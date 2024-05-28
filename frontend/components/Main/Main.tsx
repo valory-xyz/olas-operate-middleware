@@ -13,6 +13,7 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 import { MainOlasBalance } from './MainOlasBalance';
 import { MainRewards } from './MainRewards';
 import { NotifyRewards } from './NotifyRewards';
+import { NotifyUpdateInstallation } from './NotifyUpdateInstallation';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -50,6 +51,7 @@ export const Main = () => {
 
         {/* notifications */}
         <NotifyRewards />
+        <NotifyUpdateInstallation />
       </Flex>
     </Card>
   );
