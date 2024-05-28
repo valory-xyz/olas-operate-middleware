@@ -3,7 +3,6 @@ export type ElectronStore = {
   firstStakingRewardAchieved?: boolean;
   firstRewardNotificationShown?: boolean;
   canCheckForUpdates?: boolean;
-  downloadPercentage?: number;
 };
 
 export type ElectronTrayIconStatus = 'low-gas' | 'running' | 'paused';

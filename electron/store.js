@@ -18,10 +18,6 @@ const schema = {
     type: 'boolean',
     default: true,
   },
-  downloadPercentage: {
-    type: 'number',
-    default: -1,
-  },
 };
 
 /**
