@@ -25,6 +25,10 @@ type ElectronApiContextProps = {
   setAppHeight?: (height: unknown) => void;
   notifyAgentRunning?: () => void;
   showNotification?: (title: string, body?: string) => void;
+
+  // download updates
+  startUpdate?: () => Promise<void>;
+  quitAndInstall?: () => void;
 };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({
@@ -44,6 +48,10 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
     clear: async () => {},
   },
   setAppHeight: () => {},
+
+  // download updates
+  startUpdate: async () => {},
+  quitAndInstall: async () => {},
 });
 
 export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
@@ -80,6 +88,10 @@ export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
         },
         setAppHeight: getElectronApiFunction('setAppHeight'),
         showNotification: getElectronApiFunction('showNotification'),
+
+        // download updates
+        startUpdate: getElectronApiFunction('startUpdate'),
+        quitAndInstall: getElectronApiFunction('quitAndInstall'),
       }}
     >
       {children}

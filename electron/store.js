@@ -16,15 +16,17 @@ const schema = {
     type: 'boolean',
     default: false,
   },
+  downloadPercentage: {
+    type: 'number',
+    default: 0,
+  },
 };
 
 const setupStoreIpc = async (ipcChannel, mainWindow) => {
   const Store = (await import('electron-store')).default;
 
-  /** @type import Store from 'electron-store' */
-  const store = new Store({
-    schema,
-  });
+  /** @type {import('electron-store').default} */
+  const store = new Store({ schema });
 
   store.onDidAnyChange((data) => {
     if (mainWindow?.webContents)
