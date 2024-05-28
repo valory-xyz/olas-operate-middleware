@@ -28,7 +28,7 @@ const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE, isWindows, isMac } = require('./constants');
 const { macUpdater } = require('./update');
-const { setupStoreIpc, setStoreValue } = require('./store');
+const { setupStoreIpc } = require('./store');
 
 // Configure environment variables
 dotenv.config();
@@ -527,20 +527,20 @@ macUpdater.on('update-downloaded', () => {
   macUpdater.quitAndInstall();
 });
 
-// macUpdater.on('update-available', (info) => {});
+macUpdater.on('update-available', (info) => {
+  mainWindow.webContents.send('update-available', info);
+});
 
-// macUpdater.once('checking-for-update', () => {
-//   console.log('Checking for update...');
-// });
+macUpdater.on('download-progress', (progress) => {
+  mainWindow.webContents.send('download-progress', progress);
+});
 
-// macUpdater.on('update-not-available', (e) => {
-//   console.log('Checking for update: ', e);
-// });
+macUpdater.on('update-downloaded', (info) => {
+  mainWindow.webContents.send('update-downloaded', info);
+});
 
-// CONFIRMED // TODO: remove this line
 ipcMain.on('check-for-updates', async () => {
-  const res = await macUpdater.checkForUpdates();
-  return res && !!res.downloadPromise;
+  macUpdater.checkForUpdates();
 });
 
 ipcMain.on('start-download', () => {

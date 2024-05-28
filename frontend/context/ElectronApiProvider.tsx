@@ -14,6 +14,7 @@ type ElectronApiContextProps = {
       func: (event: unknown, data: unknown) => void,
     ) => void; // listen to messages from main process
     invoke?: (channel: string, data: unknown) => Promise<unknown>; // send message to main process and get Promise response
+    removeAllListeners?: (channel: string) => void;
   };
   store?: {
     store?: () => Promise<ElectronStore>;
@@ -81,6 +82,9 @@ export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
           send: getElectronApiFunction('ipcRenderer.send'),
           on: getElectronApiFunction('ipcRenderer.on'),
           invoke: getElectronApiFunction('ipcRenderer.invoke'),
+          removeAllListeners: getElectronApiFunction(
+            'ipcRenderer.removeAllListeners',
+          ),
         },
         store: {
           store: getElectronApiFunction('store.store'),

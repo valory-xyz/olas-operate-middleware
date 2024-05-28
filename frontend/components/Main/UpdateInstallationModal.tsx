@@ -1,7 +1,6 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
-import { FC, useState } from 'react';
-import { useInterval } from 'usehooks-ts';
+import { FC, useEffect, useState } from 'react';
 
 import { MODAL_WIDTH } from '@/constants/sizes';
 import { useElectronApi } from '@/hooks/useElectronApi';
@@ -11,25 +10,24 @@ const { Title, Paragraph } = Typography;
 
 export const UpdateInstallationModal: FC = () => {
   const { storeState } = useStore();
-  const { store, checkForUpdates, startDownload } = useElectronApi();
+  const { store, ipcRenderer, startDownload } = useElectronApi();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   // console.log(storeState);
 
-  // Check for updates every 10 seconds
-  useInterval(
-    () => {
-      (async () => {
-        const isUpdateAvailable = await checkForUpdates?.();
-        window.console.log({ isUpdateAvailable });
-        // console.log({ isUpdateAvailable });
-        // if (storeState?.canCheckForUpdates) {
-        //   setIsModalVisible(!!isUpdateAvailable);
-        // }
-      })();
-    },
-    storeState?.canCheckForUpdates ? 3000 : null,
-  );
+  // listen for update available event
+  useEffect(() => {
+    ipcRenderer?.on?.('update-available', (info) => {
+      if (!info) return;
+      if (storeState?.canCheckForUpdates === false) return;
+
+      setIsModalVisible(true);
+    });
+
+    return () => {
+      ipcRenderer?.removeAllListeners?.('update-available');
+    };
+  }, [ipcRenderer, storeState]);
 
   const handleInstall = () => {
     startDownload?.();

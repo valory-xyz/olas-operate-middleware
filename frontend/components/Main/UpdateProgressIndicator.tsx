@@ -1,10 +1,8 @@
 import { Button, Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
-import { FC } from 'react';
+import { FC, useEffect, useState } from 'react';
 import { CSSProperties } from 'styled-components';
 
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useStore } from '@/hooks/useStore';
 
 import { Alert } from '../common/Alert';
 import { CardSection } from '../styled/CardSection';
@@ -13,21 +11,39 @@ const { Text, Paragraph } = Typography;
 const COVER_PREV_BLOCK_BORDER_STYLE: CSSProperties = { marginBottom: '-1px' };
 
 export const UpdateProgressIndicator: FC = () => {
-  const { storeState } = useStore();
-  const { quitAndInstall } = useElectronApi();
+  const [progressPercent, setProgressPercent] = useState(0);
+  const [isDownloaded, setUpdateDownloaded] = useState(false);
+
+  const { quitAndInstall, ipcRenderer } = useElectronApi();
+
+  useEffect(() => {
+    ipcRenderer?.on?.(
+      'download-progress',
+      (_event: unknown, progress: unknown) => {
+        const progressInfo = progress as { percent?: number | undefined };
+        setProgressPercent(progressInfo.percent || 0);
+      },
+    );
+
+    ipcRenderer?.on?.('update-downloaded', () => {
+      setUpdateDownloaded(true);
+    });
+
+    return () => {
+      ipcRenderer?.removeAllListeners?.('download-progress');
+      ipcRenderer?.removeAllListeners?.('update-downloaded');
+    };
+  }, [ipcRenderer, setProgressPercent, setUpdateDownloaded]);
 
   const restartApp = () => {
     quitAndInstall?.();
   };
 
-  if (
-    isNil(storeState?.downloadPercentage) ||
-    storeState.downloadPercentage === -1
-  ) {
+  if (!progressPercent) {
     return null;
   }
 
-  const isAppReady = storeState.downloadPercentage === 100;
+  const isAppReady = progressPercent === 100;
 
   return (
     <CardSection style={COVER_PREV_BLOCK_BORDER_STYLE}>
@@ -41,13 +57,18 @@ export const UpdateProgressIndicator: FC = () => {
               <Text className="font-weight-600 mb-4">Preparing for update</Text>
               {isAppReady ? null : (
                 <Paragraph className="mb-4">
-                  Downloading the update... {storeState.downloadPercentage}%
+                  Downloading the update... {progressPercent}%
                 </Paragraph>
               )}
             </Flex>
 
             {isAppReady && (
-              <Button type="primary" ghost onClick={restartApp}>
+              <Button
+                type="primary"
+                ghost
+                onClick={restartApp}
+                loading={!isDownloaded}
+              >
                 Install Update
               </Button>
             )}

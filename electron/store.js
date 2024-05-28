@@ -48,17 +48,4 @@ const setupStoreIpc = async (ipcChannel, mainWindow) => {
   ipcChannel.handle('store-clear', (_) => store.clear());
 };
 
-/**
- *
- * @param {import('electron').IpcMain} ipcChannel
- * @param {string} key
- * @param {any} value
- */
-const setStoreValue = async (ipcChannel, key, value) => {
-  console.log('store-set called =====>>>> ');
-  // ipcRenderer.invoke('store-set', key, value);
-
-  ipcChannel.handle('store-set', key, value);
-};
-
-module.exports = { setupStoreIpc, setStoreValue };
+module.exports = { setupStoreIpc };
