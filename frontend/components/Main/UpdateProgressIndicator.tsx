@@ -17,13 +17,10 @@ export const UpdateProgressIndicator: FC = () => {
   const [isDownloadComplete, setDownloadComplete] = useState(false);
 
   useEffect(() => {
-    ipcRenderer?.on?.(
-      'download-progress',
-      (_event: unknown, progress: unknown) => {
-        const progressInfo = progress as { percent?: number | undefined };
-        setDownloadPercent(progressInfo.percent ?? 0);
-      },
-    );
+    ipcRenderer?.on?.('download-progress', (progress: unknown) => {
+      const progressInfo = progress as { percent?: number | undefined };
+      setDownloadPercent(progressInfo.percent ?? 0);
+    });
 
     ipcRenderer?.on?.('update-downloaded', () => {
       setDownloadComplete(true);
