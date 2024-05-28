@@ -13,7 +13,7 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 import { MainOlasBalance } from './MainOlasBalance';
 import { MainRewards } from './MainRewards';
 import { NotifyRewards } from './NotifyRewards';
-import { UpdateInstallationModal } from './UpdateInstallationModal';
+import { NotifyUpdateInstallationModal } from './NotifyUpdateInstallationModal';
 import { UpdateProgressIndicator } from './UpdateProgressIndicator';
 
 export const Main = () => {
@@ -53,7 +53,7 @@ export const Main = () => {
 
         {/* notifications */}
         <NotifyRewards />
-        <UpdateInstallationModal />
+        <NotifyUpdateInstallationModal />
       </Flex>
     </Card>
   );

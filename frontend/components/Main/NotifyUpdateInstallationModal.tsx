@@ -8,7 +8,7 @@ import { useStore } from '@/hooks/useStore';
 
 const { Title, Paragraph } = Typography;
 
-export const UpdateInstallationModal: FC = () => {
+export const NotifyUpdateInstallationModal: FC = () => {
   const { storeState } = useStore();
   const { store, ipcRenderer, startDownload } = useElectronApi();
 
