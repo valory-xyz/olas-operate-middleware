@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 
 import { balanceFormat } from '@/common-util';
+import { MODAL_WIDTH } from '@/constants';
 import { useBalance } from '@/hooks';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useReward } from '@/hooks/useReward';
@@ -70,7 +71,7 @@ export const NotifyRewards = () => {
   return (
     <Modal
       open={canShowNotification}
-      width={400}
+      width={MODAL_WIDTH}
       onCancel={closeNotificationModal}
       footer={[
         <Button
