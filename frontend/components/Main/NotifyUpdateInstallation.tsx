@@ -1,18 +1,87 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
 import { FC, useEffect, useState } from 'react';
+import { CSSProperties } from 'styled-components';
 
 import { MODAL_WIDTH } from '@/constants/sizes';
+import { useStore } from '@/hooks/useStore';
 
-const { Title, Paragraph } = Typography;
+import { Alert } from '../common/Alert';
+import { CardSection } from '../styled/CardSection';
 
-export const NotifyUpdateInstallation: FC = () => {
-  const [isModalVisible, setIsModalVisible] = useState(false);
+const { Title, Text, Paragraph } = Typography;
+const COVER_PREV_BLOCK_BORDER_STYLE: CSSProperties = { marginBottom: '-1px' };
+
+const UpdateDownloadAlert: FC = () => {
+  const [downloadPercentage, setDownloadPercentage] = useState(0);
 
   useEffect(() => {
-    // TODO: should from electron API store
-    setIsModalVisible(true);
+    const interval = setInterval(() => {
+      setDownloadPercentage((prev) => {
+        const newPercentage = prev + 1;
+        if (newPercentage > 100) {
+          clearInterval(interval);
+          return 0;
+        }
+        return newPercentage;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
   }, []);
+
+  // TODO: Implement restartApp in store
+  const restartApp = () => {
+    // console.log('Restart app');
+  };
+
+  if (!downloadPercentage) return null;
+
+  const isAppReady = downloadPercentage === 100;
+
+  return (
+    <CardSection style={COVER_PREV_BLOCK_BORDER_STYLE}>
+      <Alert
+        type="primary"
+        showIcon
+        fullWidth
+        message={
+          <Flex justify="space-between" align="center">
+            <Flex vertical gap={4}>
+              <Text className="font-weight-600 mb-4">Preparing for update</Text>
+              {isAppReady ? null : (
+                <Paragraph className="mb-4">
+                  Downloading the update... {downloadPercentage}%
+                </Paragraph>
+              )}
+            </Flex>
+
+            {isAppReady && (
+              <Button type="primary" ghost onClick={restartApp}>
+                Install Update
+              </Button>
+            )}
+          </Flex>
+        }
+      />
+    </CardSection>
+  );
+};
+
+export const NotifyUpdateModal: FC = () => {
+  const { storeState } = useStore();
+
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  // console.log('storeState', storeState);
+
+  useEffect(() => {
+    // setIsModalVisible(true); // TODO: remove
+
+    if (!storeState) return;
+    if (!storeState?.isUpdateAvailable) return;
+
+    setIsModalVisible(true);
+  }, [storeState]);
 
   const handleInstall = () => {
     // console.log('Install button clicked');
@@ -65,3 +134,10 @@ export const NotifyUpdateInstallation: FC = () => {
     </Modal>
   );
 };
+
+export const NotifyUpdateInstallation = () => (
+  <>
+    <UpdateDownloadAlert />
+    <NotifyUpdateModal />
+  </>
+);
