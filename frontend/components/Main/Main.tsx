@@ -12,6 +12,7 @@ import { MainHeader } from './MainHeader';
 import { MainNeedsFunds } from './MainNeedsFunds';
 import { MainOlasBalance } from './MainOlasBalance';
 import { MainRewards } from './MainRewards';
+import { NotifyRewards } from './NotifyRewards';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -46,6 +47,9 @@ export const Main = () => {
         <MainGasBalance />
         <MainNeedsFunds />
         <MainAddFunds />
+
+        {/* notifications */}
+        <NotifyRewards />
       </Flex>
     </Card>
   );
