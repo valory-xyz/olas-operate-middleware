@@ -7,7 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ipcRenderer: {
     send: (channel, data) => ipcRenderer.send(channel, data),
     on: (channel, func) =>
-      ipcRenderer.on(channel, (event, ...args) => func(...args)),
+      ipcRenderer.on(channel, (_event, ...args) => func(...args)),
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
   },
   store: {
@@ -20,4 +20,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   setAppHeight: (height) => ipcRenderer.send('set-height', height),
   showNotification: (title, description) =>
     ipcRenderer.send('show-notification', title, description),
+
+  // update downloads
+  startDownload: () => ipcRenderer.send('start-download'),
+  quitAndInstall: () => ipcRenderer.send('install-update'),
 });

@@ -527,6 +527,14 @@ macUpdater.on('update-downloaded', () => {
   macUpdater.quitAndInstall();
 });
 
+ipcMain.on('start-download', () => {
+  macUpdater.downloadUpdate();
+});
+
+ipcMain.on('install-update', () => {
+  macUpdater.quitAndInstall();
+});
+
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
 process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception:', error);
