@@ -524,7 +524,7 @@ app.on('before-quit', async () => {
 
 // UPDATER EVENTS
 macUpdater.on('update-downloaded', () => {
-  macUpdater.quitAndInstall();
+  mainWindow.webContents.send('update-downloaded');
 });
 
 macUpdater.on('update-available', (info) => {
@@ -533,14 +533,6 @@ macUpdater.on('update-available', (info) => {
 
 macUpdater.on('download-progress', (progress) => {
   mainWindow.webContents.send('download-progress', progress);
-});
-
-macUpdater.on('update-downloaded', (info) => {
-  mainWindow.webContents.send('update-downloaded', info);
-});
-
-ipcMain.on('check-for-updates', async () => {
-  macUpdater.checkForUpdates();
 });
 
 ipcMain.on('start-download', () => {

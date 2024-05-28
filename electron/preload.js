@@ -22,7 +22,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.send('show-notification', title, description),
 
   // update downloads
-  checkForUpdates: () => ipcRenderer.send('check-for-updates'),
   startDownload: () => ipcRenderer.send('start-download'),
   quitAndInstall: () => ipcRenderer.send('install-update'),
 });

@@ -28,7 +28,6 @@ type ElectronApiContextProps = {
   showNotification?: (title: string, body?: string) => void;
 
   // download new updates
-  checkForUpdates?: () => Promise<boolean>;
   startDownload?: () => Promise<void>;
   quitAndInstall?: () => void;
 };
@@ -52,7 +51,6 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
   setAppHeight: () => {},
 
   // download updates
-  checkForUpdates: () => Promise.resolve(false),
   startDownload: async () => {},
   quitAndInstall: async () => {},
 });
@@ -96,7 +94,6 @@ export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
         showNotification: getElectronApiFunction('showNotification'),
 
         // download updates
-        checkForUpdates: getElectronApiFunction('checkForUpdates'),
         startDownload: getElectronApiFunction('startDownload'),
         quitAndInstall: getElectronApiFunction('quitAndInstall'),
       }}
