@@ -50,11 +50,11 @@ export const UpdateProgressIndicator: FC = () => {
           <Flex justify="space-between" align="center">
             <Flex vertical gap={4}>
               <Text className="font-weight-600 mb-4">Preparing for update</Text>
-              {isAppReady ? null : (
-                <Paragraph className="mb-4">
-                  Downloading the update... {downloadPercent}%
-                </Paragraph>
-              )}
+              <Paragraph className="mb-4">
+                {isAppReady
+                  ? 'The update is ready for install.'
+                  : `Downloading the update... ${downloadPercent}%`}
+              </Paragraph>
             </Flex>
 
             {isAppReady && (
