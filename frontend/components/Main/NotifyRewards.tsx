@@ -19,8 +19,8 @@ const OPERATE_URL = 'https://olas.network/operate?pearl=first-reward';
 export const NotifyRewards = () => {
   const { isEligibleForRewards, availableRewardsForEpochEth } = useReward();
   const { totalOlasBalance } = useBalance();
-  const { showNotification, store } = useElectronApi();
   const { storeState } = useStore();
+  const { showNotification, store } = useElectronApi();
 
   const [canShowNotification, setCanShowNotification] = useState(false);
 

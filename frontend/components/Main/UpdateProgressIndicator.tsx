@@ -11,39 +11,37 @@ const { Text, Paragraph } = Typography;
 const COVER_PREV_BLOCK_BORDER_STYLE: CSSProperties = { marginBottom: '-1px' };
 
 export const UpdateProgressIndicator: FC = () => {
-  const [progressPercent, setProgressPercent] = useState(0);
-  const [isDownloaded, setUpdateDownloaded] = useState(false);
-
   const { quitAndInstall, ipcRenderer } = useElectronApi();
+
+  const [downloadPercent, setDownloadPercent] = useState(0);
+  const [isDownloadComplete, setDownloadComplete] = useState(false);
 
   useEffect(() => {
     ipcRenderer?.on?.(
       'download-progress',
       (_event: unknown, progress: unknown) => {
         const progressInfo = progress as { percent?: number | undefined };
-        setProgressPercent(progressInfo.percent || 0);
+        setDownloadPercent(progressInfo.percent ?? 0);
       },
     );
 
     ipcRenderer?.on?.('update-downloaded', () => {
-      setUpdateDownloaded(true);
+      setDownloadComplete(true);
     });
 
     return () => {
       ipcRenderer?.removeAllListeners?.('download-progress');
       ipcRenderer?.removeAllListeners?.('update-downloaded');
     };
-  }, [ipcRenderer, setProgressPercent, setUpdateDownloaded]);
+  }, [ipcRenderer, setDownloadPercent, setDownloadComplete]);
 
   const restartApp = () => {
     quitAndInstall?.();
   };
 
-  if (!progressPercent) {
-    return null;
-  }
+  const isAppReady = downloadPercent === 100;
 
-  const isAppReady = progressPercent === 100;
+  if (!downloadPercent) return null;
 
   return (
     <CardSection style={COVER_PREV_BLOCK_BORDER_STYLE}>
@@ -57,7 +55,7 @@ export const UpdateProgressIndicator: FC = () => {
               <Text className="font-weight-600 mb-4">Preparing for update</Text>
               {isAppReady ? null : (
                 <Paragraph className="mb-4">
-                  Downloading the update... {progressPercent}%
+                  Downloading the update... {downloadPercent}%
                 </Paragraph>
               )}
             </Flex>
@@ -67,7 +65,7 @@ export const UpdateProgressIndicator: FC = () => {
                 type="primary"
                 ghost
                 onClick={restartApp}
-                loading={!isDownloaded}
+                loading={!isDownloadComplete}
               >
                 Install Update
               </Button>

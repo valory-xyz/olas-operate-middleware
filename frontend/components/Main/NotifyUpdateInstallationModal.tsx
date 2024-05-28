@@ -13,7 +13,6 @@ export const NotifyUpdateInstallationModal: FC = () => {
   const { store, ipcRenderer, startDownload } = useElectronApi();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  // console.log(storeState);
 
   // listen for update available event
   useEffect(() => {
@@ -40,7 +39,7 @@ export const NotifyUpdateInstallationModal: FC = () => {
 
   return (
     <Modal
-      open={isModalVisible} // Set to true to show the modal
+      open={isModalVisible}
       title={null}
       onCancel={handleCancel}
       width={MODAL_WIDTH}

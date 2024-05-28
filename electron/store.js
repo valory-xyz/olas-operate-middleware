@@ -1,5 +1,3 @@
-// const { ipcRenderer } = require('electron/renderer');
-
 // set schema to validate store data
 const schema = {
   isInitialFunded: {

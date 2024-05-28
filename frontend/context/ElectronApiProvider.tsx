@@ -52,7 +52,6 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
   setAppHeight: () => {},
 
   // download updates
-  // canCheckForUpdates: () => Promise.resolve(false),
   checkForUpdates: () => Promise.resolve(false),
   startDownload: async () => {},
   quitAndInstall: async () => {},
