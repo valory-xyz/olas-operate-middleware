@@ -28,7 +28,7 @@ const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE, isWindows, isMac } = require('./constants');
 const { macUpdater } = require('./update');
-const { setupStoreIpc } = require('./store');
+const { setupStoreIpc, setStoreValue } = require('./store');
 
 // Configure environment variables
 dotenv.config();
@@ -186,7 +186,7 @@ const HEIGHT = 700;
 /**
  * Creates the main window
  */
-const createMainWindow = () => {
+const createMainWindow = async () => {
   const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
     title: 'Pearl',
@@ -256,7 +256,7 @@ const createMainWindow = () => {
     mainWindow.hide();
   });
 
-  setupStoreIpc(ipcMain, mainWindow);
+  await setupStoreIpc(ipcMain, mainWindow);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();
@@ -490,9 +490,9 @@ ipcMain.on('check', async function (event, _argument) {
     }
 
     event.sender.send('response', 'Launching App');
-    createMainWindow();
-    createTray();
+    await createMainWindow();
     splashWindow.destroy();
+    createTray();
   } catch (e) {
     console.log(e);
     new Notification({
@@ -525,6 +525,22 @@ app.on('before-quit', async () => {
 // UPDATER EVENTS
 macUpdater.on('update-downloaded', () => {
   macUpdater.quitAndInstall();
+});
+
+// macUpdater.on('update-available', (info) => {});
+
+// macUpdater.once('checking-for-update', () => {
+//   console.log('Checking for update...');
+// });
+
+// macUpdater.on('update-not-available', (e) => {
+//   console.log('Checking for update: ', e);
+// });
+
+// CONFIRMED // TODO: remove this line
+ipcMain.on('check-for-updates', async () => {
+  const res = await macUpdater.checkForUpdates();
+  return res && !!res.downloadPromise;
 });
 
 ipcMain.on('start-download', () => {

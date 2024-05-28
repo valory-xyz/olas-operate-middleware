@@ -1,33 +1,43 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
-import { FC, useEffect, useState } from 'react';
+import { FC, useState } from 'react';
+import { useInterval } from 'usehooks-ts';
 
 import { MODAL_WIDTH } from '@/constants/sizes';
+import { useElectronApi } from '@/hooks/useElectronApi';
 import { useStore } from '@/hooks/useStore';
 
 const { Title, Paragraph } = Typography;
 
 export const UpdateInstallationModal: FC = () => {
   const { storeState } = useStore();
+  const { store, checkForUpdates, startDownload } = useElectronApi();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
-  // console.log('storeState', storeState);
+  // console.log(storeState);
 
-  useEffect(() => {
-    // setIsModalVisible(true); // TODO: remove
-
-    if (!storeState) return;
-    if (!storeState?.isUpdateAvailable) return;
-
-    setIsModalVisible(true);
-  }, [storeState]);
+  // Check for updates every 10 seconds
+  useInterval(
+    () => {
+      (async () => {
+        const isUpdateAvailable = await checkForUpdates?.();
+        window.console.log({ isUpdateAvailable });
+        // console.log({ isUpdateAvailable });
+        // if (storeState?.canCheckForUpdates) {
+        //   setIsModalVisible(!!isUpdateAvailable);
+        // }
+      })();
+    },
+    storeState?.canCheckForUpdates ? 3000 : null,
+  );
 
   const handleInstall = () => {
-    // console.log('Install button clicked');
+    startDownload?.();
   };
 
   const handleCancel = () => {
     setIsModalVisible(false);
+    store?.set?.('canCheckForUpdates', false);
   };
 
   return (

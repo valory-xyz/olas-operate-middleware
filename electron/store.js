@@ -1,3 +1,5 @@
+// const { ipcRenderer } = require('electron/renderer');
+
 // set schema to validate store data
 const schema = {
   isInitialFunded: {
@@ -12,16 +14,21 @@ const schema = {
     type: 'boolean',
     default: false,
   },
-  isUpdateAvailable: {
+  canCheckForUpdates: {
     type: 'boolean',
-    default: false,
+    default: true,
   },
   downloadPercentage: {
     type: 'number',
-    default: 0,
+    default: -1,
   },
 };
 
+/**
+ *
+ * @param {import('electron').IpcMain} ipcChannel
+ * @param {import('electron').BrowserWindow} mainWindow
+ */
 const setupStoreIpc = async (ipcChannel, mainWindow) => {
   const Store = (await import('electron-store')).default;
 
@@ -41,4 +48,17 @@ const setupStoreIpc = async (ipcChannel, mainWindow) => {
   ipcChannel.handle('store-clear', (_) => store.clear());
 };
 
-module.exports = { setupStoreIpc };
+/**
+ *
+ * @param {import('electron').IpcMain} ipcChannel
+ * @param {string} key
+ * @param {any} value
+ */
+const setStoreValue = async (ipcChannel, key, value) => {
+  console.log('store-set called =====>>>> ');
+  // ipcRenderer.invoke('store-set', key, value);
+
+  ipcChannel.handle('store-set', key, value);
+};
+
+module.exports = { setupStoreIpc, setStoreValue };

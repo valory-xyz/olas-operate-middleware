@@ -14,16 +14,15 @@ const COVER_PREV_BLOCK_BORDER_STYLE: CSSProperties = { marginBottom: '-1px' };
 
 export const UpdateProgressIndicator: FC = () => {
   const { storeState } = useStore();
-  const { store, quitAndInstall } = useElectronApi();
+  const { quitAndInstall } = useElectronApi();
 
   const restartApp = () => {
-    store?.set?.('isUpdateAvailable', false);
     quitAndInstall?.();
   };
 
   if (
     isNil(storeState?.downloadPercentage) ||
-    isNaN(storeState.downloadPercentage)
+    storeState.downloadPercentage === -1
   ) {
     return null;
   }
