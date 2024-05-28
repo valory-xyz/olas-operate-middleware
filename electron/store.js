@@ -12,6 +12,10 @@ const schema = {
     type: 'boolean',
     default: false,
   },
+  isUpdateAvailable: {
+    type: 'boolean',
+    default: false,
+  },
 };
 
 const setupStoreIpc = async (ipcChannel, mainWindow) => {
