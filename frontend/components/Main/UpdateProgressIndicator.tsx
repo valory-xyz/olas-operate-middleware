@@ -62,7 +62,7 @@ export const UpdateProgressIndicator: FC = () => {
                 type="primary"
                 ghost
                 onClick={restartApp}
-                loading={!isDownloadComplete}
+                disabled={!isDownloadComplete}
               >
                 Install Update
               </Button>
