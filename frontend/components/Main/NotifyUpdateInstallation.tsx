@@ -1,7 +1,10 @@
-import { Button, Flex, Modal } from 'antd';
+import { Button, Flex, Modal, Typography } from 'antd';
+import Image from 'next/image';
 import { FC, useEffect, useState } from 'react';
 
 import { MODAL_WIDTH } from '@/constants/sizes';
+
+const { Title, Paragraph } = Typography;
 
 export const NotifyUpdateInstallation: FC = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
@@ -28,17 +31,37 @@ export const NotifyUpdateInstallation: FC = () => {
       closable={false}
       footer={[
         <Flex key="footer" vertical gap={12}>
-          <Button key="install" type="primary" onClick={handleInstall} block>
-            Install
+          <Button
+            key="install"
+            type="primary"
+            size="large"
+            block
+            onClick={handleInstall}
+          >
+            Download and install now
           </Button>
-          <Button key="cancel" onClick={handleCancel} block>
-            Cancel
+          <Button key="cancel" size="large" block onClick={handleCancel}>
+            Install on next launch
           </Button>
         </Flex>,
       ]}
     >
-      {/* Modal content goes here */}
-      <p>Are you sure you want to install the updates?</p>
+      <Flex align="center" justify="center" gap={12} vertical>
+        <Image
+          src="/splash-robot-head-dock.png"
+          width={100}
+          height={100}
+          alt="OLAS logo"
+        />
+
+        <Title level={5} className="m-0">
+          Update Available
+        </Title>
+
+        <Paragraph className="mb-8">
+          A new version of Pearl is ready to be downloaded and installed.
+        </Paragraph>
+      </Flex>
     </Modal>
   );
 };
