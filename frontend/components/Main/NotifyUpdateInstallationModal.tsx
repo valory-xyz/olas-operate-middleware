@@ -1,4 +1,4 @@
-import { Button, Flex, message, Modal, Typography } from 'antd';
+import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
 import { FC, useEffect, useState } from 'react';
 
@@ -31,11 +31,6 @@ export const NotifyUpdateInstallationModal: FC = () => {
   const handleInstall = () => {
     startDownload?.();
     setIsModalVisible(false);
-    message.info({
-      type: 'loading',
-      content: 'Downloading the update...',
-      duration: 10,
-    });
   };
 
   const handleCancel = () => {
