@@ -1,6 +1,6 @@
 {
   "extends": ["eslint:recommended", "plugin:prettier/recommended"],
-  "plugins": ["prettier"],
+  "plugins": ["prettier", "no-unused-imports"],
   "ignorePatterns": [".next/"],
   "rules": {
     "prettier/prettier": [
@@ -11,7 +11,8 @@
         "singleQuote": true
       }
     ],
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-unused-imports/no-unused-imports": "error"
   },
   "parserOptions": {
     "ecmaVersion": "latest",

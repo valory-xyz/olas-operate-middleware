@@ -1,4 +1,4 @@
-const dotenv = require('dotenv');
+const dotenv = require("dotenv");
 
 const {
   app,
@@ -9,15 +9,15 @@ const {
   ipcMain,
   dialog,
   shell,
-} = require('electron');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
-const os = require('os');
-const next = require('next');
-const http = require('http');
-const AdmZip = require('adm-zip');
-const { TRAY_ICONS, TRAY_ICONS_PATHS } = require('./icons');
+} = require("electron");
+const { spawn } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+const os = require("os");
+const next = require("next");
+const http = require("http");
+const AdmZip = require("adm-zip");
+const { TRAY_ICONS, TRAY_ICONS_PATHS } = require("./icons");
 
 const {
   setupDarwin,
@@ -26,12 +26,12 @@ const {
   OperateDirectory,
   Env,
   dirs,
-} = require('./install');
-const { killProcesses } = require('./processes');
-const { isPortAvailable, findAvailablePort } = require('./ports');
-const { PORT_RANGE, isWindows, isMac } = require('./constants');
-const { macUpdater } = require('./update');
-const { setupStoreIpc } = require('./store');
+} = require("./install");
+const { killProcesses } = require("./processes");
+const { isPortAvailable, findAvailablePort } = require("./ports");
+const { PORT_RANGE, isWindows, isMac } = require("./constants");
+const { macUpdater } = require("./update");
+const { setupStoreIpc } = require("./store");
 
 // Configure environment variables
 dotenv.config();
@@ -40,8 +40,11 @@ dotenv.config();
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.quit();
 
+// Attach mac updater
+const macUpdater = setupMacUpdater(app);
+
 const platform = os.platform();
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = process.env.NODE_ENV === "development";
 
 let appConfig = {
   ports: {
@@ -104,54 +107,54 @@ const getUpdatedTrayIcon = (iconPath) => {
  */
 const createTray = () => {
   const trayPath = getUpdatedTrayIcon(
-    isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
+    isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT
   );
   const tray = new Tray(trayPath);
 
   const contextMenu = Menu.buildFromTemplate([
     {
-      label: 'Show app',
+      label: "Show app",
       click: function () {
         mainWindow.show();
       },
     },
     {
-      label: 'Hide app',
+      label: "Hide app",
       click: function () {
         mainWindow.hide();
       },
     },
     {
-      label: 'Quit',
+      label: "Quit",
       click: async function () {
         await beforeQuit();
         app.quit();
       },
     },
   ]);
-  tray.setToolTip('Pearl');
+  tray.setToolTip("Pearl");
   tray.setContextMenu(contextMenu);
 
-  ipcMain.on('tray', (_event, status) => {
+  ipcMain.on("tray", (_event, status) => {
     switch (status) {
-      case 'low-gas': {
+      case "low-gas": {
         const icon = getUpdatedTrayIcon(
-          isWindows || isMac ? TRAY_ICONS.LOW_GAS : TRAY_ICONS_PATHS.LOW_GAS,
+          isWindows || isMac ? TRAY_ICONS.LOW_GAS : TRAY_ICONS_PATHS.LOW_GAS
         );
         tray.setImage(icon);
         break;
       }
-      case 'running': {
+      case "running": {
         const icon = getUpdatedTrayIcon(
-          isWindows || isMac ? TRAY_ICONS.RUNNING : TRAY_ICONS_PATHS.RUNNING,
+          isWindows || isMac ? TRAY_ICONS.RUNNING : TRAY_ICONS_PATHS.RUNNING
         );
         tray.setImage(icon);
 
         break;
       }
-      case 'paused': {
+      case "paused": {
         const icon = getUpdatedTrayIcon(
-          isWindows || isMac ? TRAY_ICONS.PAUSED : TRAY_ICONS_PATHS.PAUSED,
+          isWindows || isMac ? TRAY_ICONS.PAUSED : TRAY_ICONS_PATHS.PAUSED
         );
         tray.setImage(icon);
         break;
@@ -171,14 +174,14 @@ const createSplashWindow = () => {
     height: APP_WIDTH,
     resizable: false,
     show: true,
-    title: 'Pearl',
+    title: "Pearl",
     frame: false,
     webPreferences: {
       nodeIntegration: true,
       contextIsolation: false,
     },
   });
-  splashWindow.loadURL('file://' + __dirname + '/loading/index.html');
+  splashWindow.loadURL("file://" + __dirname + "/loading/index.html");
 
   if (isDev) {
     splashWindow.webContents.openDevTools();
@@ -192,7 +195,7 @@ const HEIGHT = 700;
 const createMainWindow = () => {
   const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
-    title: 'Pearl',
+    title: "Pearl",
     resizable: false,
     draggable: true,
     frame: false,
@@ -204,7 +207,7 @@ const createMainWindow = () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
     },
   });
 
@@ -216,15 +219,15 @@ const createMainWindow = () => {
     mainWindow.loadURL(`http://localhost:${appConfig.ports.prod.next}`);
   }
 
-  ipcMain.on('close-app', () => {
+  ipcMain.on("close-app", () => {
     mainWindow.close();
   });
 
-  ipcMain.on('minimize-app', () => {
+  ipcMain.on("minimize-app", () => {
     mainWindow.minimize();
   });
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (mainWindow.isMinimized()) {
       mainWindow.restore();
     } else {
@@ -232,29 +235,29 @@ const createMainWindow = () => {
     }
   });
 
-  ipcMain.on('set-height', (_event, height) => {
+  ipcMain.on("set-height", (_event, height) => {
     mainWindow.setSize(width, height);
   });
 
-  ipcMain.on('show-notification', (_event, title, description) => {
+  ipcMain.on("show-notification", (_event, title, description) => {
     showNotification(title, description || undefined);
   });
 
-  mainWindow.webContents.on('did-fail-load', () => {
+  mainWindow.webContents.on("did-fail-load", () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
 
-  mainWindow.webContents.on('ready-to-show', () => {
+  mainWindow.webContents.on("ready-to-show", () => {
     mainWindow.show();
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     // open url in a browser and prevent default
-    require('electron').shell.openExternal(url);
-    return { action: 'deny' };
+    require("electron").shell.openExternal(url);
+    return { action: "deny" };
   });
 
-  mainWindow.on('close', function (event) {
+  mainWindow.on("close", function (event) {
     event.preventDefault();
     mainWindow.hide();
   });
@@ -268,8 +271,8 @@ const createMainWindow = () => {
 
 async function launchDaemon() {
   function appendLog(data) {
-    fs.appendFileSync(`${OperateDirectory}/logs.txt`, data.trim() + '\n', {
-      encoding: 'utf-8',
+    fs.appendFileSync(`${OperateDirectory}/logs.txt`, data.trim() + "\n", {
+      encoding: "utf-8",
     });
     return data;
   }
@@ -277,7 +280,7 @@ async function launchDaemon() {
   // Free up backend port if already occupied
   try {
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/api`);
-    console.log('Killing backend server!');
+    console.log("Killing backend server!");
     let endpoint = fs
       .readFileSync(`${OperateDirectory}/operate.kill`)
       .toString()
@@ -285,40 +288,40 @@ async function launchDaemon() {
       .trimRight();
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
   } catch (err) {
-    console.log('Backend not running!');
+    console.log("Backend not running!");
   }
 
   const check = new Promise(function (resolve, _reject) {
     operateDaemon = spawn(
       OperateCmd,
       [
-        'daemon',
+        "daemon",
         `--port=${appConfig.ports.prod.operate}`,
         `--home=${OperateDirectory}`,
       ],
-      { env: Env },
+      { env: Env }
     );
     operateDaemonPid = operateDaemon.pid;
     fs.appendFileSync(
       `${OperateDirectory}/operate.pip`,
       `${operateDaemon.pid}`,
       {
-        encoding: 'utf-8',
-      },
+        encoding: "utf-8",
+      }
     );
 
-    operateDaemon.stderr.on('data', (data) => {
-      if (data.toString().includes('Uvicorn running on')) {
+    operateDaemon.stderr.on("data", (data) => {
+      if (data.toString().includes("Uvicorn running on")) {
         resolve({ running: true, error: null });
       }
       if (
-        data.toString().includes('error while attempting to bind on address')
+        data.toString().includes("error while attempting to bind on address")
       ) {
-        resolve({ running: false, error: 'Port already in use' });
+        resolve({ running: false, error: "Port already in use" });
       }
       console.log(appendLog(data.toString().trim()));
     });
-    operateDaemon.stdout.on('data', (data) => {
+    operateDaemon.stdout.on("data", (data) => {
       console.log(appendLog(data.toString().trim()));
     });
   });
@@ -327,26 +330,26 @@ async function launchDaemon() {
 
 async function launchDaemonDev() {
   const check = new Promise(function (resolve, _reject) {
-    operateDaemon = spawn('poetry', [
-      'run',
-      'operate',
-      'daemon',
+    operateDaemon = spawn("poetry", [
+      "run",
+      "operate",
+      "daemon",
       `--port=${appConfig.ports.dev.operate}`,
-      '--home=.operate',
+      "--home=.operate",
     ]);
     operateDaemonPid = operateDaemon.pid;
-    operateDaemon.stderr.on('data', (data) => {
-      if (data.toString().includes('Uvicorn running on')) {
+    operateDaemon.stderr.on("data", (data) => {
+      if (data.toString().includes("Uvicorn running on")) {
         resolve({ running: true, error: null });
       }
       if (
-        data.toString().includes('error while attempting to bind on address')
+        data.toString().includes("error while attempting to bind on address")
       ) {
-        resolve({ running: false, error: 'Port already in use' });
+        resolve({ running: false, error: "Port already in use" });
       }
       console.log(data.toString().trim());
     });
-    operateDaemon.stdout.on('data', (data) => {
+    operateDaemon.stdout.on("data", (data) => {
       console.log(data.toString().trim());
     });
   });
@@ -360,11 +363,11 @@ async function launchNextApp() {
     port: appConfig.ports.prod.next,
     env: {
       GNOSIS_RPC:
-        process.env.NODE_ENV === 'production'
+        process.env.NODE_ENV === "production"
           ? process.env.FORK_URL
           : process.env.DEV_RPC,
       NEXT_PUBLIC_BACKEND_PORT:
-        process.env.NODE_ENV === 'production'
+        process.env.NODE_ENV === "production"
           ? appConfig.ports.prod.operate
           : appConfig.ports.dev.operate,
     },
@@ -378,7 +381,7 @@ async function launchNextApp() {
   server.listen(appConfig.ports.prod.next, (err) => {
     if (err) throw err;
     console.log(
-      `> Next server running on http://localhost:${appConfig.ports.prod.next}`,
+      `> Next server running on http://localhost:${appConfig.ports.prod.next}`
     );
   });
 }
@@ -387,24 +390,24 @@ async function launchNextAppDev() {
   await new Promise(function (resolve, _reject) {
     process.env.NEXT_PUBLIC_BACKEND_PORT = appConfig.ports.dev.operate; // must set next env var to connect to backend
     nextAppProcess = spawn(
-      'yarn',
-      ['dev:frontend', '--port', appConfig.ports.dev.next],
+      "yarn",
+      ["dev:frontend", "--port", appConfig.ports.dev.next],
       {
         env: {
           ...process.env,
           NEXT_PUBLIC_BACKEND_PORT: appConfig.ports.dev.operate,
         },
-      },
+      }
     );
     nextAppProcessPid = nextAppProcess.pid;
-    nextAppProcess.stdout.on('data', (data) => {
+    nextAppProcess.stdout.on("data", (data) => {
       console.log(data.toString().trim());
       resolve();
     });
   });
 }
 
-ipcMain.on('check', async function (event, _argument) {
+ipcMain.on("check", async function (event, _argument) {
   // Update
   try {
     macUpdater.checkForUpdates().then((res) => {
@@ -412,14 +415,14 @@ ipcMain.on('check', async function (event, _argument) {
       if (!res.downloadPromise) return;
 
       new Notification({
-        title: 'Update Available',
-        body: 'Downloading update...',
+        title: "Update Available",
+        body: "Downloading update...",
       }).show();
 
       res.downloadPromise.then(() => {
         new Notification({
-          title: 'Update Downloaded',
-          body: 'Restarting application...',
+          title: "Update Downloaded",
+          body: "Restarting application...",
         }).show();
         macUpdater.quitAndInstall();
       });
@@ -430,11 +433,11 @@ ipcMain.on('check', async function (event, _argument) {
 
   // Setup
   try {
-    event.sender.send('response', 'Checking installation');
+    event.sender.send("response", "Checking installation");
     if (!isDev) {
-      if (platform === 'darwin') {
+      if (platform === "darwin") {
         await setupDarwin(event.sender);
-      } else if (platform === 'win32') {
+      } else if (platform === "win32") {
         // TODO
       } else {
         await setupUbuntu(event.sender);
@@ -443,12 +446,12 @@ ipcMain.on('check', async function (event, _argument) {
 
     if (isDev) {
       event.sender.send(
-        'response',
-        'Starting Pearl Daemon In Development Mode',
+        "response",
+        "Starting Pearl Daemon In Development Mode"
       );
 
       const daemonDevPortAvailable = await isPortAvailable(
-        appConfig.ports.dev.operate,
+        appConfig.ports.dev.operate
       );
 
       if (!daemonDevPortAvailable) {
@@ -458,12 +461,12 @@ ipcMain.on('check', async function (event, _argument) {
       }
       await launchDaemonDev();
       event.sender.send(
-        'response',
-        'Starting Frontend Server In Development Mode',
+        "response",
+        "Starting Frontend Server In Development Mode"
       );
 
       const frontendDevPortAvailable = await isPortAvailable(
-        appConfig.ports.dev.next,
+        appConfig.ports.dev.next
       );
 
       if (!frontendDevPortAvailable) {
@@ -474,12 +477,12 @@ ipcMain.on('check', async function (event, _argument) {
       }
       await launchNextAppDev();
     } else {
-      event.sender.send('response', 'Starting Pearl Daemon');
+      event.sender.send("response", "Starting Pearl Daemon");
       await launchDaemon();
 
-      event.sender.send('response', 'Starting Frontend Server');
+      event.sender.send("response", "Starting Frontend Server");
       const frontendPortAvailable = await isPortAvailable(
-        appConfig.ports.prod.next,
+        appConfig.ports.prod.next
       );
       if (!frontendPortAvailable) {
         appConfig.ports.prod.next = await findAvailablePort({
@@ -490,54 +493,54 @@ ipcMain.on('check', async function (event, _argument) {
       await launchNextApp();
     }
 
-    event.sender.send('response', 'Launching App');
+    event.sender.send("response", "Launching App");
     createMainWindow();
     createTray();
     splashWindow.destroy();
   } catch (e) {
     console.log(e);
     new Notification({
-      title: 'Error',
+      title: "Error",
       body: e,
     }).show();
-    event.sender.send('response', e);
+    event.sender.send("response", e);
     // app.quit();
   }
 });
 
 // APP-SPECIFIC EVENTS
-app.on('ready', async () => {
-  if (platform === 'darwin') {
+app.on("ready", async () => {
+  if (platform === "darwin") {
     app.dock?.setIcon(
-      path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
+      path.join(__dirname, "assets/icons/splash-robot-head-dock.png")
     );
   }
   createSplashWindow();
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   app.quit();
 });
 
-app.on('before-quit', async () => {
+app.on("before-quit", async () => {
   await beforeQuit();
 });
 
 // UPDATER EVENTS
-macUpdater.on('update-downloaded', () => {
+macUpdater.on("update-downloaded", () => {
   macUpdater.quitAndInstall();
 });
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
-process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
   // Clean up your child processes here
   beforeQuit().then(() => {
     process.exit(1); // Exit with a failure code
   });
 });
 
-['SIGINT', 'SIGTERM'].forEach((signal) => {
+["SIGINT", "SIGTERM"].forEach((signal) => {
   process.on(signal, () => {
     console.log(`Received ${signal}. Cleaning up...`);
     beforeQuit().then(() => {
@@ -547,16 +550,16 @@ process.on('uncaughtException', (error) => {
 });
 
 // OPEN PATH
-ipcMain.on('open-path', (_, filePath) => {
+ipcMain.on("open-path", (_, filePath) => {
   shell.openPath(filePath);
 });
 
 function getSanitizedLogs({ name, filePath, data }) {
-  const logs = filePath ? fs.readFileSync(filePath, 'utf-8') : data;
+  const logs = filePath ? fs.readFileSync(filePath, "utf-8") : data;
   const tempDir = os.tmpdir();
 
   const usernameRegex = /\/Users\/([^/]+)/g;
-  const sanitizedData = logs.replace(usernameRegex, '/Users/*****');
+  const sanitizedData = logs.replace(usernameRegex, "/Users/*****");
 
   const sanitizedLogsFilePath = path.join(tempDir, name);
   fs.writeFileSync(sanitizedLogsFilePath, sanitizedData);
@@ -565,14 +568,14 @@ function getSanitizedLogs({ name, filePath, data }) {
 }
 
 // EXPORT LOGS
-ipcMain.handle('save-logs', async (_, data) => {
+ipcMain.handle("save-logs", async (_, data) => {
   // version.txt
   const versionFile = dirs.VersionFile;
   // logs.txt
-  const logFile = getSanitizedLogs({ name: 'log.txt', filePath: dirs.LogFile });
+  const logFile = getSanitizedLogs({ name: "log.txt", filePath: dirs.LogFile });
   // operate.log
   const installationLog = getSanitizedLogs({
-    name: 'installation_log.txt',
+    name: "installation_log.txt",
     filePath: dirs.OperateInstallationLog,
   });
 
@@ -587,13 +590,13 @@ ipcMain.handle('save-logs', async (_, data) => {
     Total Memory: ${os.totalmem()}
     Free Memory: ${os.freemem()}
   `;
-  const osInfoFilePath = path.join(tempDir, 'os_info.txt');
+  const osInfoFilePath = path.join(tempDir, "os_info.txt");
   fs.writeFileSync(osInfoFilePath, osInfo);
 
   // Persistent store
   let storeFilePath;
   if (data.store) {
-    storeFilePath = path.join(tempDir, 'store.txt');
+    storeFilePath = path.join(tempDir, "store.txt");
     fs.writeFileSync(storeFilePath, JSON.stringify(data.store, null, 2));
   }
 
@@ -601,7 +604,7 @@ ipcMain.handle('save-logs', async (_, data) => {
   let debugDataFilePath;
   if (data.debugData) {
     debugDataFilePath = getSanitizedLogs({
-      name: 'debug_data.txt',
+      name: "debug_data.txt",
       data: JSON.stringify(data.debugData, null, 2),
     });
   }
@@ -617,9 +620,9 @@ ipcMain.handle('save-logs', async (_, data) => {
 
   // Show save dialog
   const { filePath } = await dialog.showSaveDialog({
-    title: 'Save Logs',
-    defaultPath: path.join(os.homedir(), 'pearl_logs.zip'),
-    filters: [{ name: 'Zip Files', extensions: ['zip'] }],
+    title: "Save Logs",
+    defaultPath: path.join(os.homedir(), "pearl_logs.zip"),
+    filters: [{ name: "Zip Files", extensions: ["zip"] }],
   });
 
   let result;
