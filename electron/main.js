@@ -40,7 +40,6 @@ dotenv.config();
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.quit();
 
-// Attach mac updater
 const macUpdater = setupMacUpdater(app);
 
 const platform = os.platform();
