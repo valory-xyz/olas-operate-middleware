@@ -1,7 +1,6 @@
 {
   "extends": ["eslint:recommended", "plugin:prettier/recommended"],
-  "plugins": ["prettier", "no-unused-imports"],
-  "ignorePatterns": [".next/"],
+  "plugins": ["prettier", "unused-imports"],
   "rules": {
     "prettier/prettier": [
       "error",
@@ -12,7 +11,7 @@
       }
     ],
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-    "no-unused-imports/no-unused-imports": "error"
+    "unused-imports/no-unused-imports": "error"
   },
   "parserOptions": {
     "ecmaVersion": "latest",
@@ -21,5 +20,6 @@
   "env": {
     "node": true,
     "es6": true
-  }
+  },
+  "ignorePatterns": ["**/*.js", "!electron/**/*.js"]
 }

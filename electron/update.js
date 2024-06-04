@@ -1,35 +1,11 @@
-// const { publishOptions } = require('./constants/publishOptions');
-// const electronUpdater = require('electron-updater');
-// const electronLogger = require('electron-log');
+const electronUpdater = require('electron-updater');
+const electronLogger = require('electron-log');
 
-// const macUpdater = new electronUpdater.MacUpdater({
-//   ...publishOptions,
-// });
+const { publishOptions } = require('./constants/publishOptions');
 
-// macUpdater.logger = electronLogger;
-
-// macUpdater.setFeedURL({
-//   ...publishOptions,
-// });
-
-// macUpdater.autoDownload = true;
-// macUpdater.autoInstallOnAppQuit = true;
-// macUpdater.logger = electronLogger;
-
-const { publishOptions } = require("../constants/publishOptions");
-const electronUpdater = require("electron-updater");
-const electronLogger = require("electron-log");
-
-macUpdater.logger = electronLogger;
-
-export const setupMacUpdater = (app) => {
+const setupMacUpdater = (app) => {
   /** @type import type { MacUpdater } from "electron-updater" */
-  const macUpdater = new electronUpdater.MacUpdater(
-    {
-      ...publishOptions,
-    },
-    app
-  );
+  const macUpdater = new electronUpdater.MacUpdater(publishOptions, app);
 
   macUpdater.logger = electronLogger;
 
@@ -38,4 +14,4 @@ export const setupMacUpdater = (app) => {
   };
 };
 
-module.exports = { macUpdater };
+module.exports = { setupMacUpdater };
