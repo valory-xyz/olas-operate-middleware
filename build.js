@@ -24,7 +24,7 @@ const main = async () => {
         target: [
           {
             target: 'default',
-            arch: ['x64','arm64'],
+            arch: ['x64', 'arm64'],
           },
         ],
         publish: githubPublishOptions,
@@ -35,7 +35,7 @@ const main = async () => {
         entitlements: 'electron/entitlements.mac.plist',
         entitlementsInherit: 'electron/entitlements.mac.plist',
         notarize: {
-          teamId: process.env.APPLETEAMID
+          teamId: process.env.APPLETEAMID,
         },
       },
     },
