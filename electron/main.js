@@ -30,7 +30,7 @@ const {
 const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE, isWindows, isMac } = require('./constants');
-const { setupMacUpdater } = require('./update');
+const { macUpdater } = require('./update');
 const { setupStoreIpc } = require('./store');
 
 // Configure environment variables
@@ -39,7 +39,6 @@ dotenv.config();
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.quit();
-const macUpdater = setupMacUpdater(app);
 
 const platform = os.platform();
 const isDev = process.env.NODE_ENV === 'development';
