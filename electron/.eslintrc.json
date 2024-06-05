@@ -20,6 +20,5 @@
   "env": {
     "node": true,
     "es6": true
-  },
-  "ignorePatterns": ["**/*.js", "!electron/**/*.js"]
+  }
 }
