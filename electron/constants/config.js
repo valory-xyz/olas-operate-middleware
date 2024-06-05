@@ -1,15 +1,13 @@
 const githubOptions = {
+  releaseType: 'draft',
+  publishAutoUpdate: true,
+  token: process.env.GH_TOKEN,
   provider: 'github',
   owner: 'valory-xyz',
   repo: 'olas-operate-app',
   private: false,
+  protocol: 'https',
+  channel: 'latest',
 };
 
-const githubPublishOptions = {
-  releaseType: 'draft',
-  publishAutoUpdate: true,
-  token: process.env.GH_TOKEN,
-  ...githubOptions,
-};
-
-module.exports = { githubPublishOptions, githubOptions };
+module.exports = { githubOptions };
