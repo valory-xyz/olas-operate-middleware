@@ -36,14 +36,10 @@ const { setupStoreIpc } = require('./store');
 // Configure environment variables
 dotenv.config();
 
-console.log(app.getVersion())
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.quit();
 const macUpdater = setupMacUpdater(app);
-
-
-return
 
 const platform = os.platform();
 const isDev = process.env.NODE_ENV === 'development';
