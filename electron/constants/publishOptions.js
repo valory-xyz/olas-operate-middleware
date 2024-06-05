@@ -1,3 +1,4 @@
+/** @implements import { GithubOptions } from 'electron-updater' */
 const publishOptions = {
   provider: 'github',
   owner: 'valory-xyz',
