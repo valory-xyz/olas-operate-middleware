@@ -56,5 +56,5 @@
     "start": "electron .",
     "build": "rm -rf dist/ && electron-builder build"
   },
-  "version": "0.0.1-ota"
+  "version": "0.0.1"
 }
