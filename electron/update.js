@@ -3,7 +3,6 @@ const electronLogger = require('electron-log');
 
 const macUpdater = new MacUpdater({
   provider: 'github',
-  host: 'github.com',
   protocol: 'https',
   owner: 'valory-xyz',
   channel: ['latest', 'beta', 'alpha'],
