@@ -1,5 +1,3 @@
-/** @implements import { GithubOptions } from 'electron-updater' */
-
 const githubOptions = {
   provider: 'github',
   owner: 'valory-xyz',

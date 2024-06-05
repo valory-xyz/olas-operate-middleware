@@ -1,10 +1,16 @@
-const electronUpdater = require('electron-updater');
+const { MacUpdater } = require('electron-updater');
 const electronLogger = require('electron-log');
 
-const { githubOptions } = require('./constants/options');
+const macUpdater = new MacUpdater({
+  provider: 'github',
+  host: 'github.com',
+  protocol: 'https',
+  owner: 'valory-xyz',
+  channel: ['latest', 'beta', 'alpha'],
+  private: false,
+});
 
-const macUpdater = new electronUpdater.MacUpdater(githubOptions);
-
+electronLogger.transports.file.level = 'info';
 macUpdater.logger = electronLogger;
 
 module.exports = { macUpdater };
