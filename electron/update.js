@@ -11,7 +11,7 @@ macUpdater.logger = electronLogger;
 
 macUpdater.setFeedURL({ ...publishOptions });
 
-macUpdater.autoDownload = true;
+macUpdater.autoDownload = false;
 macUpdater.autoInstallOnAppQuit = true;
 macUpdater.logger = electronLogger;
 
