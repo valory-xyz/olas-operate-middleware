@@ -236,7 +236,7 @@ const createMainWindow = async () => {
     mainWindow.setSize(width, height);
   });
 
-  ipcMain.on('show-notification', (title, description) => {
+  ipcMain.on('show-notification', (_event, title, description) => {
     showNotification(title, description || undefined);
   });
 
@@ -259,7 +259,10 @@ const createMainWindow = async () => {
     mainWindow.hide();
   });
 
-  await setupStoreIpc(ipcMain, mainWindow);
+  const storeInitialValues = {
+    environmentName: process.env.IS_STAGING ? 'staging' : '',
+  };
+  await setupStoreIpc(ipcMain, mainWindow, storeInitialValues);
 
   if (isDev) {
     mainWindow.webContents.openDevTools();

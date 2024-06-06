@@ -1,21 +1,9 @@
-// set schema to validate store data
-const schema = {
-  isInitialFunded: {
-    type: 'boolean',
-    default: false,
-  },
-  firstStakingRewardAchieved: {
-    type: 'boolean',
-    default: false,
-  },
-  firstRewardNotificationShown: {
-    type: 'boolean',
-    default: false,
-  },
-  canCheckForUpdates: {
-    type: 'boolean',
-    default: true,
-  },
+const defaultSchema = {
+  environmentName: { type: 'string', default: '' },
+  isInitialFunded: { type: 'boolean', default: false },
+  firstStakingRewardAchieved: { type: 'boolean', default: false },
+  firstRewardNotificationShown: { type: 'boolean', default: false },
+  canCheckForUpdates: { type: 'boolean', default: true },
 };
 
 /**
@@ -23,10 +11,19 @@ const schema = {
  * @param {import('electron').IpcMain} ipcChannel
  * @param {import('electron').BrowserWindow} mainWindow
  */
-const setupStoreIpc = async (ipcChannel, mainWindow) => {
+const setupStoreIpc = async (ipcChannel, mainWindow, storeInitialValues) => {
+  /** @type {import('electron-store').default} */
   const Store = (await import('electron-store')).default;
 
-  /** @type {import('electron-store').default} */
+  // set default values for store
+  const schema = Object.assign({}, defaultSchema);
+  Object.keys(schema).forEach((key) => {
+    if (storeInitialValues[key] !== undefined) {
+      schema[key].default = storeInitialValues[key];
+    }
+  });
+
+  /** @type import Store from 'electron-store' */
   const store = new Store({ schema });
 
   store.onDidAnyChange((data) => {

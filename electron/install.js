@@ -6,12 +6,17 @@ const fs = require('fs');
 const os = require('os');
 const sudo = require('sudo-prompt');
 const process = require('process');
-const axios = require("axios")
+const axios = require('axios');
 
 const Docker = require('dockerode');
 const { spawnSync } = require('child_process');
 
-const Version = '0.1.0rc34';
+/**
+ * current version of the pearl release
+ * - use "" (nothing as a suffix) for latest release candidate, for example "0.1.0rc26"
+ * - use "alpha" for alpha release, for example "0.1.0rc26-alpha"
+ */
+const OlasMiddlewareVersion = '0.1.0rc35';
 const OperateDirectory = `${os.homedir()}/.operate`;
 const VenvDir = `${OperateDirectory}/venv`;
 const TempDir = `${OperateDirectory}/temp`;
@@ -22,6 +27,7 @@ const OperateCmd = `${os.homedir()}/.operate/venv/bin/operate`;
 const Env = {
   ...process.env,
   PATH: `${process.env.PATH}:/opt/homebrew/bin:/usr/local/bin`,
+  HOMEBREW_NO_AUTO_UPDATE: '1',
 };
 const SudoOptions = {
   name: 'Pearl',
@@ -29,18 +35,21 @@ const SudoOptions = {
 };
 const TendermintUrls = {
   darwin: {
-    x64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_amd64.tar.gz",
-    arm64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_arm64.tar.gz",
+    x64: 'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_amd64.tar.gz',
+    arm64:
+      'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_arm64.tar.gz',
   },
   linux: {
-    x64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_amd64.tar.gz",
-    arm64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_arm64.tar.gz",
+    x64: 'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_amd64.tar.gz',
+    arm64:
+      'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_linux_arm64.tar.gz',
   },
   win32: {
-    x64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_windows_amd64.tar.gz",
-    arm64: "https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_windows_arm64.tar.gz"
-  }
-}
+    x64: 'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_windows_amd64.tar.gz',
+    arm64:
+      'https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_windows_arm64.tar.gz',
+  },
+};
 
 function getBinPath(command) {
   return spawnSync('/usr/bin/which', [command], { env: Env })
@@ -63,10 +72,8 @@ function appendLog(log) {
 }
 
 function runCmdUnix(command, options) {
-  fs.appendFileSync(
-    OperateInstallationLog,
-    `Runninng ${command} with options ${JSON.stringify(options)}`,
-    { encoding: 'utf-8' },
+  console.log(
+    appendLog(`Running ${command} with options ${JSON.stringify(options)}`),
   );
   let bin = getBinPath(command);
   if (!bin) {
@@ -97,7 +104,7 @@ function runSudoUnix(command, options) {
   if (!bin) {
     throw new Error(`Command ${command} not found`);
   }
-  return new Promise(function (resolve, reject) {
+  return new Promise(function (resolve, _reject) {
     sudo.exec(
       `${bin} ${options}`,
       SudoOptions,
@@ -133,7 +140,7 @@ async function downloadFile(url, dest) {
     const response = await axios({
       url,
       method: 'GET',
-      responseType: 'stream'
+      responseType: 'stream',
     });
     response.data.pipe(writer);
     return new Promise((resolve, reject) => {
@@ -141,27 +148,28 @@ async function downloadFile(url, dest) {
       writer.on('error', reject);
     });
   } catch (err) {
-    fs.unlink(dest, () => { }); // Delete the file if there is an error
+    fs.unlink(dest, () => {}); // Delete the file if there is an error
     console.error('Error downloading the file:', err.message);
   }
 }
 
 async function installTendermintUnix() {
-  const cwd = process.cwd()
-  process.chdir(TempDir)
+  const cwd = process.cwd();
+  process.chdir(TempDir);
 
-  console.log(appendLog(`Installing tendermint for ${os.platform()}-${process.arch}`))
-  const url = TendermintUrls[os.platform()][process.arch]
+  console.log(
+    appendLog(`Installing tendermint for ${os.platform()}-${process.arch}`),
+  );
+  const url = TendermintUrls[os.platform()][process.arch];
 
-  console.log(appendLog(`Downloading ${url}, might take a while...`))
-  await downloadFile(url, `${TempDir}/tendermint.tar.gz`)
+  console.log(appendLog(`Downloading ${url}, might take a while...`));
+  await downloadFile(url, `${TempDir}/tendermint.tar.gz`);
 
-  console.log(appendLog(`Installing tendermint binary`))
-  await runCmdUnix("tar", ["-xvf", "tendermint.tar.gz"])
-  await runSudoUnix("install", "tendermint /usr/local/bin")
-  process.chdir(cwd)
+  console.log(appendLog(`Installing tendermint binary`));
+  await runCmdUnix('tar', ['-xvf', 'tendermint.tar.gz']);
+  await runSudoUnix('install', 'tendermint /usr/local/bin');
+  process.chdir(cwd);
 }
-
 
 function isDockerInstalledDarwin() {
   return Boolean(getBinPath('docker'));
@@ -216,7 +224,7 @@ function installOperatePackageUnix(path) {
     '-m',
     'pip',
     'install',
-    `olas-operate-middleware==${Version}`,
+    `olas-operate-middleware==${OlasMiddlewareVersion}`,
   ]);
 }
 
@@ -226,7 +234,7 @@ function reInstallOperatePackageUnix(path) {
     '-m',
     'pip',
     'install',
-    `olas-operate-middleware==${Version}`,
+    `olas-operate-middleware==${OlasMiddlewareVersion}`,
     '--force-reinstall',
   ]);
 }
@@ -236,11 +244,11 @@ function installOperateCli(path) {
   if (fs.existsSync(installPath)) {
     fs.rmSync(installPath);
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     fs.copyFile(
       `${OperateDirectory}/venv/bin/operate`,
       installPath,
-      function (error, stdout, stderr) {
+      function (error, _stdout, _stderr) {
         resolve(!error);
       },
     );
@@ -251,7 +259,7 @@ function createDirectory(path) {
   if (fs.existsSync(path)) {
     return;
   }
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve, _reject) => {
     fs.mkdir(path, { recursive: true }, (error) => {
       resolve(!error);
     });
@@ -259,15 +267,15 @@ function createDirectory(path) {
 }
 
 function writeVersion() {
-  fs.writeFileSync(VersionFile, Version);
+  fs.writeFileSync(VersionFile, OlasMiddlewareVersion);
 }
 
 function versionBumpRequired() {
   if (!fs.existsSync(VersionFile)) {
     return true;
   }
-  const version = fs.readFileSync(VersionFile).toString();
-  return version != Version;
+  const olasMiddlewareVersionInFile = fs.readFileSync(VersionFile).toString();
+  return olasMiddlewareVersionInFile != OlasMiddlewareVersion;
 }
 
 function removeLogFile() {
@@ -310,7 +318,7 @@ async function setupDarwin(ipcChannel) {
   if (!isTendermintInstalledUnix()) {
     ipcChannel.send('response', 'Installing Pearl Daemon');
     console.log(appendLog('Installing tendermint'));
-    await installTendermintUnix()
+    await installTendermintUnix();
   }
 
   if (!fs.existsSync(VenvDir)) {
@@ -324,7 +332,9 @@ async function setupDarwin(ipcChannel) {
 
   console.log(appendLog('Checking if upgrade is required'));
   if (versionBumpRequired()) {
-    console.log(appendLog(`Upgrading pearl daemon to ${Version}`));
+    console.log(
+      appendLog(`Upgrading pearl daemon to ${OlasMiddlewareVersion}`),
+    );
     reInstallOperatePackageUnix(OperateDirectory);
     writeVersion();
     removeLogFile();
@@ -364,7 +374,7 @@ async function setupUbuntu(ipcChannel) {
   if (!isTendermintInstalledUnix()) {
     ipcChannel.send('response', 'Installing Pearl Daemon');
     console.log(appendLog('Installing tendermint'));
-    await installTendermintUnix()
+    await installTendermintUnix();
   }
 
   if (!fs.existsSync(VenvDir)) {
@@ -378,7 +388,9 @@ async function setupUbuntu(ipcChannel) {
 
   console.log(appendLog('Checking if upgrade is required'));
   if (versionBumpRequired()) {
-    console.log(appendLog(`Upgrading pearl daemon to ${Version}`));
+    console.log(
+      appendLog(`Upgrading pearl daemon to ${OlasMiddlewareVersion}`),
+    );
     reInstallOperatePackageUnix(OperateDirectory);
     writeVersion();
     removeLogFile();

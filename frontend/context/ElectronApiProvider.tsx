@@ -29,7 +29,7 @@ type ElectronApiContextProps = {
   saveLogs?: (data: {
     store?: ElectronStore;
     debugData?: Record<string, unknown>;
-  }) => Promise<{ success: true; dirPath: string } | { success: false }>;
+  }) => Promise<{ success: true; dirPath: string } | { success?: false }>;
   openPath?: (filePath: string) => void;
 
   // download new updates
