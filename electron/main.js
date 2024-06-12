@@ -547,12 +547,12 @@ function checkForUpdates() {
       resolve({ available: true, version: info.version, message: info.releaseNotes });
     });
 
-    autoUpdater.once('update-not-available', () => {
+    macUpdater.once('update-not-available', () => {
       console.log('No updates available.');
       resolve({ available: false, message: 'No updates available.' });
     });
 
-    autoUpdater.once('error', (error) => {
+    macUpdater.once('error', (error) => {
       console.error('Error in auto-updater:', error);
       reject(error);
     });
@@ -561,14 +561,14 @@ function checkForUpdates() {
 
 ipcMain.handle('check-for-updates', async () => {
   console.log('Checking for updates...');
-  console.log(typeof macUpdater);
-  return {  available: false, message: 'No updates available.' }
-  // try {
-  //   const result = await checkForUpdates();
-  //   return result;
-  // } catch (error) {
-  //   throw new Error(error.message);
-  // }
+  // console.log(typeof macUpdater);
+  // return { checkForUpdates: macUpdater.checkForUpdates, available: false, message: 'No updates available.' }
+  try {
+    const result = await checkForUpdates();
+    return result;
+  } catch (error) {
+    throw new Error(error.message);
+  }
 });
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
