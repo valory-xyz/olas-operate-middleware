@@ -408,6 +408,24 @@ async function launchNextAppDev() {
   });
 }
 
+// APP-SPECIFIC EVENTS
+app.on('ready', async () => {
+  if (platform === 'darwin') {
+    app.dock?.setIcon(
+      path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
+    );
+  }
+  createSplashWindow();
+});
+
+app.on('window-all-closed', () => {
+  app.quit();
+});
+
+app.on('before-quit', async () => {
+  await beforeQuit();
+});
+
 ipcMain.on('check', async function (event, _argument) {
   // Setup
   try {
@@ -486,25 +504,17 @@ ipcMain.on('check', async function (event, _argument) {
   }
 });
 
-// APP-SPECIFIC EVENTS
-app.on('ready', async () => {
-  if (platform === 'darwin') {
-    app.dock?.setIcon(
-      path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
-    );
-  }
-  createSplashWindow();
-});
+ipcMain.handle('check-for-updates', async () =>
+  macUpdater
+    .checkForUpdates()
+    .then((res) => res && macUpdater.emit('update-available', res)),
+);
 
-app.on('window-all-closed', () => {
-  app.quit();
-});
+ipcMain.handle('start-download', () => macUpdater.downloadUpdate());
 
-app.on('before-quit', async () => {
-  await beforeQuit();
-});
+ipcMain.handleOnce('install-update', () => macUpdater.quitAndInstall());
 
-// UPDATER EVENTS
+// HANDLE EVENTS FROM MAC UPDATER
 macUpdater.on('update-downloaded', () => {
   mainWindow.webContents.send('update-downloaded');
 });
@@ -515,60 +525,6 @@ macUpdater.on('update-available', (info) => {
 
 macUpdater.on('download-progress', (progress) => {
   mainWindow.webContents.send('download-progress', progress);
-});
-
-ipcMain.on('start-download', () => {
-  macUpdater.downloadUpdate();
-});
-
-ipcMain.on('install-update', () => {
-  macUpdater.quitAndInstall();
-});
-
-ipcMain.on('update-available', async () => {
-  try {
-    const result = await checkForUpdates();
-    return result;
-  } catch (error) {
-    throw new Error(error.message);
-  }
-});
-
-function checkForUpdates() {
-  return new Promise((resolve, reject) => {
-    console.log('Checking for updates...');
-    console.log(macUpdater);
-
-    macUpdater.checkForUpdates();
-
-    macUpdater.once('update-available', (info) => {
-      console.log('Update available.');
-      console.log(`Version: ${info.version}`);
-      resolve({ available: true, version: info.version, message: info.releaseNotes });
-    });
-
-    macUpdater.once('update-not-available', () => {
-      console.log('No updates available.');
-      resolve({ available: false, message: 'No updates available.' });
-    });
-
-    macUpdater.once('error', (error) => {
-      console.error('Error in auto-updater:', error);
-      reject(error);
-    });
-  });
-}
-
-ipcMain.handle('check-for-updates', async () => {
-  console.log('Checking for updates...');
-  // console.log(typeof macUpdater);
-  // return { checkForUpdates: macUpdater.checkForUpdates, available: false, message: 'No updates available.' }
-  try {
-    const result = await checkForUpdates();
-    return result;
-  } catch (error) {
-    throw new Error(error.message);
-  }
 });
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
