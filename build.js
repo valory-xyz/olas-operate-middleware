@@ -37,6 +37,7 @@ const main = async () => {
         notarize: {
           teamId: process.env.APPLETEAMID,
         },
+        
       },
     },
   });
