@@ -6,5 +6,8 @@ const macUpdater = new MacUpdater(githubOptions);
 
 electronLogger.transports.file.level = 'info';
 macUpdater.logger = electronLogger;
+macUpdater.autoDownload = false;
+macUpdater.autoInstallOnAppQuit = false;
+macUpdater.channel = 'latest';
 
 module.exports = { macUpdater };
