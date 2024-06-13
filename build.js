@@ -24,7 +24,7 @@ const main = async () => {
         target: [
           {
             target: 'default',
-            arch: ['x64', 'arm64'],
+            arch: ['arm64', 'x64'],
           },
         ],
         publish: githubPublishOptions,
@@ -37,7 +37,7 @@ const main = async () => {
         notarize: {
           teamId: process.env.APPLETEAMID,
         },
-        
+
       },
     },
   });
