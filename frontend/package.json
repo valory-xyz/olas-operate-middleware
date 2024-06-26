@@ -41,7 +41,7 @@
     "ts-node": "^10.9.2",
     "typescript": "^5"
   },
-  "name": "olas-operate-app",
+  "name": "olas-pearl-app",
   "private": true,
   "scripts": {
     "dev": "next dev",

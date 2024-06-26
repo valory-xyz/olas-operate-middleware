@@ -1,7 +1,7 @@
 {
   "author": "Valory AG",
   "main": "electron/main.js",
-  "name": "olas-operate-app",
+  "name": "olas-pearl-app",
   "productName": "Pearl",
   "version": "0.1.0-rc60",
   "dependencies": {
