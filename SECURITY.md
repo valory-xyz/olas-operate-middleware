@@ -1,19 +1,19 @@
 # Security Policy
 
-This document outlines security procedures and general policies for the `olas-operate-app` project.
+This document outlines security procedures and general policies for the `olas-pearl-app` project.
 
 ## Supported Versions
 
-The following table shows which versions of `olas-operate-app` are currently being supported with security updates.
+The following table shows which versions of `olas-pearl-app` are currently being supported with security updates.
 
-| Version         | Supported          |
-|-----------------|--------------------|
+| Version   | Supported          |
+| --------- | ------------------ |
 | `1.0.0`   | :white_check_mark: |
 | `< 1.0.0` | :x:                |
 
 ## Reporting a Vulnerability
 
-The `olas-operate-app` team and community take all security bugs in `olas-operate-app` seriously. Thank you for improving the security of `olas-operate-app`. We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your contributions.
+The `olas-pearl-app` team and community take all security bugs in `olas-pearl-app` seriously. Thank you for improving the security of `olas-pearl-app`. We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your contributions.
 
 Report security bugs by emailing `info@valory.xyz`.
 
