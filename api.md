@@ -12,7 +12,7 @@ Returns information of the operate daemon
   "account": {
     "key": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb9226a"
   },
-  "home": "/Users/user/valory/olas-operate-app/.operate"
+  "home": "/Users/user/valory/olas-pearl-app/.operate"
 }
 ```
 
@@ -282,8 +282,8 @@ Returns the list of services
         }
       }
     },
-    "path": "/Users/user/valory/olas-operate-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-    "service_path": "/Users/user/valory/olas-operate-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq/trader_omen_gnosis",
+    "path": "/Users/user/valory/olas-pearl-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
+    "service_path": "/Users/user/valory/olas-pearl-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq/trader_omen_gnosis",
     "name": "valory/trader_omen_gnosis"
   }
 ]
