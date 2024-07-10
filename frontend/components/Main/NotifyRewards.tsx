@@ -2,14 +2,13 @@ import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useState } from 'react';
 
-import { balanceFormat } from '@/common-util';
-import { MODAL_WIDTH } from '@/constants';
-import { useBalance } from '@/hooks';
+import { ConfettiAnimation } from '@/components/Confetti/ConfettiAnimation';
+import { MODAL_WIDTH } from '@/constants/sizes';
+import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useReward } from '@/hooks/useReward';
 import { useStore } from '@/hooks/useStore';
-
-import { ConfettiAnimation } from '../common/ConfettiAnimation';
+import { balanceFormat } from '@/utils/numberFormatters';
 
 const { Text, Title } = Typography;
 
