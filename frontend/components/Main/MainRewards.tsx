@@ -1,9 +1,9 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Flex, Skeleton, Tag, Tooltip, Typography } from 'antd';
 
-import { balanceFormat } from '@/common-util';
-import { useBalance } from '@/hooks';
+import { useBalance } from '@/hooks/useBalance';
 import { useReward } from '@/hooks/useReward';
+import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../styled/CardSection';
 
@@ -19,6 +19,11 @@ const Loader = () => (
 export const MainRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
   const { isBalanceLoaded } = useBalance();
+
+  const reward =
+    availableRewardsForEpochEth === undefined
+      ? '--'
+      : `~${balanceFormat(availableRewardsForEpochEth, 2)}`;
 
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
@@ -38,9 +43,7 @@ export const MainRewards = () => {
       </Text>
       {isBalanceLoaded ? (
         <Flex align="center" gap={12}>
-          <Text className="text-xl font-weight-600">
-            {balanceFormat(availableRewardsForEpochEth, 2)} OLAS&nbsp;
-          </Text>
+          <Text className="text-xl font-weight-600">{reward} OLAS&nbsp;</Text>
           {isEligibleForRewards ? (
             <Tag color="success">Earned</Tag>
           ) : (

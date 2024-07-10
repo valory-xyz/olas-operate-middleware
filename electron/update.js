@@ -1,10 +1,13 @@
+const { publishOptions } = require('./constants');
 const { MacUpdater } = require('electron-updater');
-const electronLogger = require('electron-log');
-const { githubOptions } = require('./constants/config');
+const logger = require('./logger');
 
 const macUpdater = new MacUpdater(githubOptions);
 
-electronLogger.transports.file.level = 'info';
-macUpdater.logger = electronLogger;
+macUpdater.setFeedURL({ ...publishOptions });
+
+macUpdater.autoDownload = true;
+macUpdater.autoInstallOnAppQuit = true;
+macUpdater.logger = logger;
 
 module.exports = { macUpdater };

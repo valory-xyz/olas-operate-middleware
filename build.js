@@ -1,8 +1,10 @@
-const dotenv = require('dotenv');
+/**
+ * This script is used to build the electron app **with notarization**. It is used for the final build and release process.
+ */
+require('dotenv').config();
 const build = require('electron-builder').build;
-const { githubPublishOptions } = require('./electron/constants/config');
 
-dotenv.config();
+const { publishOptions } = require('./electron/constants');
 
 const main = async () => {
   console.log('Building...');
@@ -18,6 +20,13 @@ const main = async () => {
       directories: {
         output: 'dist',
       },
+      extraResources: [
+        {
+          from: 'electron/bins',
+          to: 'bins',
+          filter: ['**/*'],
+        },
+      ],
       cscKeyPassword: process.env.CSC_KEY_PASSWORD,
       cscLink: process.env.CSC_LINK,
       mac: {

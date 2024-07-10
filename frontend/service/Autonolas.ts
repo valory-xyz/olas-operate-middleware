@@ -1,13 +1,11 @@
-import { ethers } from 'ethers';
+import { BigNumber, ethers } from 'ethers';
 import { Contract as MulticallContract } from 'ethers-multicall';
 
-import {
-  AGENT_MECH_ABI,
-  MECH_ACTIVITY_CHECKER_ABI,
-  SERVICE_REGISTRY_L2_ABI,
-  SERVICE_REGISTRY_TOKEN_UTILITY_ABI,
-  SERVICE_STAKING_TOKEN_MECH_USAGE_ABI,
-} from '@/abi';
+import { AGENT_MECH_ABI } from '@/abis/agentMech';
+import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
+import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
+import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_ABI } from '@/abis/serviceStakingTokenMechUsage';
 import { Chain } from '@/client';
 import {
   AGENT_MECH_CONTRACT_ADDRESS,
@@ -15,10 +13,11 @@ import {
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESS,
-} from '@/constants';
+} from '@/constants/contractAddresses';
 import { gnosisMulticallProvider } from '@/constants/providers';
-import { ServiceRegistryL2ServiceState } from '@/enums';
-import { Address, StakingRewardsInfo } from '@/types';
+import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
+import { Address } from '@/types/Address';
+import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
 
 const REQUIRED_MECH_REQUESTS_SAFETY_MARGIN = 1;
 
@@ -65,6 +64,7 @@ const getAgentStakingRewardsInfo = async ({
     serviceStakingTokenMechUsageContract.rewardsPerSecond(),
     serviceStakingTokenMechUsageContract.calculateStakingReward(serviceId),
     serviceStakingTokenMechUsageContract.minStakingDeposit(),
+    serviceStakingTokenMechUsageContract.tsCheckpoint(),
   ];
 
   await gnosisMulticallProvider.init();
@@ -77,8 +77,9 @@ const getAgentStakingRewardsInfo = async ({
     livenessPeriod,
     livenessRatio,
     rewardsPerSecond,
-    accruedServiceStakingRewards,
-    minimumStakingDeposit,
+    accuredStakingReward,
+    minStakingDeposit,
+    tsCheckpoint,
   ] = multicallResponse;
 
   /**
@@ -97,24 +98,28 @@ const getAgentStakingRewardsInfo = async ({
     uint256 inactivity;}
    */
 
-  const livenessRatioFormatted = livenessRatio / 1e18;
+  const nowInSeconds = Math.floor(Date.now() / 1000);
 
-  const multisigNonce = serviceInfo[2][1];
-
-  const eligibleRequests = mechRequestCount - multisigNonce;
-
-  const eligibilityMargin =
-    livenessPeriod * livenessRatioFormatted +
+  const requiredMechRequests =
+    (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
+      livenessRatio) /
+      1e18 +
     REQUIRED_MECH_REQUESTS_SAFETY_MARGIN;
 
-  const isEligibleForRewards = eligibleRequests >= eligibilityMargin;
+  const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
+  const eligibleRequests = mechRequestCount - mechRequestCountOnLastCheckpoint;
 
-  const availableRewardsForEpoch = rewardsPerSecond * livenessPeriod;
+  const isEligibleForRewards = eligibleRequests >= requiredMechRequests;
+
+  const availableRewardsForEpoch = Math.max(
+    rewardsPerSecond * livenessPeriod, // expected rewards for the epoch
+    rewardsPerSecond * (nowInSeconds - tsCheckpoint), // incase of late checkpoint
+  );
 
   // Minimum staked amount is double the minimum staking deposit
-  // (basically all the bonds must be the same as deposit)
+  // (all the bonds must be the same as deposit)
   const minimumStakedAmount =
-    parseFloat(ethers.utils.formatEther(`${minimumStakingDeposit}`)) * 2;
+    parseFloat(ethers.utils.formatEther(`${minStakingDeposit}`)) * 2;
 
   return {
     mechRequestCount,
@@ -125,7 +130,7 @@ const getAgentStakingRewardsInfo = async ({
     isEligibleForRewards,
     availableRewardsForEpoch,
     accruedServiceStakingRewards: parseFloat(
-      ethers.utils.formatEther(`${accruedServiceStakingRewards}`),
+      ethers.utils.formatEther(`${accuredStakingReward}`),
     ),
     minimumStakedAmount,
   } as StakingRewardsInfo;
@@ -134,16 +139,53 @@ const getAgentStakingRewardsInfo = async ({
 const getAvailableRewardsForEpoch = async (): Promise<number | undefined> => {
   const contractCalls = [
     serviceStakingTokenMechUsageContract.rewardsPerSecond(),
-    serviceStakingTokenMechUsageContract.livenessPeriod(),
+    serviceStakingTokenMechUsageContract.livenessPeriod(), // epoch length
+    serviceStakingTokenMechUsageContract.tsCheckpoint(), // last checkpoint timestamp
   ];
 
   await gnosisMulticallProvider.init();
 
   const multicallResponse = await gnosisMulticallProvider.all(contractCalls);
 
-  const [rewardsPerSecond, livenessPeriod] = multicallResponse;
+  const [rewardsPerSecond, livenessPeriod, tsCheckpoint] = multicallResponse;
 
-  return rewardsPerSecond * livenessPeriod;
+  const nowInSeconds = Math.floor(Date.now() / 1000);
+
+  return Math.max(
+    rewardsPerSecond * livenessPeriod, // expected rewards
+    rewardsPerSecond * (nowInSeconds - tsCheckpoint), // incase of late checkpoint
+  );
+};
+
+/**
+ * function to get the staking contract info
+ */
+const getStakingContractInfo = async (): Promise<
+  StakingContractInfo | undefined
+> => {
+  const contractCalls = [
+    serviceStakingTokenMechUsageContract.availableRewards(),
+    serviceStakingTokenMechUsageContract.maxNumServices(),
+    serviceStakingTokenMechUsageContract.getServiceIds(),
+  ];
+
+  await gnosisMulticallProvider.init();
+
+  const multicallResponse = await gnosisMulticallProvider.all(contractCalls);
+  const [availableRewardsInBN, maxNumServicesInBN, getServiceIdsInBN] =
+    multicallResponse;
+
+  const availableRewards = parseFloat(
+    ethers.utils.formatUnits(availableRewardsInBN, 18),
+  );
+  const serviceIds = getServiceIdsInBN.map((id: BigNumber) => id.toNumber());
+  const maxNumServices = maxNumServicesInBN.toNumber();
+
+  return {
+    availableRewards,
+    maxNumServices,
+    serviceIds,
+  };
 };
 
 const getServiceRegistryInfo = async (
@@ -188,4 +230,5 @@ export const AutonolasService = {
   getAgentStakingRewardsInfo,
   getAvailableRewardsForEpoch,
   getServiceRegistryInfo,
+  getStakingContractInfo,
 };

@@ -5,13 +5,16 @@ import type { AppProps } from 'next/app';
 import { useEffect, useRef } from 'react';
 
 import { Layout } from '@/components/Layout';
-import { PageStateProvider, ServicesProvider, SetupProvider } from '@/context';
 import { BalanceProvider } from '@/context/BalanceProvider';
 import { ElectronApiProvider } from '@/context/ElectronApiProvider';
 import { MasterSafeProvider } from '@/context/MasterSafeProvider';
 import { OnlineStatusProvider } from '@/context/OnlineStatusProvider';
+import { PageStateProvider } from '@/context/PageStateProvider';
 import { RewardProvider } from '@/context/RewardProvider';
+import { ServicesProvider } from '@/context/ServicesProvider';
 import { SettingsProvider } from '@/context/SettingsProvider';
+import { SetupProvider } from '@/context/SetupProvider';
+import { StakingContractInfoProvider } from '@/context/StakingContractInfoProvider';
 import { StoreProvider } from '@/context/StoreProvider';
 import { WalletProvider } from '@/context/WalletProvider';
 import { mainTheme } from '@/theme';
@@ -38,13 +41,15 @@ export default function App({ Component, pageProps }: AppProps) {
                     <BalanceProvider>
                       <SetupProvider>
                         <SettingsProvider>
-                          {isMounted ? (
-                            <ConfigProvider theme={mainTheme}>
-                              <Layout>
-                                <Component {...pageProps} />
-                              </Layout>
-                            </ConfigProvider>
-                          ) : null}
+                          <StakingContractInfoProvider>
+                            {isMounted ? (
+                              <ConfigProvider theme={mainTheme}>
+                                <Layout>
+                                  <Component {...pageProps} />
+                                </Layout>
+                              </ConfigProvider>
+                            ) : null}
+                          </StakingContractInfoProvider>
                         </SettingsProvider>
                       </SetupProvider>
                     </BalanceProvider>

@@ -3,11 +3,11 @@ import { Flex, Skeleton, Tooltip, Typography } from 'antd';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
-import { balanceFormat } from '@/common-util/numberFormatters';
-import { COLOR } from '@/constants';
-import { UNICODE_SYMBOLS } from '@/constants/unicode';
-import { useBalance } from '@/hooks';
+import { COLOR } from '@/constants/colors';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { useBalance } from '@/hooks/useBalance';
 import { useReward } from '@/hooks/useReward';
+import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../styled/CardSection';
 
@@ -67,9 +67,12 @@ const CurrentBalance = () => {
         value: balanceFormat(accruedServiceStakingRewards ?? 0, 2),
       },
       {
+        // Unused funds should only be ‘free-floating’ OLAS that is neither unclaimed nor staked.
         title: 'Unused funds',
         value: balanceFormat(
-          (totalOlasBalance ?? 0) - (totalOlasStakedBalance ?? 0),
+          (totalOlasBalance ?? 0) -
+            (totalOlasStakedBalance ?? 0) -
+            (accruedServiceStakingRewards ?? 0),
           2,
         ),
       },

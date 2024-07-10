@@ -3,8 +3,9 @@ import { Skeleton, Tooltip, Typography } from 'antd';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
-import { COLOR, LOW_BALANCE } from '@/constants';
-import { useBalance } from '@/hooks';
+import { COLOR } from '@/constants/colors';
+import { LOW_BALANCE } from '@/constants/thresholds';
+import { useBalance } from '@/hooks/useBalance';
 import { useWallet } from '@/hooks/useWallet';
 
 import { CardSection } from '../styled/CardSection';
@@ -77,13 +78,12 @@ export const MainGasBalance = () => {
       padding="16px 24px"
     >
       <Text type="secondary">
-        Gas and trading balance&nbsp;
+        Trading balance&nbsp;
         {masterSafeAddress && (
           <Tooltip
             title={
               <TooltipContent>
-                Your agent uses this balance to pay for transactions and other
-                trading activity on-chain.
+                Your agent uses this balance to fund trading activity on-chain.
                 <br />
                 <a
                   href={'https://gnosisscan.io/address/' + masterSafeAddress}

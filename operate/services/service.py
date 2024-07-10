@@ -21,19 +21,13 @@
 
 import json
 import os
-import platform
 import shutil
-import signal
 import subprocess  # nosec
-import time
 import typing as t
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from pathlib import Path
-from venv import main as venv_cli
 
-import psutil
-from aea.__version__ import __version__ as aea_version
 from aea.configurations.constants import (
     DEFAULT_LEDGER,
     LEDGER,
@@ -44,7 +38,6 @@ from aea.configurations.constants import (
 from aea.configurations.data_types import PackageType
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
-from autonomy.__version__ import __version__ as autonomy_version
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
 from autonomy.configurations.loader import load_service_config
 from autonomy.deploy.base import BaseDeploymentGenerator
@@ -70,6 +63,7 @@ from operate.constants import (
 from operate.http.exceptions import NotAllowed
 from operate.keys import Keys
 from operate.resource import LocalResource
+from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
 from operate.types import (
     ChainType,
@@ -87,7 +81,7 @@ from operate.types import (
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-
+DELETE_PREFIX = "delete_"
 
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
 
@@ -299,7 +293,7 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
             encoding="utf-8",
         )
         shutil.copy(
-            tendermint.__file__,
+            tendermint.__file__.replace(".pyc", ".py"),
             self.build_dir / "tendermint.py",
         )
         return self
@@ -317,7 +311,6 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
             json.dumps(agent, indent=2),
             encoding="utf-8",
         )
-        venv_cli(args=[str(self.build_dir / "venv")])
         return self
 
     def _populate_keys(self) -> None:
@@ -341,229 +334,6 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         return self
 
 
-def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
-    """Run command in a subprocess."""
-    print(f"Running: {' '.join(args)}")
-    result = subprocess.run(  # pylint: disable=subprocess-run-check # nosec
-        args=args,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"Error running: {args} @ {cwd}\n{result.stderr.decode()}")
-
-
-def _setup_agent(working_dir: Path) -> None:
-    """Setup agent."""
-    env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
-    # Patch for trader agent
-    if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_POLICY_STORE_PATH" in env:
-        data_dir = working_dir / "data"
-        data_dir.mkdir(exist_ok=True)
-        env["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_POLICY_STORE_PATH"] = str(data_dir)
-
-    # TODO: Dynamic port allocation, backport to service builder
-    env["CONNECTION_ABCI_CONFIG_HOST"] = "localhost"
-    env["CONNECTION_ABCI_CONFIG_PORT"] = "26658"
-
-    for var in env:
-        # Fix tendermint connection params
-        if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_COM_URL"):
-            env[var] = "http://localhost:8080"
-
-        if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_URL"):
-            env[var] = "http://localhost:26657"
-
-        if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_P2P_URL"):
-            env[var] = "localhost:26656"
-
-        if var.endswith("MODELS_BENCHMARK_TOOL_ARGS_LOG_DIR"):
-            benchmarks_dir = working_dir / "benchmarks"
-            benchmarks_dir.mkdir(exist_ok=True, parents=True)
-            env[var] = str(benchmarks_dir.resolve())
-
-    (working_dir / "agent.json").write_text(
-        json.dumps(env, indent=4),
-        encoding="utf-8",
-    )
-    venv = working_dir / "venv"
-    pbin = str(venv / "bin" / "python")
-
-    # Install agent dependencies
-    _run_cmd(
-        args=[
-            pbin,
-            "-m",
-            "pip",
-            "install",
-            f"open-autonomy[all]=={autonomy_version}",
-            f"open-aea-ledger-ethereum=={aea_version}",
-            f"open-aea-ledger-ethereum-flashbots=={aea_version}",
-            f"open-aea-ledger-cosmos=={aea_version}",
-        ],
-    )
-
-    # Install tendermint dependencies
-    _run_cmd(args=[pbin, "-m", "pip", "install", "flask", "requests"])
-
-    abin = str(venv / "bin" / "aea")
-    # Fetch agent
-    _run_cmd(
-        args=[
-            abin,
-            "init",
-            "--reset",
-            "--author",
-            "valory",
-            "--remote",
-            "--ipfs",
-            "--ipfs-node",
-            "/dns/registry.autonolas.tech/tcp/443/https",
-        ],
-        cwd=working_dir,
-    )
-    _run_cmd(
-        args=[
-            abin,
-            "fetch",
-            env["AEA_AGENT"],
-            "--alias",
-            "agent",
-        ],
-        cwd=working_dir,
-    )
-
-    # Install agent dependencies
-    _run_cmd(
-        args=[abin, "-v", "debug", "install", "--timeout", "600"],
-        cwd=working_dir / "agent",
-    )
-
-    # Add keys
-    shutil.copy(
-        working_dir / "ethereum_private_key.txt",
-        working_dir / "agent" / "ethereum_private_key.txt",
-    )
-    _run_cmd(
-        args=[abin, "add-key", "ethereum"],
-        cwd=working_dir / "agent",
-    )
-    _run_cmd(
-        args=[abin, "issue-certificates"],
-        cwd=working_dir / "agent",
-    )
-
-
-def _start_agent(working_dir: Path) -> None:
-    """Start agent process."""
-    env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
-    process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-        args=[str(working_dir / "venv" / "bin" / "aea"), "run"],
-        cwd=working_dir / "agent",
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env={**os.environ, **env},
-        creationflags=(
-            0x00000008 if platform.system() == "Windows" else 0
-        ),  # Detach process from the main process
-    )
-    (working_dir / "agent.pid").write_text(
-        data=str(process.pid),
-        encoding="utf-8",
-    )
-
-
-def _start_tendermint(working_dir: Path) -> None:
-    """Start tendermint process."""
-    env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
-    process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-        args=[
-            str(working_dir / "venv" / "bin" / "flask"),
-            "run",
-            "--host",
-            "localhost",
-            "--port",
-            "8080",
-        ],
-        cwd=working_dir,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        env={**os.environ, **env},
-        creationflags=(
-            0x00000008 if platform.system() == "Windows" else 0
-        ),  # Detach process from the main process
-    )
-    (working_dir / "tendermint.pid").write_text(
-        data=str(process.pid),
-        encoding="utf-8",
-    )
-
-
-def _kill_process(pid: int) -> None:
-    """Kill process."""
-    print(f"Trying to kill process: {pid}")
-    while True:
-        if not psutil.pid_exists(pid=pid):
-            return
-        if psutil.Process(pid=pid).status() in (
-            psutil.STATUS_DEAD,
-            psutil.STATUS_ZOMBIE,
-        ):
-            return
-        try:
-            os.kill(
-                pid,
-                (
-                    signal.CTRL_C_EVENT  # type: ignore
-                    if platform.platform() == "Windows"
-                    else signal.SIGKILL
-                ),
-            )
-        except OSError:
-            return
-        time.sleep(1)
-
-
-def _stop_agent(working_dir: Path) -> None:
-    """Start process."""
-    pid = working_dir / "agent.pid"
-    if not pid.exists():
-        return
-    _kill_process(int(pid.read_text(encoding="utf-8")))
-
-
-def _stop_tendermint(working_dir: Path) -> None:
-    """Start tendermint process."""
-    pid = working_dir / "tendermint.pid"
-    if not pid.exists():
-        return
-    _kill_process(int(pid.read_text(encoding="utf-8")))
-
-
-def run_host_deployment(build_dir: Path) -> None:
-    """Run host deployment."""
-    _setup_agent(
-        working_dir=build_dir,
-    )
-    _start_tendermint(
-        working_dir=build_dir,
-    )
-    _start_agent(
-        working_dir=build_dir,
-    )
-
-
-def stop_host_deployment(build_dir: Path) -> None:
-    """Stop host deployment."""
-    _stop_agent(
-        working_dir=build_dir,
-    )
-    _stop_tendermint(
-        working_dir=build_dir,
-    )
-
-
 @dataclass
 class Deployment(LocalResource):
     """Deployment resource for a service."""
@@ -580,6 +350,7 @@ class Deployment(LocalResource):
         Create a new deployment
 
         :param path: Path to service
+        :return: Deployment object
         """
         deployment = Deployment(
             status=DeploymentStatus.CREATED,
@@ -767,7 +538,8 @@ class Deployment(LocalResource):
             )
 
         except Exception as e:
-            shutil.rmtree(build)
+            if build.exists():
+                shutil.rmtree(build)
             raise e
 
         # Mech price patch.
@@ -792,6 +564,7 @@ class Deployment(LocalResource):
         """
         Build a deployment
 
+        :param use_docker: Use docker deployment
         :param force: Remove existing deployment and build a new one
         :return: Deployment object
         """
@@ -822,9 +595,9 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.DEPLOYED
         self.store()
 
-    def stop(self, use_docker: bool = False) -> None:
+    def stop(self, use_docker: bool = False, force: bool = False) -> None:
         """Stop the deployment."""
-        if self.status != DeploymentStatus.DEPLOYED:
+        if self.status != DeploymentStatus.DEPLOYED and not force:
             return
 
         self.status = DeploymentStatus.STOPPING
@@ -931,4 +704,7 @@ class Service(LocalResource):
 
     def delete(self) -> None:
         """Delete a service."""
-        shutil.rmtree(self.path)
+        parent_directory = self.path.parent
+        new_path = parent_directory / f"{DELETE_PREFIX}{self.path.name}"
+        shutil.move(self.path, new_path)
+        shutil.rmtree(new_path)

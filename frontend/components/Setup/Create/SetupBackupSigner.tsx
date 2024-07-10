@@ -2,9 +2,9 @@ import { Button, Flex, Form, Input, Typography } from 'antd';
 
 import { CardFlex } from '@/components/styled/CardFlex';
 import { FormFlex } from '@/components/styled/FormFlex';
-import { SetupScreen } from '@/enums';
-import { useSetup } from '@/hooks';
-import { Address } from '@/types';
+import { SetupScreen } from '@/enums/SetupScreen';
+import { useSetup } from '@/hooks/useSetup';
+import { Address } from '@/types/Address';
 
 import { SetupCreateHeader } from './SetupCreateHeader';
 
@@ -48,6 +48,7 @@ export const SetupBackupSigner = () => {
           <Button type="primary" size="large" htmlType="submit">
             Add backup wallet and continue
           </Button>
+          {/* Commented to protect users from skipping backup wallet setup during Alpha testing          
           <Button
             type="link"
             size="large"
@@ -58,7 +59,8 @@ export const SetupBackupSigner = () => {
           <Typography.Text type="secondary" className="text-sm">
             Note that in the current version of the app, you will not be able to
             set up a backup wallet afterward. This functionality is coming soon.
-          </Typography.Text>
+          </Typography.Text> 
+          */}
         </FormFlex>
       </Flex>
     </CardFlex>
