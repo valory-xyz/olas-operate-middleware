@@ -4,7 +4,7 @@ import { CSSProperties } from 'styled-components';
 
 import { useElectronApi } from '@/hooks/useElectronApi';
 
-import { Alert } from '../common/Alert';
+import { Alert } from '../Alert';
 import { CardSection } from '../styled/CardSection';
 
 const { Text, Paragraph } = Typography;
