@@ -62,5 +62,5 @@
     "test:frontend": "cd frontend && yarn test"
   },
   "type": "module",
-  "version": "0.1.0-rc71"
+  "version": "0.1.0-rc72"
 }

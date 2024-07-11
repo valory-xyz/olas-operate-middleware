@@ -3,23 +3,13 @@
     "es6": true,
     "node": true
   },
-  "settings": {
-    "import/resolver": {
-      "node": {
-        "extensions": [".mjs"]
-      }
-    }
-  },
+  "extends": [
+    "eslint:recommended"
+  ],
   "parserOptions": {
     "ecmaVersion": "latest",
-    "sourceType": "module"    
+    "sourceType": "module"
   },
-  "extends": [
-    "eslint:recommended",
-    "plugin:import/errors",
-    "plugin:import/warnings",
-    "plugin:import/typescript"
-  ],
   "plugins": [
     "prettier",
     "import",
@@ -27,7 +17,13 @@
     "simple-import-sort"
   ],
   "rules": {
-    "import/extensions": ["error", "always", { "ignorePackages": true }],
+    "import/extensions": [
+      "error",
+      "always",
+      {
+        "ignorePackages": true
+      }
+    ],
     "no-unused-vars": "off", // Turn off the default no-unused-vars rule
     "prettier/prettier": [
       "error",
@@ -43,12 +39,25 @@
     "unused-imports/no-unused-vars": [
       "warn",
       {
-        "vars": "all",
-        "varsIgnorePattern": "^_",
         "args": "after-used",
         "argsIgnorePattern": "^_",
-        "ignoreRestSiblings": true
+        "ignoreRestSiblings": true,
+        "vars": "all",
+        "varsIgnorePattern": "^_"
       }
     ]
+  },
+  "settings": {
+    "import/extensions": [
+      ".js",
+      ".mjs"
+    ],
+    "import/resolver": {
+      "node": {
+        "extensions": [
+          ".mjs"
+        ]
+      }
+    }
   }
 }

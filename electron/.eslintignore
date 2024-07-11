@@ -1,2 +1,4 @@
 .next
-scripts
+bins
+*.yml
+*.plist
