@@ -1,11 +1,21 @@
 /**
- * This script is used to build the electron app **with notarization**. It is used for the final build and release process.
+ * This script is used to build, release, code sign and notarize the app.
+ * It is used for the final build and release process.
  */
 import { config } from "dotenv"
 import { build } from "electron-builder"
-import { publishOptions } from "./electron/constants/options.mjs"
 
 config();
+
+const publishOptions = {
+  provider: 'github',
+  owner: 'valory-xyz',
+  repo: 'olas-operate-app',
+  releaseType: 'draft',
+  token: process.env.GH_TOKEN,
+  private: false,
+  publishAutoUpdate: true,
+};
 
 const main = async () => {
   console.log("Building...");

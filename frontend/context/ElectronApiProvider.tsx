@@ -33,6 +33,7 @@ type ElectronApiContextProps = {
   openPath?: (filePath: string) => void;
 
   // download new updates
+  checkUpdates?: () => Promise<void>;
   startDownload?: () => Promise<void>;
   quitAndInstall?: () => void;
 };
@@ -58,6 +59,7 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
   openPath: () => {},
 
   // download updates
+  checkUpdates: async () => {},
   startDownload: async () => {},
   quitAndInstall: async () => {},
 });

@@ -52,7 +52,7 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: 'electron.log',
       dirname: paths.dotOperateDirectory,
-      level: 'electron',
+      levels: ['electron'],
       format: combine(levelFilter('electron'), timestamp(), logFormat),
       maxFiles: 1,
       maxsize: 1024 * 1024 * 10,

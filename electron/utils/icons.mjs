@@ -1,6 +1,7 @@
 import { nativeImage } from 'electron';
 
-import { isMac } from '../constants/os.mjs';
+import { isLinux, isMac } from '../constants/os.mjs';
+import { logger } from './logger.mjs';
 
 const TRAY_ICONS_PATHS = {
   LOGGED_OUT: `${import.meta.dirname}/assets/icons/tray-logged-out.png`,
@@ -17,7 +18,7 @@ const TRAY_ICONS = {
 };
 
 try {
-  if (isMac) {
+  if (isMac || isLinux) {
     // resize icons for macOS
     const size = { width: 16, height: 16 };
     TRAY_ICONS.LOGGED_OUT = TRAY_ICONS.LOGGED_OUT.resize(size);
@@ -26,7 +27,7 @@ try {
     TRAY_ICONS.RUNNING = TRAY_ICONS.RUNNING.resize({ width: 16, height: 16 });
   }
 } catch (e) {
-  console.log('Error resizing tray icons', e);
+  logger.electron('Error resizing tray icons', e);
 }
 
 export { TRAY_ICONS, TRAY_ICONS_PATHS };

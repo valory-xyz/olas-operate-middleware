@@ -30,7 +30,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openPath: (filePath) => ipcRenderer.send('open-path', filePath),
   saveLogs: (data) => ipcRenderer.invoke('save-logs', data),
 
-  // update downloads
+  // OTA updates
+  checkUpdates: () => ipcRenderer.invoke('check-for-updates'),
   startDownload: () => ipcRenderer.send('start-download'),
   quitAndInstall: () => ipcRenderer.send('install-update'),
 });

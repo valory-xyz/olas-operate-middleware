@@ -401,6 +401,7 @@ async function launchNextAppDev() {
   });
 }
 
+// Fires after splash screen is loaded
 ipcMain.on('check', async function (event, _argument) {
   // Setup
   try {
@@ -498,12 +499,8 @@ app.on('before-quit', async () => {
 });
 
 // UPDATER EVENTS
-macUpdater.on('update-downloaded', () => {
+macUpdater.once('update-downloaded', () => {
   mainWindow.webContents.send('update-downloaded');
-});
-
-macUpdater.on('update-available', (info) => {
-  mainWindow.webContents.send('update-available', info);
 });
 
 macUpdater.on('download-progress', (progress) => {
@@ -517,6 +514,32 @@ ipcMain.on('start-download', () => {
 ipcMain.on('install-update', () => {
   macUpdater.quitAndInstall();
 });
+
+// const checkForUpdates = async () => {
+//   macUpdater.once('update-available', (info) => {
+//     logger.electron('Update available.');
+//     logger.electron(`Version: ${info.version}`);
+//     resolve({
+//       available: true,
+//       version: info.version,
+//       message: info.releaseNotes,
+//     });
+//   });
+
+//   macUpdater.once('update-not-available', () => {
+//     logger.electron('No updates available.');
+//     resolve({ available: false, message: 'No updates available.' });
+//   });
+
+//   macUpdater.once('error', (error) => {
+//     logger.electron('Error in auto-updater:', error);
+//     reject(error);
+//   });
+
+//   macUpdater.checkForUpdates();
+// };
+
+ipcMain.handle('check-for-updates', async () => macUpdater.checkForUpdates());
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
 process.on('uncaughtException', (error) => {

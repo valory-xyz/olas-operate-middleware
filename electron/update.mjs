@@ -1,14 +1,23 @@
 import { MacUpdater } from 'electron-updater';
 
-import { publishOptions } from './constants/options.mjs';
+import { isDev } from './constants/env.mjs';
 import { logger } from './utils/logger.mjs';
 
-const macUpdater = new MacUpdater(publishOptions);
+export const updateOptions = {
+  provider: 'github',
+  owner: 'valory-xyz',
+  repo: 'olas-operate-app',
+  releaseType: 'draft',
+  private: false,
+};
 
-macUpdater.setFeedURL({ ...publishOptions });
+const macUpdater = new MacUpdater(updateOptions);
+
+macUpdater.setFeedURL({ ...updateOptions });
 
 macUpdater.autoDownload = false;
 macUpdater.autoInstallOnAppQuit = false;
 macUpdater.logger = logger;
+macUpdater.forceDevUpdateConfig = isDev;
 
 export { macUpdater };
