@@ -13,7 +13,7 @@ import { paths } from './constants/paths.mjs';
  * - use "" (nothing as a suffix) for latest release candidate, for example "0.1.0rc26"
  * - use "alpha" for alpha release, for example "0.1.0rc26-alpha"
  */
-const OlasMiddlewareVersion = '0.1.0rc70';
+const OlasMiddlewareVersion = '0.1.0rc71';
 
 export const Env = {
   ...process.env,
