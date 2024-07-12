@@ -105,6 +105,7 @@ const createTray = () => {
   const trayPath = getUpdatedTrayIcon(
     isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
   );
+
   const tray = new Tray(trayPath);
 
   const contextMenu = Menu.buildFromTemplate([
@@ -466,9 +467,9 @@ ipcMain.on('check', async function (event, _argument) {
     }
 
     event.sender.send('response', 'Launching App');
-    await createMainWindow();
-    splashWindow.destroy();
-    createTray();
+    createMainWindow().then(() => {
+      splashWindow.destroy();
+    });
   } catch (e) {
     logger.electron(e);
     new Notification({
@@ -482,6 +483,7 @@ ipcMain.on('check', async function (event, _argument) {
 
 // APP-SPECIFIC EVENTS
 app.on('ready', async () => {
+  createTray();
   if (isMac) {
     app.dock?.setIcon(
       path.join(import.meta.dirname, 'assets/icons/splash-robot-head-dock.png'),
