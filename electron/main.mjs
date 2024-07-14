@@ -182,11 +182,11 @@ const createSplashWindow = () => {
     splashWindow.webContents.openDevTools();
   }
 };
+
 /**
  * Creates the main window
  */
 const createMainWindow = async () => {
-  const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
     title: 'Pearl',
     resizable: false,
@@ -195,7 +195,7 @@ const createMainWindow = async () => {
     transparent: true,
     fullscreenable: false,
     maximizable: false,
-    width,
+    width: APP_WIDTH,
     maxHeight: APP_HEIGHT,
     webPreferences: {
       nodeIntegration: false,
@@ -229,7 +229,7 @@ const createMainWindow = async () => {
   });
 
   ipcMain.on('set-height', (_event, height) => {
-    mainWindow.setSize(width, height);
+    mainWindow.setSize(APP_WIDTH, height);
   });
 
   ipcMain.on('show-notification', (_event, title, description) => {
@@ -369,10 +369,7 @@ async function launchNextApp() {
   });
   await nextApp.prepare();
 
-  const handle = nextApp.getRequestHandler();
-  const server = http.createServer((req, res) => {
-    handle(req, res); // Handle requests using the Next.js request handler
-  });
+  const server = http.createServer(nextApp.getRequestHandler);
   server.listen(appConfig.ports.prod.next, (err) => {
     if (err) throw err;
     logger.next(
@@ -397,7 +394,9 @@ async function launchNextAppDev() {
     nextAppProcessPid = nextAppProcess.pid;
     nextAppProcess.stdout.on('data', (data) => {
       logger.next(data.toString().trim());
-      resolve();
+      if (data.toString().includes('Ready in', 'ms')) {
+        resolve();
+      }
     });
   });
 }
@@ -496,9 +495,7 @@ app.on('window-all-closed', () => {
   app.quit();
 });
 
-app.on('before-quit', async () => {
-  await beforeQuit();
-});
+app.on('before-quit', beforeQuit);
 
 // UPDATER EVENTS
 macUpdater.once('update-downloaded', () => {
@@ -509,39 +506,11 @@ macUpdater.on('download-progress', (progress) => {
   mainWindow.webContents.send('download-progress', progress);
 });
 
-ipcMain.on('start-download', () => {
-  macUpdater.downloadUpdate();
-});
+ipcMain.once('start-download', macUpdater.downloadUpdate);
 
-ipcMain.on('install-update', () => {
-  macUpdater.quitAndInstall();
-});
+ipcMain.once('install-update', macUpdater.quitAndInstall);
 
-// const checkForUpdates = async () => {
-//   macUpdater.once('update-available', (info) => {
-//     logger.electron('Update available.');
-//     logger.electron(`Version: ${info.version}`);
-//     resolve({
-//       available: true,
-//       version: info.version,
-//       message: info.releaseNotes,
-//     });
-//   });
-
-//   macUpdater.once('update-not-available', () => {
-//     logger.electron('No updates available.');
-//     resolve({ available: false, message: 'No updates available.' });
-//   });
-
-//   macUpdater.once('error', (error) => {
-//     logger.electron('Error in auto-updater:', error);
-//     reject(error);
-//   });
-
-//   macUpdater.checkForUpdates();
-// };
-
-ipcMain.handle('check-for-updates', async () => macUpdater.checkForUpdates());
+ipcMain.handle('check-for-updates', macUpdater.checkForUpdates);
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
 process.on('uncaughtException', (error) => {
