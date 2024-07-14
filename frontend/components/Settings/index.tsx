@@ -50,7 +50,7 @@ export const Settings = () => {
 const SettingsMain = () => {
   const { backupSafeAddress } = useMasterSafe();
   const { goto } = usePageState();
-  const { checkUpdates } = useElectronApi();
+  const { checkForUpdates } = useElectronApi();
 
   const truncatedBackupSafeAddress: string | undefined = useMemo(() => {
     if (backupSafeAddress) {
@@ -92,7 +92,7 @@ const SettingsMain = () => {
         )}
       </CardSection>
       <CardSection borderbottom="true" vertical gap={8}>
-        <Button onClick={checkUpdates} color="primary" size="large">
+        <Button onClick={checkForUpdates} color="primary" size="large">
           Check for updates
         </Button>
       </CardSection>
