@@ -33,9 +33,22 @@ type ElectronApiContextProps = {
   openPath?: (filePath: string) => void;
 
   // download new updates
-  checkUpdates?: () => Promise<void>;
+  checkForUpdates?: () => Promise<void>;
   startDownload?: () => Promise<void>;
   quitAndInstall?: () => void;
+};
+
+const getElectronApiFunction = (functionNameInWindow: string) => {
+  if (typeof window === 'undefined') return;
+
+  const fn = get(window, `electronAPI.${functionNameInWindow}`);
+  if (!fn || typeof fn !== 'function') {
+    throw new Error(
+      `Function ${functionNameInWindow} not found in window.electronAPI`,
+    );
+  }
+
+  return fn;
 };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({
@@ -59,25 +72,12 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
   openPath: () => {},
 
   // download updates
-  checkUpdates: async () => {},
+  checkForUpdates: async () => {},
   startDownload: async () => {},
   quitAndInstall: async () => {},
 });
 
 export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
-  const getElectronApiFunction = (functionNameInWindow: string) => {
-    if (typeof window === 'undefined') return;
-
-    const fn = get(window, `electronAPI.${functionNameInWindow}`);
-    if (!fn || typeof fn !== 'function') {
-      throw new Error(
-        `Function ${functionNameInWindow} not found in window.electronAPI`,
-      );
-    }
-
-    return fn;
-  };
-
   return (
     <ElectronApiContext.Provider
       value={{
@@ -105,6 +105,7 @@ export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
         openPath: getElectronApiFunction('openPath'),
 
         // download updates
+        checkForUpdates: getElectronApiFunction('checkForUpdates'),
         startDownload: getElectronApiFunction('startDownload'),
         quitAndInstall: getElectronApiFunction('quitAndInstall'),
       }}
