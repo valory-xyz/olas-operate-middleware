@@ -7,6 +7,7 @@ import { useBalance } from '@/hooks/useBalance';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 
+import { UpdateProgressIndicator } from '../Update/UpdateProgressIndicator';
 import { KeepAgentRunning } from './KeepAgentRunning';
 import { MainAddFunds } from './MainAddFunds';
 import { MainGasBalance } from './MainGasBalance';
@@ -14,9 +15,6 @@ import { MainHeader } from './MainHeader';
 import { MainNeedsFunds } from './MainNeedsFunds';
 import { MainOlasBalance } from './MainOlasBalance';
 import { MainRewards } from './MainRewards';
-import { NotifyRewards } from './NotifyRewards';
-import { NotifyUpdateInstallationModal } from './NotifyUpdateInstallationModal';
-import { UpdateProgressIndicator } from './UpdateProgressIndicator';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -59,10 +57,6 @@ export const Main = () => {
         <MainGasBalance />
         <MainNeedsFunds />
         <MainAddFunds />
-
-        {/* notifications */}
-        <NotifyRewards />
-        <NotifyUpdateInstallationModal />
       </Flex>
     </Card>
   );

@@ -15,7 +15,7 @@ const { Text, Title } = Typography;
 const SHARE_TEXT = `I just earned my first reward through the Operate app powered by #olas!\n\nDownload the Pearl app:`;
 const OPERATE_URL = 'https://olas.network/operate?pearl=first-reward';
 
-export const NotifyRewards = () => {
+export const RewardsModal = () => {
   const { isEligibleForRewards, availableRewardsForEpochEth } = useReward();
   const { totalOlasBalance } = useBalance();
   const { storeState } = useStore();
