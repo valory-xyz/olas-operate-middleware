@@ -4,8 +4,6 @@
     "@ant-design/cssinjs": "^1.18.4",
     "@ant-design/icons": "^5.3.0",
     "@fontsource/inter": "^5.0.17",
-    "@types/react": "^18.3.3",
-    "@types/react-dom": "^18.3.0",
     "antd": "^5.14.0",
     "ethers": "^5.7.2",
     "ethers-multicall": "^0.2.3",
@@ -24,8 +22,8 @@
     "@types/jest": "^29.5.12",
     "@types/lodash": "^4.14.202",
     "@types/node": "^20.14.10",
-    "@typescript-eslint/eslint-plugin": "^7.0.1",
-    "@typescript-eslint/parser": "^7.0.1",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
     "eslint": "^8.56.0",
     "eslint-config-next": "^14.1.0",
     "eslint-config-prettier": "^9.1.0",
@@ -38,7 +36,7 @@
     "jest-environment-jsdom": "^29.7.0",
     "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
-    "typescript": "^5.4.x"
+    "typescript": "~5.4.0"
   },
   "name": "olas-operate-app",
   "private": true,
