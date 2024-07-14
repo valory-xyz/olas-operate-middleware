@@ -38,11 +38,11 @@
     "eslint-plugin-import": "^2.29.1",
     "eslint-plugin-prettier": "^5.1.3",
     "eslint-plugin-simple-import-sort": "^12.0.0",
-    "eslint-plugin-unused-imports": "^3.0.0",
+    "eslint-plugin-unused-imports": "~3.0.0",
     "hardhat": "==2.17.1",
     "net": "^1.0.2",
     "prettier": "^3.2.5",
-    "typescript": "^5.4.x"
+    "typescript": "~5.4"
   },
   "main": "electron/main.mjs",
   "name": "olas-operate-app",
