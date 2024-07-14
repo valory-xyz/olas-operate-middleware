@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import { HelpAndSupport } from '@/components/HelpAndSupport';
 import { Main } from '@/components/Main';
@@ -14,18 +14,23 @@ export default function Home() {
   const { pageState } = usePageState();
   const electronApi = useElectronApi();
 
+  const updateAppHeight = useCallback(() => {
+    const bodyElement = document.querySelector('body');
+    if (bodyElement) {
+      const scrollHeight = bodyElement.scrollHeight;
+      electronApi?.setAppHeight?.(Math.min(DEFAULT_APP_HEIGHT, scrollHeight));
+    }
+  }, [electronApi]);
+
   useEffect(() => {
     // set the flag to check for updates on app start
     electronApi?.store?.set?.('canCheckForUpdates', true);
 
-    function updateAppHeight() {
-      const bodyElement = document.querySelector('body');
-      if (bodyElement) {
-        const scrollHeight = bodyElement.scrollHeight;
-        electronApi?.setAppHeight?.(Math.min(DEFAULT_APP_HEIGHT, scrollHeight));
-      }
-    }
+    // Runs only once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  useEffect(() => {
     const resizeObserver = new ResizeObserver(updateAppHeight);
     resizeObserver.observe(document.body);
     updateAppHeight();
@@ -33,7 +38,7 @@ export default function Home() {
     return () => {
       resizeObserver.unobserve(document.body);
     };
-  }, [electronApi]);
+  }, [electronApi, updateAppHeight]);
 
   const page = useMemo(() => {
     switch (pageState) {
