@@ -62,7 +62,7 @@ jobs:
                 python-version: "3.10"
             - uses: actions/setup-node@v4
               with:
-                node-version: lts/*
+                node-version: 20
             - name: Download artifacts
               uses: actions/download-artifact@v2
               with:
@@ -102,4 +102,4 @@ jobs:
                 NODE_ENV: production
                 DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
                 FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-              run: node build.mjs
+              run: node build.js
