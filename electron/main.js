@@ -357,10 +357,9 @@ async function launchNextApp() {
     dir: path.join(import.meta.dirname),
     port: appConfig.ports.prod.next,
     env: {
-      GNOSIS_RPC:
-        process.env.NODE_ENV === 'production'
-          ? process.env.FORK_URL
-          : process.env.DEV_RPC,
+      NODE_ENV: 'production',
+      FORK_URL: process.env.FORK_URL,
+      DEV_RPC: process.env.DEV_RPC,
       NEXT_PUBLIC_BACKEND_PORT:
         process.env.NODE_ENV === 'production'
           ? appConfig.ports.prod.operate
@@ -506,11 +505,30 @@ macUpdater.on('download-progress', (progress) => {
   mainWindow.webContents.send('download-progress', progress);
 });
 
-ipcMain.once('start-download', macUpdater.downloadUpdate);
+ipcMain.once('start-download', async () => {
+  logger.electron('Downloading update...');
+  await macUpdater.downloadUpdate();
+});
 
-ipcMain.once('install-update', macUpdater.quitAndInstall);
+ipcMain.once('install-update', async () => {
+  logger.electron('Quitting and installing...');
+  macUpdater.quitAndInstall();
+});
 
-ipcMain.handle('check-for-updates', macUpdater.checkForUpdates);
+ipcMain.handleOnce('check-for-updates', async () => {
+  logger.electron('Checking for updates...');
+  const updateCheckResult = await macUpdater
+    .checkForUpdates()
+    .then((res) => {
+      logger.electron('Update check result:', res);
+      return res;
+    })
+    .catch((e) => {
+      logger.electron('Update check error:', e);
+      return { error: e };
+    });
+  return updateCheckResult.updateInfo;
+});
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
 process.on('uncaughtException', (error) => {
