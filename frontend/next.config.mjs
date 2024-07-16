@@ -32,7 +32,7 @@ const nextConfig = {
     return config;
   },
   env: {
-    GNOSIS_RPC:
+    RPC:
       process.env.NODE_ENV === 'production'
         ? process.env.FORK_URL
         : process.env.DEV_RPC,
