@@ -1,7 +1,7 @@
 import os from 'os';
 import path from 'path';
 
-import { isProd } from './env.mjs';
+import { isProd } from './env.js';
 
 // Paths
 const dotOperateDirectory = isProd

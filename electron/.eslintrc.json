@@ -50,12 +50,12 @@
   "settings": {
     "import/extensions": [
       ".js",
-      ".mjs"
+      ".js"
     ],
     "import/resolver": {
       "node": {
         "extensions": [
-          ".mjs"
+          ".js"
         ]
       }
     }

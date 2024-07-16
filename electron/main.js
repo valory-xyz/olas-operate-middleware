@@ -16,18 +16,18 @@ import next from 'next';
 import os from 'os';
 import path from 'path';
 
-import { APP_HEIGHT, APP_WIDTH } from './constants/appSizes.mjs';
-import { isDev } from './constants/env.mjs';
-import { isMac, isWindows } from './constants/os.mjs';
-import { paths } from './constants/paths.mjs';
-import { PORT_RANGE } from './constants/ports.mjs';
-import { Env } from './install.mjs';
-import { setupStoreIpc } from './store.mjs';
-import { macUpdater } from './update.mjs';
-import { TRAY_ICONS, TRAY_ICONS_PATHS } from './utils/icons.mjs';
-import { logger } from './utils/logger.mjs';
-import { findAvailablePort, isPortAvailable } from './utils/ports.mjs';
-import { killProcesses } from './utils/processes.mjs';
+import { APP_HEIGHT, APP_WIDTH } from './constants/appSizes.js';
+import { isDev } from './constants/env.js';
+import { isMac, isWindows } from './constants/os.js';
+import { paths } from './constants/paths.js';
+import { PORT_RANGE } from './constants/ports.js';
+import { Env } from './install.js';
+import { setupStoreIpc } from './store.js';
+import { macUpdater } from './update.js';
+import { TRAY_ICONS, TRAY_ICONS_PATHS } from './utils/icons.js';
+import { logger } from './utils/logger.js';
+import { findAvailablePort, isPortAvailable } from './utils/ports.js';
+import { killProcesses } from './utils/processes.js';
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -200,7 +200,7 @@ const createMainWindow = async () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(import.meta.dirname, 'preload.mjs'),
+      preload: path.join(import.meta.dirname, 'preload.js'),
     },
   });
 
