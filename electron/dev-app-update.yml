@@ -1,4 +1,4 @@
-# Production app update configuration
+# Develop app update configuration
 provider: github
 host: github.com
 owner: valory-xyz
