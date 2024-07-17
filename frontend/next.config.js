@@ -1,5 +1,5 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {
+module.exports = {
   images: {
     remotePatterns: [
       {
@@ -38,5 +38,3 @@ const nextConfig = {
         : process.env.DEV_RPC,
   },
 };
-
-export default nextConfig;

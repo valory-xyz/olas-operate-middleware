@@ -10,3 +10,9 @@ export const provider = new ethers.providers.StaticJsonRpcProvider(
 );
 
 export const multicallProvider = new Provider(provider, 100);
+
+try {
+  multicallProvider.init();
+} catch (e) {
+  console.error('Error initializing multicall provider', e);
+}

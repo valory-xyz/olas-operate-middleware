@@ -47,7 +47,7 @@
     "prettier": "^3.2.5",
     "typescript": "~5.4"
   },
-  "main": "electron/main.js",
+  "main": "electron/main.mjs",
   "name": "olas-operate-app",
   "productName": "Pearl",
   "scripts": {

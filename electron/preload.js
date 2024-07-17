@@ -1,5 +1,5 @@
 // This file is loaded in the renderer process before other scripts
-import { contextBridge, ipcRenderer } from 'electron/renderer';
+const { contextBridge, ipcRenderer } = require('electron/renderer');
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // App controls

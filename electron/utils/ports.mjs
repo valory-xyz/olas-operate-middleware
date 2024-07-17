@@ -1,6 +1,6 @@
 import net from 'net';
 
-import { ERROR_ADDRESS_IN_USE } from '../constants/errors.js';
+import { ERROR_ADDRESS_IN_USE } from '../constants/errors.mjs';
 
 export function findAvailablePort({ startPort, endPort, excludePorts = [] }) {
   return new Promise((resolve, reject) => {

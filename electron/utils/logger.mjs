@@ -2,7 +2,7 @@
 import { format } from 'logform';
 import winston from 'winston';
 
-import { paths } from '../constants/paths.js';
+import { paths } from '../constants/paths.mjs';
 
 const { combine, timestamp, printf } = format;
 

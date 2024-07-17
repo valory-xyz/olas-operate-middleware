@@ -1,8 +1,8 @@
 import { exec } from 'child_process';
 import psTree from 'ps-tree';
 
-import { isWindows } from '../constants/os.js';
-import { logger } from './logger.js';
+import { isWindows } from '../constants/os.mjs';
+import { logger } from './logger.mjs';
 
 const unixKillCommand = 'kill -9';
 const windowsKillCommand = 'taskkill /F /PID';
