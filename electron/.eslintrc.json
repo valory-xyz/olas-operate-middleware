@@ -1,4 +1,5 @@
 {
+  "root": true,
   "env": {
     "es6": true,
     "node": true
@@ -24,6 +25,7 @@
         "ignorePackages": true
       }
     ],
+    "import/no-unresolved": "error",
     "no-unused-vars": "off", // Turn off the default no-unused-vars rule
     "prettier/prettier": [
       "error",
