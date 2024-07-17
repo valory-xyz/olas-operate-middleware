@@ -2,13 +2,6 @@ import net from 'net';
 
 import { ERROR_ADDRESS_IN_USE } from '../constants/errors.js';
 
-/**
- * Finds an available port within the specified range, excluding specified ports.
- * @param {number} startPort - The start of the port range.
- * @param {number} endPort - The end of the port range.
- * @param {Array<number>} excludePorts - An array of ports to be skipped.
- * @returns {Promise<number>} The first available port found within the range that's not excluded.
- */
 export function findAvailablePort({ startPort, endPort, excludePorts = [] }) {
   return new Promise((resolve, reject) => {
     let currentPort = startPort;

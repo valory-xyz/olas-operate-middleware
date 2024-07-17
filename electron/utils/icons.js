@@ -1,3 +1,4 @@
+// @ts-check
 import { nativeImage } from 'electron';
 import path from 'path';
 

@@ -1,4 +1,5 @@
-const { contextBridge, ipcRenderer } = require('electron/renderer');
+// @ts-check
+import { contextBridge, ipcRenderer } from 'electron/renderer';
 
 const electronAPI = {
   // App controls

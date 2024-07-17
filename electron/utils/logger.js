@@ -1,3 +1,4 @@
+// @ts-check
 import { format } from 'logform';
 import winston from 'winston';
 
@@ -30,7 +31,7 @@ const customLevels = {
 
 // Custom filter for specific levels, otherwise higher levels will include lower levels
 const levelFilter = (level) =>
-  format((info, _opts) => {
+  format((info) => {
     return info.level === level ? info : false;
   })();
 
@@ -52,7 +53,7 @@ const logger = winston.createLogger({
     new winston.transports.File({
       filename: 'electron.log',
       dirname: paths.dotOperateDirectory,
-      levels: ['electron'],
+      level: 'electron',
       format: combine(levelFilter('electron'), timestamp(), logFormat),
       maxFiles: 1,
       maxsize: 1024 * 1024 * 10,

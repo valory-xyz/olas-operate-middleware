@@ -82,7 +82,7 @@ function runSudoUnix(command, options) {
   if (!bin) {
     throw new Error(`Command ${command} not found`);
   }
-  return new Promise(function (resolve, _reject) {
+  return new Promise(function (resolve) {
     sudo.exec(
       `${bin} ${options}`,
       SudoOptions,
@@ -210,11 +210,11 @@ function installOperateCli(path) {
   if (fs.existsSync(installPath)) {
     fs.rmSync(installPath);
   }
-  return new Promise((resolve, _reject) => {
+  return new Promise((resolve) => {
     fs.copyFile(
       `${paths.dotOperateDirectory}/venv/bin/operate`,
       installPath,
-      function (error, _stdout, _stderr) {
+      function (error) {
         resolve(!error);
       },
     );
@@ -225,7 +225,7 @@ function createDirectory(path) {
   if (fs.existsSync(path)) {
     return;
   }
-  return new Promise((resolve, _reject) => {
+  return new Promise((resolve) => {
     fs.mkdir(path, { recursive: true }, (error) => {
       resolve(!error);
     });
