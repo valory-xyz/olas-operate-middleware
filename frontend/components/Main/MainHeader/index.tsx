@@ -1,5 +1,5 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Badge, Button, Flex, Popover, Typography } from 'antd';
+import { Badge, Button, Flex, Popover, Skeleton, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -8,7 +8,6 @@ import { COLOR } from '@/constants/colors';
 import { LOW_BALANCE } from '@/constants/thresholds';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
@@ -16,7 +15,9 @@ import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
+import { getMinimumStakedAmountRequired } from '@/utils/service';
 
+import { CannotStartAgent } from './CannotStartAgent';
 import { requiredGas, requiredOlas } from './constants';
 import { FirstRunModal } from './FirstRunModal';
 
@@ -85,9 +86,8 @@ export const MainHeader = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const handleModalClose = useCallback(() => setIsModalOpen(false), []);
 
-  const { minimumStakedAmountRequired } = useReward();
-
-  const { canStartAgent } = useStakingContractInfo();
+  const { isInitialStakingLoad, isAgentEvicted, canStartAgent } =
+    useStakingContractInfo();
 
   // hook to setup tray icon
   useSetupTrayIcon();
@@ -170,6 +170,9 @@ export const MainHeader = () => {
           if (serviceExists) {
             showNotification?.('Your agent is now running!');
           } else {
+            const minimumStakedAmountRequired =
+              getMinimumStakedAmountRequired(serviceTemplate);
+
             showNotification?.(
               `Your agent is running and you've staked ${minimumStakedAmountRequired} OLAS!`,
             );
@@ -186,7 +189,6 @@ export const MainHeader = () => {
     }
   }, [
     masterSafeAddress,
-    minimumStakedAmountRequired,
     serviceTemplate,
     services,
     setIsBalancePollingPaused,
@@ -206,6 +208,16 @@ export const MainHeader = () => {
   }, [services, setServiceStatus]);
 
   const serviceToggleButton = useMemo(() => {
+    if (!canStartAgent) return <CannotStartAgent />;
+
+    if (canStartAgent && isAgentEvicted) {
+      return (
+        <Button type="primary" size="large" onClick={handleStart}>
+          Start agent
+        </Button>
+      );
+    }
+
     if (serviceButtonState === ServiceButtonLoadingState.Pausing) {
       return (
         <Button type="default" size="large" ghost disabled loading>
@@ -294,12 +306,17 @@ export const MainHeader = () => {
     storeState?.isInitialFunded,
     totalEthBalance,
     canStartAgent,
+    isAgentEvicted,
   ]);
 
   return (
     <Flex justify="start" align="center" gap={10}>
       {agentHead}
-      {serviceToggleButton}
+      {isInitialStakingLoad ? (
+        <Skeleton.Input style={{ width: 80 }} active />
+      ) : (
+        serviceToggleButton
+      )}
       <FirstRunModal open={isModalOpen} onClose={handleModalClose} />
     </Flex>
   );
