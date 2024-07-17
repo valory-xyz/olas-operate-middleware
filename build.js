@@ -2,10 +2,7 @@
  * This script is used to build, release, code sign and notarize the app.
  * It is used for the final build and release process.
  */
-import { config } from "dotenv"
 import { build } from "electron-builder"
-
-config();
 
 const publishOptions = {
   provider: 'github',
@@ -27,7 +24,7 @@ const main = async () => {
       appId: "xyz.valory.olas-operate-app",
       artifactName: "${productName}-${version}-${platform}-${arch}.${ext}",
       productName: "Pearl",
-      files: ["electron/**/*", "package.json", "*app-update.yml"],
+      files: ["electron/**/*", "package.json", "app-update.yml"],
       directories: {
         output: "dist",
       },
@@ -56,7 +53,7 @@ const main = async () => {
         entitlementsInherit: "electron/entitlements.mac.plist",
         notarize: {
           teamId: process.env.APPLETEAMID,
-        },
+        },        
       },
     },
   });
