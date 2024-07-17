@@ -305,6 +305,7 @@ async function launchDaemon() {
     // );
 
     operateDaemon.stderr.on('data', (data) => {
+      logger.cli(data.toString().trim());
       if (data.toString().includes('Uvicorn running on')) {
         resolve({ running: true, error: null });
       }
@@ -313,7 +314,6 @@ async function launchDaemon() {
       ) {
         resolve({ running: false, error: 'Port already in use' });
       }
-      logger.cli(data.toString().trim());
     });
     operateDaemon.stdout.on('data', (data) => {
       logger.cli(data.toString().trim());
@@ -357,9 +357,7 @@ async function launchNextApp() {
     dir: path.join(import.meta.dirname),
     port: appConfig.ports.prod.next,
     env: {
-      NODE_ENV: 'production',
-      FORK_URL: process.env.FORK_URL,
-      DEV_RPC: process.env.DEV_RPC,
+      ...process.env,
       NEXT_PUBLIC_BACKEND_PORT:
         process.env.NODE_ENV === 'production'
           ? appConfig.ports.prod.operate
@@ -370,7 +368,10 @@ async function launchNextApp() {
 
   const server = http.createServer(nextApp.getRequestHandler);
   server.listen(appConfig.ports.prod.next, (err) => {
-    if (err) throw err;
+    if (err) {
+      logger.next(err);
+      throw err;
+    }
     logger.next(
       `> Next server running on http://localhost:${appConfig.ports.prod.next}`,
     );
@@ -405,15 +406,6 @@ ipcMain.on('check', async function (event, _argument) {
   // Setup
   try {
     event.sender.send('response', 'Checking installation');
-    if (!isDev) {
-      if (isMac) {
-        //await setupDarwin(event.sender);
-      } else if (isWindows) {
-        // TODO
-      } else {
-        //await setupUbuntu(event.sender);
-      }
-    }
 
     if (isDev) {
       event.sender.send(
@@ -430,7 +422,9 @@ ipcMain.on('check', async function (event, _argument) {
           ...PORT_RANGE,
         });
       }
+
       await launchDaemonDev();
+
       event.sender.send(
         'response',
         'Starting Frontend Server In Development Mode',
@@ -449,7 +443,9 @@ ipcMain.on('check', async function (event, _argument) {
       await launchNextAppDev();
     } else {
       event.sender.send('response', 'Starting Pearl Daemon');
-      await launchDaemon();
+      await launchDaemon().catch((e) =>
+        logger.electron('Failed to launch daemon', e),
+      );
 
       event.sender.send('response', 'Starting Frontend Server');
       const frontendPortAvailable = await isPortAvailable(
