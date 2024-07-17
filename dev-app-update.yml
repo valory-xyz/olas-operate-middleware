@@ -4,3 +4,5 @@ host: github.com
 owner: valory-xyz
 repo: olas-operate-app
 channel: latest
+# Optional (Github Read Access Token, for updating from a draft release or private repository)
+token: 
