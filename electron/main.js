@@ -179,7 +179,9 @@ const createSplashWindow = () => {
   splashWindow.loadURL('file://' + import.meta.dirname + '/loading/index.html');
 
   if (isDev) {
-    splashWindow.webContents.openDevTools();
+    splashWindow.webContents.openDevTools({
+      mode: 'detach',
+    });
   }
 };
 
@@ -263,7 +265,7 @@ const createMainWindow = async () => {
   await setupStoreIpc(ipcMain, mainWindow, storeInitialValues);
 
   if (isDev) {
-    mainWindow.webContents.openDevTools();
+    mainWindow.webContents.openDevTools({ mode: 'detach' });
   }
 };
 
@@ -354,7 +356,7 @@ async function launchDaemonDev() {
 async function launchNextApp() {
   const nextApp = next({
     dev: false,
-    dir: path.join(import.meta.dirname),
+    dir: '.',
     port: appConfig.ports.prod.next,
     env: {
       ...process.env,
@@ -364,6 +366,7 @@ async function launchNextApp() {
           : appConfig.ports.dev.operate,
     },
   });
+
   await nextApp.prepare();
 
   const server = http.createServer(nextApp.getRequestHandler);
@@ -477,6 +480,7 @@ ipcMain.on('check', async function (event, _argument) {
 
 // APP-SPECIFIC EVENTS
 app.on('ready', async () => {
+  logger.electron('App ready');
   createTray();
   if (isMac) {
     app.dock?.setIcon(

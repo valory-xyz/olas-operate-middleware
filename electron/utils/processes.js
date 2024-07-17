@@ -2,6 +2,7 @@ import { exec } from 'child_process';
 import psTree from 'ps-tree';
 
 import { isWindows } from '../constants/os.js';
+import { logger } from './logger.js';
 
 const unixKillCommand = 'kill -9';
 const windowsKillCommand = 'taskkill /F /PID';
@@ -13,6 +14,7 @@ const windowsKillCommand = 'taskkill /F /PID';
  * @returns {Promise<void>} A promise that resolves when the process and its children are killed, or rejects with an error.
  */
 export function killProcesses(pid) {
+  logger.electron('Killing processes...', pid);
   return new Promise((resolve, reject) => {
     psTree(pid, (err, children) => {
       if (err) {

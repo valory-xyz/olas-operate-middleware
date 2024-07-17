@@ -24,13 +24,13 @@ const main = async () => {
       appId: "xyz.valory.olas-operate-app",
       artifactName: "${productName}-${version}-${platform}-${arch}.${ext}",
       productName: "Pearl",
-      files: ["electron/**/*", "package.json", "app-update.yml"],
+      files: ["./electron/**/*", "./package.json", "./app-update.yml"],
       directories: {
-        output: "dist",
+        output: "./dist",
       },
       extraResources: [
         {
-          from: "electron/bins",
+          from: "./electron/bins",
           to: "bins",
           filter: ["**/*"],
         },
@@ -45,12 +45,12 @@ const main = async () => {
           },
         ],
         publish: publishOptions,
-        category: "public.app-category.utilities",
-        icon: "electron/assets/icons/splash-robot-head-dock.png",
+        category: "./public.app-category.utilities",
+        icon: "./electron/assets/icons/splash-robot-head-dock.png",
         hardenedRuntime: true,
         gatekeeperAssess: false,
-        entitlements: "electron/entitlements.mac.plist",
-        entitlementsInherit: "electron/entitlements.mac.plist",
+        entitlements: "./electron/entitlements.mac.plist",
+        entitlementsInherit: "./electron/entitlements.mac.plist",
         notarize: {
           teamId: process.env.APPLETEAMID,
         },        
