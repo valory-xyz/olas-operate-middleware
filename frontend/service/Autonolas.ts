@@ -176,7 +176,7 @@ const getStakingContractInfo = async (
 
   await multicallProvider.init();
 
-  const multicallResponse = await gnosisMulticallProvider.all(contractCalls);
+  const multicallResponse = await multicallProvider.all(contractCalls);
   const [
     availableRewardsInBN,
     maxNumServicesInBN,

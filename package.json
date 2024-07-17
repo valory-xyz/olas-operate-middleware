@@ -55,6 +55,7 @@
     "install-deps": "yarn && yarn install:backend && yarn install:frontend",
     "install:backend": "poetry install --no-root",
     "install:frontend": "cd frontend && yarn",
+    "lint": "yarn lint:frontend && yarn lint:electron",
     "lint:frontend": "cd frontend && yarn lint",
     "lint:electron": "cd electron && eslint .",
     "start": "electron .",
