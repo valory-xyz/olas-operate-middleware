@@ -202,7 +202,7 @@ const createMainWindow = async () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(import.meta.dirname, 'preload.js'),
+      preload: path.join(import.meta.dirname, 'preload.cjs'),
     },
   });
 
