@@ -18,7 +18,7 @@ const main = async () => {
       appId: 'xyz.valory.olas-operate-app',
       artifactName: '${productName}-${version}-${platform}-${arch}.${ext}',
       productName: 'Pearl',
-      files: ['electron/**/*', 'package.json', '*app-update.yml'],
+      files: ['electron/**/*', 'package.json', 'dev-app-update.yml'],
       directories: {
         output: 'dist',
       },
@@ -28,8 +28,9 @@ const main = async () => {
           to: 'bins',
           filter: ['**/*'],
         },
-      ],
-      // mac: {
+      ],      
+      //   NOTE - Edit this for your own platform, or leave it commented for default settings
+      //   mac: {
       //   publish: null,
       //   target: [
       //     {
