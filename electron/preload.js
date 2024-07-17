@@ -1,7 +1,7 @@
-// @ts-check
+// This file is loaded in the renderer process before other scripts
 import { contextBridge, ipcRenderer } from 'electron/renderer';
 
-const electronAPI = {
+contextBridge.exposeInMainWorld('electronAPI', {
   // App controls
   closeApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
@@ -40,6 +40,4 @@ const electronAPI = {
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
     removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
   },
-};
-
-contextBridge.exposeInMainWorld('electronAPI', electronAPI);
+});

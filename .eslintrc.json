@@ -2,13 +2,7 @@
   "overrides": [
     {
       // Next Frontend
-      "excludedFiles": [
-        "frontend/node_modules/*",
-        "frontend/.next",
-        "frontend/next.config.js",
-        "frontend/next-env.d.ts",
-        "frontend/.eslintrc.json"
-      ],
+      "excludedFiles": ["frontend/node_modules/*", "frontend/.next"],
       "extends": [
         "plugin:@typescript-eslint/recommended",
         "next/core-web-vitals"
@@ -38,7 +32,11 @@
     },
     {
       // Electron
-      "excludedFiles": ["electron/node_modules/*", "electron/.next"],
+      "excludedFiles": [
+        "electron/node_modules/*",
+        "electron/.next",
+        "eslint/preload.mjs"
+      ],
       "extends": ["plugin:@typescript-eslint/recommended"],
       "files": ["electron/**/*.js"],
       "parser": "@typescript-eslint/parser",
@@ -60,6 +58,5 @@
       }
     }
   ],
-  "plugins": ["prettier", "unused-imports", "simple-import-sort", "import"],
   "root": true
 }

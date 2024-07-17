@@ -202,7 +202,8 @@ const createMainWindow = async () => {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      preload: path.join(import.meta.dirname, 'preload.js'),
+      enableRemoteModule: true,
+      preload: path.join(import.meta.dirname, 'preload.mjs'),
     },
   });
 
@@ -248,7 +249,7 @@ const createMainWindow = async () => {
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     // open url in a browser and prevent default
-    require('electron').shell.openExternal(url);
+    import('electron').then((mod) => mod.shell.openExternal(url));
     return { action: 'deny' };
   });
 
@@ -284,7 +285,7 @@ async function launchDaemon() {
     logger.electron('Backend not running!');
   }
 
-  const check = new Promise(function (resolve, _reject) {
+  const check = new Promise(function (resolve) {
     operateDaemon = spawn(
       path.join(
         process.resourcesPath,
@@ -326,7 +327,7 @@ async function launchDaemon() {
 }
 
 async function launchDaemonDev() {
-  const check = new Promise(function (resolve, _reject) {
+  const check = new Promise(function (resolve) {
     operateDaemon = spawn('poetry', [
       'run',
       'operate',
@@ -382,7 +383,7 @@ async function launchNextApp() {
 }
 
 async function launchNextAppDev() {
-  await new Promise(function (resolve, _reject) {
+  await new Promise(function (resolve) {
     process.env.NEXT_PUBLIC_BACKEND_PORT = appConfig.ports.dev.operate; // must set next env var to connect to backend
     nextAppProcess = spawn(
       'yarn',
@@ -405,7 +406,7 @@ async function launchNextAppDev() {
 }
 
 // Fires after splash screen is loaded
-ipcMain.on('check', async function (event, _argument) {
+ipcMain.on('check', async function (event) {
   // Setup
   try {
     event.sender.send('response', 'Checking installation');
