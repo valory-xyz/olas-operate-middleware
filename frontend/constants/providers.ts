@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 import { Provider } from 'ethers-multicall';
 
-export const provider = new ethers.providers.JsonRpcProvider(
+export const provider = new ethers.providers.StaticJsonRpcProvider(
   `${process.env.RPC}`,
   {
     name: 'Gnosis',

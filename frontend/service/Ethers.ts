@@ -60,7 +60,10 @@ const checkRpc = async (rpc: string): Promise<boolean> => {
   try {
     if (!rpc) throw new Error('RPC is required');
 
-    const provider = new ethers.providers.JsonRpcProvider(rpc);
+    const provider = new ethers.providers.StaticJsonRpcProvider(rpc, {
+      name: 'Gnosis',
+      chainId: 100,
+    });
 
     const networkId = (await provider.getNetwork()).chainId;
     if (!networkId) throw new Error('Failed to get network ID');
