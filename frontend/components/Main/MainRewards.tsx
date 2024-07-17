@@ -1,12 +1,16 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Modal, Skeleton, Tag, Tooltip, Typography } from 'antd';
+import Title from 'antd/es/typography/Title';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import { useBalance } from '@/hooks/useBalance';
+import { useElectronApi } from '@/hooks/useElectronApi';
 import { useReward } from '@/hooks/useReward';
+import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
 
+import { ConfettiAnimation } from '../Confetti/ConfettiAnimation';
 import { CardSection } from '../styled/CardSection';
 
 const { Text, Paragraph } = Typography;
@@ -18,7 +22,7 @@ const Loader = () => (
   </Flex>
 );
 
-export const MainRewards = () => {
+export const DisplayRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
   const { isBalanceLoaded } = useBalance();
 
