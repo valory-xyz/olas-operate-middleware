@@ -1,3 +1,5 @@
+import { logger } from './logger.js';
+
 const defaultSchema = {
   version: { type: 'string', default: '' },
   environmentName: { type: 'string', default: '' },
@@ -34,8 +36,10 @@ export const setupStoreIpc = async (
   const store = new Store({ schema });
 
   store.onDidAnyChange((data) => {
-    if (mainWindow?.webContents)
+    if (mainWindow?.webContents) {
+      logger.electron('store-changed', data);
       mainWindow.webContents.send('store-changed', data);
+    }
   });
 
   // exposed to electron browser window

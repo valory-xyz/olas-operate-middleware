@@ -27,7 +27,7 @@ const main = async () => {
       appId: "xyz.valory.olas-operate-app",
       artifactName: "${productName}-${version}-${platform}-${arch}.${ext}",
       productName: "Pearl",
-      files: ["electron/**/*", "package.json"],
+      files: ["electron/**/*", "package.json", "*app-update.yml"],
       directories: {
         output: "dist",
       },

@@ -49,7 +49,6 @@
   },
   "settings": {
     "import/extensions": [
-      ".js",
       ".js"
     ],
     "import/resolver": {

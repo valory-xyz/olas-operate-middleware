@@ -17,9 +17,13 @@ export const UpdateModal = () => {
 
   useEffect(() => {
     if (storeState?.canCheckForUpdates === false) return;
-    checkForUpdates?.().then((res) => {
-      console.log('checkForUpdates', res);
-    });
+    checkForUpdates?.()
+      .then((res) => {
+        console.log('checkForUpdates', res);
+      })
+      .catch((err) => {
+        console.error('checkForUpdates', err);
+      });
   }, [checkForUpdates, storeState?.canCheckForUpdates]);
 
   // listen for update available event
@@ -83,7 +87,7 @@ export const UpdateModal = () => {
         </Title>
 
         <Paragraph className="mb-8">
-          A new version of Pearl is ready to be downloaded and installed.
+          A new version of Pearl is ready to be downloaded and installed!
         </Paragraph>
       </Flex>
     </Modal>

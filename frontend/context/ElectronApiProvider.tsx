@@ -1,5 +1,4 @@
-import { get } from 'lodash';
-import { createContext, PropsWithChildren } from 'react';
+import { createContext, PropsWithChildren, useEffect, useState } from 'react';
 
 import { ElectronStore, ElectronTrayIconStatus } from '@/types/ElectronApi';
 
@@ -38,18 +37,18 @@ type ElectronApiContextProps = {
   quitAndInstall?: () => void;
 };
 
-const getElectronApiFunction = (functionNameInWindow: string) => {
-  if (typeof window === 'undefined') return;
+// const getElectronApiFunction = (functionNameInWindow: string) => {
+//   if (typeof window === 'undefined') return;
 
-  const fn = get(window, `electronAPI.${functionNameInWindow}`);
-  if (!fn || typeof fn !== 'function') {
-    throw new Error(
-      `Function ${functionNameInWindow} not found in window.electronAPI`,
-    );
-  }
+//   const fn = get(window, `electronAPI.${functionNameInWindow}`);
+//   if (!fn || typeof fn !== 'function') {
+//     throw new Error(
+//       `Function ${functionNameInWindow} not found in window.electronAPI`,
+//     );
+//   }
 
-  return fn;
-};
+//   return fn;
+// };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({
   closeApp: () => {},
@@ -78,37 +77,47 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
 });
 
 export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
+  const [electronApi, setElectronApi] = useState<ElectronApiContextProps>({});
+
+  useEffect(() => {
+    if (!window) return;
+    setElectronApi(window.electronAPI);
+  }, []);
+
   return (
     <ElectronApiContext.Provider
-      value={{
-        closeApp: getElectronApiFunction('closeApp'),
-        minimizeApp: getElectronApiFunction('minimizeApp'),
-        setTrayIcon: getElectronApiFunction('setTrayIcon'),
-        ipcRenderer: {
-          send: getElectronApiFunction('ipcRenderer.send'),
-          on: getElectronApiFunction('ipcRenderer.on'),
-          invoke: getElectronApiFunction('ipcRenderer.invoke'),
-          removeAllListeners: getElectronApiFunction(
-            'ipcRenderer.removeAllListeners',
-          ),
-        },
-        store: {
-          store: getElectronApiFunction('store.store'),
-          get: getElectronApiFunction('store.get'),
-          set: getElectronApiFunction('store.set'),
-          delete: getElectronApiFunction('store.delete'),
-          clear: getElectronApiFunction('store.clear'),
-        },
-        setAppHeight: getElectronApiFunction('setAppHeight'),
-        showNotification: getElectronApiFunction('showNotification'),
-        saveLogs: getElectronApiFunction('saveLogs'),
-        openPath: getElectronApiFunction('openPath'),
+      value={
+        electronApi
+        //   {
+        //   closeApp: getElectronApiFunction('closeApp'),
+        //   minimizeApp: getElectronApiFunction('minimizeApp'),
+        //   setTrayIcon: getElectronApiFunction('setTrayIcon'),
+        //   ipcRenderer: {
+        //     send: getElectronApiFunction('ipcRenderer.send'),
+        //     on: getElectronApiFunction('ipcRenderer.on'),
+        //     invoke: getElectronApiFunction('ipcRenderer.invoke'),
+        //     removeAllListeners: getElectronApiFunction(
+        //       'ipcRenderer.removeAllListeners',
+        //     ),
+        //   },
+        //   store: {
+        //     store: getElectronApiFunction('store.store'),
+        //     get: getElectronApiFunction('store.get'),
+        //     set: getElectronApiFunction('store.set'),
+        //     delete: getElectronApiFunction('store.delete'),
+        //     clear: getElectronApiFunction('store.clear'),
+        //   },
+        //   setAppHeight: getElectronApiFunction('setAppHeight'),
+        //   showNotification: getElectronApiFunction('showNotification'),
+        //   saveLogs: getElectronApiFunction('saveLogs'),
+        //   openPath: getElectronApiFunction('openPath'),
 
-        // download updates
-        checkForUpdates: getElectronApiFunction('checkForUpdates'),
-        startDownload: getElectronApiFunction('startDownload'),
-        quitAndInstall: getElectronApiFunction('quitAndInstall'),
-      }}
+        //   // download updates
+        //   checkForUpdates: getElectronApiFunction('checkForUpdates'),
+        //   startDownload: getElectronApiFunction('startDownload'),
+        //   quitAndInstall: getElectronApiFunction('quitAndInstall'),
+        // }
+      }
     >
       {children}
     </ElectronApiContext.Provider>

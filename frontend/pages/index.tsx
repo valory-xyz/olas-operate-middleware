@@ -23,14 +23,6 @@ export default function Home() {
   }, [electronApi]);
 
   useEffect(() => {
-    // set the flag to check for updates on app start
-    electronApi?.store?.set?.('canCheckForUpdates', true);
-
-    // Runs only once on mount
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
     const resizeObserver = new ResizeObserver(updateAppHeight);
     resizeObserver.observe(document.body);
     updateAppHeight();
@@ -38,7 +30,7 @@ export default function Home() {
     return () => {
       resizeObserver.unobserve(document.body);
     };
-  }, [electronApi, updateAppHeight]);
+  }, [updateAppHeight]);
 
   const page = useMemo(() => {
     switch (pageState) {

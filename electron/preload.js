@@ -1,9 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron/renderer');
 
-/**
- * Adds electronAPI object to window object in the browser
- */
-contextBridge.exposeInMainWorld('electronAPI', {
+const electronAPI = {
   // App controls
   closeApp: () => ipcRenderer.send('close-app'),
   minimizeApp: () => ipcRenderer.send('minimize-app'),
@@ -34,7 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   startDownload: () => ipcRenderer.send('start-download'),
   quitAndInstall: () => ipcRenderer.send('install-update'),
 
-  // IPC communication (lower level API to communicate with main process)
+  // IPC (lower level API to communicate with main process)
   ipcRenderer: {
     send: (channel, data) => ipcRenderer.send(channel, data),
     on: (channel, func) =>
@@ -42,4 +39,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     invoke: (channel, data) => ipcRenderer.invoke(channel, data),
     removeAllListeners: (channel) => ipcRenderer.removeAllListeners(channel),
   },
-});
+};
+
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);
