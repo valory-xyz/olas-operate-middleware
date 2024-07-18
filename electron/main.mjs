@@ -379,7 +379,7 @@ async function launchNextApp() {
     nextApp.getRequestHandler()(req, res);
   });
 
-  logger.next('Listening to Next App Server on port', appConfig.ports.prod.next);
+  logger.next(`Listening to Next App Server on port ${appConfig.ports.prod.next}`);
   server.listen(appConfig.ports.prod.next, (out)=>{
     logger.next(out);
   });
