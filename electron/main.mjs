@@ -354,12 +354,16 @@ async function launchDaemonDev() {
 }
 
 async function launchNextApp() {
+  logger.next('Launching Next App');
   const nextApp = next({
     dev: false,
-    dir: '.',
+    dir: path.join(import.meta.dirname),
+    isNodeDebugging: true,
     port: appConfig.ports.prod.next,
     env: {
-      ...process.env,
+      // ...process.env,
+      FORK_URL: process.env.FORK_URL,
+      DEV_RPC: process.env.DEV_RPC,
       NEXT_PUBLIC_BACKEND_PORT:
         process.env.NODE_ENV === 'production'
           ? appConfig.ports.prod.operate
@@ -367,19 +371,19 @@ async function launchNextApp() {
     },
   });
 
+  logger.next('Preparing Next App');
   await nextApp.prepare();
 
-  const server = http.createServer(nextApp.getRequestHandler);
-  server.listen(appConfig.ports.prod.next, (err) => {
-    if (err) {
-      logger.next(err);
-      throw err;
-    }
-    logger.next(
-      `> Next server running on http://localhost:${appConfig.ports.prod.next}`,
-    );
+  logger.next('Creating Next App Server');
+  const server = http.createServer((req, res) => {
+    nextApp.getRequestHandler()(req, res);
   });
-}
+
+  logger.next('Listening to Next App Server on port', appConfig.ports.prod.next);
+  server.listen(appConfig.ports.prod.next, (out)=>{
+    logger.next(out);
+  });
+  }
 
 async function launchNextAppDev() {
   await new Promise(function (resolve) {
