@@ -20,6 +20,7 @@ export const Env = {
   PATH: `${process.env.PATH}:/opt/homebrew/bin:/usr/local/bin`,
   HOMEBREW_NO_AUTO_UPDATE: '1',
 };
+
 const SudoOptions = {
   name: 'Pearl',
   env: Env,
