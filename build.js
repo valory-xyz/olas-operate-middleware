@@ -15,7 +15,7 @@ const publishOptions = {
 };
 
 const main = async () => {
-  console.log("Building...");
+  console.log("Building... ");
 
   /** @type import {CliOptions} from "electron-builder" */
   await build({
