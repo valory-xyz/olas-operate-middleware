@@ -10,7 +10,7 @@ import { CardSection } from '../styled/CardSection';
 const { Text, Paragraph } = Typography;
 const COVER_PREV_BLOCK_BORDER_STYLE: CSSProperties = { marginBottom: '-1px' };
 
-export const UpdateProgressIndicator: FC = () => {
+export const UpdateProgressIndicator = () => {
   const { quitAndInstall, ipcRenderer } = useElectronApi();
 
   const [downloadPercent, setDownloadPercent] = useState(0);

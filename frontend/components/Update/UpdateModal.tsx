@@ -16,7 +16,9 @@ export const UpdateModal = () => {
   const [isModalVisible, setIsModalVisible] = useState(false);
 
   useEffect(() => {
-    if (storeState?.canCheckForUpdates === false) return;
+    // Initial load
+    store?.set?.('canCheckForUpdates', true);
+
     checkForUpdates?.()
       .then((res) => {
         console.log('checkForUpdates', res);
@@ -24,7 +26,7 @@ export const UpdateModal = () => {
       .catch((err) => {
         console.error('checkForUpdates', err);
       });
-  }, [checkForUpdates, storeState?.canCheckForUpdates]);
+  }, []);
 
   // listen for update available event
   useEffect(() => {
@@ -33,6 +35,7 @@ export const UpdateModal = () => {
       if (storeState?.canCheckForUpdates === false) return;
 
       setIsModalVisible(true);
+      store?.set?.('canCheckForUpdates', false);
     });
 
     return () => {

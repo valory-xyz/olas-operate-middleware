@@ -15,6 +15,7 @@ import { MainHeader } from './MainHeader';
 import { MainNeedsFunds } from './MainNeedsFunds';
 import { MainOlasBalance } from './MainOlasBalance';
 import { MainRewards } from './MainRewards';
+import { UpdateModal } from '../Update/UpdateModal';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -28,7 +29,7 @@ export const Main = () => {
     }
   }, [isLoaded, setIsLoaded, updateBalances, updateServicesState]);
 
-  return (
+  return (<>
     <Card
       title={<MainHeader />}
       extra={
@@ -59,5 +60,7 @@ export const Main = () => {
         <MainAddFunds />
       </Flex>
     </Card>
+    <UpdateModal/>
+  </>
   );
 };
