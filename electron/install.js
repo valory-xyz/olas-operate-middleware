@@ -14,7 +14,7 @@ const { paths } = require('./constants');
  * - use "" (nothing as a suffix) for latest release candidate, for example "0.1.0rc26"
  * - use "alpha" for alpha release, for example "0.1.0rc26-alpha"
  */
-const OlasMiddlewareVersion = '0.1.0rc88';
+const OlasMiddlewareVersion = '0.1.0rc89'; // TODO: remove if unused
 
 const Env = {
   ...process.env,
