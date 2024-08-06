@@ -28,6 +28,13 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 
+// load env vars
+require('dotenv').config({
+  path: app.isPackaged
+    ? path.join(process.resourcesPath, '.env')
+    : path.resolve(process.cwd(), '.env'),
+});
+
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) app.quit();
