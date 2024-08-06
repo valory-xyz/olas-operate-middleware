@@ -83,26 +83,26 @@ jobs:
                 virtualenvs-path: ~/my-custom-path
                 installer-parallel: true
             -   run: yarn install-deps
-#            -   name: "Build frontend with env vars"
-#                run: yarn build:frontend
-#                env:
-#                    NODE_ENV: production
-#                    DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-#                    IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-#                    FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-#            - run: rm -rf /dist
-#            - name: "Build, notarize, publish"
-#              env:
-#                APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-#                APPLE_ID: ${{ secrets.APPLEID }}
-#                APPLETEAMID: ${{ secrets.APPLETEAMID }}
-#                CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-#                CSC_LINK: ${{ secrets.CSC_LINK }}
-#                GH_TOKEN: ${{ secrets.github_token}}
-#                NODE_ENV: production
-#                DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-#                FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-#              run: node build.js
+            -   name: "Build frontend with env vars"
+                run: yarn build:frontend
+                env:
+                    NODE_ENV: production
+                    DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+                    IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
+                    FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+            - run: rm -rf /dist
+            - name: "Build, notarize, publish"
+              env:
+                APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
+                APPLE_ID: ${{ secrets.APPLEID }}
+                APPLETEAMID: ${{ secrets.APPLETEAMID }}
+                CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+                CSC_LINK: ${{ secrets.CSC_LINK }}
+                GH_TOKEN: ${{ secrets.github_token}}
+                NODE_ENV: production
+                DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+                FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+              run: node build.js
             - name: "Build frontend with dev env vars"
               run: yarn build:frontend
               env:
