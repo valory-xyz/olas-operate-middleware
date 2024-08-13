@@ -292,7 +292,6 @@ async function launchDaemon() {
   } catch (err) {
     logger.electron('Backend not running!');
   }
-  logger.info("11111111 " + JSON.stringify(Env, null, " "));
 
   const check = new Promise(function (resolve, _reject) {
     operateDaemon = spawn(

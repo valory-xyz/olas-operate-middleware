@@ -54,7 +54,6 @@ class AbstractDeploymentRunner(ABC):
 
 def _kill_process(pid: int) -> None:
     """Kill process."""
-    print(f"Trying to kill process: {pid}")
     while True:
         if not psutil.pid_exists(pid=pid):
             return
@@ -65,15 +64,8 @@ def _kill_process(pid: int) -> None:
         ):
             return
         try:
-            os.kill(
-                pid,
-                (
-                    signal.CTRL_C_EVENT  # type: ignore
-                    if platform.platform() == "Windows"
-                    else signal.SIGKILL
-                ),
-            )
-        except OSError:
+            process.kill()
+        except OSError as e:
             return
         time.sleep(1)
 
@@ -94,7 +86,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _run_aea(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        print(222222222222222, self._aea_bin, args, flush=True)
         return self._run_cmd(args=[self._aea_bin, *args], cwd=cwd)
 
     @staticmethod
@@ -243,7 +234,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             stderr=subprocess.DEVNULL,
             env={**os.environ, **env},
             creationflags=(
-                0x00000200  if platform.system() == "Windows" else 0
+                0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
         (working_dir / "agent.pid").write_text(
@@ -263,7 +254,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             stderr=subprocess.DEVNULL,
             env={**os.environ, **env},
             creationflags=(
-                0x00000200  if platform.system() == "Windows" else 0
+                0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
         (working_dir / "tendermint.pid").write_text(

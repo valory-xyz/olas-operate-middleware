@@ -39,13 +39,6 @@ GOERLI_RPC = os.environ.get("DEV_RPC", "https://ethereum-goerli.publicnode.com")
 SOLANA_RPC = os.environ.get("DEV_RPC", "https://api.mainnet-beta.solana.com")
 
 
-print(
-    11111111111111111111,
-    "DEV_RPC",
-    os.environ.get("DEV_RPC", "https://gnosis-rpc.publicnode.com"),
-    flush=True
-)
-
 PUBLIC_RPCS = {
     ChainType.ETHEREUM: ETHEREUM_PUBLIC_RPC,
     ChainType.GNOSIS: GNOSIS_PUBLIC_RPC,
