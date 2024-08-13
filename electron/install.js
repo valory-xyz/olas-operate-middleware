@@ -6,9 +6,9 @@ const process = require('process');
 const axios = require('axios');
 const { spawnSync } = require('child_process');
 const { logger } = require('./logger');
-
+const { execSync} = require('child_process');
 const { paths } = require('./constants');
-
+const homedir = os.homedir();
 /**
  * current version of the pearl release
  * - use "" (nothing as a suffix) for latest release candidate, for example "0.1.0rc26"
@@ -55,6 +55,21 @@ const TendermintUrls = {
   },
 };
 
+
+function execSyncExitCode(cmd) {
+  try {
+    execSync(cmd);
+    return 0;
+  } 
+  catch (error) {
+    logger.electron(error.status);  // Might be 127 in your example.
+    logger.electron(error.message); // Holds the message you typically want.
+      logger.electron(error.stderr.toString());  // Holds the stderr output. Use `.toString()`.
+        logger.electron(error.stdout.toString());  // Holds the stdout output. Use `.toString()`.
+   return error.status;
+  }
+}
+
 function getBinPath(command) {
   return spawnSync('/usr/bin/which', [command], { env: Env })
     .stdout?.toString()
@@ -78,6 +93,7 @@ function runCmdUnix(command, options) {
   logger.electron(`===== stdout =====  \n${output.stdout}`);
   logger.electron(`===== stderr =====  \n${output.stderr}`);
 }
+
 
 function runSudoUnix(command, options) {
   let bin = getBinPath(command);
@@ -113,6 +129,10 @@ function isTendermintInstalledUnix() {
   return Boolean(getBinPath('tendermint'));
 }
 
+function isTendermintInstalledWindows() {
+    return execSyncExitCode('tendermint --help') === 0;
+}
+
 async function downloadFile(url, dest) {
   const writer = fs.createWriteStream(dest);
   try {
@@ -131,6 +151,39 @@ async function downloadFile(url, dest) {
     console.error('Error downloading the file:', err.message);
   }
 }
+
+async function installTendermintWindows() {
+  logger.electron(`Installing tendermint for ${os.platform()}-${process.arch}`);
+  const cwd = process.cwd();
+  process.chdir(paths.tempDir);
+
+  const url = TendermintUrls[os.platform()][process.arch];
+
+  logger.electron(
+    `Downloading ${url} to ${paths.tempDir}. This might take a while...`,
+  );
+  await downloadFile(url, `${paths.tempDir}/tendermint.tar.gz`);
+
+  logger.electron(`Installing tendermint binary`);
+  try {
+    execSync('tar -xvf tendermint.tar.gz');
+  } catch (error){
+    logger.electron(error.status);  // Might be 127 in your example.
+    logger.electron(error.message); // Holds the message you typically want.
+      logger.electron(error.stderr.toString());  // Holds the stderr output. Use `.toString()`.
+        logger.electron(error.stdout.toString());  // Holds the stdout output. Use `.toString()`.
+  }
+
+  const bin_dir = homedir + "//AppData//Local//Microsoft//WindowsApps//"
+  if (!Env.CI) {
+    if (!fs.existsSync(bin_dir)) {
+     fs.mkdirSync(bin_dir, {recursive: true});
+    }
+    fs.copyFileSync("tendermint.exe", bin_dir + "tendermint.exe");
+  }
+  process.chdir(cwd);
+}
+
 
 async function installTendermintUnix() {
   logger.electron(`Installing tendermint for ${os.platform()}-${process.arch}`);
@@ -202,8 +255,24 @@ async function setupUbuntu(ipcChannel) {
   }
 }
 
+
+
+async function setupWindows(ipcChannel) {
+  logger.electron('Creating required directories');
+  await createDirectory(`${paths.dotOperateDirectory}`);
+  await createDirectory(`${paths.tempDir}`);
+
+  logger.electron('Checking tendermint installation: ' + isTendermintInstalledWindows());
+  if (!isTendermintInstalledWindows()) {
+    ipcChannel.send('response', 'Installing tendermint');
+    logger.electron('Installing tendermint');
+    await installTendermintWindows();
+  }
+}
+
 module.exports = {
   setupDarwin,
   setupUbuntu,
+  setupWindows,
   Env,
 };
