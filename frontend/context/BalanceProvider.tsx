@@ -1,7 +1,7 @@
-import { message } from 'antd';
-import { isAddress } from 'ethers/lib/utils';
-import { isNumber } from 'lodash';
-import { ValueOf } from 'next/dist/shared/lib/constants';
+import { message } from "antd";
+import { isAddress } from "ethers/lib/utils";
+import { isNumber } from "lodash";
+import { ValueOf } from "next/dist/shared/lib/constants";
 import {
   createContext,
   Dispatch,
@@ -11,27 +11,28 @@ import {
   useContext,
   useMemo,
   useState,
-} from 'react';
-import { useInterval } from 'usehooks-ts';
+} from "react";
+import { useInterval } from "usehooks-ts";
 
-import { Wallet } from '@/client';
-import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
-import { TOKENS } from '@/constants/tokens';
-import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
-import { Token } from '@/enums/Token';
-import { AutonolasService } from '@/service/Autonolas';
-import { EthersService } from '@/service/Ethers';
-import MulticallService from '@/service/Multicall';
-import { Address } from '@/types/Address';
+import { Wallet } from "@/client";
+import { FIVE_SECONDS_INTERVAL } from "@/constants/intervals";
+import { TOKENS } from "@/constants/tokens";
+import { ServiceRegistryL2ServiceState } from "@/enums/ServiceRegistryL2ServiceState";
+import { Token } from "@/enums/Token";
+import { AutonolasService } from "@/service/Autonolas";
+import { EthersService } from "@/service/Ethers";
+import MulticallService from "@/service/Multicall";
+import { Address } from "@/types/Address";
 import {
   AddressNumberRecord,
   WalletAddressNumberRecord,
-} from '@/types/Records';
+} from "@/types/Records";
 
-import { OnlineStatusContext } from './OnlineStatusProvider';
-import { RewardContext } from './RewardProvider';
-import { ServicesContext } from './ServicesProvider';
-import { WalletContext } from './WalletProvider';
+import { OnlineStatusContext } from "./OnlineStatusProvider";
+import { RewardContext } from "./RewardProvider";
+import { ServicesContext } from "./ServicesProvider";
+import { WalletContext } from "./WalletProvider";
+import { LOW_AGENT_BALANCE, LOW_BALANCE } from "@/constants/thresholds";
 
 export const BalanceContext = createContext<{
   isLoaded: boolean;
@@ -43,6 +44,7 @@ export const BalanceContext = createContext<{
   safeBalance?: ValueOf<WalletAddressNumberRecord>;
   totalEthBalance?: number;
   totalOlasBalance?: number;
+  isLowBalance: boolean;
   wallets?: Wallet[];
   walletBalances: WalletAddressNumberRecord;
   updateBalances: () => Promise<void>;
@@ -58,6 +60,7 @@ export const BalanceContext = createContext<{
   safeBalance: undefined,
   totalEthBalance: undefined,
   totalOlasBalance: undefined,
+  isLowBalance: false,
   wallets: undefined,
   walletBalances: {},
   updateBalances: async () => {},
@@ -85,7 +88,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     if (!isLoaded) return;
     return Object.values(walletBalances).reduce(
       (acc: number, walletBalance) => acc + walletBalance.ETH,
-      0,
+      0
     );
   }, [isLoaded, walletBalances]);
 
@@ -94,7 +97,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
     const sumWalletBalances = Object.values(walletBalances).reduce(
       (acc: number, walletBalance) => acc + walletBalance.OLAS,
-      0,
+      0
     );
 
     const total =
@@ -146,7 +149,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         const { depositValue, bondValue, serviceState } =
           await AutonolasService.getServiceRegistryInfo(
             masterSafeAddress,
-            serviceId,
+            serviceId
           );
 
         switch (serviceState) {
@@ -182,25 +185,41 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       setIsBalanceLoaded(true);
     } catch (error) {
       console.error(error);
-      message.error('Unable to retrieve wallet balances');
+      message.error("Unable to retrieve wallet balances");
       setIsBalanceLoaded(true);
     }
   }, [masterEoaAddress, masterSafeAddress, serviceAddresses, services]);
 
   const eoaBalance = useMemo(
     () => masterEoaAddress && walletBalances[masterEoaAddress],
-    [masterEoaAddress, walletBalances],
+    [masterEoaAddress, walletBalances]
   );
   const safeBalance = useMemo(
     () => masterSafeAddress && walletBalances[masterSafeAddress],
-    [masterSafeAddress, walletBalances],
+    [masterSafeAddress, walletBalances]
   );
+  const agentSafeBalance = useMemo(
+    () =>
+      services?.[0]?.chain_data?.multisig &&
+      walletBalances[services[0].chain_data.multisig],
+    [services, walletBalances]
+  );
+  const isLowBalance = useMemo(() => {
+    if (!safeBalance || !agentSafeBalance) return false;
+    if (
+      safeBalance.ETH < LOW_BALANCE &&
+      // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
+      agentSafeBalance.ETH < LOW_AGENT_BALANCE
+    )
+      return true;
+    return false;
+  }, [safeBalance, agentSafeBalance]);
 
   useInterval(
     () => {
       updateBalances();
     },
-    isPaused || !isOnline ? null : FIVE_SECONDS_INTERVAL,
+    isPaused || !isOnline ? null : FIVE_SECONDS_INTERVAL
   );
 
   return (
@@ -215,6 +234,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         safeBalance,
         totalEthBalance,
         totalOlasBalance,
+        isLowBalance,
         wallets,
         walletBalances,
         updateBalances,
@@ -228,7 +248,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 };
 
 export const getEthBalances = async (
-  walletAddresses: Address[],
+  walletAddresses: Address[]
 ): Promise<AddressNumberRecord | undefined> => {
   const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
   if (!rpcIsValid) return;
@@ -239,14 +259,14 @@ export const getEthBalances = async (
 };
 
 export const getOlasBalances = async (
-  walletAddresses: Address[],
+  walletAddresses: Address[]
 ): Promise<AddressNumberRecord | undefined> => {
   const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
   if (!rpcIsValid) return;
 
   const olasBalances = await MulticallService.getErc20Balances(
     walletAddresses,
-    TOKENS.gnosis.OLAS,
+    TOKENS.gnosis.OLAS
   );
 
   return olasBalances;
@@ -254,7 +274,7 @@ export const getOlasBalances = async (
 
 export const getWalletAddresses = (
   wallets: Wallet[],
-  serviceAddresses: Address[],
+  serviceAddresses: Address[]
 ): Address[] => {
   const walletsToCheck: Address[] = [];
 
@@ -278,7 +298,7 @@ export const getWalletAddresses = (
 };
 
 export const getWalletBalances = async (
-  walletAddresses: Address[],
+  walletAddresses: Address[]
 ): Promise<WalletAddressNumberRecord | undefined> => {
   const [ethBalances, olasBalances] = await Promise.all([
     getEthBalances(walletAddresses),
