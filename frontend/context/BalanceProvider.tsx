@@ -15,6 +15,7 @@ import {
 import { useInterval } from 'usehooks-ts';
 
 import { Wallet } from '@/client';
+import { CHAINS } from '@/constants/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import {
   LOW_AGENT_SAFE_BALANCE,
@@ -140,7 +141,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
       setWalletBalances(walletBalances);
 
-      const serviceId = services?.[0]?.chain_data.token;
+      const serviceId =
+        services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data.token;
 
       if (!isNumber(serviceId)) {
         setIsLoaded(true);
@@ -203,8 +205,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
   const agentSafeBalance = useMemo(
     () =>
-      services?.[0]?.chain_data?.multisig &&
-      walletBalances[services[0].chain_data.multisig],
+      services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data
+        ?.multisig &&
+      walletBalances[
+        services[0].chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig!
+      ],
     [services, walletBalances],
   );
   const isLowBalance = useMemo(() => {
