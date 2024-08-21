@@ -136,7 +136,7 @@ export const StakingContractSection = ({
     }
 
     if (!hasEnoughOlasToMigrate) {
-      return 'Insufficient OLAS balance to migrate, need ${}';
+      return `Insufficient OLAS balance to migrate, ${minimumOlasRequiredToMigrate} OLAS minimum required.`;
     }
 
     if (!isAppVersionCompatible) {
