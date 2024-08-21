@@ -35,23 +35,6 @@ const CustomizedCardSection = styled(CardSection)<{ border?: boolean }>`
 
 export const AddFundsSection = () => {
   const [isAddFundsVisible, setIsAddFundsVisible] = useState(false);
-  const { masterSafeAddress } = useWallet();
-
-  const fundingAddress: Address | undefined = masterSafeAddress;
-
-  const truncatedFundingAddress: string | undefined = useMemo(
-    () => fundingAddress && truncateAddress(fundingAddress),
-    [fundingAddress],
-  );
-
-  const handleCopyAddress = useCallback(
-    () =>
-      fundingAddress &&
-      copyToClipboard(fundingAddress).then(() =>
-        message.success('Copied successfully!'),
-      ),
-    [fundingAddress],
-  );
 
   return (
     <>
@@ -75,17 +58,38 @@ export const AddFundsSection = () => {
         </Popover>
       </CustomizedCardSection>
 
-      {isAddFundsVisible && (
-        <>
-          <AddFundsWarningAlertSection />
-          <AddFundsAddressSection
-            truncatedFundingAddress={truncatedFundingAddress}
-            fundingAddress={fundingAddress}
-            handleCopy={handleCopyAddress}
-          />
-          <AddFundsGetTokensSection />
-        </>
-      )}
+      {isAddFundsVisible && <OpenAddFundsSection />}
+    </>
+  );
+};
+
+export const OpenAddFundsSection = () => {
+  const { masterSafeAddress } = useWallet();
+
+  const fundingAddress: Address | undefined = masterSafeAddress;
+
+  const truncatedFundingAddress: string | undefined = useMemo(
+    () => fundingAddress && truncateAddress(fundingAddress),
+    [fundingAddress],
+  );
+
+  const handleCopyAddress = useCallback(
+    () =>
+      fundingAddress &&
+      copyToClipboard(fundingAddress).then(() =>
+        message.success('Copied successfully!'),
+      ),
+    [fundingAddress],
+  );
+  return (
+    <>
+      <AddFundsWarningAlertSection />
+      <AddFundsAddressSection
+        truncatedFundingAddress={truncatedFundingAddress}
+        fundingAddress={fundingAddress}
+        handleCopy={handleCopyAddress}
+      />
+      <AddFundsGetTokensSection />
     </>
   );
 };
