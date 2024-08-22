@@ -433,7 +433,7 @@ class ServiceManager:
                 ],
             )
         else:  # TODO fix this - using pearl beta params
-            staking_params = dict(
+            staking_params = dict(  # nosec
                 agent_ids=[25],
                 service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
                 staking_token="0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",  # nosec
