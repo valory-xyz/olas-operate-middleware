@@ -974,7 +974,7 @@ class EthSafeTxBuilder(_ChainUtil):
             )
             .load_metadata()
             .verify_nft(nft=nft)
-            #.verify_service_dependencies(agent_id=agent_id)  # TODO add this check once subgraph production indexes agent 25
+            .verify_service_dependencies(agent_id=agent_id)
             .publish_metadata()
         )
         instance = registry_contracts.service_manager.get_instance(
