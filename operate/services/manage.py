@@ -767,7 +767,9 @@ class ServiceManager:
         service.chain_data.on_chain_state = OnChainState.TERMINATED_BONDED
         service.store()
 
-    def _terminate_service_on_chain_from_safe(self, hash: str, chain_id: str) -> None:
+    def _terminate_service_on_chain_from_safe(
+        self, hash: str, chain_id: str
+    ) -> None:  # pylint: disable=too-many-locals
         """
         Terminate service on-chain
 
@@ -813,7 +815,7 @@ class ServiceManager:
                 hash=hash, chain_id=chain_id, staking_program_id=current_staking_program
             )
 
-        if self._get_on_chain_state(chain_config) in (
+        if self._get_on_chain_state(service=service, chain_id=chain_id) in (
             OnChainState.ACTIVE_REGISTRATION,
             OnChainState.FINISHED_REGISTRATION,
             OnChainState.DEPLOYED,
@@ -825,7 +827,10 @@ class ServiceManager:
                 )
             ).settle()
 
-        if self._get_on_chain_state(chain_config) == OnChainState.TERMINATED_BONDED:
+        if (
+            self._get_on_chain_state(service=service, chain_id=chain_id)
+            == OnChainState.TERMINATED_BONDED
+        ):
             self.logger.info("Unbonding service")
             sftxb.new_tx().add(
                 sftxb.get_unbond_data(
@@ -853,8 +858,9 @@ class ServiceManager:
                 else wallet.crypto.address,  # TODO it should always be safe address
             )  # noqa: E800
 
+    @staticmethod
     def _get_current_staking_program(
-        self, chain_data, ledger_config, sftxb
+        chain_data, ledger_config, sftxb
     ) -> t.Optional[str]:
         if chain_data.token == NON_EXISTENT_TOKEN:
             return None
@@ -896,9 +902,7 @@ class ServiceManager:
         service.chain_data.on_chain_state = OnChainState.UNBONDED
         service.store()
 
-    def stake_service_on_chain(
-        self, hash: str, chain_id: int, staking_program_id: str
-    ) -> None:
+    def stake_service_on_chain(self, hash: str) -> None:
         """
         Stake service on-chain
 
@@ -906,7 +910,9 @@ class ServiceManager:
         """
         raise NotImplementedError
 
-    def stake_service_on_chain_from_safe(self, hash: str, chain_id: str) -> None:
+    def stake_service_on_chain_from_safe(
+        self, hash: str, chain_id: str
+    ) -> None:  # pylint: disable=too-many-statements,too-many-locals
         """
         Stake service on-chain
 
@@ -1127,7 +1133,7 @@ class ServiceManager:
         chain_data.staked = False
         service.store()
 
-    def fund_service(  # pylint: disable=too-many-arguments
+    def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         hash: str,
         rpc: t.Optional[str] = None,

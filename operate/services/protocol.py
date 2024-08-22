@@ -535,13 +535,6 @@ class _ChainUtil:
         )
         return ledger_api
 
-    def owner_of(self, token_id: int) -> str:
-        """Get owner of a service."""
-        self._patch()
-        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
-            chain_type=self.chain_type
-        )
-
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""
         self._patch()

@@ -82,12 +82,13 @@ from operate.types import (
 )
 
 
+# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-
-# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+SERVICE_CONFIG_VERSION = 2
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -238,7 +239,7 @@ class ServiceHelper:
         self.path = path
         self.config = load_service_config(service_path=path)
 
-    def ledger_configs(self) -> "LedgerConfigs":
+    def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
         ledger_configs = {}
         for override in self.config.overrides:
@@ -741,7 +742,7 @@ class Service(LocalResource):
         return t.cast(Deployment, self._deployment)
 
     @staticmethod
-    def new(
+    def new(  # pylint: disable=too-many-locals
         hash: str,
         keys: Keys,
         service_template: ServiceTemplate,
@@ -781,7 +782,7 @@ class Service(LocalResource):
             )
 
         service = Service(
-            version=2,  # TODO implement in appropriate place
+            version=SERVICE_CONFIG_VERSION,
             name=service_yaml["author"] + "/" + service_yaml["name"],
             hash=service_template["hash"],
             keys=keys,
@@ -796,10 +797,9 @@ class Service(LocalResource):
     def update_user_params_from_template(self, service_template: ServiceTemplate):
         """Update user params from template."""
         for chain, config in service_template["configurations"].items():
-            for chain, config in service_template["configurations"].items():
-                self.chain_configs[
-                    chain
-                ].chain_data.user_params = OnChainUserParams.from_json(config)
+            self.chain_configs[
+                chain
+            ].chain_data.user_params = OnChainUserParams.from_json(config)
 
         self.store()
 
