@@ -767,9 +767,9 @@ class ServiceManager:
         service.chain_data.on_chain_state = OnChainState.TERMINATED_BONDED
         service.store()
 
-    def _terminate_service_on_chain_from_safe(
+    def _terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
         self, hash: str, chain_id: str
-    ) -> None:  # pylint: disable=too-many-locals
+    ) -> None:
         """
         Terminate service on-chain
 
@@ -910,9 +910,9 @@ class ServiceManager:
         """
         raise NotImplementedError
 
-    def stake_service_on_chain_from_safe(
+    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
         self, hash: str, chain_id: str
-    ) -> None:  # pylint: disable=too-many-statements,too-many-locals
+    ) -> None:
         """
         Stake service on-chain
 
