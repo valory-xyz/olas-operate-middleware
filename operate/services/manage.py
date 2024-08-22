@@ -186,22 +186,21 @@ class ServiceManager:
 
         return service
 
-    def _get_on_chain_state(self, chain_config: ChainConfig) -> OnChainState:
+    def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
+        chain_config = service.chain_configs[chain_id]
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         if chain_data.token == NON_EXISTENT_TOKEN:
             service_state = OnChainState.NON_EXISTENT
             chain_data.on_chain_state = service_state
-            # TODO save service state
-            # service.store()
+            service.store()
             return service_state
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         info = sftxb.info(token_id=chain_data.token)
         service_state = OnChainState(info["service_state"])
         chain_data.on_chain_state = service_state
-        # TODO save service state
-        # service.store()
+        service.store()
         return service_state
 
     def _get_on_chain_hash(self, chain_config: ChainConfig) -> t.Optional[str]:
@@ -478,7 +477,7 @@ class ServiceManager:
 
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
         is_first_mint = (
-            self._get_on_chain_state(chain_config=chain_config)
+            self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.NON_EXISTENT
         )
         is_update = (
@@ -507,7 +506,7 @@ class ServiceManager:
 
             # Update service
             if (
-                self._get_on_chain_state(chain_config=chain_config)
+                self._get_on_chain_state(service=service, chain_id=chain_id)
                 == OnChainState.PRE_REGISTRATION
             ):
                 self.logger.info("Updating service")
@@ -549,7 +548,7 @@ class ServiceManager:
 
         # Mint service
         if (
-            self._get_on_chain_state(chain_config=chain_config)
+            self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.NON_EXISTENT
         ):
             if user_params.use_staking and not sftxb.staking_slots_available(
@@ -598,7 +597,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(chain_config=chain_config)
+            self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.PRE_REGISTRATION
         ):
             cost_of_bond = staking_params["min_staking_deposit"]
@@ -651,7 +650,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(chain_config=chain_config)
+            self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.ACTIVE_REGISTRATION
         ):
             cost_of_bond = user_params.cost_of_bond
@@ -708,7 +707,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(chain_config=chain_config)
+            self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.FINISHED_REGISTRATION
         ):
             self.logger.info("Deploying service")
@@ -1007,7 +1006,7 @@ class ServiceManager:
             target_staking_contract
         )
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
-        on_chain_state = self._get_on_chain_state(chain_config=chain_config)
+        on_chain_state = self._get_on_chain_state(service=service, chain_id=chain_id)
         current_staking_program = self._get_current_staking_program(
             chain_data, ledger_config, sftxb
         )
@@ -1260,12 +1259,14 @@ class ServiceManager:
             hash=new_hash, service_template=service_template
         )
         new_service.keys = old_service.keys
-        # new_Service.home_chain_id = old_service.home_chain_id
 
-        # TODO - Ensure this works as expected - New service must copy all chain_data from old service,
-        # but if service_template is not None, it must copy the user_params
-        # passed in the service_template and copy the remaining attributes from old_service.
+        # TODO Ensure this is as intended.
+        new_service.home_chain_id = old_service.home_chain_id
 
+        # new_service must copy all chain_data from old_service.
+        # Additionally, if service_template is not None, it must overwrite
+        # the user_params on all chain_data by the values passed through the
+        # service_template.
         new_service.chain_configs = {}
         for chain_id, config in old_service.chain_configs.items():
             new_service.chain_configs[chain_id] = config

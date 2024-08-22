@@ -244,6 +244,7 @@ class StakingManager(OnChainHelper):
         ).get("data")
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
+        """Get the agent IDs for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -251,6 +252,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.getAgentIds().call()
 
     def service_registry(self, staking_contract: str) -> str:
+        """Get the service registry address for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -258,6 +260,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistry().call()
 
     def staking_token(self, staking_contract: str) -> str:
+        """Get the staking token address for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -265,6 +268,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.stakingToken().call()
 
     def service_registry_token_utility(self, staking_contract: str) -> str:
+        """Get the service registry token utility address for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -272,6 +276,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistryTokenUtility().call()
 
     def min_staking_deposit(self, staking_contract: str) -> str:
+        """Get the minimum staking deposit for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -279,6 +284,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.minStakingDeposit().call()
 
     def activity_checker(self, staking_contract: str) -> str:
+        """Get the activity checker address for the specified staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
