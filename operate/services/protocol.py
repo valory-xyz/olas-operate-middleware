@@ -242,7 +242,7 @@ class StakingManager(OnChainHelper):
             staking_contract,
             service_id,
         ).get("data")
- 
+
     def agent_ids(self, staking_contract: str) -> t.List[int]:
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -536,7 +536,6 @@ class _ChainUtil:
             chain_type=self.chain_type
         )
 
-
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""
         self._patch()
@@ -574,7 +573,6 @@ class _ChainUtil:
             instances=instances,
         )
 
-
     def get_service_safe_owners(self, service_id: int) -> t.List[str]:
         """Get list of owners."""
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
@@ -599,13 +597,8 @@ class _ChainUtil:
             contract_address=multisig_address,
         ).get("owners", [])
 
-
     def swap(  # pylint: disable=too-many-arguments,too-many-locals
-        self,
-        service_id: int,
-        multisig: str,
-        owner_key: str,
-        new_owner_address: str
+        self, service_id: int, multisig: str, owner_key: str, new_owner_address: str
     ) -> None:
         """Swap safe owner."""
         logging.info(f"Swapping safe for service {service_id} [{multisig}]...")
@@ -634,9 +627,7 @@ class _ChainUtil:
             ledger_api=manager.ledger_api,
             contract_address=multisig,
             old_owner=manager.ledger_api.api.to_checksum_address(owner_to_swap),
-            new_owner=manager.ledger_api.api.to_checksum_address(
-                new_owner_address
-            ),
+            new_owner=manager.ledger_api.api.to_checksum_address(new_owner_address),
         ).get("data")
         multisend_txs.append(
             {
@@ -719,6 +710,7 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
         return available_rewards > 0
+
 
 class OnChainManager(_ChainUtil):
     """On chain service management."""
@@ -1003,9 +995,9 @@ class EthSafeTxBuilder(_ChainUtil):
                     [agent_id],
                     [[number_of_slots, cost_of_bond]],
                     threshold,
-                    update_token
+                    update_token,
                 ],
-            )            
+            )
 
         return {
             "to": self.contracts["service_manager"],
@@ -1139,7 +1131,11 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         approve_hash_message = None
         if reuse_multisig:
-            _deployment_payload, approve_hash_message, error = get_reuse_multisig_from_safe_payload(
+            (
+                _deployment_payload,
+                approve_hash_message,
+                error,
+            ) = get_reuse_multisig_from_safe_payload(
                 ledger_api=self.ledger_api,
                 chain_type=self.chain_type,
                 service_id=service_id,
@@ -1334,7 +1330,7 @@ class EthSafeTxBuilder(_ChainUtil):
             staking_token=staking_token,
             service_registry_token_utility=service_registry_token_utility,
             min_staking_deposit=min_staking_deposit,
-            activity_checker=activity_checker
+            activity_checker=activity_checker,
         )
 
     def can_unstake(self, service_id: int, staking_contract: str) -> bool:
@@ -1358,26 +1354,25 @@ class EthSafeTxBuilder(_ChainUtil):
         raise NotImplementedError()
 
 
-
 def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
-        """Get the packed signatures."""
-        sorted_owners = sorted(owners, key=str.lower)
-        signatures = b''
-        for owner in sorted_owners:
-            # Convert address to bytes and ensure it is 32 bytes long (left-padded with zeros)
-            r_bytes = to_bytes(hexstr=owner[2:].rjust(64, '0'))
+    """Get the packed signatures."""
+    sorted_owners = sorted(owners, key=str.lower)
+    signatures = b""
+    for owner in sorted_owners:
+        # Convert address to bytes and ensure it is 32 bytes long (left-padded with zeros)
+        r_bytes = to_bytes(hexstr=owner[2:].rjust(64, "0"))
 
-            # `s` as 32 zero bytes
-            s_bytes = b'\x00' * 32
+        # `s` as 32 zero bytes
+        s_bytes = b"\x00" * 32
 
-            # `v` as a single byte
-            v_bytes = to_bytes(1)
+        # `v` as a single byte
+        v_bytes = to_bytes(1)
 
-            # Concatenate r, s, and v to form the packed signature
-            packed_signature = r_bytes + s_bytes + v_bytes
-            signatures += packed_signature
+        # Concatenate r, s, and v to form the packed signature
+        packed_signature = r_bytes + s_bytes + v_bytes
+        signatures += packed_signature
 
-        return signatures
+    return signatures
 
 
 def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
@@ -1477,7 +1472,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         contract_address=multisend_address,
         txs=txs,
     )
-    signature_bytes = get_packed_signature_for_approved_hash(owners=(master_safe, ))
+    signature_bytes = get_packed_signature_for_approved_hash(owners=(master_safe,))
 
     safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
         ledger_api=ledger_api,
@@ -1517,4 +1512,3 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
     )
     payload = multisig_address + safe_exec_data[2:]
     return payload, approve_hash_message, None
-
