@@ -24,12 +24,11 @@ export const AlertInsufficientMigrationFunds = ({
       message={
         <Flex vertical gap={4}>
           <Text className="font-weight-600">
-            Additional {requiredOlasDeposit} OLAS are required to switch
+            An additional {requiredOlasDeposit} OLAS is required to switch
           </Text>
-
           <Text>
             Add <strong>{requiredOlasDeposit} OLAS</strong> to your account to
-            meet the contract requirements and be able to switch.
+            meet the contract requirements and switch.
           </Text>
         </Flex>
       }
