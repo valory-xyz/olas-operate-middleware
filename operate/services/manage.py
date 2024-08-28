@@ -115,9 +115,11 @@ class ServiceManager:
                 self.logger.warning(
                     f"Failed to load service: {path.name}. Exception: {e}"
                 )
-                # delete the invalid path
-                shutil.rmtree(path)
-                self.logger.info(f"Deleted invalid service: {path.name}")
+                # rename the invalid path
+                invalid_path = path.parent / f"invalid_{path.name}"
+                os.rename(path, invalid_path)
+                self.logger.info(f"Renamed invalid service: {path.name} to {invalid_path.name}")
+
         return data
 
     def exists(self, service: str) -> bool:
