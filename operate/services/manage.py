@@ -118,7 +118,9 @@ class ServiceManager:
                 # rename the invalid path
                 invalid_path = path.parent / f"invalid_{path.name}"
                 os.rename(path, invalid_path)
-                self.logger.info(f"Renamed invalid service: {path.name} to {invalid_path.name}")
+                self.logger.info(
+                    f"Renamed invalid service: {path.name} to {invalid_path.name}"
+                )
 
         return data
 
