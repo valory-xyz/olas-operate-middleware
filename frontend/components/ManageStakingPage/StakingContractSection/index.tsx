@@ -185,10 +185,14 @@ export const StakingContractSection = ({
       return <AlertNoSlots />;
     }
 
-    if (!hasEnoughOlasToMigrate) {
+    if (
+      !hasEnoughOlasToMigrate &&
+      safeBalance?.OLAS !== undefined &&
+      totalOlasStakedBalance !== undefined
+    ) {
       return (
         <AlertInsufficientMigrationFunds
-          masterSafeOlasBalance={safeBalance?.OLAS}
+          masterSafeOlasBalance={safeBalance.OLAS}
           stakedOlasBalance={totalOlasStakedBalance}
           totalOlasRequiredForStaking={minimumOlasRequiredToMigrate}
         />

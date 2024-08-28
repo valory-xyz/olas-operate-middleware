@@ -10,13 +10,11 @@ export const AlertInsufficientMigrationFunds = ({
   stakedOlasBalance,
   totalOlasRequiredForStaking,
 }: {
-  masterSafeOlasBalance?: number;
-  stakedOlasBalance?: number;
+  masterSafeOlasBalance: number;
+  stakedOlasBalance: number;
   totalOlasRequiredForStaking: number;
 }) => {
   const requiredOlasDeposit =
-    stakedOlasBalance !== undefined &&
-    masterSafeOlasBalance !== undefined &&
     totalOlasRequiredForStaking - (stakedOlasBalance + masterSafeOlasBalance);
 
   return (
