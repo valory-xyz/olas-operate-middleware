@@ -18,7 +18,6 @@ import styled from 'styled-components';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
 import { useWallet } from '@/hooks/useWallet';
-import { Address } from '@/types/Address';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { truncateAddress } from '@/utils/truncate';
 
@@ -66,27 +65,25 @@ export const AddFundsSection = () => {
 export const OpenAddFundsSection = () => {
   const { masterSafeAddress } = useWallet();
 
-  const fundingAddress: Address | undefined = masterSafeAddress;
-
   const truncatedFundingAddress: string | undefined = useMemo(
-    () => fundingAddress && truncateAddress(fundingAddress),
-    [fundingAddress],
+    () => masterSafeAddress && truncateAddress(masterSafeAddress),
+    [masterSafeAddress],
   );
 
   const handleCopyAddress = useCallback(
     () =>
-      fundingAddress &&
-      copyToClipboard(fundingAddress).then(() =>
+      masterSafeAddress &&
+      copyToClipboard(masterSafeAddress).then(() =>
         message.success('Copied successfully!'),
       ),
-    [fundingAddress],
+    [masterSafeAddress],
   );
   return (
     <>
       <AddFundsWarningAlertSection />
       <AddFundsAddressSection
         truncatedFundingAddress={truncatedFundingAddress}
-        fundingAddress={fundingAddress}
+        fundingAddress={masterSafeAddress}
         handleCopy={handleCopyAddress}
       />
       <AddFundsGetTokensSection />
