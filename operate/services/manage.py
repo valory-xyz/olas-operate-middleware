@@ -846,8 +846,7 @@ class ServiceManager:
         counter_instances = Counter(s.lower() for s in instances)
 
         if counter_current_safe_owners == counter_instances:
-            self.logger.info("Swapping Safe owners")
-
+            self.logger.info("Service funded for safe swap")
             self.fund_service(
                 hash=hash,
                 rpc=ledger_config.rpc,
@@ -857,6 +856,7 @@ class ServiceManager:
                 safe_fund_treshold=0,
             )
 
+            self.logger.info("Swapping Safe owners")
             sftxb.swap(  # noqa: E800
                 service_id=chain_data.token,  # noqa: E800
                 multisig=chain_data.multisig,  # TODO this can be read from the registry

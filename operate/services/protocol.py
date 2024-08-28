@@ -23,7 +23,6 @@ import binascii
 import contextlib
 import io
 import json
-import logging
 import tempfile
 import time
 import typing as t
@@ -600,7 +599,6 @@ class _ChainUtil:
         self, service_id: int, multisig: str, owner_key: str, new_owner_address: str
     ) -> None:
         """Swap safe owner."""
-        logging.info(f"Swapping safe for service {service_id} [{multisig}]...")
         self._patch()
         manager = ServiceManager(
             service_id=service_id,
@@ -709,6 +707,11 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
         return available_rewards > 0
+
+    # def get_agent_bond(self, staking_contract: str) -> int:
+    #     self._patch()
+        
+
 
 
 class OnChainManager(_ChainUtil):
