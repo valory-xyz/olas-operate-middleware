@@ -65,10 +65,10 @@ export const StakingContractSection = ({
   const { setMigrationModalOpen } = useModals();
   const { activeStakingProgram, defaultStakingProgram, updateStakingProgram } =
     useStakingProgram();
-  const { stakingContractInfoRecord } = useStakingContractInfo();
   const { token } = useToken();
-  const { totalOlasBalance, isBalanceLoaded } = useBalance();
-  const { isServiceStakedForMinimumDuration } = useStakingContractInfo();
+  const { safeBalance, totalOlasStakedBalance, isBalanceLoaded } = useBalance();
+  const { isServiceStakedForMinimumDuration, stakingContractInfoRecord } =
+    useStakingContractInfo();
 
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
@@ -87,10 +87,15 @@ export const StakingContractSection = ({
   );
 
   const hasEnoughOlasToMigrate = useMemo(() => {
-    if (totalOlasBalance === undefined) return false;
-    if (!minimumOlasRequiredToMigrate) return false;
-    return totalOlasBalance >= minimumOlasRequiredToMigrate;
-  }, [minimumOlasRequiredToMigrate, totalOlasBalance]);
+    if (safeBalance?.OLAS === undefined || totalOlasStakedBalance === undefined)
+      return false;
+
+    const balanceForMigration = safeBalance.OLAS + totalOlasStakedBalance;
+
+    if (minimumOlasRequiredToMigrate === undefined) return false;
+
+    return balanceForMigration >= minimumOlasRequiredToMigrate;
+  }, [minimumOlasRequiredToMigrate, safeBalance?.OLAS, totalOlasStakedBalance]);
 
   const hasEnoughSlots =
     stakingContractInfoForStakingProgram?.maxNumServices &&
@@ -167,6 +172,7 @@ export const StakingContractSection = ({
     isBalanceLoaded,
     isSelected,
     isServiceStakedForMinimumDuration,
+    minimumOlasRequiredToMigrate,
     serviceStatus,
   ]);
 
@@ -181,7 +187,11 @@ export const StakingContractSection = ({
 
     if (!hasEnoughOlasToMigrate) {
       return (
-        <AlertInsufficientMigrationFunds totalOlasBalance={totalOlasBalance!} />
+        <AlertInsufficientMigrationFunds
+          masterSafeOlasBalance={safeBalance?.OLAS}
+          stakedOlasBalance={totalOlasStakedBalance}
+          totalOlasRequiredForStaking={minimumOlasRequiredToMigrate}
+        />
       );
     }
 
@@ -191,10 +201,12 @@ export const StakingContractSection = ({
   }, [
     isSelected,
     isBalanceLoaded,
-    totalOlasBalance,
     hasEnoughSlots,
     hasEnoughOlasToMigrate,
     isAppVersionCompatible,
+    safeBalance?.OLAS,
+    totalOlasStakedBalance,
+    minimumOlasRequiredToMigrate,
   ]);
 
   const contractTagStatus = useMemo(() => {
