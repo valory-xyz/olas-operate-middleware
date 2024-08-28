@@ -476,6 +476,7 @@ class ServiceManager:
                 )
 
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
+        current_agent_bond = staking_params["min_staking_deposit"]  # TODO fixme, read from service registry token utility contract
         is_first_mint = (
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.NON_EXISTENT
@@ -486,6 +487,7 @@ class ServiceManager:
             and (
                 on_chain_hash != service.hash
                 or current_agent_id != staking_params["agent_ids"][0]
+                or current_agent_bond != staking_params["min_staking_deposit"]
             )
         )
         current_staking_program = self._get_current_staking_program(
@@ -845,6 +847,16 @@ class ServiceManager:
 
         if counter_current_safe_owners == counter_instances:
             self.logger.info("Swapping Safe owners")
+
+            self.fund_service(
+                hash=hash,
+                rpc=ledger_config.rpc,
+                agent_topup=chain_data.user_params.fund_requirements.agent,
+                agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
+                safe_topup=0,
+                safe_fund_treshold=0,
+            )
+
             sftxb.swap(  # noqa: E800
                 service_id=chain_data.token,  # noqa: E800
                 multisig=chain_data.multisig,  # TODO this can be read from the registry
