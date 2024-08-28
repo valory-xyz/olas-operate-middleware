@@ -805,8 +805,8 @@ class Service(LocalResource):
             self.chain_configs[
                 chain
             ].chain_data.user_params = OnChainUserParams.from_json(
-                config
-            )  # type: ignore
+                config  # type: ignore
+            )
 
         self.store()
 

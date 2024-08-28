@@ -710,6 +710,54 @@ class _ChainUtil:
         )
         return available_rewards > 0
 
+    def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
+        """Stake the service"""
+        self._patch()
+        return StakingManager(
+            key=self.wallet.key_path,
+            password=self.wallet.password,
+            chain_type=self.chain_type,
+        ).status(
+            service_id=service_id,
+            staking_contract=staking_contract,
+        )
+
+    def get_staking_params(self, staking_contract: str) -> t.Dict:
+        """Get agent IDs for the staking contract"""
+        self._patch()
+        staking_manager = StakingManager(
+            key=self.wallet.key_path,
+            password=self.wallet.password,
+            chain_type=self.chain_type,
+        )
+        agent_ids = staking_manager.agent_ids(
+            staking_contract=staking_contract,
+        )
+        service_registry = staking_manager.service_registry(
+            staking_contract=staking_contract,
+        )
+        staking_token = staking_manager.staking_token(
+            staking_contract=staking_contract,
+        )
+        service_registry_token_utility = staking_manager.service_registry_token_utility(
+            staking_contract=staking_contract,
+        )
+        min_staking_deposit = staking_manager.min_staking_deposit(
+            staking_contract=staking_contract,
+        )
+        activity_checker = staking_manager.activity_checker(
+            staking_contract=staking_contract,
+        )
+
+        return dict(
+            agent_ids=agent_ids,
+            service_registry=service_registry,
+            staking_token=staking_token,
+            service_registry_token_utility=service_registry_token_utility,
+            min_staking_deposit=min_staking_deposit,
+            activity_checker=activity_checker,
+        )
+
 
 class OnChainManager(_ChainUtil):
     """On chain service management."""
@@ -1282,54 +1330,6 @@ class EthSafeTxBuilder(_ChainUtil):
             chain_type=self.chain_type,
         ).slots_available(
             staking_contract=staking_contract,
-        )
-
-    def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
-        """Stake the service"""
-        self._patch()
-        return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        ).status(
-            service_id=service_id,
-            staking_contract=staking_contract,
-        )
-
-    def get_staking_params(self, staking_contract: str) -> t.Dict:
-        """Get agent IDs for the staking contract"""
-        self._patch()
-        staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        )
-        agent_ids = staking_manager.agent_ids(
-            staking_contract=staking_contract,
-        )
-        service_registry = staking_manager.service_registry(
-            staking_contract=staking_contract,
-        )
-        staking_token = staking_manager.staking_token(
-            staking_contract=staking_contract,
-        )
-        service_registry_token_utility = staking_manager.service_registry_token_utility(
-            staking_contract=staking_contract,
-        )
-        min_staking_deposit = staking_manager.min_staking_deposit(
-            staking_contract=staking_contract,
-        )
-        activity_checker = staking_manager.activity_checker(
-            staking_contract=staking_contract,
-        )
-
-        return dict(
-            agent_ids=agent_ids,
-            service_registry=service_registry,
-            staking_token=staking_token,
-            service_registry_token_utility=service_registry_token_utility,
-            min_staking_deposit=min_staking_deposit,
-            activity_checker=activity_checker,
         )
 
     def can_unstake(self, service_id: int, staking_contract: str) -> bool:
