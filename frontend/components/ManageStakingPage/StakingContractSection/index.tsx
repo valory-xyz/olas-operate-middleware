@@ -287,40 +287,38 @@ export const StakingContractSection = ({
         {cantMigrateAlert}
         {/* Switch to program button */}
         {
-          <>
-            <Popover content={!isMigratable && cantMigrateReason}>
-              <Button
-                type="primary"
-                size="large"
-                disabled={!isMigratable}
-                onClick={async () => {
-                  setIsServicePollingPaused(true);
-                  try {
-                    setServiceStatus(DeploymentStatus.DEPLOYING);
-                    goto(Pages.Main);
-                    // TODO: cleanup and call via hook
+          <Popover content={!isMigratable && cantMigrateReason}>
+            <Button
+              type="primary"
+              size="large"
+              disabled={!isMigratable}
+              onClick={async () => {
+                setIsServicePollingPaused(true);
+                try {
+                  setServiceStatus(DeploymentStatus.DEPLOYING);
+                  goto(Pages.Main);
+                  // TODO: cleanup and call via hook
 
-                    await ServicesService.createService({
-                      stakingProgram,
-                      serviceTemplate,
-                      deploy: true,
-                    });
+                  await ServicesService.createService({
+                    stakingProgram,
+                    serviceTemplate,
+                    deploy: true,
+                  });
 
-                    await updateStakingProgram();
+                  await updateStakingProgram();
 
-                    setMigrationModalOpen(true);
-                  } catch (error) {
-                    console.error(error);
-                  } finally {
-                    setIsServicePollingPaused(false);
-                    updateServiceStatus();
-                  }
-                }}
-              >
-                Switch to {activeStakingProgramMeta?.name} contract
-              </Button>
-            </Popover>
-          </>
+                  setMigrationModalOpen(true);
+                } catch (error) {
+                  console.error(error);
+                } finally {
+                  setIsServicePollingPaused(false);
+                  updateServiceStatus();
+                }
+              }}
+            >
+              Switch to {activeStakingProgramMeta?.name} contract
+            </Button>
+          </Popover>
         }
         {stakingProgram === StakingProgram.Beta && (
           <Button
