@@ -6,28 +6,38 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 const { Text } = Typography;
 
 export const AlertInsufficientMigrationFunds = ({
-  totalOlasBalance,
+  masterSafeOlasBalance,
+  stakedOlasBalance,
+  totalOlasRequiredForStaking,
 }: {
-  totalOlasBalance: number;
-}) => (
-  <CustomAlert
-    type="warning"
-    showIcon
-    message={
-      <Flex vertical gap={4}>
-        <Text className="font-weight-600">
-          Insufficient amount of funds to switch
-        </Text>
+  masterSafeOlasBalance?: number;
+  stakedOlasBalance?: number;
+  totalOlasRequiredForStaking: number;
+}) => {
+  const requiredOlasDeposit =
+    stakedOlasBalance !== undefined &&
+    masterSafeOlasBalance !== undefined &&
+    totalOlasRequiredForStaking - (stakedOlasBalance + masterSafeOlasBalance);
 
-        <Text>Add funds to your account to meet the program requirements.</Text>
-        <Text>
-          Your current OLAS balance:{' '}
-          <span className="font-weight-600">{totalOlasBalance} OLAS</span>
-        </Text>
-      </Flex>
-    }
-  />
-);
+  return (
+    <CustomAlert
+      type="warning"
+      showIcon
+      message={
+        <Flex vertical gap={4}>
+          <Text className="font-weight-600">
+            Additional {requiredOlasDeposit} OLAS are required to switch
+          </Text>
+
+          <Text>
+            Add <strong>{requiredOlasDeposit} OLAS</strong> to your account to
+            meet the contract requirements and be able to switch.
+          </Text>
+        </Flex>
+      }
+    />
+  );
+};
 
 export const AlertNoSlots = () => (
   <CustomAlert
