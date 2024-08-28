@@ -476,7 +476,9 @@ class ServiceManager:
                 )
 
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
-        current_agent_bond = staking_params["min_staking_deposit"]  # TODO fixme, read from service registry token utility contract
+        current_agent_bond = staking_params[
+            "min_staking_deposit"
+        ]  # TODO fixme, read from service registry token utility contract
         is_first_mint = (
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.NON_EXISTENT

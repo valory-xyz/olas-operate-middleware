@@ -710,8 +710,6 @@ class _ChainUtil:
 
     # def get_agent_bond(self, staking_contract: str) -> int:
     #     self._patch()
-        
-
 
 
 class OnChainManager(_ChainUtil):

@@ -418,7 +418,9 @@ class Deployment(LocalResource):
             builder.try_update_abci_connection_params()
 
             home_chain_data = service.chain_configs[service.home_chain_id].chain_data
-            home_chain_ledger_config = service.chain_configs[service.home_chain_id].ledger_config
+            home_chain_ledger_config = service.chain_configs[
+                service.home_chain_id
+            ].ledger_config
             builder.try_update_runtime_params(
                 multisig_address=home_chain_data.multisig,
                 agent_instances=home_chain_data.instances,
@@ -795,12 +797,16 @@ class Service(LocalResource):
         service.store()
         return service
 
-    def update_user_params_from_template(self, service_template: ServiceTemplate) -> None:
+    def update_user_params_from_template(
+        self, service_template: ServiceTemplate
+    ) -> None:
         """Update user params from template."""
         for chain, config in service_template["configurations"].items():
             self.chain_configs[
                 chain
-            ].chain_data.user_params = OnChainUserParams.from_json(config)  # type: ignore
+            ].chain_data.user_params = OnChainUserParams.from_json(
+                config
+            )  # type: ignore
 
         self.store()
 
