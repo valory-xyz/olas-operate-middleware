@@ -24,9 +24,7 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
-      {/* Pearl Beta */}
       <StakingContractSection stakingProgram={StakingProgram.Beta} />
-      {/* Pearl alpha */}
       <StakingContractSection stakingProgram={StakingProgram.Alpha} />
     </Card>
   );
