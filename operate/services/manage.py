@@ -23,6 +23,7 @@ import asyncio
 import logging
 import os
 import shutil
+import time
 import traceback
 import typing as t
 from collections import Counter
@@ -116,7 +117,8 @@ class ServiceManager:
                     f"Failed to load service: {path.name}. Exception: {e}"
                 )
                 # rename the invalid path
-                invalid_path = path.parent / f"invalid_{path.name}"
+                timestamp = int(time.time())
+                invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
                 os.rename(path, invalid_path)
                 self.logger.info(
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
