@@ -1,9 +1,10 @@
 import { Button, Flex, Popover, theme, Typography } from 'antd';
 import { useMemo, useState } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { Chain, DeploymentStatus } from '@/client';
 import { OpenAddFundsSection } from '@/components/MainPage/sections/AddFundsSection';
 import { CardSection } from '@/components/styled/CardSection';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
@@ -17,7 +18,6 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
-import { Address } from '@/types/Address';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import {
@@ -54,10 +54,8 @@ const { useToken } = theme;
 
 export const StakingContractSection = ({
   stakingProgram,
-  contractAddress,
 }: {
   stakingProgram: StakingProgram;
-  contractAddress: Address;
 }) => {
   const { goto } = usePageState();
   const {
@@ -75,6 +73,11 @@ export const StakingContractSection = ({
   const { isServiceStakedForMinimumDuration, stakingContractInfoRecord } =
     useStakingContractInfo();
   const [isFundingSectionOpen, setIsFundingSectionOpen] = useState(false);
+
+  const stakingContractAddress =
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+      stakingProgram
+    ];
 
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
@@ -258,7 +261,7 @@ export const StakingContractSection = ({
             // here instead of isSelected we should check that the contract is not the old staking contract
             // but the one from staking factory (if we want to open govern)
             <a
-              href={`https://gnosisscan.io/address/${contractAddress}`}
+              href={`https://gnosisscan.io/address/${stakingContractAddress}`}
               target="_blank"
               className="ml-auto"
             >
@@ -286,7 +289,7 @@ export const StakingContractSection = ({
 
         {cantMigrateAlert}
         {/* Switch to program button */}
-        {
+        {stakingProgram !== StakingProgram.Alpha && (
           <Popover content={!isMigratable && cantMigrateReason}>
             <Button
               type="primary"
@@ -319,7 +322,7 @@ export const StakingContractSection = ({
               Switch to {activeStakingProgramMeta?.name} contract
             </Button>
           </Popover>
-        }
+        )}
         {stakingProgram === StakingProgram.Beta && (
           <Button
             type="default"
