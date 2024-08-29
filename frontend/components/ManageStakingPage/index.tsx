@@ -1,8 +1,6 @@
 import { CloseOutlined } from '@ant-design/icons';
 import { Button, Card } from 'antd';
 
-import { Chain } from '@/client';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { Pages } from '@/enums/PageState';
 import { StakingProgram } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
@@ -26,15 +24,8 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
-      {Object.entries(
-        SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
-      ).map(([stakingProgram, contractAddress]) => (
-        <StakingContractSection
-          key={contractAddress}
-          stakingProgram={stakingProgram as StakingProgram}
-          contractAddress={contractAddress}
-        />
-      ))}
+      <StakingContractSection stakingProgram={StakingProgram.Beta} />
+      <StakingContractSection stakingProgram={StakingProgram.Alpha} />
     </Card>
   );
 };

@@ -82,12 +82,13 @@ from operate.types import (
 )
 
 
+# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-
-# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+SERVICE_CONFIG_VERSION = 2
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -238,7 +239,7 @@ class ServiceHelper:
         self.path = path
         self.config = load_service_config(service_path=path)
 
-    def ledger_configs(self) -> "LedgerConfigs":
+    def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
         ledger_configs = {}
         for override in self.config.overrides:
@@ -416,7 +417,10 @@ class Deployment(LocalResource):
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
-            home_chain_data = service.chain_configs[service.home_chain_id]
+            home_chain_data = service.chain_configs[service.home_chain_id].chain_data
+            home_chain_ledger_config = service.chain_configs[
+                service.home_chain_id
+            ].ledger_config
             builder.try_update_runtime_params(
                 multisig_address=home_chain_data.multisig,
                 agent_instances=home_chain_data.instances,
@@ -425,8 +429,8 @@ class Deployment(LocalResource):
             )
             # TODO: Support for multiledger
             builder.try_update_ledger_params(
-                chain=LedgerType(service.ledger_config.type).name.lower(),
-                address=service.ledger_config.rpc,
+                chain=LedgerType(home_chain_ledger_config.type).name.lower(),
+                address=home_chain_ledger_config.rpc,
             )
 
             # build deployment
@@ -656,15 +660,19 @@ class Service(LocalResource):
     @classmethod
     def migrate_format(cls, path: Path) -> None:
         """Migrate the JSON file format if needed."""
-        file_path = path / Service._file if Service._file is not None and path.name != Service._file else path
-        
-        with open(file_path, 'r', encoding='utf-8') as file:
+        file_path = (
+            path / Service._file
+            if Service._file is not None and path.name != Service._file
+            else path
+        )
+
+        with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
-        
-        if 'version' in data:
+
+        if "version" in data:
             # Data is already in the new format
             return
-        
+
         # Migrate from old format to new format
         new_data = {
             "version": 2,
@@ -676,30 +684,42 @@ class Service(LocalResource):
                     "ledger_config": {
                         "rpc": data.get("ledger_config", {}).get("rpc"),
                         "type": data.get("ledger_config", {}).get("type"),
-                        "chain": data.get("ledger_config", {}).get("chain")
+                        "chain": data.get("ledger_config", {}).get("chain"),
                     },
                     "chain_data": {
                         "instances": data.get("chain_data", {}).get("instances", []),
                         "token": data.get("chain_data", {}).get("token"),
                         "multisig": data.get("chain_data", {}).get("multisig"),
                         "staked": data.get("chain_data", {}).get("staked", False),
-                        "on_chain_state": data.get("chain_data", {}).get("on_chain_state", 3),
+                        "on_chain_state": data.get("chain_data", {}).get(
+                            "on_chain_state", 3
+                        ),
                         "user_params": {
                             "staking_program_id": "pearl_alpha",
-                            "nft": data.get("chain_data", {}).get("user_params", {}).get("nft"),
-                            "threshold": data.get("chain_data", {}).get("user_params", {}).get("threshold"),
-                            "use_staking": data.get("chain_data", {}).get("user_params", {}).get("use_staking"),
-                            "cost_of_bond": data.get("chain_data", {}).get("user_params", {}).get("cost_of_bond"),
-                            "fund_requirements": data.get("chain_data", {}).get("user_params", {}).get("fund_requirements", {})
-                        }
-                    }
+                            "nft": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("nft"),
+                            "threshold": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("threshold"),
+                            "use_staking": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("use_staking"),
+                            "cost_of_bond": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("cost_of_bond"),
+                            "fund_requirements": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("fund_requirements", {}),
+                        },
+                    },
                 }
             },
             "service_path": data.get("service_path", ""),
-            "name": data.get("name", "")
+            "name": data.get("name", ""),
         }
-        
-        with open(file_path, 'w', encoding='utf-8') as file:
+
+        with open(file_path, "w", encoding="utf-8") as file:
             json.dump(new_data, file, indent=2)
 
     @classmethod
@@ -725,7 +745,7 @@ class Service(LocalResource):
         return t.cast(Deployment, self._deployment)
 
     @staticmethod
-    def new(
+    def new(  # pylint: disable=too-many-locals
         hash: str,
         keys: Keys,
         service_template: ServiceTemplate,
@@ -756,7 +776,7 @@ class Service(LocalResource):
                 multisig=DUMMY_MULTISIG,
                 staked=False,
                 on_chain_state=OnChainState.NON_EXISTENT,
-                user_params=OnChainUserParams.from_json(config),
+                user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
             chain_configs[chain] = ChainConfig(
@@ -765,7 +785,7 @@ class Service(LocalResource):
             )
 
         service = Service(
-            version=2,  # TODO implement in appropriate place
+            version=SERVICE_CONFIG_VERSION,
             name=service_yaml["author"] + "/" + service_yaml["name"],
             hash=service_template["hash"],
             keys=keys,
@@ -777,11 +797,16 @@ class Service(LocalResource):
         service.store()
         return service
 
-    def update_user_params_from_template(self, service_template: ServiceTemplate):
+    def update_user_params_from_template(
+        self, service_template: ServiceTemplate
+    ) -> None:
         """Update user params from template."""
         for chain, config in service_template["configurations"].items():
-            for chain, config in service_template["configurations"].items():
-                self.chain_configs[chain].chain_data.user_params = OnChainUserParams.from_json(config)
+            self.chain_configs[
+                chain
+            ].chain_data.user_params = OnChainUserParams.from_json(
+                config  # type: ignore
+            )
 
         self.store()
 

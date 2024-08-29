@@ -1,8 +1,10 @@
 import { Button, Flex, Popover, theme, Typography } from 'antd';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { Chain, DeploymentStatus } from '@/client';
+import { OpenAddFundsSection } from '@/components/MainPage/sections/AddFundsSection';
 import { CardSection } from '@/components/styled/CardSection';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
@@ -16,7 +18,6 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
-import { Address } from '@/types/Address';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import {
@@ -53,22 +54,30 @@ const { useToken } = theme;
 
 export const StakingContractSection = ({
   stakingProgram,
-  contractAddress,
 }: {
   stakingProgram: StakingProgram;
-  contractAddress: Address;
 }) => {
   const { goto } = usePageState();
-  const { setServiceStatus, serviceStatus, setIsServicePollingPaused } =
-    useServices();
+  const {
+    setServiceStatus,
+    serviceStatus,
+    setIsServicePollingPaused,
+    updateServiceStatus,
+  } = useServices();
   const { serviceTemplate } = useServiceTemplates();
   const { setMigrationModalOpen } = useModals();
   const { activeStakingProgram, defaultStakingProgram, updateStakingProgram } =
     useStakingProgram();
-  const { stakingContractInfoRecord } = useStakingContractInfo();
   const { token } = useToken();
-  const { totalOlasBalance, isBalanceLoaded } = useBalance();
-  const { isServiceStakedForMinimumDuration } = useStakingContractInfo();
+  const { safeBalance, totalOlasStakedBalance, isBalanceLoaded } = useBalance();
+  const { isServiceStakedForMinimumDuration, stakingContractInfoRecord } =
+    useStakingContractInfo();
+  const [isFundingSectionOpen, setIsFundingSectionOpen] = useState(false);
+
+  const stakingContractAddress =
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+      stakingProgram
+    ];
 
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
@@ -87,10 +96,15 @@ export const StakingContractSection = ({
   );
 
   const hasEnoughOlasToMigrate = useMemo(() => {
-    if (totalOlasBalance === undefined) return false;
-    if (!minimumOlasRequiredToMigrate) return false;
-    return totalOlasBalance >= minimumOlasRequiredToMigrate;
-  }, [minimumOlasRequiredToMigrate, totalOlasBalance]);
+    if (safeBalance?.OLAS === undefined || totalOlasStakedBalance === undefined)
+      return false;
+
+    const balanceForMigration = safeBalance.OLAS + totalOlasStakedBalance;
+
+    if (minimumOlasRequiredToMigrate === undefined) return false;
+
+    return balanceForMigration >= minimumOlasRequiredToMigrate;
+  }, [minimumOlasRequiredToMigrate, safeBalance?.OLAS, totalOlasStakedBalance]);
 
   const hasEnoughSlots =
     stakingContractInfoForStakingProgram?.maxNumServices &&
@@ -167,6 +181,7 @@ export const StakingContractSection = ({
     isBalanceLoaded,
     isSelected,
     isServiceStakedForMinimumDuration,
+    minimumOlasRequiredToMigrate,
     serviceStatus,
   ]);
 
@@ -179,9 +194,17 @@ export const StakingContractSection = ({
       return <AlertNoSlots />;
     }
 
-    if (!hasEnoughOlasToMigrate) {
+    if (
+      !hasEnoughOlasToMigrate &&
+      safeBalance?.OLAS !== undefined &&
+      totalOlasStakedBalance !== undefined
+    ) {
       return (
-        <AlertInsufficientMigrationFunds totalOlasBalance={totalOlasBalance!} />
+        <AlertInsufficientMigrationFunds
+          masterSafeOlasBalance={safeBalance.OLAS}
+          stakedOlasBalance={totalOlasStakedBalance}
+          totalOlasRequiredForStaking={minimumOlasRequiredToMigrate}
+        />
       );
     }
 
@@ -191,10 +214,12 @@ export const StakingContractSection = ({
   }, [
     isSelected,
     isBalanceLoaded,
-    totalOlasBalance,
     hasEnoughSlots,
     hasEnoughOlasToMigrate,
     isAppVersionCompatible,
+    safeBalance?.OLAS,
+    totalOlasStakedBalance,
+    minimumOlasRequiredToMigrate,
   ]);
 
   const contractTagStatus = useMemo(() => {
@@ -213,40 +238,41 @@ export const StakingContractSection = ({
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
   return (
-    <CardSection
-      style={
-        isSelected || !activeStakingProgram
-          ? { background: token.colorBgContainerDisabled }
-          : {}
-      }
-      borderbottom="true"
-      vertical
-      gap={16}
-    >
-      {/* Title */}
-      <Flex gap={12}>
-        <Typography.Title
-          level={5}
-          className="m-0"
-        >{`${activeStakingProgramMeta.name} contract`}</Typography.Title>
-        {/* TODO: pass `status` attribute */}
-        <StakingContractTag status={contractTagStatus} />
-        {!isSelected && (
-          // here instead of isSelected we should check that the contract is not the old staking contract
-          // but the one from staking factory (if we want to open govern)
-          <a
-            href={`https://gnosisscan.io/address/${contractAddress}`}
-            target="_blank"
-            className="ml-auto"
-          >
-            Contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </a>
-        )}
-      </Flex>
+    <>
+      <CardSection
+        style={
+          isSelected || !activeStakingProgram
+            ? { background: token.colorBgContainerDisabled }
+            : {}
+        }
+        bordertop="true"
+        borderbottom="true"
+        vertical
+        gap={16}
+      >
+        {/* Title */}
+        <Flex gap={12}>
+          <Typography.Title
+            level={5}
+            className="m-0"
+          >{`${activeStakingProgramMeta.name} contract`}</Typography.Title>
+          <StakingContractTag status={contractTagStatus} />
+          {!isSelected && (
+            // here instead of isSelected we should check that the contract is not the old staking contract
+            // but the one from staking factory (if we want to open govern)
+            <a
+              href={`https://gnosisscan.io/address/${stakingContractAddress}`}
+              target="_blank"
+              className="ml-auto"
+            >
+              Contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            </a>
+          )}
+        </Flex>
 
-      {/* TODO: fix */}
+        {/* TODO: redisplay once bugs resolved */}
 
-      {/* Contract details
+        {/* Contract details
       {stakingContractInfo?.availableRewards && (
         <ContractParameter
           label="Rewards per work period"
@@ -261,41 +287,55 @@ export const StakingContractSection = ({
         />
       )} */}
 
-      {cantMigrateAlert}
-      {/* Switch to program button */}
-      {!isSelected && (
-        <Popover content={!isMigratable && cantMigrateReason}>
-          <Button
-            type="primary"
-            size="large"
-            disabled={!isMigratable}
-            onClick={async () => {
-              setIsServicePollingPaused(true);
-              try {
-                setServiceStatus(DeploymentStatus.DEPLOYING);
-                goto(Pages.Main);
-                // TODO: cleanup and call via hook
+        {cantMigrateAlert}
+        {/* Switch to program button */}
+        {stakingProgram !== StakingProgram.Alpha && (
+          <Popover content={!isMigratable && cantMigrateReason}>
+            <Button
+              type="primary"
+              size="large"
+              disabled={!isMigratable}
+              onClick={async () => {
+                setIsServicePollingPaused(true);
+                try {
+                  setServiceStatus(DeploymentStatus.DEPLOYING);
+                  goto(Pages.Main);
+                  // TODO: cleanup and call via hook
 
-                await ServicesService.createService({
-                  stakingProgram,
-                  serviceTemplate,
-                  deploy: true,
-                }).then(() => {
-                  updateStakingProgram().then(() =>
-                    setMigrationModalOpen(true),
-                  );
-                });
-              } catch (error) {
-                console.error(error);
-              } finally {
-                setIsServicePollingPaused(false);
-              }
-            }}
+                  await ServicesService.createService({
+                    stakingProgram,
+                    serviceTemplate,
+                    deploy: true,
+                  });
+
+                  await updateStakingProgram();
+
+                  setMigrationModalOpen(true);
+                } catch (error) {
+                  console.error(error);
+                } finally {
+                  setIsServicePollingPaused(false);
+                  updateServiceStatus();
+                }
+              }}
+            >
+              Switch to {activeStakingProgramMeta?.name} contract
+            </Button>
+          </Popover>
+        )}
+        {stakingProgram === StakingProgram.Beta && (
+          <Button
+            type="default"
+            size="large"
+            onClick={() => setIsFundingSectionOpen((prev) => !prev)}
           >
-            Switch to {activeStakingProgramMeta?.name} contract
+            {isFundingSectionOpen ? 'Hide' : 'Show'} address to fund
           </Button>
-        </Popover>
+        )}
+      </CardSection>
+      {stakingProgram === StakingProgram.Beta && isFundingSectionOpen && (
+        <OpenAddFundsSection />
       )}
-    </CardSection>
+    </>
   );
 };
