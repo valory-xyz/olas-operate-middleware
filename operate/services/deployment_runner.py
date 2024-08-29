@@ -252,7 +252,11 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             cwd=working_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={**os.environ, **env},
+            env={
+                **os.environ,
+                **env,
+                "PATH": os.environ["PATH"] + ";" + os.path.dirname(sys.executable),
+            },
             creationflags=(
                 0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process

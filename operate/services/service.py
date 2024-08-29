@@ -21,6 +21,8 @@
 
 import json
 import os
+import platform
+import sys
 import shutil
 import subprocess  # nosec
 import typing as t
@@ -271,11 +273,16 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
     def generate_config_tendermint(self) -> "HostDeploymentGenerator":
         """Generate tendermint configuration."""
         tmhome = str(self.build_dir / "node")
+        tendermint_executable = str(
+            shutil.which("tendermint"),
+        )
+        # TODO: move all platform related things to a dedicated file
+        if platform.system() == "Windows":
+            tendermint_executable = Path(os.path.dirname(sys.executable)) / "tendermint.exe"
+        print(11111111111111111, tendermint_executable)
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
-                str(
-                    shutil.which("tendermint"),
-                ),
+                tendermint_executable,
                 "--home",
                 tmhome,
                 "init",
@@ -558,9 +565,9 @@ class Deployment(LocalResource):
         # Mech price patch.
         agent_vars = json.loads(Path(build, "agent.json").read_text(encoding="utf-8"))
         if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE" in agent_vars:
-            agent_vars[
-                "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE"
-            ] = "10000000000000000"
+            agent_vars["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE"] = (
+                "10000000000000000"
+            )
             Path(build, "agent.json").write_text(
                 json.dumps(agent_vars, indent=4),
                 encoding="utf-8",
@@ -656,15 +663,19 @@ class Service(LocalResource):
     @classmethod
     def migrate_format(cls, path: Path) -> None:
         """Migrate the JSON file format if needed."""
-        file_path = path / Service._file if Service._file is not None and path.name != Service._file else path
-        
-        with open(file_path, 'r', encoding='utf-8') as file:
+        file_path = (
+            path / Service._file
+            if Service._file is not None and path.name != Service._file
+            else path
+        )
+
+        with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
-        
-        if 'version' in data:
+
+        if "version" in data:
             # Data is already in the new format
             return
-        
+
         # Migrate from old format to new format
         new_data = {
             "version": 2,
@@ -676,30 +687,42 @@ class Service(LocalResource):
                     "ledger_config": {
                         "rpc": data.get("ledger_config", {}).get("rpc"),
                         "type": data.get("ledger_config", {}).get("type"),
-                        "chain": data.get("ledger_config", {}).get("chain")
+                        "chain": data.get("ledger_config", {}).get("chain"),
                     },
                     "chain_data": {
                         "instances": data.get("chain_data", {}).get("instances", []),
                         "token": data.get("chain_data", {}).get("token"),
                         "multisig": data.get("chain_data", {}).get("multisig"),
                         "staked": data.get("chain_data", {}).get("staked", False),
-                        "on_chain_state": data.get("chain_data", {}).get("on_chain_state", 3),
+                        "on_chain_state": data.get("chain_data", {}).get(
+                            "on_chain_state", 3
+                        ),
                         "user_params": {
                             "staking_program_id": "pearl_alpha",
-                            "nft": data.get("chain_data", {}).get("user_params", {}).get("nft"),
-                            "threshold": data.get("chain_data", {}).get("user_params", {}).get("threshold"),
-                            "use_staking": data.get("chain_data", {}).get("user_params", {}).get("use_staking"),
-                            "cost_of_bond": data.get("chain_data", {}).get("user_params", {}).get("cost_of_bond"),
-                            "fund_requirements": data.get("chain_data", {}).get("user_params", {}).get("fund_requirements", {})
-                        }
-                    }
+                            "nft": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("nft"),
+                            "threshold": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("threshold"),
+                            "use_staking": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("use_staking"),
+                            "cost_of_bond": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("cost_of_bond"),
+                            "fund_requirements": data.get("chain_data", {})
+                            .get("user_params", {})
+                            .get("fund_requirements", {}),
+                        },
+                    },
                 }
             },
             "service_path": data.get("service_path", ""),
-            "name": data.get("name", "")
+            "name": data.get("name", ""),
         }
-        
-        with open(file_path, 'w', encoding='utf-8') as file:
+
+        with open(file_path, "w", encoding="utf-8") as file:
             json.dump(new_data, file, indent=2)
 
     @classmethod

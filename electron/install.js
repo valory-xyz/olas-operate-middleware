@@ -130,6 +130,8 @@ function isTendermintInstalledUnix() {
 }
 
 function isTendermintInstalledWindows() {
+  return true;
+  //always installed cause bundled in
     return execSyncExitCode('tendermint --help') === 0;
 }
 
@@ -153,6 +155,8 @@ async function downloadFile(url, dest) {
 }
 
 async function installTendermintWindows() {
+  return;
+  // bundled in
   logger.electron(`Installing tendermint for ${os.platform()}-${process.arch}`);
   const cwd = process.cwd();
   process.chdir(paths.tempDir);
