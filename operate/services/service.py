@@ -84,12 +84,13 @@ from operate.types import (
 )
 
 
+# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-
-# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+SERVICE_CONFIG_VERSION = 2
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -240,7 +241,7 @@ class ServiceHelper:
         self.path = path
         self.config = load_service_config(service_path=path)
 
-    def ledger_configs(self) -> "LedgerConfigs":
+    def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
         ledger_configs = {}
         for override in self.config.overrides:
@@ -423,7 +424,10 @@ class Deployment(LocalResource):
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
-            home_chain_data = service.chain_configs[service.home_chain_id]
+            home_chain_data = service.chain_configs[service.home_chain_id].chain_data
+            home_chain_ledger_config = service.chain_configs[
+                service.home_chain_id
+            ].ledger_config
             builder.try_update_runtime_params(
                 multisig_address=home_chain_data.multisig,
                 agent_instances=home_chain_data.instances,
@@ -432,8 +436,8 @@ class Deployment(LocalResource):
             )
             # TODO: Support for multiledger
             builder.try_update_ledger_params(
-                chain=LedgerType(service.ledger_config.type).name.lower(),
-                address=service.ledger_config.rpc,
+                chain=LedgerType(home_chain_ledger_config.type).name.lower(),
+                address=home_chain_ledger_config.rpc,
             )
 
             # build deployment
@@ -748,7 +752,7 @@ class Service(LocalResource):
         return t.cast(Deployment, self._deployment)
 
     @staticmethod
-    def new(
+    def new(  # pylint: disable=too-many-locals
         hash: str,
         keys: Keys,
         service_template: ServiceTemplate,
@@ -779,7 +783,7 @@ class Service(LocalResource):
                 multisig=DUMMY_MULTISIG,
                 staked=False,
                 on_chain_state=OnChainState.NON_EXISTENT,
-                user_params=OnChainUserParams.from_json(config),
+                user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
             chain_configs[chain] = ChainConfig(
@@ -788,7 +792,7 @@ class Service(LocalResource):
             )
 
         service = Service(
-            version=2,  # TODO implement in appropriate place
+            version=SERVICE_CONFIG_VERSION,
             name=service_yaml["author"] + "/" + service_yaml["name"],
             hash=service_template["hash"],
             keys=keys,
@@ -799,6 +803,19 @@ class Service(LocalResource):
         )
         service.store()
         return service
+
+    def update_user_params_from_template(
+        self, service_template: ServiceTemplate
+    ) -> None:
+        """Update user params from template."""
+        for chain, config in service_template["configurations"].items():
+            self.chain_configs[
+                chain
+            ].chain_data.user_params = OnChainUserParams.from_json(
+                config  # type: ignore
+            )
+
+        self.store()
 
     def delete(self) -> None:
         """Delete a service."""

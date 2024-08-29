@@ -28,19 +28,19 @@ export default function App({ Component, pageProps }: AppProps) {
   }, []);
 
   return (
-    <ElectronApiProvider>
-      <StoreProvider>
-        <PageStateProvider>
-          <OnlineStatusProvider>
-            <WalletProvider>
-              <MasterSafeProvider>
-                <ServicesProvider>
-                  <RewardProvider>
-                    <BalanceProvider>
-                      <SetupProvider>
-                        <SettingsProvider>
-                          <StakingProgramProvider>
-                            <StakingContractInfoProvider>
+    <OnlineStatusProvider>
+      <ElectronApiProvider>
+        <StoreProvider>
+          <PageStateProvider>
+            <ServicesProvider>
+              <WalletProvider>
+                <MasterSafeProvider>
+                  <StakingProgramProvider>
+                    <StakingContractInfoProvider>
+                      <RewardProvider>
+                        <BalanceProvider>
+                          <SetupProvider>
+                            <SettingsProvider>
                               <ConfigProvider theme={mainTheme}>
                                 <ModalProvider>
                                   {isMounted ? (
@@ -50,18 +50,18 @@ export default function App({ Component, pageProps }: AppProps) {
                                   ) : null}
                                 </ModalProvider>
                               </ConfigProvider>
-                            </StakingContractInfoProvider>
-                          </StakingProgramProvider>
-                        </SettingsProvider>
-                      </SetupProvider>
-                    </BalanceProvider>
-                  </RewardProvider>
-                </ServicesProvider>
-              </MasterSafeProvider>
-            </WalletProvider>
-          </OnlineStatusProvider>
-        </PageStateProvider>
-      </StoreProvider>
-    </ElectronApiProvider>
+                            </SettingsProvider>
+                          </SetupProvider>
+                        </BalanceProvider>
+                      </RewardProvider>
+                    </StakingContractInfoProvider>
+                  </StakingProgramProvider>
+                </MasterSafeProvider>
+              </WalletProvider>
+            </ServicesProvider>
+          </PageStateProvider>
+        </StoreProvider>
+      </ElectronApiProvider>
+    </OnlineStatusProvider>
   );
 }

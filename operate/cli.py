@@ -534,9 +534,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         if template.get("deploy", False):
+
             def _fn() -> None:
+                # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
                 manager.deploy_service_onchain_from_safe(hash=service.hash)
-                # manager.stake_service_on_chain_from_safe(hash=service.hash) # Done inside deploy_service_onchain
                 manager.fund_service(hash=service.hash)
                 manager.deploy_service_locally(hash=service.hash)
 
@@ -561,8 +562,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
         if template.get("deploy", False):
             manager = operate.service_manager()
+
+            # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             manager.deploy_service_onchain_from_safe(hash=service.hash)
-            # manager.stake_service_on_chain_from_safe(hash=service.hash)  # Done in deploy_service_onchain_from_safe
             manager.fund_service(hash=service.hash)
             manager.deploy_service_locally(hash=service.hash)
             schedule_funding_job(service=service.hash)
@@ -680,7 +682,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> None:
             manager.deploy_service_onchain(hash=service)
-            # manager.stake_service_on_chain(hash=service)
+            manager.stake_service_on_chain(hash=service)
             manager.fund_service(hash=service)
             manager.deploy_service_locally(hash=service, force=True)
 
