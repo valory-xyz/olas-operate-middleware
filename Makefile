@@ -18,18 +18,15 @@ endef
 	pwd
 
 
-./dist/tendermint_win.exe: ./operate
+./dist/tendermint_win.exe: ./operate/
 	pwd
 	poetry install && poetry run pyinstaller operate/services/utils/tendermint.py --onefile --name tendermint_win
 
 
-./dist/pearl_win.exe: ./dist/aea_win.exe ./dist/tendermint_win.exe
+./dist/pearl_win.exe: ./operate/ ./dist/aea_win.exe ./dist/tendermint_win.exe
 	pwd
 	poetry install && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_win.exe:.  --add-binary dist/tendermint_win.exe:. --onefile --name pearl_win
 
-
-.PHONY: operate
-operate: ./dist/pearl_win.exe
 
 .PHONY: build
 build: ./dist/pearl_win.exe
