@@ -4,7 +4,13 @@ name: Release for Windows
 # git tag vX.Y.Z
 # git push origin tag vX.Y.Z
 
-on: [pull_request]
+# on: [pull_request]
+
+
+on:
+  push:
+      tags:
+          - 'v*.*.*'
 
 jobs:
     build-windows:
@@ -48,12 +54,14 @@ jobs:
             DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
             IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
             FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+            GH_TOKEN: ${{ secrets.github_token}}
           run: |
             echo NODE_ENV=$NODE_ENV >> prod.env
             echo DEV_RPC=$DEV_RPC >> prod.env
             echo IS_STAGING=$IS_STAGING >> prod.env
             echo FORK_URL=$FORK_URL >> prod.env
             cat prod.env
+            echo GH_TOKEN=$GH_TOKEN >> prod.env
         - run: rm -rf /dist
         - name: "Build, notarize, publish"
           run: make build
