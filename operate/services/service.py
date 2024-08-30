@@ -22,9 +22,9 @@
 import json
 import os
 import platform
-import sys
 import shutil
 import subprocess  # nosec
+import sys
 import typing as t
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -279,8 +279,9 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         )
         # TODO: move all platform related things to a dedicated file
         if platform.system() == "Windows":
-            tendermint_executable = Path(os.path.dirname(sys.executable)) / "tendermint.exe"
-        print(11111111111111111, tendermint_executable)
+            tendermint_executable = str(
+                Path(os.path.dirname(sys.executable)) / "tendermint.exe"
+            )
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
                 tendermint_executable,
@@ -569,9 +570,9 @@ class Deployment(LocalResource):
         # Mech price patch.
         agent_vars = json.loads(Path(build, "agent.json").read_text(encoding="utf-8"))
         if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE" in agent_vars:
-            agent_vars["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE"] = (
-                "10000000000000000"
-            )
+            agent_vars[
+                "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE"
+            ] = "10000000000000000"
             Path(build, "agent.json").write_text(
                 json.dumps(agent_vars, indent=4),
                 encoding="utf-8",

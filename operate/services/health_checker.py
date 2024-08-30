@@ -110,7 +110,9 @@ class HealthChecker:
                         self.logger.info("[HEALTH_CHECKER]: port is UP")
                         return
                     except aiohttp.ClientConnectionError:
-                        self.logger.error("[HEALTH_CHECKER]: error connecting http port")
+                        self.logger.error(
+                            "[HEALTH_CHECKER]: error connecting http port"
+                        )
                     await asyncio.sleep(sleep_period)
 
             async def _check_port_ready(

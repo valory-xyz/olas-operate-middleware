@@ -138,7 +138,7 @@ class OperateApp:
             "home": str(self._path),
         }
 
-    
+
 def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-statements
     home: t.Optional[Path] = None,
 ) -> FastAPI:
@@ -146,13 +146,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     HEALTH_CHECKER_OFF = os.environ.get("HEALTH_CHECKER_OFF", "0") == "1"
     number_of_fails = int(os.environ.get("HEALTH_CHECKER_TRIES", "5"))
 
-
     logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
         logger.warning("healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
     funding_jobs: t.Dict[str, asyncio.Task] = {}
-    health_checker = HealthChecker(operate.service_manager(), number_of_fails=number_of_fails)
+    health_checker = HealthChecker(
+        operate.service_manager(), number_of_fails=number_of_fails
+    )
     # Create shutdown endpoint
     shutdown_endpoint = uuid.uuid4().hex
     (operate._path / "operate.kill").write_text(  # pylint: disable=protected-access

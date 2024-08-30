@@ -22,7 +22,6 @@ import json
 import os
 import platform
 import shutil  # nosec
-import signal  # nosec
 import subprocess  # nosec
 import sys  # nosec
 import time
@@ -31,6 +30,7 @@ from abc import ABC, ABCMeta, abstractmethod
 from pathlib import Path
 from typing import Any
 from venv import main as venv_cli
+
 import psutil
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
@@ -65,7 +65,7 @@ def _kill_process(pid: int) -> None:
             return
         try:
             process.kill()
-        except OSError as e:
+        except OSError:
             return
         time.sleep(1)
 
@@ -268,10 +268,12 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
-    pass
+    """Mac deployment runner."""
 
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
+    """Windows deployment runner."""
+
     @property
     def _aea_bin(self) -> str:
         """Return aea_bin path."""
