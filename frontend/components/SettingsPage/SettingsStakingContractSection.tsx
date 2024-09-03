@@ -11,6 +11,7 @@ import { CardSection } from '../styled/CardSection';
 
 const { Text } = Typography;
 
+// TODO: delete this component
 export const SettingsStakingContractSection = () => {
   const { goto } = usePageState();
   const {
