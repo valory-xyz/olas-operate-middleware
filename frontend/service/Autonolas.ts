@@ -33,19 +33,27 @@ const serviceStakingTokenMechUsageContracts: Record<
 > = {
   [StakingProgram.Alpha]: new MulticallContract(
     SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgram.Alpha
+    StakingProgram.Alpha
     ],
     SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
       (abi) => abi.type === 'function',
-    ), // same as above
+    ),
   ),
   [StakingProgram.Beta]: new MulticallContract(
     SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgram.Beta
+    StakingProgram.Beta
     ],
     SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
       (abi) => abi.type === 'function',
-    ), // same as above
+    ),
+  ),
+  [StakingProgram.Beta2]: new MulticallContract(
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+    StakingProgram.Beta2
+    ],
+    SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
+      (abi) => abi.type === 'function',
+    ),
   ),
 };
 
@@ -127,7 +135,7 @@ const getAgentStakingRewardsInfo = async ({
   const requiredMechRequests =
     (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
       livenessRatio) /
-      1e18 +
+    1e18 +
     REQUIRED_MECH_REQUESTS_SAFETY_MARGIN;
 
   const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
@@ -311,27 +319,34 @@ const getServiceRegistryInfo = async (
 const getCurrentStakingProgramByServiceId = async (
   serviceId: number,
 ): Promise<StakingProgram | null> => {
-  const contractCalls = [
-    serviceStakingTokenMechUsageContracts[StakingProgram.Alpha].getStakingState(
-      serviceId,
-    ),
-    serviceStakingTokenMechUsageContracts[StakingProgram.Beta].getStakingState(
-      serviceId,
-    ),
-  ];
+
+  if (serviceId < 1) return null;
+
+  const contractCalls = Object.values(StakingProgram).reduce(
+    (acc, stakingProgram: StakingProgram) => ({
+      ...acc,
+      [stakingProgram]:
+        serviceStakingTokenMechUsageContracts[stakingProgram].getStakingState(
+          serviceId,
+        ),
+    }),
+    {},
+  );
 
   await gnosisMulticallProvider.init();
 
   try {
-    const [isAlphaStaked, isBetaStaked] =
-      await gnosisMulticallProvider.all(contractCalls);
+    const [isAlphaStaked, isBetaStaked, isBeta2Staked] =
+      await gnosisMulticallProvider.all(Object.values(contractCalls));
 
     // Alpha should take precedence, as it must be migrated from
     return isAlphaStaked
       ? StakingProgram.Alpha
       : isBetaStaked
         ? StakingProgram.Beta
-        : null;
+        : isBeta2Staked
+          ? StakingProgram.Beta2
+          : null;
   } catch (error) {
     console.error('Error while getting current staking program', error);
     return null;
