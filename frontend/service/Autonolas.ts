@@ -319,8 +319,7 @@ const getServiceRegistryInfo = async (
 const getCurrentStakingProgramByServiceId = async (
   serviceId: number,
 ): Promise<StakingProgram | null> => {
-
-  if (serviceId < 1) return null;
+  if (serviceId <= -1) return null;
 
   const contractCalls = Object.values(StakingProgram).reduce(
     (acc, stakingProgram: StakingProgram) => ({
