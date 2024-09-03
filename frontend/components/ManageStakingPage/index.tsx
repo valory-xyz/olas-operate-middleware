@@ -24,6 +24,7 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
+      <StakingContractSection stakingProgram={StakingProgram.Beta2} />
       <StakingContractSection stakingProgram={StakingProgram.Beta} />
       <StakingContractSection stakingProgram={StakingProgram.Alpha} />
     </Card>

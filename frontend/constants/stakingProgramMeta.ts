@@ -12,4 +12,7 @@ export const STAKING_PROGRAM_META: Record<
   [StakingProgram.Beta]: {
     name: 'Pearl Beta',
   },
+  [StakingProgram.Beta2]: {
+    name: 'Pearl Beta 2',
+  },
 };
