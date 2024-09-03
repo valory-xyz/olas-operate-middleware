@@ -20,11 +20,7 @@ import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
-import {
-  AlertInsufficientMigrationFunds,
-  AlertNoSlots,
-  AlertUpdateToMigrate,
-} from './alerts';
+import { AlertInsufficientMigrationFunds, AlertNoSlots } from './alerts';
 import { StakingContractTag } from './StakingContractTag';
 
 // const { Text } = Typography;
@@ -79,10 +75,13 @@ export const StakingContractSection = ({
       stakingProgram
     ];
 
+  const stakingProgramMeta = STAKING_PROGRAM_META[stakingProgram];
+
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
 
-  const activeStakingProgramMeta = STAKING_PROGRAM_META[stakingProgram];
+  const activeStakingProgramMeta =
+    activeStakingProgram && STAKING_PROGRAM_META[activeStakingProgram];
 
   const isSelected =
     activeStakingProgram && activeStakingProgram === stakingProgram;
@@ -91,8 +90,8 @@ export const StakingContractSection = ({
   //(stakingContractInfoForStakingProgram?.availableRewards ?? 0) > 0;
 
   const minimumOlasRequiredToMigrate = useMemo(
-    () => getMinimumStakedAmountRequired(serviceTemplate, StakingProgram.Beta),
-    [serviceTemplate],
+    () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgram),
+    [serviceTemplate, stakingProgram],
   );
 
   const hasEnoughOlasToMigrate = useMemo(() => {
@@ -112,33 +111,36 @@ export const StakingContractSection = ({
     stakingContractInfoForStakingProgram?.maxNumServices >
       stakingContractInfoForStakingProgram?.serviceIds?.length;
 
-  // TODO: compatibility needs to be implemented
-  const isAppVersionCompatible = true; // contract.appVersion === 'rc105';
+  const activeStakingContractSupportsMigration =
+    !activeStakingProgram ||
+    activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram);
 
-  const isMigratable =
+  const canMigrate =
+    // checks for both initial deployment and migration
     !isSelected &&
-    activeStakingProgram === StakingProgram.Alpha && // TODO: make more elegant
     isBalanceLoaded &&
     hasEnoughSlots &&
     hasEnoughRewards &&
     hasEnoughOlasToMigrate &&
-    isAppVersionCompatible &&
     serviceStatus !== DeploymentStatus.DEPLOYED &&
     serviceStatus !== DeploymentStatus.DEPLOYING &&
     serviceStatus !== DeploymentStatus.STOPPING &&
-    isServiceStakedForMinimumDuration;
+    // checks for migration from an actively staked service
+    (!activeStakingProgram ||
+      (isServiceStakedForMinimumDuration &&
+        activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)));
 
   const cantMigrateReason = useMemo(() => {
     if (isSelected) {
       return 'Contract is already selected';
     }
 
-    if (!hasEnoughRewards) {
-      return 'No available rewards';
+    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
+      return 'Migration not supported for this contract';
     }
 
-    if (activeStakingProgram !== StakingProgram.Alpha) {
-      return 'Can only migrate from Alpha to Beta';
+    if (!hasEnoughRewards) {
+      return 'No available rewards';
     }
 
     if (!isBalanceLoaded) {
@@ -149,40 +151,41 @@ export const StakingContractSection = ({
       return 'No available staking slots';
     }
 
+    if (!isServiceStakedForMinimumDuration) {
+      return 'Service has not been staked for the minimum duration';
+    }
+
     if (!hasEnoughOlasToMigrate) {
       return `Insufficient OLAS to migrate, ${minimumOlasRequiredToMigrate} OLAS required in total.`;
     }
 
-    if (!isAppVersionCompatible) {
-      return 'Pearl update required to migrate';
-    }
+    // App version compatibility not implemented yet
+    // if (!isAppVersionCompatible) {
+    //   return 'Pearl update required to migrate';
+    // }
 
     if (serviceStatus === DeploymentStatus.DEPLOYED) {
-      return 'Service is currently running';
+      return 'Pearl is currently running, turn it before switching';
     }
 
     if (serviceStatus === DeploymentStatus.DEPLOYING) {
-      return 'Service is currently deploying';
+      return 'Pearl is currently deploying, please turn it off before switching';
     }
 
     if (serviceStatus === DeploymentStatus.STOPPING) {
-      return 'Service is currently stopping';
-    }
-
-    if (!isServiceStakedForMinimumDuration) {
-      return 'Service has not been staked for the minimum duration';
+      return 'Pearl is currently stopping, please wait before switching';
     }
   }, [
-    activeStakingProgram,
+    activeStakingProgramMeta,
     hasEnoughOlasToMigrate,
     hasEnoughRewards,
     hasEnoughSlots,
-    isAppVersionCompatible,
     isBalanceLoaded,
     isSelected,
     isServiceStakedForMinimumDuration,
     minimumOlasRequiredToMigrate,
     serviceStatus,
+    stakingProgram,
   ]);
 
   const cantMigrateAlert = useMemo(() => {
@@ -203,20 +206,20 @@ export const StakingContractSection = ({
         <AlertInsufficientMigrationFunds
           masterSafeOlasBalance={safeBalance.OLAS}
           stakedOlasBalance={totalOlasStakedBalance}
-          totalOlasRequiredForStaking={minimumOlasRequiredToMigrate}
+          totalOlasRequiredForStaking={minimumOlasRequiredToMigrate!}
         />
       );
     }
 
-    if (!isAppVersionCompatible) {
-      return <AlertUpdateToMigrate />;
-    }
+    // App version compatibility not implemented yet
+    // if (!isAppVersionCompatible) {
+    //   return <AlertUpdateToMigrate />;
+    // }
   }, [
     isSelected,
     isBalanceLoaded,
     hasEnoughSlots,
     hasEnoughOlasToMigrate,
-    isAppVersionCompatible,
     safeBalance?.OLAS,
     totalOlasStakedBalance,
     minimumOlasRequiredToMigrate,
@@ -237,6 +240,10 @@ export const StakingContractSection = ({
     return;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
+  if (STAKING_PROGRAM_META[stakingProgram].deprecated) {
+    return null;
+  }
+
   return (
     <>
       <CardSection
@@ -255,52 +262,48 @@ export const StakingContractSection = ({
           <Typography.Title
             level={5}
             className="m-0"
-          >{`${activeStakingProgramMeta.name} contract`}</Typography.Title>
+          >{`${stakingProgramMeta?.name} contract`}</Typography.Title>
           <StakingContractTag status={contractTagStatus} />
-          {!isSelected && (
-            // here instead of isSelected we should check that the contract is not the old staking contract
-            // but the one from staking factory (if we want to open govern)
-            <a
-              href={`https://gnosisscan.io/address/${stakingContractAddress}`}
-              target="_blank"
-              className="ml-auto"
-            >
-              Contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
-            </a>
-          )}
         </Flex>
 
         {/* TODO: redisplay once bugs resolved */}
 
-        {/* Contract details
-      {stakingContractInfo?.availableRewards && (
-        <ContractParameter
-          label="Rewards per work period"
-          value={`${stakingContractInfo?.availableRewards} OLAS`}
-        />
-      )}
+        {/* 
+          {stakingContractInfo?.availableRewards && (
+            <ContractParameter
+              label="Rewards per work period"
+              value={`${stakingContractInfo?.availableRewards} OLAS`}
+            />
+          )}
 
-      {stakingContractInfo?.minStakingDeposit && (
-        <ContractParameter
-          label="Required OLAS for staking"
-          value={`${stakingContractInfo?.minStakingDeposit} OLAS`}
-        />
-      )} */}
-
-        {cantMigrateAlert}
+          {stakingContractInfo?.minStakingDeposit && (
+            <ContractParameter
+              label="Required OLAS for staking"
+              value={`${stakingContractInfo?.minStakingDeposit} OLAS`}
+            />
+          )} 
+       */}
+        <a
+          href={`https://gnosisscan.io/address/${stakingContractAddress}`}
+          target="_blank"
+        >
+          View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
+        </a>
+        {activeStakingContractSupportsMigration && cantMigrateAlert}
         {/* Switch to program button */}
-        {stakingProgram !== StakingProgram.Alpha && (
-          <Popover content={!isMigratable && cantMigrateReason}>
+        {![activeStakingProgram, defaultStakingProgram].includes(
+          stakingProgram,
+        ) && (
+          <Popover content={!canMigrate && cantMigrateReason}>
             <Button
               type="primary"
               size="large"
-              disabled={!isMigratable}
+              disabled={!canMigrate}
               onClick={async () => {
                 setIsServicePollingPaused(true);
                 try {
                   setServiceStatus(DeploymentStatus.DEPLOYING);
                   goto(Pages.Main);
-                  // TODO: cleanup and call via hook
 
                   await ServicesService.createService({
                     stakingProgram,
@@ -319,23 +322,25 @@ export const StakingContractSection = ({
                 }
               }}
             >
-              Switch to {activeStakingProgramMeta?.name} contract
+              Switch
             </Button>
           </Popover>
         )}
-        {stakingProgram === StakingProgram.Beta && (
-          <Button
-            type="default"
-            size="large"
-            onClick={() => setIsFundingSectionOpen((prev) => !prev)}
-          >
-            {isFundingSectionOpen ? 'Hide' : 'Show'} address to fund
-          </Button>
-        )}
+        {!isSelected &&
+          activeStakingContractSupportsMigration &&
+          !hasEnoughOlasToMigrate && (
+            <>
+              <Button
+                type="default"
+                size="large"
+                onClick={() => setIsFundingSectionOpen((prev) => !prev)}
+              >
+                {isFundingSectionOpen ? 'Hide' : 'Show'} address to fund
+              </Button>
+              {isFundingSectionOpen && <OpenAddFundsSection />}
+            </>
+          )}
       </CardSection>
-      {stakingProgram === StakingProgram.Beta && isFundingSectionOpen && (
-        <OpenAddFundsSection />
-      )}
     </>
   );
 };

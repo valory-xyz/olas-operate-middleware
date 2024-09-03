@@ -2,6 +2,7 @@ import { Flex, Typography } from 'antd';
 
 import { CustomAlert } from '@/components/Alert';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 const { Text } = Typography;
 
@@ -14,8 +15,11 @@ export const AlertInsufficientMigrationFunds = ({
   stakedOlasBalance: number;
   totalOlasRequiredForStaking: number;
 }) => {
-  const requiredOlasDeposit =
-    totalOlasRequiredForStaking - (stakedOlasBalance + masterSafeOlasBalance);
+  const { activeStakingProgram } = useStakingProgram();
+
+  const requiredOlasDeposit = activeStakingProgram
+    ? totalOlasRequiredForStaking - (stakedOlasBalance + masterSafeOlasBalance) // when staked
+    : totalOlasRequiredForStaking - masterSafeOlasBalance; // when not staked
 
   return (
     <CustomAlert

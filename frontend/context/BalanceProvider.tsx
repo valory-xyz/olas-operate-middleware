@@ -132,9 +132,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
     try {
       const walletAddresses: Address[] = [];
-      if (masterEoaAddress) walletAddresses.push(masterEoaAddress);
-      if (masterSafeAddress) walletAddresses.push(masterSafeAddress);
-      if (serviceAddresses) walletAddresses.push(...serviceAddresses);
+      if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
+      if (isAddress(`${masterSafeAddress}`))
+        walletAddresses.push(masterSafeAddress as Address);
+      if (serviceAddresses)
+        walletAddresses.push(...serviceAddresses.filter(isAddress));
 
       const walletBalances = await getWalletBalances(walletAddresses);
       if (!walletBalances) return;
@@ -150,10 +152,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         return;
       }
 
-      if (masterSafeAddress && serviceId) {
+      if (isAddress(`${masterSafeAddress}`) && serviceId > 0) {
         const { depositValue, bondValue, serviceState } =
           await AutonolasService.getServiceRegistryInfo(
-            masterSafeAddress,
+            masterSafeAddress as Address,
             serviceId,
           );
 

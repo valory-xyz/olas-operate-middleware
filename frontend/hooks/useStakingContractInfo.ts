@@ -17,7 +17,7 @@ export const useStakingContractInfo = () => {
   const {
     serviceStakingState,
     serviceStakingStartTime,
-    availableRewards,
+    //availableRewards, // TODO: uncomment when availableRewards is available
     serviceIds,
     maxNumServices,
     minimumStakingDuration,

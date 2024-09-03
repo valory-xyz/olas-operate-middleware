@@ -75,11 +75,16 @@ export const StakingContractInfoProvider = ({
       StakingProgram.Beta,
     );
 
-    Promise.all([alpha, beta]).then((values) => {
-      const [alphaInfo, betaInfo] = values;
+    const beta_2 = AutonolasService.getStakingContractInfoByStakingProgram(
+      StakingProgram.Beta2,
+    );
+
+    Promise.all([alpha, beta, beta_2]).then((values) => {
+      const [alphaInfo, betaInfo, beta2Info] = values;
       setStakingContractInfoRecord({
         [StakingProgram.Alpha]: alphaInfo,
         [StakingProgram.Beta]: betaInfo,
+        [StakingProgram.Beta2]: beta2Info,
       });
     });
   };
