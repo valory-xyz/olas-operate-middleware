@@ -168,7 +168,7 @@ export const StakingContractSection = ({
     // }
 
     if (serviceStatus === DeploymentStatus.DEPLOYED) {
-      return 'Pearl is currently running, turn it before switching';
+      return 'Pearl is currently running, turn it off before switching';
     }
 
     if (serviceStatus === DeploymentStatus.DEPLOYING) {
