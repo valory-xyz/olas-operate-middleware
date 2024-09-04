@@ -1,4 +1,4 @@
-import { EditOutlined } from '@ant-design/icons';
+import { RightOutlined } from '@ant-design/icons';
 import { Button, Flex, Skeleton, Typography } from 'antd';
 
 import { Pages } from '@/enums/PageState';
@@ -35,9 +35,9 @@ export const StakingContractUpdate = () => {
         >
           {activeStakingProgramMeta ? (
             <>
-              <EditOutlined />
-              &nbsp;
               {activeStakingProgramMeta.name}
+              &nbsp;
+              <RightOutlined />
             </>
           ) : (
             'Not staked'
