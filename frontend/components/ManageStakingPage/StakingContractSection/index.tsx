@@ -389,9 +389,10 @@ const CountdownUntilMigration = ({
 
   return (
     <Flex vertical gap={1}>
-      <span>Your agent must continue staking for</span>
+      <strong>Can&apos;t switch because you unstaked too recently.</strong>
+      <span>This may be because your agent was suspended.</span>
+      <span>Keep running your agent and you&apos;ll be able to switch in</span>
       <span>{countdownDisplayFormat(secondsUntilReady)}</span>
-      <span>before it can switch to a new contract</span>
     </Flex>
   );
 };
