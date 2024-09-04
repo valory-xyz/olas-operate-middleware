@@ -17,7 +17,7 @@ import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { NewStakingProgramAlertSection } from './sections/NewStakingProgramAlertSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { MainRewards } from './sections/RewardsSection';
-import { StakingContractUpdate } from './sections/stakingContractUpdate';
+import { StakingContractUpdate } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
