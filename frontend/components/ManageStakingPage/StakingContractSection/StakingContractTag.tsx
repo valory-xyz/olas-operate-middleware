@@ -10,7 +10,7 @@ export const StakingContractTag = ({
   if (status === StakingProgramStatus.New) {
     return <Tag color="blue">New</Tag>;
   } else if (status === StakingProgramStatus.Selected) {
-    return <Tag>Selected</Tag>;
+    return <Tag color="purple">Active</Tag>;
   }
   return null;
 };

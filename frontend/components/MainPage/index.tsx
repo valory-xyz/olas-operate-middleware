@@ -17,6 +17,7 @@ import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { NewStakingProgramAlertSection } from './sections/NewStakingProgramAlertSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { MainRewards } from './sections/RewardsSection';
+import { StakingContractUpdate } from './sections/stakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -59,6 +60,7 @@ export const Main = () => {
         <MainOlasBalance />
         <MainRewards />
         <KeepAgentRunningSection />
+        <StakingContractUpdate />
         <GasBalanceSection />
         <MainNeedsFunds />
         <AddFundsSection />

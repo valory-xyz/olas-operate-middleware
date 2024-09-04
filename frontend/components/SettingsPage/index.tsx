@@ -16,7 +16,6 @@ import { CardTitle } from '../Card/CardTitle';
 import { CardSection } from '../styled/CardSection';
 import { AddBackupWalletPage } from './AddBackupWalletPage';
 import { DebugInfoSection } from './DebugInfoSection';
-import { SettingsStakingContractSection } from './SettingsStakingContractSection';
 
 const { Text, Paragraph } = Typography;
 
@@ -76,6 +75,7 @@ const SettingsMain = () => {
           <Text style={{ lineHeight: 1 }}>********</Text>
         </Flex>
       </CardSection>
+
       {/* Wallet backup */}
       <CardSection borderbottom="true" vertical gap={8}>
         <Text strong>Backup wallet</Text>
@@ -91,8 +91,7 @@ const SettingsMain = () => {
           <NoBackupWallet />
         )}
       </CardSection>
-      {/* Staking contract section */}
-      <SettingsStakingContractSection />
+
       {/* Debug info */}
       <DebugInfoSection />
     </Card>
