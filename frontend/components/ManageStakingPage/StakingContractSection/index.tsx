@@ -115,7 +115,8 @@ export const StakingContractSection = ({
 
   const activeStakingContractSupportsMigration =
     !activeStakingProgram ||
-    activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram);
+    (activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram) &&
+      isServiceStakedForMinimumDuration);
 
   const canMigrate =
     // checks for both initial deployment and migration
