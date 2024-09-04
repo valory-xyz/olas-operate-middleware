@@ -23,7 +23,7 @@ import { getMinimumStakedAmountRequired } from '@/utils/service';
 import { AlertInsufficientMigrationFunds, AlertNoSlots } from './alerts';
 import { StakingContractTag } from './StakingContractTag';
 
-// const { Text } = Typography;
+const { Title } = Typography;
 
 const { useToken } = theme;
 
@@ -94,22 +94,24 @@ export const StakingContractSection = ({
     [serviceTemplate, stakingProgram],
   );
 
+  // Check if there are enough OLAS to migrate
   const hasEnoughOlasToMigrate = useMemo(() => {
     if (safeBalance?.OLAS === undefined || totalOlasStakedBalance === undefined)
       return false;
 
     const balanceForMigration = safeBalance.OLAS + totalOlasStakedBalance;
-
     if (minimumOlasRequiredToMigrate === undefined) return false;
 
     return balanceForMigration >= minimumOlasRequiredToMigrate;
   }, [minimumOlasRequiredToMigrate, safeBalance?.OLAS, totalOlasStakedBalance]);
 
-  const hasEnoughSlots =
-    stakingContractInfoForStakingProgram?.maxNumServices &&
-    stakingContractInfoForStakingProgram?.serviceIds &&
-    stakingContractInfoForStakingProgram?.maxNumServices >
-      stakingContractInfoForStakingProgram?.serviceIds?.length;
+  // Check if there are enough SLOTS available
+  const hasEnoughSlots = useMemo(() => {
+    if (!stakingContractInfoForStakingProgram) return false;
+
+    const { maxNumServices, serviceIds } = stakingContractInfoForStakingProgram;
+    return maxNumServices && serviceIds && maxNumServices > serviceIds.length;
+  }, [stakingContractInfoForStakingProgram]);
 
   const activeStakingContractSupportsMigration =
     !activeStakingProgram ||
@@ -240,6 +242,14 @@ export const StakingContractSection = ({
     return;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
+  const cardStyle = useMemo(() => {
+    if (isSelected || !activeStakingProgram) {
+      return { background: token.colorPrimaryBg };
+    }
+    return {};
+  }, [isSelected, activeStakingProgram, token.colorPrimaryBg]);
+
+  // If the staking program is deprecated, don't render the section
   if (STAKING_PROGRAM_META[stakingProgram].deprecated) {
     return null;
   }
@@ -247,27 +257,21 @@ export const StakingContractSection = ({
   return (
     <>
       <CardSection
-        style={
-          isSelected || !activeStakingProgram
-            ? { background: token.colorBgContainerDisabled }
-            : {}
-        }
+        style={cardStyle}
         bordertop="true"
         borderbottom="true"
         vertical
         gap={16}
       >
-        {/* Title */}
         <Flex gap={12}>
-          <Typography.Title
+          <Title
             level={5}
             className="m-0"
-          >{`${stakingProgramMeta?.name} contract`}</Typography.Title>
+          >{`${stakingProgramMeta?.name} contract`}</Title>
           <StakingContractTag status={contractTagStatus} />
         </Flex>
 
         {/* TODO: redisplay once bugs resolved */}
-
         {/* 
           {stakingContractInfo?.availableRewards && (
             <ContractParameter
@@ -283,6 +287,7 @@ export const StakingContractSection = ({
             />
           )} 
        */}
+
         <a
           href={`https://gnosisscan.io/address/${stakingContractAddress}`}
           target="_blank"
@@ -290,6 +295,7 @@ export const StakingContractSection = ({
           View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
         </a>
         {activeStakingContractSupportsMigration && cantMigrateAlert}
+
         {/* Switch to program button */}
         {![activeStakingProgram, defaultStakingProgram].includes(
           stakingProgram,
@@ -322,10 +328,12 @@ export const StakingContractSection = ({
                 }
               }}
             >
-              Switch
+              Switch and run agent
             </Button>
           </Popover>
         )}
+
+        {/* show funding address */}
         {!isSelected &&
           activeStakingContractSupportsMigration &&
           !hasEnoughOlasToMigrate && (
