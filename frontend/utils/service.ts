@@ -6,16 +6,15 @@ export const getMinimumStakedAmountRequired = (
   serviceTemplate: ServiceTemplate,
   stakingProgram: StakingProgram = StakingProgram.Beta,
 ) => {
-  // const olasCostOfBond = Number(
-  //   formatUnits(
-  //     `${serviceTemplate.configurations[CHAINS.GNOSIS.chainId].cost_of_bond}`,
-  //     18,
-  //   ),
-  // );
-
   if (stakingProgram === StakingProgram.Alpha) {
     return 20;
   }
 
-  return 40;
+  if (stakingProgram === StakingProgram.Beta) {
+    return 40;
+  }
+
+  if (stakingProgram === StakingProgram.Beta2) {
+    return 100;
+  }
 };

@@ -476,9 +476,6 @@ class ServiceManager:
 
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        os.environ[
-            "OPEN_AUTONOMY_SUBGRAPH_URL"
-        ] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
 
         current_agent_id = None
         if chain_data.token > -1:
@@ -497,15 +494,24 @@ class ServiceManager:
                     user_params.staking_program_id
                 ],
             )
-        else:  # TODO fix this - using pearl beta params
+        else:
             staking_params = dict(  # nosec
+                staking_contract=NULL_ADDRESS,
                 agent_ids=[25],
                 service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
-                staking_token="0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",  # nosec
+                staking_token=NULL_ADDRESS,  # nosec
                 service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
                 min_staking_deposit=20000000000000000000,
-                activity_checker="0x155547857680A6D51bebC5603397488988DEb1c8",  # nosec
+                activity_checker=NULL_ADDRESS,  # nosec
+                agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
+
+        # Override service.yaml variables for the deployment
+        os.environ["STAKING_CONTRACT_ADDRESS"] = staking_params["staking_contract"]
+        os.environ["MECH_ACTIVITY_CHECKER_CONTRACT"] = staking_params[
+            "activity_checker"
+        ]
+        os.environ["MECH_CONTRACT_ADDRESS"] = staking_params["agent_mech"]
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
@@ -541,9 +547,10 @@ class ServiceManager:
                 )
 
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
-        current_agent_bond = staking_params[
-            "min_staking_deposit"
-        ]  # TODO fixme, read from service registry token utility contract
+        current_agent_bond = sftxb.get_agent_bond(
+            service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
+        )
+
         is_first_mint = (
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.NON_EXISTENT
@@ -561,12 +568,15 @@ class ServiceManager:
             chain_data, ledger_config, sftxb
         )
 
+        self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
         self.logger.info(f"{staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{current_agent_bond=}")
+        self.logger.info(f"{staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
