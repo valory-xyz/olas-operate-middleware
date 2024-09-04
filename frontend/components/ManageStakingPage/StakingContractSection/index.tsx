@@ -389,9 +389,9 @@ const CountdownUntilMigration = ({
 
   return (
     <Flex vertical gap={1}>
-      <span>Your agent must continuing staking for</span>
+      <span>Your agent must continue staking for</span>
       <span>{countdownDisplayFormat(secondsUntilReady)}</span>
-      <span>before it can switch to a new program!</span>
+      <span>before it can switch to a new contract</span>
     </Flex>
   );
 };
