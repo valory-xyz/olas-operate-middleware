@@ -1,5 +1,6 @@
 import { Button, Flex, Popover, theme, Typography } from 'antd';
 import { useMemo, useState } from 'react';
+import { useInterval } from 'usehooks-ts';
 
 import { Chain, DeploymentStatus } from '@/client';
 import { OpenAddFundsSection } from '@/components/MainPage/sections/AddFundsSection';
@@ -18,6 +19,7 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
+import { StakingContractInfo } from '@/types/Autonolas';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import { AlertInsufficientMigrationFunds, AlertNoSlots } from './alerts';
@@ -80,6 +82,9 @@ export const StakingContractSection = ({
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
 
+  const activeStakingContractInfo =
+    activeStakingProgram && stakingContractInfoRecord?.[activeStakingProgram];
+
   const activeStakingProgramMeta =
     activeStakingProgram && STAKING_PROGRAM_META[activeStakingProgram];
 
@@ -113,7 +118,8 @@ export const StakingContractSection = ({
 
   const activeStakingContractSupportsMigration =
     !activeStakingProgram ||
-    activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram);
+    (activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram) &&
+      isServiceStakedForMinimumDuration);
 
   const canMigrate =
     // checks for both initial deployment and migration
@@ -151,8 +157,12 @@ export const StakingContractSection = ({
       return 'No available staking slots';
     }
 
-    if (!isServiceStakedForMinimumDuration) {
-      return 'Service has not been staked for the minimum duration';
+    if (!isServiceStakedForMinimumDuration && activeStakingContractInfo) {
+      return (
+        <CountdownUntilMigration
+          activeStakingContractInfo={activeStakingContractInfo}
+        />
+      );
     }
 
     if (!hasEnoughOlasToMigrate) {
@@ -176,7 +186,8 @@ export const StakingContractSection = ({
       return 'Pearl is currently stopping, please wait before switching';
     }
   }, [
-    activeStakingProgramMeta,
+    activeStakingContractInfo,
+    activeStakingProgramMeta?.canMigrateTo,
     hasEnoughOlasToMigrate,
     hasEnoughRewards,
     hasEnoughSlots,
@@ -343,4 +354,62 @@ export const StakingContractSection = ({
       </CardSection>
     </>
   );
+};
+
+const CountdownUntilMigration = ({
+  activeStakingContractInfo,
+}: {
+  activeStakingContractInfo: Partial<StakingContractInfo>;
+}) => {
+  const [secondsUntilReady, setSecondsUntilMigration] = useState<number>();
+
+  useInterval(() => {
+    if (!activeStakingContractInfo) return;
+
+    const { serviceStakingStartTime, minimumStakingDuration } =
+      activeStakingContractInfo;
+
+    if (!minimumStakingDuration) return;
+    if (!serviceStakingStartTime) return;
+
+    const now = Math.round(Date.now() / 1000);
+    const timeSinceLastStaked = now - serviceStakingStartTime;
+
+    const timeUntilMigration = minimumStakingDuration - timeSinceLastStaked;
+
+    if (timeUntilMigration < 0) {
+      setSecondsUntilMigration(0);
+      return;
+    }
+
+    setSecondsUntilMigration(timeUntilMigration);
+  }, 1000);
+
+  if (!secondsUntilReady) return "You're ready to switch contracts!"; // Shouldn't happen, but just in case
+
+  return (
+    <Flex vertical gap={1}>
+      <span>Your agent must continuing staking for</span>
+      <span>{countdownDisplayFormat(secondsUntilReady)}</span>
+      <span>before it can switch to a new program!</span>
+    </Flex>
+  );
+};
+
+const countdownDisplayFormat = (totalSeconds: number) => {
+  const days = Math.floor(totalSeconds / (24 * 3600));
+  totalSeconds %= 24 * 3600;
+
+  const hours = Math.floor(totalSeconds / 3600);
+  totalSeconds %= 3600;
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  // Ensure double digits for hours, minutes, and seconds
+  const formattedHours = String(hours).padStart(2, '0');
+  const formattedMinutes = String(minutes).padStart(2, '0');
+  const formattedSeconds = String(seconds).padStart(2, '0');
+
+  return `${days} days ${formattedHours} hours ${formattedMinutes} minutes ${formattedSeconds} seconds`;
 };
