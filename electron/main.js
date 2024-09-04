@@ -17,7 +17,7 @@ const http = require('http');
 const AdmZip = require('adm-zip');
 const { TRAY_ICONS, TRAY_ICONS_PATHS } = require('./icons');
 
-const { setupDarwin, setupUbuntu, Env } = require('./install');
+const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
 const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
@@ -38,6 +38,9 @@ const binaryPaths = {
   darwin: {
     arm64: 'bins/pearl_arm64',
     x64: 'bins/pearl_x64',
+  },
+  win32: {
+    x64: 'bins/pearl_win.exe',
   },
 };
 
@@ -334,6 +337,7 @@ async function launchDaemon() {
 }
 
 async function launchDaemonDev() {
+
   const check = new Promise(function (resolve, _reject) {
     operateDaemon = spawn('poetry', [
       'run',
@@ -398,6 +402,7 @@ async function launchNextAppDev() {
       'yarn',
       ['dev:frontend', '--port', appConfig.ports.dev.next],
       {
+        shell: true,
         env: {
           ...process.env,
           NEXT_PUBLIC_BACKEND_PORT: appConfig.ports.dev.operate,
@@ -441,7 +446,7 @@ ipcMain.on('check', async function (event, _argument) {
     if (platform === 'darwin') {
       await setupDarwin(event.sender);
     } else if (platform === 'win32') {
-      // TODO
+      await setupWindows(event.sender);
     } else {
       await setupUbuntu(event.sender);
     }

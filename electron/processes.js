@@ -3,7 +3,7 @@ const { exec } = require('child_process');
 
 const unixKillCommand = 'kill -9';
 const windowsKillCommand = 'taskkill /F /PID';
-
+const { logger } = require('./logger');
 const isWindows = process.platform === 'win32';
 
 function killProcesses(pid) {
@@ -16,23 +16,29 @@ function killProcesses(pid) {
 
       // Array of PIDs to kill, starting with the children
       const pidsToKill = children.map((p) => p.PID);
-      pidsToKill.push(pid); // Also kill the main process
+      logger.info("Pids to kill " + JSON.stringify(pidsToKill));
 
       const killCommand = isWindows ? windowsKillCommand : unixKillCommand;
-      const joinedCommand = pidsToKill
-        .map((pid) => `${killCommand} ${pid}`)
-        .join('; '); // Separate commands with a semicolon, so they run in sequence even if one fails. Also works on Windows.
 
-      exec(joinedCommand, (err) => {
-        if (
-          err?.message?.includes(isWindows ? 'not found' : 'No such process')
-        ) {
-          return; // Ignore errors for processes that are already dead
-        }
-        reject(err);
-      });
+      let errors = [];
+      for (const ppid of pidsToKill) {
+        logger.info("kill: " + ppid);
+        exec(`${killCommand} ${ppid}`, (err) => {
+          logger.error("Pids to kill error:" + err);
+          if (
+            err?.message?.includes(isWindows ? 'not found' : 'No such process')
+          ) {
+            return; // Ignore errors for processes that are already dead
+          }
+          errors.push(err);
+        });
+      }
 
-      resolve();
+      if (errors.length === 0) {
+        reject(errors);
+        
+
+      } else  resolve();
     });
   });
 }
