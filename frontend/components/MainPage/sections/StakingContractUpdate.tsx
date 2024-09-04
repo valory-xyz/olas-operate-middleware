@@ -14,10 +14,6 @@ export const StakingContractUpdate = () => {
   const { activeStakingProgramMeta, isLoadedActiveStakingProgram } =
     useStakingProgram();
 
-  if (!isLoadedActiveStakingProgram) {
-    return <Skeleton style={{ height: 100 }} />;
-  }
-
   return (
     <CardSection bordertop="true" padding="16px 24px">
       <Flex
@@ -28,21 +24,25 @@ export const StakingContractUpdate = () => {
       >
         <Text type="secondary">Staking contract</Text>
 
-        <Button
-          type="link"
-          className="p-0"
-          onClick={() => goto(Pages.ManageStaking)}
-        >
-          {activeStakingProgramMeta ? (
-            <>
-              {activeStakingProgramMeta.name}
-              &nbsp;
-              <RightOutlined />
-            </>
-          ) : (
-            'Not staked'
-          )}
-        </Button>
+        {isLoadedActiveStakingProgram ? (
+          <Button
+            type="link"
+            className="p-0"
+            onClick={() => goto(Pages.ManageStaking)}
+          >
+            {activeStakingProgramMeta ? (
+              <>
+                {activeStakingProgramMeta.name}
+                &nbsp;
+                <RightOutlined />
+              </>
+            ) : (
+              'Not staked'
+            )}
+          </Button>
+        ) : (
+          <Skeleton.Input />
+        )}
       </Flex>
     </CardSection>
   );
