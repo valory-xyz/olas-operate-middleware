@@ -48,6 +48,7 @@ from autonomy.chain.service import (
     get_delployment_payload,
     get_reuse_multisig_payload,
     get_service_info,
+    get_token_deposit_amount,
 )
 from autonomy.chain.tx import TxSettler
 from autonomy.cli.helpers.chain import MintHelper as MintManager
@@ -572,6 +573,24 @@ class _ChainUtil:
             instances=instances,
         )
 
+    def get_agent_bond(self, service_id: int, agent_id: int) -> int:
+        """Get the agent bond for a given service"""
+        self._patch()
+
+        if service_id <= 0 or agent_id <= 0:
+            return 0
+
+        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
+            chain_type=self.chain_type
+        )
+        bond = get_token_deposit_amount(
+            ledger_api=ledger_api,
+            chain_type=self.chain_type,
+            service_id=service_id,
+            agent_id=agent_id,
+        )
+        return bond
+
     def get_service_safe_owners(self, service_id: int) -> t.List[str]:
         """Get list of owners."""
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
@@ -749,13 +768,18 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
+        # TODO Read from activity checker contract
+        agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
+
         return dict(
+            staking_contract=staking_contract,
             agent_ids=agent_ids,
             service_registry=service_registry,
             staking_token=staking_token,
             service_registry_token_utility=service_registry_token_utility,
             min_staking_deposit=min_staking_deposit,
             activity_checker=activity_checker,
+            agent_mech=agent_mech,
         )
 
 

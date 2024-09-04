@@ -1,5 +1,6 @@
 import { ArrowUpOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { Skeleton, Tooltip, Typography } from 'antd';
+import { isNil } from 'lodash';
 import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
@@ -65,6 +66,10 @@ const BalanceStatus = () => {
   ]);
 
   const status = useMemo(() => {
+    if (isNil(isLowBalance)) {
+      return { statusName: 'Loading...', StatusComponent: EmptyDot };
+    }
+
     if (isLowBalance) {
       return { statusName: 'Too low', StatusComponent: EmptyDot };
     }
