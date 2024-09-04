@@ -28,15 +28,24 @@ endef
 	poetry install && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_win.exe:.  --add-binary dist/tendermint_win.exe:. --onefile --name pearl_win
 
 
+./electron/bins/:
+	mkdir -p ./electron/bins/
+
+./electron/bins/tendermint.exe: ./electron/bins/
+	curl -L https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_windows_amd64.tar.gz -o tendermint.tar.gz
+	tar -xvf tendermint.tar.gz tendermint.exe
+	cp ./tendermint.exe ./electron/bins/tendermint.exe
+
 .PHONY: build
-build: ./dist/pearl_win.exe
+build: ./dist/pearl_win.exe ./electron/bins/tendermint.exe
 	$(call setup_env, prod)
 	echo ${DEV_RPC}
-	mkdir -p ./electron/bins
 	cp -f dist/pearl_win.exe ./electron/bins/pearl_win.exe
 	echo ${NODE_ENV}
 	NODE_ENV=${NODE_ENV} DEV_RPC=${DEV_RPC} FORK_URL=${FORK_URL} yarn build:frontend
 	NODE_ENV=${NODE_ENV} DEV_RPC=${DEV_RPC} FORK_URL=${FORK_URL} GH_TOKEN=${GH_TOKEN} node build-win.js
+
+
 
 
 .PHONY: build-tenderly
