@@ -180,18 +180,20 @@ export const DebugInfoSection = () => {
       });
     }
 
-    const multisigAddress =
-      services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
-    if (multisigAddress) {
-      result.push({
-        title: 'Agent Safe',
-        ...getItemData(walletBalances, multisigAddress),
-        link: {
-          title: 'See agent activity on Pandora',
-          href: `https://pandora.computer/predict/${multisigAddress}`,
-        },
-      });
-    }
+    // COMMENTED UNTIL PANDORA UPDATES GRAPH ENDPOINT 5/9
+    //
+    // const multisigAddress =
+    //   services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
+    // if (multisigAddress) {
+    //   result.push({
+    //     title: 'Agent Safe',
+    //     ...getItemData(walletBalances, multisigAddress),
+    //     link: {
+    //       title: 'See agent activity on Pandora',
+    //       href: `https://pandora.computer/predict/${multisigAddress}`,
+    //     },
+    //   });
+    // }
 
     return result;
   }, [
