@@ -227,12 +227,13 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
+        env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._aea_bin, "run"],
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={**os.environ, **env},
+            env=env,
             creationflags=(
                 0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
@@ -246,17 +247,22 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start tendermint process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
+        env = {
+            **os.environ,
+            **env,
+        }
+
+        if platform.system() == "Windows":
+            # to look up for bundled in tendermint.exe
+            env["PATH"] = os.environ["PATH"] + ";" + os.path.dirname(sys.executable)
+
         tendermint_com = self._tendermint_bin  # type: ignore  # pylint: disable=protected-access
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[tendermint_com],
             cwd=working_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={
-                **os.environ,
-                **env,
-                "PATH": os.environ["PATH"] + ";" + os.path.dirname(sys.executable),
-            },
+            env=env,
             creationflags=(
                 0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
