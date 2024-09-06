@@ -20,7 +20,7 @@ import { StakingProgramContext } from './StakingProgramContext';
 
 type StakingContractInfoContextProps = {
   updateActiveStakingContractInfo: () => Promise<void>;
-  activeStakingContractInfo?: StakingContractInfo;
+  activeStakingContractInfo?: Partial<StakingContractInfo>;
   stakingContractInfoRecord?: Record<
     StakingProgram,
     Partial<StakingContractInfo>
@@ -41,7 +41,7 @@ export const StakingContractInfoProvider = ({
   const { activeStakingProgram } = useContext(StakingProgramContext);
 
   const [activeStakingContractInfo, setActiveStakingContractInfo] =
-    useState<StakingContractInfo>();
+    useState<Partial<StakingContractInfo>>();
 
   const [stakingContractInfoRecord, setStakingContractInfoRecord] =
     useState<Record<StakingProgram, Partial<StakingContractInfo>>>();

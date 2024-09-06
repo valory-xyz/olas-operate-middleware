@@ -21,38 +21,16 @@ import { ServicesService } from '@/service/Services';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import { AlertInsufficientMigrationFunds, AlertNoSlots } from './alerts';
+import { StakingContractDetails } from './StakingContractDetails';
 import { StakingContractTag } from './StakingContractTag';
 
 const { Title } = Typography;
-
 const { useToken } = theme;
 
-// const CustomDivider = styled(Divider)`
-//   flex: auto;
-//   width: max-content;
-//   min-width: 0;
-//   margin: 0;
-// `;
-
-// const ContractParameter = ({
-//   label,
-//   value,
-// }: {
-//   label: string;
-//   value: string;
-// }) => (
-//   <Flex gap={16} align="center">
-//     <Text type="secondary">{label}</Text>
-//     <CustomDivider />
-//     <Text className="font-weight-600">{value}</Text>
-//   </Flex>
-// );
-
+type StakingProgramProps = { stakingProgram: StakingProgram };
 export const StakingContractSection = ({
   stakingProgram,
-}: {
-  stakingProgram: StakingProgram;
-}) => {
+}: StakingProgramProps) => {
   const { goto } = usePageState();
   const {
     setServiceStatus,
@@ -243,6 +221,12 @@ export const StakingContractSection = ({
     return;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
+  // Show funding address
+  const canShowFundingAddress =
+    !isSelected &&
+    activeStakingContractSupportsMigration &&
+    !hasEnoughOlasToMigrate;
+
   const cardStyle = useMemo(() => {
     if (isSelected || !activeStakingProgram) {
       return { background: token.colorPrimaryBg };
@@ -250,45 +234,17 @@ export const StakingContractSection = ({
     return {};
   }, [isSelected, activeStakingProgram, token.colorPrimaryBg]);
 
-  // If the staking program is deprecated, don't render the section
-  if (STAKING_PROGRAM_META[stakingProgram].deprecated) {
-    return null;
-  }
-
   return (
     <>
-      <CardSection
-        style={cardStyle}
-        bordertop="true"
-        borderbottom="true"
-        vertical
-        gap={16}
-      >
+      <CardSection style={cardStyle} borderbottom="true" vertical gap={16}>
         <Flex gap={12}>
-          <Title
-            level={5}
-            className="m-0"
-          >{`${stakingProgramMeta?.name} contract`}</Title>
+          <Title level={5} className="m-0">
+            {`${stakingProgramMeta?.name} contract`}
+          </Title>
           <StakingContractTag status={contractTagStatus} />
         </Flex>
 
-        {/* TODO: redisplay once bugs resolved */}
-        {/* 
-          {stakingContractInfo?.availableRewards && (
-            <ContractParameter
-              label="Rewards per work period"
-              value={`${stakingContractInfo?.availableRewards} OLAS`}
-            />
-          )}
-
-          {stakingContractInfo?.minStakingDeposit && (
-            <ContractParameter
-              label="Required OLAS for staking"
-              value={`${stakingContractInfo?.minStakingDeposit} OLAS`}
-            />
-          )} 
-       */}
-
+        <StakingContractDetails name={stakingProgram} />
         <a
           href={`https://gnosisscan.io/address/${stakingContractAddress}`}
           target="_blank"
@@ -335,20 +291,18 @@ export const StakingContractSection = ({
         )}
 
         {/* show funding address */}
-        {!isSelected &&
-          activeStakingContractSupportsMigration &&
-          !hasEnoughOlasToMigrate && (
-            <>
-              <Button
-                type="default"
-                size="large"
-                onClick={() => setIsFundingSectionOpen((prev) => !prev)}
-              >
-                {isFundingSectionOpen ? 'Hide' : 'Show'} address to fund
-              </Button>
-              {isFundingSectionOpen && <OpenAddFundsSection />}
-            </>
-          )}
+        {canShowFundingAddress && (
+          <>
+            <Button
+              type="default"
+              size="large"
+              onClick={() => setIsFundingSectionOpen((prev) => !prev)}
+            >
+              {isFundingSectionOpen ? 'Hide' : 'Show'} address to fund
+            </Button>
+            {isFundingSectionOpen && <OpenAddFundsSection />}
+          </>
+        )}
       </CardSection>
     </>
   );
