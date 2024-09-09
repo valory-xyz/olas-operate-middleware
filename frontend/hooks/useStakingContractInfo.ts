@@ -1,3 +1,4 @@
+import { isNil } from 'lodash';
 import { useContext } from 'react';
 
 import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
@@ -24,7 +25,10 @@ export const useStakingContractInfo = () => {
   } = activeStakingContractInfo;
 
   const isRewardsAvailable = true; // availableRewards > 0;
-  const hasEnoughServiceSlots = serviceIds.length < maxNumServices;
+  const hasEnoughServiceSlots =
+    !isNil(serviceIds) &&
+    !isNil(maxNumServices) &&
+    serviceIds.length < maxNumServices;
   const hasEnoughRewardsAndSlots = isRewardsAvailable && hasEnoughServiceSlots;
 
   const isAgentEvicted = serviceStakingState === 2;
@@ -41,8 +45,10 @@ export const useStakingContractInfo = () => {
    *
    */
   const isServiceStakedForMinimumDuration =
+    !isNil(serviceStakingStartTime) &&
+    !isNil(minimumStakingDuration) &&
     Math.round(Date.now() / 1000) - serviceStakingStartTime >=
-    minimumStakingDuration;
+      minimumStakingDuration;
 
   /**
    * user can start the agent iff,
@@ -51,7 +57,7 @@ export const useStakingContractInfo = () => {
    * - if agent is evicted, then service should be staked for minimum duration
    */
   const isEligibleForStaking =
-    hasEnoughRewardsAndSlots &&
+    !isNil(hasEnoughRewardsAndSlots) &&
     (isAgentEvicted ? isServiceStakedForMinimumDuration : true);
 
   return {
