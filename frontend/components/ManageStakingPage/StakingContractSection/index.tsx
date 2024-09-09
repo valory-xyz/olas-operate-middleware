@@ -225,14 +225,11 @@ export const StakingContractSection = ({
     if (activeStakingProgram === stakingProgram)
       return StakingProgramStatus.Selected;
 
-    // Pearl is not staked, set as Selected if default (Beta)
-    if (!activeStakingProgram && stakingProgram === defaultStakingProgram)
+    // not staked, set the default as the Selected contract
+    if (stakingProgram === defaultStakingProgram)
       return StakingProgramStatus.Selected;
 
-    // Otherwise, highlight Beta as New
-    if (stakingProgram === StakingProgram.Beta) return StakingProgramStatus.New;
-
-    // Otherwise, no tag
+    // otherwise, no tag
     return;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
