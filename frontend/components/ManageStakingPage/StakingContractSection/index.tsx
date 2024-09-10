@@ -362,9 +362,7 @@ export const StakingContractSection = ({
 
         {!migrateValidation.canMigrate && cantMigrateAlert}
         {/* Switch to program button */}
-        {![activeStakingProgram, defaultStakingProgram].includes(
-          stakingProgram,
-        ) && (
+        {!isSelectedOrUnstakedDefault && (
           <Popover
             content={!migrateValidation.canMigrate && migrateValidation.reason}
           >
