@@ -7,9 +7,7 @@ export const StakingContractTag = ({
 }: {
   status?: StakingProgramStatus;
 }) => {
-  if (status === StakingProgramStatus.New) {
-    return <Tag color="blue">New</Tag>;
-  } else if (status === StakingProgramStatus.Selected) {
+  if (status === StakingProgramStatus.Selected) {
     return <Tag color="purple">Active</Tag>;
   }
   return null;
