@@ -1,5 +1,6 @@
 import { Button, Flex, Popover, theme, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { isNil } from 'lodash';
+import { ReactNode, useMemo, useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
 import { Chain, DeploymentStatus } from '@/client';
@@ -26,33 +27,48 @@ import { AlertInsufficientMigrationFunds, AlertNoSlots } from './alerts';
 import { StakingContractDetails } from './StakingContractDetails';
 import { StakingContractTag } from './StakingContractTag';
 
-const { Title } = Typography;
+const { Title, Text } = Typography;
 const { useToken } = theme;
 
-type StakingProgramProps = { stakingProgram: StakingProgram };
+type StakingContractSectionProps = { stakingProgram: StakingProgram };
 export const StakingContractSection = ({
   stakingProgram,
-}: StakingProgramProps) => {
+}: StakingContractSectionProps) => {
   const { goto } = usePageState();
+
   const {
     setServiceStatus,
     serviceStatus,
     setIsServicePollingPaused,
     updateServiceStatus,
   } = useServices();
+
   const { serviceTemplate } = useServiceTemplates();
   const { setMigrationModalOpen } = useModals();
-  const { activeStakingProgram, defaultStakingProgram, updateStakingProgram } =
-    useStakingProgram();
+
+  const {
+    activeStakingProgram,
+    activeStakingProgramMeta,
+    defaultStakingProgram,
+    updateStakingProgram,
+  } = useStakingProgram();
+
   const { token } = useToken();
+
   const {
     safeBalance,
     totalOlasStakedBalance,
     isBalanceLoaded,
     setIsPaused: setIsBalancePollingPaused,
   } = useBalance();
-  const { isServiceStakedForMinimumDuration, stakingContractInfoRecord } =
-    useStakingContractInfo();
+
+  const {
+    isServiceStaked,
+    isServiceStakedForMinimumDuration,
+    isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
+  } = useStakingContractInfo();
+
   const [isFundingSectionOpen, setIsFundingSectionOpen] = useState(false);
 
   const stakingContractAddress =
@@ -65,14 +81,28 @@ export const StakingContractSection = ({
   const stakingContractInfoForStakingProgram =
     stakingContractInfoRecord?.[stakingProgram];
 
-  const activeStakingContractInfo =
-    activeStakingProgram && stakingContractInfoRecord?.[activeStakingProgram];
+  const activeStakingContractInfo = useMemo<
+    Partial<StakingContractInfo> | null | undefined
+  >(() => {
+    if (!isStakingContractInfoLoaded) return undefined;
+    if (activeStakingProgram === undefined) return undefined;
+    if (activeStakingProgram === null) return null;
+    return stakingContractInfoRecord?.[activeStakingProgram];
+  }, [
+    activeStakingProgram,
+    isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
+  ]);
 
-  const activeStakingProgramMeta =
-    activeStakingProgram && STAKING_PROGRAM_META[activeStakingProgram];
-
-  const isSelected =
-    activeStakingProgram && activeStakingProgram === stakingProgram;
+  /**
+   * Returns `true` if this stakingProgram is active,
+   * or user is unstaked and this is the default
+   */
+  const isSelectedOrUnstakedDefault = useMemo(() => {
+    if (activeStakingProgram === null)
+      return stakingProgram === defaultStakingProgram;
+    return activeStakingProgram === stakingProgram;
+  }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
   const hasEnoughRewards = true;
   //(stakingContractInfoForStakingProgram?.availableRewards ?? 0) > 0;
@@ -101,91 +131,187 @@ export const StakingContractSection = ({
     return maxNumServices && serviceIds && maxNumServices > serviceIds.length;
   }, [stakingContractInfoForStakingProgram]);
 
-  const activeStakingContractSupportsMigration =
-    !activeStakingProgram ||
-    (activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram) &&
-      isServiceStakedForMinimumDuration);
-
-  const canMigrate =
-    // checks for both initial deployment and migration
-    !isSelected &&
-    isBalanceLoaded &&
-    hasEnoughSlots &&
-    hasEnoughRewards &&
-    hasEnoughOlasToMigrate &&
-    serviceStatus !== DeploymentStatus.DEPLOYED &&
-    serviceStatus !== DeploymentStatus.DEPLOYING &&
-    serviceStatus !== DeploymentStatus.STOPPING &&
-    // checks for migration from an actively staked service
-    (!activeStakingProgram ||
-      (isServiceStakedForMinimumDuration &&
-        activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)));
-
-  const cantMigrateReason = useMemo(() => {
-    if (isSelected) {
-      return 'Contract is already selected';
+  const migrateValidation = useMemo<{
+    canMigrate: boolean;
+    reason?: string | ReactNode;
+  }>(() => {
+    // loading requirements
+    if (!isBalanceLoaded) {
+      return { canMigrate: false, reason: <Text>Loading balance...</Text> };
+    }
+    if (!isStakingContractInfoLoaded) {
+      return {
+        canMigrate: false,
+        reason: <Text>Loading staking contract information...</Text>,
+      };
     }
 
-    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
-      return 'Migration not supported for this contract';
+    // general requirements
+    if (isSelectedOrUnstakedDefault) {
+      return {
+        canMigrate: false,
+        reason: <Text>Contract is already selected</Text>,
+      };
     }
 
     if (!hasEnoughRewards) {
-      return 'No available rewards';
+      return { canMigrate: false, reason: <Text>No available rewards</Text> };
     }
-
-    if (!isBalanceLoaded) {
-      return 'Loading balance...';
-    }
-
     if (!hasEnoughSlots) {
-      return 'No available staking slots';
+      return {
+        canMigrate: false,
+        reason: <Text>No available staking slots</Text>,
+      };
     }
-
-    if (!isServiceStakedForMinimumDuration && activeStakingContractInfo) {
-      return (
-        <CountdownUntilMigration
-          activeStakingContractInfo={activeStakingContractInfo}
-        />
-      );
-    }
-
     if (!hasEnoughOlasToMigrate) {
-      return `Insufficient OLAS to migrate, ${minimumOlasRequiredToMigrate} OLAS required in total.`;
+      return {
+        canMigrate: false,
+        reason: <Text>Insufficient OLAS to migrate</Text>,
+      };
+    }
+    // stopped service requirements
+    if (
+      [
+        DeploymentStatus.DEPLOYED,
+        DeploymentStatus.DEPLOYING,
+        DeploymentStatus.STOPPING,
+      ].some((status) => status === serviceStatus) // allow nil serviceStatus to pass, so first-timers can migrate
+    ) {
+      return {
+        canMigrate: false,
+        reason: <Text>Pearl is currently running</Text>,
+      };
     }
 
-    // App version compatibility not implemented yet
-    // if (!isAppVersionCompatible) {
-    //   return 'Pearl update required to migrate';
-    // }
-
-    if (serviceStatus === DeploymentStatus.DEPLOYED) {
-      return 'Pearl is currently running, turn it off before switching';
+    // active staking program requirements
+    if (!isStakingContractInfoLoaded) {
+      return {
+        canMigrate: false,
+        reason: <Text>Loading staking contract information...</Text>,
+      };
     }
 
-    if (serviceStatus === DeploymentStatus.DEPLOYING) {
-      return 'Pearl is currently deploying, please turn it off before switching';
+    // user is not actively staked, allow migration
+    if (activeStakingProgram === null) {
+      return { canMigrate: true };
     }
 
-    if (serviceStatus === DeploymentStatus.STOPPING) {
-      return 'Pearl is currently stopping, please wait before switching';
+    // USER IS STAKED
+    if (!isServiceStaked) {
+      return {
+        canMigrate: false,
+        reason: <Text>Service is not staked</Text>,
+      };
     }
+
+    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
+      return {
+        canMigrate: false,
+        reason: 'Migration not supported for this contract',
+      };
+    }
+
+    if (activeStakingContractInfo && !isServiceStakedForMinimumDuration) {
+      return {
+        canMigrate: false,
+        reason: (
+          <CountdownUntilMigration
+            activeStakingContractInfo={activeStakingContractInfo}
+          />
+        ),
+      };
+    }
+
+    return { canMigrate: true };
   }, [
     activeStakingContractInfo,
+    activeStakingProgram,
     activeStakingProgramMeta?.canMigrateTo,
     hasEnoughOlasToMigrate,
     hasEnoughRewards,
     hasEnoughSlots,
     isBalanceLoaded,
-    isSelected,
+    isSelectedOrUnstakedDefault,
+    isServiceStaked,
     isServiceStakedForMinimumDuration,
-    minimumOlasRequiredToMigrate,
+    isStakingContractInfoLoaded,
     serviceStatus,
     stakingProgram,
   ]);
+  // further conditions for migration from an actively staked service
+  !isServiceStaked ||
+    (isServiceStakedForMinimumDuration &&
+      activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram));
+
+  // const cantMigrateReason = useMemo(() => {
+  //   if (isSelectedOrUnstakedDefault) {
+  //     return 'Contract is already selected';
+  //   }
+
+  //   if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
+  //     return 'Migration not supported for this contract';
+  //   }
+
+  //   if (!hasEnoughRewards) {
+  //     return 'No available rewards';
+  //   }
+
+  //   if (!isBalanceLoaded) {
+  //     return 'Loading balance...';
+  //   }
+
+  //   if (!hasEnoughSlots) {
+  //     return 'No available staking slots';
+  //   }
+
+  //   if (!isServiceStakedForMinimumDuration && activeStakingContractInfo) {
+  //     return (
+  //       <CountdownUntilMigration
+  //         activeStakingContractInfo={activeStakingContractInfo}
+  //       />
+  //     );
+  //   }
+
+  //   if (!hasEnoughOlasToMigrate) {
+  //     return `Insufficient OLAS to migrate, ${minimumOlasRequiredToMigrate} OLAS required in total.`;
+  //   }
+
+  //   // App version compatibility not implemented yet
+  //   // if (!isAppVersionCompatible) {
+  //   //   return 'Pearl update required to migrate';
+  //   // }
+
+  //   if (serviceStatus === DeploymentStatus.DEPLOYED) {
+  //     return 'Pearl is currently running, turn it off before switching';
+  //   }
+
+  //   if (serviceStatus === DeploymentStatus.DEPLOYING) {
+  //     return 'Pearl is currently deploying, please turn it off before switching';
+  //   }
+
+  //   if (serviceStatus === DeploymentStatus.STOPPING) {
+  //     return 'Pearl is currently stopping, please wait before switching';
+  //   }
+  // }, [
+  //   activeStakingContractInfo,
+  //   activeStakingProgramMeta?.canMigrateTo,
+  //   hasEnoughOlasToMigrate,
+  //   hasEnoughRewards,
+  //   hasEnoughSlots,
+  //   isBalanceLoaded,
+  //   isSelectedOrUnstakedDefault,
+  //   isServiceStakedForMinimumDuration,
+  //   minimumOlasRequiredToMigrate,
+  //   serviceStatus,
+  //   stakingProgram,
+  // ]);
 
   const cantMigrateAlert = useMemo(() => {
-    if (isSelected || !isBalanceLoaded) {
+    if (!isBalanceLoaded || !isStakingContractInfoLoaded) {
+      return null;
+    }
+
+    if (isSelectedOrUnstakedDefault) {
       return null;
     }
 
@@ -206,14 +332,10 @@ export const StakingContractSection = ({
         />
       );
     }
-
-    // App version compatibility not implemented yet
-    // if (!isAppVersionCompatible) {
-    //   return <AlertUpdateToMigrate />;
-    // }
   }, [
-    isSelected,
     isBalanceLoaded,
+    isStakingContractInfoLoaded,
+    isSelectedOrUnstakedDefault,
     hasEnoughSlots,
     hasEnoughOlasToMigrate,
     safeBalance?.OLAS,
@@ -225,33 +347,67 @@ export const StakingContractSection = ({
     if (activeStakingProgram === stakingProgram)
       return StakingProgramStatus.Selected;
 
-    // Pearl is not staked, set as Selected if default (Beta)
-    if (!activeStakingProgram && stakingProgram === defaultStakingProgram)
+    // Pearl is not staked, set as Selected if default
+    if (
+      activeStakingProgram === null &&
+      stakingProgram === defaultStakingProgram
+    )
       return StakingProgramStatus.Selected;
-
-    // Otherwise, highlight Beta as New
-    if (stakingProgram === StakingProgram.Beta) return StakingProgramStatus.New;
 
     // Otherwise, no tag
     return;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
-  // Show funding address
-  const canShowFundingAddress =
-    !isSelected &&
-    activeStakingContractSupportsMigration &&
-    !hasEnoughOlasToMigrate;
+  /** Displays the dropdown function section & button */
+  const isFundingSectionShown = useMemo(() => {
+    if (!isBalanceLoaded || !isStakingContractInfoLoaded) {
+      return false;
+    }
 
-  const cardStyle = useMemo(() => {
-    if (isSelected || !activeStakingProgram) {
+    if (!isSelectedOrUnstakedDefault) {
+      return false;
+    }
+
+    if (!hasEnoughOlasToMigrate) {
+      return false;
+    }
+
+    // check if migration is possible according to meta
+    // ignore `null` as unstaked
+    if (
+      activeStakingProgram !== null &&
+      !stakingProgramMeta.canMigrateTo.includes(stakingProgram)
+    ) {
+      return false;
+    }
+
+    return true;
+  }, [
+    activeStakingProgram,
+    hasEnoughOlasToMigrate,
+    isBalanceLoaded,
+    isSelectedOrUnstakedDefault,
+    isStakingContractInfoLoaded,
+    stakingProgram,
+    stakingProgramMeta.canMigrateTo,
+  ]);
+
+  /** Styling for active or other contracts  */
+  const cardSectionStyle = useMemo(() => {
+    if (isSelectedOrUnstakedDefault) {
       return { background: token.colorPrimaryBg };
     }
     return {};
-  }, [isSelected, activeStakingProgram, token.colorPrimaryBg]);
+  }, [isSelectedOrUnstakedDefault, token.colorPrimaryBg]);
 
   return (
     <>
-      <CardSection style={cardStyle} borderbottom="true" vertical gap={16}>
+      <CardSection
+        style={cardSectionStyle}
+        borderbottom="true"
+        vertical
+        gap={16}
+      >
         <Flex gap={12}>
           <Title level={5} className="m-0">
             {`${stakingProgramMeta?.name} contract`}
@@ -266,17 +422,19 @@ export const StakingContractSection = ({
         >
           View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
         </a>
-        {activeStakingContractSupportsMigration && cantMigrateAlert}
 
+        {!migrateValidation.canMigrate && cantMigrateAlert}
         {/* Switch to program button */}
         {![activeStakingProgram, defaultStakingProgram].includes(
           stakingProgram,
         ) && (
-          <Popover content={!canMigrate && cantMigrateReason}>
+          <Popover
+            content={!migrateValidation.canMigrate && migrateValidation.reason}
+          >
             <Button
               type="primary"
               size="large"
-              disabled={!canMigrate}
+              disabled={!migrateValidation.canMigrate}
               onClick={async () => {
                 setIsServicePollingPaused(true);
                 setIsBalancePollingPaused(true);
@@ -309,7 +467,7 @@ export const StakingContractSection = ({
         )}
 
         {/* show funding address */}
-        {canShowFundingAddress && (
+        {isFundingSectionShown && (
           <>
             <Button
               type="default"
@@ -339,8 +497,8 @@ const CountdownUntilMigration = ({
     const { serviceStakingStartTime, minimumStakingDuration } =
       activeStakingContractInfo;
 
-    if (!minimumStakingDuration) return;
-    if (!serviceStakingStartTime) return;
+    if (isNil(minimumStakingDuration)) return;
+    if (isNil(serviceStakingStartTime)) return;
 
     const now = Math.round(Date.now() / 1000);
     const timeSinceLastStaked = now - serviceStakingStartTime;
