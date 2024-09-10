@@ -1,11 +1,11 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { StakingProgramContext } from '@/context/StakingProgramContext';
 
 /**
- *  Mock hook for staking program abstraction
- * @returns {currentStakingProgram: IncentiveProgram}
+ * Hook to get the active staking program and its metadata, and the default staking program.
+ * @returns {Object} The active staking program and its metadata.
  */
 export const useStakingProgram = () => {
   const {
@@ -16,18 +16,20 @@ export const useStakingProgram = () => {
 
   const isLoadedActiveStakingProgram = activeStakingProgram !== undefined;
 
-  const activeStakingProgramMeta =
-    activeStakingProgram === undefined
-      ? null
-      : activeStakingProgram === null
-        ? null
-        : STAKING_PROGRAM_META[activeStakingProgram];
+  const activeStakingProgramMeta = useMemo(() => {
+    if (activeStakingProgram === undefined) return undefined;
+    if (activeStakingProgram === null) return null;
+    return STAKING_PROGRAM_META[activeStakingProgram];
+  }, [activeStakingProgram]);
+
+  const defaultStakingProgramMeta = STAKING_PROGRAM_META[defaultStakingProgram];
 
   return {
     activeStakingProgram,
     activeStakingProgramMeta,
     defaultStakingProgram,
-    updateStakingProgram,
+    defaultStakingProgramMeta,
     isLoadedActiveStakingProgram,
+    updateStakingProgram,
   };
 };
