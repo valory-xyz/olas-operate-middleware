@@ -344,6 +344,10 @@ const getServiceRegistryInfo = async (
   };
 };
 
+/**
+ * @param serviceId
+ * @returns StakingProgram | null (null when not staked)
+ */
 const getCurrentStakingProgramByServiceId = async (
   serviceId: number,
 ): Promise<StakingProgram | null> => {
@@ -360,20 +364,24 @@ const getCurrentStakingProgramByServiceId = async (
     {},
   );
 
-  await gnosisMulticallProvider.init();
-
   try {
+    await gnosisMulticallProvider.init();
     const [isAlphaStaked, isBetaStaked, isBeta2Staked] =
       await gnosisMulticallProvider.all(Object.values(contractCalls));
 
-    // Alpha should take precedence, as it must be migrated from
-    return isAlphaStaked
-      ? StakingProgram.Alpha
-      : isBetaStaked
-        ? StakingProgram.Beta
-        : isBeta2Staked
-          ? StakingProgram.Beta2
-          : null;
+    if (isAlphaStaked) {
+      return StakingProgram.Alpha;
+    }
+
+    if (isBetaStaked) {
+      return StakingProgram.Beta;
+    }
+
+    if (isBeta2Staked) {
+      return StakingProgram.Beta2;
+    }
+
+    return null;
   } catch (error) {
     console.error('Error while getting current staking program', error);
     return null;
