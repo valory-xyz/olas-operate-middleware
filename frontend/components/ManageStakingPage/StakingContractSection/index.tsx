@@ -243,69 +243,6 @@ export const StakingContractSection = ({
     (isServiceStakedForMinimumDuration &&
       activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram));
 
-  // const cantMigrateReason = useMemo(() => {
-  //   if (isSelectedOrUnstakedDefault) {
-  //     return 'Contract is already selected';
-  //   }
-
-  //   if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
-  //     return 'Migration not supported for this contract';
-  //   }
-
-  //   if (!hasEnoughRewards) {
-  //     return 'No available rewards';
-  //   }
-
-  //   if (!isBalanceLoaded) {
-  //     return 'Loading balance...';
-  //   }
-
-  //   if (!hasEnoughSlots) {
-  //     return 'No available staking slots';
-  //   }
-
-  //   if (!isServiceStakedForMinimumDuration && activeStakingContractInfo) {
-  //     return (
-  //       <CountdownUntilMigration
-  //         activeStakingContractInfo={activeStakingContractInfo}
-  //       />
-  //     );
-  //   }
-
-  //   if (!hasEnoughOlasToMigrate) {
-  //     return `Insufficient OLAS to migrate, ${minimumOlasRequiredToMigrate} OLAS required in total.`;
-  //   }
-
-  //   // App version compatibility not implemented yet
-  //   // if (!isAppVersionCompatible) {
-  //   //   return 'Pearl update required to migrate';
-  //   // }
-
-  //   if (serviceStatus === DeploymentStatus.DEPLOYED) {
-  //     return 'Pearl is currently running, turn it off before switching';
-  //   }
-
-  //   if (serviceStatus === DeploymentStatus.DEPLOYING) {
-  //     return 'Pearl is currently deploying, please turn it off before switching';
-  //   }
-
-  //   if (serviceStatus === DeploymentStatus.STOPPING) {
-  //     return 'Pearl is currently stopping, please wait before switching';
-  //   }
-  // }, [
-  //   activeStakingContractInfo,
-  //   activeStakingProgramMeta?.canMigrateTo,
-  //   hasEnoughOlasToMigrate,
-  //   hasEnoughRewards,
-  //   hasEnoughSlots,
-  //   isBalanceLoaded,
-  //   isSelectedOrUnstakedDefault,
-  //   isServiceStakedForMinimumDuration,
-  //   minimumOlasRequiredToMigrate,
-  //   serviceStatus,
-  //   stakingProgram,
-  // ]);
-
   const cantMigrateAlert = useMemo(() => {
     if (!isBalanceLoaded || !isStakingContractInfoLoaded) {
       return null;
