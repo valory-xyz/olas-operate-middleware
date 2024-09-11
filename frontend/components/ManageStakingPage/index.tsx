@@ -14,7 +14,8 @@ import { WhatAreStakingContractsSection } from './WhatAreStakingContracts';
 
 export const ManageStakingPage = () => {
   const { goto } = usePageState();
-  const { activeStakingProgramId } = useStakingProgram();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
 
   const orderedStakingProgramIds: StakingProgramId[] = Object.values(
     StakingProgramId,
@@ -23,6 +24,13 @@ export const ManageStakingPage = () => {
     if (stakingProgramId === activeStakingProgramId) {
       return [stakingProgramId, ...acc];
     }
+
+    // otherwise put the default at the top
+    if (
+      activeStakingProgramId === null &&
+      stakingProgramId === defaultStakingProgramId
+    )
+      return [stakingProgramId];
 
     // otherwise, append to the end
     return [...acc, stakingProgramId];
