@@ -175,25 +175,19 @@ export const DebugInfoSection = () => {
         ?.instances?.[0];
     if (instanceAddress) {
       result.push({
-        title: 'Agent instance',
+        title: 'Agent Instance EOA',
         ...getItemData(walletBalances, instanceAddress!),
       });
     }
 
-    // COMMENTED UNTIL PANDORA UPDATES GRAPH ENDPOINT 5/9
-    //
-    // const multisigAddress =
-    //   services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
-    // if (multisigAddress) {
-    //   result.push({
-    //     title: 'Agent Safe',
-    //     ...getItemData(walletBalances, multisigAddress),
-    //     link: {
-    //       title: 'See agent activity on Pandora',
-    //       href: `https://pandora.computer/predict/${multisigAddress}`,
-    //     },
-    //   });
-    // }
+    const multisigAddress =
+      services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
+    if (multisigAddress) {
+      result.push({
+        title: 'Agent Safe',
+        ...getItemData(walletBalances, multisigAddress),
+      });
+    }
 
     return result;
   }, [
