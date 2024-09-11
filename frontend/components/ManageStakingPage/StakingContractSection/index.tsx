@@ -237,10 +237,6 @@ export const StakingContractSection = ({
     serviceStatus,
     stakingProgram,
   ]);
-  // further conditions for migration from an actively staked service
-  !isServiceStaked ||
-    (isServiceStakedForMinimumDuration &&
-      activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram));
 
   const cantMigrateAlert = useMemo(() => {
     if (!isBalanceLoaded || !isStakingContractInfoLoaded) {
