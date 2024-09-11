@@ -222,15 +222,15 @@ export const StakingContractSection = ({
   ]);
 
   const contractTagStatus = useMemo(() => {
-    if (activeStakingProgram === stakingProgram)
+    if (activeStakingProgram === stakingProgram) {
       return StakingProgramStatus.Selected;
+    }
 
-    // not staked, set the default as the Selected contract
-    if (stakingProgram === defaultStakingProgram)
+    if (!activeStakingProgram && stakingProgram === defaultStakingProgram) {
       return StakingProgramStatus.Selected;
+    }
 
-    // otherwise, no tag
-    return;
+    return null;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
   // Show funding address
@@ -239,16 +239,14 @@ export const StakingContractSection = ({
     activeStakingContractSupportsMigration &&
     !hasEnoughOlasToMigrate;
 
-  const cardStyle = useMemo(() => {
-    if (isSelected || !activeStakingProgram) {
-      return { background: token.colorPrimaryBg };
-    }
-    return {};
-  }, [isSelected, activeStakingProgram, token.colorPrimaryBg]);
-
   return (
     <>
-      <CardSection style={cardStyle} borderbottom="true" vertical gap={16}>
+      <CardSection
+        style={contractTagStatus ? { background: token.colorPrimaryBg } : {}}
+        borderbottom="true"
+        vertical
+        gap={16}
+      >
         <Flex gap={12}>
           <Title level={5} className="m-0">
             {`${stakingProgramMeta?.name} contract`}
