@@ -196,14 +196,13 @@ export const StakingContractSection = ({
       return { canMigrate: true };
     }
 
-    // USER IS STAKED
     if (!isServiceStaked) {
       return {
         canMigrate: false,
         reason: <Text>Service is not staked</Text>,
       };
     }
-
+    // USER IS STAKED
     if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgram)) {
       return {
         canMigrate: false,
