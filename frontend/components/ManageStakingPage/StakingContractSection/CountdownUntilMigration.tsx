@@ -1,9 +1,11 @@
-import { Flex } from 'antd';
+import { Flex, Typography } from 'antd';
 import { isNil } from 'lodash';
 import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
 import { StakingContractInfo } from '@/types/Autonolas';
+
+const { Text } = Typography;
 
 export const CountdownUntilMigration = ({
   activeStakingContractInfo,
@@ -34,14 +36,16 @@ export const CountdownUntilMigration = ({
     setSecondsUntilMigration(timeUntilMigration);
   }, 1000);
 
-  if (!secondsUntilReady) return "You're ready to switch contracts!"; // Shouldn't happen, but just in case
+  const countdownDisplay = isNil(secondsUntilReady)
+    ? 'Loading ...'
+    : countdownDisplayFormat(secondsUntilReady);
 
   return (
     <Flex vertical gap={1}>
-      <strong>Can&apos;t switch because you unstaked too recently.</strong>
-      <span>This may be because your agent was suspended.</span>
-      <span>Keep running your agent and you&apos;ll be able to switch in</span>
-      <span>{countdownDisplayFormat(secondsUntilReady)}</span>
+      <Text strong>Can&apos;t switch because you unstaked too recently.</Text>
+      <Text>This may be because your agent was suspended.</Text>
+      <Text>Keep running your agent and you&apos;ll be able to switch in</Text>
+      <Text>{countdownDisplay}</Text>
     </Flex>
   );
 };
