@@ -100,7 +100,7 @@ export const StakingContractSection = ({
    */
   const isSelectedOrUnstakedDefault = useMemo(() => {
     if (activeStakingProgram === null)
-      return stakingProgram === defaultStakingProgram;
+      return defaultStakingProgram === stakingProgram;
     return activeStakingProgram === stakingProgram;
   }, [activeStakingProgram, defaultStakingProgram, stakingProgram]);
 
