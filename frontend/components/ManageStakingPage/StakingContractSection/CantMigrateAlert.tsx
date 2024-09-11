@@ -87,6 +87,9 @@ const AlertNoSlots = () => (
 //   />
 // );
 
+/**
+ * Displays alerts for specific non-migration reasons
+ */
 export const CantMigrateAlert = ({
   stakingProgramId,
   cantMigrateReason,
