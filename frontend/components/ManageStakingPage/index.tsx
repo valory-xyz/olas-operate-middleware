@@ -32,7 +32,7 @@ export const ManageStakingPage = () => {
     )
       return [stakingProgramId, ...acc];
 
-    // if the program is deprecated, and not staked in, ignore
+    // if the program is deprecated, ignore it
     if (STAKING_PROGRAM_META[stakingProgramId]?.deprecated) {
       return acc;
     }
