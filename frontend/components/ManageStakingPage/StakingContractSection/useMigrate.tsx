@@ -11,15 +11,15 @@ import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 export enum CantMigrateReason {
-  ContractAlreadySelected = 'Contract is already selected',
+  ContractAlreadySelected = 'This staking program is already selected',
   LoadingBalance = 'Loading balance...',
   LoadingStakingContractInfo = 'Loading staking contract information...',
-  InsufficientOlasToMigrate = 'Insufficient OLAS to migrate',
-  MigrationNotSupported = 'Migration not supported from your current contract',
-  NoAvailableRewards = 'No available rewards',
-  NoAvailableStakingSlots = 'No available staking slots',
-  NotStakedForMinimumDuration = 'Pearl has not been staked for the minimum duration',
-  PearlCurrentlyRunning = 'Pearl is currently running',
+  InsufficientOlasToMigrate = 'Insufficient OLAS to switch',
+  MigrationNotSupported = 'Switching to this program is not currently supported',
+  NoAvailableRewards = 'This program has no rewards available',
+  NoAvailableStakingSlots = 'The program has no more avaiable slots',
+  NotStakedForMinimumDuration = 'Pearl has not been staked for the required minimum duration',
+  PearlCurrentlyRunning = 'Unable to switch while Pearl is running',
 }
 
 type MigrateValidation =
