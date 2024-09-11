@@ -57,8 +57,12 @@ let appConfig = {
   },
 };
 
+/**
+ * @type {BrowserWindow}
+ */
+let mainWindow;
+
 let tray,
-  mainWindow,
   splashWindow,
   operateDaemon,
   operateDaemonPid,
@@ -243,6 +247,14 @@ const createMainWindow = async () => {
     showNotification(title, description || undefined);
   });
 
+  // if app (ie. mainWindow) is loaded, destroy splash window.
+  ipcMain.on('is-app-loaded', (_event, isLoaded) => {
+    if (isLoaded && splashWindow) {
+      splashWindow.destroy();
+      splashWindow = null;
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
@@ -261,7 +273,7 @@ const createMainWindow = async () => {
     event.preventDefault();
     mainWindow.hide();
   });
-  
+
   try {
     logger.electron('Setting up store IPC');
     await setupStoreIpc(ipcMain, mainWindow);
@@ -337,7 +349,6 @@ async function launchDaemon() {
 }
 
 async function launchDaemonDev() {
-
   const check = new Promise(function (resolve, _reject) {
     operateDaemon = spawn('poetry', [
       'run',
@@ -503,7 +514,6 @@ ipcMain.on('check', async function (event, _argument) {
     event.sender.send('response', 'Launching App');
     await createMainWindow();
     createTray();
-    splashWindow.destroy();
   } catch (e) {
     logger.electron(e);
     new Notification({
@@ -522,6 +532,7 @@ app.on('ready', async () => {
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
+
   createSplashWindow();
 });
 
