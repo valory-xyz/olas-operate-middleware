@@ -53,14 +53,11 @@ export const StakingContractSection = ({
       return StakingProgramStatus.Selected;
 
     // Pearl is not staked, set as Selected if default
-    if (
-      activeStakingProgramId === null &&
-      stakingProgramId === defaultStakingProgramId
-    )
+    if (!activeStakingProgramId && stakingProgramId === defaultStakingProgramId)
       return StakingProgramStatus.Selected;
 
     // Otherwise, no tag
-    return;
+    return null;
   }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
 
   const showMigrateButton = !isActiveStakingProgram;
@@ -71,18 +68,10 @@ export const StakingContractSection = ({
     );
   }, [migrateValidation]);
 
-  /** Styling for active or other contracts  */
-  const cardSectionStyle = useMemo(() => {
-    if (isActiveStakingProgram) {
-      return { background: token.colorPrimaryBg };
-    }
-    return {};
-  }, [isActiveStakingProgram, token.colorPrimaryBg]);
-
   return (
     <>
       <CardSection
-        style={cardSectionStyle}
+        style={contractTagStatus ? { background: token.colorPrimaryBg } : {}}
         borderbottom="true"
         vertical
         gap={16}

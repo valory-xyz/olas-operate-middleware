@@ -64,7 +64,12 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
-      <StakingContractSection stakingProgramId={orderedStakingProgramIds[0]} />
+
+      {activeStakingProgramId && (
+        <StakingContractSection
+          stakingProgramId={orderedStakingProgramIds[0]}
+        />
+      )}
 
       <CardSection borderbottom="true" vertical gap={16}>
         {`Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length > 1 ? 's' : ''}.`}
