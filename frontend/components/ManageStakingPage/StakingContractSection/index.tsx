@@ -22,7 +22,7 @@ const { useToken } = theme;
 
 type StakingContractSectionProps = { stakingProgramId: StakingProgramId };
 export const StakingContractSection = ({
-  stakingProgramId: stakingProgramId,
+  stakingProgramId,
 }: StakingContractSectionProps) => {
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();

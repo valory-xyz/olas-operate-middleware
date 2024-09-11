@@ -32,7 +32,7 @@ const getServices = async (): Promise<Service[]> =>
 const createService = async ({
   deploy,
   serviceTemplate,
-  stakingProgramId: stakingProgram,
+  stakingProgramId,
 }: {
   deploy: boolean;
   serviceTemplate: ServiceTemplate;
@@ -47,7 +47,7 @@ const createService = async ({
         configurations: {
           100: {
             ...serviceTemplate.configurations[100],
-            staking_program_id: stakingProgram,
+            staking_program_id: stakingProgramId,
             rpc: `${process.env.GNOSIS_RPC}`,
           },
         },

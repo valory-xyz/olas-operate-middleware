@@ -14,25 +14,25 @@ import { WhatAreStakingContractsSection } from './WhatAreStakingContracts';
 
 export const ManageStakingPage = () => {
   const { goto } = usePageState();
-  const { activeStakingProgramId: activeStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
-  const orderedStakingPrograms: StakingProgramId[] = Object.values(
+  const orderedStakingProgramIds: StakingProgramId[] = Object.values(
     StakingProgramId,
-  ).reduce((acc: StakingProgramId[], stakingProgram: StakingProgramId) => {
+  ).reduce((acc: StakingProgramId[], stakingProgramId: StakingProgramId) => {
     // put the active staking program at the top
-    if (stakingProgram === activeStakingProgram) {
-      return [stakingProgram, ...acc];
+    if (stakingProgramId === activeStakingProgramId) {
+      return [stakingProgramId, ...acc];
     }
 
     // otherwise, append to the end
-    return [...acc, stakingProgram];
+    return [...acc, stakingProgramId];
   }, []);
 
-  const otherStakingPrograms = orderedStakingPrograms.filter(
-    (stakingProgram) => {
-      const info = STAKING_PROGRAM_META[stakingProgram];
+  const otherStakingProgramIds = orderedStakingProgramIds.filter(
+    (stakingProgramId) => {
+      const info = STAKING_PROGRAM_META[stakingProgramId];
       if (!info) return false;
-      if (activeStakingProgram === stakingProgram) return false;
+      if (activeStakingProgramId === stakingProgramId) return false;
       if (info.deprecated) return false;
       return true;
     },
@@ -51,16 +51,16 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
-      <StakingContractSection stakingProgramId={orderedStakingPrograms[0]} />
+      <StakingContractSection stakingProgramId={orderedStakingProgramIds[0]} />
 
       <CardSection borderbottom="true" vertical gap={16}>
-        {`Browse ${otherStakingPrograms.length} staking contract${otherStakingPrograms.length > 1 ? 's' : ''}.`}
+        {`Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length > 1 ? 's' : ''}.`}
       </CardSection>
 
-      {otherStakingPrograms.map((stakingProgram) => (
+      {otherStakingProgramIds.map((stakingProgramId) => (
         <StakingContractSection
-          key={stakingProgram}
-          stakingProgramId={stakingProgram}
+          key={stakingProgramId}
+          stakingProgramId={stakingProgramId}
         />
       ))}
     </Card>
