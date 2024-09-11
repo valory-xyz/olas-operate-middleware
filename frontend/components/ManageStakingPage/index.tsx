@@ -3,7 +3,7 @@ import { Button, Card } from 'antd';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { Pages } from '@/enums/PageState';
-import { StakingProgram } from '@/enums/StakingProgram';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
@@ -14,11 +14,11 @@ import { WhatAreStakingContractsSection } from './WhatAreStakingContracts';
 
 export const ManageStakingPage = () => {
   const { goto } = usePageState();
-  const { activeStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId: activeStakingProgram } = useStakingProgram();
 
-  const orderedStakingPrograms: StakingProgram[] = Object.values(
-    StakingProgram,
-  ).reduce((acc: StakingProgram[], stakingProgram: StakingProgram) => {
+  const orderedStakingPrograms: StakingProgramId[] = Object.values(
+    StakingProgramId,
+  ).reduce((acc: StakingProgramId[], stakingProgram: StakingProgramId) => {
     // put the active staking program at the top
     if (stakingProgram === activeStakingProgram) {
       return [stakingProgram, ...acc];
@@ -51,7 +51,7 @@ export const ManageStakingPage = () => {
       }
     >
       <WhatAreStakingContractsSection />
-      <StakingContractSection stakingProgram={orderedStakingPrograms[0]} />
+      <StakingContractSection stakingProgramId={orderedStakingPrograms[0]} />
 
       <CardSection borderbottom="true" vertical gap={16}>
         {`Browse ${otherStakingPrograms.length} staking contract${otherStakingPrograms.length > 1 ? 's' : ''}.`}
@@ -60,7 +60,7 @@ export const ManageStakingPage = () => {
       {otherStakingPrograms.map((stakingProgram) => (
         <StakingContractSection
           key={stakingProgram}
-          stakingProgram={stakingProgram}
+          stakingProgramId={stakingProgram}
         />
       ))}
     </Card>

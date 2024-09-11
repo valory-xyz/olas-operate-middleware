@@ -70,13 +70,14 @@ export const useStakingContractInfo = () => {
     (isAgentEvicted ? isServiceStakedForMinimumDuration : true);
 
   return {
+    activeStakingContractInfo,
     hasEnoughServiceSlots,
     isEligibleForStaking,
     isRewardsAvailable,
     isAgentEvicted,
-    stakingContractInfoRecord,
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
   };
 };

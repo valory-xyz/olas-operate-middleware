@@ -19,8 +19,8 @@ export const StakingContractUpdate = () => {
   const { needsInitialFunding } = useNeedsFunds();
   const {
     activeStakingProgramMeta,
-    isLoadedActiveStakingProgram,
-    defaultStakingProgram,
+    isActiveStakingProgramLoaded: isLoadedActiveStakingProgram,
+    defaultStakingProgramId: defaultStakingProgram,
   } = useStakingProgram();
 
   const stakingContractName = useMemo(() => {

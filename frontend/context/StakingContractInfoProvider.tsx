@@ -11,7 +11,7 @@ import { useInterval } from 'usehooks-ts';
 
 import { CHAINS } from '@/constants/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
-import { StakingProgram } from '@/enums/StakingProgram';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { AutonolasService } from '@/service/Autonolas';
 import { StakingContractInfo } from '@/types/Autonolas';
 
@@ -22,7 +22,7 @@ type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
   isStakingContractInfoLoaded: boolean;
   stakingContractInfoRecord?: Record<
-    StakingProgram,
+    StakingProgramId,
     Partial<StakingContractInfo>
   >;
   updateActiveStakingContractInfo: () => Promise<void>;
@@ -40,7 +40,7 @@ export const StakingContractInfoProvider = ({
   children,
 }: PropsWithChildren) => {
   const { services } = useContext(ServicesContext);
-  const { activeStakingProgram } = useContext(StakingProgramContext);
+  const { activeStakingProgramId } = useContext(StakingProgramContext);
 
   const [isStakingContractInfoLoaded, setIsStakingContractInfoLoaded] =
     useState(false);
@@ -49,7 +49,7 @@ export const StakingContractInfoProvider = ({
     useState<Partial<StakingContractInfo>>();
 
   const [stakingContractInfoRecord, setStakingContractInfoRecord] =
-    useState<Record<StakingProgram, Partial<StakingContractInfo>>>();
+    useState<Record<StakingProgramId, Partial<StakingContractInfo>>>();
 
   const serviceId = useMemo(
     () => services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token,
@@ -60,13 +60,13 @@ export const StakingContractInfoProvider = ({
   // it requires serviceId and activeStakingProgram
   const updateActiveStakingContractInfo = useCallback(async () => {
     if (!serviceId) return;
-    if (!activeStakingProgram) return;
+    if (!activeStakingProgramId) return;
 
     AutonolasService.getStakingContractInfoByServiceIdStakingProgram(
       serviceId,
-      activeStakingProgram,
+      activeStakingProgramId,
     ).then(setActiveStakingContractInfo);
-  }, [activeStakingProgram, serviceId]);
+  }, [activeStakingProgramId, serviceId]);
 
   useInterval(updateActiveStakingContractInfo, FIVE_SECONDS_INTERVAL);
 
@@ -74,14 +74,14 @@ export const StakingContractInfoProvider = ({
   // not user/service specific
   const updateStakingContractInfoRecord = async () => {
     const alpha = AutonolasService.getStakingContractInfoByStakingProgram(
-      StakingProgram.Alpha,
+      StakingProgramId.Alpha,
     );
     const beta = AutonolasService.getStakingContractInfoByStakingProgram(
-      StakingProgram.Beta,
+      StakingProgramId.Beta,
     );
 
     const beta_2 = AutonolasService.getStakingContractInfoByStakingProgram(
-      StakingProgram.Beta2,
+      StakingProgramId.Beta2,
     );
 
     try {
@@ -91,9 +91,9 @@ export const StakingContractInfoProvider = ({
         beta_2,
       ]);
       setStakingContractInfoRecord({
-        [StakingProgram.Alpha]: alphaInfo,
-        [StakingProgram.Beta]: betaInfo,
-        [StakingProgram.Beta2]: beta2Info,
+        [StakingProgramId.Alpha]: alphaInfo,
+        [StakingProgramId.Beta]: betaInfo,
+        [StakingProgramId.Beta2]: beta2Info,
       });
       setIsStakingContractInfoLoaded(true);
     } catch (e) {

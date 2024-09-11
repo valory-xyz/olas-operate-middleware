@@ -107,7 +107,7 @@ const AgentNotRunningButton = () => {
   } = useBalance();
   const { storeState } = useStore();
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
-  const { activeStakingProgram, defaultStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId: activeStakingProgram, defaultStakingProgramId: defaultStakingProgram } = useStakingProgram();
 
   // const minStakingDeposit =
   //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
@@ -154,7 +154,7 @@ const AgentNotRunningButton = () => {
     // Then create / deploy the service
     try {
       await ServicesService.createService({
-        stakingProgram: activeStakingProgram ?? defaultStakingProgram, // overwrite with StakingProgram.Alpha to test migration
+        stakingProgramId: activeStakingProgram ?? defaultStakingProgram, // overwrite with StakingProgram.Alpha to test migration
         serviceTemplate,
         deploy: true,
       });

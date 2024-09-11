@@ -12,7 +12,7 @@ export const MigrationSuccessModal = ({
   open: boolean;
   onClose: () => void;
 }) => {
-  const { activeStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId: activeStakingProgram } = useStakingProgram();
 
   // Close modal if no active staking program, migration doesn't apply to non-stakers
   if (!activeStakingProgram) {
