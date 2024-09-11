@@ -22,6 +22,15 @@ export enum CantMigrateReason {
   PearlCurrentlyRunning = 'Pearl is currently running',
 }
 
+type MigrateValidation =
+  | {
+      canMigrate: true;
+    }
+  | {
+      canMigrate: false;
+      reason: CantMigrateReason;
+    };
+
 export const useMigrate = (stakingProgramId: StakingProgramId) => {
   const { serviceStatus } = useServices();
   const { serviceTemplate } = useServiceTemplates();
@@ -58,10 +67,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     totalOlasStakedBalance,
   ]);
 
-  const migrateValidation = useMemo<{
-    canMigrate: boolean;
-    reason?: CantMigrateReason;
-  }>(() => {
+  const migrateValidation = useMemo<MigrateValidation>(() => {
     // loading requirements
     if (!isBalanceLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
@@ -117,16 +123,8 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
-    // user is not actively staked, allow migration
-    if (activeStakingProgramId === null) {
+    if (activeStakingProgramId === null && !isServiceStaked) {
       return { canMigrate: true };
-    }
-
-    if (!isServiceStaked) {
-      return {
-        canMigrate: false,
-        reason: CantMigrateReason.NotStakedForMinimumDuration,
-      };
     }
 
     // user must be staked from hereon

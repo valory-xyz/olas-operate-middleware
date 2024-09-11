@@ -15,7 +15,7 @@ import { MigrateButton } from './MigrateButton';
 import { StakingContractDetails } from './StakingContractDetails';
 import { StakingContractFundingButton } from './StakingContractFundingButton';
 import { StakingContractTag } from './StakingContractTag';
-import { useMigrate } from './useMigrate';
+import { CantMigrateReason, useMigrate } from './useMigrate';
 
 const { Title } = Typography;
 const { useToken } = theme;
@@ -31,32 +31,12 @@ export const StakingContractSection = ({
 
   const { migrateValidation } = useMigrate(stakingProgramId);
 
-  // const {
-  //   // isServiceStaked,
-  //   // isServiceStakedForMinimumDuration,
-  //   // isStakingContractInfoLoaded,
-  //   // stakingContractInfoRecord,
-  // } = useStakingContractInfo();
-
   const stakingContractAddress =
     SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
       stakingProgramId
     ];
 
   const stakingProgramMeta = STAKING_PROGRAM_META[stakingProgramId];
-
-  // const activeStakingContractInfo = useMemo<
-  //   Partial<StakingContractInfo> | null | undefined
-  // >(() => {
-  //   if (!isStakingContractInfoLoaded) return undefined;
-  //   if (activeStakingProgram === undefined) return undefined;
-  //   if (activeStakingProgram === null) return null;
-  //   return stakingContractInfoRecord?.[activeStakingProgram];
-  // }, [
-  //   activeStakingProgram,
-  //   isStakingContractInfoLoaded,
-  //   stakingContractInfoRecord,
-  // ]);
 
   /**
    * Returns `true` if this stakingProgram is active,
@@ -67,9 +47,6 @@ export const StakingContractSection = ({
       return defaultStakingProgramId === stakingProgramId;
     return activeStakingProgramId === stakingProgramId;
   }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
-
-  // const isActiveStakingProgram = activeStakingProgramId === stakingProgramId;
-  // const isDefaultStakingProgram = defaultStakingProgramId === stakingProgramId;
 
   const contractTagStatus = useMemo(() => {
     if (activeStakingProgramId === stakingProgramId)
@@ -85,6 +62,14 @@ export const StakingContractSection = ({
     // Otherwise, no tag
     return;
   }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
+
+  const showMigrateButton = !isActiveStakingProgram;
+  const showFundingButton = useMemo(() => {
+    if (migrateValidation.canMigrate) return false;
+    return (
+      migrateValidation.reason === CantMigrateReason.InsufficientOlasToMigrate
+    );
+  }, [migrateValidation]);
 
   /** Styling for active or other contracts  */
   const cardSectionStyle = useMemo(() => {
@@ -117,16 +102,17 @@ export const StakingContractSection = ({
           View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
         </a>
 
-        {!migrateValidation.canMigrate && migrateValidation.reason && (
+        {!migrateValidation.canMigrate && (
           <CantMigrateAlert
             stakingProgramId={stakingProgramId}
             cantMigrateReason={migrateValidation.reason}
           />
         )}
 
-        {/* Switch to program button */}
-        <MigrateButton stakingProgramId={stakingProgramId} />
-        <StakingContractFundingButton />
+        {showMigrateButton && (
+          <MigrateButton stakingProgramId={stakingProgramId} />
+        )}
+        {showFundingButton && <StakingContractFundingButton />}
       </CardSection>
     </>
   );

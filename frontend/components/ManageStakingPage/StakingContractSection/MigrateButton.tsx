@@ -1,4 +1,5 @@
 import { Button, Popover } from 'antd';
+import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { DeploymentStatus } from '@/client';
@@ -33,10 +34,12 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
   const { migrateValidation } = useMigrate(stakingProgramId);
 
   const popoverContent = useMemo(() => {
+    if (migrateValidation.canMigrate) return null;
+
     if (
       migrateValidation.reason ===
         CantMigrateReason.NotStakedForMinimumDuration &&
-      activeStakingContractInfo
+      !isNil(activeStakingContractInfo)
     ) {
       return (
         <CountdownUntilMigration
@@ -46,10 +49,10 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
     }
 
     return migrateValidation.reason;
-  }, [activeStakingContractInfo, migrateValidation.reason]);
+  }, [activeStakingContractInfo, migrateValidation]);
 
   return (
-    <Popover content={!migrateValidation.canMigrate && popoverContent}>
+    <Popover content={popoverContent}>
       <Button
         type="primary"
         size="large"
