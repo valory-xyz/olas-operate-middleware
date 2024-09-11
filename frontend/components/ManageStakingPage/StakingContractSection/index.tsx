@@ -358,9 +358,7 @@ export const StakingContractSection = ({
         {!migrateValidation.canMigrate && cantMigrateAlert}
         {/* Switch to program button */}
         {!isSelectedOrUnstakedDefault && (
-          <Popover
-            content={migrateValidation.reason}
-          >
+          <Popover content={migrateValidation.reason}>
             <Button
               type="primary"
               size="large"
