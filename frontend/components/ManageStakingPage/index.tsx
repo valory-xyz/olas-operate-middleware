@@ -25,12 +25,17 @@ export const ManageStakingPage = () => {
       return [stakingProgramId, ...acc];
     }
 
-    // otherwise put the default at the top
+    // put default at the top if no activeStakingProgram
     if (
       activeStakingProgramId === null &&
       stakingProgramId === defaultStakingProgramId
     )
-      return [stakingProgramId];
+      return [stakingProgramId, ...acc];
+
+    // if the program is deprecated, and not staked in, ignore
+    if (STAKING_PROGRAM_META[stakingProgramId]?.deprecated) {
+      return acc;
+    }
 
     // otherwise, append to the end
     return [...acc, stakingProgramId];
