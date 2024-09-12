@@ -4,7 +4,6 @@ import { useCallback, useMemo } from 'react';
 
 import { Chain, DeploymentStatus } from '@/client';
 import { COLOR } from '@/constants/colors';
-import { StakingProgram } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
@@ -108,7 +107,8 @@ const AgentNotRunningButton = () => {
   } = useBalance();
   const { storeState } = useStore();
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
-  const { activeStakingProgram, defaultStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
 
   // const minStakingDeposit =
   //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
@@ -116,7 +116,7 @@ const AgentNotRunningButton = () => {
 
   const requiredOlas = getMinimumStakedAmountRequired(
     serviceTemplate,
-    activeStakingProgram ?? defaultStakingProgram,
+    activeStakingProgramId ?? defaultStakingProgramId,
   );
 
   const safeOlasBalance = safeBalance?.OLAS;
@@ -155,7 +155,7 @@ const AgentNotRunningButton = () => {
     // Then create / deploy the service
     try {
       await ServicesService.createService({
-        stakingProgram: activeStakingProgram ?? defaultStakingProgram, // overwrite with StakingProgram.Alpha to test migration
+        stakingProgramId: activeStakingProgramId ?? defaultStakingProgramId, // overwrite with StakingProgram.Alpha to test migration
         serviceTemplate,
         deploy: true,
       });
@@ -170,18 +170,7 @@ const AgentNotRunningButton = () => {
 
     // Show success notification based on whether there was a service prior to starting
     try {
-      if (!service) {
-        showNotification?.('Your agent is now running!');
-      } else {
-        const minimumStakedAmountRequired = getMinimumStakedAmountRequired(
-          serviceTemplate,
-          StakingProgram.Beta, // users should always deploy on Beta if they are yet to start their agent
-        );
-
-        showNotification?.(
-          `Your agent is running and you've staked ${minimumStakedAmountRequired} OLAS!`,
-        );
-      }
+      showNotification?.(`Your agent is running!`);
     } catch (error) {
       console.error(error);
       showNotification?.('Error while showing "running" notification');
@@ -199,10 +188,9 @@ const AgentNotRunningButton = () => {
     setServiceStatus,
     masterSafeAddress,
     showNotification,
-    activeStakingProgram,
-    defaultStakingProgram,
+    activeStakingProgramId,
+    defaultStakingProgramId,
     serviceTemplate,
-    service,
   ]);
 
   const isDeployable = useMemo(() => {

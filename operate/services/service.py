@@ -21,8 +21,10 @@
 
 import json
 import os
+import platform
 import shutil
 import subprocess  # nosec
+import sys
 import typing as t
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -272,11 +274,17 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
     def generate_config_tendermint(self) -> "HostDeploymentGenerator":
         """Generate tendermint configuration."""
         tmhome = str(self.build_dir / "node")
+        tendermint_executable = str(
+            shutil.which("tendermint"),
+        )
+        # TODO: move all platform related things to a dedicated file
+        if platform.system() == "Windows":
+            tendermint_executable = str(
+                Path(os.path.dirname(sys.executable)) / "tendermint.exe"
+            )
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
-                str(
-                    shutil.which("tendermint"),
-                ),
+                tendermint_executable,
                 "--home",
                 tmhome,
                 "init",

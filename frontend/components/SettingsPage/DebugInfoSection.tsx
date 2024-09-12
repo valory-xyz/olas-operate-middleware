@@ -175,7 +175,7 @@ export const DebugInfoSection = () => {
         ?.instances?.[0];
     if (instanceAddress) {
       result.push({
-        title: 'Agent instance',
+        title: 'Agent Instance EOA',
         ...getItemData(walletBalances, instanceAddress!),
       });
     }
@@ -186,10 +186,6 @@ export const DebugInfoSection = () => {
       result.push({
         title: 'Agent Safe',
         ...getItemData(walletBalances, multisigAddress),
-        link: {
-          title: 'See agent activity on Pandora',
-          href: `https://pandora.computer/predict/${multisigAddress}`,
-        },
       });
     }
 

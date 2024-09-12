@@ -1,3 +1,4 @@
+import { isNil } from 'lodash';
 import { useContext } from 'react';
 
 import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
@@ -5,9 +6,11 @@ import { StakingContractInfoContext } from '@/context/StakingContractInfoProvide
 import { useServices } from './useServices';
 
 export const useStakingContractInfo = () => {
-  const { activeStakingContractInfo, stakingContractInfoRecord } = useContext(
-    StakingContractInfoContext,
-  );
+  const {
+    activeStakingContractInfo,
+    stakingContractInfoRecord,
+    isStakingContractInfoLoaded,
+  } = useContext(StakingContractInfoContext);
 
   const { services } = useServices();
 
@@ -17,19 +20,28 @@ export const useStakingContractInfo = () => {
   const {
     serviceStakingState,
     serviceStakingStartTime,
-    availableRewards,
+    //availableRewards, // TODO: uncomment when availableRewards is available
     serviceIds,
     maxNumServices,
     minimumStakingDuration,
   } = activeStakingContractInfo;
 
   const isRewardsAvailable = true; // availableRewards > 0;
-  const hasEnoughServiceSlots = serviceIds.length < maxNumServices;
+
+  const hasEnoughServiceSlots =
+    !isNil(serviceIds) &&
+    !isNil(maxNumServices) &&
+    serviceIds.length < maxNumServices;
+
   const hasEnoughRewardsAndSlots = isRewardsAvailable && hasEnoughServiceSlots;
 
   const isAgentEvicted = serviceStakingState === 2;
 
+  const isServiceStaked =
+    !!serviceStakingStartTime && serviceStakingState === 1;
+
   /**
+   * Important: Assumes service is staked. Returns false for unstaked.
    * For example: minStakingDuration = 3 days
    *
    * - Service starts staking 1st June 00:01
@@ -41,25 +53,31 @@ export const useStakingContractInfo = () => {
    *
    */
   const isServiceStakedForMinimumDuration =
+    !isNil(serviceStakingStartTime) &&
+    !isNil(minimumStakingDuration) &&
     Math.round(Date.now() / 1000) - serviceStakingStartTime >=
-    minimumStakingDuration;
+      minimumStakingDuration;
 
   /**
-   * user can start the agent iff,
+   * User can only stake if:
    * - rewards are available
    * - service has enough slots
-   * - if agent is evicted, then service should be staked for minimum duration
+   * - agent is not evicted
+   *    - if agent is evicted, then service should be staked for minimum duration
    */
   const isEligibleForStaking =
-    hasEnoughRewardsAndSlots &&
+    !isNil(hasEnoughRewardsAndSlots) &&
     (isAgentEvicted ? isServiceStakedForMinimumDuration : true);
 
   return {
+    activeStakingContractInfo,
     hasEnoughServiceSlots,
     isEligibleForStaking,
     isRewardsAvailable,
     isAgentEvicted,
-    stakingContractInfoRecord,
     isServiceStakedForMinimumDuration,
+    isServiceStaked,
+    isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
   };
 };

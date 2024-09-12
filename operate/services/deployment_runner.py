@@ -22,7 +22,6 @@ import json
 import os
 import platform
 import shutil  # nosec
-import signal  # nosec
 import subprocess  # nosec
 import sys  # nosec
 import time
@@ -55,7 +54,6 @@ class AbstractDeploymentRunner(ABC):
 
 def _kill_process(pid: int) -> None:
     """Kill process."""
-    print(f"Trying to kill process: {pid}")
     while True:
         if not psutil.pid_exists(pid=pid):
             return
@@ -66,14 +64,7 @@ def _kill_process(pid: int) -> None:
         ):
             return
         try:
-            os.kill(
-                pid,
-                (
-                    signal.CTRL_C_EVENT  # type: ignore
-                    if platform.platform() == "Windows"
-                    else signal.SIGKILL
-                ),
-            )
+            process.kill()
         except OSError:
             return
         time.sleep(1)
@@ -236,14 +227,15 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
+        env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._aea_bin, "run"],
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={**os.environ, **env},
+            env=env,
             creationflags=(
-                0x00000008 if platform.system() == "Windows" else 0
+                0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
         (working_dir / "agent.pid").write_text(
@@ -255,21 +247,49 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start tendermint process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
+        env = {
+            **os.environ,
+            **env,
+        }
+
+        if platform.system() == "Windows":
+            # to look up for bundled in tendermint.exe
+            env["PATH"] = os.environ["PATH"] + ";" + os.path.dirname(sys.executable)
+
         tendermint_com = self._tendermint_bin  # type: ignore  # pylint: disable=protected-access
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[tendermint_com],
             cwd=working_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            env={**os.environ, **env},
+            env=env,
             creationflags=(
-                0x00000008 if platform.system() == "Windows" else 0
+                0x00000200 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
         (working_dir / "tendermint.pid").write_text(
             data=str(process.pid),
             encoding="utf-8",
         )
+
+
+class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
+    """Mac deployment runner."""
+
+
+class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
+    """Windows deployment runner."""
+
+    @property
+    def _aea_bin(self) -> str:
+        """Return aea_bin path."""
+        abin = str(Path(sys._MEIPASS) / "aea_win.exe")  # type: ignore # pylint: disable=protected-access
+        return abin
+
+    @property
+    def _tendermint_bin(self) -> str:
+        """Return tendermint path."""
+        return str(Path(sys._MEIPASS) / "tendermint_win.exe")  # type: ignore # pylint: disable=protected-access
 
 
 class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
@@ -368,8 +388,15 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
 def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     """Return depoyment runner according to running env."""
     deployment_runner: BaseDeploymentRunner
+
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        deployment_runner = PyInstallerHostDeploymentRunner(build_dir)
+        # pyinstaller inside!
+        if platform.system() == "Darwin":
+            deployment_runner = PyInstallerHostDeploymentRunner(build_dir)
+        elif platform.system() == "Windows":
+            deployment_runner = PyInstallerHostDeploymentRunnerWindows(build_dir)
+        else:
+            raise ValueError(f"Platform not supported {platform.system()}")
     else:
         deployment_runner = HostPythonHostDeploymentRunner(build_dir)
     return deployment_runner

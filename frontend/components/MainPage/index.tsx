@@ -3,7 +3,7 @@ import { Button, Card, Flex } from 'antd';
 import { useEffect } from 'react';
 
 import { Pages } from '@/enums/PageState';
-import { StakingProgram } from '@/enums/StakingProgram';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
@@ -17,12 +17,13 @@ import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { NewStakingProgramAlertSection } from './sections/NewStakingProgramAlertSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { MainRewards } from './sections/RewardsSection';
+import { StakingContractUpdate } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
   const { updateServicesState } = useServices();
   const { updateBalances, isLoaded, setIsLoaded } = useBalance();
-  const { activeStakingProgram: currentStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId: currentStakingProgram } = useStakingProgram();
 
   useEffect(() => {
     if (!isLoaded) {
@@ -53,12 +54,13 @@ export const Main = () => {
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
-        {currentStakingProgram === StakingProgram.Alpha && (
+        {currentStakingProgram === StakingProgramId.Alpha && (
           <NewStakingProgramAlertSection />
         )}
         <MainOlasBalance />
         <MainRewards />
         <KeepAgentRunningSection />
+        <StakingContractUpdate />
         <GasBalanceSection />
         <MainNeedsFunds />
         <AddFundsSection />

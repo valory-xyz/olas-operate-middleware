@@ -17,7 +17,7 @@ const http = require('http');
 const AdmZip = require('adm-zip');
 const { TRAY_ICONS, TRAY_ICONS_PATHS } = require('./icons');
 
-const { setupDarwin, setupUbuntu, Env } = require('./install');
+const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
 const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
@@ -39,6 +39,9 @@ const binaryPaths = {
     arm64: 'bins/pearl_arm64',
     x64: 'bins/pearl_x64',
   },
+  win32: {
+    x64: 'bins/pearl_win.exe',
+  },
 };
 
 let appConfig = {
@@ -54,8 +57,12 @@ let appConfig = {
   },
 };
 
+/**
+ * @type {BrowserWindow}
+ */
+let mainWindow;
+
 let tray,
-  mainWindow,
   splashWindow,
   operateDaemon,
   operateDaemonPid,
@@ -240,6 +247,14 @@ const createMainWindow = async () => {
     showNotification(title, description || undefined);
   });
 
+  // if app (ie. mainWindow) is loaded, destroy splash window.
+  ipcMain.on('is-app-loaded', (_event, isLoaded) => {
+    if (isLoaded && splashWindow) {
+      splashWindow.destroy();
+      splashWindow = null;
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
@@ -258,7 +273,7 @@ const createMainWindow = async () => {
     event.preventDefault();
     mainWindow.hide();
   });
-  
+
   try {
     logger.electron('Setting up store IPC');
     await setupStoreIpc(ipcMain, mainWindow);
@@ -398,6 +413,7 @@ async function launchNextAppDev() {
       'yarn',
       ['dev:frontend', '--port', appConfig.ports.dev.next],
       {
+        shell: true,
         env: {
           ...process.env,
           NEXT_PUBLIC_BACKEND_PORT: appConfig.ports.dev.operate,
@@ -441,7 +457,7 @@ ipcMain.on('check', async function (event, _argument) {
     if (platform === 'darwin') {
       await setupDarwin(event.sender);
     } else if (platform === 'win32') {
-      // TODO
+      await setupWindows(event.sender);
     } else {
       await setupUbuntu(event.sender);
     }
@@ -498,7 +514,6 @@ ipcMain.on('check', async function (event, _argument) {
     event.sender.send('response', 'Launching App');
     await createMainWindow();
     createTray();
-    splashWindow.destroy();
   } catch (e) {
     logger.electron(e);
     new Notification({
@@ -517,6 +532,7 @@ app.on('ready', async () => {
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
+
   createSplashWindow();
 });
 
