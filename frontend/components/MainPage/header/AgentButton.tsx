@@ -1,11 +1,12 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Button, ButtonProps, Flex, Popover, Typography } from 'antd';
+import { Button, ButtonProps, Flex, Popover, Tooltip, Typography } from 'antd';
 import { useCallback, useMemo } from 'react';
 
 import { Chain, DeploymentStatus } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
@@ -21,11 +22,27 @@ import {
   CannotStartAgentPopover,
 } from './CannotStartAgentPopover';
 import { requiredGas } from './constants';
+import { LastTransaction } from './LastTransaction';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 const LOADING_MESSAGE =
   "Starting the agent may take a while, so feel free to minimize the app. We'll notify you once it's running. Please, don't quit the app.";
+
+const IdleTooltip = () => (
+  <Tooltip
+    placement="bottom"
+    arrow={false}
+    title={
+      <Paragraph className="text-sm m-0">
+        Your agent earned rewards for this epoch and stopped working. It’ll
+        return to work once the next epoch starts.
+      </Paragraph>
+    }
+  >
+    <InfoCircleOutlined />
+  </Tooltip>
+);
 
 const AgentStartingButton = () => (
   <Popover
@@ -55,6 +72,7 @@ const AgentStoppingButton = () => (
 
 const AgentRunningButton = () => {
   const { showNotification } = useElectronApi();
+  const { isEligibleForRewards } = useReward();
   const { service, setIsServicePollingPaused, setServiceStatus } =
     useServices();
 
@@ -76,14 +94,33 @@ const AgentRunningButton = () => {
     }
   }, [service, setIsServicePollingPaused, setServiceStatus, showNotification]);
 
+  /**
+   * logic to improve activity
+   * - Pool for the last transaction agent safe has made (TODO: agent safe or agent instance?)
+   * - Update the time of the last transaction
+   * - If the reward is "earned", show a different image with Agent as Idle
+   *  - and also a tooltip
+   */
+
   return (
     <Flex gap={10} align="center">
       <Button type="default" size="large" onClick={handlePause}>
         Pause
       </Button>
-      <Typography.Text type="secondary" className="text-sm loading-ellipses">
-        Agent is working
-      </Typography.Text>
+
+      <Flex vertical>
+        {isEligibleForRewards ? (
+          <Text type="secondary" className="text-sm">
+            Agent is idle&nbsp;
+            <IdleTooltip />
+          </Text>
+        ) : (
+          <Text type="secondary" className="text-sm loading-ellipses">
+            Agent is working
+          </Text>
+        )}
+        <LastTransaction />
+      </Flex>
     </Flex>
   );
 };
@@ -252,6 +289,8 @@ export const AgentButton = () => {
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
 
   return useMemo(() => {
+    return <AgentRunningButton />;
+
     if (!hasInitialLoaded) {
       return <Button type="primary" size="large" disabled loading />;
     }
