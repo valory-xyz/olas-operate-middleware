@@ -94,14 +94,6 @@ const AgentRunningButton = () => {
     }
   }, [service, setIsServicePollingPaused, setServiceStatus, showNotification]);
 
-  /**
-   * logic to improve activity
-   * - Pool for the last transaction agent safe has made (TODO: agent safe or agent instance?)
-   * - Update the time of the last transaction
-   * - If the reward is "earned", show a different image with Agent as Idle
-   *  - and also a tooltip
-   */
-
   return (
     <Flex gap={10} align="center">
       <Button type="default" size="large" onClick={handlePause}>
