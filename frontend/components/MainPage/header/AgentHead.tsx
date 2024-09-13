@@ -26,7 +26,7 @@ const StoppedAgentHead = () => (
 );
 
 const IdleAgentHead = () => (
-  <Badge dot color="red" offset={badgeOffset}>
+  <Badge dot status="processing" color="green" offset={badgeOffset}>
     <Image src="/idle-robot.svg" alt="Idle Robot" width={40} height={40} />
   </Badge>
 );

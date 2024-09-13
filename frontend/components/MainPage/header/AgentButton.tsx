@@ -281,8 +281,6 @@ export const AgentButton = () => {
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
 
   return useMemo(() => {
-    return <AgentRunningButton />;
-
     if (!hasInitialLoaded) {
       return <Button type="primary" size="large" disabled loading />;
     }
