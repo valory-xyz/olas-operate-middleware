@@ -1,5 +1,5 @@
 import { Button, Flex, Form, Input, Typography } from 'antd';
-import { ethers } from 'ethers';
+import { getAddress } from 'ethers/lib/utils';
 
 import { CardFlex } from '@/components/styled/CardFlex';
 import { FormFlex } from '@/components/styled/FormFlex';
@@ -17,8 +17,8 @@ export const SetupBackupSigner = () => {
   const [form] = Form.useForm();
 
   const handleFinish = (values: { 'backup-signer': string }) => {
-    const checksummedAddress = ethers.utils.getAddress(
-      values['backup-signer'],
+    const checksummedAddress = getAddress(
+      values['backup-signer'].toLowerCase(), // important to lowercase the address before checksumming, invalid checksums will cause ethers to throw
     ) as Address | null; // returns null if invalid, ethers type is incorrect...
 
     // If the address is invalid, show an error message
@@ -50,7 +50,7 @@ export const SetupBackupSigner = () => {
             rules={[
               {
                 required: true,
-                min: 42,
+                len: 42,
                 pattern: /^0x[a-fA-F0-9]{40}$/,
                 type: 'string',
                 message: invalidAddressMessage,
