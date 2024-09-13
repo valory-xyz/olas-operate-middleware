@@ -22,10 +22,7 @@ const Loader = styled(Skeleton.Input)`
 const POLLING_INTERVAL = 60 * 1000; // 1 minute
 
 /**
- * TODO:
- * - add cache if the same block number is requested
- *
- * Components to display the last transaction time and link to the transaction on GnosisScan
+ * Component to display the last transaction time and link to the transaction on GnosisScan
  * by agent safe.
  */
 export const LastTransaction = () => {
@@ -37,7 +34,7 @@ export const LastTransaction = () => {
   const fetchTransaction = useCallback(async () => {
     if (!multisigAddress) return;
 
-    getLatestTransaction(`${process.env.GNOSIS_RPC}`, multisigAddress)
+    getLatestTransaction(multisigAddress)
       .then((tx) => setTransaction(tx))
       .catch((error) =>
         console.error('Failed to get latest transaction', error),
@@ -66,14 +63,17 @@ export const LastTransaction = () => {
   }
 
   return (
-    <Text
-      type="secondary"
-      className="text-xs pointer"
-      onClick={() =>
-        window.open(`https://gnosisscan.io/tx/${transaction.hash}`)
-      }
-    >
-      Last txn: {getTimeAgo(transaction.timestamp)} ↗
+    <Text type="secondary" className="text-xs">
+      Last txn:&nbsp;
+      <Text
+        type="secondary"
+        className="text-xs pointer hover-underline"
+        onClick={() =>
+          window.open(`https://gnosisscan.io/tx/${transaction.hash}`)
+        }
+      >
+        {getTimeAgo(transaction.timestamp)} ↗
+      </Text>
     </Text>
   );
 };

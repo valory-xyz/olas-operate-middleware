@@ -91,46 +91,44 @@ const checkRpc = async (rpc: string): Promise<boolean> => {
 };
 
 const BACK_TRACK_BLOCKS = 9000;
-const MAX_ROUNDS = 10;
+const MAX_ROUNDS = 5;
+
+const getLogsList = async (
+  contractAddress: Address,
+  fromBlock: number,
+  toBlock: number,
+  roundsLeft: number,
+): Promise<providers.Log[]> => {
+  // Limit the number of recursive calls to prevent too many requests
+  if (roundsLeft === 0) return [];
+
+  const filter = {
+    address: contractAddress,
+    fromBlock,
+    toBlock,
+  };
+  const list = await gnosisProvider.getLogs(filter);
+
+  if (list.length > 0) return list;
+
+  return getLogsList(
+    contractAddress,
+    fromBlock - BACK_TRACK_BLOCKS,
+    fromBlock,
+    roundsLeft - 1,
+  );
+};
 
 /**
  * Get the latest transaction details for the given contract address
  */
 export const getLatestTransaction = async (
-  rpc: string,
   contractAddress: Address,
 ): Promise<TransactionInfo | null> => {
-  const provider = new providers.StaticJsonRpcProvider(rpc, {
-    name: 'Gnosis',
-    chainId: 100, // we currently only support Gnosis Trader agent
-  });
-
-  const latestBlock = await provider.getBlockNumber();
-
-  const getLogsList = async (
-    fromBlock: number,
-    toBlock: number,
-    roundsLeft: number,
-  ): Promise<providers.Log[]> => {
-    // Limit the number of recursive calls to prevent infinite loop
-    if (roundsLeft === 0) return [];
-
-    const filter = {
-      address: contractAddress,
-      fromBlock,
-      toBlock,
-    };
-    const list = await provider.getLogs(filter);
-    if (list.length > 0) return list;
-
-    return getLogsList(
-      fromBlock - BACK_TRACK_BLOCKS,
-      fromBlock,
-      roundsLeft - 1,
-    );
-  };
+  const latestBlock = await gnosisProvider.getBlockNumber();
 
   const logs = await getLogsList(
+    contractAddress,
     latestBlock - BACK_TRACK_BLOCKS,
     latestBlock,
     MAX_ROUNDS,
@@ -142,8 +140,8 @@ export const getLatestTransaction = async (
   // Get the last log entry and fetch the transaction details
   const lastLog = logs[logs.length - 1];
   const txHash = lastLog.transactionHash;
-  const receipt = await provider.getTransactionReceipt(txHash);
-  const block = await provider.getBlock(receipt.blockNumber);
+  const receipt = await gnosisProvider.getTransactionReceipt(txHash);
+  const block = await gnosisProvider.getBlock(receipt.blockNumber);
   const timestamp = block.timestamp;
 
   return { hash: txHash, timestamp };

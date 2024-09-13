@@ -202,6 +202,12 @@ ul.alert-list {
   width: 0px;
 }
 
+.hover-underline {
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 @keyframes ellipsis {
   to {
     width: 40px;
