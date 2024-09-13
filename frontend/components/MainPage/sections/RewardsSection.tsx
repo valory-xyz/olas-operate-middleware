@@ -33,7 +33,7 @@ const DisplayRewards = () => {
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
       <Text type="secondary">
-        Staking rewards this work period&nbsp;
+        Staking rewards this epoch&nbsp;
         <Tooltip
           arrow={false}
           title={

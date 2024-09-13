@@ -13,12 +13,11 @@ import {
 import { useCallback, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
-import { CHAINS } from '@/constants/chains';
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Token } from '@/enums/Token';
+import { useAddress } from '@/hooks/useAddress';
 import { useBalance } from '@/hooks/useBalance';
-import { useServices } from '@/hooks/useServices';
 import { useWallet } from '@/hooks/useWallet';
 import { WalletAddressNumberRecord } from '@/types/Records';
 import { copyToClipboard } from '@/utils/copyToClipboard';
@@ -143,7 +142,7 @@ const DebugItem = ({
 
 export const DebugInfoSection = () => {
   const { wallets, masterEoaAddress, masterSafeAddress } = useWallet();
-  const { services } = useServices();
+  const { instanceAddress, multisigAddress } = useAddress();
   const { walletBalances } = useBalance();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -151,7 +150,6 @@ export const DebugInfoSection = () => {
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
 
   const data = useMemo(() => {
-    if (!services) return null;
     if (!wallets?.length) return null;
 
     const result = [];
@@ -170,9 +168,6 @@ export const DebugInfoSection = () => {
       });
     }
 
-    const instanceAddress =
-      services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
-        ?.instances?.[0];
     if (instanceAddress) {
       result.push({
         title: 'Agent Instance EOA',
@@ -180,8 +175,6 @@ export const DebugInfoSection = () => {
       });
     }
 
-    const multisigAddress =
-      services[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
     if (multisigAddress) {
       result.push({
         title: 'Agent Safe',
@@ -193,7 +186,8 @@ export const DebugInfoSection = () => {
   }, [
     masterEoaAddress,
     masterSafeAddress,
-    services,
+    instanceAddress,
+    multisigAddress,
     walletBalances,
     wallets?.length,
   ]);
