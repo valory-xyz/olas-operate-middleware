@@ -5,7 +5,7 @@ import { useInterval } from 'usehooks-ts';
 
 import { useAddress } from '@/hooks/useAddress';
 import { getLatestTransaction } from '@/service/Ethers';
-import { Transaction } from '@/types/Transaction';
+import { TransactionInfo } from '@/types/TransactionInfo';
 import { getTimeAgo } from '@/utils/time';
 
 const { Text } = Typography;
@@ -32,7 +32,7 @@ export const LastTransaction = () => {
   const { multisigAddress } = useAddress();
 
   const [isFetching, setIsFetching] = useState(true);
-  const [transaction, setTransaction] = useState<Transaction | null>(null);
+  const [transaction, setTransaction] = useState<TransactionInfo | null>(null);
 
   const fetchTransaction = useCallback(async () => {
     if (!multisigAddress) return;
