@@ -60,7 +60,7 @@ export const LastTransaction = () => {
   if (!transaction) {
     return (
       <Text type="secondary" className="text-xs">
-        No transactions yet
+        No transactions recently!
       </Text>
     );
   }

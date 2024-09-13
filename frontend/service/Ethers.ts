@@ -91,6 +91,7 @@ const checkRpc = async (rpc: string): Promise<boolean> => {
 };
 
 const BACK_TRACK_BLOCKS = 9000;
+const MAX_ROUNDS = 10;
 
 /**
  * Get the latest transaction details for the given contract address
@@ -105,25 +106,14 @@ export const getLatestTransaction = async (
   });
 
   const latestBlock = await provider.getBlockNumber();
-  // const latestBlock = await provider.getBlockNumber();
 
-  // Fetch logs for the contract (this will include all events emitted by the contract)
-  // const logs = await provider.getLogs({
-  //   fromBlock: latestBlock - BACK_TRACK_BLOCKS,
-  //   address: contractAddress,
-  //   toBlock: latestBlock,
-  // });
-
-  let count = 0;
   const getLogsList = async (
     fromBlock: number,
     toBlock: number,
+    roundsLeft: number,
   ): Promise<providers.Log[]> => {
-    console.log({ fromBlock, toBlock });
-
     // Limit the number of recursive calls to prevent infinite loop
-    if (count > 10) return [];
-    count = count + 1;
+    if (roundsLeft === 0) return [];
 
     const filter = {
       address: contractAddress,
@@ -133,22 +123,28 @@ export const getLatestTransaction = async (
     const list = await provider.getLogs(filter);
     if (list.length > 0) return list;
 
-    return getLogsList(fromBlock - BACK_TRACK_BLOCKS, fromBlock);
+    return getLogsList(
+      fromBlock - BACK_TRACK_BLOCKS,
+      fromBlock,
+      roundsLeft - 1,
+    );
   };
 
-  const logs = await getLogsList(latestBlock - BACK_TRACK_BLOCKS, latestBlock);
-  console.log({ latestBlock, logs });
+  const logs = await getLogsList(
+    latestBlock - BACK_TRACK_BLOCKS,
+    latestBlock,
+    MAX_ROUNDS,
+  );
 
   // No transactions found
   if (logs.length === 0) return null;
 
-  // Get the last log entry
+  // Get the last log entry and fetch the transaction details
   const lastLog = logs[logs.length - 1];
   const txHash = lastLog.transactionHash;
   const receipt = await provider.getTransactionReceipt(txHash);
   const block = await provider.getBlock(receipt.blockNumber);
   const timestamp = block.timestamp;
-  console.log({ receipt, block });
 
   return { hash: txHash, timestamp };
 };
