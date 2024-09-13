@@ -1,4 +1,5 @@
 import { Button, Flex, Form, Input, Typography } from 'antd';
+import { ethers } from 'ethers';
 
 import { CardFlex } from '@/components/styled/CardFlex';
 import { FormFlex } from '@/components/styled/FormFlex';
@@ -8,13 +9,26 @@ import { Address } from '@/types/Address';
 
 import { SetupCreateHeader } from './SetupCreateHeader';
 
+const invalidAddressMessage = 'Please input a valid backup wallet address!';
+
 export const SetupBackupSigner = () => {
   const { goto } = useSetup();
   const { setBackupSigner } = useSetup();
   const [form] = Form.useForm();
 
-  const handleFinish = (values: { 'backup-signer': Address }) => {
-    setBackupSigner(values['backup-signer']);
+  const handleFinish = (values: { 'backup-signer': string }) => {
+    const checksummedAddress = ethers.utils.getAddress(
+      values['backup-signer'],
+    ) as Address | null; // returns null if invalid, ethers type is incorrect...
+
+    // If the address is invalid, show an error message
+    if (!checksummedAddress) {
+      return form.setFields([
+        { name: 'backup-signer', errors: [invalidAddressMessage] },
+      ]);
+    }
+
+    setBackupSigner(checksummedAddress);
     goto(SetupScreen.SetupEoaFunding);
   };
 
@@ -39,7 +53,7 @@ export const SetupBackupSigner = () => {
                 min: 42,
                 pattern: /^0x[a-fA-F0-9]{40}$/,
                 type: 'string',
-                message: 'Please input a valid backup wallet address!',
+                message: invalidAddressMessage,
               },
             ]}
           >
