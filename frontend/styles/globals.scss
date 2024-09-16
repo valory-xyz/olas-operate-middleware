@@ -161,8 +161,16 @@ button, input, select, textarea, .ant-input-suffix {
   font-size: 14px !important;
 }
 
+.text-xs {
+  font-size: 12px !important;
+}
+
 .text-center {
   text-align: center !important;
+}
+
+.pointer {
+  cursor: pointer;
 }
 
 .font-weight-600 {
@@ -192,6 +200,12 @@ ul.alert-list {
   content: "\2026";
   /* ascii code for the ellipsis character */
   width: 0px;
+}
+
+.hover-underline {
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 @keyframes ellipsis {

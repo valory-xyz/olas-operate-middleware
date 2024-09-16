@@ -1,4 +1,5 @@
 import { Button, Flex, Form, Input, Typography } from 'antd';
+import { getAddress } from 'ethers/lib/utils';
 
 import { CardFlex } from '@/components/styled/CardFlex';
 import { FormFlex } from '@/components/styled/FormFlex';
@@ -8,13 +9,26 @@ import { Address } from '@/types/Address';
 
 import { SetupCreateHeader } from './SetupCreateHeader';
 
+const invalidAddressMessage = 'Please input a valid backup wallet address!';
+
 export const SetupBackupSigner = () => {
   const { goto } = useSetup();
   const { setBackupSigner } = useSetup();
   const [form] = Form.useForm();
 
-  const handleFinish = (values: { 'backup-signer': Address }) => {
-    setBackupSigner(values['backup-signer']);
+  const handleFinish = (values: { 'backup-signer': string }) => {
+    const checksummedAddress = getAddress(
+      values['backup-signer'].toLowerCase(), // important to lowercase the address before checksumming, invalid checksums will cause ethers to throw
+    ) as Address | null; // returns null if invalid, ethers type is incorrect...
+
+    // If the address is invalid, show an error message
+    if (!checksummedAddress) {
+      return form.setFields([
+        { name: 'backup-signer', errors: [invalidAddressMessage] },
+      ]);
+    }
+
+    setBackupSigner(checksummedAddress);
     goto(SetupScreen.SetupEoaFunding);
   };
 
@@ -36,10 +50,10 @@ export const SetupBackupSigner = () => {
             rules={[
               {
                 required: true,
-                min: 42,
+                len: 42,
                 pattern: /^0x[a-fA-F0-9]{40}$/,
                 type: 'string',
-                message: 'Please input a valid backup wallet address!',
+                message: invalidAddressMessage,
               },
             ]}
           >

@@ -2,6 +2,7 @@ import { Badge } from 'antd';
 import Image from 'next/image';
 
 import { DeploymentStatus } from '@/client';
+import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 
 const badgeOffset: [number, number] = [-5, 32.5];
@@ -24,13 +25,26 @@ const StoppedAgentHead = () => (
   </Badge>
 );
 
+const IdleAgentHead = () => (
+  <Badge dot status="processing" color="green" offset={badgeOffset}>
+    <Image src="/idle-robot.svg" alt="Idle Robot" width={40} height={40} />
+  </Badge>
+);
+
 export const AgentHead = () => {
   const { serviceStatus } = useServices();
+  const { isEligibleForRewards } = useReward();
+
   if (
     serviceStatus === DeploymentStatus.DEPLOYING ||
     serviceStatus === DeploymentStatus.STOPPING
-  )
+  ) {
     return <TransitionalAgentHead />;
-  if (serviceStatus === DeploymentStatus.DEPLOYED) return <DeployedAgentHead />;
+  }
+
+  if (serviceStatus === DeploymentStatus.DEPLOYED) {
+    // If the agent is eligible for rewards, agent is idle
+    return isEligibleForRewards ? <IdleAgentHead /> : <DeployedAgentHead />;
+  }
   return <StoppedAgentHead />;
 };

@@ -688,7 +688,9 @@ ipcMain.handle('save-logs', async (_, data) => {
     title: 'Save Logs',
     defaultPath: path.join(
       os.homedir(),
-      `pearl_logs_${new Date(Date.now()).toISOString()}-${app.getVersion()}.zip`,
+      `pearl_logs_${new Date(Date.now())
+        .toISOString()
+        .replaceAll(':', '-')}-${app.getVersion()}.zip`,
     ),
     filters: [{ name: 'Zip Files', extensions: ['zip'] }],
   });
