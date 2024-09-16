@@ -1,135 +1,262 @@
 name: Release
 
-# This workflow is triggered on pushing a tag BE CAREFUL this application AUTO UPDATES !!! 
-# git tag vX.Y.Z
-# git push origin tag vX.Y.Z
-
+# Triggered on pushing a tag
 on:
-    push:
-        tags:
-            - 'v*.*.*'
+  push:
+    tags:
+      - "v*.*.*"
 
 jobs:
-    build-macos-pyinstaller:
-      runs-on: ${{ matrix.os }}
-      strategy:
-        matrix:
-          os: [ macos-14, macos-14-large ]
+  # PyInstaller job for both x64 and arm64 binaries
+  build-macos-pyinstaller:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-14, macos-14-large]
 
-      steps:
-        - uses: actions/checkout@v3
-        - uses: actions/setup-python@v4
-          with:
-            python-version: '3.10'
+    steps:
+      - uses: actions/checkout@v3
 
-        - name: Install and configure Poetry
-          uses: snok/install-poetry@v1
-          with:
-            version: '1.4.0'
-            virtualenvs-create: true
-            virtualenvs-in-project: false
-            virtualenvs-path: ~/my-custom-path
-            installer-parallel: true
+      # Setup Python
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
 
-        - name: Install dependencies
-          run: poetry install
+      # Install Poetry and its dependencies
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "1.4.0"
+          virtualenvs-create: true
+          virtualenvs-in-project: false
+          virtualenvs-path: ~/my-custom-path
+          installer-parallel: true
 
-        - name: Set arch environment variable for macos-latest-large
-          if: contains(matrix.os, 'large')
-          run: echo "OS_ARCH=x64" >> $GITHUB_ENV
+      - name: Install dependencies
+        run: poetry install
 
-        - name: Set arch environment variable for other macOS versions
-          if: ${{ !contains(matrix.os, 'large') }}
-          run: echo "OS_ARCH=arm64" >> $GITHUB_ENV
+      # Set architecture for macos-latest-large as x64 and arm64 for other versions
+      - name: Set architecture environment variable
+        run: |
+          if [ "${{ matrix.os }}" == "macos-14-large" ]; then echo "OS_ARCH=x64" >> $GITHUB_ENV; else echo "OS_ARCH=arm64" >> $GITHUB_ENV; fi
 
-        - name: Get trader bin
-          run: |
-            trader_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/trader.yaml')); print(config['service_version'])")
-            echo $trader_version
-            mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
+      # Download and build with PyInstaller
+      - name: Get trader bin
+        run: |
+          trader_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/trader.yaml')); print(config['service_version'])")
+          echo $trader_version
+          mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
 
-        - name: Build with PyInstaller
-          run: |
-             poetry run pyinstaller operate/services/utils/tendermint.py --onefile
-             poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_bin:.  --add-binary dist/tendermint:. --onefile --name pearl_${{ env.OS_ARCH }}
+      - name: Build with PyInstaller
+        run: |
+          poetry run pyinstaller operate/services/utils/tendermint.py --onefile
+          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_bin:. --add-binary dist/tendermint:. --onefile --name pearl_${{ env.OS_ARCH }}
 
-        - name: Upload Release Assets
-          uses: actions/upload-artifact@v4
-          with:
-            name: pearl_${{ env.OS_ARCH }}
-            path: dist/pearl_${{ env.OS_ARCH }}
+      - name: Upload Release Assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: pearl_${{ env.OS_ARCH }}
+          path: dist/pearl_${{ env.OS_ARCH }}
 
-    release-operate:
-        runs-on: macos-latest
-        needs:
-          - "build-macos-pyinstaller"
-        steps:
-            - uses: actions/checkout@v4
-            - uses: actions/setup-python@v4
-              with:
-                python-version: "3.10"
-            - uses: actions/setup-node@v4
-              with:
-                node-version: lts/*
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-              with:
-                name: pearl_x64
-                path: electron/bins/
-            - name: Download artifacts
-              uses: actions/download-artifact@v4
-              with:
-                name: pearl_arm64
-                path: electron/bins/
-            - name: Add exec permissions
-              run: chmod +x electron/bins/pearl_x64 && chmod +x electron/bins/pearl_arm64
-            - uses: snok/install-poetry@v1
-              with:
-                version: "1.7.1"
-                virtualenvs-create: true
-                virtualenvs-in-project: false
-                virtualenvs-path: ~/my-custom-path
-                installer-parallel: true
-            -   run: yarn install-deps
-            -   name: "Build frontend with env vars"
-                run: yarn build:frontend
-                env:
-                    NODE_ENV: production
-                    DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-                    IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-                    FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-            - run: rm -rf /dist
-            - name: "Build, notarize, publish"
-              env:
-                APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-                APPLE_ID: ${{ secrets.APPLEID }}
-                APPLETEAMID: ${{ secrets.APPLETEAMID }}
-                CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-                CSC_LINK: ${{ secrets.CSC_LINK }}
-                GH_TOKEN: ${{ secrets.github_token}}
-                NODE_ENV: production
-                DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-                FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-              run: node build.js
-            - name: "Build frontend with dev env vars"
-              run: yarn build:frontend
-              env:
-                NODE_ENV: development
-                DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
-                IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-                FORK_URL: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
-            - name: "Build, notarize, publish dev build"
-              env:
-                APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-                APPLE_ID: ${{ secrets.APPLEID }}
-                APPLETEAMID: ${{ secrets.APPLETEAMID }}
-                CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-                CSC_LINK: ${{ secrets.CSC_LINK }}
-                GH_TOKEN: ${{ secrets.github_token}}
-                NODE_ENV: development
-                DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
-                FORK_URL: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
-              run: |
-                echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b" >> .env
-                echo -e "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b" >> .env
-                node build.js
+  # Jobs for production and development, running separately for x64 and arm64
+  build-release:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        env: [production, development]
+        arch: [arm64, x64]
+
+    needs: build-macos-pyinstaller
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Download the appropriate architecture artifact
+      - name: Download Pearl binary for architecture
+        uses: actions/download-artifact@v4
+        with:
+          name: pearl_${{ matrix.arch }}
+          path: electron/bins/
+
+      # Add execution permissions to the binaries
+      - name: Add exec permissions
+        run: chmod +x electron/bins/pearl_${{ matrix.arch }}
+
+      # Cache node_modules with unique key for each environment and architecture
+      - name: Cache Node.js modules
+        uses: actions/cache@v3
+        with:
+          path: |
+            node_modules
+            frontend/node_modules
+          key: node-modules-${{ matrix.env }}-${{ matrix.arch }}-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            node-modules-${{ matrix.env }}-${{ matrix.arch }}-
+
+      # Cache Poetry dependencies with unique key for each environment and architecture
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+            ~/.venv
+          key: poetry-${{ matrix.env }}-${{ matrix.arch }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ matrix.env }}-${{ matrix.arch }}-
+
+      # Install dependencies
+      - name: Install dependencies
+        run: yarn install-deps
+
+      # Build frontend for production
+      - name: Build frontend for production
+        if: matrix.env == 'production'
+        run: yarn build:frontend
+        env:
+          NODE_ENV: ${{ matrix.env }}
+          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
+          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+
+      # Build frontend for development
+      - name: Build frontend for development
+        if: matrix.env == 'development'
+        run: yarn build:frontend
+        env:
+          NODE_ENV: ${{ matrix.env }}
+          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
+          IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
+          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
+
+      # Run the build and notarization process for production
+      - name: Build, notarize, and publish (Production)
+        if: matrix.env == 'production'
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLETEAMID: ${{ secrets.APPLETEAMID }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          GH_TOKEN: ${{ secrets.github_token }}
+          NODE_ENV: ${{ matrix.env }}
+          ARCH: ${{ matrix.arch }}
+          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+        run: node build.js
+
+      # Run the build and notarization process for development
+      - name: Build, notarize, and publish (Development)
+        if: matrix.env == 'development'
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLETEAMID: ${{ secrets.APPLETEAMID }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          GH_TOKEN: ${{ secrets.github_token }}
+          NODE_ENV: ${{ matrix.env }}
+          ARCH: ${{ matrix.arch }}
+          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
+          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b
+        run: |
+          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b" >> .env
+          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b" >> .env
+          node build.js
+
+  update-release:
+    name: Update Release Notes
+    runs-on: ubuntu-latest
+    needs: build-release
+
+    steps:
+      - uses: actions/checkout@v3
+
+      # Get the latest release matching the pushed tag (created by electron-builder)
+      - name: Get release by tag
+        id: release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const release = await github.repos.getReleaseByTag({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag: context.ref.replace('refs/tags/', '')
+            });
+            return release.data.id;
+
+      # Get the latest published release
+      - name: Get latest release tag
+        id: latest_release
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const latestRelease = await github.repos.getLatestRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo
+            });
+            return latestRelease.data.tag_name;
+
+      # Get list of merged PRs and format release notes
+      - name: Generate changelog
+        id: changelog
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const latestReleaseTag = '${{ steps.latest_release.outputs.result }}';
+            const currentTag = github.context.ref.replace('refs/tags/', '');
+
+            // Get commits between the latest release and the current tag
+            const { data: compareData } = await github.repos.compareCommits({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              base: latestReleaseTag,
+              head: currentTag
+            });
+
+            // Filter merged PRs based on commit messages
+            const prs = new Map();  // To avoid duplicates
+
+            for (const commit of compareData.commits) {
+              const { data: prData } = await github.search.issuesAndPullRequests({
+                q: `${commit.sha} repo:${context.repo.owner}/${context.repo.repo}`
+              });
+
+              // If PR found, format and store it
+              if (prData.items.length > 0) {
+                const pr = prData.items[0];
+                prs.set(pr.number, pr);
+              }
+            }
+
+            // Format the PRs into the "What's Changed" section
+            let changelog = `## What's Changed\n`;
+            for (const [prNumber, pr] of prs) {
+              changelog += `* ${pr.title} by @${pr.user.login} in ${pr.html_url}\n`;
+            }
+
+            // Add the full changelog link
+            changelog += `\n**Full Changelog**: https://github.com/${context.repo.owner}/${context.repo.repo}/compare/${latestReleaseTag}...${currentTag}`;
+
+            return changelog;
+
+      # Update the release description and set it to draft mode
+      - name: Update release description
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const release_id = ${{ steps.release.outputs.result }};
+            const changelog = ${{ steps.changelog.outputs.result }};
+            await github.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: release_id,
+              body: changelog,
+              draft: true  // Keep the release as draft
+            });

@@ -46,8 +46,8 @@ const main = async () => {
       mac: {
         target: [
           {
-            target: 'default',
-            arch: ['x64', 'arm64'],
+            target: 'dmg',
+            arch: [process.env.ARCH],
           },
         ],
         publish: publishOptions,
