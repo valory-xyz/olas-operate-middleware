@@ -32,13 +32,25 @@ jobs:
           virtualenvs-path: ~/my-custom-path
           installer-parallel: true
 
-      - name: Install dependencies
-        run: poetry install
-
       # Set architecture for macos-latest-large as x64 and arm64 for other versions
       - name: Set architecture environment variable
         run: |
           if [ "${{ matrix.os }}" == "macos-14-large" ]; then echo "OS_ARCH=x64" >> $GITHUB_ENV; else echo "OS_ARCH=arm64" >> $GITHUB_ENV; fi
+
+      # Cache Poetry dependencies with unique key for each environment and architecture
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/pypoetry
+            ~/.cache/pip
+            ~/.venv
+          key: poetry-${{ env.OS_ARCH }}-${{ hashFiles('**/poetry.lock') }}
+          restore-keys: |
+            poetry-${{ env.OS_ARCH }}-
+
+      - name: Install dependencies
+        run: poetry install
 
       # Download and build with PyInstaller
       - name: Get trader bin
@@ -70,12 +82,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
       - uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version: lts/20
 
       # Download the appropriate architecture artifact
       - name: Download Pearl binary for architecture
@@ -99,21 +108,11 @@ jobs:
           restore-keys: |
             node-modules-${{ matrix.env }}-${{ matrix.arch }}-
 
-      # Cache Poetry dependencies with unique key for each environment and architecture
-      - name: Cache Poetry dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/pypoetry
-            ~/.cache/pip
-            ~/.venv
-          key: poetry-${{ matrix.env }}-${{ matrix.arch }}-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            poetry-${{ matrix.env }}-${{ matrix.arch }}-
-
       # Install dependencies
       - name: Install dependencies
-        run: yarn install-deps
+        run: |
+          yarn install
+          yarn install:frontend
 
       # Build frontend for production
       - name: Build frontend for production
