@@ -49,7 +49,7 @@ from operate.services.service import (
     OnChainUserParams,
     Service,
 )
-from operate.types import LedgerConfig, ServiceTemplate
+from operate.types import LedgerConfig, ServiceTemplate, LedgerType, ChainType
 from operate.utils.gnosis import NULL_ADDRESS
 from operate.wallet.master import MasterWalletManager
 
@@ -1216,52 +1216,27 @@ class ServiceManager:
         chain_data.staked = False
         service.store()
 
-    def unstake_service_on_chain_from_safe(
-        self, hash: str, chain_id: str, staking_program_id: t.Optional[str] = None
-    ) -> None:
+    def unstake_service_on_chain_from_safe(self) -> None:
         """
         Unbond service on-chain
 
         :param hash: Service hash
         """
-
-        self.logger.info("unstake_service_on_chain_from_safe")
-        service = self.load_or_create(hash=hash)
-        chain_config = service.chain_configs[chain_id]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-
-        if staking_program_id is None:
-            self.logger.info(
-                "Cannot unstake service, `staking_program_id` is set to None"
-            )
-            return
-
-        if not chain_data.user_params.use_staking:
-            self.logger.info("Cannot unstake service, `use_staking` is set to false")
-            return
-
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        state = sftxb.staking_status(
-            service_id=chain_data.token,
-            staking_contract=STAKING[ledger_config.chain][staking_program_id],
+        rpc = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+        os.environ["CUSTOM_CHAIN_RPC"] = rpc
+        ledger_config = LedgerConfig(
+            rpc=rpc,
+            type=LedgerType.ETHEREUM,
+            chain=ChainType.GNOSIS,
         )
-        self.logger.info(f"Staking status for service {chain_data.token}: {state}")
-        if state not in {StakingState.STAKED, StakingState.EVICTED}:
-            self.logger.info("Cannot unstake service, it's not staked")
-            chain_data.staked = False
-            service.store()
-            return
-
-        self.logger.info(f"Unstaking service: {chain_data.token}")
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        service_id = 594
         sftxb.new_tx().add(
             sftxb.get_unstaking_data(
-                service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][staking_program_id],
+                service_id=service_id,
+                staking_contract="0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d",
             )
-        ).settle()
-        chain_data.staked = False
-        service.store()
+        ).add(sftxb.get_terminate_data(service_id=service_id)).add(sftxb.get_unbond_data(service_id=service_id)).settle()
 
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,

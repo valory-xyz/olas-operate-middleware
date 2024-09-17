@@ -20,6 +20,7 @@
 """Operate app CLI module."""
 
 import asyncio
+import json
 import logging
 import os
 import signal
@@ -30,6 +31,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum import EthereumCrypto, EthereumApi
+from autonomy.chain.base import registry_contracts
 from clea import group, params, run
 from compose.project import ProjectError
 from docker.errors import APIError
@@ -38,13 +41,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
 from uvicorn.main import run as uvicorn
+from web3 import Web3
+
+from autonomy.chain.config import ChainType as AutonomyChainType
 
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
 from operate.services.health_checker import HealthChecker
+from operate.services.protocol import GnosisSafeTransaction
 from operate.types import ChainType, DeploymentStatus
+from operate.utils.gnosis import SafeOperation
 from operate.wallet.master import MasterWalletManager
 
 
@@ -337,6 +345,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         operate.password = data["password"]
+        # recover stake
+        operate.service_manager().unstake_service_on_chain_from_safe()
+        # recover funds from service safe
+        recover_service_funds(operate)
+
+        exit(0)
         return JSONResponse(
             content={"message": "Login successful"},
             status_code=200,
@@ -752,6 +766,105 @@ def main() -> None:
     """CLI entry point."""
     run(cli=_operate)
 
+
+def get_erc20_balance(ledger_api: EthereumApi, token: str, account: str) -> int:
+    """Get ERC-20 token balance of an account."""
+    web3 = t.cast(EthereumApi, ledger_api).api
+
+    # ERC20 Token Standard Partial ABI
+    erc20_abi = [
+        {
+            "constant": True,
+            "inputs": [{"name": "_owner", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"name": "balance", "type": "uint256"}],
+            "type": "function",
+        }
+    ]
+
+    # Create contract instance
+    contract = web3.eth.contract(address=web3.to_checksum_address(token), abi=erc20_abi)
+
+    # Get the balance of the account
+    balance = contract.functions.balanceOf(web3.to_checksum_address(account)).call()
+
+    return balance
+
+
+def get_transfer_data(ledger_api: EthereumApi, token: str, account: str) -> int:
+    """Get ERC-20 token balance of an account."""
+    web3 = t.cast(EthereumApi, ledger_api).api
+
+    # ERC20 Token Standard Partial ABI
+    erc20_abi = [
+        {
+            "constant": True,
+            "inputs": [{"name": "_owner", "type": "address"}],
+            "name": "balanceOf",
+            "outputs": [{"name": "balance", "type": "uint256"}],
+            "type": "function",
+        }
+    ]
+
+    # Create contract instance
+    contract = web3.eth.contract(address=web3.to_checksum_address(token), abi=erc20_abi)
+
+    # Get the balance of the account
+    balance = contract.functions.balanceOf(web3.to_checksum_address(account)).call()
+
+    return balance
+
+
+def recover_service_funds(operate: OperateApp):
+    print(f"hererere: {operate._path}")
+    agent_key = "0x80B3eEc9C0C9B27eD29A2E41834a8A07fC05BCE0"
+    master_address = "0x31281c1ef5ccc43cc5af7637e6fd491a790ba2ae"
+    safe_address = "0xc6c10307b9ae985507064a7da090bc8efce5e908"
+    key_json_path = operate._path / "keys" / agent_key
+    with open(key_json_path, "r") as key_file:
+        key = json.load(key_file)["private_key"]
+
+    key_path = operate._path / "tmp"
+    with open(key_path, "w") as key_file:
+        key_file.write(key)
+
+    crypto = EthereumCrypto(key_path)
+    olas = "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f"
+    rpc = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+    os.environ["CUSTOM_CHAIN_RPC"] = rpc
+    ledger_api = EthereumApi(address=rpc)
+    xdai_balance = ledger_api.get_balance(safe_address)
+    olas_balance = get_erc20_balance(ledger_api, Web3.to_checksum_address(olas), safe_address )
+
+    print(f"xdai balance: {xdai_balance}")
+    print(f"olas balance: {olas_balance}")
+
+    # trasnfer all funds
+    transfer = registry_contracts.erc20.get_instance(ledger_api, olas).encodeABI("transfer", [Web3.to_checksum_address(master_address), olas_balance])
+    GnosisSafeTransaction(
+        ledger_api,
+        crypto=crypto,
+        chain_type=AutonomyChainType.GNOSIS,
+        safe=safe_address,
+    ).add(
+        {
+            "to": olas,
+            "value": 0,
+            "data": transfer,
+            "operation": SafeOperation.CALL,
+        }
+    ).add(
+        {
+            "to": Web3.to_checksum_address(master_address),
+            "value": xdai_balance,
+            "data": b"",
+            "operation": SafeOperation.CALL,
+        }
+    ).settle()
+
+
+    # delete the tmp key
+    os.remove(operate._path / "tmp")
 
 if __name__ == "__main__":
     main()

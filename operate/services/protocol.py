@@ -26,6 +26,7 @@ import json
 import logging
 import tempfile
 import time
+import traceback
 import typing as t
 from datetime import datetime
 from enum import Enum
@@ -113,10 +114,11 @@ class GnosisSafeTransaction:
 
     def build(self) -> t.Dict:
         """Build the transaction."""
+        multisend_adr = ContractConfigs.multisend.contracts[self.chain_type] or "0xA238CBeb142c10Ef7Ad8442C6D1f9E89e07e7761"
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
                 ledger_api=self.ledger_api,
-                contract_address=ContractConfigs.multisend.contracts[self.chain_type],
+                contract_address=multisend_adr,
                 multi_send_txs=self._txs,
             ).get("data")[2:]
         )
@@ -125,7 +127,7 @@ class GnosisSafeTransaction:
             contract_address=self.safe,
             value=0,
             safe_tx_gas=0,
-            to_address=ContractConfigs.multisend.contracts[self.chain_type],
+            to_address=multisend_adr,
             data=multisend_data,
             operation=SafeOperation.DELEGATE_CALL.value,
         ).get("tx_hash")[2:]
@@ -133,7 +135,7 @@ class GnosisSafeTransaction:
             safe_tx_hash=safe_tx_hash,
             ether_value=0,
             safe_tx_gas=0,
-            to_address=ContractConfigs.multisend.contracts[self.chain_type],
+            to_address=multisend_adr,
             operation=SafeOperation.DELEGATE_CALL.value,
             data=multisend_data,
         )
@@ -174,7 +176,10 @@ class GnosisSafeTransaction:
                 self.build()
                 tx_digest = self.ledger_api.send_signed_transaction(self.tx)
             except Exception as e:  # pylint: disable=broad-except
-                print(f"Error sending the safe tx: {e}")
+                # print error and trace
+                logging.error(f"Error while sending transaction: {e}")
+                # print trace
+                logging.error(traceback.format_exc())
                 tx_digest = None
 
             if tx_digest is not None:
