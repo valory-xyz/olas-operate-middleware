@@ -57,17 +57,15 @@ let appConfig = {
   },
 };
 
-/**
- * @type {BrowserWindow}
- */
-let mainWindow;
+/** @type {Electron.BrowserWindow | null} */
+let mainWindow = null;
+/** @type {Electron.BrowserWindow | null} */
+let splashWindow = null;
 
-let tray,
-  splashWindow,
-  operateDaemon,
-  operateDaemonPid,
-  nextAppProcess,
-  nextAppProcessPid;
+/** @type {Electron.Tray | null} */
+let tray = null;
+
+let operateDaemon, operateDaemonPid, nextAppProcess, nextAppProcessPid;
 
 function showNotification(title, body) {
   new Notification({ title, body }).show();
@@ -90,8 +88,9 @@ async function beforeQuit() {
     }
   }
 
-  tray && tray.destroy();
-  mainWindow && mainWindow.destroy();
+  tray?.destroy();
+  splashWindow?.destroy();
+  mainWindow?.destroy();
 }
 
 const getUpdatedTrayIcon = (iconPath) => {
@@ -104,6 +103,10 @@ const getUpdatedTrayIcon = (iconPath) => {
   return icon;
 };
 
+/** @type {() => Electron.BrowserWindow | null} */
+const getActiveWindow = () =>
+  splashWindow ? splashWindow : mainWindow ? mainWindow : null;
+
 /**
  * Creates the tray
  */
@@ -111,20 +114,17 @@ const createTray = () => {
   const trayPath = getUpdatedTrayIcon(
     isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
   );
-  const tray = new Tray(trayPath);
+
+  tray = new Tray(trayPath);
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show app',
-      click: function () {
-        mainWindow.show();
-      },
+      click: () => getActiveWindow()?.show(),
     },
     {
       label: 'Hide app',
-      click: function () {
-        mainWindow.hide();
-      },
+      click: () => getActiveWindow()?.hide(),
     },
     {
       label: 'Quit',
@@ -134,8 +134,6 @@ const createTray = () => {
       },
     },
   ]);
-  tray.setToolTip('Pearl');
-  tray.setContextMenu(contextMenu);
 
   ipcMain.on('tray', (_event, status) => {
     const isSupportedOS = isWindows || isMac;
@@ -171,6 +169,11 @@ const createTray = () => {
       }
     }
   });
+
+  tray.on('click', () => getActiveWindow()?.show());
+  tray.on('double-click', () => getActiveWindow()?.show());
+  tray.setToolTip('Pearl');
+  tray.setContextMenu(contextMenu);
 };
 
 const APP_WIDTH = 460;
