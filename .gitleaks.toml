@@ -535,11 +535,11 @@ entropy = 3.7
 secretGroup = 4
 
 [allowlist]
-description = "evm public keys"
-regex = '''^0x[a-fA-F0-9]{40}$'''
-
-[allowlist]
 description = "global allow lists"
-regexes = ['''219-09-9999''', '''078-05-1120''', '''(9[0-9]{2}|666)-\d{2}-\d{4}''']
+regexes = [
+    '''219-09-9999''', 
+    '''078-05-1120''', 
+    '''(9[0-9]{2}|666)-\d{2}-\d{4}''',
+    '''^0x[a-fA-F0-9]{40}$''', # evm public keys
+    ]
 paths = ['''(.*?)(jpg|gif|doc|pdf|bin|svg|socket)$''']
-
