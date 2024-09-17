@@ -120,20 +120,20 @@ const createTray = () => {
   const trayPath = getUpdatedTrayIcon(
     isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
   );
-  const tray = new Tray(trayPath);
+  tray = new Tray(trayPath);
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: 'Show app',
-      click: mainWindow.show,
+      click: () => mainWindow?.show(),
     },
     {
       label: 'Hide app',
-      click: mainWindow.hide,
+      click: () => mainWindow?.hide(),
     },
     {
       label: 'Quit',
-      click: app.quit,
+      click: () => app.quit(),
     },
   ]);
   tray.setToolTip('Pearl');
