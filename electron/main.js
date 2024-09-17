@@ -227,23 +227,23 @@ const createMainWindow = async () => {
   mainWindow.setMenuBarVisibility(true);
 
   ipcMain.on('close-app', () => {
-    mainWindow.close();
+    mainWindow?.close();
   });
 
   ipcMain.on('minimize-app', () => {
-    mainWindow.minimize();
+    mainWindow?.minimize();
   });
 
   app.on('activate', () => {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
+    if (mainWindow?.isMinimized()) {
+      mainWindow?.restore();
     } else {
-      mainWindow.show();
+      mainWindow?.show();
     }
   });
 
   ipcMain.on('set-height', (_event, height) => {
-    mainWindow.setSize(width, height);
+    mainWindow?.setSize(width, height);
   });
 
   ipcMain.on('show-notification', (_event, title, description) => {
