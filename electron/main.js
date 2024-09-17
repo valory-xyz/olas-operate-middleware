@@ -36,7 +36,7 @@ if (!singleInstanceLock) {
   } catch (e) {
     console.error(e);
   } finally {
-    app.quit();
+    app.exit();
   }
 }
 
@@ -529,27 +529,25 @@ ipcMain.on('check', async function (event, _argument) {
 });
 
 // APP-SPECIFIC EVENTS
-app.on('ready', async () => {
-  app.on('second-instance', () => {
-    logger.electron('Tried to open second instance.');
+app.on('second-instance', () => {
+  logger.electron('User attempted to open a second instance.');
 
-    if (mainWindow) {
-      logger.electron('Restoring main window.');
-      mainWindow.show();
-      return;
-    }
+  if (mainWindow) {
+    logger.electron('Restoring primary main window.');
+    mainWindow.show();
+    return;
+  }
 
-    if (splashWindow) {
-      logger.electron('Restoring splash window as there is no main window.');
-      splashWindow.show();
-      return;
-    }
+  if (splashWindow) {
+    logger.electron(
+      'Restoring primary splash window as there is no main window.',
+    );
+    splashWindow.show();
+    return;
+  }
+});
 
-    logger.electron('Nothing to restore, reloading.');
-    app.relaunch();
-    app.quit();
-  });
-
+app.once('ready', async () => {
   app.on('window-all-closed', () => {
     app.quit();
   });
