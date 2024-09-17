@@ -47,7 +47,7 @@ const main = async () => {
         target: [
           {
             target: 'dmg',
-            arch: [process.env.ARCH],
+            arch: [process.env.ARCH], // ARCH env is set during release CI
           },
         ],
         publish: publishOptions,
