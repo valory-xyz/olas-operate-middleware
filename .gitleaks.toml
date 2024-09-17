@@ -534,10 +534,9 @@ regex = '''(?i)((key|api|token|secret|password)[a-z0-9_ .\-,]{0,25})(=|>|:=|\|\|
 entropy = 3.7
 secretGroup = 4
 
-[[rules]]
-description = "evm-public-keys"
+[allowlist]
+description = "evm public keys"
 regex = '''^0x[a-fA-F0-9]{40}$'''
-allowlist = true
 
 [allowlist]
 description = "global allow lists"
