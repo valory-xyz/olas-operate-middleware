@@ -99,7 +99,7 @@ async function beforeQuit() {
   }
 
   tray?.destroy();
-  mainWindow.destroy();
+  mainWindow?.destroy();
   splashWindow?.destroy();
 }
 
