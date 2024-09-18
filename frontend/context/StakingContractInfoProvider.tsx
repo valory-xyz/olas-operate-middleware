@@ -1,6 +1,8 @@
 import {
   createContext,
+  Dispatch,
   PropsWithChildren,
+  SetStateAction,
   useCallback,
   useContext,
   useEffect,
@@ -20,20 +22,24 @@ import { StakingProgramContext } from './StakingProgramContext';
 
 type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
+  isPaused: boolean;
   isStakingContractInfoLoaded: boolean;
   stakingContractInfoRecord?: Record<
     StakingProgramId,
     Partial<StakingContractInfo>
   >;
   updateActiveStakingContractInfo: () => Promise<void>;
+  setIsPaused: Dispatch<SetStateAction<boolean>>;
 };
 
 export const StakingContractInfoContext =
   createContext<StakingContractInfoContextProps>({
     activeStakingContractInfo: undefined,
+    isPaused: false,
     isStakingContractInfoLoaded: false,
     stakingContractInfoRecord: undefined,
     updateActiveStakingContractInfo: async () => {},
+    setIsPaused: () => {},
   });
 
 export const StakingContractInfoProvider = ({
@@ -42,6 +48,7 @@ export const StakingContractInfoProvider = ({
   const { services } = useContext(ServicesContext);
   const { activeStakingProgramId } = useContext(StakingProgramContext);
 
+  const [isPaused, setIsPaused] = useState(false);
   const [isStakingContractInfoLoaded, setIsStakingContractInfoLoaded] =
     useState(false);
 
@@ -56,8 +63,7 @@ export const StakingContractInfoProvider = ({
     [services],
   );
 
-  // ACTIVE staking contract info should be updated on interval
-  // it requires serviceId and activeStakingProgram
+  /** Updates staking contract info specific to the actively staked service owned by the user */
   const updateActiveStakingContractInfo = useCallback(async () => {
     if (!serviceId) return;
     if (!activeStakingProgramId) return;
@@ -68,10 +74,15 @@ export const StakingContractInfoProvider = ({
     ).then(setActiveStakingContractInfo);
   }, [activeStakingProgramId, serviceId]);
 
-  useInterval(updateActiveStakingContractInfo, FIVE_SECONDS_INTERVAL);
+  useInterval(
+    async () => {
+      await updateStakingContractInfoRecord().catch(console.error);
+      await updateActiveStakingContractInfo().catch(console.error);
+    },
+    isPaused ? null : FIVE_SECONDS_INTERVAL,
+  );
 
-  // Record of staking contract info for each staking program
-  // not user/service specific
+  /** Updates general staking contract information, not user or service specific */
   const updateStakingContractInfoRecord = async () => {
     const alpha = AutonolasService.getStakingContractInfoByStakingProgram(
       StakingProgramId.Alpha,
@@ -97,12 +108,12 @@ export const StakingContractInfoProvider = ({
       });
       setIsStakingContractInfoLoaded(true);
     } catch (e) {
-      setIsStakingContractInfoLoaded(false);
+      console.error(e);
     }
   };
 
   useEffect(() => {
-    // Load staking contract info record on mount
+    // Load generic staking contract info record on mount
     updateStakingContractInfoRecord();
   }, []);
 
@@ -112,6 +123,8 @@ export const StakingContractInfoProvider = ({
         activeStakingContractInfo,
         isStakingContractInfoLoaded,
         stakingContractInfoRecord,
+        isPaused,
+        setIsPaused,
         updateActiveStakingContractInfo,
       }}
     >
