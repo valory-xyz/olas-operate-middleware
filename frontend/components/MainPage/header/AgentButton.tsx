@@ -218,13 +218,14 @@ const AgentNotRunningButton = () => {
       showNotification?.('Error while showing "running" notification');
     }
 
-    // TODO: remove this workaround, middleware should respond when agent is staked & confirmed running after `createService` call
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
     // Can assume successful deployment
     setServiceStatus(DeploymentStatus.DEPLOYED);
 
+    // TODO: remove this workaround, middleware should respond when agent is staked & confirmed running after `createService` call
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
     // update provider states sequentially
+    // service id is required before activeStakingContractInfo & balances can be updated
     try {
       await updateServicesState(); // reload the available services
       await updateActiveStakingContractInfo(); // reload active staking contract with new service
