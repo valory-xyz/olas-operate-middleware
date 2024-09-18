@@ -1,13 +1,13 @@
 import { InfoCircleOutlined, WalletOutlined } from '@ant-design/icons';
 import { Card, Flex, Tooltip, Typography } from 'antd';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
 import { MODAL_WIDTH } from '@/constants/width';
 
-import { InfoBreakdownList } from './InfoBreakdown';
-import { CustomModal } from './styled/CustomModal';
+import { InfoBreakdownList } from '../../../InfoBreakdown';
+import { CustomModal } from '../../../styled/CustomModal';
 
 const { Title, Paragraph } = Typography;
 
@@ -254,16 +254,20 @@ const YourAgentWallet = () => {
   );
 };
 
-export const AccountBalanceDetails = () => {
-  const [isModalVisible, setIsModalVisible] = useState(true);
+type AccountBalanceDetailsProps = {
+  hideAccountBalanceDetailsModal: () => void;
+};
 
+export const AccountBalanceDetails = ({
+  hideAccountBalanceDetailsModal,
+}: AccountBalanceDetailsProps) => {
   return (
     <CustomModal
       title="Account balance details"
-      open={isModalVisible}
+      open
       width={MODAL_WIDTH}
       bodyPadding
-      onCancel={() => setIsModalVisible(false)}
+      onCancel={hideAccountBalanceDetailsModal}
       footer={null}
     >
       <Container>

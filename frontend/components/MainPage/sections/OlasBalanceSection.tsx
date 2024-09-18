@@ -1,6 +1,6 @@
-import { InfoCircleOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined, WalletOutlined } from '@ant-design/icons';
 import { Button, Flex, Skeleton, Tooltip, Typography } from 'antd';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { CustomAlert } from '@/components/Alert';
@@ -14,6 +14,9 @@ import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../styled/CardSection';
+import { AccountBalanceDetails } from './AccountBalanceDetails/AccountBalanceDetails';
+
+const IS_ACCOUNT_DETAILS_FEATURE_ENABLED = false; // TODO: remove
 
 const { Text, Title } = Typography;
 const Balance = styled.span`
@@ -159,6 +162,10 @@ const AvoidSuspensionAlert = () => {
 export const MainOlasBalance = () => {
   const { storeState } = useStore();
   const { isBalanceLoaded, totalOlasBalance } = useBalance();
+  const [
+    isAccountBalanceDetailsModalVisible,
+    setIsAccountBalanceDetailsModalVisible,
+  ] = useState(false);
 
   // If first reward notification is shown BUT
   // agent eviction alert is NOT yet shown, show this alert.
@@ -177,16 +184,48 @@ export const MainOlasBalance = () => {
   }, [totalOlasBalance]);
 
   return (
-    <CardSection vertical gap={8} bordertop="true" borderbottom="true">
+    <CardSection
+      vertical
+      gap={8}
+      bordertop="true"
+      borderbottom="true"
+      padding="16px 24px"
+    >
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
       <LowTradingBalanceAlert />
       {isBalanceLoaded ? (
         <>
-          <CurrentBalance />
+          {/* <CurrentBalance />
           <Flex align="end">
             <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
             <Balance className="balance">{balance}</Balance>
             <span className="balance-currency">OLAS</span>
+          </Flex> */}
+
+          <Flex className="w-full" align="center" justify="space-between">
+            <Flex vertical gap={8}>
+              <CurrentBalance />
+              <Flex align="end">
+                <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
+                <Balance className="balance">{balance}</Balance>
+                <span className="balance-currency">OLAS</span>
+              </Flex>
+            </Flex>
+
+            {IS_ACCOUNT_DETAILS_FEATURE_ENABLED && (
+              <Button
+                icon={<WalletOutlined />}
+                onClick={() => setIsAccountBalanceDetailsModalVisible(true)}
+              />
+            )}
+
+            {isAccountBalanceDetailsModalVisible && (
+              <AccountBalanceDetails
+                hideAccountBalanceDetailsModal={() =>
+                  setIsAccountBalanceDetailsModalVisible(false)
+                }
+              />
+            )}
           </Flex>
         </>
       ) : (
