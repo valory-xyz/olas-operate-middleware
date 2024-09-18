@@ -207,6 +207,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
+        pause_all_services()
+        logger.info("Stopping services on startup done.")
+
+    def pause_all_services():
         service_hashes = [i["hash"] for i in operate.service_manager().json]
 
         for service in service_hashes:
@@ -220,7 +224,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.info(f"Cancelling funding job for {service}")
             cancel_funding_job(service=service)
             health_checker.stop_for_service(service=service)
-        logger.info("Stopping services on startup done.")
+
+    def pause_all_services_on_exit() -> None:
+        logger.info("Stopping services on exit...")
+        pause_all_services()
+        logger.info("Stopping services on exit done.")
+
+    signal.signal(signal.SIGINT, pause_all_services_on_exit)
+    signal.signal(signal.SIGTERM, pause_all_services_on_exit)
 
     # on backend app started we assume there are now started agents, so we force to pause all
     pause_all_services_on_startup()
@@ -267,6 +278,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _kill_server(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
+
+    @app.get(f"/stop_all_services")
+    async def _kill_server(request: Request) -> JSONResponse:
+        """Kill backend server from inside."""
+        logger.info("Stopping services on demand...")
+        pause_all_services()
+        logger.info("Stopping services on demand done.")
 
     @app.get("/api")
     @with_retries

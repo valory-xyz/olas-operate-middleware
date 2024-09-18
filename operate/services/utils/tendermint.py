@@ -188,6 +188,14 @@ class TendermintNode:
         self.log_file = os.environ.get("LOG_FILE", DEFAULT_TENDERMINT_LOG_FILE)
         self.write_to_log = write_to_log
 
+    def _set_on_stop_handler(self):
+        signal.signal(signal.SIGINT, self._stop_signal_handler)
+        signal.signal(signal.SIGTERM, self._stop_signal_handler)
+
+    def _stop_signal_handler(self):
+        self.logger.info("Handling stop signal!")
+        self.stop()
+
     def _build_init_command(self) -> List[str]:
         """Build the 'init' command."""
         cmd = [
@@ -258,6 +266,7 @@ class TendermintNode:
 
     def start(self, debug: bool = False) -> None:
         """Start a Tendermint node process."""
+        self._set_on_stop_handler()
         self._start_tm_process(debug)
         self._start_monitoring_thread()
 
@@ -310,8 +319,8 @@ class TendermintNode:
 
     def stop(self) -> None:
         """Stop a Tendermint node process."""
-        self._stop_tm_process()
         self._stop_monitoring_thread()
+        self._stop_tm_process()
 
     @staticmethod
     def _write_to_console(line: str) -> None:
