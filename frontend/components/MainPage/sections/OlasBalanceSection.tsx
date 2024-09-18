@@ -194,40 +194,31 @@ export const MainOlasBalance = () => {
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
       <LowTradingBalanceAlert />
       {isBalanceLoaded ? (
-        <>
-          {/* <CurrentBalance />
-          <Flex align="end">
-            <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
-            <Balance className="balance">{balance}</Balance>
-            <span className="balance-currency">OLAS</span>
-          </Flex> */}
-
-          <Flex className="w-full" align="center" justify="space-between">
-            <Flex vertical gap={8}>
-              <CurrentBalance />
-              <Flex align="end">
-                <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
-                <Balance className="balance">{balance}</Balance>
-                <span className="balance-currency">OLAS</span>
-              </Flex>
+        <Flex className="w-full" align="center" justify="space-between">
+          <Flex vertical gap={8}>
+            <CurrentBalance />
+            <Flex align="end">
+              <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
+              <Balance className="balance">{balance}</Balance>
+              <span className="balance-currency">OLAS</span>
             </Flex>
-
-            {IS_ACCOUNT_DETAILS_FEATURE_ENABLED && (
-              <Button
-                icon={<WalletOutlined />}
-                onClick={() => setIsAccountBalanceDetailsModalVisible(true)}
-              />
-            )}
-
-            {isAccountBalanceDetailsModalVisible && (
-              <AccountBalanceDetails
-                hideAccountBalanceDetailsModal={() =>
-                  setIsAccountBalanceDetailsModalVisible(false)
-                }
-              />
-            )}
           </Flex>
-        </>
+
+          {IS_ACCOUNT_DETAILS_FEATURE_ENABLED && (
+            <Button
+              icon={<WalletOutlined />}
+              onClick={() => setIsAccountBalanceDetailsModalVisible(true)}
+            />
+          )}
+
+          {isAccountBalanceDetailsModalVisible && (
+            <AccountBalanceDetails
+              hideAccountBalanceDetailsModal={() =>
+                setIsAccountBalanceDetailsModalVisible(false)
+              }
+            />
+          )}
+        </Flex>
       ) : (
         <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
       )}
