@@ -20,7 +20,7 @@ export const StakingContractDetails = ({
     const details = stakingContractInfoRecord[stakingProgramId];
     return [
       {
-        left: 'Rewards per work period',
+        left: 'Rewards per epoch',
         right: `~ ${details.rewardsPerWorkPeriod?.toFixed(2)} OLAS`,
       },
       {

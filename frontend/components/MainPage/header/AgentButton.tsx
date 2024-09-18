@@ -1,11 +1,12 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Button, ButtonProps, Flex, Popover, Typography } from 'antd';
+import { Button, ButtonProps, Flex, Popover, Tooltip, Typography } from 'antd';
 import { useCallback, useMemo } from 'react';
 
 import { Chain, DeploymentStatus } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
@@ -21,11 +22,27 @@ import {
   CannotStartAgentPopover,
 } from './CannotStartAgentPopover';
 import { requiredGas } from './constants';
+import { LastTransaction } from './LastTransaction';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 const LOADING_MESSAGE =
   "Starting the agent may take a while, so feel free to minimize the app. We'll notify you once it's running. Please, don't quit the app.";
+
+const IdleTooltip = () => (
+  <Tooltip
+    placement="bottom"
+    arrow={false}
+    title={
+      <Paragraph className="text-sm m-0">
+        Your agent earned rewards for this epoch and stopped working. It’ll
+        return to work once the next epoch starts.
+      </Paragraph>
+    }
+  >
+    <InfoCircleOutlined />
+  </Tooltip>
+);
 
 const AgentStartingButton = () => (
   <Popover
@@ -55,6 +72,7 @@ const AgentStoppingButton = () => (
 
 const AgentRunningButton = () => {
   const { showNotification } = useElectronApi();
+  const { isEligibleForRewards } = useReward();
   const { service, setIsServicePollingPaused, setServiceStatus } =
     useServices();
 
@@ -81,13 +99,25 @@ const AgentRunningButton = () => {
       <Button type="default" size="large" onClick={handlePause}>
         Pause
       </Button>
-      <Typography.Text type="secondary" className="text-sm loading-ellipses">
-        Agent is working
-      </Typography.Text>
+
+      <Flex vertical>
+        {isEligibleForRewards ? (
+          <Text type="secondary" className="text-sm">
+            Agent is idle&nbsp;
+            <IdleTooltip />
+          </Text>
+        ) : (
+          <Text type="secondary" className="text-sm loading-ellipses">
+            Agent is working
+          </Text>
+        )}
+        <LastTransaction />
+      </Flex>
     </Flex>
   );
 };
 
+/** Button used to start / deploy the agent */
 const AgentNotRunningButton = () => {
   const { wallets, masterSafeAddress } = useWallet();
   const {
@@ -95,6 +125,7 @@ const AgentNotRunningButton = () => {
     serviceStatus,
     setServiceStatus,
     setIsServicePollingPaused,
+    updateServicesState,
   } = useServices();
   const { serviceTemplate } = useServiceTemplates();
   const { showNotification } = useElectronApi();
@@ -104,9 +135,15 @@ const AgentNotRunningButton = () => {
     isLowBalance,
     totalOlasStakedBalance,
     totalEthBalance,
+    updateBalances,
   } = useBalance();
   const { storeState } = useStore();
-  const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
+  const {
+    isEligibleForStaking,
+    isAgentEvicted,
+    setIsPaused: setIsStakingContractInfoPollingPaused,
+    updateActiveStakingContractInfo,
+  } = useStakingContractInfo();
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
 
@@ -135,6 +172,9 @@ const AgentNotRunningButton = () => {
     // Paused to stop confusing balance transitions while starting the agent
     setIsBalancePollingPaused(true);
 
+    // Paused to stop overlapping staking contract info poll while starting the agent
+    setIsStakingContractInfoPollingPaused(true);
+
     // Mock "DEPLOYING" status (service polling will update this once resumed)
     setServiceStatus(DeploymentStatus.DEPLOYING);
 
@@ -147,6 +187,7 @@ const AgentNotRunningButton = () => {
       console.error(error);
       setServiceStatus(undefined);
       showNotification?.('Error while creating safe');
+      setIsStakingContractInfoPollingPaused(false);
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
       return;
@@ -165,6 +206,7 @@ const AgentNotRunningButton = () => {
       showNotification?.('Error while deploying service');
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
+      setIsStakingContractInfoPollingPaused(false);
       return;
     }
 
@@ -177,20 +219,39 @@ const AgentNotRunningButton = () => {
     }
 
     // Can assume successful deployment
-    // resume polling, optimistically update service status (poll will update, if needed)
-    setIsServicePollingPaused(false);
-    setIsBalancePollingPaused(false);
     setServiceStatus(DeploymentStatus.DEPLOYED);
+
+    // TODO: remove this workaround, middleware should respond when agent is staked & confirmed running after `createService` call
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // update provider states sequentially
+    // service id is required before activeStakingContractInfo & balances can be updated
+    try {
+      await updateServicesState(); // reload the available services
+      await updateActiveStakingContractInfo(); // reload active staking contract with new service
+      await updateBalances(); // reload the balances
+    } catch (error) {
+      console.error(error);
+    } finally {
+      // resume polling
+      setIsServicePollingPaused(false);
+      setIsStakingContractInfoPollingPaused(false);
+      setIsBalancePollingPaused(false);
+    }
   }, [
     wallets,
     setIsServicePollingPaused,
     setIsBalancePollingPaused,
+    setIsStakingContractInfoPollingPaused,
     setServiceStatus,
     masterSafeAddress,
     showNotification,
     activeStakingProgramId,
     defaultStakingProgramId,
     serviceTemplate,
+    updateServicesState,
+    updateActiveStakingContractInfo,
+    updateBalances,
   ]);
 
   const isDeployable = useMemo(() => {

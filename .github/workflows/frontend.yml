@@ -13,8 +13,8 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
-      
+          node-version: "20.x"
+
       # Install dependencies
       - name: Install dependencies
         run: yarn install:frontend
@@ -24,4 +24,4 @@ jobs:
         run: yarn lint:frontend
       # Test
       # - name: Test
-        # run: yarn test:frontend
+      # run: yarn test:frontend
