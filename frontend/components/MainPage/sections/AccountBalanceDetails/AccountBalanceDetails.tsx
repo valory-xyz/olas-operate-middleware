@@ -13,6 +13,7 @@ import { useWallet } from '@/hooks/useWallet';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 import { Container, infoBreakdownParentStyle } from './styles';
+import { YourAgentWallet } from './YourAgentWallet';
 
 const { Title, Paragraph } = Typography;
 
@@ -77,6 +78,7 @@ const OlasBalance = () => {
         <InfoBreakdownList
           list={olasBalances.map((item) => ({
             left: item.title,
+            leftClassName: 'text-light',
             right: `${item.value} OLAS`,
           }))}
           parentStyle={infoBreakdownParentStyle}
@@ -106,6 +108,7 @@ const XdaiBalance = () => {
         <InfoBreakdownList
           list={xdaiBalances.map((item) => ({
             left: item.title,
+            leftClassName: 'text-light',
             right: `${item.value} XDAI`,
           }))}
           parentStyle={infoBreakdownParentStyle}
@@ -133,6 +136,7 @@ const Signer = () => {
         <InfoBreakdownList
           list={signerInfo.map((item) => ({
             left: item.title,
+            leftClassName: 'text-light',
             right: item.value,
             rightClassName: 'font-normal',
           }))}
@@ -164,6 +168,7 @@ export const AccountBalanceDetails = ({
         <OlasBalance />
         <XdaiBalance />
         <Signer />
+        <YourAgentWallet />
       </Container>
     </CustomModal>
   );

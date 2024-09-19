@@ -51,6 +51,7 @@ export const BalanceContext = createContext<{
   isLowBalance: boolean;
   wallets?: Wallet[];
   walletBalances: WalletAddressNumberRecord;
+  agentSafeBalance?: ValueOf<WalletAddressNumberRecord>;
   updateBalances: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
   totalOlasStakedBalance?: number;
@@ -67,6 +68,7 @@ export const BalanceContext = createContext<{
   isLowBalance: false,
   wallets: undefined,
   walletBalances: {},
+  agentSafeBalance: undefined,
   updateBalances: async () => {},
   setIsPaused: () => {},
   totalOlasStakedBalance: undefined,
@@ -247,6 +249,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isLowBalance,
         wallets,
         walletBalances,
+        agentSafeBalance,
         updateBalances,
         setIsPaused,
         totalOlasStakedBalance,

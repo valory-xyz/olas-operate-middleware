@@ -57,6 +57,9 @@ export const useServices = () => {
     setIsPaused,
   } = useContext(ServicesContext);
 
+  const serviceId =
+    services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token;
+
   // STATE METHODS
   const getServiceFromState = (
     serviceHash: ServiceHash,
@@ -90,6 +93,7 @@ export const useServices = () => {
   return {
     service: services?.[0],
     services,
+    serviceId,
     serviceStatus,
     setServiceStatus,
     getServiceFromState,

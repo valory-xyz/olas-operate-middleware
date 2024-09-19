@@ -40,6 +40,7 @@ const Line = styled.span<{ color?: Color }>`
 type Info = {
   id?: number | string;
   left: ReactNode;
+  leftClassName?: string;
   right: ReactNode;
   rightClassName?: string;
 };
@@ -59,7 +60,7 @@ export const InfoBreakdownList = ({
   <Breakdown style={parentStyle}>
     {list.map((item, index) => (
       <BreakdownLine key={item.id || index} size={size}>
-        <span>{item.left}</span>
+        <span className={item.leftClassName}>{item.left}</span>
         <Line color={color} />
         <span className={item.rightClassName || 'font-weight-600'}>
           {item.right}

@@ -1,6 +1,8 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import Tooltip, { TooltipPlacement } from 'antd/es/tooltip';
 
+import { COLOR } from '@/constants/colors';
+
 export const InfoTooltip = ({
   placement = 'topLeft',
   children,
@@ -9,6 +11,6 @@ export const InfoTooltip = ({
   children: React.ReactNode;
 }) => (
   <Tooltip arrow={false} title={children} placement={placement}>
-    <InfoCircleOutlined />
+    <InfoCircleOutlined style={{ color: COLOR.TEXT_LIGHT }} />
   </Tooltip>
 );
