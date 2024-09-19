@@ -1,4 +1,3 @@
-import { WalletOutlined } from '@ant-design/icons';
 import { Card, Flex, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
@@ -7,7 +6,6 @@ import styled from 'styled-components';
 import { Chain } from '@/client';
 import { AddressLink } from '@/components/AddressLink';
 import { InfoTooltip } from '@/components/InfoTooltip';
-import { COLOR } from '@/constants/colors';
 import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { useAddress } from '@/hooks/useAddress';
@@ -101,12 +99,7 @@ const ServiceAndNftDetails = () => {
     <NftCard>
       <Flex>
         <Flex>
-          <Image
-            width={64}
-            height={64}
-            alt="NFT"
-            src="https://zos.alipayobjects.com/rmsportal/jkjgkEfvpUPVyRjUImniVslZfWPnJuuZ.png"
-          />
+          <Image width={64} height={64} alt="NFT" src="/NFT.png" />
         </Flex>
         <Flex
           style={{ padding: '8px 16px' }}
@@ -182,7 +175,13 @@ export const YourAgentWallet = () => {
     <Card>
       <Container>
         <Flex vertical gap={12}>
-          <WalletOutlined style={{ fontSize: 24, color: COLOR.TEXT_LIGHT }} />
+          <Image
+            width={36}
+            height={36}
+            alt="Agent wallet"
+            src="/agent-wallet.png"
+          />
+
           <Flex justify="space-between" className="w-full">
             <Title level={5} className="m-0 text-base">
               Your agent
