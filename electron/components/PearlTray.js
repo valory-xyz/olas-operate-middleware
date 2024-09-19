@@ -110,7 +110,7 @@ class PearlTray extends Electron.Tray {
           break;
         }
         default: {
-          console.error('Unknown tray icon status:', status);
+          logger.electron('Unknown tray icon status:', status);
         }
       }
     });
