@@ -2,19 +2,38 @@ import { WalletOutlined } from '@ant-design/icons';
 import { Card, Flex, Typography } from 'antd';
 import { useMemo } from 'react';
 
+import { AddressLink } from '@/components/AddressLink';
+import { InfoBreakdownList } from '@/components/InfoBreakdown';
 import { InfoTooltip } from '@/components/InfoTooltip';
+import { CustomModal } from '@/components/styled/CustomModal';
 import { COLOR } from '@/constants/colors';
 import { MODAL_WIDTH } from '@/constants/width';
 import { useBalance } from '@/hooks/useBalance';
 import { useWallet } from '@/hooks/useWallet';
 import { balanceFormat } from '@/utils/numberFormatters';
 
-import { InfoBreakdownList } from '../../../InfoBreakdown';
-import { CustomModal } from '../../../styled/CustomModal';
-import { AddressLink } from './AddressLink';
 import { Container, infoBreakdownParentStyle } from './styles';
 
 const { Title, Paragraph } = Typography;
+
+const SignerTitle = () => (
+  <>
+    Signer&nbsp;
+    <InfoTooltip>
+      <Paragraph className="text-sm">
+        Your wallet and agent’s wallet use Safe, a multi-signature wallet. The
+        app is designed to trigger transactions on these Safe wallets via
+        Signers.
+      </Paragraph>
+      <Paragraph className="text-sm">
+        This setup enables features like the backup wallet.
+      </Paragraph>
+      <Paragraph className="text-sm m-0">
+        Note: Signer’s XDAI balance is included in wallet XDAI balances.
+      </Paragraph>
+    </InfoTooltip>
+  </>
+);
 
 const YourWalletDetails = () => {
   const { masterSafeAddress } = useWallet();
@@ -102,24 +121,7 @@ const Signer = () => {
   const signerInfo = useMemo(() => {
     return [
       {
-        title: (
-          <>
-            Signer&nbsp;
-            <InfoTooltip>
-              <Paragraph className="text-sm">
-                Your wallet and agent’s wallet use Safe, a multi-signature
-                wallet. The app is designed to trigger transactions on these
-                Safe wallets via Signers.
-              </Paragraph>
-              <Paragraph className="text-sm">
-                This setup enables features like the backup wallet.
-              </Paragraph>
-              <Paragraph className="text-sm m-0">
-                Note: Signer’s XDAI balance is included in wallet XDAI balances.
-              </Paragraph>
-            </InfoTooltip>
-          </>
-        ),
+        title: <SignerTitle />,
         value: <AddressLink address={masterEoaAddress} />,
       },
     ];

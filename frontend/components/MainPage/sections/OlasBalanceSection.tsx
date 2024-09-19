@@ -16,7 +16,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 import { CardSection } from '../../styled/CardSection';
 import { AccountBalanceDetails } from './AccountBalanceDetails/AccountBalanceDetails';
 
-const IS_ACCOUNT_DETAILS_FEATURE_ENABLED = false; // TODO: remove
+const IS_ACCOUNT_DETAILS_FEATURE_ENABLED = true; // TODO: remove
 
 const { Text, Title } = Typography;
 const Balance = styled.span`
@@ -193,6 +193,7 @@ export const MainOlasBalance = () => {
     >
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
       <LowTradingBalanceAlert />
+
       {isBalanceLoaded ? (
         <Flex className="w-full" align="center" justify="space-between">
           <Flex vertical gap={8}>
