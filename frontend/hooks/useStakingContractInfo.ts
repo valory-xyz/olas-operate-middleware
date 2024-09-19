@@ -8,14 +8,23 @@ import { useServices } from './useServices';
 export const useStakingContractInfo = () => {
   const {
     activeStakingContractInfo,
-    stakingContractInfoRecord,
+    isPaused,
     isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
+    updateActiveStakingContractInfo,
+    setIsPaused,
   } = useContext(StakingContractInfoContext);
 
-  const { services } = useServices();
+  const { service } = useServices();
 
-  if (!services?.[0] || !activeStakingContractInfo)
-    return { stakingContractInfoRecord };
+  // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
+  if (!service || !activeStakingContractInfo)
+    return {
+      stakingContractInfoRecord,
+      updateActiveStakingContractInfo,
+      setIsPaused,
+      isPaused,
+    };
 
   const {
     serviceStakingState,
@@ -72,12 +81,15 @@ export const useStakingContractInfo = () => {
   return {
     activeStakingContractInfo,
     hasEnoughServiceSlots,
-    isEligibleForStaking,
-    isRewardsAvailable,
     isAgentEvicted,
+    isEligibleForStaking,
+    isPaused,
+    isRewardsAvailable,
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     isStakingContractInfoLoaded,
     stakingContractInfoRecord,
+    updateActiveStakingContractInfo,
+    setIsPaused,
   };
 };

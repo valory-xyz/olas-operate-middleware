@@ -28,7 +28,15 @@ const { PearlTray } = require('./components/PearlTray');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
-if (!singleInstanceLock) app.quit();
+if (!singleInstanceLock) {
+  try {
+    logger.electron('Could not obtain single instance lock. Quitting...');
+  } catch (e) {
+    console.error(e);
+  } finally {
+    app.exit();
+  }
+}
 
 const platform = os.platform();
 
@@ -99,6 +107,7 @@ const APP_WIDTH = 460;
  * Creates the splash window
  */
 const createSplashWindow = () => {
+  /** @type {Electron.BrowserWindow} */
   splashWindow = new BrowserWindow({
     width: APP_WIDTH,
     height: APP_WIDTH,
@@ -446,22 +455,39 @@ ipcMain.on('check', async function (event, _argument) {
 });
 
 // APP-SPECIFIC EVENTS
-app.on('ready', async () => {
+app.on('second-instance', () => {
+  logger.electron('User attempted to open a second instance.');
+
+  if (mainWindow) {
+    logger.electron('Restoring primary main window.');
+    mainWindow.show();
+    return;
+  }
+
+  if (splashWindow) {
+    logger.electron(
+      'Restoring primary splash window as there is no main window.',
+    );
+    splashWindow.show();
+    return;
+  }
+});
+
+app.once('ready', async () => {
+  app.on('window-all-closed', () => {
+    app.quit();
+  });
+
+  app.on('before-quit', async () => {
+    await beforeQuit();
+  });
+
   if (platform === 'darwin') {
     app.dock?.setIcon(
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
-
   createSplashWindow();
-});
-
-app.on('window-all-closed', () => {
-  app.quit();
-});
-
-app.on('before-quit', async () => {
-  await beforeQuit();
 });
 
 // UPDATER EVENTS

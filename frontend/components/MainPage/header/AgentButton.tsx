@@ -117,6 +117,7 @@ const AgentRunningButton = () => {
   );
 };
 
+/** Button used to start / deploy the agent */
 const AgentNotRunningButton = () => {
   const { wallets, masterSafeAddress } = useWallet();
   const {
@@ -124,6 +125,7 @@ const AgentNotRunningButton = () => {
     serviceStatus,
     setServiceStatus,
     setIsServicePollingPaused,
+    updateServicesState,
   } = useServices();
   const { serviceTemplate } = useServiceTemplates();
   const { showNotification } = useElectronApi();
@@ -133,9 +135,15 @@ const AgentNotRunningButton = () => {
     isLowBalance,
     totalOlasStakedBalance,
     totalEthBalance,
+    updateBalances,
   } = useBalance();
   const { storeState } = useStore();
-  const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
+  const {
+    isEligibleForStaking,
+    isAgentEvicted,
+    setIsPaused: setIsStakingContractInfoPollingPaused,
+    updateActiveStakingContractInfo,
+  } = useStakingContractInfo();
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
 
@@ -164,6 +172,9 @@ const AgentNotRunningButton = () => {
     // Paused to stop confusing balance transitions while starting the agent
     setIsBalancePollingPaused(true);
 
+    // Paused to stop overlapping staking contract info poll while starting the agent
+    setIsStakingContractInfoPollingPaused(true);
+
     // Mock "DEPLOYING" status (service polling will update this once resumed)
     setServiceStatus(DeploymentStatus.DEPLOYING);
 
@@ -176,6 +187,7 @@ const AgentNotRunningButton = () => {
       console.error(error);
       setServiceStatus(undefined);
       showNotification?.('Error while creating safe');
+      setIsStakingContractInfoPollingPaused(false);
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
       return;
@@ -194,6 +206,7 @@ const AgentNotRunningButton = () => {
       showNotification?.('Error while deploying service');
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
+      setIsStakingContractInfoPollingPaused(false);
       return;
     }
 
@@ -206,20 +219,39 @@ const AgentNotRunningButton = () => {
     }
 
     // Can assume successful deployment
-    // resume polling, optimistically update service status (poll will update, if needed)
-    setIsServicePollingPaused(false);
-    setIsBalancePollingPaused(false);
     setServiceStatus(DeploymentStatus.DEPLOYED);
+
+    // TODO: remove this workaround, middleware should respond when agent is staked & confirmed running after `createService` call
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // update provider states sequentially
+    // service id is required before activeStakingContractInfo & balances can be updated
+    try {
+      await updateServicesState(); // reload the available services
+      await updateActiveStakingContractInfo(); // reload active staking contract with new service
+      await updateBalances(); // reload the balances
+    } catch (error) {
+      console.error(error);
+    } finally {
+      // resume polling
+      setIsServicePollingPaused(false);
+      setIsStakingContractInfoPollingPaused(false);
+      setIsBalancePollingPaused(false);
+    }
   }, [
     wallets,
     setIsServicePollingPaused,
     setIsBalancePollingPaused,
+    setIsStakingContractInfoPollingPaused,
     setServiceStatus,
     masterSafeAddress,
     showNotification,
     activeStakingProgramId,
     defaultStakingProgramId,
     serviceTemplate,
+    updateServicesState,
+    updateActiveStakingContractInfo,
+    updateBalances,
   ]);
 
   const isDeployable = useMemo(() => {
