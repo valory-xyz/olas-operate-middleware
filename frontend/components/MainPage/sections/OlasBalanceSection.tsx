@@ -12,9 +12,7 @@ import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../styled/CardSection';
-import { AccountBalanceDetails } from './AccountBalanceDetails/AccountBalanceDetails';
-
-const IS_ACCOUNT_DETAILS_FEATURE_ENABLED = true; // TODO: remove
+import { AccountBalances } from './AccountBalances/AccountBalances';
 
 const { Text, Title } = Typography;
 const Balance = styled.span`
@@ -150,15 +148,13 @@ export const MainOlasBalance = () => {
             </Flex>
           </Flex>
 
-          {IS_ACCOUNT_DETAILS_FEATURE_ENABLED && (
-            <Button
-              icon={<WalletOutlined />}
-              onClick={() => setIsAccountBalanceDetailsModalVisible(true)}
-            />
-          )}
+          <Button
+            icon={<WalletOutlined />}
+            onClick={() => setIsAccountBalanceDetailsModalVisible(true)}
+          />
 
           {isAccountBalanceDetailsModalVisible && (
-            <AccountBalanceDetails
+            <AccountBalances
               hideAccountBalanceDetailsModal={() =>
                 setIsAccountBalanceDetailsModalVisible(false)
               }

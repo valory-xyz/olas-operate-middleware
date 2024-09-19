@@ -5,7 +5,6 @@ import styled from 'styled-components';
 
 import { Chain } from '@/client';
 import { AddressLink } from '@/components/AddressLink';
-import { InfoTooltip } from '@/components/InfoTooltip';
 import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { useAddress } from '@/hooks/useAddress';
@@ -16,70 +15,16 @@ import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
 import { InfoBreakdownList } from '../../../InfoBreakdown';
-import { SignerTitle } from './SignerTitle';
 import { Container, infoBreakdownParentStyle } from './styles';
+import {
+  OlasTitle,
+  OwnershipNftTitle,
+  ServiceIdTitle,
+  SignerTitle,
+  XdaiTitle,
+} from './Titles';
 
-const { Title, Paragraph, Text } = Typography;
-
-const OlasTitle = () => (
-  <Flex align="center">
-    <Title level={5} className="m-0 text-sm">
-      OLAS
-    </Title>
-    &nbsp;
-    <InfoTooltip>
-      <Paragraph className="text-sm m-0">
-        Agent rewards accumulate in the staking contract. The agent is designed
-        to claim rewards periodically. Withdrawal of claimed rewards isn’t
-        available yet.
-      </Paragraph>
-    </InfoTooltip>
-  </Flex>
-);
-
-const XdaiTitle = () => (
-  <Flex align="center">
-    <Title level={5} className="m-0 text-sm">
-      XDAI
-    </Title>
-    &nbsp;
-    <InfoTooltip>
-      <Paragraph className="text-sm m-0">
-        XDAI is used by the agent to engage in prediction markets. This amount
-        will fluctuate based on your agent’s performance.
-      </Paragraph>
-    </InfoTooltip>
-  </Flex>
-);
-
-const OwnershipNftTitle = () => (
-  <Text className="text-sm text-light">
-    Ownership NFT&nbsp;
-    <InfoTooltip>
-      <Flex gap={4} vertical>
-        <Text strong className="text-sm">
-          You own your agent
-        </Text>
-        <Paragraph className="text-sm m-0">
-          Agents are minted through the Olas Registry. Each agent has an NFT
-          that gives its owner control over the agent’s settings.
-        </Paragraph>
-      </Flex>
-    </InfoTooltip>
-  </Text>
-);
-
-const ServiceIdTitle = () => (
-  <Text className="text-sm text-light">
-    ID&nbsp;
-    <InfoTooltip placement="topRight">
-      <Paragraph className="text-sm m-0">
-        Each minted agent gets a unique ID. Technically, agents are referred to
-        as ‘services’.
-      </Paragraph>
-    </InfoTooltip>
-  </Text>
-);
+const { Title } = Typography;
 
 const NftCard = styled(Card)`
   .ant-card-body {
@@ -99,10 +44,10 @@ const ServiceAndNftDetails = () => {
     <NftCard>
       <Flex>
         <Flex>
-          <Image width={64} height={64} alt="NFT" src="/NFT.png" />
+          <Image width={78} height={78} alt="NFT" src="/NFT.png" />
         </Flex>
         <Flex
-          style={{ padding: '8px 16px' }}
+          style={{ padding: '16px 12px' }}
           align="center"
           justify="space-between"
           flex={1}

@@ -12,9 +12,9 @@ import { useBalance } from '@/hooks/useBalance';
 import { useWallet } from '@/hooks/useWallet';
 import { balanceFormat } from '@/utils/numberFormatters';
 
-import { SignerTitle } from './SignerTitle';
 import { Container, infoBreakdownParentStyle } from './styles';
-import { YourAgentWallet } from './YourAgentWallet';
+import { SignerTitle } from './Titles';
+import { YourAgentWallet } from './YourAgent';
 
 const { Title, Text } = Typography;
 
@@ -97,7 +97,6 @@ const XdaiBalance = () => {
 
 const Signer = () => {
   const { masterEoaAddress } = useWallet();
-
   const signerInfo = useMemo(() => {
     return [
       {
@@ -126,12 +125,12 @@ type AccountBalanceDetailsProps = {
   hideAccountBalanceDetailsModal: () => void;
 };
 
-export const AccountBalanceDetails = ({
+export const AccountBalances = ({
   hideAccountBalanceDetailsModal,
 }: AccountBalanceDetailsProps) => {
   return (
     <CustomModal
-      title="Account balance details"
+      title="Account balances"
       open
       width={MODAL_WIDTH}
       bodyPadding
