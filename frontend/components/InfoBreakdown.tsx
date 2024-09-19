@@ -37,7 +37,12 @@ const Line = styled.span<{ color?: Color }>`
     `1px solid ${color === 'primary' ? COLOR.PURPLE_LIGHT : COLOR.BORDER_GRAY}`};
 `;
 
-type Info = { id?: number | string; left: ReactNode; right: ReactNode };
+type Info = {
+  id?: number | string;
+  left: ReactNode;
+  right: ReactNode;
+  rightClassName?: string;
+};
 type InfoBreakdownListProps = {
   list: Info[];
   parentStyle?: CSSProperties;
@@ -56,7 +61,9 @@ export const InfoBreakdownList = ({
       <BreakdownLine key={item.id || index} size={size}>
         <span>{item.left}</span>
         <Line color={color} />
-        <span className="font-weight-600">{item.right}</span>
+        <span className={item.rightClassName || 'font-weight-600'}>
+          {item.right}
+        </span>
       </BreakdownLine>
     ))}
   </Breakdown>

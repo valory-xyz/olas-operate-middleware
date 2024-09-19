@@ -5,7 +5,9 @@ import { useMemo } from 'react';
 import { InfoTooltip } from '@/components/InfoTooltip';
 import { COLOR } from '@/constants/colors';
 import { MODAL_WIDTH } from '@/constants/width';
+import { useBalance } from '@/hooks/useBalance';
 import { useWallet } from '@/hooks/useWallet';
+import { balanceFormat } from '@/utils/numberFormatters';
 
 import { InfoBreakdownList } from '../../../InfoBreakdown';
 import { CustomModal } from '../../../styled/CustomModal';
@@ -33,18 +35,19 @@ const YourWalletDetails = () => {
 };
 
 const OlasBalance = () => {
+  const { safeBalance, totalOlasStakedBalance } = useBalance();
   const olasBalances = useMemo(() => {
     return [
       {
         title: 'Available',
-        value: '100',
+        value: balanceFormat(safeBalance?.OLAS ?? 0, 2),
       },
       {
         title: 'Staked',
-        value: '200',
+        value: balanceFormat(totalOlasStakedBalance ?? 0, 2),
       },
     ];
-  }, []);
+  }, [safeBalance?.OLAS, totalOlasStakedBalance]);
 
   return (
     <Card>
@@ -65,14 +68,15 @@ const OlasBalance = () => {
 };
 
 const XdaiBalance = () => {
+  const { safeBalance } = useBalance();
   const xdaiBalances = useMemo(() => {
     return [
       {
         title: 'Available',
-        value: '100',
+        value: balanceFormat(safeBalance?.ETH ?? 0, 2),
       },
     ];
-  }, []);
+  }, [safeBalance?.ETH]);
 
   return (
     <Card>
@@ -93,6 +97,8 @@ const XdaiBalance = () => {
 };
 
 const Signer = () => {
+  const { masterEoaAddress } = useWallet();
+
   const signerInfo = useMemo(() => {
     return [
       {
@@ -114,10 +120,10 @@ const Signer = () => {
             </InfoTooltip>
           </>
         ),
-        value: '100',
+        value: <AddressLink address={masterEoaAddress} />,
       },
     ];
-  }, []);
+  }, [masterEoaAddress]);
 
   return (
     <Card>
@@ -125,7 +131,8 @@ const Signer = () => {
         <InfoBreakdownList
           list={signerInfo.map((item) => ({
             left: item.title,
-            right: `${item.value} XDAI`,
+            right: item.value,
+            rightClassName: 'font-normal',
           }))}
           parentStyle={infoBreakdownParentStyle}
         />
@@ -152,9 +159,9 @@ export const AccountBalanceDetails = ({
     >
       <Container>
         <YourWalletDetails />
-        {/* <OlasBalance /> */}
-        {/* <XdaiBalance /> */}
-        {/* <Signer /> */}
+        <OlasBalance />
+        <XdaiBalance />
+        <Signer />
       </Container>
     </CustomModal>
   );

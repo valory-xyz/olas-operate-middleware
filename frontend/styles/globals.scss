@@ -173,8 +173,12 @@ button, input, select, textarea, .ant-input-suffix {
   cursor: pointer;
 }
 
+// font weight
 .font-weight-600 {
   font-weight: 600 !important;
+}
+.font-normal {
+  font-weight: normal !important;
 }
 
 .break-word {
@@ -187,10 +191,10 @@ ul.alert-list {
   padding-left: 1.25em;
 }
 
+// width
 .w-3\/4 {
   width: 75% !important;
 }
-
 .w-full {
   width: 100% !important;
 }
