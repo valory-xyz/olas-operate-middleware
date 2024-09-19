@@ -18,6 +18,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
 import { InfoBreakdownList } from '../../../InfoBreakdown';
+import { SignerTitle } from './SignerTitle';
 import { Container, infoBreakdownParentStyle } from './styles';
 
 const { Title, Paragraph, Text } = Typography;
@@ -29,16 +30,10 @@ const OlasTitle = () => (
     </Title>
     &nbsp;
     <InfoTooltip>
-      <Paragraph className="text-sm">
-        Your wallet and agent’s wallet use Safe, a multi-signature wallet. The
-        app is designed to trigger transactions on these Safe wallets via
-        Signers.
-      </Paragraph>
-      <Paragraph className="text-sm">
-        This setup enables features like the backup wallet.
-      </Paragraph>
       <Paragraph className="text-sm m-0">
-        Note: Signer’s XDAI balance is included in wallet XDAI balances.
+        Agent rewards accumulate in the staking contract. The agent is designed
+        to claim rewards periodically. Withdrawal of claimed rewards isn’t
+        available yet.
       </Paragraph>
     </InfoTooltip>
   </Flex>
@@ -51,45 +46,27 @@ const XdaiTitle = () => (
     </Title>
     &nbsp;
     <InfoTooltip>
-      <Paragraph className="text-sm">
-        Your wallet and agent’s wallet use Safe, a multi-signature wallet. The
-        app is designed to trigger transactions on these Safe wallets via
-        Signers.
-      </Paragraph>
-      <Paragraph className="text-sm">
-        This setup enables features like the backup wallet.
-      </Paragraph>
       <Paragraph className="text-sm m-0">
-        Note: Signer’s XDAI balance is included in wallet XDAI balances.
+        XDAI is used by the agent to engage in prediction markets. This amount
+        will fluctuate based on your agent’s performance.
       </Paragraph>
     </InfoTooltip>
   </Flex>
-);
-
-const SignerTitle = () => (
-  <>
-    Signer&nbsp;
-    <InfoTooltip>
-      <Paragraph className="text-sm">
-        Your wallet and agent’s wallet use Safe, a multi-signature wallet. The
-        app is designed to trigger transactions on these Safe wallets via
-        Signers.
-      </Paragraph>
-      <Paragraph className="text-sm">
-        This setup enables features like the backup wallet.
-      </Paragraph>
-      <Paragraph className="text-sm m-0">
-        Note: Signer’s XDAI balance is included in wallet XDAI balances.
-      </Paragraph>
-    </InfoTooltip>
-  </>
 );
 
 const OwnershipNftTitle = () => (
   <Text className="text-sm text-light">
     Ownership NFT&nbsp;
     <InfoTooltip>
-      <Paragraph className="text-sm m-0">Example</Paragraph>
+      <Flex gap={4} vertical>
+        <Text strong className="text-sm">
+          You own your agent
+        </Text>
+        <Paragraph className="text-sm m-0">
+          Agents are minted through the Olas Registry. Each agent has an NFT
+          that gives its owner control over the agent’s settings.
+        </Paragraph>
+      </Flex>
     </InfoTooltip>
   </Text>
 );
@@ -98,7 +75,10 @@ const ServiceIdTitle = () => (
   <Text className="text-sm text-light">
     ID&nbsp;
     <InfoTooltip placement="topRight">
-      <Paragraph className="text-sm m-0">Example</Paragraph>
+      <Paragraph className="text-sm m-0">
+        Each minted agent gets a unique ID. Technically, agents are referred to
+        as ‘services’.
+      </Paragraph>
     </InfoTooltip>
   </Text>
 );
@@ -129,7 +109,7 @@ const ServiceAndNftDetails = () => {
           />
         </Flex>
         <Flex
-          style={{ padding: '16px' }}
+          style={{ padding: '8px 16px' }}
           align="center"
           justify="space-between"
           flex={1}
@@ -205,7 +185,7 @@ export const YourAgentWallet = () => {
           <WalletOutlined style={{ fontSize: 24, color: COLOR.TEXT_LIGHT }} />
           <Flex justify="space-between" className="w-full">
             <Title level={5} className="m-0 text-base">
-              Your agent&apos;s wallet
+              Your agent
             </Title>
             <AddressLink address={agentSafeAddress} />
           </Flex>
