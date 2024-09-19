@@ -7,7 +7,7 @@ const macTrayIconSize = { width: 16, height: 16 };
 
 /** Status supported by tray icons.
  * @readonly
- * @enum {string}
+ * @enum {'logged-out' | 'low-gas' | 'paused' | 'running'}
  */
 const TrayIconStatus = {
   LoggedOut: 'logged-out',
@@ -39,10 +39,10 @@ const trayIcons = Object.entries(trayIconPaths).reduce(
       if (isLinux) return path;
 
       // Windows and macOS support nativeImage
-      const trayIcon = Electron.nativeImage.createFromPath(path);
+      let trayIcon = Electron.nativeImage.createFromPath(path);
 
       // Resize icon for macOS
-      if (isMac) trayIcon.resize(macTrayIconSize);
+      if (isMac) trayIcon = trayIcon.resize(macTrayIconSize);
 
       return trayIcon;
     })(),
