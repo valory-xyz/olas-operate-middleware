@@ -94,19 +94,19 @@ class PearlTray extends Electron.Tray {
       isDev && logger.electron('received tray icon status:', status);
       switch (status) {
         case TrayIconStatus.LoggedOut: {
-          this.setImage(trayIcons.LOGGED_OUT);
+          this.setImage(trayIcons[TrayIconStatus.LoggedOut]);
           break;
         }
         case TrayIconStatus.Running: {
-          this.setImage(trayIcons.RUNNING);
+          this.setImage(trayIcons[TrayIconStatus.Running]);
           break;
         }
         case TrayIconStatus.Paused: {
-          this.setImage(trayIcons.PAUSED);
+          this.setImage(trayIcons[TrayIconStatus.Paused]);
           break;
         }
         case TrayIconStatus.LowGas: {
-          this.setImage(trayIcons.LOW_GAS);
+          this.setImage(trayIcons[TrayIconStatus.LowGas]);
           break;
         }
         default: {
