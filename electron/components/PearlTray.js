@@ -41,8 +41,12 @@ const trayIcons = Object.entries(trayIconPaths).reduce(
       // Windows and macOS support nativeImage
       let trayIcon = Electron.nativeImage.createFromPath(path);
 
-      // Resize icon for macOS
-      if (isMac) trayIcon = trayIcon.resize(macTrayIconSize);
+      if (isMac) {
+        // Resize icon for tray
+        trayIcon = trayIcon.resize(macTrayIconSize);
+        // Set as template image (required for tray icon parsing)
+        trayIcon.setTemplateImage(true);
+      }
 
       return trayIcon;
     })(),
