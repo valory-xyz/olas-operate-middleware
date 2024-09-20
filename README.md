@@ -23,21 +23,21 @@ A cross-platform desktop application used to run autonomous agents powered by th
 
 #### Setting up your development environment
 
-- Ubuntu Setup Guide: [docs/dev/ubuntu-setup.md](docs/dev/ubuntu-setup.md)
-- MacOS Setup Guide: [docs/dev/macos-setup.md](docs/dev/macos-setup.md)
-- Windows Setup Guide: [docs/dev/windows-setup.md](docs/dev/windows-setup.md)
+- [Ubuntu Setup Guide](docs/dev/ubuntu-setup.md)
+- [MacOS Setup Guide](docs/dev/macos-setup.md)
+- [Windows Setup Guide](docs/dev/windows-setup.md)
 
 #### Setting up a development RPC endpoint
 
-- RPC Setup Guide: [docs/dev/rpcs.md](docs/dev/rpcs.md)
+- [RPC Setup Guide](docs/dev/rpcs.md)
 
 ## Project Dependencies
 
 There are three parts to the project: the Electron app (CommonJS), the NextJS frontend (TypeScript), and the Python backend/middleware.
 
-- Electron dependencies: [package.json](package.json)
-- Frontend dependencies: [frontend/package.json](package.json)
-- Backend dependencies: [backend/pyproject.toml](backend/pyproject.toml)
+- [Electron dependencies](package.json)
+- [Frontend dependencies](package.json)
+- [Backend dependencies](backend/pyproject.toml)
 
 ## License
 
