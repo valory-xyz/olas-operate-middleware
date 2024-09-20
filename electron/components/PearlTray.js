@@ -72,24 +72,18 @@ class PearlTray extends Electron.Tray {
   }
 
   #bindClickEvents = () => {
-    if (isMac) {
-      isDev && logger.electron('binding mac click events to tray');
-      // macOS: Only handle the click to show window or context menu with right-click
-      this.on('click', () => this.activeWindowCallback()?.show());
-      this.on('right-click', () => this.popUpContextMenu());
-    } else if (isLinux) {
-      isDev && logger.electron('binding linux click events to tray');
-      // Linux: events are not working as expected, only context menu shows
-      // this.on('click', () => this.activeWindowCallback()?.show());
-      // this.on('double-click', () => this.activeWindowCallback()?.show());
-      // this.on('right-click', () => this.popUpContextMenu());
-    } else if (isWindows) {
+    if (isWindows) {
       isDev && logger.electron('binding windows click events to tray');
       // Windows: Handle single and double-clicks to show the window
       this.on('click', () => this.activeWindowCallback()?.show());
       this.on('double-click', () => this.activeWindowCallback()?.show());
       this.on('right-click', () => this.popUpContextMenu());
     }
+    isDev &&
+      logger.electron('no click events bound to tray as not using win32');
+    // macOS and Linux handle all clicks by displaying the context menu
+    // can show window by selecting 'Show app' on dropdown
+    // or clicking the app icon in the dock
   };
 
   #bindIpcListener = () => {
