@@ -2,6 +2,7 @@ import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
 import { FC } from 'react';
 
+import { MODAL_WIDTH } from '@/constants/width';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
@@ -21,7 +22,7 @@ export const FirstRunModal: FC<FirstRunModalProps> = ({ open, onClose }) => {
   return (
     <Modal
       open={open}
-      width={412}
+      width={MODAL_WIDTH}
       onCancel={onClose}
       footer={[
         <Button
