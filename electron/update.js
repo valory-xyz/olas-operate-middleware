@@ -19,4 +19,9 @@ macUpdater.autoDownload = false;
 macUpdater.autoInstallOnAppQuit = false;
 macUpdater.logger = logger;
 
+// UPDATER EVENTS
+macUpdater.on('update-downloaded', () => {
+  macUpdater.quitAndInstall();
+});
+
 module.exports = { macUpdater };
