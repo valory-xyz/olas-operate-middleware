@@ -20,7 +20,6 @@ const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE } = require('./constants');
-const { macUpdater } = require('./update');
 const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
@@ -488,11 +487,6 @@ app.once('ready', async () => {
     );
   }
   createSplashWindow();
-});
-
-// UPDATER EVENTS
-macUpdater.on('update-downloaded', () => {
-  macUpdater.quitAndInstall();
 });
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
