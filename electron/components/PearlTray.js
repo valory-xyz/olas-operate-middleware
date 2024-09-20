@@ -44,7 +44,7 @@ const trayIcons = Object.entries(trayIconPaths).reduce(
       if (isMac) {
         // Resize icon for tray
         trayIcon = trayIcon.resize(macTrayIconSize);
-        // Set as template image (required for tray icon parsing)
+        // Mark the image as a template image for MacOS to apply correct color
         trayIcon.setTemplateImage(true);
       }
 
