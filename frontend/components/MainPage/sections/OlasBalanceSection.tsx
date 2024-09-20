@@ -57,8 +57,8 @@ const LowTradingBalanceAlert = () => {
               {`To run your agent, add at least $${LOW_MASTER_SAFE_BALANCE} XDAI to your account.`}
             </Text>
             <Text>
-              Do it quickly to avoid your agent missing its targets and getting
-              suspended!
+              Your agent is at risk of missing its targets, which would result
+              in several days&apos; suspension.
             </Text>
           </Flex>
         }
@@ -82,10 +82,10 @@ const AvoidSuspensionAlert = () => {
               Avoid suspension!
             </Title>
             <Text>
-              Run your agent for at least half an hour a day to make sure it
-              hits its targets. If it misses its targets 2 days in a row, it’ll
-              be suspended. You won’t be able to run it or earn rewards for
-              several days.
+              Run your agent for at least half an hour a day to avoid missing
+              targets. If it misses its targets 2 days in a row, it’ll be
+              suspended. You won’t be able to run it or earn rewards for several
+              days.
             </Text>
             <Button
               type="primary"
