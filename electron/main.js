@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const next = require('next');
+const { default: next } = require('next');
 const http = require('http');
 const AdmZip = require('adm-zip');
 
@@ -24,6 +24,7 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+const { PearlUpdater } = require('./components/PearlOTA');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -135,7 +136,7 @@ const createMainWindow = async () => {
   mainWindow = new BrowserWindow({
     title: 'Pearl',
     resizable: false,
-    draggable: true,
+    // draggable: true,
     frame: false,
     transparent: true,
     fullscreenable: false,
@@ -187,7 +188,7 @@ const createMainWindow = async () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
 
-  mainWindow.webContents.on('ready-to-show', () => {
+  mainWindow.webContents.on('dom-ready', () => {
     mainWindow.show();
   });
 
@@ -309,16 +310,16 @@ async function launchNextApp() {
     dev: false,
     dir: path.join(__dirname),
     port: appConfig.ports.prod.next,
-    env: {
-      GNOSIS_RPC:
-        process.env.NODE_ENV === 'production'
-          ? process.env.FORK_URL
-          : process.env.DEV_RPC,
-      NEXT_PUBLIC_BACKEND_PORT:
-        process.env.NODE_ENV === 'production'
-          ? appConfig.ports.prod.operate
-          : appConfig.ports.dev.operate,
-    },
+    // env: {
+    //   GNOSIS_RPC:
+    //     process.env.NODE_ENV === 'production'
+    //       ? process.env.FORK_URL
+    //       : process.env.DEV_RPC,
+    //   NEXT_PUBLIC_BACKEND_PORT:
+    //     process.env.NODE_ENV === 'production'
+    //       ? appConfig.ports.prod.operate
+    //       : appConfig.ports.dev.operate,
+    // },
   });
   await nextApp.prepare();
 
@@ -486,6 +487,7 @@ app.once('ready', async () => {
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
+  new PearlUpdater();
   createSplashWindow();
 });
 

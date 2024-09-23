@@ -33,6 +33,13 @@ const levelFilter = (level) =>
     return info.level === level ? info : false;
   })();
 
+/**
+ * Winston logger for the CLI and Electron app.
+ * @module logger
+ * @type {any & {cli: winston.Logger, electron: winston.Logger}}
+ * @property {winston.Logger} cli - Logger for CLI
+ * @property {winston.Logger} electron - Logger for Electron app
+ */
 const logger = winston.createLogger({
   levels: customLevels.levels,
   transports: [

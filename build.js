@@ -4,8 +4,6 @@
 require('dotenv').config();
 const build = require('electron-builder').build;
 
-const { publishOptions } = require('./electron/constants');
-
 /**
  * Get the artifact name for the build based on the environment.
  * @returns {string}
