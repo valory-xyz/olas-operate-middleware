@@ -1,0 +1,21 @@
+{
+    "compilerOptions": {
+        "target": "ESNext",
+        "module": "NodeNext",
+        "lib": ["ESNext"],
+        "allowJs": true,
+        "checkJs": true,
+        // "jsx": "react",
+        "moduleResolution": "NodeNext",
+        "baseUrl": "./",
+        "paths": {
+            "*": ["node_modules/*"]
+        }
+    },
+    "include": ["./**/*"],
+    "exclude": [
+        "node_modules", 
+        "**/node_modules/*",
+        "main.js" // TODO: fix main.js and remove this line
+    ]
+}
