@@ -80,6 +80,7 @@ class PearlTray extends Electron.Tray {
       this.on('click', () => this.activeWindowCallback()?.show());
       this.on('double-click', () => this.activeWindowCallback()?.show());
       this.on('right-click', () => this.popUpContextMenu());
+      return;
     }
     isDev &&
       logger.electron('no click events bound to tray as not using win32');
