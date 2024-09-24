@@ -34,17 +34,19 @@ const levelFilter = (level) =>
   })();
 
 /**
- * Winston logger for the CLI and Electron app.
- * @module logger
- * @type {any & {cli: winston.Logger, electron: winston.Logger}}
- * @property {winston.Logger} cli - Logger for CLI
- * @property {winston.Logger} electron - Logger for Electron app
+ * A custom logger for Pearl that logs to the console and to files.
+ * @todo Type this object.
+ * @type {Object}
+ * @property {winston.Logger} electron - The logger instance.
+ * @property {winston.Logger} cli - The logger instance.
+ * @property {winston.Logger} next - The logger instance.
  */
 const logger = winston.createLogger({
   levels: customLevels.levels,
   transports: [
+    // Console transport logs all levels (electron is the highest level, there is no levelFilter)
     new winston.transports.Console({
-      level: 'electron', // Set to the highest level so it captures everything.
+      level: 'electron',
       format: combine(winston.format.colorize(), timestamp(), logFormat),
     }),
     new winston.transports.File({
