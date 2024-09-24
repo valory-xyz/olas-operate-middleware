@@ -20,7 +20,7 @@ const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE } = require('./constants');
-const { setupStoreIpc } = require('./store');
+const { setupStore } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
@@ -204,8 +204,8 @@ const createMainWindow = async () => {
   });
 
   try {
-    logger.electron('Setting up store IPC');
-    await setupStoreIpc(ipcMain, mainWindow);
+    logger.electron('Setting up store');
+    await setupStore(ipcMain, mainWindow);
   } catch (e) {
     logger.electron('Store IPC failed:', JSON.stringify(e));
   }
