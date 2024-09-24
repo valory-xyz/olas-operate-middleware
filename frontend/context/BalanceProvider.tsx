@@ -203,7 +203,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentEoaAddress = useMemo(
     () =>
-      services?.[0].chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
+      services?.[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
         ?.instances?.[0],
     [services],
   );
