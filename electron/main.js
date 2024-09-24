@@ -24,7 +24,7 @@ const { setupStore } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
-const { PearlUpdater } = require('./components/PearlOTA');
+const { PearlOTA } = require('./components/PearlOTA');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -487,7 +487,8 @@ app.once('ready', async () => {
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
-  new PearlUpdater();
+
+  new PearlOTA();
   createSplashWindow();
 });
 
