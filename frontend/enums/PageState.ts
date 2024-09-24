@@ -7,4 +7,5 @@ export enum Pages {
   Send,
   ManageStaking,
   YourWalletBreakdown,
+  RewardsHistory,
 }
