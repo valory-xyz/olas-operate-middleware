@@ -4,7 +4,6 @@ import {
   Col,
   Flex,
   message,
-  Modal,
   Row,
   Spin,
   Tooltip,
@@ -15,6 +14,7 @@ import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { MODAL_WIDTH } from '@/constants/width';
 import { Token } from '@/enums/Token';
 import { useAddress } from '@/hooks/useAddress';
 import { useBalance } from '@/hooks/useBalance';
@@ -25,36 +25,9 @@ import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
 import { CardSection } from '../styled/CardSection';
+import { CustomModal } from '../styled/CustomModal';
 
 const { Text, Title } = Typography;
-
-const DebugModal = styled(Modal)`
-  top: 24px;
-  height: calc(100vh - 48px);
-  display: flex;
-  flex-direction: column;
-
-  .ant-modal-content {
-    height: calc(100vh - 48px);
-    display: flex;
-    flex-direction: column;
-    padding: 0;
-  }
-
-  .ant-modal-header {
-    padding: 16px 24px;
-    margin: 0;
-    border-bottom: 1px solid ${COLOR.BORDER_GRAY};
-  }
-
-  .ant-modal-body {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    overflow-y: auto;
-    border-radius: 12px;
-  }
-`;
 
 const Card = styled.div`
   padding: 16px 24px;
@@ -198,11 +171,11 @@ export const DebugInfoSection = () => {
       <Button type="primary" ghost size="large" onClick={showModal}>
         Show debug data
       </Button>
-      <DebugModal
+      <CustomModal
         title="Debug data"
         open={isModalOpen}
         footer={null}
-        width={412}
+        width={MODAL_WIDTH}
         onCancel={handleCancel}
       >
         {data ? (
@@ -212,7 +185,7 @@ export const DebugInfoSection = () => {
             <Spin size="large" />
           </Flex>
         )}
-      </DebugModal>
+      </CustomModal>
     </CardSection>
   );
 };

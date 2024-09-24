@@ -10,4 +10,5 @@ export const COLOR = {
   BORDER_GRAY: '#DFE5EE',
   BROWN: '#873800',
   TEXT: '#1f2229',
+  TEXT_LIGHT: '#606F85',
 };
