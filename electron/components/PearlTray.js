@@ -23,10 +23,10 @@ const appPath = Electron.app.getAppPath();
  * @type {Record<TrayIconStatus, string>}
  */
 const trayIconPaths = {
-  [TrayIconStatus.LoggedOut]: `${appPath}/electron/assets/icons/tray-logged-out.png`,
-  [TrayIconStatus.LowGas]: `${appPath}/electron/assets/icons/tray-low-gas.png`,
-  [TrayIconStatus.Paused]: `${appPath}/electron/assets/icons/tray-paused.png`,
-  [TrayIconStatus.Running]: `${appPath}/electron/assets/icons/tray-running.png`,
+  [TrayIconStatus.LoggedOut]: `${appPath}/electron/assets/icons/tray/logged-out.png`,
+  [TrayIconStatus.LowGas]: `${appPath}/electron/assets/icons/tray/low-gas.png`,
+  [TrayIconStatus.Paused]: `${appPath}/electron/assets/icons/tray/paused.png`,
+  [TrayIconStatus.Running]: `${appPath}/electron/assets/icons/tray/running.png`,
 };
 
 /** Tray icons as native images
