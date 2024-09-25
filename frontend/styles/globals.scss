@@ -9,19 +9,34 @@ html, body {
   height: auto;
 }
 
-  /* Hide scrollbar for Chrome, Safari and Opera */
-*::-webkit-scrollbar {
-  display: none;
-}
-
 body {
   max-width: 460px;
   border-radius: 8px;
   user-select: none;
+  scroll-behavior: smooth;
+  overflow: hidden;
 }
 
 button, input, select, textarea, .ant-input-suffix {
   -webkit-app-region: no-drag;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #FFFFFF; /* Scrollbar track background */
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #C2CBD7; /* Scrollbar color */
+  border-radius: 8px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9AA1AA; /* Scrollbar color when hovered */
 }
 
 // antd overrides
@@ -36,7 +51,7 @@ button, input, select, textarea, .ant-input-suffix {
 }
 
 .antd-card {
-  background-color: white;
+  background-color: #FFFFFF;
   overflow-y: scroll;
 }
 
