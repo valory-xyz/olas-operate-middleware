@@ -12,6 +12,7 @@ const schema = {
   firstStakingRewardAchieved: { type: 'boolean', default: false },
   firstRewardNotificationShown: { type: 'boolean', default: false },
   agentEvictionAlertShown: { type: 'boolean', default: false },
+  canCheckForUpdates: { type: ['boolean', 'null'], default: null },
 };
 
 /**
@@ -24,15 +25,22 @@ const schema = {
  * @type {Record<string, (store: Store<{[key: string]: unknown}>) => void>} */
 const migrations = {
   '0.1.0-rc143': (store) => {
-    // Environment name and current staking program are no longer stored
+    // Environment name and current staking program are unused
+    // can revisit environment name if we need to support multiple environments
     if (store.has('environmentName')) {
       logger.electron('Removing environmentName from store');
       store.delete('environmentName');
     }
-    // Remove the current staking program, was never implemented
     if (store.has('currentStakingProgram')) {
       logger.electron('Removing currentStakingProgram from store');
       store.delete('currentStakingProgram');
+    }
+  },
+  '0.1.0-rc144': (store) => {
+    // Add new canCheckForUpdates
+    if (!store.has('canCheckForUpdates')) {
+      logger.electron('Adding canCheckForUpdates to store');
+      store.set('canCheckForUpdates', null);
     }
   },
 };
