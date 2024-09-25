@@ -4,7 +4,7 @@
 require('dotenv').config();
 const build = require('electron-builder').build;
 
-const { publishOptions } = require('./electron/constants');
+const { githubPublishOptions } = require('./electron/constants');
 
 
 function artifactName() {
@@ -31,7 +31,7 @@ const main = async () => {
         oneClick: false,
       },
       win: {
-        publish: publishOptions,
+        publish: githubPublishOptions,
         icon: 'electron/assets/icons/splash-robot-head-dock.png',
       },
       extraResources: [

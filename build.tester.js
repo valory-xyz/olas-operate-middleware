@@ -7,8 +7,6 @@
 require('dotenv').config();
 const build = require('electron-builder').build;
 
-const { publishOptions } = require('./electron/constants');
-
 const main = async () => {
   console.log('Building...');
 

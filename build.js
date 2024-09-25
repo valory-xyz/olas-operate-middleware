@@ -3,6 +3,7 @@
  */
 require('dotenv').config();
 const build = require('electron-builder').build;
+const { githubPublishOptions } = require('./electron/constants/config');
 
 /**
  * Get the artifact name for the build based on the environment.
@@ -48,7 +49,7 @@ const main = async () => {
             arch: [process.env.ARCH], // ARCH env is set during release CI
           },
         ],
-        publish: publishOptions,
+        publish: githubPublishOptions,
         category: 'public.app-category.utilities',
         icon: 'electron/assets/icons/splash-robot-head-dock.png',
         hardenedRuntime: true,
