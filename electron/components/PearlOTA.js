@@ -1,9 +1,10 @@
+const { ipcMain } = require('electron');
 const { MacUpdater, NsisUpdater } = require('electron-updater');
 const { logger } = require('../logger');
-const { publishOptions, isWindows, isMac } = require('../constants');
+const { isWindows, isMac } = require('../constants');
+const { githubUpdateOptions } = require('../constants/config');
 
 /** Over-the-air update manager
- * @property {NsisUpdater | MacUpdater} updater - The updater instance
  * @example
  * const { PearlOTA } = require('./PearlOTA');
  * const ota = new PearlOTA();
@@ -14,28 +15,29 @@ const { publishOptions, isWindows, isMac } = require('../constants');
  * @note updater only supports Windows and Mac
  */
 class PearlOTA {
+  /**
+   * @type {MacUpdater | NsisUpdater | null} */
   updater = null;
-  constructor() {
-    if (isWindows) this.updater = new NsisUpdater(publishOptions);
-    if (isMac) this.updater = new MacUpdater(publishOptions);
 
-    if (!this.updater) {
-      logger.electron.error('Unsupported platform for auto-updates');
-      return null;
+  constructor() {
+    if (isWindows) this.updater = new NsisUpdater(githubUpdateOptions);
+    if (isMac) this.updater = new MacUpdater(githubUpdateOptions);
+
+    if (this.updater) {
+      this.updater.autoDownload = false;
+      this.updater.autoInstallOnAppQuit = false;
+      this.updater.logger = logger.electron;
+      this.#bindUpdaterEvents();
     }
 
-    this.updater.autoDownload = false;
-    this.updater.autoInstallOnAppQuit = false;
-    this.updater.logger = logger.electron;
-
-    this.#bindUpdaterEvents();
+    this.#bindIpcMainEvents();
   }
 
   /** Binds events to the updater
    */
   #bindUpdaterEvents = () => {
     this.updater.on('error', (error) => {
-      logger.electron.error('Update error:', error);
+      logger.electron('Update error:', error);
     });
     this.updater.on('update-available', () => {
       logger.electron.info('Update available');
@@ -51,6 +53,41 @@ class PearlOTA {
     });
     this.updater.on('update-not-available', () => {
       logger.electron.info('No update available');
+    });
+  };
+
+  #bindIpcMainEvents = () => {
+    ipcMain.handle('ota.checkForUpdates', async () => {
+      if (!this.updater) return "Updater doesn't support this platform";
+      try {
+        await this.updater.checkForUpdates();
+        return true;
+      } catch (error) {
+        logger.electron('Failed to check for updates:', error);
+        return false;
+      }
+    });
+
+    ipcMain.handle('ota.downloadUpdate', async () => {
+      if (!this.updater) return "Updater doesn't support this platform";
+      try {
+        await this.updater.downloadUpdate();
+        return true;
+      } catch (error) {
+        logger.electron('Failed to download update:', error);
+        return false;
+      }
+    });
+
+    ipcMain.handle('ota.quitAndInstall', async () => {
+      if (!this.updater) return "Updater doesn't support this platform";
+      try {
+        await this.updater.quitAndInstall();
+        return true;
+      } catch (error) {
+        logger.electron('Failed to quit and install:', error);
+        return false;
+      }
     });
   };
 }
