@@ -31,31 +31,6 @@ const paths = {
   osPearlTempDir: path.join(os.tmpdir(), 'pearl'),
 };
 
-/**
- * Options for the auto-updater
- * @note electron-updater does not export the required type, so it is defined here
- * @type {{
- *  provider: 'github',
- * owner: string,
- * repo: string,
- * private: boolean,
- * publishAutoUpdate: boolean,
- * channel: string,
- * vPrefixedTagName: boolean,
- * protocol: 'https' | 'http'
- * }}
- */
-const publishOptions = {
-  provider: 'github',
-  owner: 'valory-xyz',
-  repo: 'olas-operate-app',
-  private: false,
-  publishAutoUpdate: true,
-  channel: 'latest',
-  vPrefixedTagName: true,
-  protocol: 'https',
-};
-
 module.exports = {
   PORT_RANGE,
   ERROR_ADDRESS_IN_USE,
@@ -65,5 +40,4 @@ module.exports = {
   isProd,
   isDev,
   paths,
-  publishOptions,
 };
