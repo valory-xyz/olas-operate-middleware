@@ -1,4 +1,4 @@
-import { Card, Flex, Typography } from 'antd';
+import { Card, Flex, Skeleton, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import styled from 'styled-components';
@@ -78,25 +78,39 @@ const ServiceAndNftDetails = () => {
 };
 
 export const YourAgentWallet = () => {
-  const { agentSafeBalance, agentEoaBalance } = useBalance();
-  const { accruedServiceStakingRewards } = useReward();
+  const { isBalanceLoaded, agentSafeBalance, agentEoaBalance } = useBalance();
+  const {
+    availableRewardsForEpochEth,
+    isEligibleForRewards,
+    accruedServiceStakingRewards,
+  } = useReward();
   const {
     instanceAddress: agentEoaAddress,
     multisigAddress: agentSafeAddress,
   } = useAddress();
 
+  const reward = useMemo(() => {
+    if (!isBalanceLoaded) return <Skeleton.Input size="small" active />;
+    if (!isEligibleForRewards) return 'Not yet earned';
+    return `~${balanceFormat(availableRewardsForEpochEth, 2)} OLAS`;
+  }, [isBalanceLoaded, isEligibleForRewards, availableRewardsForEpochEth]);
+
   const olasBalances = useMemo(() => {
     return [
       {
         title: 'Claimed rewards',
-        value: balanceFormat(agentSafeBalance?.OLAS ?? 0, 2),
+        value: `${balanceFormat(agentSafeBalance?.OLAS ?? 0, 2)} OLAS`,
       },
       {
         title: 'Unclaimed rewards',
-        value: balanceFormat(accruedServiceStakingRewards ?? 0, 2),
+        value: `${balanceFormat(accruedServiceStakingRewards ?? 0, 2)} OLAS`,
+      },
+      {
+        title: 'Current epoch rewards',
+        value: reward,
       },
     ];
-  }, [agentSafeBalance?.OLAS, accruedServiceStakingRewards]);
+  }, [agentSafeBalance?.OLAS, accruedServiceStakingRewards, reward]);
 
   const agentXdaiBalance = useMemo(
     () => (agentSafeBalance?.ETH ?? 0) + (agentEoaBalance?.ETH ?? 0),
@@ -128,7 +142,7 @@ export const YourAgentWallet = () => {
             list={olasBalances.map((item) => ({
               left: item.title,
               leftClassName: 'text-light text-sm',
-              right: `${item.value} OLAS`,
+              right: item.value,
             }))}
             parentStyle={infoBreakdownParentStyle}
           />
