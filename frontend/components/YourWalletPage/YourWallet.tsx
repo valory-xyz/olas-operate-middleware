@@ -114,7 +114,12 @@ const Signer = () => {
       <InfoBreakdownList
         list={[
           {
-            left: <SignerTitle />,
+            left: (
+              <SignerTitle
+                signerText="Your wallet signer address:"
+                signerAddress={masterEoaAddress}
+              />
+            ),
             leftClassName: 'text-light',
             right: <AddressLink address={masterEoaAddress} />,
             rightClassName: 'font-normal',

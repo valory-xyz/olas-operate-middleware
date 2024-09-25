@@ -165,7 +165,12 @@ export const YourAgentWallet = () => {
           <InfoBreakdownList
             list={[
               {
-                left: <SignerTitle />,
+                left: (
+                  <SignerTitle
+                    signerText="Agent’s wallet signer address:"
+                    signerAddress={agentEoaAddress}
+                  />
+                ),
                 leftClassName: 'text-light text-sm',
                 right: <AddressLink address={agentEoaAddress} />,
                 rightClassName: 'font-normal',
