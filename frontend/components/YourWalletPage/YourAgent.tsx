@@ -112,11 +112,6 @@ export const YourAgentWallet = () => {
     ];
   }, [agentSafeBalance?.OLAS, accruedServiceStakingRewards, reward]);
 
-  const agentXdaiBalance = useMemo(
-    () => (agentSafeBalance?.ETH ?? 0) + (agentEoaBalance?.ETH ?? 0),
-    [agentSafeBalance?.ETH, agentEoaBalance?.ETH],
-  );
-
   return (
     <Card>
       <Container>
@@ -154,7 +149,7 @@ export const YourAgentWallet = () => {
               {
                 left: <XdaiTitle />,
                 leftClassName: 'text-light text-sm',
-                right: `${balanceFormat(agentXdaiBalance, 2)} XDAI`,
+                right: `${balanceFormat(agentSafeBalance?.ETH, 2)} XDAI`,
               },
             ]}
             parentStyle={infoBreakdownParentStyle}
@@ -172,8 +167,7 @@ export const YourAgentWallet = () => {
                   />
                 ),
                 leftClassName: 'text-light text-sm',
-                right: <AddressLink address={agentEoaAddress} />,
-                rightClassName: 'font-normal',
+                right: `${balanceFormat(agentEoaBalance?.ETH, 2)} XDAI`,
               },
             ]}
             parentStyle={infoBreakdownParentStyle}
