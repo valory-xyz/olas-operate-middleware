@@ -99,11 +99,11 @@ export const YourAgentWallet = () => {
     return [
       {
         title: 'Claimed rewards',
-        value: `${balanceFormat(agentSafeBalance?.OLAS ?? 0, 2)} OLAS`,
+        value: `${balanceFormat(agentSafeBalance?.OLAS, 2)} OLAS`,
       },
       {
         title: 'Unclaimed rewards',
-        value: `${balanceFormat(accruedServiceStakingRewards ?? 0, 2)} OLAS`,
+        value: `${balanceFormat(accruedServiceStakingRewards, 2)} OLAS`,
       },
       {
         title: 'Current epoch rewards',
