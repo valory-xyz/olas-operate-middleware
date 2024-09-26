@@ -26,6 +26,7 @@ const main = async () => {
       artifactName: artifactName(),
       productName: 'Pearl',
       files: ['electron/**/*', 'package.json'],
+      detectUpdateChannel: false,
       directories: {
         output: 'dist',
       },

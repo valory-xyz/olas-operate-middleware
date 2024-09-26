@@ -27,6 +27,7 @@ const main = async () => {
       directories: {
         output: 'dist',
       },
+      detectUpdateChannel: false,
       nsis: {
         oneClick: false,
       },
@@ -41,7 +42,6 @@ const main = async () => {
           filter: ['**/*'],
         },
       ],
-
     },
   });
 };
