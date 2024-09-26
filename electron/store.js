@@ -19,12 +19,11 @@ const schema = {
  * Migrations for the Electron store.
  * Each migration function should take the store as an argument and update it in place.
  * Migrations are run in order, starting from the oldest version and updating to the latest.
- * @note The migration function should be named after the version it
- * migrates to, e.g. '0.1.0-rc143' for version 0.1.0-rc143.
+ * @note Update the version number to the latest version and update migration.
  * @note All versions prior will be migrated to the latest version.
  * @type {Record<string, (store: Store<{[key: string]: unknown}>) => void>} */
 const migrations = {
-  '0.1.0-rc143': (store) => {
+  '0.1.0-rc146': (store) => {
     // Environment name and current staking program are unused
     // can revisit environment name if we need to support multiple environments
     if (store.has('environmentName')) {
@@ -35,8 +34,6 @@ const migrations = {
       logger.electron('Removing currentStakingProgram from store');
       store.delete('currentStakingProgram');
     }
-  },
-  '0.1.0-rc144': (store) => {
     // Add new canCheckForUpdates
     if (!store.has('canCheckForUpdates')) {
       logger.electron('Adding canCheckForUpdates to store');
