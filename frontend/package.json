@@ -2,7 +2,7 @@
   "author": "Valory AG",
   "dependencies": {
     "@ant-design/cssinjs": "^1.18.4",
-    "@ant-design/icons": "^5.3.0",
+    "@ant-design/icons": "^5.5.1",
     "@fontsource/inter": "^5.0.17",
     "antd": "^5.14.0",
     "ethers": "5.7.2",
