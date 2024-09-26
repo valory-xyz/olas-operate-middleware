@@ -17,7 +17,7 @@ export const UpdateModal = () => {
   useEffect(() => {
     if (storeState?.canCheckForUpdates === false) return;
     ota?.checkForUpdates?.().then((res) => {
-      console.log('Checking for updates', res);
+      console.error('Checking for updates', res);
     });
   }, [ota, storeState?.canCheckForUpdates]);
 
