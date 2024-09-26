@@ -1,3 +1,5 @@
+const { isDev } = require('./');
+
 require('dotenv').config();
 
 /**
@@ -20,7 +22,7 @@ require('dotenv').config();
 /**
  * GitHub update options
  * @see https://www.electron.build/auto-update#githuboptions
- * @type {Omit<PearlGithubUpdateOptions, 'token'> & {token: null}}
+ * @type {PearlGithubUpdateOptions}
  * @warning `token` is leaked in app-update.yml if defined here,
  * use {githubPublishOptions} instead if you're looking to release the app to GitHub
  */
@@ -33,7 +35,7 @@ const githubUpdateOptions = {
   channel: 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',
-  token: null,
+  token: isDev ? process.env.GH_TEST_PAT ?? null : null, // Personal Access Token (PAT) for GitHub when testing
 };
 
 /**
