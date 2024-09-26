@@ -5,11 +5,12 @@ import {
   ConfigProvider,
   Flex,
   Row,
+  Spin,
   Tag,
   ThemeConfig,
   Typography,
 } from 'antd';
-import { CSSProperties, useMemo } from 'react';
+import { CSSProperties, ReactNode, useMemo } from 'react';
 import styled from 'styled-components';
 
 import { CardTitle } from '@/components/Card/CardTitle';
@@ -19,6 +20,7 @@ import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 
 import dummyData from './mock.json';
+// import { useRewardsHistory } from './useRewardsHistory';
 
 const { Text } = Typography;
 const MIN_HEIGHT = 400;
@@ -73,7 +75,7 @@ interface StakingContract {
   history: HistoryItem[];
 }
 
-const NoRewardsHistory = () => (
+const Container = ({ children }: { children: ReactNode }) => (
   <Flex
     vertical
     gap={24}
@@ -81,24 +83,30 @@ const NoRewardsHistory = () => (
     justify="center"
     style={{ height: MIN_HEIGHT }}
   >
-    <HistoryOutlined style={iconStyle} />
-    <Text type="secondary">There’s no history of rewards yet</Text>
+    {children}
   </Flex>
 );
 
+const Loading = () => (
+  <Container>
+    <Spin />
+  </Container>
+);
+
+const NoRewardsHistory = () => (
+  <Container>
+    <HistoryOutlined style={iconStyle} />
+    <Text type="secondary">There’s no history of rewards yet</Text>
+  </Container>
+);
+
 const ErrorLoadingHistory = () => (
-  <Flex
-    vertical
-    gap={24}
-    align="center"
-    justify="center"
-    style={{ height: MIN_HEIGHT }}
-  >
+  <Container>
     <ApiOutlined style={iconStyle} />
     <Text type="secondary">Error loading data</Text>
     {/* TODO: add "refetch" function */}
     <Button onClick={() => window.console.log('refetch')}>Try again</Button>
-  </Flex>
+  </Container>
 );
 
 const RewardsHistoryList = () =>
@@ -136,21 +144,26 @@ const RewardsHistoryList = () =>
   });
 
 export const RewardsHistory = () => {
+  // const {
+  //   data, isError, isLoading
+  // } = useRewardsHistory();
   const { goto } = usePageState();
-  const hasErrors = false;
+  const isLoading = false;
+  const isError = false;
 
   const history = useMemo(() => {
-    if (hasErrors) return <ErrorLoadingHistory />;
+    if (isLoading) return <Loading />;
+    if (isError) return <ErrorLoadingHistory />;
     if (dummyData.length === 0) return <NoRewardsHistory />;
     return <RewardsHistoryList />;
-  }, [hasErrors]);
+  }, [isLoading, isError]);
 
   return (
     <ConfigProvider theme={yourWalletTheme}>
       <CardFlex
         bordered={false}
         title={<RewardsHistoryTitle />}
-        noBodyPadding
+        noBodyPadding="true"
         extra={
           <Button
             size="large"
