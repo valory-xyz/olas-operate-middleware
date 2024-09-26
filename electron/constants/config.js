@@ -31,7 +31,7 @@ const githubUpdateOptions = {
   owner: 'valory-xyz',
   repo: 'olas-operate-app',
   private: false, // Only set to true if the repo is private
-  publishAutoUpdate: true, // Publishes the app-update.yml file (required for auto-update)
+  publishAutoUpdate: !isDev, // Publishes the app-update.yml file (required for auto-update)
   channel: 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',
