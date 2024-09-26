@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 const { MacUpdater, NsisUpdater } = require('electron-updater');
 const { logger } = require('../logger');
-const { isWindows, isMac } = require('../constants');
+const { isWindows, isMac, isDev } = require('../constants');
 const { githubUpdateOptions } = require('../constants/config');
 
 /** Over-the-air update manager
@@ -26,7 +26,8 @@ class PearlOTA {
     if (this.updater) {
       this.updater.autoDownload = false;
       this.updater.autoInstallOnAppQuit = false;
-      this.updater.logger = logger.electron;
+      this.updater.logger = logger;
+      this.updater.forceDevUpdateConfig = isDev;
       this.#bindUpdaterEvents();
     }
 
@@ -40,19 +41,19 @@ class PearlOTA {
       logger.electron('Update error:', error);
     });
     this.updater.on('update-available', () => {
-      logger.electron.info('Update available');
+      logger.electron('Update available');
     });
     this.updater.on('update-not-available', () => {
-      logger.electron.info('No update available');
+      logger.electron('No update available');
     });
     this.updater.on('checking-for-update', () => {
-      logger.electron.info('Checking for update');
+      logger.electron('Checking for update');
     });
     this.updater.on('download-progress', (progress) => {
-      logger.electron.info('Download progress:', progress);
+      logger.electron('Download progress:', progress);
     });
     this.updater.on('update-not-available', () => {
-      logger.electron.info('No update available');
+      logger.electron('No update available');
     });
   };
 
