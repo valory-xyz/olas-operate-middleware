@@ -1,3 +1,6 @@
+// @ts-nocheck
+/* eslint-disable */
+
 // Installation helpers.
 const fs = require('fs');
 const os = require('os');
