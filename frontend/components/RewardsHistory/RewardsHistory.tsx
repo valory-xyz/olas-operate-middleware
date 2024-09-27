@@ -1,9 +1,15 @@
-import { ApiOutlined, CloseOutlined, HistoryOutlined } from '@ant-design/icons';
+import {
+  ApiOutlined,
+  CloseOutlined,
+  HistoryOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons';
 import {
   Button,
   Col,
   ConfigProvider,
   Flex,
+  Popover,
   Row,
   Spin,
   Tag,
@@ -16,13 +22,15 @@ import styled from 'styled-components';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { COLOR } from '@/constants/colors';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
+import { balanceFormat } from '@/utils/numberFormatters';
 
-import dummyData from './mock.json';
-// import { useRewardsHistory } from './useRewardsHistory';
+import { EpochDetails, StakingContract } from './types';
+import { useRewardsHistory } from './useRewardsHistory';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 const MIN_HEIGHT = 400;
 const iconStyle: CSSProperties = { fontSize: 48, color: COLOR.TEXT_LIGHT };
 
@@ -42,38 +50,39 @@ const EpochRow = styled(Row)`
   border-bottom: 1px solid ${COLOR.BORDER_GRAY};
 `;
 
-const getFormattedReward = (date: number | undefined) => {
-  if (!date) return '--';
-  return new Date(date).toLocaleDateString('en-US', {
+const getEpochEndDate = (dateInMs: number | undefined) => {
+  if (!dateInMs) return '--';
+  return new Date(dateInMs * 1000).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
   });
 };
 
+const getFormattedDate = (dateInMs: number | undefined) => {
+  if (!dateInMs) return '--';
+  return new Date(dateInMs * 1000).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+    timeZone: 'UTC',
+  });
+};
+
 const RewardsHistoryTitle = () => <CardTitle title="Staking rewards history" />;
+
 const EarnedTag = () => (
   <Tag color="success" className="m-0">
     Earned
   </Tag>
 );
+
 const NotEarnedTag = () => (
   <Tag color="red" className="m-0">
     Not earned
   </Tag>
 );
-
-interface HistoryItem {
-  epochStartTimeStamp: number;
-  epochEndTimeStamp: number;
-  reward: number;
-  earned: boolean;
-}
-
-interface StakingContract {
-  id: number;
-  stakingContractName: string;
-  history: HistoryItem[];
-}
 
 const Container = ({ children }: { children: ReactNode }) => (
   <Flex
@@ -100,63 +109,98 @@ const NoRewardsHistory = () => (
   </Container>
 );
 
-const ErrorLoadingHistory = () => (
+const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
   <Container>
     <ApiOutlined style={iconStyle} />
     <Text type="secondary">Error loading data</Text>
-    {/* TODO: add "refetch" function */}
-    <Button onClick={() => window.console.log('refetch')}>Try again</Button>
+    <Button onClick={refetch}>Try again</Button>
   </Container>
 );
 
-const RewardsHistoryList = () =>
-  (dummyData as StakingContract[]).map((item) => {
-    return (
-      <Flex vertical key={item.id}>
-        <ContractName>
-          <Text strong>{item.stakingContractName}</Text>
-        </ContractName>
+const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
+  const timePeriod = useMemo(() => {
+    if (!epoch.epochStartTimeStamp || !epoch.epochEndTimeStamp) return '';
+    if (epoch.epochStartTimeStamp) {
+      return `${getFormattedDate(epoch.epochStartTimeStamp)} - ${getFormattedDate(epoch.epochEndTimeStamp)} (UTC)`;
+    }
+    return `${getEpochEndDate(epoch.epochStartTimeStamp)} (UTC)`;
+  }, [epoch]);
 
-        {item.history.map((epoch, index) => {
-          const reward = epoch.reward ? epoch.reward.toFixed(2) : '--';
-
-          return (
-            <EpochRow
-              key={epoch.epochStartTimeStamp}
-              className={index === item.history.length - 1 ? 'mb-16' : ''}
+  return (
+    <Text type="secondary">
+      {getEpochEndDate(epoch.epochEndTimeStamp)}
+      &nbsp;
+      <Popover
+        arrow={false}
+        placement="topRight"
+        content={
+          <Flex vertical gap={4} className="text-sm" style={{ width: 280 }}>
+            <Title level={5} className="text-sm m-0">
+              Epoch duration
+            </Title>
+            <Text type="secondary" className="text-sm m-0">
+              {timePeriod}
+            </Text>
+            <a
+              href={`https://gnosisscan.io/tx/${epoch.transactionHash}`}
+              target="_blank"
             >
-              <Col span={6}>
-                <Text type="secondary">
-                  {getFormattedReward(epoch.epochStartTimeStamp)}
-                </Text>
-              </Col>
-              <Col span={11} className="text-right pr-16">
-                <Text type="secondary">{`~${reward} OLAS`}</Text>
-              </Col>
-              <Col span={7} className="text-center pl-16">
-                {epoch.earned ? <EarnedTag /> : <NotEarnedTag />}
-              </Col>
-            </EpochRow>
-          );
-        })}
-      </Flex>
-    );
-  });
+              End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            </a>
+          </Flex>
+        }
+      >
+        <InfoCircleOutlined />
+      </Popover>
+    </Text>
+  );
+};
+
+const RewardsHistoryList = ({ reward }: { reward: StakingContract }) => (
+  <Flex vertical>
+    <ContractName>
+      <Text strong>{reward.name}</Text>
+    </ContractName>
+
+    {reward.history.map((epoch, index) => {
+      const currentEpochReward = epoch.reward
+        ? `~${balanceFormat(epoch.reward, 2)} OLAS`
+        : 'NA';
+
+      return (
+        <EpochRow
+          key={epoch.epochEndTimeStamp}
+          className={index === reward.history.length - 1 ? 'mb-16' : ''}
+        >
+          <Col span={6}>
+            <EpochTime epoch={epoch} />
+          </Col>
+          <Col span={11} className="text-right pr-16">
+            <Text type="secondary">{currentEpochReward}</Text>
+          </Col>
+          <Col span={7} className="text-center pl-16">
+            {epoch.earned ? <EarnedTag /> : <NotEarnedTag />}
+          </Col>
+        </EpochRow>
+      );
+    })}
+  </Flex>
+);
 
 export const RewardsHistory = () => {
-  // const {
-  //   data, isError, isLoading
-  // } = useRewardsHistory();
+  const { rewards, isError, isLoading, isFetching, refetch } =
+    useRewardsHistory();
   const { goto } = usePageState();
-  const isLoading = false;
-  const isError = false;
 
   const history = useMemo(() => {
-    if (isLoading) return <Loading />;
-    if (isError) return <ErrorLoadingHistory />;
-    if (dummyData.length === 0) return <NoRewardsHistory />;
-    return <RewardsHistoryList />;
-  }, [isLoading, isError]);
+    if (isLoading || isFetching) return <Loading />;
+    if (isError) return <ErrorLoadingHistory refetch={refetch} />;
+    if (!rewards) return <NoRewardsHistory />;
+    if (rewards.length === 0) return <NoRewardsHistory />;
+    return rewards.map((reward) => (
+      <RewardsHistoryList key={reward.id} reward={reward} />
+    ));
+  }, [isLoading, isFetching, isError, rewards, refetch]);
 
   return (
     <ConfigProvider theme={yourWalletTheme}>
@@ -177,13 +221,3 @@ export const RewardsHistory = () => {
     </ConfigProvider>
   );
 };
-
-/**
- * - do we need to do the "Factory" stuff? - https://thegraph.com/docs/en/developing/creating-a-subgraph/#data-source-templates
- *
- * - fetch the staking contracts (already hardcoded)
- * - for each staking contract, fetch the list of epochs current agent safe have interacted with
- *    - for each epoch, fetch the rewards
- *    - for each epoch, did the user earn rewards
- *    - for each epoch, get the timestamp
- */
