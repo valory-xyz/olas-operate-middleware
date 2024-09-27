@@ -17,7 +17,8 @@
     "react-dom": "^18.3.1",
     "sass": "^1.72.0",
     "styled-components": "^6.1.8",
-    "usehooks-ts": "^2.14.0"
+    "usehooks-ts": "^2.14.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.2",

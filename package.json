@@ -24,8 +24,7 @@
     "styled-components": "^6.1.8",
     "sudo-prompt": "9.2.1",
     "usehooks-ts": "^2.14.0",
-    "winston": "^3.13.0",
-    "zod": "^3.23.8"
+    "winston": "^3.13.0"
   },
   "devDependencies": {
     "@electron/notarize": "^2.3.0",
