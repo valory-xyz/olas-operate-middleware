@@ -1,5 +1,4 @@
 import { WifiOutlined } from '@ant-design/icons';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { message } from 'antd';
 import { PropsWithChildren, useContext, useEffect } from 'react';
 import styled, { css } from 'styled-components';
@@ -40,8 +39,6 @@ const Body = styled.div`
   overflow-y: auto;
 `;
 
-const queryClient = new QueryClient();
-
 export const Layout = ({
   children,
 }: PropsWithChildren & { vertical?: boolean }) => {
@@ -62,10 +59,8 @@ export const Layout = ({
 
   return (
     <Container blur={isOnline ? 'false' : 'true'}>
-      <QueryClientProvider client={queryClient}>
-        <TopBar />
-        <Body>{children}</Body>
-      </QueryClientProvider>
+      <TopBar />
+      <Body>{children}</Body>
     </Container>
   );
 };

@@ -8,7 +8,7 @@ export type EpochDetails = {
   transactionHash: string;
 };
 
-export type StakingContract = {
+export type StakingReward = {
   id: Address;
   name: string;
   history: EpochDetails[];

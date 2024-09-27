@@ -27,7 +27,7 @@ import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 import { balanceFormat } from '@/utils/numberFormatters';
 
-import { EpochDetails, StakingContract } from './types';
+import { EpochDetails, StakingReward } from './types';
 import { useRewardsHistory } from './useRewardsHistory';
 
 const { Text, Title } = Typography;
@@ -119,11 +119,13 @@ const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
 
 const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   const timePeriod = useMemo(() => {
-    if (!epoch.epochStartTimeStamp || !epoch.epochEndTimeStamp) return '';
-    if (epoch.epochStartTimeStamp) {
+    if (epoch.epochStartTimeStamp && epoch.epochEndTimeStamp) {
       return `${getFormattedDate(epoch.epochStartTimeStamp)} - ${getFormattedDate(epoch.epochEndTimeStamp)} (UTC)`;
     }
-    return `${getEpochEndDate(epoch.epochStartTimeStamp)} (UTC)`;
+    if (epoch.epochStartTimeStamp) {
+      return `${getEpochEndDate(epoch.epochStartTimeStamp)} (UTC)`;
+    }
+    return 'NA';
   }, [epoch]);
 
   return (
@@ -156,7 +158,7 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   );
 };
 
-const RewardsHistoryList = ({ reward }: { reward: StakingContract }) => (
+const RewardsHistoryList = ({ reward }: { reward: StakingReward }) => (
   <Flex vertical>
     <ContractName>
       <Text strong>{reward.name}</Text>

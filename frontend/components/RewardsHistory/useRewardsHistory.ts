@@ -9,7 +9,7 @@ import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 
-import { EpochDetails, StakingContract } from './types';
+import { EpochDetails, StakingReward } from './types';
 
 type RewardHistoryResponse = {
   epoch: string;
@@ -108,7 +108,7 @@ export const useRewardsHistory = () => {
             serviceId,
           ),
         },
-      ] as StakingContract[];
+      ] as StakingReward[];
     },
     refetchOnWindowFocus: false,
     refetchInterval: 5 * 60 * 1000,
