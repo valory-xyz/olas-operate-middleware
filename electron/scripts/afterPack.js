@@ -7,9 +7,9 @@ const os = require('os');
  * @param {keyof typeof import('builder-util').Arch} arch - CPU architecture
  */
 const renameLatestMacToArchSpecific = (outDir, arch) => {
-  console.log(`afterPack: renaming latest-mac.yml to latest-mac-${arch}.yml`);
+  console.log(`afterPack: renaming lates.yml to latest-mac-${arch}.yml`);
   fs.renameSync(
-    path.resolve(outDir, 'latest-mac.yml'),
+    path.resolve(outDir, 'latest.yml'),
     path.resolve(outDir, `latest-mac-${arch}.yml`),
   );
 };
