@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { gql, request } from 'graphql-request';
 import { groupBy } from 'lodash';
+import { z } from 'zod';
 
 import { Chain } from '@/client';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
@@ -9,16 +10,18 @@ import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 
-import { EpochDetails, StakingReward } from './types';
+import { EpochDetails, StakingRewardSchema } from './types';
 
-type RewardHistoryResponse = {
-  epoch: string;
-  rewards: string[];
-  serviceIds: string[];
-  blockTimestamp: string;
-  transactionHash: string;
-  epochLength: number;
-};
+const RewardHistoryResponseSchema = z.object({
+  epoch: z.string(),
+  rewards: z.array(z.string()),
+  serviceIds: z.array(z.string()),
+  blockTimestamp: z.string(),
+  transactionHash: z.string(),
+  epochLength: z.number(),
+});
+
+type RewardHistoryResponse = z.infer<typeof RewardHistoryResponseSchema>;
 
 const betaAddress =
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS].pearl_beta;
@@ -65,7 +68,7 @@ const transformRewards = (
       epochEndTimeStamp: Number(item.blockTimestamp),
       epochStartTimeStamp:
         Number(item.blockTimestamp) - Number(item.epochLength),
-      reward,
+      reward: Number(reward),
       earned: serviceIdIndex !== -1,
       transactionHash: item.transactionHash,
     } as EpochDetails;
@@ -87,7 +90,7 @@ export const useRewardsHistory = () => {
       const betaRewards = allRewards[betaAddress.toLowerCase()];
       const beta2Rewards = allRewards[beta2Address.toLowerCase()];
 
-      return [
+      const rewards = [
         {
           id: beta2Address,
           name: STAKING_PROGRAM_META[StakingProgramId.Beta2].name,
@@ -98,7 +101,14 @@ export const useRewardsHistory = () => {
           name: STAKING_PROGRAM_META[StakingProgramId.Beta].name,
           history: transformRewards(betaRewards, serviceId),
         },
-      ] as StakingReward[];
+      ];
+
+      const parsedRewards = StakingRewardSchema.array().safeParse(rewards);
+      if (!parsedRewards.success) {
+        throw new Error(parsedRewards.error.errors.join(', '));
+      }
+
+      return parsedRewards.data;
     },
     refetchOnWindowFocus: false,
     refetchInterval: 5 * 60 * 1000,
