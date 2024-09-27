@@ -51,6 +51,8 @@ export const BalanceContext = createContext<{
   isLowBalance: boolean;
   wallets?: Wallet[];
   walletBalances: WalletAddressNumberRecord;
+  agentSafeBalance?: ValueOf<WalletAddressNumberRecord>;
+  agentEoaBalance?: ValueOf<WalletAddressNumberRecord>;
   updateBalances: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
   totalOlasStakedBalance?: number;
@@ -67,6 +69,8 @@ export const BalanceContext = createContext<{
   isLowBalance: false,
   wallets: undefined,
   walletBalances: {},
+  agentSafeBalance: undefined,
+  agentEoaBalance: undefined,
   updateBalances: async () => {},
   setIsPaused: () => {},
   totalOlasStakedBalance: undefined,
@@ -197,6 +201,13 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     }
   }, [masterEoaAddress, masterSafeAddress, serviceAddresses, services]);
 
+  const agentEoaAddress = useMemo(
+    () =>
+      services?.[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
+        ?.instances?.[0],
+    [services],
+  );
+
   const eoaBalance = useMemo(
     () => masterEoaAddress && walletBalances[masterEoaAddress],
     [masterEoaAddress, walletBalances],
@@ -214,6 +225,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       ],
     [services, walletBalances],
   );
+  const agentEoaBalance = useMemo(
+    () => agentEoaAddress && walletBalances[agentEoaAddress],
+    [agentEoaAddress, walletBalances],
+  );
+
   const isLowBalance = useMemo(() => {
     if (!safeBalance || !agentSafeBalance) return false;
     if (
@@ -247,6 +263,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isLowBalance,
         wallets,
         walletBalances,
+        agentSafeBalance,
+        agentEoaBalance,
         updateBalances,
         setIsPaused,
         totalOlasStakedBalance,

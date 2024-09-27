@@ -1,15 +1,15 @@
-import { InfoCircleOutlined } from '@ant-design/icons';
-import { Button, Flex, Skeleton, Tooltip, Typography } from 'antd';
+import { RightOutlined } from '@ant-design/icons';
+import { Button, Flex, Skeleton, Typography } from 'antd';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { CustomAlert } from '@/components/Alert';
-import { InfoBreakdownList } from '@/components/InfoBreakdown';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
+import { Pages } from '@/enums/PageState';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useReward } from '@/hooks/useReward';
+import { usePageState } from '@/hooks/usePageState';
 import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
 
@@ -20,59 +20,6 @@ const Balance = styled.span`
   letter-spacing: -2px;
   margin-right: 4px;
 `;
-
-const OVERLAY_STYLE = { maxWidth: '300px', width: '300px' };
-
-const CurrentBalance = () => {
-  const { totalOlasBalance, totalOlasStakedBalance } = useBalance();
-  const { accruedServiceStakingRewards } = useReward();
-
-  const balances = useMemo(() => {
-    return [
-      {
-        title: 'Staked amount',
-        value: balanceFormat(totalOlasStakedBalance ?? 0, 2),
-      },
-      {
-        title: 'Unclaimed rewards',
-        value: balanceFormat(accruedServiceStakingRewards ?? 0, 2),
-      },
-      {
-        // Unused funds should only be ‘free-floating’ OLAS that is neither unclaimed nor staked.
-        title: 'Unused funds',
-        value: balanceFormat(
-          (totalOlasBalance ?? 0) -
-            (totalOlasStakedBalance ?? 0) -
-            (accruedServiceStakingRewards ?? 0),
-          2,
-        ),
-      },
-    ];
-  }, [accruedServiceStakingRewards, totalOlasBalance, totalOlasStakedBalance]);
-
-  return (
-    <Text type="secondary">
-      Current balance&nbsp;
-      <Tooltip
-        arrow={false}
-        placement="bottom"
-        overlayStyle={OVERLAY_STYLE}
-        title={
-          <InfoBreakdownList
-            list={balances.map((item) => ({
-              left: item.title,
-              right: `${item.value} OLAS`,
-            }))}
-            size="small"
-            parentStyle={{ padding: 4, gap: 8 }}
-          />
-        }
-      >
-        <InfoCircleOutlined />
-      </Tooltip>
-    </Text>
-  );
-};
 
 const MainOlasBalanceAlert = styled.div`
   .ant-alert {
@@ -111,8 +58,8 @@ const LowTradingBalanceAlert = () => {
               {`To run your agent, add at least $${LOW_MASTER_SAFE_BALANCE} XDAI to your account.`}
             </Text>
             <Text>
-              Do it quickly to avoid your agent missing its targets and getting
-              suspended!
+              Your agent is at risk of missing its targets, which would result
+              in several days&apos; suspension.
             </Text>
           </Flex>
         }
@@ -136,10 +83,10 @@ const AvoidSuspensionAlert = () => {
               Avoid suspension!
             </Title>
             <Text>
-              Run your agent for at least half an hour a day to make sure it
-              hits its targets. If it misses its targets 2 days in a row, it’ll
-              be suspended. You won’t be able to run it or earn rewards for
-              several days.
+              Run your agent for at least half an hour a day to avoid missing
+              targets. If it misses its targets 2 days in a row, it’ll be
+              suspended. You won’t be able to run it or earn rewards for several
+              days.
             </Text>
             <Button
               type="primary"
@@ -159,6 +106,7 @@ const AvoidSuspensionAlert = () => {
 export const MainOlasBalance = () => {
   const { storeState } = useStore();
   const { isBalanceLoaded, totalOlasBalance } = useBalance();
+  const { goto } = usePageState();
 
   // If first reward notification is shown BUT
   // agent eviction alert is NOT yet shown, show this alert.
@@ -177,18 +125,34 @@ export const MainOlasBalance = () => {
   }, [totalOlasBalance]);
 
   return (
-    <CardSection vertical gap={8} bordertop="true" borderbottom="true">
+    <CardSection
+      vertical
+      gap={8}
+      bordertop="true"
+      borderbottom="true"
+      padding="16px 24px"
+    >
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
       <LowTradingBalanceAlert />
+
       {isBalanceLoaded ? (
-        <>
-          <CurrentBalance />
+        <Flex vertical gap={8}>
+          <Text type="secondary">Current balance</Text>
           <Flex align="end">
             <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
             <Balance className="balance">{balance}</Balance>
             <span className="balance-currency">OLAS</span>
           </Flex>
-        </>
+
+          <Text
+            type="secondary"
+            className="text-sm pointer hover-underline"
+            onClick={() => goto(Pages.YourWalletBreakdown)}
+          >
+            See breakdown
+            <RightOutlined style={{ fontSize: 12, paddingLeft: 6 }} />
+          </Text>
+        </Flex>
       ) : (
         <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
       )}
