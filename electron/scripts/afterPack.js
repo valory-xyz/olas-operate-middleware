@@ -24,10 +24,10 @@ const afterPack = async (context) => {
     console.log('afterPack: macOS detected');
 
     if (context.arch === builderUtil.Arch.x64) {
-      renameLatestMacToArchSpecific(context.outDir, 'x64');
+      renameLatestMacToArchSpecific(context.appOutDir, 'x64');
     }
     if (context.arch === builderUtil.Arch.arm64) {
-      renameLatestMacToArchSpecific(context.outDir, 'arm64');
+      renameLatestMacToArchSpecific(context.appOutDir, 'arm64');
     }
   }
 };
