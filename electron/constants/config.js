@@ -1,5 +1,3 @@
-const { isDev } = require('./');
-
 require('dotenv').config();
 
 /**
