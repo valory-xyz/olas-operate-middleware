@@ -1,5 +1,6 @@
 const { ipcMain } = require('electron');
 const { MacUpdater, NsisUpdater } = require('electron-updater');
+const os = require('os');
 const { logger } = require('../logger');
 const { isWindows, isMac, isDev } = require('../constants');
 const { githubUpdateOptions } = require('../constants/config');
@@ -28,6 +29,7 @@ class PearlOTA {
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
       this.updater.forceDevUpdateConfig = isDev;
+      this.updater.updateConfigPath = `latest-mac-${os.arch()}.yml`;
       this.#bindUpdaterEvents();
     }
 
