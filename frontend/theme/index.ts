@@ -40,5 +40,8 @@ export const mainTheme: ThemeConfig = {
     Typography: {
       colorTextDescription: '#4D596A',
     },
+    Tag: {
+      colorSuccess: '#135200',
+    },
   },
 };
