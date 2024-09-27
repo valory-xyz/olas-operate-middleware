@@ -17,6 +17,7 @@ type RewardHistoryResponse = {
   serviceIds: string[];
   blockTimestamp: string;
   transactionHash: string;
+  epochLength: number;
 };
 
 const betaAddress =
@@ -46,11 +47,8 @@ const fetchRewardsQuery = gql`
 
 const transformRewards = (
   rewards: RewardHistoryResponse[],
-  stackingProgramId: StakingProgramId,
   serviceId?: number,
 ) => {
-  const stakingInfo = STAKING_PROGRAM_META[stackingProgramId];
-
   if (!rewards || rewards.length === 0) return [];
   if (!serviceId) return [];
 
@@ -66,7 +64,7 @@ const transformRewards = (
     return {
       epochEndTimeStamp: Number(item.blockTimestamp),
       epochStartTimeStamp:
-        Number(item.blockTimestamp) - (stakingInfo.liveness ?? 0),
+        Number(item.blockTimestamp) - Number(item.epochLength),
       reward,
       earned: serviceIdIndex !== -1,
       transactionHash: item.transactionHash,
@@ -93,20 +91,12 @@ export const useRewardsHistory = () => {
         {
           id: beta2Address,
           name: STAKING_PROGRAM_META[StakingProgramId.Beta2].name,
-          history: transformRewards(
-            beta2Rewards,
-            StakingProgramId.Beta2,
-            serviceId,
-          ),
+          history: transformRewards(beta2Rewards, serviceId),
         },
         {
           id: betaAddress,
           name: STAKING_PROGRAM_META[StakingProgramId.Beta].name,
-          history: transformRewards(
-            betaRewards,
-            StakingProgramId.Beta,
-            serviceId,
-          ),
+          history: transformRewards(betaRewards, serviceId),
         },
       ] as StakingReward[];
     },
