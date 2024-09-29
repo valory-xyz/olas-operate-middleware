@@ -49,7 +49,7 @@ const main = async () => {
         target: [
           {
             target: 'default', // builds both dmg and zip, required for auto-updates
-            arch: ['arm64', 'x64'],
+            arch: ['arm64', 'x64'],            
           },
         ],
         publish: githubPublishOptions,
