@@ -1,3 +1,5 @@
+const { isDev } = require('../constants');
+
 require('dotenv').config();
 
 /**
@@ -28,7 +30,7 @@ const githubUpdateOptions = {
   owner: 'valory-xyz',
   repo: 'olas-operate-app',
   private: false, // Only set to true if the repo is private
-  publishAutoUpdate: true,
+  publishAutoUpdate: !isDev, // Publishes the update to GitHub
   channel: 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',

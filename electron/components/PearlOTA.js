@@ -1,8 +1,7 @@
 const { ipcMain } = require('electron');
 const { MacUpdater, NsisUpdater } = require('electron-updater');
-const os = require('os');
 const { logger } = require('../logger');
-const { isWindows, isMac, isDev } = require('../constants');
+const { isWindows, isMac } = require('../constants');
 const { githubUpdateOptions } = require('../constants/config');
 
 /** Over-the-air update manager
