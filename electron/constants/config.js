@@ -1,4 +1,4 @@
-const { isDev } = require('../constants');
+const { isProd } = require('../constants');
 
 require('dotenv').config();
 
@@ -14,6 +14,7 @@ require('dotenv').config();
  *  channel: string,
  *  vPrefixedTagName: boolean,
  *  protocol: "https" | "http",
+ *  token?: string
  * }} PearlGithubUpdateOptions
  *
  */
@@ -30,11 +31,11 @@ const githubUpdateOptions = {
   owner: 'valory-xyz',
   repo: 'olas-operate-app',
   private: false, // Only set to true if the repo is private
-  publishAutoUpdate: !isDev, // Publishes the update to GitHub
+  publishAutoUpdate: isProd, // Publishes the update to GitHub
   channel: 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',
-  // token: isDev ? process.env.GH_TEST_PAT ?? null : null, // Personal Access Token (PAT) for GitHub when testing
+  // token: process.env.GH_TEST_PAT, // Personal Access Token (PAT) for GitHub when testing
 };
 
 /**
