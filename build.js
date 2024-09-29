@@ -1,3 +1,4 @@
+//@ts-check
 /**
  * This script is used to build the electron app **with notarization**. It is used for the final build and release process.
  */
@@ -18,11 +19,10 @@ function artifactName() {
 const main = async () => {
   console.log('Building...');
 
-  /** @type import {CliOptions} from "electron-builder" */
-  await build({
+  /** @type {import('electron-builder').CliOptions}  */
+  const cliOptions = {
     publish: 'onTag',
     config: {
-      afterAllArtifactBuild: './electron/scripts/afterAllArtifactBuild.js',
       appId: 'xyz.valory.olas-operate-app',
       artifactName: artifactName(),
       productName: 'Pearl',
@@ -45,10 +45,11 @@ const main = async () => {
       cscKeyPassword: process.env.CSC_KEY_PASSWORD,
       cscLink: process.env.CSC_LINK,
       mac: {
+        type: process.env.NODE_ENV === 'production' ? 'distribution' : 'development',
         target: [
           {
-            target: 'dmg',
-            arch: [process.env.ARCH], // ARCH env is set during release CI
+            target: 'default', // builds both dmg and zip, required for auto-updates
+            arch: ['arm64', 'x64'],
           },
         ],
         publish: githubPublishOptions,
@@ -59,11 +60,13 @@ const main = async () => {
         entitlements: 'electron/entitlements.mac.plist',
         entitlementsInherit: 'electron/entitlements.mac.plist',
         notarize: {
-          teamId: process.env.APPLETEAMID,
+          teamId: `${process.env.APPLETEAMID}`,
         },
       },
     },
-  });
+  };
+
+  await build(cliOptions);
 };
 
 main().then((response) => { console.log('Build & Notarize complete'); }).catch((e) => console.error(e));

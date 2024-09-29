@@ -28,8 +28,6 @@ class PearlOTA {
       this.updater.autoDownload = false;
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
-      this.updater.forceDevUpdateConfig = isDev;
-      this.updater.updateConfigPath = `latest-mac-${os.arch()}.yml`;
       this.#bindUpdaterEvents();
     }
 
