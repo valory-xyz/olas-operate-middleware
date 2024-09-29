@@ -258,6 +258,7 @@ async function launchDaemon() {
     // );
 
     operateDaemon.stderr.on('data', (data) => {
+      logger.cli(data.toString().trim() + ' stderr');
       if (data.toString().includes('Uvicorn running on')) {
         resolve({ running: true, error: null });
       }
@@ -266,10 +267,17 @@ async function launchDaemon() {
       ) {
         resolve({ running: false, error: 'Port already in use' });
       }
-      logger.cli(data.toString().trim());
     });
     operateDaemon.stdout.on('data', (data) => {
-      logger.cli(data.toString().trim());
+      logger.cli(data.toString().trim() + ' stdout');
+      if (data.toString().includes('Uvicorn running on')) {
+        resolve({ running: true, error: null });
+      }
+      if (
+        data.toString().includes('error while attempting to bind on address')
+      ) {
+        resolve({ running: false, error: 'Port already in use' });
+      }
     });
   });
 
