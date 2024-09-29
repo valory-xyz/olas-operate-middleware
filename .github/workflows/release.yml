@@ -94,7 +94,7 @@ jobs:
       - name: Download Pearl binaries for macOS
         uses: actions/download-artifact@v4
         with:
-          name: pearl_*
+          pattern: pearl_*
           path: electron/bins/
 
       # Add execution permissions to the binaries
