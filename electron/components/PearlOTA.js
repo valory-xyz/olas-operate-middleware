@@ -27,12 +27,16 @@ class PearlOTA {
       this.updater.autoDownload = false;
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
-      // this.updater.forceDevUpdateConfig = true;
-      isDev &&
-        this.updater.setFeedURL({
-          url: `https://github.com/${githubUpdateOptions.owner}/${githubUpdateOptions.repo}/releases/download/v${githubUpdateOptions.channel}/latest-mac-dev.yml`,
-          provider: 'generic',
-        });
+
+      this.updater.setFeedURL({
+        provider: 'github',
+        owner: 'valory-xyz',
+        repo: 'olas-operate',
+        private: false,
+        publishAutoUpdate: true,
+        channel: isDev ? 'dev' : 'latest',
+      });
+
       this.#bindUpdaterEvents();
     }
 
