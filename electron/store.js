@@ -1,3 +1,4 @@
+//@ts-check
 const Store = require('electron-store');
 
 const { logger } = require('./logger');
@@ -49,6 +50,7 @@ const migrations = {
  * @returns {Promise<void>} - A promise that resolves once the store is set up.
  */
 const setupStore = async (ipcMain, mainWindow) => {
+  logger.electron('Setting up Electron store');
   const store = new Store({
     schema,
     migrations,
