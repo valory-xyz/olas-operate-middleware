@@ -9,7 +9,6 @@ import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
-import { UpdateProgressIndicator } from '../Update/UpdateProgressIndicator';
 import { MainHeader } from './header';
 import { AddFundsSection } from './sections/AddFundsSection';
 import { GasBalanceSection } from './sections/GasBalanceSection';
@@ -55,7 +54,7 @@ export const Main = () => {
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
-        <UpdateProgressIndicator />
+        {/* <UpdateProgressIndicator /> */}
         {currentStakingProgram === StakingProgramId.Alpha && (
           <NewStakingProgramAlertSection />
         )}

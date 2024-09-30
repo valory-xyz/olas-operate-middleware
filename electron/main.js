@@ -313,6 +313,7 @@ async function launchDaemonDev() {
 }
 
 async function launchNextApp() {
+  logger.electron('Launching Next App');
   const nextApp = next({
     dev: false,
     dir: path.join(__dirname),
@@ -328,14 +329,20 @@ async function launchNextApp() {
     //       : appConfig.ports.dev.operate,
     // },
   });
+  logger.electron('Preparing Next App');
   await nextApp.prepare();
 
+  logger.electron('Getting Next App Handler');
   const handle = nextApp.getRequestHandler();
+
+  logger.electron('Creating Next App Server');
   const server = http.createServer((req, res) => {
     handle(req, res); // Handle requests using the Next.js request handler
   });
-  server.listen(appConfig.ports.prod.next, (err) => {
-    if (err) throw err;
+
+  logger.electron('Listening on Next App Server');
+  server.listen(appConfig.ports.prod.next, (test) => {
+    logger.electron(test);
     logger.next(
       `> Next server running on http://localhost:${appConfig.ports.prod.next}`,
     );
@@ -432,7 +439,7 @@ ipcMain.on('check', async function (event, _argument) {
       await launchNextAppDev();
     } else {
       event.sender.send('response', 'Starting Pearl Daemon');
-      await launchDaemon();
+      // await launchDaemon();
 
       event.sender.send('response', 'Starting Frontend Server');
       const frontendPortAvailable = await isPortAvailable(
