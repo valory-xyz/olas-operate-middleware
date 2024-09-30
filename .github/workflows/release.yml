@@ -89,17 +89,22 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20.x"
-
-      # Download the appropriate architecture artifact
-      - name: Download Pearl binaries for macOS
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: pearl_*
+          name: pearl_x64
           path: electron/bins/
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pearl_arm64
+          path: electron/bins/
+      
+      - name: Read directory
+        run: ls -R electron/bins/
 
-      # Add execution permissions to the binaries
       - name: Add exec permissions
-        run: chmod +x electron/bins/pearl_*
+        run: chmod +x electron/bins/pearl_x64 && chmod +x electron/bins/pearl_arm64
 
       # Cache node_modules with unique key for each environment and architecture
       - name: Cache Node.js modules
