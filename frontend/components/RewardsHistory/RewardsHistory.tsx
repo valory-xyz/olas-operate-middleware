@@ -26,6 +26,7 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 import { balanceFormat } from '@/utils/numberFormatters';
+import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
 import { EpochDetails, StakingReward } from './types';
 import { useRewardsHistory } from './useRewardsHistory';
@@ -49,28 +50,6 @@ const EpochRow = styled(Row)`
   padding: 16px 24px;
   border-bottom: 1px solid ${COLOR.BORDER_GRAY};
 `;
-
-const getEpochEndDate = (dateInMs: number | undefined) => {
-  if (!dateInMs) return '--';
-  return new Date(dateInMs * 1000).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
-};
-
-const getFormattedDate = (dateInMs: number | undefined) => {
-  if (!dateInMs) return '--';
-  return new Date(dateInMs * 1000).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: true,
-    timeZone: 'UTC',
-  });
-};
-
-const RewardsHistoryTitle = () => <CardTitle title="Staking rewards history" />;
 
 const EarnedTag = () => (
   <Tag color="success" className="m-0">
@@ -120,17 +99,17 @@ const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
 const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   const timePeriod = useMemo(() => {
     if (epoch.epochStartTimeStamp && epoch.epochEndTimeStamp) {
-      return `${getFormattedDate(epoch.epochStartTimeStamp)} - ${getFormattedDate(epoch.epochEndTimeStamp)} (UTC)`;
+      return `${formatToShortDateTime(epoch.epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epoch.epochEndTimeStamp * 1000)} (UTC)`;
     }
     if (epoch.epochStartTimeStamp) {
-      return `${getEpochEndDate(epoch.epochStartTimeStamp)} (UTC)`;
+      return `${formatToMonthDay(epoch.epochStartTimeStamp * 1000)} (UTC)`;
     }
     return 'NA';
   }, [epoch]);
 
   return (
     <Text type="secondary">
-      {getEpochEndDate(epoch.epochEndTimeStamp)}
+      {formatToMonthDay(epoch.epochEndTimeStamp * 1000)}
       &nbsp;
       <Popover
         arrow={false}
@@ -208,7 +187,7 @@ export const RewardsHistory = () => {
     <ConfigProvider theme={yourWalletTheme}>
       <CardFlex
         bordered={false}
-        title={<RewardsHistoryTitle />}
+        title={<CardTitle title="Staking rewards history" />}
         noBodyPadding="true"
         extra={
           <Button
