@@ -12,13 +12,15 @@ import { useServices } from '@/hooks/useServices';
 
 import { EpochDetails, StakingRewardSchema } from './types';
 
+const ONE_DAY = 24 * 60 * 60 * 1000;
+
 const RewardHistoryResponseSchema = z.object({
   epoch: z.string(),
   rewards: z.array(z.string()),
   serviceIds: z.array(z.string()),
   blockTimestamp: z.string(),
   transactionHash: z.string(),
-  epochLength: z.number(),
+  epochLength: z.string(),
 });
 
 type RewardHistoryResponse = z.infer<typeof RewardHistoryResponseSchema>;
@@ -55,22 +57,34 @@ const transformRewards = (
   if (!rewards || rewards.length === 0) return [];
   if (!serviceId) return [];
 
-  return rewards.map((item: RewardHistoryResponse) => {
-    const serviceIdIndex = item.serviceIds.findIndex(
+  return rewards.map((currentReward: RewardHistoryResponse, index: number) => {
+    const {
+      epoch,
+      rewards: aggregatedServiceRewards,
+      serviceIds,
+      epochLength,
+      blockTimestamp,
+      transactionHash,
+    } = RewardHistoryResponseSchema.parse(currentReward);
+    const serviceIdIndex = serviceIds.findIndex(
       (id) => Number(id) === serviceId,
     );
     const reward =
-      serviceIdIndex === -1
-        ? 0
-        : ethers.utils.formatUnits(item.rewards[serviceIdIndex], 18);
+      serviceIdIndex === -1 ? 0 : aggregatedServiceRewards[serviceIdIndex];
+
+    // If the epoch is 0, it means it's the first epoch else,
+    // the start time of the epoch is the end time of the previous epoch
+    const epochStartTimeStamp =
+      epoch === '0'
+        ? Number(blockTimestamp) - Number(epochLength)
+        : rewards[index + 1].blockTimestamp;
 
     return {
-      epochEndTimeStamp: Number(item.blockTimestamp),
-      epochStartTimeStamp:
-        Number(item.blockTimestamp) - Number(item.epochLength),
-      reward: Number(reward),
+      epochEndTimeStamp: Number(blockTimestamp),
+      epochStartTimeStamp: Number(epochStartTimeStamp),
+      reward: Number(ethers.utils.formatUnits(reward, 18)),
       earned: serviceIdIndex !== -1,
-      transactionHash: item.transactionHash,
+      transactionHash,
     } as EpochDetails;
   });
 };
@@ -78,7 +92,7 @@ const transformRewards = (
 export const useRewardsHistory = () => {
   const { serviceId } = useServices();
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
-    queryKey: ['rewardsHistory', serviceId],
+    queryKey: [],
     async queryFn() {
       return await request(SUBGRAPH_URL, fetchRewardsQuery);
     },
@@ -111,7 +125,7 @@ export const useRewardsHistory = () => {
       return parsedRewards.data;
     },
     refetchOnWindowFocus: false,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: ONE_DAY,
   });
 
   return {

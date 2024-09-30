@@ -137,22 +137,20 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   );
 };
 
-const RewardsHistoryList = ({ reward }: { reward: StakingReward }) => (
+type ContractRewardsHistoryProps = { contract: StakingReward };
+const ContractRewards = ({ contract }: ContractRewardsHistoryProps) => (
   <Flex vertical>
     <ContractName>
-      <Text strong>{reward.name}</Text>
+      <Text strong>{contract.name}</Text>
     </ContractName>
 
-    {reward.history.map((epoch, index) => {
+    {contract.history.map((epoch) => {
       const currentEpochReward = epoch.reward
         ? `~${balanceFormat(epoch.reward, 2)} OLAS`
         : 'NA';
 
       return (
-        <EpochRow
-          key={epoch.epochEndTimeStamp}
-          className={index === reward.history.length - 1 ? 'mb-16' : ''}
-        >
+        <EpochRow key={epoch.epochEndTimeStamp}>
           <Col span={6}>
             <EpochTime epoch={epoch} />
           </Col>
@@ -178,9 +176,13 @@ export const RewardsHistory = () => {
     if (isError) return <ErrorLoadingHistory refetch={refetch} />;
     if (!rewards) return <NoRewardsHistory />;
     if (rewards.length === 0) return <NoRewardsHistory />;
-    return rewards.map((reward) => (
-      <RewardsHistoryList key={reward.id} reward={reward} />
-    ));
+    return (
+      <Flex vertical gap={16}>
+        {rewards.map((reward) => (
+          <ContractRewards key={reward.id} contract={reward} />
+        ))}
+      </Flex>
+    );
   }, [isLoading, isFetching, isError, rewards, refetch]);
 
   return (
