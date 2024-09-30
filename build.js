@@ -24,8 +24,6 @@ const main = async () => {
   const cliOptions = {
     publish: 'onTag',
     config: {
-
-      ...(isDev ? { afterAllArtifactBuild: "mv dist/latest-mac.yml dist/latest-mac-dev.yml" } : {}),
       appId: 'xyz.valory.olas-operate-app',
       artifactName: artifactName(),
       productName: 'Pearl',
