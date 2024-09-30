@@ -15,7 +15,7 @@
     "exclude": [
       "node_modules", 
       "**/node_modules/*",
-      "main.js"                           // You mentioned fixing this in the future
+      // "main.js"                           // You mentioned fixing this in the future
     ]
   }
   

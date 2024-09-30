@@ -1,4 +1,4 @@
-const { isProd, isDev } = require('../constants');
+const { isDev } = require('../constants');
 
 require('dotenv').config();
 

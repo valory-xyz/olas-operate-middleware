@@ -31,9 +31,7 @@ class PearlOTA {
       this.updater.setFeedURL({
         provider: 'github',
         owner: 'valory-xyz',
-        repo: 'olas-operate',
-        private: false,
-        publishAutoUpdate: true,
+        repo: 'olas-operate-app',
         channel: isDev ? 'dev' : 'latest',
       });
 

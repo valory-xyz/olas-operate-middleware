@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const { default: next } = require('next');
+const next = require('next');
 const http = require('http');
 const AdmZip = require('adm-zip');
 
@@ -72,6 +72,12 @@ let splashWindow = null;
 let tray = null;
 
 let operateDaemon, operateDaemonPid, nextAppProcess, nextAppProcessPid;
+
+// @ts-ignore - Workaround for the missing type definitions
+const nextApp = next({
+  dev: false,
+  dir: path.join(__dirname),
+});
 
 const getActiveWindow = () => splashWindow ?? mainWindow;
 
@@ -314,21 +320,7 @@ async function launchDaemonDev() {
 
 async function launchNextApp() {
   logger.electron('Launching Next App');
-  const nextApp = next({
-    dev: false,
-    dir: path.join(__dirname),
-    port: appConfig.ports.prod.next,
-    // env: {
-    //   GNOSIS_RPC:
-    //     process.env.NODE_ENV === 'production'
-    //       ? process.env.FORK_URL
-    //       : process.env.DEV_RPC,
-    //   NEXT_PUBLIC_BACKEND_PORT:
-    //     process.env.NODE_ENV === 'production'
-    //       ? appConfig.ports.prod.operate
-    //       : appConfig.ports.dev.operate,
-    // },
-  });
+
   logger.electron('Preparing Next App');
   await nextApp.prepare();
 
@@ -351,15 +343,15 @@ async function launchNextApp() {
 
 async function launchNextAppDev() {
   await new Promise(function (resolve, _reject) {
-    process.env.NEXT_PUBLIC_BACKEND_PORT = appConfig.ports.dev.operate; // must set next env var to connect to backend
+    process.env.NEXT_PUBLIC_BACKEND_PORT = `${appConfig.ports.dev.operate}`; // must set next env var to connect to backend
     nextAppProcess = spawn(
       'yarn',
-      ['dev:frontend', '--port', appConfig.ports.dev.next],
+      ['dev:frontend', '--port', `${appConfig.ports.dev.next}`],
       {
         shell: true,
         env: {
           ...process.env,
-          NEXT_PUBLIC_BACKEND_PORT: appConfig.ports.dev.operate,
+          NEXT_PUBLIC_BACKEND_PORT: `${appConfig.ports.dev.operate}`,
         },
       },
     );
@@ -439,19 +431,20 @@ ipcMain.on('check', async function (event, _argument) {
       await launchNextAppDev();
     } else {
       event.sender.send('response', 'Starting Pearl Daemon');
-      // await launchDaemon();
-
+      await launchDaemon();
       event.sender.send('response', 'Starting Frontend Server');
       const frontendPortAvailable = await isPortAvailable(
         appConfig.ports.prod.next,
       );
       if (!frontendPortAvailable) {
         appConfig.ports.prod.next = await findAvailablePort({
-          ...PORT_RANGE,
+          startPort: PORT_RANGE.startPort,
+          endPort: PORT_RANGE.endPort,
           excludePorts: [appConfig.ports.prod.operate],
         });
       }
-      await launchNextApp();
+      await launchNextApp().catch((e) => logger.electron(JSON.stringify(e)));
+      logger.electron('Frontend server started');
     }
 
     event.sender.send('response', 'Launching App');
@@ -535,11 +528,12 @@ ipcMain.on('open-path', (_, filePath) => {
  * If the file path does not exist, it returns null.
  * If no file path is provided, it sanitizes the provided data directly.
  * The sanitized log data is then written to the destination path.
- * @param {Object} options - The options for sanitizing logs.
- * @param {string} options.name - The name of the log file.
- * @param {string} options.filePath - The file path to read the log data from.
- * @param {string} options.data - The log data to sanitize if no file path is provided.
- * @param {string} options.destPath - The destination path where the logs should be stored after sanitization.
+ * @param {{
+ *  name: string,
+ *  filePath?: string,
+ *  data?: string,
+ *  destPath?: string,
+ * }} options - The options for sanitizing logs.
  * @returns {string|null} - The file path of the sanitized log data, or null if the file path does not exist.
  */
 function sanitizeLogs({
