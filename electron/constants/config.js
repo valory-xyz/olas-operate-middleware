@@ -43,13 +43,13 @@ const githubUpdateOptions = {
  * @see https://www.electron.build/auto-update#githuboptions
  * @type {{
  * releaseType: 'draft' | 'prerelease' | 'release',
- * token: string
+ * token?: string
  * } & PearlGithubUpdateOptions}
  */
 const githubPublishOptions = {
   ...githubUpdateOptions,
   releaseType: 'draft',
-  token: process.env.GH_TOKEN, // Token assigned temporarily during GitHub Actions
+  // token: process.env.GH_TOKEN, // Token assigned temporarily during GitHub Actions
 };
 
 module.exports = {

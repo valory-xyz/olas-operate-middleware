@@ -1,7 +1,7 @@
 const { ipcMain } = require('electron');
 const { MacUpdater, NsisUpdater } = require('electron-updater');
 const { logger } = require('../logger');
-const { isWindows, isMac } = require('../constants');
+const { isWindows, isMac, isDev } = require('../constants');
 const { githubUpdateOptions } = require('../constants/config');
 
 /** Over-the-air update manager
@@ -28,6 +28,11 @@ class PearlOTA {
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
       // this.updater.forceDevUpdateConfig = true;
+      isDev &&
+        this.updater.setFeedURL({
+          url: `https://github.com/${githubUpdateOptions.owner}/${githubUpdateOptions.repo}/releases/download/v${githubUpdateOptions.channel}/latest-mac-dev.yml`,
+          provider: 'generic',
+        });
       this.#bindUpdaterEvents();
     }
 

@@ -139,7 +139,4 @@ jobs:
           NODE_ENV: ${{ matrix.env }}
           DEV_RPC: ${{ matrix.rpc }}
           FORK_URL: ${{ matrix.rpc }}
-        run: |
-          echo "DEV_RPC=${{ matrix.rpc }}" >> .env
-          echo "FORK_URL=${{ matrix.rpc }}" >> .env
-          node build.js
+        run: node build.js

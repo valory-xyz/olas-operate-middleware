@@ -4,6 +4,7 @@
  */
 require('dotenv').config();
 const build = require('electron-builder').build;
+const { isDev } = require('./electron/constants');
 const { githubPublishOptions } = require('./electron/constants/config');
 
 /**
@@ -23,6 +24,8 @@ const main = async () => {
   const cliOptions = {
     publish: 'onTag',
     config: {
+
+      ...(isDev ? { afterAllArtifactBuild: "mv dist/latest-mac.yml dist/latest-mac-dev.yml" } : {}),
       appId: 'xyz.valory.olas-operate-app',
       artifactName: artifactName(),
       productName: 'Pearl',
@@ -45,13 +48,14 @@ const main = async () => {
       cscKeyPassword: process.env.CSC_KEY_PASSWORD,
       cscLink: process.env.CSC_LINK,
       mac: {
+        
         target: [
           {
             target: 'default', // builds both dmg and zip, required for auto-updates
             arch: ['arm64', 'x64'],            
           },
         ],
-        publish: process.env.NODE_ENV === "production" ? githubPublishOptions : undefined,
+        publish: githubPublishOptions,
         category: 'public.app-category.utilities',
         icon: 'electron/assets/icons/splash-robot-head-dock.png',
         hardenedRuntime: true,
