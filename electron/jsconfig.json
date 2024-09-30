@@ -7,9 +7,9 @@
       "checkJs": true,                    // Enable type-checking for JavaScript files
       "moduleResolution": "Node",         // Use Node module resolution for CommonJS
       "baseUrl": "./",                    // Set base directory for module resolution
-    //   "paths": {
-    //     "*": ["node_modules/*"]           // Simplify path resolution for modules
-    //   }
+      "paths": {
+        "*": ["node_modules/*"]           // Simplify path resolution for modules
+      }
     },
     "include": ["./**/*"],                // Include all files in the project
     "exclude": [
