@@ -35,7 +35,6 @@ const githubUpdateOptions = {
   channel: isDev ? 'dev' : 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',
-  // token: process.env.GH_TEST_PAT, // Personal Access Token (PAT) for GitHub when testing
 };
 
 /**

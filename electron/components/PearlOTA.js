@@ -28,12 +28,7 @@ class PearlOTA {
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
 
-      this.updater.setFeedURL({
-        provider: 'github',
-        owner: 'valory-xyz',
-        repo: 'olas-operate-app',
-        channel: isDev ? 'dev' : 'latest',
-      });
+      this.updater.setFeedURL(githubUpdateOptions);
 
       this.#bindUpdaterEvents();
     }
