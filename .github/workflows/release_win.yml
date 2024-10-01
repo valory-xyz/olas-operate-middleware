@@ -14,7 +14,7 @@ jobs:
           - env: "production"
             rpc: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
           - env: "development"
-            rpc: "https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b"
+            rpc: "https://virtual.gnosis.rpc.tenderly.co/7e67e659-9a8a-4830-b430-76203f1abde8"
     defaults:
       run:
         shell: bash
