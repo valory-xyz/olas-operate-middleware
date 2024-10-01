@@ -45,7 +45,6 @@ const main = async () => {
       cscKeyPassword: process.env.CSC_KEY_PASSWORD,
       cscLink: process.env.CSC_LINK,
       mac: {
-        
         target: [
           {
             target: 'default', // builds both dmg and zip, required for auto-updates
