@@ -1,5 +1,5 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
-import { Popover, PopoverProps, Typography } from 'antd';
+import { Flex, Popover, PopoverProps, Typography } from 'antd';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
@@ -46,8 +46,19 @@ const evictedDescription =
 const AgentEvictedPopover = () => (
   <Popover
     {...otherPopoverProps}
+    open
     title="Your agent is suspended from work"
-    content={<div style={{ maxWidth: 340 }}>{evictedDescription}</div>}
+    content={
+      <Flex vertical gap={8} className="text-sm-all" style={{ maxWidth: 340 }}>
+        <Paragraph className="text-sm m-0">{evictedDescription}</Paragraph>
+        <Paragraph className="m-0">
+          <Text className="text-sm">Eviction ends at</Text>{' '}
+          <Text strong className="text-sm">
+            Sep 29, 11:15 pm
+          </Text>
+        </Paragraph>
+      </Flex>
+    }
   >
     {cannotStartAgentText}
   </Popover>
@@ -93,6 +104,8 @@ export const CannotStartAgentPopover = () => {
     isRewardsAvailable,
     isAgentEvicted,
   } = useStakingContractInfo();
+
+  return <AgentEvictedPopover />;
 
   if (isEligibleForStaking) return null;
   if (!hasEnoughServiceSlots) return <NoJobsAvailablePopover />;
