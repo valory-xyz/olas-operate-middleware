@@ -15,6 +15,7 @@ import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
+import { delayInSeconds } from '@/utils/delay';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import {
@@ -35,8 +36,8 @@ const IdleTooltip = () => (
     arrow={false}
     title={
       <Paragraph className="text-sm m-0">
-        Your agent earned rewards for this epoch and stopped working. It’ll
-        return to work once the next epoch starts.
+        Your agent earned rewards for this epoch, so decided to stop working
+        until the next epoch.
       </Paragraph>
     }
   >
@@ -222,7 +223,7 @@ const AgentNotRunningButton = () => {
     setServiceStatus(DeploymentStatus.DEPLOYED);
 
     // TODO: remove this workaround, middleware should respond when agent is staked & confirmed running after `createService` call
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await delayInSeconds(5);
 
     // update provider states sequentially
     // service id is required before activeStakingContractInfo & balances can be updated

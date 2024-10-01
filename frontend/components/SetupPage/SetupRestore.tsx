@@ -50,7 +50,7 @@ export const SetupRestoreMain = () => {
       <CardSection gap={10} vertical bordertop="true" borderbottom="true">
         <Typography.Text>
           If you don’t have the seed phrase but added a backup wallet to your
-          account, you can still restore your funds, but you won’t be able to
+          account, you may still restore your funds, but you won’t be able to
           recover access to your Pearl account.
         </Typography.Text>
         <Button
@@ -188,8 +188,8 @@ export const SetupRestoreViaBackup = () => {
           the instructions below.
         </Typography.Text>
         <Typography.Text>
-          Note that the backup wallet won’t give you access to your Pearl
-          account but only to the funds stored on it.
+          Note that the backup wallet feature is not designed to restore access
+          to your Pearl account but rather the funds stored on it.
         </Typography.Text>
       </Flex>
     </CardFlex>

@@ -8,6 +8,13 @@ on:
 jobs:
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        include:
+          - env: "production"
+            rpc: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+          - env: "development"
+            rpc: "https://virtual.gnosis.rpc.tenderly.co/78ca845d-2b24-44a6-9ce2-869a979e8b5b"
     defaults:
       run:
         shell: bash
@@ -33,15 +40,15 @@ jobs:
       - name: Install dependencies
         run: poetry install
 
-      - name: install node deps
+      - name: install all deps
         run: yarn install-deps
 
       - name: set env vars to prod.env
         env:
-          NODE_ENV: production
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          NODE_ENV: ${{ matrix.env }}
+          DEV_RPC: ${{ matrix.rpc }}
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          FORK_URL: ${{ matrix.rpc }}
           GH_TOKEN: ${{ secrets.github_token}}
         run: |
           echo NODE_ENV=$NODE_ENV >> prod.env

@@ -3,6 +3,7 @@ import Image from 'next/image';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { MODAL_WIDTH } from '@/constants/width';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 export const MigrationSuccessModal = ({
@@ -24,7 +25,7 @@ export const MigrationSuccessModal = ({
 
   return (
     <Modal
-      width={412}
+      width={MODAL_WIDTH}
       open={open}
       onCancel={onClose}
       footer={[

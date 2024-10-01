@@ -1,8 +1,6 @@
 const {
   app,
   BrowserWindow,
-  Tray,
-  Menu,
   Notification,
   ipcMain,
   dialog,
@@ -15,18 +13,17 @@ const os = require('os');
 const next = require('next');
 const http = require('http');
 const AdmZip = require('adm-zip');
-const { TRAY_ICONS, TRAY_ICONS_PATHS } = require('./icons');
 
 const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
 const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
-const { PORT_RANGE, isWindows, isMac } = require('./constants');
-const { macUpdater } = require('./update');
+const { PORT_RANGE } = require('./constants');
 const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
+const { PearlTray } = require('./components/PearlTray');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -65,17 +62,17 @@ let appConfig = {
   },
 };
 
-/**
- * @type {BrowserWindow}
- */
-let mainWindow;
+/** @type {Electron.BrowserWindow | null} */
+let mainWindow = null;
+/** @type {Electron.BrowserWindow | null} */
+let splashWindow = null;
 
-let tray,
-  splashWindow,
-  operateDaemon,
-  operateDaemonPid,
-  nextAppProcess,
-  nextAppProcessPid;
+/** @type {Electron.Tray | null} */
+let tray = null;
+
+let operateDaemon, operateDaemonPid, nextAppProcess, nextAppProcessPid;
+
+const getActiveWindow = () => splashWindow ?? mainWindow;
 
 function showNotification(title, body) {
   new Notification({ title, body }).show();
@@ -100,81 +97,9 @@ async function beforeQuit() {
   }
 
   tray?.destroy();
-  mainWindow?.destroy();
   splashWindow?.destroy();
+  mainWindow?.destroy();
 }
-
-const getUpdatedTrayIcon = (iconPath) => {
-  const icon = iconPath;
-  if (icon.resize) {
-    icon.resize({ width: 16 });
-    icon.setTemplateImage(true);
-  }
-
-  return icon;
-};
-
-/**
- * Creates the tray
- */
-const createTray = () => {
-  const trayPath = getUpdatedTrayIcon(
-    isWindows || isMac ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
-  );
-  tray = new Tray(trayPath);
-
-  const contextMenu = Menu.buildFromTemplate([
-    {
-      label: 'Show app',
-      click: () => mainWindow?.show(),
-    },
-    {
-      label: 'Hide app',
-      click: () => mainWindow?.hide(),
-    },
-    {
-      label: 'Quit',
-      click: () => app.quit(),
-    },
-  ]);
-  tray.setToolTip('Pearl');
-  tray.setContextMenu(contextMenu);
-
-  ipcMain.on('tray', (_event, status) => {
-    const isSupportedOS = isWindows || isMac;
-    switch (status) {
-      case 'low-gas': {
-        const icon = getUpdatedTrayIcon(
-          isSupportedOS ? TRAY_ICONS.LOW_GAS : TRAY_ICONS_PATHS.LOW_GAS,
-        );
-        tray.setImage(icon);
-        break;
-      }
-      case 'running': {
-        const icon = getUpdatedTrayIcon(
-          isSupportedOS ? TRAY_ICONS.RUNNING : TRAY_ICONS_PATHS.RUNNING,
-        );
-        tray.setImage(icon);
-
-        break;
-      }
-      case 'paused': {
-        const icon = getUpdatedTrayIcon(
-          isSupportedOS ? TRAY_ICONS.PAUSED : TRAY_ICONS_PATHS.PAUSED,
-        );
-        tray.setImage(icon);
-        break;
-      }
-      case 'logged-out': {
-        const icon = getUpdatedTrayIcon(
-          isSupportedOS ? TRAY_ICONS.LOGGED_OUT : TRAY_ICONS_PATHS.LOGGED_OUT,
-        );
-        tray.setImage(icon);
-        break;
-      }
-    }
-  });
-};
 
 const APP_WIDTH = 460;
 
@@ -228,23 +153,23 @@ const createMainWindow = async () => {
   mainWindow.setMenuBarVisibility(true);
 
   ipcMain.on('close-app', () => {
-    mainWindow.close();
+    mainWindow?.close();
   });
 
   ipcMain.on('minimize-app', () => {
-    mainWindow.minimize();
+    mainWindow?.minimize();
   });
 
   app.on('activate', () => {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
+    if (mainWindow?.isMinimized()) {
+      mainWindow?.restore();
     } else {
-      mainWindow.show();
+      mainWindow?.show();
     }
   });
 
   ipcMain.on('set-height', (_event, height) => {
-    mainWindow.setSize(width, height);
+    mainWindow?.setSize(width, height);
   });
 
   ipcMain.on('show-notification', (_event, title, description) => {
@@ -517,7 +442,7 @@ ipcMain.on('check', async function (event, _argument) {
 
     event.sender.send('response', 'Launching App');
     await createMainWindow();
-    createTray();
+    tray = new PearlTray(getActiveWindow);
   } catch (e) {
     logger.electron(e);
     new Notification({
@@ -563,11 +488,6 @@ app.once('ready', async () => {
     );
   }
   createSplashWindow();
-});
-
-// UPDATER EVENTS
-macUpdater.on('update-downloaded', () => {
-  macUpdater.quitAndInstall();
 });
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
