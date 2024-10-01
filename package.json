@@ -5,7 +5,7 @@
     "@ant-design/icons": "^5.5.1",
     "@fontsource/inter": "^5.0.17",
     "adm-zip": "^0.5.12",
-    "antd": "^5.14.0",
+    "antd": "^5.21.2",
     "axios": "^1.7.2",
     "child_process": "^1.0.2",
     "cross-env": "^7.0.3",
@@ -16,6 +16,7 @@
     "ethers": "5.7.2",
     "ethers-multicall": "^0.2.3",
     "lodash": "^4.17.21",
+    "net": "^1.0.2",
     "next": "==14.2.3",
     "ps-tree": "^1.2.0",
     "react": "^18.3.1",
@@ -24,7 +25,6 @@
     "styled-components": "^6.1.8",
     "sudo-prompt": "9.2.1",
     "usehooks-ts": "^2.14.0",
-    "net": "^1.0.2",
     "winston": "^3.13.0"
   },
   "devDependencies": {

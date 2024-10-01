@@ -4,7 +4,7 @@
     "@ant-design/cssinjs": "^1.18.4",
     "@ant-design/icons": "^5.5.1",
     "@fontsource/inter": "^5.0.17",
-    "antd": "^5.14.0",
+    "antd": "^5.21.2",
     "ethers": "5.7.2",
     "ethers-multicall": "^0.2.3",
     "lodash": "^4.17.21",

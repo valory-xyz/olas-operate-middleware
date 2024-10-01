@@ -14,8 +14,7 @@ require('dotenv').config();
  *  channel: string,
  *  vPrefixedTagName: boolean,
  *  protocol: "https" | "http",
- *  token?: string,
- *  allowPrerelease: boolean
+ *  token?: string
  * }} PearlGithubUpdateOptions
  */
 
