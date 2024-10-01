@@ -14,7 +14,8 @@ require('dotenv').config();
  *  channel: string,
  *  vPrefixedTagName: boolean,
  *  protocol: "https" | "http",
- *  token?: string
+ *  token?: string,
+ *  allowPrerelease: boolean
  * }} PearlGithubUpdateOptions
  */
 
@@ -29,11 +30,13 @@ const githubUpdateOptions = {
   provider: 'github',
   owner: 'valory-xyz',
   repo: 'olas-operate-app',
-  private: false, // Only set to true if the repo is private
+  private: true, // Only set to true if the repo is private
   publishAutoUpdate: true, // Publishes the update to GitHub
   channel: isDev ? 'dev' : 'latest', // The release channel to check for updates, e.g. 'latest', 'beta', 'alpha'
   vPrefixedTagName: true,
   protocol: 'https',
+  token: process.env.GH_TOKEN, // Token assigned temporarily during GitHub Actions
+  allowPrerelease: true,
 };
 
 /**

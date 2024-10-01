@@ -28,16 +28,6 @@ class PearlOTA {
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
 
-      this.updater.setFeedURL({
-        provider: 'github',
-        owner: 'valory-xyz',
-        repo: 'olas-operate-app',
-        private: false, // Only set to true if the repo is private
-        token: process.env.GH_TOKEN,
-      });
-
-      this.updater.allowPrerelease = true; // for testing ota
-
       this.#bindUpdaterEvents();
     }
 
