@@ -1,5 +1,6 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Flex, Popover, PopoverProps, Typography } from 'antd';
+import { isNumber } from 'lodash';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
@@ -7,6 +8,20 @@ import { SUPPORT_URL } from '@/constants/urls';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 
 const { Paragraph, Text } = Typography;
+
+// TODO: already moved to time.ts util file in different PR
+// To be removed!
+const formatToShortDateTime = (timeInSeconds?: number) => {
+  if (!isNumber(timeInSeconds)) return '--';
+  return new Date(timeInSeconds).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+    timeZone: 'UTC',
+  });
+};
 
 const cannotStartAgentText = (
   <Text style={{ color: COLOR.RED }}>
@@ -42,27 +57,37 @@ export const CannotStartAgentDueToUnexpectedError = () => (
 );
 
 const evictedDescription =
-  "You didn't run your agent enough and it missed its targets multiple times. Please wait a few days and try to run your agent again.";
-const AgentEvictedPopover = () => (
-  <Popover
-    {...otherPopoverProps}
-    open
-    title="Your agent is suspended from work"
-    content={
-      <Flex vertical gap={8} className="text-sm-all" style={{ maxWidth: 340 }}>
-        <Paragraph className="text-sm m-0">{evictedDescription}</Paragraph>
-        <Paragraph className="m-0">
-          <Text className="text-sm">Eviction ends at</Text>{' '}
-          <Text strong className="text-sm">
-            Sep 29, 11:15 pm
-          </Text>
-        </Paragraph>
-      </Flex>
-    }
-  >
-    {cannotStartAgentText}
-  </Popover>
-);
+  "You didn't run your agent enough and it missed its targets multiple times. You can run the agent again when the eviction period ends.";
+const AgentEvictedPopover = () => {
+  const { evictionExpiresAt } = useStakingContractInfo();
+
+  if (!evictionExpiresAt) return null;
+  return (
+    <Popover
+      {...otherPopoverProps}
+      open
+      title="Your agent is evicted"
+      content={
+        <Flex
+          vertical
+          gap={8}
+          className="text-sm-all"
+          style={{ maxWidth: 340 }}
+        >
+          <Paragraph className="text-sm m-0">{evictedDescription}</Paragraph>
+          <Paragraph className="m-0">
+            <Text className="text-sm">Eviction ends at</Text>{' '}
+            <Text strong className="text-sm">
+              {formatToShortDateTime(evictionExpiresAt * 1000)}
+            </Text>
+          </Paragraph>
+        </Flex>
+      }
+    >
+      {cannotStartAgentText}
+    </Popover>
+  );
+};
 
 const JoinOlasCommunity = () => (
   <div style={{ maxWidth: 340 }}>
