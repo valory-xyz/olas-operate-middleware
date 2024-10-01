@@ -1,10 +1,11 @@
+// @ts-check
 /**
  * This script is used to build the electron app **with notarization**. It is used for the final build and release process.
  */
 require('dotenv').config();
 const build = require('electron-builder').build;
 
-const { githubPublishOptions } = require('./electron/constants');
+const { githubPublishOptions } = require('./electron/constants/config');
 
 
 function artifactName() {
@@ -16,7 +17,7 @@ function artifactName() {
 const main = async () => {
   console.log('Building...');
 
-  /** @type import {CliOptions} from "electron-builder" */
+  /** @type {import('electron-builder').CliOptions} */
   await build({
     publish: 'onTag',
     config: {

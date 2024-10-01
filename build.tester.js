@@ -1,5 +1,4 @@
-const { githubPublishOptions } = require("./electron/constants/config");
-
+//@ts-check
 /**
  * This script is used to build the electron app **without** notarization.
  *
@@ -12,7 +11,7 @@ const build = require("electron-builder").build;
 const main = async () => {
   console.log("Building...");
 
-  /** @type import {CliOptions} from "electron-builder" */
+  /** @type {import('electron-builder').CliOptions}  */
   await build({
     publish: "never",
     config: {
