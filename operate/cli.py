@@ -279,8 +279,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
 
-    @app.get(f"/stop_all_services")
-    async def _kill_server(request: Request) -> JSONResponse:
+    @app.get("/stop_all_services")
+    async def _stop_all_services(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         logger.info("Stopping services on demand...")
         pause_all_services()

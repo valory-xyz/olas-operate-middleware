@@ -509,7 +509,7 @@ class Deployment(LocalResource):
             try:
                 sleep(3)
                 shutil.rmtree(build)
-            except:
+            except:  # noqa
                 # sleep and try again. exception if fails
                 print_exc()
                 sleep(3)
