@@ -5,6 +5,7 @@ export type StakingProgramMeta = {
   canMigrateTo: StakingProgramId[];
   deprecated: boolean;
 };
+
 export const STAKING_PROGRAM_META: Record<
   StakingProgramId,
   StakingProgramMeta

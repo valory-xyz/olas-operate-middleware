@@ -4,6 +4,7 @@
     "@ant-design/cssinjs": "^1.18.4",
     "@ant-design/icons": "^5.3.0",
     "@fontsource/inter": "^5.0.17",
+    "@tanstack/react-query": "^5.29.0",
     "adm-zip": "^0.5.12",
     "antd": "^5.14.0",
     "axios": "^1.7.2",
@@ -15,6 +16,8 @@
     "electron-updater": "^6.1.8",
     "ethers": "5.7.2",
     "ethers-multicall": "^0.2.3",
+    "graphql": "^16.8.1",
+    "graphql-request": "^6.1.0",
     "lodash": "^4.17.21",
     "next": "^14.2.3",
     "ps-tree": "^1.2.0",
@@ -24,7 +27,8 @@
     "styled-components": "^6.1.8",
     "sudo-prompt": "9.2.1",
     "usehooks-ts": "^2.14.0",
-    "winston": "^3.13.0"
+    "winston": "^3.13.0",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@electron/notarize": "^2.3.0",
@@ -58,5 +62,5 @@
     "download-binaries": "sh download_binaries.sh",
     "build:pearl": "sh build_pearl.sh"
   },
-  "version": "0.1.0-rc145"
+  "version": "0.1.0-rc158"
 }
