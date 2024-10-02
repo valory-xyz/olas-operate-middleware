@@ -131,7 +131,8 @@ const HEIGHT = 700;
  * Creates the main window
  */
 const createMainWindow = async () => {
-  const width = isDev ? 840 : APP_WIDTH;
+  const width = APP_WIDTH;
+  // const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
     title: 'Pearl',
     resizable: false,
@@ -209,9 +210,9 @@ const createMainWindow = async () => {
     logger.electron('Store IPC failed:', JSON.stringify(e));
   }
 
-  if (isDev) {
-    mainWindow.webContents.openDevTools();
-  }
+  // if (isDev) {
+  //   mainWindow.webContents.openDevTools();
+  // }
 
   if (isDev) {
     mainWindow.loadURL(`http://localhost:${appConfig.ports.dev.next}`);

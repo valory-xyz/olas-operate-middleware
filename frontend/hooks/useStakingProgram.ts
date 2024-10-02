@@ -1,5 +1,7 @@
 import { useContext, useMemo } from 'react';
 
+import { Chain } from '@/client';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { StakingProgramContext } from '@/context/StakingProgramContext';
 
@@ -31,8 +33,16 @@ export const useStakingProgram = () => {
   const defaultStakingProgramMeta =
     STAKING_PROGRAM_META[defaultStakingProgramId];
 
+  const activeStakingProgramAddress = useMemo(() => {
+    if (!activeStakingProgramId) return undefined;
+    return SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+      activeStakingProgramId
+    ];
+  }, [activeStakingProgramId]);
+
   return {
     activeStakingProgramId,
+    activeStakingProgramAddress,
     activeStakingProgramMeta,
     defaultStakingProgramId,
     defaultStakingProgramMeta,

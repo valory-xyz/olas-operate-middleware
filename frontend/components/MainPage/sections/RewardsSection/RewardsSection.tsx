@@ -1,5 +1,5 @@
 import { InfoCircleOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Flex, Modal, Skeleton, Tag, Tooltip, Typography } from 'antd';
+import { Button, Flex, Modal, Popover, Skeleton, Tag, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -10,11 +10,13 @@ import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
+import { formatToTime } from '@/utils/time';
 
-import { ConfettiAnimation } from '../../Confetti/ConfettiAnimation';
-import { CardSection } from '../../styled/CardSection';
+import { ConfettiAnimation } from '../../../Confetti/ConfettiAnimation';
+import { CardSection } from '../../../styled/CardSection';
+import { useEpochEndTime } from './useEpochEndTime';
 
-const { Text, Title, Paragraph } = Typography;
+const { Text, Title } = Typography;
 
 const Loader = () => (
   <Flex vertical gap={8}>
@@ -30,6 +32,7 @@ const DisplayRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
   const { isBalanceLoaded } = useBalance();
   const { goto } = usePageState();
+  const { data: epochEndTimeInMs } = useEpochEndTime();
 
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
@@ -37,17 +40,21 @@ const DisplayRewards = () => {
     <CardSection vertical gap={8} padding="16px 24px" align="start">
       <Text type="secondary">
         Staking rewards this epoch&nbsp;
-        <Tooltip
+        <Popover
           arrow={false}
-          title={
-            <Paragraph className="text-sm m-0">
-              The agent&apos;s working period lasts at least 24 hours, but its
-              start and end point may not be at the same time every day.
-            </Paragraph>
+          content={
+            <>
+              The epoch ends each day at ~{' '}
+              <Text className="text-sm" strong>
+                {epochEndTimeInMs
+                  ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
+                  : '--'}
+              </Text>
+            </>
           }
         >
           <InfoCircleOutlined />
-        </Tooltip>
+        </Popover>
       </Text>
 
       {isBalanceLoaded ? (
