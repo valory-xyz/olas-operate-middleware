@@ -2,7 +2,6 @@ import { InfoCircleOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Popover, Typography } from 'antd';
 import { gql, request } from 'graphql-request';
-import { useMemo } from 'react';
 import { z } from 'zod';
 
 import { SUBGRAPH_URL } from '@/constants/urls';
@@ -19,23 +18,21 @@ type EpochTimeResponse = z.infer<typeof EpochTimeResponseSchema>;
 
 const useEpochEndTime = () => {
   const { activeStakingProgramAddress } = useStakingProgram();
-  const latestEpochTimeQuery = useMemo(() => {
-    return gql`
-      query {
-        checkpoints(
-          orderBy: epoch
-          orderDirection: desc
-          first: 1
-          where: {
-            contractAddress: "${activeStakingProgramAddress}"
-          }
-        ) {
-          epochLength
-          blockTimestamp
+  const latestEpochTimeQuery = gql`
+    query {
+      checkpoints(
+        orderBy: epoch
+        orderDirection: desc
+        first: 1
+        where: {
+          contractAddress: "${activeStakingProgramAddress}"
         }
+      ) {
+        epochLength
+        blockTimestamp
       }
-    `;
-  }, [activeStakingProgramAddress]);
+    }
+  `;
 
   const { data, isLoading } = useQuery({
     queryKey: ['latestEpochTime'],
