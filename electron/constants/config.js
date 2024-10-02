@@ -47,7 +47,7 @@ const githubPublishOptions = {
  * @typedef {{
  * private: boolean,
  * token?: string,
- * allowPrerelease: boolean
+ * allowPrerelease: boolean,
  * } & PearlGithubPublishOptions} PearlGithubUpdateOptions
  */
 
@@ -55,7 +55,6 @@ const githubPublishOptions = {
  * GitHub update options
  * @see https://www.electron.build/auto-update#githuboptions
  * @type {PearlGithubUpdateOptions}
- * use {githubPublishOptions} instead if you're looking to release the app to GitHub
  */
 const githubUpdateOptions = {
   ...githubPublishOptions,
