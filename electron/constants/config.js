@@ -58,9 +58,8 @@ const githubPublishOptions = {
  */
 const githubUpdateOptions = {
   ...githubPublishOptions,
-  private: true, // Only set to true if the repo is private
-  token: process.env.GH_TOKEN, // Token assigned temporarily during GitHub Actions
-  allowPrerelease: true,
+  private: false, // Only set to true if the repo is private
+  allowPrerelease: true, // Allow pre-release versions to be installed
 };
 
 module.exports = {

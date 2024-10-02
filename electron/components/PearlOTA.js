@@ -42,9 +42,18 @@ class PearlOTA {
     });
     this.updater.on('update-available', () => {
       logger.electron('Update available');
+      // TEST: Uncomment to test download and install
+      logger.electron('Downloading update...');
+      this.updater.downloadUpdate().then(() => {
+        logger.electron('Update downloaded');
+        logger.electron('Quitting and installing...');
+        this.updater.quitAndInstall();
+      });
+      // TEST: Uncomment to test download and install
     });
-    this.updater.on('update-not-available', () => {
+    this.updater.on('update-not-available', (info) => {
       logger.electron('No update available');
+      logger.electron(`Update info: ${JSON.stringify(info)}`);
     });
     this.updater.on('checking-for-update', () => {
       logger.electron('Checking for update');
