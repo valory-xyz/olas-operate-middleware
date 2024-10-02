@@ -1,10 +1,15 @@
+import { InfoCircleOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
+import { Popover, Typography } from 'antd';
 import { gql, request } from 'graphql-request';
 import { useMemo } from 'react';
 import { z } from 'zod';
 
 import { SUBGRAPH_URL } from '@/constants/urls';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
+import { formatToTime } from '@/utils/time';
+
+const { Text } = Typography;
 
 const EpochTimeSchema = z.object({
   epoch: z.string(),
@@ -14,7 +19,7 @@ const EpochTimeSchema = z.object({
 });
 type EpochTime = z.infer<typeof EpochTimeSchema>;
 
-export const useEpochEndTime = () => {
+const useEpochEndTime = () => {
   const { activeStakingProgramAddress } = useStakingProgram();
   const fetchRewardsQuery = useMemo(() => {
     return gql`
@@ -52,4 +57,29 @@ export const useEpochEndTime = () => {
   });
 
   return { data, isLoading };
+};
+
+export const StakingRewardThisEpoch = () => {
+  const { data: epochEndTimeInMs } = useEpochEndTime();
+
+  return (
+    <Text type="secondary">
+      Staking rewards this epoch&nbsp;
+      <Popover
+        arrow={false}
+        content={
+          <>
+            The epoch ends each day at ~{' '}
+            <Text className="text-sm" strong>
+              {epochEndTimeInMs
+                ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
+                : '--'}
+            </Text>
+          </>
+        }
+      >
+        <InfoCircleOutlined />
+      </Popover>
+    </Text>
+  );
 };

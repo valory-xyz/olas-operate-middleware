@@ -1,5 +1,5 @@
-import { InfoCircleOutlined, RightOutlined } from '@ant-design/icons';
-import { Button, Flex, Modal, Popover, Skeleton, Tag, Typography } from 'antd';
+import { RightOutlined } from '@ant-design/icons';
+import { Button, Flex, Modal, Skeleton, Tag, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -10,11 +10,10 @@ import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
-import { formatToTime } from '@/utils/time';
 
 import { ConfettiAnimation } from '../../../Confetti/ConfettiAnimation';
 import { CardSection } from '../../../styled/CardSection';
-import { useEpochEndTime } from './useEpochEndTime';
+import { StakingRewardThisEpoch } from './StakingRewardThisEpoch';
 
 const { Text, Title } = Typography;
 
@@ -32,30 +31,12 @@ const DisplayRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
   const { isBalanceLoaded } = useBalance();
   const { goto } = usePageState();
-  const { data: epochEndTimeInMs } = useEpochEndTime();
 
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
-      <Text type="secondary">
-        Staking rewards this epoch&nbsp;
-        <Popover
-          arrow={false}
-          content={
-            <>
-              The epoch ends each day at ~{' '}
-              <Text className="text-sm" strong>
-                {epochEndTimeInMs
-                  ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
-                  : '--'}
-              </Text>
-            </>
-          }
-        >
-          <InfoCircleOutlined />
-        </Popover>
-      </Text>
+      <StakingRewardThisEpoch />
 
       {isBalanceLoaded ? (
         <Flex align="center" gap={12}>

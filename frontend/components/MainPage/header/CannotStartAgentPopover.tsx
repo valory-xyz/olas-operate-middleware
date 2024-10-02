@@ -65,7 +65,6 @@ const AgentEvictedPopover = () => {
   return (
     <Popover
       {...otherPopoverProps}
-      open
       title="Your agent is evicted"
       content={
         <Flex
