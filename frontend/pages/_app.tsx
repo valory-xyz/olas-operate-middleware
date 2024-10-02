@@ -1,5 +1,6 @@
 import '../styles/globals.scss';
 
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ConfigProvider } from 'antd';
 import type { AppProps } from 'next/app';
 import { useEffect, useState } from 'react';
@@ -20,6 +21,8 @@ import { StakingProgramProvider } from '@/context/StakingProgramContext';
 import { StoreProvider } from '@/context/StoreProvider';
 import { WalletProvider } from '@/context/WalletProvider';
 import { mainTheme } from '@/theme';
+
+const queryClient = new QueryClient();
 
 export default function App({ Component, pageProps }: AppProps) {
   const [isMounted, setIsMounted] = useState(false);
@@ -44,9 +47,11 @@ export default function App({ Component, pageProps }: AppProps) {
                               <ConfigProvider theme={mainTheme}>
                                 <ModalProvider>
                                   {isMounted ? (
-                                    <Layout>
-                                      <Component {...pageProps} />
-                                    </Layout>
+                                    <QueryClientProvider client={queryClient}>
+                                      <Layout>
+                                        <Component {...pageProps} />
+                                      </Layout>
+                                    </QueryClientProvider>
                                   ) : null}
                                 </ModalProvider>
                               </ConfigProvider>

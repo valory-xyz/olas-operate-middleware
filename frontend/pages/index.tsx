@@ -3,6 +3,7 @@ import { useEffect, useMemo } from 'react';
 import { HelpAndSupport } from '@/components/HelpAndSupportPage';
 import { Main } from '@/components/MainPage';
 import { ManageStakingPage } from '@/components/ManageStakingPage';
+import { RewardsHistory } from '@/components/RewardsHistory/RewardsHistory';
 import { Settings } from '@/components/SettingsPage';
 import { Setup } from '@/components/SetupPage';
 import { YourWallet } from '@/components/YourWalletPage/YourWallet';
@@ -52,6 +53,8 @@ export default function Home() {
         return <ManageStakingPage />;
       case Pages.YourWalletBreakdown:
         return <YourWallet />;
+      case Pages.RewardsHistory:
+        return <RewardsHistory />;
       default:
         return <Main />;
     }

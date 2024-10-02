@@ -25,6 +25,7 @@ export const mainTheme: ThemeConfig = {
       colorBgContainer: '#FFFFFF',
       padding: 20,
       fontWeightStrong: 400,
+      colorBorderSecondary: '#E4E4E4',
     },
     Input: {
       fontSize: 20,
@@ -41,6 +42,9 @@ export const mainTheme: ThemeConfig = {
     },
     Popover: {
       fontSize: 14,
+    },
+    Tag: {
+      colorSuccess: '#135200',
     },
   },
 };
