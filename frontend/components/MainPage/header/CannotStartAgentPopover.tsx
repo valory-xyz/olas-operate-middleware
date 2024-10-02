@@ -1,27 +1,13 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Flex, Popover, PopoverProps, Typography } from 'antd';
-import { isNumber } from 'lodash';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import { formatToShortDateTime } from '@/utils/time';
 
 const { Paragraph, Text } = Typography;
-
-// TODO: already moved to time.ts util file in different PR
-// To be removed!
-const formatToShortDateTime = (timeInSeconds?: number) => {
-  if (!isNumber(timeInSeconds)) return '--';
-  return new Date(timeInSeconds).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: true,
-    timeZone: 'UTC',
-  });
-};
 
 const cannotStartAgentText = (
   <Text style={{ color: COLOR.RED }}>
@@ -128,8 +114,6 @@ export const CannotStartAgentPopover = () => {
     isRewardsAvailable,
     isAgentEvicted,
   } = useStakingContractInfo();
-
-  return <AgentEvictedPopover />;
 
   if (isEligibleForStaking) return null;
   if (!hasEnoughServiceSlots) return <NoJobsAvailablePopover />;

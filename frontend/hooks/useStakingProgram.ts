@@ -25,7 +25,7 @@ export const useStakingProgram = () => {
    * returns `null` if not actively staked
    */
   const activeStakingProgramMeta = useMemo(() => {
-    if (activeStakingProgramId === undefined) return undefined;
+    if (activeStakingProgramId === undefined) return;
     if (activeStakingProgramId === null) return null;
     return STAKING_PROGRAM_META[activeStakingProgramId];
   }, [activeStakingProgramId]);
@@ -34,7 +34,7 @@ export const useStakingProgram = () => {
     STAKING_PROGRAM_META[defaultStakingProgramId];
 
   const activeStakingProgramAddress = useMemo(() => {
-    if (!activeStakingProgramId) return undefined;
+    if (!activeStakingProgramId) return;
     return SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
       activeStakingProgramId
     ];

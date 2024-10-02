@@ -11,17 +11,15 @@ import { formatToTime } from '@/utils/time';
 
 const { Text } = Typography;
 
-const EpochTimeSchema = z.object({
-  epoch: z.string(),
+const EpochTimeResponseSchema = z.object({
   epochLength: z.string(),
   blockTimestamp: z.string(),
-  contractAddress: z.string(),
 });
-type EpochTime = z.infer<typeof EpochTimeSchema>;
+type EpochTimeResponse = z.infer<typeof EpochTimeResponseSchema>;
 
 const useEpochEndTime = () => {
   const { activeStakingProgramAddress } = useStakingProgram();
-  const fetchRewardsQuery = useMemo(() => {
+  const latestEpochTimeQuery = useMemo(() => {
     return gql`
       query {
         checkpoints(
@@ -32,22 +30,20 @@ const useEpochEndTime = () => {
             contractAddress: "${activeStakingProgramAddress}"
           }
         ) {
-          epoch
           epochLength
           blockTimestamp
-          contractAddress
         }
       }
     `;
   }, [activeStakingProgramAddress]);
 
   const { data, isLoading } = useQuery({
-    queryKey: ['epochEndTime'],
+    queryKey: ['latestEpochTime'],
     queryFn: async () => {
-      const response = (await request(SUBGRAPH_URL, fetchRewardsQuery)) as {
-        checkpoints: EpochTime[];
+      const response = (await request(SUBGRAPH_URL, latestEpochTimeQuery)) as {
+        checkpoints: EpochTimeResponse[];
       };
-      return EpochTimeSchema.parse(response.checkpoints[0]);
+      return EpochTimeResponseSchema.parse(response.checkpoints[0]);
     },
     select: (data) => {
       // last epoch end time + epoch length

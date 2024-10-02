@@ -314,7 +314,6 @@ export const AgentButton = () => {
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
 
   return useMemo(() => {
-    return <CannotStartAgentPopover />;
     if (!hasInitialLoaded) {
       return <Button type="primary" size="large" disabled loading />;
     }
