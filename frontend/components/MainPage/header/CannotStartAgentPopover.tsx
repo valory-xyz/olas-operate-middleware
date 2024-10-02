@@ -47,7 +47,6 @@ const evictedDescription =
 const AgentEvictedPopover = () => {
   const { evictionExpiresAt } = useStakingContractInfo();
 
-  if (!evictionExpiresAt) return null;
   return (
     <Popover
       {...otherPopoverProps}
@@ -60,12 +59,14 @@ const AgentEvictedPopover = () => {
           style={{ maxWidth: 340 }}
         >
           <Paragraph className="text-sm m-0">{evictedDescription}</Paragraph>
-          <Paragraph className="m-0">
-            <Text className="text-sm">Eviction ends at</Text>{' '}
-            <Text strong className="text-sm">
-              {formatToShortDateTime(evictionExpiresAt * 1000)}
-            </Text>
-          </Paragraph>
+          {evictionExpiresAt && (
+            <Paragraph className="m-0">
+              <Text className="text-sm">Eviction ends at</Text>{' '}
+              <Text strong className="text-sm">
+                {formatToShortDateTime(evictionExpiresAt * 1000)}
+              </Text>
+            </Paragraph>
+          )}
         </Flex>
       }
     >

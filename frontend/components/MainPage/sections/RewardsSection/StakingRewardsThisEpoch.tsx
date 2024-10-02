@@ -55,7 +55,7 @@ const useEpochEndTime = () => {
   return { data, isLoading };
 };
 
-export const StakingRewardThisEpoch = () => {
+export const StakingRewardsThisEpoch = () => {
   const { data: epochEndTimeInMs } = useEpochEndTime();
 
   return (

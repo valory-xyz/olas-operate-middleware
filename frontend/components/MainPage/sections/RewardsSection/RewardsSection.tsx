@@ -13,7 +13,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 
 import { ConfettiAnimation } from '../../../Confetti/ConfettiAnimation';
 import { CardSection } from '../../../styled/CardSection';
-import { StakingRewardThisEpoch } from './StakingRewardThisEpoch';
+import { StakingRewardsThisEpoch } from './StakingRewardsThisEpoch';
 
 const { Text, Title } = Typography;
 
@@ -36,7 +36,7 @@ const DisplayRewards = () => {
 
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
-      <StakingRewardThisEpoch />
+      <StakingRewardsThisEpoch />
 
       {isBalanceLoaded ? (
         <Flex align="center" gap={12}>
