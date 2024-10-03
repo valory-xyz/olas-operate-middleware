@@ -1,6 +1,6 @@
-import { message, Typography } from 'antd';
+import { Typography } from 'antd';
 import Image from 'next/image';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Chain } from '@/client';
 import { CardSection } from '@/components/styled/CardSection';
@@ -13,23 +13,61 @@ import { useWallet } from '@/hooks/useWallet';
 import { WalletService } from '@/service/Wallet';
 
 export const SetupCreateSafe = () => {
-  const { masterSafeAddress } = useWallet();
-  const { backupSigner } = useSetup();
   const { goto } = usePageState();
+  const { masterSafeAddress, updateWallets } = useWallet();
+  const { backupSigner } = useSetup();
 
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);
-  const [isError, setIsError] = useState(false);
+  const [isCreateSafeSuccessful, setIsCreateSafeSuccessful] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  const createSafeWithRetries = useCallback(
+    (retries: number) => {
+      setIsCreatingSafe(true);
+
+      // If we have retried too many times, set failed
+      if (retries <= 0) {
+        setFailed(true);
+        setIsCreatingSafe(false);
+        setIsCreateSafeSuccessful(false);
+        return;
+      }
+
+      // Try to create the safe
+      WalletService.createSafe(Chain.GNOSIS, backupSigner)
+        .then(async () => {
+          setIsCreatingSafe(false);
+          setIsCreateSafeSuccessful(true);
+          setFailed(false);
+          updateWallets();
+        })
+        .catch(async (e) => {
+          console.error(e);
+          // Wait for 1 second before retrying
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+          // Retry
+          createSafeWithRetries(retries - 1);
+        });
+    },
+    [backupSigner, updateWallets],
+  );
+
+  const creationStatusText = useMemo(() => {
+    if (isCreatingSafe) return 'Creating account';
+    if (masterSafeAddress) return 'Account created';
+    return 'Account creation in progress';
+  }, [isCreatingSafe, masterSafeAddress]);
 
   useEffect(() => {
-    if (isCreatingSafe) return;
-    setIsCreatingSafe(true);
-    // TODO: add backup signer
-    WalletService.createSafe(Chain.GNOSIS, backupSigner).catch((e) => {
-      console.error(e);
-      setIsError(true);
-      message.error('Failed to create an account. Please try again later.');
-    });
-  }, [backupSigner, isCreatingSafe]);
+    if (failed || isCreatingSafe || isCreateSafeSuccessful) return;
+    createSafeWithRetries(3);
+  }, [
+    backupSigner,
+    createSafeWithRetries,
+    failed,
+    isCreateSafeSuccessful,
+    isCreatingSafe,
+  ]);
 
   useEffect(() => {
     // Only progress is the safe is created and accessible via context (updates on interval)
@@ -44,7 +82,7 @@ export const SetupCreateSafe = () => {
       padding="80px 24px"
       gap={12}
     >
-      {isError ? (
+      {failed ? (
         <>
           <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
           <Typography.Text type="secondary" className="mt-12">
@@ -67,7 +105,7 @@ export const SetupCreateSafe = () => {
             className="m-0 mt-12 loading-ellipses"
             style={{ width: '220px' }}
           >
-            Creating account
+            {creationStatusText}
           </Typography.Title>
           <Typography.Text type="secondary">
             You will be redirected once the account is created
