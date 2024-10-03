@@ -1,8 +1,8 @@
 const { ipcMain } = require('electron');
-const { MacUpdater, NsisUpdater } = require('electron-updater');
+const { autoUpdater } = require('electron-updater');
 const { logger } = require('../logger');
-const { isWindows, isMac } = require('../constants');
-const { githubUpdateOptions } = require('../constants/config');
+// const { isWindows, isMac } = require('../constants');
+// const { githubUpdateOptions } = require('../constants/config');
 
 /** Over-the-air update manager
  * @example
@@ -16,12 +16,11 @@ const { githubUpdateOptions } = require('../constants/config');
  */
 class PearlOTA {
   /**
-   * @type {MacUpdater | NsisUpdater | null} */
+   * @type {import('electron-updater').AppUpdater} */
   updater = null;
 
   constructor() {
-    if (isWindows) this.updater = new NsisUpdater(githubUpdateOptions);
-    if (isMac) this.updater = new MacUpdater(githubUpdateOptions);
+    this.updater = autoUpdater;
 
     if (this.updater) {
       this.updater.autoDownload = false;
