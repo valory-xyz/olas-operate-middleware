@@ -26,6 +26,7 @@ class PearlOTA {
       this.updater.autoDownload = false;
       this.updater.autoInstallOnAppQuit = false;
       this.updater.logger = logger;
+      this.updater.allowPrerelease = true;
 
       this.#bindUpdaterEvents();
     }

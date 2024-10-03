@@ -14,9 +14,7 @@ require('dotenv').config();
  *  vPrefixedTagName: boolean,
  *  protocol: "https" | "http",
  *  releaseType: 'draft' | 'prerelease' | 'release',
- *  private: boolean,
  *  token?: string,
- *  allowPrerelease: boolean,
  * }} PearlGithubPublishOptions
  */
 
@@ -31,9 +29,7 @@ const githubPublishOptions = {
   publishAutoUpdate: true, // Publishes the update to GitHub
   vPrefixedTagName: true,
   protocol: 'https',
-  channel: isDev ? 'dev' : 'latest', // Github only supports latest, dev stops overwrite,
-  private: false, // Only set to true if the repo is private
-  allowPrerelease: true, // Allow pre-release versions to be installed
+  channel: isDev ? 'dev' : 'latest', // Github only supports latest, dev stops overwrite
 };
 
 module.exports = {
