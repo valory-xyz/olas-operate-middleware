@@ -27,7 +27,25 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20.x"
+          node-version: "20.x"      
+
+      # Cache node_modules with unique key for each environment and architecture
+      - name: Cache Electron Node.js modules
+        uses: actions/cache@v3
+        with:
+          path: node_modules
+          key: ${{runner.os}}-node-modules-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-node_modules-
+
+      # Cache frontend node_modules with unique key
+      - name: Cache Frontend node_modules
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: ${{runner.os}}-frontend-node-modules-${{ hashFiles('frontend/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-frontend-node-modules-
 
       - name: Install and configure Poetry
         uses: snok/install-poetry@v1
