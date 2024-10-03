@@ -5,11 +5,13 @@ import { useEffect } from 'react';
 import { Pages } from '@/enums/PageState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
+import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { MainHeader } from './header';
+import { AddBackupWalletAlert } from './sections/AddBackupWalletAlert';
 import { AddFundsSection } from './sections/AddFundsSection';
 import { GasBalanceSection } from './sections/GasBalanceSection';
 import { KeepAgentRunningSection } from './sections/KeepAgentRunningSection';
@@ -21,6 +23,7 @@ import { StakingContractUpdate } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
+  const { backupSafeAddress } = useMasterSafe();
   const { updateServicesState } = useServices();
   const { updateBalances, isLoaded, setIsLoaded } = useBalance();
   const { activeStakingProgramId: currentStakingProgram } = useStakingProgram();
@@ -31,6 +34,11 @@ export const Main = () => {
       updateServicesState().then(() => updateBalances());
     }
   }, [isLoaded, setIsLoaded, updateBalances, updateServicesState]);
+
+  const hideMainOlasBalanceTopBorder = [
+    !backupSafeAddress,
+    currentStakingProgram === StakingProgramId.Alpha,
+  ].some((condition) => !!condition);
 
   return (
     <Card
@@ -54,10 +62,12 @@ export const Main = () => {
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
+        {!backupSafeAddress && <AddBackupWalletAlert />}
         {currentStakingProgram === StakingProgramId.Alpha && (
           <NewStakingProgramAlertSection />
         )}
-        <MainOlasBalance />
+
+        <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <MainRewards />
         <KeepAgentRunningSection />
         <StakingContractUpdate />
