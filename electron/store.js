@@ -24,7 +24,7 @@ const schema = {
  * @note All versions prior will be migrated to the latest version.
  * @type {Record<string, (store: Store<{[key: string]: unknown}>) => void>} */
 const migrations = {
-  '0.1.0-rc161': (store) => {
+  '0.1.0-rc161.1': (store) => {
     // Environment name and current staking program are unused
     // can revisit environment name if we need to support multiple environments
     if (store.has('environmentName')) {
