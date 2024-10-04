@@ -28,6 +28,7 @@ import typing as t
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import FrameType
 
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
@@ -210,7 +211,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         pause_all_services()
         logger.info("Stopping services on startup done.")
 
-    def pause_all_services():
+    def pause_all_services() -> None:
         service_hashes = [i["hash"] for i in operate.service_manager().json]
 
         for service in service_hashes:
@@ -225,7 +226,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             cancel_funding_job(service=service)
             health_checker.stop_for_service(service=service)
 
-    def pause_all_services_on_exit() -> None:
+    def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
         pause_all_services()
         logger.info("Stopping services on exit done.")
