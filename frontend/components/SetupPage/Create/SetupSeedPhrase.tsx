@@ -28,19 +28,21 @@ export const SetupSeedPhrase = () => {
           <Tag key={word}>{word}</Tag>
         ))}
       </Flex>
-      <Button
-        size="large"
-        onClick={() =>
-          copyToClipboard(mnemonic.join(' ')).then(() =>
-            message.success('Seed phrase is copied!'),
-          )
-        }
-      >
-        <CopyOutlined /> Copy to clipboard
-      </Button>
-      <Button type="primary" size="large" onClick={handleNext}>
-        Continue
-      </Button>
+      <Flex gap={10}>
+        <Button
+          size="large"
+          onClick={() =>
+            copyToClipboard(mnemonic.join(' ')).then(() =>
+              message.success('Seed phrase is copied!'),
+            )
+          }
+        >
+          <CopyOutlined /> Copy to clipboard
+        </Button>
+        <Button type="primary" size="large" onClick={handleNext}>
+          Continue
+        </Button>
+      </Flex>
     </CardFlex>
   );
 };
