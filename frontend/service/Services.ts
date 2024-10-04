@@ -34,7 +34,7 @@ const getServices = async (): Promise<Service[]> =>
     if (response.ok) {
       return response.json();
     }
-    throw new Error('Failed to fetch services array');
+    throw new Error('Failed to fetch services');
   });
 
 /**
