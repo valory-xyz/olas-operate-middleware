@@ -20,6 +20,7 @@ import { NewStakingProgramAlertSection } from './sections/NewStakingProgramAlert
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { MainRewards } from './sections/RewardsSection';
 import { StakingContractUpdate } from './sections/StakingContractUpdate';
+import { UpdateAlert } from './sections/UpdateAlert';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -62,6 +63,7 @@ export const Main = () => {
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
+        <UpdateAlert />
         {!backupSafeAddress && <AddBackupWalletAlert />}
         {currentStakingProgram === StakingProgramId.Alpha && (
           <NewStakingProgramAlertSection />
