@@ -113,7 +113,7 @@ export const SetupCreateSafe = () => {
           <Typography.Text>
             If the issue persists, please{' '}
             <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
-              contact Olas community support.
+              contact Olas community support. {UNICODE_SYMBOLS.EXTERNAL_LINK}
             </a>
             .
           </Typography.Text>
