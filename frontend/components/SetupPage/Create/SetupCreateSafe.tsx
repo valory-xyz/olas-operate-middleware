@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Chain } from '@/client';
 import { CardSection } from '@/components/styled/CardSection';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import { Pages } from '@/enums/PageState';
 import { useMasterSafe } from '@/hooks/useMasterSafe';
