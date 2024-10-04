@@ -1,4 +1,5 @@
 import { Deployment, Service, ServiceHash, ServiceTemplate } from '@/client';
+import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
@@ -11,7 +12,7 @@ const getService = async (serviceHash: ServiceHash): Promise<Service> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}`, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -28,7 +29,7 @@ const getServices = async (): Promise<Service[]> =>
   fetch(`${BACKEND_URL}/services`, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -66,7 +67,7 @@ const createService = async ({
         },
       }),
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
+        ...CONTENT_TYPE_JSON_UTF8,
       },
     }).then((response) => {
       if (response.ok) {
@@ -80,7 +81,7 @@ const deployOnChain = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/onchain/deploy`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -93,7 +94,7 @@ const stopOnChain = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/onchain/stop`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -106,7 +107,7 @@ const buildDeployment = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/deployment/build`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -119,7 +120,7 @@ const startDeployment = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/deployment/start`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -132,7 +133,7 @@ const stopDeployment = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/deployment/stop`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -147,7 +148,7 @@ const deleteDeployment = async (
   fetch(`${BACKEND_URL}/services/${serviceHash}/deployment/delete`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {
@@ -160,7 +161,7 @@ const getDeployment = async (serviceHash: ServiceHash): Promise<Deployment> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}/deployment`, {
     method: 'GET',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
   }).then((response) => {
     if (response.ok) {

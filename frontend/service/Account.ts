@@ -1,10 +1,15 @@
+import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 
 /**
  * Gets account status "is_setup"
  */
 const getAccount = () =>
-  fetch(`${BACKEND_URL}/account`).then((res) => {
+  fetch(`${BACKEND_URL}/account`, {
+    headers: {
+      ...CONTENT_TYPE_JSON_UTF8,
+    },
+  }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to get account');
   });
@@ -16,7 +21,7 @@ const createAccount = (password: string) =>
   fetch(`${BACKEND_URL}/account`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
     body: JSON.stringify({ password }),
   }).then((res) => {
@@ -30,9 +35,7 @@ const createAccount = (password: string) =>
 const updateAccount = (oldPassword: string, newPassword: string) =>
   fetch(`${BACKEND_URL}/account`, {
     method: 'PUT',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-    },
+    headers: { ...CONTENT_TYPE_JSON_UTF8 },
     body: JSON.stringify({
       old_password: oldPassword,
       new_password: newPassword,
@@ -48,9 +51,7 @@ const updateAccount = (oldPassword: string, newPassword: string) =>
 const loginAccount = (password: string) =>
   fetch(`${BACKEND_URL}/account/login`, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-    },
+    headers: { ...CONTENT_TYPE_JSON_UTF8 },
     body: JSON.stringify({
       password,
     }),

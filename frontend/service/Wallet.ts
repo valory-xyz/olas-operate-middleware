@@ -1,4 +1,5 @@
 import { Chain } from '@/client';
+import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 
 /**
@@ -14,7 +15,7 @@ const createEoa = async (chain: Chain) =>
   fetch(`${BACKEND_URL}/wallet`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
     body: JSON.stringify({ chain_type: chain }),
   }).then((res) => {
@@ -26,7 +27,7 @@ const createSafe = async (chain: Chain, owner?: string) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'POST',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
     body: JSON.stringify({ chain_type: chain, owner: owner }),
   }).then((res) => {
@@ -38,7 +39,7 @@ const addBackupOwner = async (chain: Chain, owner: string) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'PUT',
     headers: {
-      'Content-Type': 'application/json; charset=utf-8',
+      ...CONTENT_TYPE_JSON_UTF8,
     },
     body: JSON.stringify({ chain_type: chain, owner: owner }),
   }).then((res) => {
