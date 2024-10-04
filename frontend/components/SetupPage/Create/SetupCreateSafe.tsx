@@ -56,7 +56,7 @@ export const SetupCreateSafe = () => {
         })
         .catch(async (e) => {
           console.error(e);
-          // Wait for 1 second before retrying
+          // Wait for 5 seconds before retrying
           await new Promise((resolve) => setTimeout(resolve, 5000));
           // Retry
           const newRetries = retries - 1;
