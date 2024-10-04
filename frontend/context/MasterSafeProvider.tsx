@@ -19,7 +19,7 @@ export const MasterSafeContext = createContext<{
   masterSafeAddress?: Address;
   masterEoaAddress?: Address;
   masterSafeOwners?: Address[];
-  updateMasterSafeOwners?: () => Promise<void>;
+  updateMasterSafeOwners: () => Promise<void>;
 }>({
   backupSafeAddress: undefined,
   masterSafeAddress: undefined,
