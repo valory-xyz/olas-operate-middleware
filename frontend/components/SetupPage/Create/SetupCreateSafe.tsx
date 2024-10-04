@@ -1,12 +1,12 @@
-import { Typography } from 'antd';
+import { message, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Chain } from '@/client';
 import { CardSection } from '@/components/styled/CardSection';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import { Pages } from '@/enums/PageState';
+import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useSetup } from '@/hooks/useSetup';
 import { useWallet } from '@/hooks/useWallet';
@@ -14,7 +14,9 @@ import { WalletService } from '@/service/Wallet';
 
 export const SetupCreateSafe = () => {
   const { goto } = usePageState();
-  const { masterSafeAddress, updateWallets } = useWallet();
+  const { updateWallets } = useWallet();
+  const { updateMasterSafeOwners, masterSafeAddress, backupSafeAddress } =
+    useMasterSafe();
   const { backupSigner } = useSetup();
 
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);
@@ -22,7 +24,7 @@ export const SetupCreateSafe = () => {
   const [failed, setFailed] = useState(false);
 
   const createSafeWithRetries = useCallback(
-    (retries: number) => {
+    async (retries: number) => {
       setIsCreatingSafe(true);
 
       // If we have retried too many times, set failed
@@ -36,31 +38,51 @@ export const SetupCreateSafe = () => {
       // Try to create the safe
       WalletService.createSafe(Chain.GNOSIS, backupSigner)
         .then(async () => {
+          // Backend returned success
+          message.success('Account created');
+
+          // Attempt wallet and master safe updates before proceeding
+          try {
+            await updateWallets();
+            await updateMasterSafeOwners();
+          } catch (e) {
+            console.error(e);
+          }
+
+          // Set states for successful creation
           setIsCreatingSafe(false);
           setIsCreateSafeSuccessful(true);
           setFailed(false);
-          updateWallets();
         })
         .catch(async (e) => {
           console.error(e);
           // Wait for 1 second before retrying
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 5000));
           // Retry
+          const newRetries = retries - 1;
+          if (newRetries <= 0) {
+            message.error('Failed to create account');
+          } else {
+            message.error('Failed to create account, retrying in 5 seconds');
+          }
           createSafeWithRetries(retries - 1);
         });
     },
-    [backupSigner, updateWallets],
+    [backupSigner, updateMasterSafeOwners, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {
     if (isCreatingSafe) return 'Creating account';
-    if (masterSafeAddress) return 'Account created';
+    if (masterSafeAddress && !backupSafeAddress) return 'Checking backup';
+    if (masterSafeAddress && backupSafeAddress) return 'Account created';
     return 'Account creation in progress';
-  }, [isCreatingSafe, masterSafeAddress]);
+  }, [backupSafeAddress, isCreatingSafe, masterSafeAddress]);
 
   useEffect(() => {
     if (failed || isCreatingSafe || isCreateSafeSuccessful) return;
-    createSafeWithRetries(3);
+    (async () => {
+      createSafeWithRetries(3);
+    })();
   }, [
     backupSigner,
     createSafeWithRetries,
@@ -71,8 +93,8 @@ export const SetupCreateSafe = () => {
 
   useEffect(() => {
     // Only progress is the safe is created and accessible via context (updates on interval)
-    if (masterSafeAddress) goto(Pages.Main);
-  }, [goto, masterSafeAddress]);
+    if (masterSafeAddress && backupSafeAddress) goto(Pages.Main);
+  }, [backupSafeAddress, goto, masterSafeAddress]);
 
   return (
     <CardSection
@@ -86,10 +108,14 @@ export const SetupCreateSafe = () => {
         <>
           <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
           <Typography.Text type="secondary" className="mt-12">
-            Error, please contact{' '}
-            <a target="_blank" href={SUPPORT_URL}>
-              Olas community {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            Error, please restart the app and try again.
+          </Typography.Text>
+          <Typography.Text>
+            If the issue persists, please{' '}
+            <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+              contact Olas community support.
             </a>
+            .
           </Typography.Text>
         </>
       ) : (
