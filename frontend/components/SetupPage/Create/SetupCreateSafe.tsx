@@ -12,6 +12,7 @@ import { usePageState } from '@/hooks/usePageState';
 import { useSetup } from '@/hooks/useSetup';
 import { useWallet } from '@/hooks/useWallet';
 import { WalletService } from '@/service/Wallet';
+import { delayInSeconds } from '@/utils/delay';
 
 export const SetupCreateSafe = () => {
   const { goto } = usePageState();
@@ -58,7 +59,7 @@ export const SetupCreateSafe = () => {
         .catch(async (e) => {
           console.error(e);
           // Wait for 5 seconds before retrying
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          await delayInSeconds(5);
           // Retry
           const newRetries = retries - 1;
           if (newRetries <= 0) {
@@ -81,9 +82,7 @@ export const SetupCreateSafe = () => {
 
   useEffect(() => {
     if (failed || isCreatingSafe || isCreateSafeSuccessful) return;
-    (async () => {
-      createSafeWithRetries(3);
-    })();
+    createSafeWithRetries(3);
   }, [
     backupSigner,
     createSafeWithRetries,
