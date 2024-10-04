@@ -155,9 +155,17 @@ button, input, select, textarea, .ant-input-suffix {
   margin-top: 12px !important;
 }
 
+// padding
 .p-0 {
   padding: 0 !important;
 }
+.pl-16 {
+  padding-left: 16px !important;
+}
+.pr-16 {
+  padding-right: 16px !important;
+}
+
 
 .mx-auto {
   margin-left: auto !important;
@@ -180,13 +188,23 @@ button, input, select, textarea, .ant-input-suffix {
   font-size: 12px !important;
 }
 
+// text align
 .text-center {
   text-align: center !important;
+}
+.text-right {
+  text-align: right !important;
 }
 
 // font color
 .text-light {
   color: #4D596A !important;
+}
+.text-light {
+  color: #4D596A !important;
+}
+.text-primary {
+  color: #7E22CE !important;
 }
 
 .pointer {

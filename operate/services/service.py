@@ -507,9 +507,10 @@ class Deployment(LocalResource):
         if build.exists() and force:
             stop_host_deployment(build_dir=build)
             try:
+                # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
                 sleep(3)
                 shutil.rmtree(build)
-            except:  # noqa
+            except:  # noqa  # pylint: disable=bare-except
                 # sleep and try again. exception if fails
                 print_exc()
                 sleep(3)
