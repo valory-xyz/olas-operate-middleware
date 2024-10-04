@@ -65,7 +65,7 @@ export const SetupCreateSafe = () => {
           } else {
             message.error('Failed to create account, retrying in 5 seconds');
           }
-          createSafeWithRetries(retries - 1);
+          createSafeWithRetries(newRetries);
         });
     },
     [backupSigner, updateMasterSafeOwners, updateWallets],
