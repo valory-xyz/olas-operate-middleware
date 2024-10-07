@@ -133,7 +133,7 @@ export const MainOlasBalance = ({
       gap={8}
       bordertop={isBorderTopVisible ? 'true' : 'false'}
       borderbottom="true"
-      // padding="16px 24px"
+      padding="16px 24px"
     >
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
       {isLowBalance && <LowTradingBalanceAlert />}

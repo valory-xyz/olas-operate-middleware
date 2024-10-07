@@ -42,7 +42,7 @@ export const CardSection = styled(Flex)<CardSectionProps>`
   margin-left: -24px;
   margin-right: -24px;
 
-  &:nth-first-child(1) {
+  &:nth-child(1) {
     margin-top: -24px;
   }
 
