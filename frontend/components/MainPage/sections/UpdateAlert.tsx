@@ -50,7 +50,7 @@ export const UpdateAlert = () => {
   }
 
   return (
-    <CardSection bordertop="false">
+    <CardSection bordertop="false" padding="0 24px 24px 24px">
       <CustomAlert
         type="info"
         fullWidth
