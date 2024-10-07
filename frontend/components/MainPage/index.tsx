@@ -68,7 +68,6 @@ export const Main = () => {
         {currentStakingProgram === StakingProgramId.Alpha && (
           <NewStakingProgramAlertSection />
         )}
-
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <MainRewards />
         <KeepAgentRunningSection />

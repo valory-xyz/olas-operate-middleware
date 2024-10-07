@@ -108,7 +108,7 @@ export const MainOlasBalance = ({
   isBorderTopVisible = true,
 }: MainOlasBalanceProps) => {
   const { storeState } = useStore();
-  const { isBalanceLoaded, totalOlasBalance } = useBalance();
+  const { isBalanceLoaded, totalOlasBalance, isLowBalance } = useBalance();
   const { goto } = usePageState();
 
   // If first reward notification is shown BUT
@@ -133,10 +133,10 @@ export const MainOlasBalance = ({
       gap={8}
       bordertop={isBorderTopVisible ? 'true' : 'false'}
       borderbottom="true"
-      padding="16px 24px"
+      // padding="16px 24px"
     >
       {canShowAvoidSuspensionAlert ? <AvoidSuspensionAlert /> : null}
-      <LowTradingBalanceAlert />
+      {isLowBalance && <LowTradingBalanceAlert />}
 
       {isBalanceLoaded ? (
         <Flex vertical gap={8}>
