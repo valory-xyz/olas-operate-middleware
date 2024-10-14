@@ -17,7 +17,7 @@ import { GasBalanceSection } from './sections/GasBalanceSection';
 import { KeepAgentRunningSection } from './sections/KeepAgentRunningSection';
 import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
-import { MainRewards } from './sections/RewardsSection/RewardsSection';
+import { RewardsSection } from './sections/RewardsSection';
 import { StakingContractUpdate } from './sections/StakingContractUpdate';
 
 export const Main = () => {
@@ -63,7 +63,7 @@ export const Main = () => {
       <Flex vertical>
         <AlertSections />
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
-        <MainRewards />
+        <RewardsSection />
         <KeepAgentRunningSection />
         <StakingContractUpdate />
         <GasBalanceSection />
