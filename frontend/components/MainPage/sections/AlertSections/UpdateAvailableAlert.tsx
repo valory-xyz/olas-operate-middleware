@@ -1,10 +1,10 @@
-import { DownloadOutlined } from '@ant-design/icons';
 import { useQuery } from '@tanstack/react-query';
 import { Flex } from 'antd';
+import useToken from 'antd/es/theme/useToken';
 import semver from 'semver';
 
 import { CustomAlert } from '@/components/Alert';
-import { CardSection } from '@/components/styled/CardSection';
+import { ArrowUpRightSvg } from '@/components/custom-icons/ArrowUpRight';
 import { DOWNLOAD_URL } from '@/constants/urls';
 
 enum SemverComparisonResult {
@@ -13,7 +13,9 @@ enum SemverComparisonResult {
   UPDATED = 1,
 }
 
-export const UpdateAlert = () => {
+export const UpdateAvailableAlert = () => {
+  const [, token] = useToken();
+
   const { data: isPearlOutdated, isFetched } = useQuery<boolean>({
     queryKey: ['isPearlOutdated'],
     queryFn: async (): Promise<boolean> => {
@@ -50,20 +52,18 @@ export const UpdateAlert = () => {
   }
 
   return (
-    <CardSection bordertop="false" padding="24px">
-      <CustomAlert
-        type="info"
-        fullWidth
-        showIcon
-        message={
-          <Flex align="center" justify="space-between" gap={2}>
-            <span>A new version of Pearl is available</span>
-            <a href={DOWNLOAD_URL} target="_blank">
-              Download <DownloadOutlined />
-            </a>
-          </Flex>
-        }
-      />
-    </CardSection>
+    <CustomAlert
+      type="info"
+      fullWidth
+      showIcon
+      message={
+        <Flex align="center" justify="space-between" gap={2}>
+          <span>A new version of Pearl is available</span>
+          <a href={DOWNLOAD_URL} target="_blank">
+            Download <ArrowUpRightSvg fill={token.colorPrimary} />
+          </a>
+        </Flex>
+      }
+    />
   );
 };
