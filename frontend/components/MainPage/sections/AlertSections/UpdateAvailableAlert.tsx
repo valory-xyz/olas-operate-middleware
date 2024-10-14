@@ -5,7 +5,7 @@ import semver from 'semver';
 
 import { CustomAlert } from '@/components/Alert';
 import { ArrowUpRightSvg } from '@/components/custom-icons/ArrowUpRight';
-import { DOWNLOAD_URL } from '@/constants/urls';
+import { DOWNLOAD_URL, GITHUB_API_LATEST_RELEASE } from '@/constants/urls';
 
 enum SemverComparisonResult {
   OUTDATED = -1,
@@ -19,16 +19,12 @@ export const UpdateAvailableAlert = () => {
   const { data: isPearlOutdated, isFetched } = useQuery<boolean>({
     queryKey: ['isPearlOutdated'],
     queryFn: async (): Promise<boolean> => {
-      const response = await fetch(
-        'https://api.github.com/repos/valory-xyz/olas-operate-app/releases/latest',
-      );
+      const response = await fetch(GITHUB_API_LATEST_RELEASE);
       if (!response.ok) return false;
 
       const data = await response.json();
       const latestTag = data.tag_name;
-
       const latestVersion = semver.parse(latestTag);
-
       const currentVersion = semver.parse(
         process.env.NEXT_PUBLIC_PEARL_VERSION ?? '0.0.0',
       );

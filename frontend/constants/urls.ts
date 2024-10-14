@@ -14,3 +14,7 @@ export const SUPPORT_URL =
   'https://discord.com/channels/899649805582737479/1244588374736502847';
 export const DISCORD_TICKET_URL =
   'https://discord.com/channels/899649805582737479/1245674435160178712/1263815577240076308';
+
+// github
+export const GITHUB_API_LATEST_RELEASE =
+  'https://api.github.com/repos/valory-xyz/olas-operate-app/releases/latest';
