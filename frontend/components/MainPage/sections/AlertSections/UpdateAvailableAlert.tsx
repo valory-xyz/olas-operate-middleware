@@ -60,7 +60,11 @@ export const UpdateAvailableAlert = () => {
         <Flex align="center" justify="space-between" gap={2}>
           <span>A new version of Pearl is available</span>
           <a href={DOWNLOAD_URL} target="_blank">
-            Download <ArrowUpRightSvg fill={token.colorPrimary} />
+            Download{' '}
+            <ArrowUpRightSvg
+              fill={token.colorPrimary}
+              style={{ marginBottom: -2 }}
+            />
           </a>
         </Flex>
       }
