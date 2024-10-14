@@ -56,8 +56,11 @@ const useEpochEndTime = () => {
 
 export const StakingRewardsThisEpoch = () => {
   const { data: epochEndTimeInMs } = useEpochEndTime();
-  const { activeStakingProgramMeta, activeStakingProgramId isActiveStakingProgramLoaded } =
-    useStakingProgram();
+  const {
+    activeStakingProgramMeta,
+    activeStakingProgramId,
+    isActiveStakingProgramLoaded,
+  } = useStakingProgram();
 
   const stakingProgramMeta = activeStakingProgramMeta;
 
@@ -69,18 +72,18 @@ export const StakingRewardsThisEpoch = () => {
         content={
           isActiveStakingProgramLoaded && activeStakingProgramId ? (
             <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
-            The epoch for {stakingProgramMeta?.name} ends each day at ~{' '}
-            <Text className="text-sm" strong>
-              {epochEndTimeInMs
-                ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
-                : '--'}
-            </Text>
-          </div>
+              The epoch for {stakingProgramMeta?.name} ends each day at ~{' '}
+              <Text className="text-sm" strong>
+                {epochEndTimeInMs
+                  ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
+                  : '--'}
+              </Text>
+            </div>
           ) : (
             <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
-              You're not yet in a staking program!
+              You&apos;re not yet in a staking program!
             </div>
-          )          
+          )
         }
       >
         <InfoCircleOutlined />
