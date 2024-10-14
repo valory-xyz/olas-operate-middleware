@@ -13,6 +13,7 @@ type CardSectionProps = FlexProps & {
 /**
  * A styled `Flex` component that represents a section of a card.
  * @param {CardSectionProps} props
+ * @note For use inside a {Card} component.
  */
 export const CardSection = styled(Flex)<CardSectionProps>`
   ${(props) => {
@@ -35,6 +36,7 @@ export const CardSection = styled(Flex)<CardSectionProps>`
       ${verticalStyle}
     `;
   }}
+
   border-collapse: collapse;
   margin-left: -24px;
   margin-right: -24px;
