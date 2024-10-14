@@ -11,7 +11,10 @@ import { SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 
-import { EpochDetails, StakingRewardSchema } from './types';
+import {
+  EpochDetails,
+  StakingRewardSchema,
+} from '../components/RewardsHistory/types';
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
