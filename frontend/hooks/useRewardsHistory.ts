@@ -15,6 +15,7 @@ import {
   EpochDetails,
   StakingRewardSchema,
 } from '../components/RewardsHistory/types';
+import { useServices } from './useServices';
 
 const ONE_DAY_IN_S = 24 * 60 * 60;
 const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
@@ -118,8 +119,7 @@ const getTimestampOfFirstReward = (
 };
 
 export const useRewardsHistory = () => {
-  // const { serviceId } = useServices();
-  const serviceId = 639;
+  const { serviceId } = useServices();
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     queryKey: [],
     async queryFn() {
