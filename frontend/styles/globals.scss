@@ -118,7 +118,7 @@ textarea,
     border-left: 0;
     border-right: 0;
     padding: 12px 24px;
-    margin: 0 -24px;
+    margin: 0;
   }
 }
 
@@ -185,12 +185,15 @@ textarea,
 .text-xl {
   font-size: 20px;
 }
+
 .text-base {
   font-size: 16px !important;
 }
+
 .text-sm {
   font-size: 14px !important;
 }
+
 .text-xs {
   font-size: 12px !important;
 }

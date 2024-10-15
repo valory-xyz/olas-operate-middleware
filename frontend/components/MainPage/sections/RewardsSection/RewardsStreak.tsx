@@ -1,6 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
 import { Flex, Typography } from 'antd';
-import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
@@ -24,25 +23,28 @@ const StreakIcon = ({ isOnStreak }: { isOnStreak: boolean }) => {
   if (isOnStreak) return <FireStreak />;
   return <FireNoStreak />;
 };
-const StreakText = ({ streak }: { streak: number }) => {
+const StreakText = ({
+  streak,
+  isLoading,
+}: {
+  streak: number | null;
+  isLoading: boolean;
+}) => {
+  if (isLoading) return <div>Loading...</div>;
+  if (streak === null) return <div>Not staked yet</div>;
   if (streak > 0) return <div>{streak} day streak</div>;
   return <div>No streak</div>;
 };
 
 export const RewardsStreak = () => {
   const { goto } = usePageState();
-  const { rewards } = useRewardsHistory();
-
-  const streak = useMemo(() => {
-    if (!rewards) return 0;
-    return 0;
-  }, [rewards]);
+  const { latestRewardStreak, isLoading } = useRewardsHistory();
 
   return (
     <RewardsStreakFlex>
       <span style={{ display: 'inline-flex', gap: 8 }}>
-        <StreakIcon isOnStreak={!!streak} />
-        <StreakText streak={streak} />
+        <StreakIcon isOnStreak={!!latestRewardStreak} />
+        <StreakText streak={latestRewardStreak} isLoading={isLoading} />
       </span>
 
       <Text

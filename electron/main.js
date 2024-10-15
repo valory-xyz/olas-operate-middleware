@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const next = require('next');
+const next = require('next/dist/server/next');
 const http = require('http');
 const AdmZip = require('adm-zip');
 
@@ -76,11 +76,6 @@ let operateDaemon, operateDaemonPid, nextAppProcess, nextAppProcessPid;
 const nextApp = next({
   dev: false, // this instance is only used for production
   dir: path.join(__dirname),
-  conf: {
-    env: {
-      NEXT_PUBLIC_PEARL_VERSION: app.getVersion(),
-    },
-  },
 });
 
 const getActiveWindow = () => splashWindow ?? mainWindow;
@@ -92,7 +87,9 @@ function showNotification(title, body) {
 async function beforeQuit() {
   if (operateDaemonPid) {
     try {
-      await fetch(`http://localhost:${appConfig.ports.prod.operate}/stop_all_services`);
+      await fetch(
+        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
+      );
       await killProcesses(operateDaemonPid);
     } catch (e) {
       logger.electron(e);
@@ -194,6 +191,8 @@ const createMainWindow = async () => {
       splashWindow = null;
     }
   });
+
+  ipcMain.handle('app-version', () => app.getVersion());
 
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();

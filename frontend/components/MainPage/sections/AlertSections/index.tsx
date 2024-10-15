@@ -8,7 +8,7 @@ import { UpdateAvailableAlert } from './UpdateAvailableAlert';
 
 export const AlertSections = () => {
   return (
-    <CardSection style={{ padding: '0 24px' }} vertical>
+    <CardSection vertical>
       <UpdateAvailableAlert />
       <AddBackupWalletAlert />
       <NewStakingProgramAlert />
