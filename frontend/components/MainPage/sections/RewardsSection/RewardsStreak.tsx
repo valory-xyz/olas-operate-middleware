@@ -1,6 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
 import { Flex, Typography } from 'antd';
-import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
@@ -31,18 +30,15 @@ const StreakText = ({ streak }: { streak: number }) => {
 
 export const RewardsStreak = () => {
   const { goto } = usePageState();
-  const { rewards } = useRewardsHistory();
+  const { latestRewardStreak, isLoading } = useRewardsHistory();
 
-  const streak = useMemo(() => {
-    if (!rewards) return 0;
-    return 0;
-  }, [rewards]);
+  if (isLoading || latestRewardStreak === null) return null;
 
   return (
     <RewardsStreakFlex>
       <span style={{ display: 'inline-flex', gap: 8 }}>
-        <StreakIcon isOnStreak={!!streak} />
-        <StreakText streak={streak} />
+        <StreakIcon isOnStreak={!!latestRewardStreak} />
+        <StreakText streak={latestRewardStreak} />
       </span>
 
       <Text

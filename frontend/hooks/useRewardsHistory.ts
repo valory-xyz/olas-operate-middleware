@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { gql, request } from 'graphql-request';
 import { groupBy } from 'lodash';
+import { useMemo } from 'react';
 import { z } from 'zod';
 
 import { Chain } from '@/client';
@@ -9,14 +10,14 @@ import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useServices } from '@/hooks/useServices';
 
 import {
   EpochDetails,
   StakingRewardSchema,
 } from '../components/RewardsHistory/types';
 
-const ONE_DAY = 24 * 60 * 60 * 1000;
+const ONE_DAY_IN_S = 24 * 60 * 60;
+const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
 
 const RewardHistoryResponseSchema = z.object({
   epoch: z.string(),
@@ -117,7 +118,8 @@ const getTimestampOfFirstReward = (
 };
 
 export const useRewardsHistory = () => {
-  const { serviceId } = useServices();
+  // const { serviceId } = useServices();
+  const serviceId = 639;
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     queryKey: [],
     async queryFn() {
@@ -166,14 +168,67 @@ export const useRewardsHistory = () => {
       return parsedRewards.data;
     },
     refetchOnWindowFocus: false,
-    refetchInterval: ONE_DAY,
+    refetchInterval: ONE_DAY_IN_MS,
     enabled: !!serviceId,
   });
+
+  const latestRewardStreak = useMemo<number | null>(() => {
+    if (!data) return null;
+
+    // merge histories into single array
+    const allHistories = data.reduce(
+      (acc, { history }) => [...acc, ...history],
+      [] as EpochDetails[],
+    );
+
+    // remove all histories that are not earned
+    const earnedHistories = allHistories.filter((history) => history.earned);
+
+    // sort descending by epoch end time
+    const sorted = earnedHistories.sort(
+      (a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp,
+    );
+
+    let streak = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const current = sorted[i];
+      // 1st iteration
+      if (i == 0) {
+        current.earned && streak++;
+        continue;
+      }
+
+      const previous = sorted[i - 1];
+
+      // 2nd iteration should consider that the
+      // first element may not have been earned yet
+      if (i == 1) {
+        if (!current.earned) break;
+        streak++;
+        continue;
+      }
+
+      // nth iterations should compare the time difference between epochs to detect streaks
+      if (!previous.earned) break;
+      if (!current.earned) break;
+
+      const epochGap = previous.epochEndTimeStamp - current.epochStartTimeStamp;
+
+      // if the gap between epochs is more than 1 day, break the loop
+      if (epochGap > ONE_DAY_IN_S) break;
+
+      // if the gap between epochs is less than 1 day, increment the streak
+      current.earned && streak++;
+    }
+
+    return streak;
+  }, [data]);
 
   return {
     isError,
     isFetching,
     isLoading,
+    latestRewardStreak,
     refetch,
     rewards: data,
   };
