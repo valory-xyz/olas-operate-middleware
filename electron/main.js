@@ -192,7 +192,7 @@ const createMainWindow = async () => {
     }
   });
 
-  ipcMain.on('app-version', () => app.getVersion());
+  ipcMain.handle('app-version', () => app.getVersion());
 
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
