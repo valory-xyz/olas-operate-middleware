@@ -10,7 +10,7 @@ const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
-const next = require('next');
+const next = require('next/dist/server/next');
 const http = require('http');
 const AdmZip = require('adm-zip');
 
@@ -92,7 +92,9 @@ function showNotification(title, body) {
 async function beforeQuit() {
   if (operateDaemonPid) {
     try {
-      await fetch(`http://localhost:${appConfig.ports.prod.operate}/stop_all_services`);
+      await fetch(
+        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
+      );
       await killProcesses(operateDaemonPid);
     } catch (e) {
       logger.electron(e);
