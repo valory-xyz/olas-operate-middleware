@@ -42,6 +42,11 @@ export const Main = () => {
   return (
     <Card
       title={<MainHeader />}
+      styles={{
+        body: {
+          paddingTop: 0,
+        },
+      }}
       extra={
         <Flex gap={8}>
           <Button
