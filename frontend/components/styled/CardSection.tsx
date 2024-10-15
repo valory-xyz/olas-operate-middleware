@@ -12,6 +12,7 @@ type CardSectionProps = FlexProps & {
 
 /**
  * A styled `Flex` component that represents a section of a card.
+ * @note Only use this inside Antd Card components
  * @param {CardSectionProps} props
  */
 export const CardSection = styled(Flex)<CardSectionProps>`

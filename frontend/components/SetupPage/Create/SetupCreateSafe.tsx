@@ -1,4 +1,4 @@
-import { message, Typography } from 'antd';
+import { Card, message, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -97,47 +97,49 @@ export const SetupCreateSafe = () => {
   }, [backupSafeAddress, goto, masterSafeAddress]);
 
   return (
-    <CardSection
-      vertical
-      align="center"
-      justify="center"
-      padding="80px 24px"
-      gap={12}
-    >
-      {failed ? (
-        <>
-          <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
-          <Typography.Text type="secondary" className="mt-12">
-            Error, please restart the app and try again.
-          </Typography.Text>
-          <Typography.Text>
-            If the issue persists, please{' '}
-            <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
-              contact Olas community support {UNICODE_SYMBOLS.EXTERNAL_LINK}
-            </a>
-            .
-          </Typography.Text>
-        </>
-      ) : (
-        <>
-          <Image
-            src="/onboarding-robot.svg"
-            alt="logo"
-            width={80}
-            height={80}
-          />
-          <Typography.Title
-            level={4}
-            className="m-0 mt-12 loading-ellipses"
-            style={{ width: '220px' }}
-          >
-            {creationStatusText}
-          </Typography.Title>
-          <Typography.Text type="secondary">
-            You will be redirected once the account is created
-          </Typography.Text>
-        </>
-      )}
-    </CardSection>
+    <Card bordered={false}>
+      <CardSection
+        vertical
+        align="center"
+        justify="center"
+        padding="80px 24px"
+        gap={12}
+      >
+        {failed ? (
+          <>
+            <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
+            <Typography.Text type="secondary" className="mt-12">
+              Error, please restart the app and try again.
+            </Typography.Text>
+            <Typography.Text style={{ fontSize: 'small' }}>
+              If the issue persists,{' '}
+              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+                contact Olas community support {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              </a>
+              .
+            </Typography.Text>
+          </>
+        ) : (
+          <>
+            <Image
+              src="/onboarding-robot.svg"
+              alt="logo"
+              width={80}
+              height={80}
+            />
+            <Typography.Title
+              level={4}
+              className="m-0 mt-12 loading-ellipses"
+              style={{ width: '220px' }}
+            >
+              {creationStatusText}
+            </Typography.Title>
+            <Typography.Text type="secondary">
+              You will be redirected once the account is created
+            </Typography.Text>
+          </>
+        )}
+      </CardSection>
+    </Card>
   );
 };
