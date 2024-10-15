@@ -34,7 +34,6 @@ const DisplayRewards = () => {
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
       <StakingRewardsThisEpoch />
-
       {isBalanceLoaded ? (
         <Flex align="center" gap={12}>
           <Text className="text-xl font-weight-600">{reward} OLAS&nbsp;</Text>
