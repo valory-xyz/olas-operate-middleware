@@ -45,6 +45,7 @@ export const Main = () => {
       styles={{
         body: {
           paddingTop: 0,
+          paddingBottom: 0,
         },
       }}
       extra={
