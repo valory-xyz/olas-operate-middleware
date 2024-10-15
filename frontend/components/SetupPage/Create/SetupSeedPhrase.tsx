@@ -1,11 +1,10 @@
 import { CopyOutlined } from '@ant-design/icons';
-import { Button, Flex, message, Tag, Typography } from 'antd';
+import { Button, Card, Flex, message, Tag, Typography } from 'antd';
 
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useSetup } from '@/hooks/useSetup';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 
-import { CardFlex } from '../../styled/CardFlex';
 import { SetupCreateHeader } from './SetupCreateHeader';
 
 export const SetupSeedPhrase = () => {
@@ -16,7 +15,7 @@ export const SetupSeedPhrase = () => {
   };
 
   return (
-    <CardFlex gap={10}>
+    <Card>
       <SetupCreateHeader prev={SetupScreen.SetupPassword} disabled={true} />
       <Typography.Title level={3}>Back up seed phrase</Typography.Title>
       <Typography.Text>
@@ -43,6 +42,6 @@ export const SetupSeedPhrase = () => {
           Continue
         </Button>
       </Flex>
-    </CardFlex>
+    </Card>
   );
 };
