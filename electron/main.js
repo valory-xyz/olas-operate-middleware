@@ -76,11 +76,6 @@ let operateDaemon, operateDaemonPid, nextAppProcess, nextAppProcessPid;
 const nextApp = next({
   dev: false, // this instance is only used for production
   dir: path.join(__dirname),
-  conf: {
-    env: {
-      NEXT_PUBLIC_PEARL_VERSION: app.getVersion(),
-    },
-  },
 });
 
 const getActiveWindow = () => splashWindow ?? mainWindow;
@@ -196,6 +191,8 @@ const createMainWindow = async () => {
       splashWindow = null;
     }
   });
+
+  ipcMain.on('app-version', () => app.getVersion());
 
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
