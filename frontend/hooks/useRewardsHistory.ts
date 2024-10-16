@@ -247,33 +247,35 @@ export const useRewardsHistory = () => {
     let streak = 0;
     for (let i = 0; i < sorted.length; i++) {
       const current = sorted[i];
-      // 1st iteration
-      if (i == 0) {
-        current.earned && streak++;
-        continue;
+
+      // first iteration
+      if (i === 0) {
+        const timeNow = Date.now() / 1000;
+
+        // multiplied by 2 to give a buffer of 2 days
+        const initialEpochGap = timeNow - current.epochEndTimeStamp;
+
+        // if the last epoch was more than 1 day ago, break
+        if (initialEpochGap > ONE_DAY_IN_S) break;
+
+        // if the last epoch was less than 1 day ago, increment streak
+        if (current.earned) {
+          streak++;
+          continue;
+        }
+
+        break;
       }
 
+      // nth interations
       const previous = sorted[i - 1];
+      const epochGap = previous.epochStartTimeStamp - current.epochEndTimeStamp;
 
-      // 2nd iteration should consider that the
-      // first element may not have been earned yet
-      if (i == 1) {
-        if (!current.earned) break;
+      if (current.earned && epochGap <= ONE_DAY_IN_S) {
         streak++;
         continue;
       }
-
-      // nth iterations should compare the time difference between epochs to detect streaks
-      if (!previous.earned) break;
-      if (!current.earned) break;
-
-      const epochGap = previous.epochEndTimeStamp - current.epochStartTimeStamp;
-
-      // if the gap between epochs is more than 1 day, break the loop
-      if (epochGap > ONE_DAY_IN_S) break;
-
-      // if the gap between epochs is less than 1 day, increment the streak
-      current.earned && streak++;
+      break;
     }
 
     return streak;
