@@ -166,6 +166,13 @@ textarea,
 .p-0 {
   padding: 0 !important;
 }
+.pl-16 {
+  padding-left: 16px !important;
+}
+.pr-16 {
+  padding-right: 16px !important;
+}
+
 
 .pl-16 {
   padding-left: 16px !important;
@@ -201,6 +208,14 @@ textarea,
 // text align
 .text-center {
   text-align: center !important;
+}
+.text-right {
+  text-align: right !important;
+}
+
+// font color
+.text-light {
+  color: #4D596A !important;
 }
 
 .text-right {
