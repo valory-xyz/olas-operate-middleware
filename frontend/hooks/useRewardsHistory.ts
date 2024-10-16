@@ -11,7 +11,6 @@ import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
-import { EpochDetails } from '../components/RewardsHistory/types';
 import { useServices } from './useServices';
 
 const ONE_DAY_IN_S = 24 * 60 * 60;
@@ -64,59 +63,69 @@ const fetchRewardsQuery = gql`
   }
 `;
 
+type TransformedCheckpoint = {
+  epoch: string;
+  rewards: string[];
+  serviceIds: string[];
+  blockTimestamp: string;
+  transactionHash: string;
+  epochLength: string;
+  contractAddress: string;
+  epochEndTimeStamp: number;
+  epochStartTimeStamp: number;
+  reward: number;
+  earned: boolean;
+};
+
 const transformCheckpoints = (
   checkpoints: CheckpointGraphResponse[],
   serviceId?: number,
   timestampToIgnore?: null | number,
-) => {
+): TransformedCheckpoint[] => {
   if (!checkpoints || checkpoints.length === 0) return [];
   if (!serviceId) return [];
 
   const transformed = checkpoints
-    .map((checkpoint: Partial<CheckpointGraphResponse>, index: number) => {
-      try {
-        const serviceIdIndex =
-          checkpoint.serviceIds?.findIndex((id) => Number(id) === serviceId) ??
-          -1;
+    .map((checkpoint: CheckpointGraphResponse, index: number) => {
+      const serviceIdIndex =
+        checkpoint.serviceIds?.findIndex((id) => Number(id) === serviceId) ??
+        -1;
 
-        let reward = '0';
+      let reward = '0';
 
-        if (serviceIdIndex !== -1) {
-          const isRewardFinite = isFinite(
-            Number(checkpoint.rewards?.[serviceIdIndex]),
-          );
-          reward = isRewardFinite
-            ? checkpoint.rewards?.[serviceIdIndex] ?? '0'
-            : '0';
-        }
-
-        // If the epoch is 0, it means it's the first epoch else,
-        // the start time of the epoch is the end time of the previous epoch
-        const epochStartTimeStamp =
-          checkpoint.epoch === '0'
-            ? Number(checkpoint.blockTimestamp) - Number(checkpoint.epochLength)
-            : checkpoints[index + 1]?.blockTimestamp ?? 0;
-
-        return {
-          ...checkpoint,
-          epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
-          epochStartTimeStamp: Number(epochStartTimeStamp),
-          reward: Number(ethers.utils.formatUnits(reward, 18)),
-          earned: serviceIdIndex !== -1,
-        };
-      } catch (error) {
-        console.error('Error transforming rewards', error);
-        console.error('Checkpoint', checkpoint);
-        return;
+      if (serviceIdIndex !== -1) {
+        const isRewardFinite = isFinite(
+          Number(checkpoint.rewards?.[serviceIdIndex]),
+        );
+        reward = isRewardFinite
+          ? checkpoint.rewards?.[serviceIdIndex] ?? '0'
+          : '0';
       }
+
+      // If the epoch is 0, it means it's the first epoch else,
+      // the start time of the epoch is the end time of the previous epoch
+      const epochStartTimeStamp =
+        checkpoint.epoch === '0'
+          ? Number(checkpoint.blockTimestamp) - Number(checkpoint.epochLength)
+          : checkpoints[index + 1]?.blockTimestamp ?? 0;
+
+      return {
+        ...checkpoint,
+        epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
+        epochStartTimeStamp: Number(epochStartTimeStamp),
+        reward: Number(ethers.utils.formatUnits(reward, 18)),
+        earned: serviceIdIndex !== -1,
+      };
     })
     .filter((epoch) => {
-      if (!epoch) return false;
       // If the contract has been switched to new contract, ignore the rewards from the old contract of the same epoch,
       // as the rewards are already accounted in the new contract.
       // example: If contract was switched on September 1st, 2024, ignore the rewards before that date
       // in the old contract.
       if (!timestampToIgnore) return true;
+
+      if (!epoch) return false;
+      if (!epoch.epochEndTimeStamp) return false;
       return epoch.epochEndTimeStamp < timestampToIgnore;
     });
 
@@ -198,6 +207,10 @@ export const useRewardsHistory = () => {
         rewards.push(betaContractRewards);
       }
 
+      /**
+       * Temporarily disabling schema validation as it is failing for some reason.
+       */
+
       // const parsedRewards = StakingRewardSchema.array().safeParse(rewards);
 
       // if (!parsedRewards.success) {
@@ -218,13 +231,13 @@ export const useRewardsHistory = () => {
     if (!data) return 0;
 
     // merge histories into single array
-    const allHistories = data.reduce(
-      (acc, { history }) => [...acc, ...history],
-      [] as EpochDetails[],
+    const allCheckpoints = data.reduce(
+      (acc: TransformedCheckpoint[], { history }) => [...acc, ...history],
+      [],
     );
 
     // remove all histories that are not earned
-    const earnedHistories = allHistories.filter((history) => history.earned);
+    const earnedHistories = allCheckpoints.filter((history) => history.earned);
 
     // sort descending by epoch end time
     const sorted = earnedHistories.sort(
