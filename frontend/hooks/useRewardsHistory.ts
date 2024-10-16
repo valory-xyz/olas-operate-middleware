@@ -11,16 +11,13 @@ import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
-import {
-  EpochDetails,
-  StakingRewardSchema,
-} from '../components/RewardsHistory/types';
+import { EpochDetails } from '../components/RewardsHistory/types';
 import { useServices } from './useServices';
 
 const ONE_DAY_IN_S = 24 * 60 * 60;
 const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
 
-const RewardHistoryResponseSchema = z.object({
+const CheckpointGraphResponseSchema = z.object({
   epoch: z.string({
     message: 'Expected epoch to be a string',
   }),
@@ -43,7 +40,7 @@ const RewardHistoryResponseSchema = z.object({
     message: 'Expected contractAddress to be a string',
   }),
 });
-type RewardHistoryResponse = z.infer<typeof RewardHistoryResponseSchema>;
+type CheckpointGraphResponse = z.infer<typeof CheckpointGraphResponseSchema>;
 
 const betaAddress =
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS].pearl_beta;
@@ -53,62 +50,63 @@ const beta2Address =
 
 const fetchRewardsQuery = gql`
   {
-    allRewards: checkpoints(orderBy: epoch, orderDirection: desc) {
-      blockTimestamp
+    checkpoints(orderBy: epoch, orderDirection: desc) {
+      id
       availableRewards
+      blockTimestamp
+      contractAddress
       epoch
       epochLength
-      id
       rewards
       serviceIds
       transactionHash
-      contractAddress
     }
   }
 `;
 
-const transformRewards = (
-  rewards: RewardHistoryResponse[],
+const transformCheckpoints = (
+  checkpoints: CheckpointGraphResponse[],
   serviceId?: number,
   timestampToIgnore?: null | number,
 ) => {
-  if (!rewards || rewards.length === 0) return [];
+  if (!checkpoints || checkpoints.length === 0) return [];
   if (!serviceId) return [];
 
-  const transformed = rewards
-    .map((currentReward: RewardHistoryResponse, index: number) => {
+  const transformed = checkpoints
+    .map((checkpoint: Partial<CheckpointGraphResponse>, index: number) => {
       try {
-        const {
-          epoch,
-          rewards: aggregatedServiceRewards,
-          serviceIds,
-          epochLength,
-          blockTimestamp,
-          transactionHash,
-        } = currentReward;
+        const serviceIdIndex =
+          checkpoint.serviceIds?.findIndex((id) => Number(id) === serviceId) ??
+          -1;
 
-        const serviceIdIndex = serviceIds.findIndex(
-          (id) => Number(id) === serviceId,
-        );
-        const reward =
-          serviceIdIndex === -1 ? 0 : aggregatedServiceRewards[serviceIdIndex];
+        let reward = '0';
+
+        if (serviceIdIndex !== -1) {
+          const isRewardFinite = isFinite(
+            Number(checkpoint.rewards?.[serviceIdIndex]),
+          );
+          reward = isRewardFinite
+            ? checkpoint.rewards?.[serviceIdIndex] ?? '0'
+            : '0';
+        }
 
         // If the epoch is 0, it means it's the first epoch else,
         // the start time of the epoch is the end time of the previous epoch
         const epochStartTimeStamp =
-          epoch === '0'
-            ? Number(blockTimestamp) - Number(epochLength)
-            : rewards[index + 1].blockTimestamp;
+          checkpoint.epoch === '0'
+            ? Number(checkpoint.blockTimestamp) - Number(checkpoint.epochLength)
+            : checkpoints[index + 1]?.blockTimestamp ?? 0;
 
         return {
-          epochEndTimeStamp: Number(blockTimestamp),
+          ...checkpoint,
+          epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
           epochStartTimeStamp: Number(epochStartTimeStamp),
           reward: Number(ethers.utils.formatUnits(reward, 18)),
           earned: serviceIdIndex !== -1,
-          transactionHash,
         };
       } catch (error) {
         console.error('Error transforming rewards', error);
+        console.error('Checkpoint', checkpoint);
         return;
       }
     })
@@ -130,7 +128,7 @@ const transformRewards = (
  * NOTE: Assumes that the switch of the contract was completed AND the rewards are received in the same epoch.
  */
 const getTimestampOfFirstReward = (
-  epochs: RewardHistoryResponse[],
+  epochs: CheckpointGraphResponse[],
   serviceId: number,
 ) => {
   const timestamp = epochs
@@ -148,35 +146,47 @@ export const useRewardsHistory = () => {
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     queryKey: [],
     async queryFn() {
-      const allRewardsResponse = await request(SUBGRAPH_URL, fetchRewardsQuery);
-      return allRewardsResponse as { allRewards: RewardHistoryResponse[] };
+      const checkpointsResponse: {
+        checkpoints: CheckpointGraphResponse[];
+      } = await request(SUBGRAPH_URL, fetchRewardsQuery);
+      return checkpointsResponse;
     },
-    select: (data) => {
-      const allRewards = groupBy(data.allRewards, 'contractAddress');
+    select: ({ checkpoints }) => {
+      const checkpointsByContractAddress = groupBy(
+        checkpoints,
+        'contractAddress',
+      );
 
-      const beta2Rewards = allRewards[beta2Address.toLowerCase()];
+      const beta2Checkpoints =
+        checkpointsByContractAddress[beta2Address.toLowerCase()];
 
       /** Pearl beta 2 details */
 
       // timestamp when the contract was switched to beta2
       // ie, got the fist rewards from beta2 contract
       const beta2switchTimestamp = getTimestampOfFirstReward(
-        beta2Rewards,
+        beta2Checkpoints,
         serviceId as number,
       );
 
       const beta2ContractDetails = {
         id: beta2Address,
         name: STAKING_PROGRAM_META[StakingProgramId.Beta2].name,
-        history: transformRewards(beta2Rewards, serviceId, null),
+        history: transformCheckpoints(beta2Checkpoints, serviceId, null),
       };
 
       /** Pearl beta details */
-      const betaRewards = allRewards[betaAddress.toLowerCase()];
+      const betaCheckpoints =
+        checkpointsByContractAddress[betaAddress.toLowerCase()];
+
       const betaContractRewards = {
         id: betaAddress,
         name: STAKING_PROGRAM_META[StakingProgramId.Beta].name,
-        history: transformRewards(betaRewards, serviceId, beta2switchTimestamp),
+        history: transformCheckpoints(
+          betaCheckpoints,
+          serviceId,
+          beta2switchTimestamp,
+        ),
       };
 
       // If there are no rewards in both contracts, return empty array
@@ -188,14 +198,16 @@ export const useRewardsHistory = () => {
         rewards.push(betaContractRewards);
       }
 
-      const parsedRewards = StakingRewardSchema.array().safeParse(rewards);
+      // const parsedRewards = StakingRewardSchema.array().safeParse(rewards);
 
-      if (!parsedRewards.success) {
-        console.error(parsedRewards.error.errors);
-        throw new Error(parsedRewards.error.errors.join(', '));
-      }
+      // if (!parsedRewards.success) {
+      //   console.error(parsedRewards.error.errors);
+      //   throw new Error(parsedRewards.error.errors.join(', '));
+      // }
 
-      return parsedRewards.data;
+      // return parsedRewards.data;
+
+      return rewards;
     },
     refetchOnWindowFocus: false,
     refetchInterval: ONE_DAY_IN_MS,
