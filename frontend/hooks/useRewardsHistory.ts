@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { gql, request } from 'graphql-request';
 import { groupBy } from 'lodash';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { z } from 'zod';
 
 import { Chain } from '@/client';
@@ -21,12 +21,27 @@ const ONE_DAY_IN_S = 24 * 60 * 60;
 const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
 
 const RewardHistoryResponseSchema = z.object({
-  epoch: z.string(),
-  rewards: z.array(z.string()),
-  serviceIds: z.array(z.string()),
-  blockTimestamp: z.string(),
-  transactionHash: z.string(),
-  epochLength: z.string(),
+  epoch: z.string({
+    message: 'Expected epoch to be a string',
+  }),
+  rewards: z.array(z.string(), {
+    message: 'Expected rewards to be an array of strings',
+  }),
+  serviceIds: z.array(z.string(), {
+    message: 'Expected serviceIds to be an array of strings',
+  }),
+  blockTimestamp: z.string({
+    message: 'Expected blockTimestamp to be a string',
+  }),
+  transactionHash: z.string({
+    message: 'Expected transactionHash to be a string',
+  }),
+  epochLength: z.string({
+    message: 'Expected epochLength to be a string',
+  }),
+  contractAddress: z.string({
+    message: 'Expected contractAddress to be a string',
+  }),
 });
 type RewardHistoryResponse = z.infer<typeof RewardHistoryResponseSchema>;
 
@@ -60,38 +75,45 @@ const transformRewards = (
   if (!rewards || rewards.length === 0) return [];
   if (!serviceId) return [];
 
-  return rewards
+  const transformed = rewards
     .map((currentReward: RewardHistoryResponse, index: number) => {
-      const {
-        epoch,
-        rewards: aggregatedServiceRewards,
-        serviceIds,
-        epochLength,
-        blockTimestamp,
-        transactionHash,
-      } = RewardHistoryResponseSchema.parse(currentReward);
-      const serviceIdIndex = serviceIds.findIndex(
-        (id) => Number(id) === serviceId,
-      );
-      const reward =
-        serviceIdIndex === -1 ? 0 : aggregatedServiceRewards[serviceIdIndex];
+      try {
+        const {
+          epoch,
+          rewards: aggregatedServiceRewards,
+          serviceIds,
+          epochLength,
+          blockTimestamp,
+          transactionHash,
+        } = currentReward;
 
-      // If the epoch is 0, it means it's the first epoch else,
-      // the start time of the epoch is the end time of the previous epoch
-      const epochStartTimeStamp =
-        epoch === '0'
-          ? Number(blockTimestamp) - Number(epochLength)
-          : rewards[index + 1].blockTimestamp;
+        const serviceIdIndex = serviceIds.findIndex(
+          (id) => Number(id) === serviceId,
+        );
+        const reward =
+          serviceIdIndex === -1 ? 0 : aggregatedServiceRewards[serviceIdIndex];
 
-      return {
-        epochEndTimeStamp: Number(blockTimestamp),
-        epochStartTimeStamp: Number(epochStartTimeStamp),
-        reward: Number(ethers.utils.formatUnits(reward, 18)),
-        earned: serviceIdIndex !== -1,
-        transactionHash,
-      } as EpochDetails;
+        // If the epoch is 0, it means it's the first epoch else,
+        // the start time of the epoch is the end time of the previous epoch
+        const epochStartTimeStamp =
+          epoch === '0'
+            ? Number(blockTimestamp) - Number(epochLength)
+            : rewards[index + 1].blockTimestamp;
+
+        return {
+          epochEndTimeStamp: Number(blockTimestamp),
+          epochStartTimeStamp: Number(epochStartTimeStamp),
+          reward: Number(ethers.utils.formatUnits(reward, 18)),
+          earned: serviceIdIndex !== -1,
+          transactionHash,
+        };
+      } catch (error) {
+        console.error('Error transforming rewards', error);
+        return;
+      }
     })
     .filter((epoch) => {
+      if (!epoch) return false;
       // If the contract has been switched to new contract, ignore the rewards from the old contract of the same epoch,
       // as the rewards are already accounted in the new contract.
       // example: If contract was switched on September 1st, 2024, ignore the rewards before that date
@@ -99,6 +121,8 @@ const transformRewards = (
       if (!timestampToIgnore) return true;
       return epoch.epochEndTimeStamp < timestampToIgnore;
     });
+
+  return transformed;
 };
 
 /**
@@ -120,6 +144,7 @@ const getTimestampOfFirstReward = (
 
 export const useRewardsHistory = () => {
   const { serviceId } = useServices();
+
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     queryKey: [],
     async queryFn() {
@@ -128,7 +153,9 @@ export const useRewardsHistory = () => {
     },
     select: (data) => {
       const allRewards = groupBy(data.allRewards, 'contractAddress');
+
       const beta2Rewards = allRewards[beta2Address.toLowerCase()];
+
       /** Pearl beta 2 details */
 
       // timestamp when the contract was switched to beta2
@@ -137,6 +164,7 @@ export const useRewardsHistory = () => {
         beta2Rewards,
         serviceId as number,
       );
+
       const beta2ContractDetails = {
         id: beta2Address,
         name: STAKING_PROGRAM_META[StakingProgramId.Beta2].name,
@@ -153,15 +181,17 @@ export const useRewardsHistory = () => {
 
       // If there are no rewards in both contracts, return empty array
       const rewards = [];
-      if (beta2ContractDetails.history.some((epoch) => epoch.earned)) {
+      if (beta2ContractDetails.history.some((epoch) => epoch?.earned)) {
         rewards.push(beta2ContractDetails);
       }
-      if (betaContractRewards.history.some((epoch) => epoch.earned)) {
+      if (betaContractRewards.history.some((epoch) => epoch?.earned)) {
         rewards.push(betaContractRewards);
       }
 
       const parsedRewards = StakingRewardSchema.array().safeParse(rewards);
+
       if (!parsedRewards.success) {
+        console.error(parsedRewards.error.errors);
         throw new Error(parsedRewards.error.errors.join(', '));
       }
 
@@ -172,8 +202,8 @@ export const useRewardsHistory = () => {
     enabled: !!serviceId,
   });
 
-  const latestRewardStreak = useMemo<number | null>(() => {
-    if (!data) return null;
+  const latestRewardStreak = useMemo<number>(() => {
+    if (!data) return 0;
 
     // merge histories into single array
     const allHistories = data.reduce(
@@ -223,6 +253,10 @@ export const useRewardsHistory = () => {
 
     return streak;
   }, [data]);
+
+  useEffect(() => {
+    serviceId && refetch();
+  }, [refetch, serviceId]);
 
   return {
     isError,

@@ -27,11 +27,10 @@ const StreakText = ({
   streak,
   isLoading,
 }: {
-  streak: number | null;
+  streak: number;
   isLoading: boolean;
 }) => {
   if (isLoading) return <div>Loading...</div>;
-  if (streak === null) return <div>Not staked yet</div>;
   if (streak > 0) return <div>{streak} day streak</div>;
   return <div>No streak</div>;
 };
