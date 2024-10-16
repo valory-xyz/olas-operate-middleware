@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
@@ -29,7 +28,6 @@ const getFormattedReward = (reward: number | undefined) =>
 const DisplayRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
   const { isBalanceLoaded } = useBalance();
-  const { goto } = usePageState();
 
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
