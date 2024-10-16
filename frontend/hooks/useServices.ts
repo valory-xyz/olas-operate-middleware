@@ -93,7 +93,7 @@ export const useServices = () => {
   return {
     service: services?.[0],
     services,
-    serviceId: 639,
+    serviceId,
     serviceStatus,
     setServiceStatus,
     getServiceFromState,
