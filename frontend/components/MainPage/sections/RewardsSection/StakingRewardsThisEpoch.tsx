@@ -19,6 +19,7 @@ type EpochTimeResponse = z.infer<typeof EpochTimeResponseSchema>;
 
 const useEpochEndTime = () => {
   const { activeStakingProgramAddress } = useStakingProgram();
+
   const latestEpochTimeQuery = gql`
     query {
       checkpoints(
@@ -55,7 +56,13 @@ const useEpochEndTime = () => {
 
 export const StakingRewardsThisEpoch = () => {
   const { data: epochEndTimeInMs } = useEpochEndTime();
-  const { activeStakingProgramMeta } = useStakingProgram();
+  const {
+    activeStakingProgramMeta,
+    activeStakingProgramId,
+    isActiveStakingProgramLoaded,
+  } = useStakingProgram();
+
+  const stakingProgramMeta = activeStakingProgramMeta;
 
   return (
     <Text type="secondary">
@@ -63,14 +70,20 @@ export const StakingRewardsThisEpoch = () => {
       <Popover
         arrow={false}
         content={
-          <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
-            The epoch for {activeStakingProgramMeta?.name} ends each day at ~{' '}
-            <Text className="text-sm" strong>
-              {epochEndTimeInMs
-                ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
-                : '--'}
-            </Text>
-          </div>
+          isActiveStakingProgramLoaded && activeStakingProgramId ? (
+            <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
+              The epoch for {stakingProgramMeta?.name} ends each day at ~{' '}
+              <Text className="text-sm" strong>
+                {epochEndTimeInMs
+                  ? `${formatToTime(epochEndTimeInMs * 1000)} (UTC)`
+                  : '--'}
+              </Text>
+            </div>
+          ) : (
+            <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
+              You&apos;re not yet in a staking program!
+            </div>
+          )
         }
       >
         <InfoCircleOutlined />
