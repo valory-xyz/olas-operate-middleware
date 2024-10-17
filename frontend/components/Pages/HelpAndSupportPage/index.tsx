@@ -9,8 +9,8 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import { useLogs } from '@/hooks/useLogs';
 import { usePageState } from '@/hooks/usePageState';
 
-import { CardTitle } from '../Card/CardTitle';
-import { CardSection } from '../styled/CardSection';
+import { CardTitle } from '../../Card/CardTitle';
+import { CardSection } from '../../styled/CardSection';
 
 const { Title, Paragraph } = Typography;
 
@@ -74,6 +74,12 @@ export const HelpAndSupport = () => {
     <Card
       title={<SettingsTitle />}
       bordered={false}
+      styles={{
+        body: {
+          paddingTop: 0,
+          paddingBottom: 0,
+        },
+      }}
       extra={
         <Button
           size="large"

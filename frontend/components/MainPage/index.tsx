@@ -5,22 +5,24 @@ import { useEffect } from 'react';
 import { Pages } from '@/enums/PageState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
+import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { MainHeader } from './header';
 import { AddFundsSection } from './sections/AddFundsSection';
+import { AlertSections } from './sections/AlertSections';
 import { GasBalanceSection } from './sections/GasBalanceSection';
 import { KeepAgentRunningSection } from './sections/KeepAgentRunningSection';
 import { MainNeedsFunds } from './sections/NeedsFundsSection';
-import { NewStakingProgramAlertSection } from './sections/NewStakingProgramAlertSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
-import { MainRewards } from './sections/RewardsSection';
+import { RewardsSection } from './sections/RewardsSection';
 import { StakingContractUpdate } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
+  const { backupSafeAddress } = useMasterSafe();
   const { updateServicesState } = useServices();
   const { updateBalances, isLoaded, setIsLoaded } = useBalance();
   const { activeStakingProgramId: currentStakingProgram } = useStakingProgram();
@@ -32,9 +34,20 @@ export const Main = () => {
     }
   }, [isLoaded, setIsLoaded, updateBalances, updateServicesState]);
 
+  const hideMainOlasBalanceTopBorder = [
+    !backupSafeAddress,
+    currentStakingProgram === StakingProgramId.Alpha,
+  ].some((condition) => !!condition);
+
   return (
     <Card
       title={<MainHeader />}
+      styles={{
+        body: {
+          paddingTop: 0,
+          paddingBottom: 0,
+        },
+      }}
       extra={
         <Flex gap={8}>
           <Button
@@ -54,11 +67,9 @@ export const Main = () => {
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
-        {currentStakingProgram === StakingProgramId.Alpha && (
-          <NewStakingProgramAlertSection />
-        )}
-        <MainOlasBalance />
-        <MainRewards />
+        <AlertSections />
+        <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
+        <RewardsSection />
         <KeepAgentRunningSection />
         <StakingContractUpdate />
         <GasBalanceSection />
