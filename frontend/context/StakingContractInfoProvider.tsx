@@ -18,7 +18,7 @@ import { AutonolasService } from '@/service/Autonolas';
 import { StakingContractInfo } from '@/types/Autonolas';
 
 import { ServicesContext } from './ServicesProvider';
-import { StakingProgramContext } from './StakingProgramContext';
+import { StakingProgramContext } from './StakingProgramProvider';
 
 type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
