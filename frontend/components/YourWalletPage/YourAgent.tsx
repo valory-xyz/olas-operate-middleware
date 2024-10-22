@@ -4,13 +4,13 @@ import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { Chain } from '@/client';
-import { AddressLink } from '@/components/AddressLink';
 import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { useAddress } from '@/hooks/useAddress';
 import { useBalance } from '@/hooks/useBalance';
 import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
+import { generateName } from '@/utils/agentName';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
@@ -24,7 +24,7 @@ import {
   XdaiTitle,
 } from './Titles';
 
-const { Title } = Typography;
+const { Text } = Typography;
 
 const NftCard = styled(Card)`
   .ant-card-body {
@@ -89,6 +89,11 @@ export const YourAgentWallet = () => {
     multisigAddress: agentSafeAddress,
   } = useAddress();
 
+  const agentName = useMemo(
+    () => (agentSafeAddress ? generateName(agentSafeAddress) : '--'),
+    [agentSafeAddress],
+  );
+
   const reward = useMemo(() => {
     if (!isBalanceLoaded) return <Skeleton.Input size="small" active />;
     if (!isEligibleForRewards) return 'Not yet earned';
@@ -116,18 +121,29 @@ export const YourAgentWallet = () => {
     <Card>
       <Container>
         <Flex vertical gap={12}>
-          <Image
-            width={36}
-            height={36}
-            alt="Agent wallet"
-            src="/agent-wallet.png"
-          />
+          <Flex gap={12}>
+            <Image
+              width={36}
+              height={36}
+              alt="Agent wallet"
+              src="/agent-wallet.png"
+            />
 
-          <Flex justify="space-between" className="w-full">
-            <Title level={5} className="m-0 text-base">
-              Your agent
-            </Title>
-            <AddressLink address={agentSafeAddress} />
+            <Flex vertical className="w-full">
+              <Text className="m-0 text-sm" type="secondary">
+                Your agent
+              </Text>
+              <Flex justify="space-between">
+                <Text strong>{agentName}</Text>
+                <a
+                  href={`https://predict.olas.network/agents/${agentSafeAddress}`}
+                  target="_blank"
+                  className="text-sm"
+                >
+                  Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
+                </a>
+              </Flex>
+            </Flex>
           </Flex>
         </Flex>
 
@@ -162,7 +178,7 @@ export const YourAgentWallet = () => {
               {
                 left: (
                   <SignerTitle
-                    signerText="Agent’s wallet signer address:"
+                    signerText="Agent's wallet signer address:"
                     signerAddress={agentEoaAddress}
                   />
                 ),
