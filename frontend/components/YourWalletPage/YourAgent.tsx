@@ -1,4 +1,3 @@
-import { RightOutlined } from '@ant-design/icons';
 import { Card, Flex, Skeleton, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
@@ -141,7 +140,7 @@ export const YourAgentWallet = () => {
                   target="_blank"
                   className="text-sm"
                 >
-                  Agent profile <RightOutlined style={{ fontSize: '12px' }} />
+                  Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
                 </a>
               </Flex>
             </Flex>
