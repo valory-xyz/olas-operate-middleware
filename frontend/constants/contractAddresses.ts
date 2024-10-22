@@ -24,6 +24,7 @@ export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
     [StakingProgramId.Beta2]: '0x1c2F82413666d2a3fD8bC337b0268e62dDF67434',
     [StakingProgramId.Beta]: '0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d',
     [StakingProgramId.Alpha]: '0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A',
+    [StakingProgramId.BetaMechMarketplace]: '0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA',
   },
 };
 
