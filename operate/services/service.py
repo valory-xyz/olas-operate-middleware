@@ -28,6 +28,7 @@ import sys
 import typing as t
 from copy import copy, deepcopy
 from dataclasses import dataclass
+from json import JSONDecodeError
 from pathlib import Path
 from time import sleep
 from traceback import print_exc
@@ -758,8 +759,10 @@ class Service(LocalResource):
         """Load deployment object for the service."""
         if not (self.path / DEPLOYMENT_JSON).exists():
             self._deployment = Deployment.new(path=self.path)
-        if self._deployment is None:
+        try:
             self._deployment = Deployment.load(path=self.path)
+        except JSONDecodeError:
+            self._deployment = Deployment.new(path=self.path)
         return t.cast(Deployment, self._deployment)
 
     @staticmethod
