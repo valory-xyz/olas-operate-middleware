@@ -492,6 +492,16 @@ class Deployment(LocalResource):
                     deployment["services"][node]["environment"].append(
                         "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE=10000000000000000"
                     )
+                if (
+                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE=False"
+                    in deployment["services"][node]["environment"]
+                ):
+                    deployment["services"][node]["environment"].remove(
+                        "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE=False"
+                    )
+                    deployment["services"][node]["environment"].append(
+                        f"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE={str(home_chain_data.user_params.use_mech_marketplace).capitalize()}"
+                    )
 
         with (build / DOCKER_COMPOSE_YAML).open("w", encoding="utf-8") as stream:
             yaml_dump(data=deployment, stream=stream)
@@ -584,10 +594,17 @@ class Deployment(LocalResource):
             agent_vars[
                 "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE"
             ] = "10000000000000000"
-            Path(build, "agent.json").write_text(
-                json.dumps(agent_vars, indent=4),
-                encoding="utf-8",
-            )
+
+        # Mech marketplace patch.
+        if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE" in agent_vars:
+            agent_vars[
+                "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE"
+            ] = str(chain_data.user_params.use_mech_marketplace).capitalize()
+
+        Path(build, "agent.json").write_text(
+            json.dumps(agent_vars, indent=4),
+            encoding="utf-8",
+        )
 
         self.status = DeploymentStatus.BUILT
         self.store()
