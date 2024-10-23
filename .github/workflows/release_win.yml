@@ -41,8 +41,6 @@ jobs:
           virtualenvs-in-project: false
           virtualenvs-path: ~/my-custom-path
           installer-parallel: true
-      - name: Install dependencies
-        run: poetry install
 
       # INSTALL PROJECT DEPENDENCIES
 
