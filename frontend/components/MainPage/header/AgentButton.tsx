@@ -133,7 +133,7 @@ const AgentNotRunningButton = () => {
   const { showNotification } = useElectronApi();
   const {
     setIsPaused: setIsBalancePollingPaused,
-    safeBalance,
+    masterSafeBalance: safeBalance,
     isLowBalance,
     totalOlasStakedBalance,
     totalEthBalance,
