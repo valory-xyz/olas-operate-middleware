@@ -12,6 +12,7 @@ import { Chain } from '@/client';
 import {
   AGENT_MECH_CONTRACT_ADDRESS,
   MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
+  MECH_MARKETPLACE_CONTRACT_ADDRESS,
   REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
@@ -22,6 +23,7 @@ import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceS
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
+import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
 
 const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
 const REQUIRED_MECH_REQUESTS_SAFETY_MARGIN = 1;
@@ -81,8 +83,8 @@ const agentMechActivityCheckerContract = new MulticallContract(
 );
 
 const mechMarketplaceContract = new MulticallContract(
-  MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
-  MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
+  MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
+  MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
 );
 
 const mechMarketplaceActivityCheckerContract = new MulticallContract(
