@@ -88,7 +88,7 @@ from operate.types import (
 )
 
 
-# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes
+# pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals
 
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
