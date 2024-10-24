@@ -94,7 +94,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 2
+SERVICE_CONFIG_VERSION = 3
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -727,55 +727,65 @@ class Service(LocalResource):
         with open(file_path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
-        if "version" in data:
-            # Data is already in the new format
+        version = data.get("version", 0)
+        if version == 3:
             return
 
-        # Migrate from old format to new format
-        new_data = {
-            "version": 2,
-            "hash": data.get("hash"),
-            "keys": data.get("keys"),
-            "home_chain_id": "100",  # Assuming a default value for home_chain_id
-            "chain_configs": {
-                "100": {
-                    "ledger_config": {
-                        "rpc": data.get("ledger_config", {}).get("rpc"),
-                        "type": data.get("ledger_config", {}).get("type"),
-                        "chain": data.get("ledger_config", {}).get("chain"),
-                    },
-                    "chain_data": {
-                        "instances": data.get("chain_data", {}).get("instances", []),
-                        "token": data.get("chain_data", {}).get("token"),
-                        "multisig": data.get("chain_data", {}).get("multisig"),
-                        "staked": data.get("chain_data", {}).get("staked", False),
-                        "on_chain_state": data.get("chain_data", {}).get(
-                            "on_chain_state", 3
-                        ),
-                        "user_params": {
-                            "staking_program_id": "pearl_alpha",
-                            "nft": data.get("chain_data", {})
-                            .get("user_params", {})
-                            .get("nft"),
-                            "threshold": data.get("chain_data", {})
-                            .get("user_params", {})
-                            .get("threshold"),
-                            "use_staking": data.get("chain_data", {})
-                            .get("user_params", {})
-                            .get("use_staking"),
-                            "cost_of_bond": data.get("chain_data", {})
-                            .get("user_params", {})
-                            .get("cost_of_bond"),
-                            "fund_requirements": data.get("chain_data", {})
-                            .get("user_params", {})
-                            .get("fund_requirements", {}),
+        # Migrate from old formats to new format
+        if version == 2:
+            data["chain_configs"]["100"]["chain_data"]["user_params"][
+                "use_mech_marketplace"
+            ] = False
+            data["version"] = 3
+            new_data = data
+        elif version == 0:
+            new_data = {
+                "version": 3,
+                "hash": data.get("hash"),
+                "keys": data.get("keys"),
+                "home_chain_id": "100",  # Assuming a default value for home_chain_id
+                "chain_configs": {
+                    "100": {
+                        "ledger_config": {
+                            "rpc": data.get("ledger_config", {}).get("rpc"),
+                            "type": data.get("ledger_config", {}).get("type"),
+                            "chain": data.get("ledger_config", {}).get("chain"),
                         },
-                    },
-                }
-            },
-            "service_path": data.get("service_path", ""),
-            "name": data.get("name", ""),
-        }
+                        "chain_data": {
+                            "instances": data.get("chain_data", {}).get(
+                                "instances", []
+                            ),
+                            "token": data.get("chain_data", {}).get("token"),
+                            "multisig": data.get("chain_data", {}).get("multisig"),
+                            "staked": data.get("chain_data", {}).get("staked", False),
+                            "on_chain_state": data.get("chain_data", {}).get(
+                                "on_chain_state", 3
+                            ),
+                            "user_params": {
+                                "staking_program_id": "pearl_alpha",
+                                "nft": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("nft"),
+                                "threshold": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("threshold"),
+                                "use_staking": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("use_staking"),
+                                "use_mech_marketplace": False,
+                                "cost_of_bond": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("cost_of_bond"),
+                                "fund_requirements": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("fund_requirements", {}),
+                            },
+                        },
+                    }
+                },
+                "service_path": data.get("service_path", ""),
+                "name": data.get("name", ""),
+            }
 
         with open(file_path, "w", encoding="utf-8") as file:
             json.dump(new_data, file, indent=2)
