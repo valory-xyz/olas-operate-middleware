@@ -133,13 +133,14 @@ export const YourAgentWallet = () => {
               <Text className="m-0 text-sm" type="secondary">
                 Your agent
               </Text>
+              <Text strong>{agentName}</Text>
+
+              {/* 
+              
+              @note: removed until predict ui resolution
+
               <Flex justify="space-between">
                 <Text strong>{agentName}</Text>
-                <div />
-                {/* 
-                
-                  @note: removed until predict ui resolution
-
                 <a
                   href={`https://predict.olas.network/agents/${agentSafeAddress}`}
                   target="_blank"
@@ -147,9 +148,9 @@ export const YourAgentWallet = () => {
                 >
                   Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
                 </a> 
-                
-                */}
               </Flex>
+
+              */}
             </Flex>
           </Flex>
         </Flex>
