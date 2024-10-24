@@ -494,15 +494,14 @@ class Deployment(LocalResource):
                 # See also method '_build_host' below.
 
                 user_params = home_chain_data.user_params
-                staking_contract = STAKING[home_chain_ledger_config.chain][user_params.staking_program_id]
+                staking_contract = STAKING[home_chain_ledger_config.chain][
+                    user_params.staking_program_id
+                ]
 
                 env_var_updates = {
-                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE=0": 
-                        "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE=10000000000000000",
-                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE=False": 
-                        f"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE={str(home_chain_data.user_params.use_mech_marketplace).capitalize()}",
-                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS=0x0000000000000000000000000000000000000000": 
-                        f"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS={staking_contract}",
+                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE=0": "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE=10000000000000000",
+                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE=False": f"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE={str(home_chain_data.user_params.use_mech_marketplace).capitalize()}",
+                    "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS=0x0000000000000000000000000000000000000000": f"SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS={staking_contract}",
                 }
 
                 for old_value, new_value in env_var_updates.items():
@@ -613,8 +612,10 @@ class Deployment(LocalResource):
         # Mech price patch, mech marketplace patch
         agent_var_updates = {
             "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE": "10000000000000000",
-            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE": str(chain_data.user_params.use_mech_marketplace).capitalize(),
-            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS": staking_contract
+            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE": str(
+                chain_data.user_params.use_mech_marketplace
+            ).capitalize(),
+            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS": staking_contract,
         }
 
         for key, value in agent_var_updates.items():
