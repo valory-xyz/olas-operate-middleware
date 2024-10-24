@@ -133,6 +133,12 @@ export const YourAgentWallet = () => {
               <Text className="m-0 text-sm" type="secondary">
                 Your agent
               </Text>
+              <Text strong>{agentName}</Text>
+
+              {/* 
+              
+              @note: removed until predict ui resolution
+
               <Flex justify="space-between">
                 <Text strong>{agentName}</Text>
                 <a
@@ -141,8 +147,10 @@ export const YourAgentWallet = () => {
                   className="text-sm"
                 >
                   Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
-                </a>
+                </a> 
               </Flex>
+
+              */}
             </Flex>
           </Flex>
         </Flex>
