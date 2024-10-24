@@ -4,6 +4,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { AGENT_MECH_ABI } from '@/abis/agentMech';
 import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
+import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
 import { REQUESTER_ACTIVITY_CHECKER_ABI } from '@/abis/requesterActivityChecker';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
@@ -23,7 +24,6 @@ import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceS
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
-import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
 
 const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
 const REQUIRED_MECH_REQUESTS_SAFETY_MARGIN = 1;
