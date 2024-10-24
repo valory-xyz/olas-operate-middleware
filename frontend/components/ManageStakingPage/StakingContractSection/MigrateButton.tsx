@@ -78,7 +78,6 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
 
           try {
             setServiceStatus(DeploymentStatus.DEPLOYING);
-            setStakingProgram(stakingProgramId);
             goto(Pages.Main);
 
             await ServicesService.createService({
