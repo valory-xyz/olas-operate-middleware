@@ -4,6 +4,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { AGENT_MECH_ABI } from '@/abis/agentMech';
 import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
+import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
 import { REQUESTER_ACTIVITY_CHECKER_ABI } from '@/abis/requesterActivityChecker';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
@@ -12,6 +13,7 @@ import { Chain } from '@/client';
 import {
   AGENT_MECH_CONTRACT_ADDRESS,
   MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
+  MECH_MARKETPLACE_CONTRACT_ADDRESS,
   REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
@@ -81,8 +83,8 @@ const agentMechActivityCheckerContract = new MulticallContract(
 );
 
 const mechMarketplaceContract = new MulticallContract(
-  MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
-  MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
+  MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
+  MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
 );
 
 const mechMarketplaceActivityCheckerContract = new MulticallContract(
