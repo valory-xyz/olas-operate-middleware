@@ -396,8 +396,12 @@ const getCurrentStakingProgramByServiceId = async (
 
   try {
     await gnosisMulticallProvider.init();
-    const [isAlphaStaked, isBetaStaked, isBeta2Staked] =
-      await gnosisMulticallProvider.all(Object.values(contractCalls));
+    const [
+      isAlphaStaked,
+      isBetaStaked,
+      isBeta2Staked,
+      isBetaMechMarketplaceStaked,
+    ] = await gnosisMulticallProvider.all(Object.values(contractCalls));
 
     if (isAlphaStaked) {
       return StakingProgramId.Alpha;
@@ -409,6 +413,10 @@ const getCurrentStakingProgramByServiceId = async (
 
     if (isBeta2Staked) {
       return StakingProgramId.Beta2;
+    }
+
+    if (isBetaMechMarketplaceStaked) {
+      return StakingProgramId.BetaMechMarketplace;
     }
 
     return null;
