@@ -1354,6 +1354,33 @@ class ServiceManager:
                     )
                 await asyncio.sleep(60)
 
+    def _set_env_variables(self, hash: str) -> None:
+
+        self.logger.info(f"_set_env_variables")
+        service = self.load_or_create(hash=hash)
+        chain_id = service.home_chain_id
+        chain_config = service.chain_configs[chain_id]
+        chain_data = chain_config.chain_data
+        ledger_config = chain_config.ledger_config
+        user_params = chain_config.chain_data.user_params
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+
+        staking_params = sftxb.get_staking_params(
+            staking_contract=STAKING[ledger_config.chain][
+                user_params.staking_program_id
+            ],
+        )
+        # Override service.yaml variables for the deployment
+        os.environ["STAKING_CONTRACT_ADDRESS"] = staking_params["staking_contract"]
+        os.environ["MECH_ACTIVITY_CHECKER_CONTRACT"] = staking_params[
+            "activity_checker"
+        ]
+        os.environ["MECH_CONTRACT_ADDRESS"] = staking_params["agent_mech"]
+        os.environ["MECH_REQUEST_PRICE"] = "10000000000000000"
+        os.environ["USE_MECH_MARKETPLACE"] = str(chain_data.user_params.use_mech_marketplace)
+        os.environ["REQUESTER_STAKING_INSTANCE_ADDRESS"] = staking_params["staking_contract"]
+        os.environ["PRIORITY_MECH_ADDRESS"] = staking_params["agent_mech"]
+
     def deploy_service_locally(self, hash: str, force: bool = True) -> Deployment:
         """
         Deploy service locally
@@ -1362,6 +1389,7 @@ class ServiceManager:
         :param force: Remove previous deployment and start a new one.
         :return: Deployment instance
         """
+        self._set_env_variables(hash=hash)
         deployment = self.load_or_create(hash=hash).deployment
         deployment.build(force=force)
         deployment.start()

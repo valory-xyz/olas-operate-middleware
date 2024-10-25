@@ -596,38 +596,6 @@ class Deployment(LocalResource):
                 shutil.rmtree(build)
             raise e
 
-        # Patch - update variables
-
-        # TODO Possibly a best way to do this is within the method
-        # 'ServiceManager.deploy_service_locally' and set the variables
-        # as environment variables. Note that part of the variables of the agent
-        # are already set using 'os.environ' on the ServiceManager, and are
-        # thus set up 'by coincidence' here.
-        # See also method '_build_docker' above.
-        agent_vars = json.loads(Path(build, "agent.json").read_text(encoding="utf-8"))
-
-        user_params = chain_data.user_params
-        staking_contract = STAKING[ledger_config.chain][user_params.staking_program_id]
-
-        # Mech price patch, mech marketplace patch
-        agent_var_updates = {
-            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_REQUEST_PRICE": "10000000000000000",
-            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_USE_MECH_MARKETPLACE": str(
-                chain_data.user_params.use_mech_marketplace
-            ).capitalize(),
-            "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_MECH_MARKETPLACE_CONFIG_REQUESTER_STAKING_INSTANCE_ADDRESS": staking_contract,
-        }
-
-        for key, value in agent_var_updates.items():
-            if key in agent_vars:
-                agent_vars[key] = value
-
-        Path(build, "agent.json").write_text(
-            json.dumps(agent_vars, indent=4),
-            encoding="utf-8",
-        )
-        # End patch
-
         self.status = DeploymentStatus.BUILT
         self.store()
 
