@@ -4,7 +4,7 @@ import { Popover, Typography } from 'antd';
 import { gql, request } from 'graphql-request';
 import { z } from 'zod';
 
-import { SUBGRAPH_URL } from '@/constants/urls';
+import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
 import { POPOVER_WIDTH_MEDIUM } from '@/constants/width';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { formatToTime } from '@/utils/time';
@@ -39,7 +39,10 @@ const useEpochEndTime = () => {
   const { data, isLoading } = useQuery({
     queryKey: ['latestEpochTime'],
     queryFn: async () => {
-      const response = (await request(SUBGRAPH_URL, latestEpochTimeQuery)) as {
+      const response = (await request(
+        GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
+        latestEpochTimeQuery,
+      )) as {
         checkpoints: EpochTimeResponse[];
       };
       return EpochTimeResponseSchema.parse(response.checkpoints[0]);
