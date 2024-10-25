@@ -4,7 +4,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     name: 'Trader Agent',
-    hash: 'bafybeig3kb72k7tlak6zeymskkdgqc5c23qvbigafsxlcsfhbeplhabhqq',
+    hash: 'bafybeibvnr4oe2gqi2aq4ledf4uspop76u4ruzsfw2iob342supm4dy7pu',
     description: 'Trader agent for omen prediction markets',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
