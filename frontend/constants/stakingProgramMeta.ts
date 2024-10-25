@@ -33,7 +33,7 @@ export const STAKING_PROGRAM_META: Record<
     deprecated: false,
   },
   [StakingProgramId.BetaMechMarketplace]: {
-    name: 'Pearl Beta - Mech Marketplace',
+    name: 'Pearl Beta Mech Marketplace',
     canMigrateTo: [StakingProgramId.Beta, StakingProgramId.Beta2],
     deprecated: false,
   },
