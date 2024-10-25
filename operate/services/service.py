@@ -735,7 +735,9 @@ class Service(LocalResource):
         if version == 2:
             data["chain_configs"]["100"]["chain_data"]["user_params"][
                 "use_mech_marketplace"
-            ] = False
+            ] = data["chain_configs"]["100"]["chain_data"]["user_params"].get(
+                "use_mech_marketplace", False
+            )
             data["version"] = 3
             new_data = data
         elif version == 0:
