@@ -193,10 +193,10 @@ export const RewardsHistory = () => {
       <Flex vertical gap={16}>
         {Object.keys(contractCheckpoints).map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
-          const [, stakingProgramId] = Object.entries(
+          const [stakingProgramId] = Object.entries(
             SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
           ).find((entry) => {
-            const [stakingProxyAddress] = entry;
+            const [, stakingProxyAddress] = entry;
             return (
               stakingProxyAddress.toLowerCase() ===
               contractAddress.toLowerCase()
