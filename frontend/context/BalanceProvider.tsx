@@ -132,7 +132,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const updateBalances = useCallback(async (): Promise<void> => {
     if (!masterEoaAddress) return;
-    if (!serviceAddresses) return;
 
     try {
       const walletAddresses: Address[] = [];
