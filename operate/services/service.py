@@ -728,7 +728,7 @@ class Service(LocalResource):
             data = json.load(file)
 
         version = data.get("version", 0)
-        if version == 3:
+        if version >= 3:
             return
 
         # Migrate from old formats to new format
