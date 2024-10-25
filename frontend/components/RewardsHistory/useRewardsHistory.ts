@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { Chain } from '@/client';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
+import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 
@@ -29,9 +30,6 @@ const betaAddress =
 const beta2Address =
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS]
     .pearl_beta_2;
-
-const SUBGRAPH_URL =
-  'https://api.studio.thegraph.com/query/81855/pearl-staking-rewards-history/version/latest';
 
 const fetchRewardsQuery = gql`
   {
@@ -120,7 +118,10 @@ export const useRewardsHistory = () => {
   const { data, isError, isLoading, isFetching, refetch } = useQuery({
     queryKey: [],
     async queryFn() {
-      const allRewardsResponse = await request(SUBGRAPH_URL, fetchRewardsQuery);
+      const allRewardsResponse = await request(
+        GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
+        fetchRewardsQuery,
+      );
       return allRewardsResponse as { allRewards: RewardHistoryResponse[] };
     },
     select: (data) => {

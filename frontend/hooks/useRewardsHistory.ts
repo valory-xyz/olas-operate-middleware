@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { Chain } from '@/client';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
-import { SUBGRAPH_URL } from '@/constants/urls';
+import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
 import { useServices } from './useServices';
@@ -157,7 +157,7 @@ export const useRewardsHistory = () => {
     async queryFn() {
       const checkpointsResponse: {
         checkpoints: CheckpointGraphResponse[];
-      } = await request(SUBGRAPH_URL, fetchRewardsQuery);
+      } = await request(GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL, fetchRewardsQuery);
       return checkpointsResponse;
     },
     select: ({ checkpoints }) => {

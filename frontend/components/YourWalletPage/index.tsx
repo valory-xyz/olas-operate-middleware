@@ -16,6 +16,7 @@ import { CardFlex } from '@/components/styled/CardFlex';
 import { Pages } from '@/enums/PageState';
 import { useBalance } from '@/hooks/useBalance';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useWallet } from '@/hooks/useWallet';
 import { balanceFormat } from '@/utils/numberFormatters';
 
@@ -128,8 +129,9 @@ const Signer = () => {
   );
 };
 
-export const YourWallet = () => {
+export const YourWalletPage = () => {
   const { goto } = usePageState();
+  const { service } = useServices();
 
   return (
     <ConfigProvider theme={yourWalletTheme}>
@@ -150,7 +152,7 @@ export const YourWallet = () => {
             <OlasBalance />
             <XdaiBalance />
             <Signer />
-            <YourAgentWallet />
+            {service && <YourAgentWallet />}
           </Container>
         </Card>
       </CardFlex>

@@ -82,9 +82,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+      
       - uses: actions/setup-node@v4
         with:
           node-version: "20.x"
+          registry-url: "https://registry.npmjs.org"   
 
       # Download the appropriate architecture artifact
       - name: Download Pearl binary for architecture
@@ -97,22 +99,31 @@ jobs:
       - name: Add exec permissions
         run: chmod +x electron/bins/pearl_${{ matrix.arch }}
 
-      # Cache node_modules with unique key for each environment and architecture
-      - name: Cache Node.js modules
+      # Cache electron node_modules with unique key for each environment and architecture
+      - name: Restore electron node_modules cache
+        id: cache-electron-node-modules
         uses: actions/cache@v3
         with:
-          path: |
-            node_modules
-            frontend/node_modules
-          key: node-modules-${{ matrix.env }}-${{ matrix.arch }}-${{ hashFiles('yarn.lock') }}
-          restore-keys: |
-            node-modules-${{ matrix.env }}-${{ matrix.arch }}-
+          path: node_modules
+          key: electron-node-modules-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.env }}-${{ hashFiles('yarn.lock') }}
 
-      # Install dependencies
-      - name: Install dependencies
-        run: |
-          yarn install
-          yarn install:frontend
+      # Install electron dependencies if cache miss
+      - name: Install electron dependencies
+        if: steps.cache-electron-node-modules.outputs.cache-hit != 'true'
+        run: yarn install
+
+      # Cache frontend node_modules with unique key for each environment and architecture
+      - name: Restore frontend node_modules cache
+        id: cache-frontend-node-modules
+        uses: actions/cache@v3
+        with:
+          path: frontend/node_modules
+          key: frontend-node-modules-${{ runner.os }}-${{ matrix.arch }}-${{ matrix.env }}-${{ hashFiles('frontend/yarn.lock') }}
+
+      # Install frontend dependencies if cache miss
+      - name: Install frontend dependencies
+        if: steps.cache-frontend-node-modules.outputs.cache-hit != 'true'
+        run: yarn install:frontend
 
       # Build frontend for production
       - name: Build frontend for production
