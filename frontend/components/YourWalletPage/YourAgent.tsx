@@ -1,4 +1,4 @@
-import { Card, Flex, Skeleton, Typography } from 'antd';
+import { Card, Flex, Skeleton, Tooltip, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import styled from 'styled-components';
@@ -14,6 +14,7 @@ import { generateName } from '@/utils/agentName';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
+import { AddressLink } from '../AddressLink';
 import { InfoBreakdownList } from '../InfoBreakdown';
 import { Container, infoBreakdownParentStyle } from './styles';
 import {
@@ -24,7 +25,7 @@ import {
   XdaiTitle,
 } from './Titles';
 
-const { Text } = Typography;
+const { Text, Paragraph } = Typography;
 
 const NftCard = styled(Card)`
   .ant-card-body {
@@ -34,6 +35,76 @@ const NftCard = styled(Card)`
     }
   }
 `;
+
+const SafeAddress = () => {
+  const { multisigAddress } = useAddress();
+
+  return (
+    <Flex vertical gap={8}>
+      <InfoBreakdownList
+        list={[
+          {
+            left: 'Wallet Address',
+            leftClassName: 'text-light text-sm',
+            right: <AddressLink address={multisigAddress} />,
+            rightClassName: 'font-normal text-sm',
+          },
+        ]}
+        parentStyle={infoBreakdownParentStyle}
+      />
+    </Flex>
+  );
+};
+
+const AgentTitle = () => {
+  const { multisigAddress: agentSafeAddress } = useAddress();
+
+  const agentName = useMemo(
+    () => (agentSafeAddress ? generateName(agentSafeAddress) : '--'),
+    [agentSafeAddress],
+  );
+
+  return (
+    <Flex vertical gap={12}>
+      <Flex gap={12}>
+        <Image
+          width={36}
+          height={36}
+          alt="Agent wallet"
+          src="/agent-wallet.png"
+        />
+
+        <Flex vertical className="w-full">
+          <Text className="m-0 text-sm" type="secondary">
+            Your agent
+          </Text>
+          <Flex justify="space-between">
+            <Tooltip
+              arrow={false}
+              title={
+                <Paragraph className="text-sm m-0">
+                  This is your agent’s unique name
+                </Paragraph>
+              }
+              placement="top"
+            >
+              <Text strong>{agentName}</Text>
+            </Tooltip>
+
+            {/* @note: removed until predict ui resolution */}
+            {/* <a
+              href={`https://predict.olas.network/agents/${agentSafeAddress}`}
+              target="_blank"
+              className="text-sm"
+            >
+              Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            </a> */}
+          </Flex>
+        </Flex>
+      </Flex>
+    </Flex>
+  );
+};
 
 const ServiceAndNftDetails = () => {
   const { serviceId } = useServices();
@@ -84,15 +155,7 @@ export const YourAgentWallet = () => {
     isEligibleForRewards,
     accruedServiceStakingRewards,
   } = useReward();
-  const {
-    instanceAddress: agentEoaAddress,
-    multisigAddress: agentSafeAddress,
-  } = useAddress();
-
-  const agentName = useMemo(
-    () => (agentSafeAddress ? generateName(agentSafeAddress) : '--'),
-    [agentSafeAddress],
-  );
+  const { instanceAddress: agentEoaAddress } = useAddress();
 
   const reward = useMemo(() => {
     if (!isBalanceLoaded) return <Skeleton.Input size="small" active />;
@@ -118,42 +181,9 @@ export const YourAgentWallet = () => {
   }, [agentSafeBalance?.OLAS, accruedServiceStakingRewards, reward]);
 
   return (
-    <Card>
+    <Card title={<AgentTitle />}>
       <Container>
-        <Flex vertical gap={12}>
-          <Flex gap={12}>
-            <Image
-              width={36}
-              height={36}
-              alt="Agent wallet"
-              src="/agent-wallet.png"
-            />
-
-            <Flex vertical className="w-full">
-              <Text className="m-0 text-sm" type="secondary">
-                Your agent
-              </Text>
-              <Text strong>{agentName}</Text>
-
-              {/* 
-              
-              @note: removed until predict ui resolution
-
-              <Flex justify="space-between">
-                <Text strong>{agentName}</Text>
-                <a
-                  href={`https://predict.olas.network/agents/${agentSafeAddress}`}
-                  target="_blank"
-                  className="text-sm"
-                >
-                  Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
-                </a> 
-              </Flex>
-
-              */}
-            </Flex>
-          </Flex>
-        </Flex>
+        <SafeAddress />
 
         <Flex vertical gap={8}>
           <OlasTitle />
