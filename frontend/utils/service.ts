@@ -18,5 +18,9 @@ export const getMinimumStakedAmountRequired = (
     return 100;
   }
 
+  if (stakingProgramId === StakingProgramId.BetaMechMarketplace) {
+    return 40;
+  }
+
   return;
 };
