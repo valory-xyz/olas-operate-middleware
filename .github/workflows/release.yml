@@ -141,9 +141,9 @@ jobs:
         run: yarn build:frontend
         env:
           NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf
+          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf
+          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
 
       # Run the build and notarization process for production
       - name: Build, notarize, and publish (Production)
@@ -173,9 +173,9 @@ jobs:
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ matrix.arch }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf
+          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
+          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
         run: |
-          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf" >> .env
-          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/07203b9d-fcf1-4ed3-8cb9-d356db9337cf" >> .env
+          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
+          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
           node build.js
