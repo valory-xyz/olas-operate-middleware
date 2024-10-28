@@ -1,12 +1,5 @@
 import { CloseOutlined } from '@ant-design/icons';
-import {
-  Button,
-  Card,
-  ConfigProvider,
-  Flex,
-  ThemeConfig,
-  Typography,
-} from 'antd';
+import { Button, ConfigProvider, Flex, ThemeConfig, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { AddressLink } from '@/components/AddressLink';
@@ -146,15 +139,13 @@ export const YourWalletPage = () => {
           />
         }
       >
-        <Card>
-          <Container>
-            <Address />
-            <OlasBalance />
-            <XdaiBalance />
-            <Signer />
-            {service && <YourAgentWallet />}
-          </Container>
-        </Card>
+        <Container style={{ margin: 8 }}>
+          <Address />
+          <OlasBalance />
+          <XdaiBalance />
+          <Signer />
+          {service && <YourAgentWallet />}
+        </Container>
       </CardFlex>
     </ConfigProvider>
   );
