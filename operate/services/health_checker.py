@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 """Source code for checking aea is alive.."""
 import asyncio
+from traceback import print_exc
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
 
@@ -26,7 +27,7 @@ import aiohttp  # type: ignore
 from aea.helpers.logging import setup_logger
 
 from operate.services.manage import ServiceManager  # type: ignore
-
+from operate.constants import HEALTH_CHECK_URL
 
 HTTP_OK = 200
 
@@ -36,7 +37,8 @@ class HealthChecker:
 
     SLEEP_PERIOD_DEFAULT = 30
     PORT_UP_TIMEOUT_DEFAULT = 120  # seconds
-    NUMBER_OF_FAILS_DEFAULT = 5
+    NUMBER_OF_FAILS_DEFAULT = 10
+    HEALTH_CHECK_URL = HEALTH_CHECK_URL
 
     def __init__(
         self,
@@ -79,12 +81,12 @@ class HealthChecker:
                 f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service} failed"
             )
 
-    @staticmethod
-    async def check_service_health(service: str) -> bool:
+    @classmethod
+    async def check_service_health(cls, service: str) -> bool:
         """Check the service health"""
         del service
         async with aiohttp.ClientSession() as session:
-            async with session.get("http://localhost:8716/healthcheck") as resp:
+            async with session.get(cls.HEALTH_CHECK_URL) as resp:
                 status = resp.status
                 response_json = await resp.json()
                 return status == HTTP_OK and response_json.get(
@@ -134,15 +136,16 @@ class HealthChecker:
                     try:
                         # Check the service health
                         healthy = await self.check_service_health(service)
-                    except aiohttp.ClientConnectionError:
-                        self.logger.info(
-                            f"[HEALTH_CHECKER] {service} port read failed. restart"
+                    except aiohttp.ClientConnectionError as e:
+                        print_exc()
+                        self.logger.warning(
+                            f"[HEALTH_CHECKER] {service} port read failed. assume not healthy {e}"
                         )
-                        return
+                        healthy = False
 
                     if not healthy:
                         fails += 1
-                        self.logger.info(
+                        self.logger.warning(
                             f"[HEALTH_CHECKER] {service} not healthy for {fails} time in a row"
                         )
                     else:
@@ -156,6 +159,7 @@ class HealthChecker:
                             f"[HEALTH_CHECKER]  {service} failed {fails} times in a row. restart"
                         )
                         return
+
                     await asyncio.sleep(sleep_period)
 
             async def _restart(service_manager: ServiceManager, service: str) -> None:
