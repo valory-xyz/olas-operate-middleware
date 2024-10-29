@@ -1363,7 +1363,7 @@ class ServiceManager:
                 await asyncio.sleep(60)
 
     def _set_env_variables(self, hash: str) -> None:
-        self.logger.info(f"_set_env_variables - not implemented")
+        self.logger.info(f"_set_env_variables {hash} - not implemented")
 
     def deploy_service_locally(self, hash: str, force: bool = True) -> Deployment:
         """

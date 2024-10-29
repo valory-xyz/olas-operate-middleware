@@ -67,7 +67,6 @@ from operate.constants import (
 )
 from operate.http.exceptions import NotAllowed
 from operate.keys import Keys
-from operate.ledger.profiles import STAKING
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
