@@ -11,6 +11,7 @@ configurations:
     rpc: http://localhost:8545 # User provided
     threshold: 1 # TODO: Move to service component
     use_staking: false # User provided
+    use_mech_marketplace: false # User provided
     cost_of_bond: 10000000000000000
     monthly_gas_estimate: 10000000000000000000  # TODO: Where is this used
     fund_requirements:
