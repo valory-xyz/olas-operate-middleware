@@ -24,6 +24,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import tempfile
 import time
 import typing as t
@@ -56,6 +57,7 @@ from autonomy.cli.helpers.chain import OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
+from web3.contract import Contract
 
 import operate.types
 from operate.constants import (
@@ -247,7 +249,7 @@ class StakingManager(OnChainHelper):
         ).get("data")
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
-        """Get the agent IDs for the specified staking contract"""
+        """Get a list of agent IDs for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -255,7 +257,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.getAgentIds().call()
 
     def service_registry(self, staking_contract: str) -> str:
-        """Get the service registry address for the specified staking contract"""
+        """Retrieve the service registry address for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -263,7 +265,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistry().call()
 
     def staking_token(self, staking_contract: str) -> str:
-        """Get the staking token address for the specified staking contract"""
+        """Get the staking token address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -271,7 +273,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.stakingToken().call()
 
     def service_registry_token_utility(self, staking_contract: str) -> str:
-        """Get the service registry token utility address for the specified staking contract"""
+        """Get the service registry token utility address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -279,7 +281,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistryTokenUtility().call()
 
     def min_staking_deposit(self, staking_contract: str) -> str:
-        """Get the minimum staking deposit for the specified staking contract"""
+        """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -287,7 +289,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.minStakingDeposit().call()
 
     def activity_checker(self, staking_contract: str) -> str:
-        """Get the activity checker address for the specified staking contract"""
+        """Retrieve the activity checker address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -515,6 +517,17 @@ class _ChainUtil:
 
         for name, address in self.contracts.items():
             ContractConfigs.get(name=name).contracts[self.chain_type] = address
+
+    @property
+    def safe(self) -> str:
+        """Get safe address."""
+        chain_id = self.ledger_api.api.eth.chain_id
+        chain_type = OperateChainType.from_id(chain_id)
+        if self.wallet.safes is None:
+            raise ValueError("Safes not initialized")
+        if chain_type not in self.wallet.safes:
+            raise ValueError(f"Safe for chain type {chain_type} not found")
+        return self.wallet.safes[chain_type]
 
     @property
     def crypto(self) -> Crypto:
