@@ -15,7 +15,7 @@ jobs:
             rpc: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
             arch: "x64"
           - env: "development"
-            rpc: "https://virtual.gnosis.rpc.tenderly.co/7e67e659-9a8a-4830-b430-76203f1abde8"
+            rpc: "https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0"
             arch: "x64"
     defaults:
       run:
