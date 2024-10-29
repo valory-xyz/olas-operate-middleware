@@ -48,7 +48,8 @@ const Address = () => {
 };
 
 const OlasBalance = () => {
-  const { safeBalance, totalOlasStakedBalance } = useBalance();
+  const { masterSafeBalance: safeBalance, totalOlasStakedBalance } =
+    useBalance();
   const olasBalances = useMemo(() => {
     return [
       {
@@ -78,7 +79,7 @@ const OlasBalance = () => {
 };
 
 const XdaiBalance = () => {
-  const { safeBalance } = useBalance();
+  const { masterSafeBalance: safeBalance } = useBalance();
 
   return (
     <Flex vertical gap={8}>
@@ -98,7 +99,7 @@ const XdaiBalance = () => {
 
 const Signer = () => {
   const { masterEoaAddress } = useWallet();
-  const { eoaBalance } = useBalance();
+  const { masterEoaBalance: eoaBalance } = useBalance();
 
   return (
     <Flex vertical gap={8}>
