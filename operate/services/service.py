@@ -65,7 +65,7 @@ from operate.constants import (
     DOCKER_COMPOSE_YAML,
     KEYS_JSON,
 )
-from operate.http.exceptions import NotAllowed
+from operate.operate_http.exceptions import NotAllowed
 from operate.keys import Keys
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
