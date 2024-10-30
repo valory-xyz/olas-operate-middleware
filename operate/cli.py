@@ -45,7 +45,7 @@ from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
 from operate.services.health_checker import HealthChecker
-from operate.types import ChainType, DeploymentStatus
+from operate.operate_types import ChainType, DeploymentStatus
 from operate.wallet.master import MasterWalletManager
 
 

@@ -70,7 +70,7 @@ from operate.keys import Keys
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
-from operate.types import (
+from operate.operate_types import (
     ChainConfig,
     ChainConfigs,
     ChainType,

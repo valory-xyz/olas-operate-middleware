@@ -30,7 +30,7 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.resource import LocalResource
-from operate.types import LedgerType
+from operate.operate_types import LedgerType
 
 
 @dataclass

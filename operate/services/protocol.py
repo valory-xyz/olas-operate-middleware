@@ -66,7 +66,7 @@ from operate.data import DATA_DIR
 from operate.data.contracts.service_staking_token.contract import (
     ServiceStakingTokenContract,
 )
-from operate.types import ContractAddresses
+from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
     NULL_ADDRESS,

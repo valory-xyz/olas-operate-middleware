@@ -38,7 +38,7 @@ from operate.constants import (
 )
 from operate.ledger import get_default_rpc
 from operate.resource import LocalResource
-from operate.types import ChainType, LedgerType
+from operate.operate_types import ChainType, LedgerType
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import get_owners, swap_owner
