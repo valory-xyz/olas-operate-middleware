@@ -43,6 +43,7 @@ _CHAIN_NAME_TO_ENUM = {
     "solana": 3,
     "optimism": 4,
     "base": 5,
+    "mode":6
 }
 
 _CHAIN_ID_TO_CHAIN_NAME = {
@@ -52,6 +53,7 @@ _CHAIN_ID_TO_CHAIN_NAME = {
     1399811149: "solana",
     10: "optimism",
     8453: "base",
+    34443: "mode"
 }
 
 _CHAIN_NAME_TO_ID = {val: key for key, val in _CHAIN_ID_TO_CHAIN_NAME.items()}
@@ -93,6 +95,7 @@ class ChainType(enum.IntEnum):
     SOLANA = 3
     OPTIMISM = 4
     BASE = 5
+    MODE = 6
 
     @property
     def id(self) -> int:
@@ -193,6 +196,7 @@ class ConfigurationTemplate(TypedDict):
     rpc: str
     threshold: int
     use_staking: bool
+    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: FundRequirementsTemplate
     fallback_chain_params: t.Optional[t.Dict]
@@ -237,6 +241,7 @@ class OnChainUserParams(LocalResource):
     nft: str
     threshold: int
     use_staking: bool
+    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: OnChainFundRequirements
 

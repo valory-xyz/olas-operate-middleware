@@ -20,8 +20,9 @@
 """Master key implementation"""
 
 import json
+import os
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
@@ -225,7 +226,7 @@ class EthereumMasterWallet(MasterWallet):
     ) -> None:
         """Transfer funds from safe wallet."""
         if self.safes is not None:
-        transfer_from_safe(
+            transfer_from_safe(
                 ledger_api=self.ledger_api(chain_type=chain_type, rpc=rpc),
                 crypto=self.crypto,
                 safe=t.cast(str, self.safes[chain_type]),
