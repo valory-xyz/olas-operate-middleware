@@ -3,18 +3,19 @@ import { useContext, useMemo } from 'react';
 import { Chain } from '@/client';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
-import { StakingProgramContext } from '@/context/StakingProgramProvider';
+import {
+  DEFAULT_STAKING_PROGRAM_ID,
+  StakingProgramContext,
+} from '@/context/StakingProgramProvider';
 
 /**
  * Hook to get the active staking program and its metadata, and the default staking program.
  * @returns {Object} The active staking program and its metadata.
  */
 export const useStakingProgram = () => {
-  const {
-    activeStakingProgramId,
-    defaultStakingProgramId,
-    updateActiveStakingProgramId,
-  } = useContext(StakingProgramContext);
+  const { activeStakingProgramId, updateActiveStakingProgramId } = useContext(
+    StakingProgramContext,
+  );
 
   const isActiveStakingProgramLoaded = activeStakingProgramId !== undefined;
 
@@ -31,18 +32,18 @@ export const useStakingProgram = () => {
   }, [activeStakingProgramId]);
 
   const defaultStakingProgramMeta =
-    STAKING_PROGRAM_META[defaultStakingProgramId];
+    STAKING_PROGRAM_META[DEFAULT_STAKING_PROGRAM_ID];
 
   const activeStakingProgramAddress = useMemo(() => {
     if (!activeStakingProgramId) return;
-    return SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+    return SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.OPTIMISM][
       activeStakingProgramId
     ];
   }, [activeStakingProgramId]);
 
   const defaultStakingProgramAddress =
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      defaultStakingProgramId
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.OPTIMISM][
+      DEFAULT_STAKING_PROGRAM_ID
     ];
 
   return {
@@ -50,7 +51,6 @@ export const useStakingProgram = () => {
     activeStakingProgramId,
     activeStakingProgramMeta,
     defaultStakingProgramAddress,
-    defaultStakingProgramId,
     defaultStakingProgramMeta,
     isActiveStakingProgramLoaded,
     updateActiveStakingProgramId,
