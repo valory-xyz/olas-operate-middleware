@@ -91,11 +91,12 @@ export const StakingContractInfoProvider = ({
         AutonolasService.getStakingContractInfoByStakingProgram(programId),
       );
 
-      const stakingInfos = await Promise.all(stakingInfoPromises);
+      const stakingInfos = await Promise.allSettled(stakingInfoPromises);
 
       const stakingContractInfoRecord = stakingPrograms.reduce(
         (record, programId, index) => {
-          record[programId] = stakingInfos[index];
+          if (stakingInfos[index].status === 'rejected') return record;
+          record[programId] = stakingInfos[index].value;
           return record;
         },
         {} as Record<string, Partial<StakingContractInfo>>,
