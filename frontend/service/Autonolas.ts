@@ -35,32 +35,18 @@ const ServiceStakingTokenAbi = SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
 const serviceStakingTokenMechUsageContracts: Record<
   StakingProgramId,
   MulticallContract
-> = {
-  [StakingProgramId.Alpha]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Alpha
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.Beta]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Beta
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.Beta2]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Beta2
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.BetaMechMarketplace]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.BetaMechMarketplace
-    ],
-    ServiceStakingTokenAbi,
-  ),
-};
+> = Object.values(StakingProgramId).reduce(
+  (contracts, programId) => {
+    contracts[programId] = new MulticallContract(
+      SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+        programId
+      ],
+      ServiceStakingTokenAbi,
+    );
+    return contracts;
+  },
+  {} as Record<StakingProgramId, MulticallContract>,
+);
 
 const serviceRegistryTokenUtilityContract = new MulticallContract(
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS[Chain.GNOSIS],
