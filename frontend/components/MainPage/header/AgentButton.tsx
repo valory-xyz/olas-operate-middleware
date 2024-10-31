@@ -2,7 +2,7 @@ import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, ButtonProps, Flex, Popover, Tooltip, Typography } from 'antd';
 import { useCallback, useMemo } from 'react';
 
-import { Chain, DeploymentStatus } from '@/client';
+import { DeploymentStatus, MiddlewareChain } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -187,7 +187,7 @@ const AgentNotRunningButton = () => {
     // Create master safe if it doesn't exist
     try {
       if (!masterSafeAddress) {
-        await WalletService.createSafe(Chain.OPTIMISM);
+        await WalletService.createSafe(MiddlewareChain.OPTIMISM);
       }
     } catch (error) {
       console.error(error);
