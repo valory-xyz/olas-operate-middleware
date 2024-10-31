@@ -4,8 +4,6 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { AGENT_MECH_ABI } from '@/abis/agentMech';
 import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
-import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
-import { REQUESTER_ACTIVITY_CHECKER_ABI } from '@/abis/requesterActivityChecker';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_ABI } from '@/abis/serviceStakingTokenMechUsage';
@@ -13,8 +11,6 @@ import { Chain } from '@/client';
 import {
   AGENT_MECH_CONTRACT_ADDRESS,
   MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
-  MECH_MARKETPLACE_CONTRACT_ADDRESS,
-  REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES,
@@ -61,7 +57,7 @@ const serviceStakingTokenMechUsageContracts: Record<
   //   ServiceStakingTokenAbi,
   // ),
   [StakingProgramId.OptimusAlpha]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.OPTIMISM][
       StakingProgramId.OptimusAlpha
     ],
     ServiceStakingTokenAbi,
@@ -88,15 +84,15 @@ const agentMechActivityCheckerContract = new MulticallContract(
   MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
 );
 
-const mechMarketplaceContract = new MulticallContract(
-  MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
-  MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
-);
+// const mechMarketplaceContract = new MulticallContract(
+//   MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
+//   MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
+// );
 
-const mechMarketplaceActivityCheckerStakingProgramId.OptimusAlphaContract = new MulticallContract(
-  REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
-  REQUESTER_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
-);
+// const mechMarketplaceActivityChecker = new MulticallContract(
+//   REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
+//   REQUESTER_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
+// );
 
 const getAgentStakingRewardsInfo = async ({
   agentMultisigAddress,
