@@ -194,7 +194,7 @@ export const RewardsHistory = () => {
         {Object.keys(contractCheckpoints).map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
-            SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
+            SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.OPTIMISM],
           ).find((entry) => {
             const [, stakingProxyAddress] = entry;
             return (

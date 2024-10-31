@@ -20,7 +20,7 @@ export const AddBackupWalletPage = () => {
   const isFunded = useMemo<boolean>(() => {
     if (!eoaBalance) return false;
     return (
-      eoaBalance.ETH >= MIN_ETH_BALANCE_THRESHOLDS[Chain.GNOSIS].safeAddSigner
+      eoaBalance.ETH >= MIN_ETH_BALANCE_THRESHOLDS[Chain.OPTIMISM].safeAddSigner
     );
   }, [eoaBalance]);
 
