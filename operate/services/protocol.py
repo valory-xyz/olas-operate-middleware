@@ -59,7 +59,7 @@ from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
 
-import operate.types
+import operate.operate_types
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -71,6 +71,7 @@ from operate.data.contracts.service_staking_token.contract import (
 )
 from operate.operate_types import ContractAddresses
 from operate.ledger.profiles import STAKING
+from operate.operate_types import ChainType as OperateChainType
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
@@ -787,7 +788,7 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.types.ChainType.GNOSIS]["pearl_beta_mech_marketplace"]
+            == STAKING[operate.operate_types.ChainType.GNOSIS]["pearl_beta_mech_marketplace"]
         ):
             agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
         else:
@@ -1026,7 +1027,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             crypto=self.crypto,
             chain_type=self.chain_type,
-            safe=t.cast(str, self.wallet.safe),
+            safe=t.cast(str, self.safe),
         )
 
     def get_mint_tx_data(  # pylint: disable=too-many-arguments
@@ -1068,10 +1069,11 @@ class EthSafeTxBuilder(_ChainUtil):
         )
 
         if update_token is None:
+            safe = self.safe
             txd = instance.encodeABI(
                 fn_name="create",
                 args=[
-                    self.wallet.safe,
+                    safe,
                     token or ETHEREUM_ERC20,
                     manager.metadata_hash,
                     [agent_id],
@@ -1132,7 +1134,7 @@ class EthSafeTxBuilder(_ChainUtil):
             args=[service_id],
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_manager"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
@@ -1160,7 +1162,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ],
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_manager"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
@@ -1316,7 +1318,7 @@ class EthSafeTxBuilder(_ChainUtil):
             staking_contract=staking_contract,
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_registry"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,

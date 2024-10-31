@@ -49,7 +49,7 @@ from operate.services.service import (
     OnChainUserParams,
     Service,
 )
-from operate.operate_types import LedgerConfig, ServiceTemplate
+from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
 from operate.utils.gnosis import NULL_ADDRESS
 from operate.wallet.master import MasterWalletManager
 
@@ -473,7 +473,8 @@ class ServiceManager:
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-
+        chain_type = ChainType.from_id(int(chain_id))
+        safe = wallet.safes[chain_type]
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -545,13 +546,13 @@ class ServiceManager:
                     ledger_api=sftxb.ledger_api,
                     contract_address=OLAS[ledger_config.chain],
                 )
-                .functions.balanceOf(wallet.safe)
+                .functions.balanceOf(safe)
                 .call()
             )
             if balance < required_olas:
                 raise ValueError(
                     "You don't have enough olas to stake, "
-                    f"address: {wallet.safe}; required olas: {required_olas}; your balance: {balance}"
+                    f"address: {safe}; required olas: {required_olas}; your balance: {balance}"
                 )
 
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
@@ -591,7 +592,6 @@ class ServiceManager:
 
         if is_update:
             self._terminate_service_on_chain_from_safe(hash=hash, chain_id=chain_id)
-
             # Update service
             if (
                 self._get_on_chain_state(service=service, chain_id=chain_id)
@@ -694,7 +694,7 @@ class ServiceManager:
                 olas_token = staking_params["staking_token"]
                 agent_id = staking_params["agent_ids"][0]
                 self.logger.info(
-                    f"Approving OLAS as bonding token from {wallet.safe} to {token_utility}"
+                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
                 cost_of_bond = (
                     registry_contracts.service_registry_token_utility.get_agent_bond(
@@ -717,13 +717,13 @@ class ServiceManager:
                         contract_address=olas_token,
                     )
                     .functions.allowance(
-                        wallet.safe,
+                        safe,
                         token_utility,
                     )
                     .call()
                 )
                 self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {wallet.safe} to {token_utility}"
+                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
                 cost_of_bond = 1
 
@@ -747,7 +747,7 @@ class ServiceManager:
                 olas_token = staking_params["staking_token"]
                 agent_id = staking_params["agent_ids"][0]
                 self.logger.info(
-                    f"Approving OLAS as bonding token from {wallet.safe} to {token_utility}"
+                    f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
                 cost_of_bond = (
                     registry_contracts.service_registry_token_utility.get_agent_bond(
@@ -770,13 +770,13 @@ class ServiceManager:
                         contract_address=olas_token,
                     )
                     .functions.allowance(
-                        wallet.safe,
+                        safe,
                         token_utility,
                     )
                     .call()
                 )
                 self.logger.info(
-                    f"Approved {token_utility_allowance} OLAS from {wallet.safe} to {token_utility}"
+                    f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
                 cost_of_bond = 1
 
@@ -810,7 +810,7 @@ class ServiceManager:
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
-                master_safe=sftxb.wallet.safe,  # type: ignore  # TODO fix mypy
+                master_safe=safe,
             )
             tx = sftxb.new_tx()
             for message in messages:
@@ -883,6 +883,8 @@ class ServiceManager:
         keys = service.keys
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.type)
+        chain_type = ChainType.from_id(int(chain_id))
+        safe = wallet.safes[chain_type]
 
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
@@ -963,8 +965,8 @@ class ServiceManager:
                         key=current_safe_owners[0]
                     ).private_key  # TODO allow multiple owners
                 ),  # noqa: E800
-                new_owner_address=wallet.safe
-                if wallet.safe
+                new_owner_address=safe
+                if safe
                 else wallet.crypto.address,  # TODO it should always be safe address
             )  # noqa: E800
 
@@ -1310,6 +1312,7 @@ class ServiceManager:
                     amount=int(to_transfer),
                     chain_type=ledger_config.chain,
                     from_safe=from_safe,
+                    rpc=rpc or ledger_config.rpc,
                 )
 
         safe_balance = ledger_api.get_balance(chain_data.multisig)
@@ -1328,6 +1331,75 @@ class ServiceManager:
                 to=t.cast(str, chain_data.multisig),
                 amount=int(to_transfer),
                 chain_type=ledger_config.chain,
+                rpc=rpc or ledger_config.rpc,
+            )
+
+    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        hash: str,
+        token: str,
+        rpc: t.Optional[str] = None,
+        agent_topup: t.Optional[float] = None,
+        safe_topup: t.Optional[float] = None,
+        agent_fund_threshold: t.Optional[float] = None,
+        safe_fund_treshold: t.Optional[float] = None,
+        from_safe: bool = True,
+        chain_id: str = "100",
+    ) -> None:
+        """Fund service if required."""
+        service = self.load_or_create(hash=hash)
+        chain_config = service.chain_configs[chain_id]
+        ledger_config = chain_config.ledger_config
+        chain_data = chain_config.chain_data
+        wallet = self.wallet_manager.load(ledger_config.type)
+        ledger_api = wallet.ledger_api(
+            chain_type=ledger_config.chain, rpc=rpc or ledger_config.rpc
+        )
+        agent_fund_threshold = (
+            agent_fund_threshold or chain_data.user_params.fund_requirements.agent
+        )
+
+        for key in service.keys:
+            agent_balance = ledger_api.get_balance(address=key.address)
+            self.logger.info(f"Agent {key.address} balance: {agent_balance}")
+            self.logger.info(f"Required balance: {agent_fund_threshold}")
+            if agent_balance < agent_fund_threshold:
+                self.logger.info("Funding agents")
+                to_transfer = (
+                    agent_topup or chain_data.user_params.fund_requirements.agent
+                )
+                self.logger.info(f"Transferring {to_transfer} units to {key.address}")
+                wallet.transfer_erc20(
+                    token=token,
+                    to=key.address,
+                    amount=int(to_transfer),
+                    chain_type=ledger_config.chain,
+                    from_safe=from_safe,
+                    rpc=rpc or ledger_config.rpc,
+                )
+
+        safe_balance = (
+            registry_contracts.erc20.get_instance(ledger_api, token)
+            .functions.balanceOf(chain_data.multisig)
+            .call()
+        )
+        safe_fund_treshold = (
+            safe_fund_treshold or chain_data.user_params.fund_requirements.safe
+        )
+        self.logger.info(f"Safe {chain_data.multisig} balance: {safe_balance}")
+        self.logger.info(f"Required balance: {safe_fund_treshold}")
+        if safe_balance < safe_fund_treshold:
+            self.logger.info("Funding safe")
+            to_transfer = safe_topup or chain_data.user_params.fund_requirements.safe
+            self.logger.info(
+                f"Transferring {to_transfer} units to {chain_data.multisig}"
+            )
+            wallet.transfer_erc20(
+                token=token,
+                to=t.cast(str, chain_data.multisig),
+                amount=int(to_transfer),
+                chain_type=ledger_config.chain,
+                rpc=rpc or ledger_config.rpc,
             )
 
     async def funding_job(
@@ -1365,7 +1437,13 @@ class ServiceManager:
     def _set_env_variables(self, hash: str) -> None:
         self.logger.info(f"_set_env_variables {hash} - not implemented")
 
-    def deploy_service_locally(self, hash: str, force: bool = True) -> Deployment:
+    def deploy_service_locally(
+        self,
+        hash: str,
+        force: bool = True,
+        chain_id: str = "100",
+        use_docker: bool = False,
+    ) -> Deployment:
         """
         Deploy service locally
 
@@ -1375,11 +1453,13 @@ class ServiceManager:
         """
         self._set_env_variables(hash=hash)
         deployment = self.load_or_create(hash=hash).deployment
-        deployment.build(force=force)
-        deployment.start()
+        deployment.build(use_docker=use_docker, force=force, chain_id=chain_id)
+        deployment.start(use_docker=use_docker)
         return deployment
 
-    def stop_service_locally(self, hash: str, delete: bool = False) -> Deployment:
+    def stop_service_locally(
+        self, hash: str, delete: bool = False, use_docker: bool = False
+    ) -> Deployment:
         """
         Stop service locally
 
@@ -1388,7 +1468,7 @@ class ServiceManager:
         :return: Deployment instance
         """
         deployment = self.load_or_create(hash=hash).deployment
-        deployment.stop()
+        deployment.stop(use_docker)
         if delete:
             deployment.delete()
         return deployment

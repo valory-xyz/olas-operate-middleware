@@ -387,6 +387,7 @@ class Deployment(LocalResource):
     def _build_docker(
         self,
         force: bool = True,
+        chain_id: str = "100",
     ) -> None:
         """Build docker deployment."""
         service = Service.load(path=self.path)
@@ -586,7 +587,7 @@ class Deployment(LocalResource):
         """
         # TODO: chain_id should be used properly! Added as a hotfix for now.
         if use_docker:
-            return self._build_docker(force=force)
+            return self._build_docker(force=force, chain_id=chain_id)
         return self._build_host(force=force, chain_id=chain_id)
 
     def start(self, use_docker: bool = False) -> None:
