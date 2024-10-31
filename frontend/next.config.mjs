@@ -32,10 +32,10 @@ const nextConfig = {
     return config;
   },
   env: {
-    GNOSIS_RPC:
-      process.env.NODE_ENV === 'production'
-        ? process.env.FORK_URL
-        : process.env.DEV_RPC,
+    GNOSIS_RPC: process.env.GNOSIS_DEV_RPC,
+    OPTIMISM_RPC: process.env.OPTIMISM_DEV_RPC,
+    BASE_RPC: process.env.BASE_DEV_RPC,
+    ETHEREUM_RPC: process.env.ETHEREUM_DEV_RPC,
   },
 };
 

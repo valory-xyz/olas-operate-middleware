@@ -5,11 +5,14 @@ export enum Action {
   STOP = 3,
 }
 
-export enum Chain {
+export enum MiddlewareChain {
   ETHEREUM = 0,
   GOERLI = 1,
   GNOSIS = 2,
   SOLANA = 3,
+  OPTIMISM = 4,
+  BASE = 5,
+  MODE = 6,
 }
 
 export enum Ledger {

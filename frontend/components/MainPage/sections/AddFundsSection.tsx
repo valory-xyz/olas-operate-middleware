@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 
+import { CHAINS } from '@/constants/chains';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
 import { useWallet } from '@/hooks/useWallet';
@@ -111,7 +112,7 @@ const AddFundsWarningAlertSection = () => (
       message={
         <Flex vertical gap={2.5}>
           <Text className="text-base" strong>
-            Only send funds on Gnosis Chain!
+            Only send funds on {CHAINS.OPTIMISM.name}!
           </Text>
           <Text className="text-base">
             You will lose any assets you send on other chains.
@@ -161,7 +162,8 @@ const AddFundsAddressSection = ({
 const AddFundsGetTokensSection = () => (
   <CardSection justify="center" bordertop="true" padding="16px 24px">
     <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-      Get OLAS + XDAI on Gnosis Chain {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      Get OLAS + {CHAINS.OPTIMISM.currency} on {CHAINS.OPTIMISM.name}{' '}
+      {UNICODE_SYMBOLS.EXTERNAL_LINK}
     </Link>
   </CardSection>
 );
