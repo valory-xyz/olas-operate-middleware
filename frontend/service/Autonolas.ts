@@ -6,7 +6,7 @@ import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_ABI } from '@/abis/serviceStakingTokenMechUsage';
 import { STAKING_ACTIVITY_CHECKER_ABI } from '@/abis/stakingActivityChecker';
-import { Chain } from '@/client';
+import { MiddlewareChain } from '@/client';
 import {
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
@@ -55,20 +55,20 @@ const serviceStakingTokenMechUsageContracts: Record<
   //   ServiceStakingTokenAbi,
   // ),
   [StakingProgramId.OptimusAlpha]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.OPTIMISM][
-      StakingProgramId.OptimusAlpha
-    ],
+    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
+      MiddlewareChain.OPTIMISM
+    ][StakingProgramId.OptimusAlpha],
     ServiceStakingTokenAbi,
   ),
 };
 
 const serviceRegistryTokenUtilityContract = new MulticallContract(
-  SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS[Chain.OPTIMISM],
+  SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
   SERVICE_REGISTRY_TOKEN_UTILITY_ABI.filter((abi) => abi.type === 'function'),
 );
 
 const serviceRegistryL2Contract = new MulticallContract(
-  SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[Chain.OPTIMISM],
+  SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
   SERVICE_REGISTRY_L2_ABI.filter((abi) => abi.type === 'function'),
 );
 
@@ -93,7 +93,7 @@ const serviceRegistryL2Contract = new MulticallContract(
 // );
 
 const stakingActivityCheckerContract = new MulticallContract(
-  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.OPTIMISM],
+  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
   STAKING_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
 );
 

@@ -1,4 +1,4 @@
-import { Chain } from '@/client';
+import { MiddlewareChain } from '@/client';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
@@ -6,14 +6,14 @@ export const MULTICALL_CONTRACT_ADDRESS: Address =
   '0xcA11bde05977b3631167028862bE2a173976CA11'; // https://github.com/mds1/multicall, https://www.multicall3.com/
 
 export const SERVICE_REGISTRY_L2_CONTRACT_ADDRESS: Record<number, Address> = {
-  [Chain.GNOSIS]: '0x9338b5153AE39BB89f50468E608eD9d764B755fD',
+  [MiddlewareChain.GNOSIS]: '0x9338b5153AE39BB89f50468E608eD9d764B755fD',
 };
 
 export const SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS: Record<
   number,
   Address
 > = {
-  [Chain.GNOSIS]: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8',
+  [MiddlewareChain.GNOSIS]: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8',
 };
 
 export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
@@ -27,7 +27,7 @@ export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
   //   [StakingProgramId.BetaMechMarketplace]:
   //     '0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA',
   // },
-  [Chain.OPTIMISM]: {
+  [MiddlewareChain.OPTIMISM]: {
     [StakingProgramId.OptimusAlpha]:
       '0x88996bbdE7f982D93214881756840cE2c77C4992',
   },
@@ -68,5 +68,5 @@ export const STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS: Record<
   number,
   Address
 > = {
-  [Chain.OPTIMISM]: '0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68',
+  [MiddlewareChain.OPTIMISM]: '0x7Fd1F4b764fA41d19fe3f63C85d12bf64d2bbf68',
 };
