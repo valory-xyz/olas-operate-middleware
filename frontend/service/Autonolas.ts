@@ -36,27 +36,33 @@ const serviceStakingTokenMechUsageContracts: Record<
   StakingProgramId,
   MulticallContract
 > = {
-  [StakingProgramId.Alpha]: new MulticallContract(
+  // [StakingProgramId.Alpha]: new MulticallContract(
+  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+  //     StakingProgramId.Alpha
+  //   ],
+  //   ServiceStakingTokenAbi,
+  // ),
+  // [StakingProgramId.Beta]: new MulticallContract(
+  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+  //     StakingProgramId.Beta
+  //   ],
+  //   ServiceStakingTokenAbi,
+  // ),
+  // [StakingProgramId.Beta2]: new MulticallContract(
+  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+  //     StakingProgramId.Beta2
+  //   ],
+  //   ServiceStakingTokenAbi,
+  // ),
+  // [StakingProgramId.BetaMechMarketplace]: new MulticallContract(
+  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
+  //     StakingProgramId.BetaMechMarketplace
+  //   ],
+  //   ServiceStakingTokenAbi,
+  // ),
+  [StakingProgramId.OptimusAlpha]: new MulticallContract(
     SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Alpha
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.Beta]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Beta
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.Beta2]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.Beta2
-    ],
-    ServiceStakingTokenAbi,
-  ),
-  [StakingProgramId.BetaMechMarketplace]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-      StakingProgramId.BetaMechMarketplace
+      StakingProgramId.OptimusAlpha
     ],
     ServiceStakingTokenAbi,
   ),
@@ -87,7 +93,7 @@ const mechMarketplaceContract = new MulticallContract(
   MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
 );
 
-const mechMarketplaceActivityCheckerContract = new MulticallContract(
+const mechMarketplaceActivityCheckerStakingProgramId.OptimusAlphaContract = new MulticallContract(
   REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
   REQUESTER_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
 );
@@ -104,15 +110,15 @@ const getAgentStakingRewardsInfo = async ({
   if (!agentMultisigAddress) return;
   if (!serviceId) return;
 
-  const mechContract =
-    stakingProgram === StakingProgramId.BetaMechMarketplace
-      ? mechMarketplaceContract
-      : agentMechContract;
+  const mechContract = agentMechContract;
+  // stakingProgram === StakingProgramId.BetaMechMarketplace
+  //   ? mechMarketplaceContract
+  //   : agentMechContract;
 
-  const mechActivityContract =
-    stakingProgram === StakingProgramId.BetaMechMarketplace
-      ? mechMarketplaceActivityCheckerContract
-      : agentMechActivityCheckerContract;
+  const mechActivityContract = agentMechActivityCheckerContract;
+  // stakingProgram === StakingProgramId.BetaMechMarketplace
+  //   ? mechMarketplaceActivityCheckerContract
+  //   : agentMechActivityCheckerContract;
 
   const contractCalls = [
     mechContract.getRequestsCount(agentMultisigAddress),
