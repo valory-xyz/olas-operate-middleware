@@ -129,7 +129,9 @@ export type WalletResponse = {
   address: Address;
   safe_chains: Chain[];
   ledger_type: Ledger;
-  safe: Address;
+  safes: {
+    [middlewareChainId in (typeof Chain)[keyof typeof Chain]]: Address;
+  };
   safe_nonce: number;
 };
 

@@ -1,4 +1,4 @@
-import { Chain } from '@/client';
+import { Chain, WalletResponse } from '@/client';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 
@@ -9,7 +9,7 @@ const getWallets = async () =>
   fetch(`${BACKEND_URL}/wallet`).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to get wallets');
-  });
+  }) as Promise<WalletResponse>;
 
 const createEoa = async (chain: Chain) =>
   fetch(`${BACKEND_URL}/wallet`, {
