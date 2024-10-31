@@ -5,4 +5,5 @@ export const CHAINS: {
   };
 } = {
   GNOSIS: { currency: 'XDAI', chainId: 100 },
+  OPTIMISM: { currency: 'ETH', chainId: 10 },
 };
