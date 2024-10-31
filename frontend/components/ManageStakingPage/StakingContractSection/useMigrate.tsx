@@ -17,7 +17,7 @@ export enum CantMigrateReason {
   InsufficientOlasToMigrate = 'Insufficient OLAS to switch',
   MigrationNotSupported = 'Switching to this program is not currently supported',
   NoAvailableRewards = 'This program has no rewards available',
-  NoAvailableStakingSlots = 'The program has no more avaiable slots',
+  NoAvailableStakingSlots = 'The program has no more available slots',
   NotStakedForMinimumDuration = 'Pearl has not been staked for the required minimum duration',
   PearlCurrentlyRunning = 'Unable to switch while Pearl is running',
   LoadingServices = 'Loading services...',
