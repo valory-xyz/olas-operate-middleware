@@ -306,12 +306,10 @@ export const getWalletAddresses = (
   const walletsToCheck: Address[] = [];
 
   for (const wallet of wallets) {
-    const { address, safe } = wallet;
+    const { address } = wallet;
+
     if (address && isAddress(address)) {
       walletsToCheck.push(address);
-    }
-    if (safe && isAddress(safe)) {
-      walletsToCheck.push(safe);
     }
   }
 

@@ -64,8 +64,8 @@ export const SetupEoaFunding = ({
       <Typography.Title level={3}>
         Deposit{' '}
         {MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation}{' '}
-        {CHAINS[MiddlewareChain.OPTIMISM].currency}
-        on {CHAINS[MiddlewareChain.OPTIMISM].name}
+        {CHAINS.OPTIMISM.currency}
+        on {CHAINS.OPTIMISM.name}
       </Typography.Title>
       <Typography.Paragraph style={{ marginBottom: 0 }}>
         The app needs these funds to create your account on-chain.
@@ -100,7 +100,7 @@ const SetupEoaFundingWaiting = () => {
           message={
             <Flex vertical gap={5}>
               <Typography.Text strong>
-                Only send funds on {CHAINS[MiddlewareChain.OPTIMISM].name}!
+                Only send funds on {CHAINS.OPTIMISM.name}!
               </Typography.Text>
               <Typography.Text>
                 You will lose any assets you send on other chains.
