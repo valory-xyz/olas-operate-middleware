@@ -2,18 +2,16 @@ import { BigNumber, ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
 
-import { AGENT_MECH_ABI } from '@/abis/agentMech';
-import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
 import { SERVICE_STAKING_TOKEN_MECH_USAGE_ABI } from '@/abis/serviceStakingTokenMechUsage';
+import { STAKING_ACTIVITY_CHECKER_ABI } from '@/abis/stakingActivityChecker';
 import { Chain } from '@/client';
 import {
-  AGENT_MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
-  AGENT_MECH_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES,
+  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
 } from '@/constants/contractAddresses';
 import { optimismMulticallProvider } from '@/constants/providers';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
@@ -74,15 +72,15 @@ const serviceRegistryL2Contract = new MulticallContract(
   SERVICE_REGISTRY_L2_ABI.filter((abi) => abi.type === 'function'),
 );
 
-const agentMechContract = new MulticallContract(
-  AGENT_MECH_CONTRACT_ADDRESS[Chain.OPTIMISM],
-  AGENT_MECH_ABI.filter((abi) => abi.type === 'function'),
-);
+// const agentMechContract = new MulticallContract(
+//   AGENT_MECH_CONTRACT_ADDRESS[Chain.GNOSIS],
+//   AGENT_MECH_ABI.filter((abi) => abi.type === 'function'),
+// );
 
-const agentMechActivityCheckerContract = new MulticallContract(
-  AGENT_MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.OPTIMISM],
-  MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
-);
+// const agentMechActivityCheckerContract = new MulticallContract(
+//   AGENT_MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
+//   MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
+// );
 
 // const mechMarketplaceContract = new MulticallContract(
 //   MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
@@ -93,6 +91,11 @@ const agentMechActivityCheckerContract = new MulticallContract(
 //   REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
 //   REQUESTER_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
 // );
+
+const stakingActivityCheckerContract = new MulticallContract(
+  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.OPTIMISM],
+  STAKING_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
+);
 
 const getAgentStakingRewardsInfo = async ({
   agentMultisigAddress,
@@ -106,23 +109,24 @@ const getAgentStakingRewardsInfo = async ({
   if (!agentMultisigAddress) return;
   if (!serviceId) return;
 
-  const mechContract = agentMechContract;
+  // const mechContract = agentMechContract;
+
   // stakingProgram === StakingProgramId.BetaMechMarketplace
   //   ? mechMarketplaceContract
   //   : agentMechContract;
 
-  const mechActivityContract = agentMechActivityCheckerContract;
+  const activityCheckerContract = stakingActivityCheckerContract;
   // stakingProgram === StakingProgramId.BetaMechMarketplace
   //   ? mechMarketplaceActivityCheckerContract
   //   : agentMechActivityCheckerContract;
 
   const contractCalls = [
-    mechContract.getRequestsCount(agentMultisigAddress),
+    // mechContract.getRequestsCount(agentMultisigAddress),
     serviceStakingTokenMechUsageContracts[stakingProgram].getServiceInfo(
       serviceId,
     ),
     serviceStakingTokenMechUsageContracts[stakingProgram].livenessPeriod(),
-    mechActivityContract.livenessRatio(),
+    activityCheckerContract.livenessRatio(),
     serviceStakingTokenMechUsageContracts[stakingProgram].rewardsPerSecond(),
     serviceStakingTokenMechUsageContracts[
       stakingProgram
@@ -186,7 +190,7 @@ const getAgentStakingRewardsInfo = async ({
     parseFloat(ethers.utils.formatEther(`${minStakingDeposit}`)) * 2;
 
   return {
-    mechRequestCount,
+    // mechRequestCount,
     serviceInfo,
     livenessPeriod,
     livenessRatio,
