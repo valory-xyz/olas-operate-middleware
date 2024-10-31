@@ -194,6 +194,7 @@ class ConfigurationTemplate(TypedDict):
     staking_program_id: str
     nft: str
     rpc: str
+    agent_id: int
     threshold: int
     use_staking: bool
     use_mech_marketplace: bool
@@ -240,6 +241,7 @@ class OnChainUserParams(LocalResource):
     staking_program_id: str
     nft: str
     threshold: int
+    agent_id: int
     use_staking: bool
     use_mech_marketplace: bool
     cost_of_bond: int

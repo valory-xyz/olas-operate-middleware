@@ -498,7 +498,7 @@ class ServiceManager:
         else:
             staking_params = dict(  # nosec
                 staking_contract=NULL_ADDRESS,
-                agent_ids=[25],
+                agent_ids=[user_params.agent_id],
                 service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
                 staking_token=NULL_ADDRESS,  # nosec
                 service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
@@ -555,6 +555,17 @@ class ServiceManager:
                     f"address: {safe}; required olas: {required_olas}; your balance: {balance}"
                 )
 
+        # TODO Handle this in a more graceful way.
+        agent_id = (
+            staking_params["agent_ids"][0]
+            if staking_params["agent_ids"]
+            else user_params.agent_id
+        )
+        staking_params["agent_ids"] = [agent_id]
+
+        from icecream import ic
+        ic(staking_params)
+
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
@@ -571,7 +582,9 @@ class ServiceManager:
                 # TODO Discuss how to manage on-chain hash updates with staking programs.
                 # on_chain_hash != service.hash or  # noqa
                 current_agent_id != staking_params["agent_ids"][0]
-                or current_agent_bond != staking_params["min_staking_deposit"]
+
+                # TODO Temporary removed for Optimus. Needs to be put back!
+                #or current_agent_bond != staking_params["min_staking_deposit"]
             )
         )
         current_staking_program = self._get_current_staking_program(
@@ -603,7 +616,7 @@ class ServiceManager:
                     .add(
                         sftxb.get_mint_tx_data(
                             package_path=service.service_path,
-                            agent_id=staking_params["agent_ids"][0],
+                            agent_id=agent_id,
                             number_of_slots=service.helper.config.number_of_agents,
                             cost_of_bond=(
                                 staking_params["min_staking_deposit"]
@@ -652,7 +665,7 @@ class ServiceManager:
                 .add(
                     sftxb.get_mint_tx_data(
                         package_path=service.service_path,
-                        agent_id=staking_params["agent_ids"][0],
+                        agent_id=agent_id,
                         number_of_slots=service.helper.config.number_of_agents,
                         cost_of_bond=(
                             staking_params["min_staking_deposit"]
@@ -688,11 +701,11 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.PRE_REGISTRATION
         ):
-            cost_of_bond = staking_params["min_staking_deposit"]
+            # cost_of_bond = staking_params["min_staking_deposit"]
+            cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
                 token_utility = staking_params["service_registry_token_utility"]
                 olas_token = staking_params["staking_token"]
-                agent_id = staking_params["agent_ids"][0]
                 self.logger.info(
                     f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
@@ -745,7 +758,6 @@ class ServiceManager:
             if user_params.use_staking:
                 token_utility = staking_params["service_registry_token_utility"]
                 olas_token = staking_params["staking_token"]
-                agent_id = staking_params["agent_ids"][0]
                 self.logger.info(
                     f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
@@ -826,7 +838,8 @@ class ServiceManager:
         chain_data.multisig = info["multisig"]
         chain_data.on_chain_state = OnChainState(info["service_state"])
         service.store()
-        self.stake_service_on_chain_from_safe(hash=hash, chain_id=chain_id)
+        if user_params.use_staking:
+            self.stake_service_on_chain_from_safe(hash=hash, chain_id=chain_id)
 
     def terminate_service_on_chain(
         self, hash: str, chain_id: t.Optional[str] = None
