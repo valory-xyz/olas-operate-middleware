@@ -6,14 +6,16 @@ export const MULTICALL_CONTRACT_ADDRESS: Address =
   '0xcA11bde05977b3631167028862bE2a173976CA11'; // https://github.com/mds1/multicall, https://www.multicall3.com/
 
 export const SERVICE_REGISTRY_L2_CONTRACT_ADDRESS: Record<number, Address> = {
-  [MiddlewareChain.GNOSIS]: '0x9338b5153AE39BB89f50468E608eD9d764B755fD',
+  // [MiddlewareChain.GNOSIS]: '0x9338b5153AE39BB89f50468E608eD9d764B755fD',
+  [MiddlewareChain.OPTIMISM]: '0x3d77596beb0f130a4415df3D2D8232B3d3D31e44',
 };
 
 export const SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS: Record<
   number,
   Address
 > = {
-  [MiddlewareChain.GNOSIS]: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8',
+  // [MiddlewareChain.GNOSIS]: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8',
+  [MiddlewareChain.OPTIMISM]: '0xBb7e1D6Cb6F243D6bdE81CE92a9f2aFF7Fbe7eac',
 };
 
 export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
