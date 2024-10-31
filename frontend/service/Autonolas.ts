@@ -292,19 +292,26 @@ const getStakingContractInfoByStakingProgram = async (
   const availableRewards = parseFloat(
     ethers.utils.formatUnits(availableRewardsInBN, 18),
   );
+
   const serviceIds = getServiceIdsInBN.map((id: BigNumber) => id.toNumber());
   const maxNumServices = maxNumServicesInBN.toNumber();
 
   // APY
   const rewardsPerYear = rewardsPerSecond.mul(ONE_YEAR);
-  const apy =
-    Number(rewardsPerYear.mul(100).div(minStakingDeposit)) /
-    (1 + numAgentInstances.toNumber());
+
+  let apy = 0;
+
+  if (rewardsPerSecond.gt(0) && minStakingDeposit.gt(0)) {
+    apy =
+      Number(rewardsPerYear.mul(100).div(minStakingDeposit)) /
+      (1 + numAgentInstances.toNumber());
+  }
 
   // Amount of OLAS required for Stake
   const stakeRequiredInWei = minStakingDeposit.add(
     minStakingDeposit.mul(numAgentInstances),
   );
+
   const olasStakeRequired = Number(formatEther(stakeRequiredInWei));
 
   // Rewards per work period

@@ -95,7 +95,10 @@ export const StakingContractInfoProvider = ({
 
       const stakingContractInfoRecord = stakingPrograms.reduce(
         (record, programId, index) => {
-          if (stakingInfos[index].status === 'rejected') return record;
+          if (stakingInfos[index].status === 'rejected') {
+            console.error(stakingInfos[index].reason);
+            return record;
+          }
           record[programId] = stakingInfos[index].value;
           return record;
         },
