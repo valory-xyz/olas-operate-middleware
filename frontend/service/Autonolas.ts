@@ -207,6 +207,8 @@ const getAgentStakingRewardsInfo = async ({
 const getAvailableRewardsForEpoch = async (
   stakingProgramId: StakingProgramId,
 ): Promise<number | undefined> => {
+  return 0;
+
   const contractCalls = [
     serviceStakingTokenMechUsageContracts[stakingProgramId].rewardsPerSecond(),
     serviceStakingTokenMechUsageContracts[stakingProgramId].livenessPeriod(), // epoch length
