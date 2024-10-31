@@ -208,7 +208,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
 
     const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
 
-    if (stakingContractInfo?.availableRewards === 0) {
+    if ((stakingContractInfo?.availableRewards ?? 0) <= 0) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.NoAvailableRewards,
