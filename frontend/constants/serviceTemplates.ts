@@ -46,7 +46,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         agent_id: 14,
         threshold: 1,
         use_staking: true,
-        use_mech_marketplace: true,
+        use_mech_marketplace: false,
         cost_of_bond: 10000000000000000,
         monthly_gas_estimate: 10000000000000000000,
         fund_requirements: {

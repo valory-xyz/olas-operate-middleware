@@ -16,7 +16,7 @@ export const NewStakingProgramAlert = () => {
 
   if (
     !isActiveStakingProgramLoaded ||
-    activeStakingProgramId !== StakingProgramId.Alpha
+    activeStakingProgramId !== StakingProgramId.OptimusAlpha
   )
     return null;
 

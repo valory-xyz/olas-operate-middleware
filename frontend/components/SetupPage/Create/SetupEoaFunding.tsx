@@ -64,8 +64,7 @@ export const SetupEoaFunding = ({
       <Typography.Title level={3}>
         Deposit{' '}
         {MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation}{' '}
-        {CHAINS.OPTIMISM.currency}
-        on {CHAINS.OPTIMISM.name}
+        {CHAINS.OPTIMISM.currency} on {CHAINS.OPTIMISM.name}
       </Typography.Title>
       <Typography.Paragraph style={{ marginBottom: 0 }}>
         The app needs these funds to create your account on-chain.

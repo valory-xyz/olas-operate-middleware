@@ -26,7 +26,7 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
   const [wallets, setWallets] = useState<Wallet[]>();
 
   const masterEoaAddress: Address | undefined = wallets?.[0]?.address;
-  const masterSafeAddress: Address | undefined = wallets?.[0]?.safe;
+  const masterSafeAddress: Address | undefined = wallets?.[0]?.safes[0];
 
   const updateWallets = async () => {
     try {

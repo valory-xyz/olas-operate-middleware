@@ -1,4 +1,4 @@
-import { MiddlewareChain, WalletResponse } from '@/client';
+import { MiddlewareChain, Wallet } from '@/client';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 
@@ -9,7 +9,7 @@ const getWallets = async () =>
   fetch(`${BACKEND_URL}/wallet`).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to get wallets');
-  }) as Promise<WalletResponse>;
+  }) as Promise<Wallet[]>;
 
 const createEoa = async (chain: MiddlewareChain) =>
   fetch(`${BACKEND_URL}/wallet`, {

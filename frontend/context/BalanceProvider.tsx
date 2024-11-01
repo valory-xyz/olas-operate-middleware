@@ -212,11 +212,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     [services],
   );
 
-  const eoaBalance = useMemo(
+  const masterEoaBalance = useMemo(
     () => masterEoaAddress && walletBalances[masterEoaAddress],
     [masterEoaAddress, walletBalances],
   );
-  const safeBalance = useMemo(
+  const masterSafeBalance = useMemo(
     () => masterSafeAddress && walletBalances[masterSafeAddress],
     [masterSafeAddress, walletBalances],
   );
@@ -235,15 +235,15 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 
   const isLowBalance = useMemo(() => {
-    if (!safeBalance || !agentSafeBalance) return false;
+    if (!masterSafeBalance || !agentSafeBalance) return false;
     if (
-      safeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
+      masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
       // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
       agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
     )
       return true;
     return false;
-  }, [safeBalance, agentSafeBalance]);
+  }, [masterSafeBalance, agentSafeBalance]);
 
   useInterval(
     () => {
@@ -260,8 +260,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isBalanceLoaded,
         olasBondBalance,
         olasDepositBalance,
-        masterEoaBalance: eoaBalance,
-        masterSafeBalance: safeBalance,
+        masterEoaBalance,
+        masterSafeBalance,
         totalEthBalance,
         totalOlasBalance,
         isLowBalance,
