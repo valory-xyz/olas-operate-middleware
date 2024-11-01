@@ -10,7 +10,7 @@ import { AddressNumberRecord } from '@/types/Records';
 
 const multicallContract = new MulticallContract(
   MULTICALL_CONTRACT_ADDRESS,
-  MULTICALL3_ABI,
+  MULTICALL3_ABI.filter((f) => f.type === 'function'),
 );
 
 /**
@@ -21,16 +21,15 @@ const multicallContract = new MulticallContract(
  */
 const getEthBalances = async (
   addresses: Address[],
-): Promise<AddressNumberRecord> => {
-  if (!addresses.length) return {};
+): Promise<AddressNumberRecord | undefined> => {
+  if (addresses.length <= 0) return;
 
-  const callData: ContractCall[] = addresses.map((address: Address) =>
+  const callData = addresses.map((address: Address) =>
     multicallContract.getEthBalance(address),
   );
 
   if (!callData.length) return {};
 
-  await optimismMulticallProvider.init();
   const multicallResponse = await optimismMulticallProvider.all(callData);
 
   return multicallResponse.reduce(
@@ -61,8 +60,6 @@ const getErc20Balances = async (
       address,
     ),
   );
-
-  await optimismMulticallProvider.init();
 
   const multicallResponse = await optimismMulticallProvider.all(callData);
 
