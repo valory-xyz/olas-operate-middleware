@@ -16,34 +16,63 @@ import { delayInSeconds } from '@/utils/delay';
 
 const { Text } = Typography;
 
+const capitalizedMiddlewareChainNames = {
+  [+MiddlewareChain.ETHEREUM]: 'Ethereum',
+  [+MiddlewareChain.BASE]: 'Base',
+  [+MiddlewareChain.OPTIMISM]: 'Optimism',
+};
+
 export const SetupCreateSafe = () => {
   const { goto } = usePageState();
-  const { updateWallets } = useWallet();
+  const { updateWallets, masterSafeAddressKeyExistsForChain } = useWallet();
   const { updateMasterSafeOwners, masterSafeAddress, backupSafeAddress } =
     useMasterSafe();
   const { backupSigner } = useSetup();
 
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);
-  const [isCreateSafeSuccessful, setIsCreateSafeSuccessful] = useState(false);
-  const [failed, setFailed] = useState(false);
+
+  const [optimismFailed, setOptimismFailed] = useState(false);
+  const [ethereumFailed, setEthereumFailed] = useState(false);
+  const [baseFailed, setBaseFailed] = useState(false);
+
+  const [isOptimismSuccess, setIsOptimismSuccess] = useState(false);
+  const [isEthereumSuccess, setIsEthereumSuccess] = useState(false);
+  const [isBaseSuccess, setIsBaseSuccess] = useState(false);
 
   const createSafeWithRetries = useCallback(
-    async (retries: number) => {
+    async (middlewareChain: MiddlewareChain, retries: number) => {
       setIsCreatingSafe(true);
 
       // If we have retried too many times, set failed
       if (retries <= 0) {
-        setFailed(true);
-        setIsCreatingSafe(false);
-        setIsCreateSafeSuccessful(false);
+        if (middlewareChain === MiddlewareChain.OPTIMISM) {
+          setOptimismFailed(true);
+          setIsOptimismSuccess(false);
+          setIsCreatingSafe(false);
+          return;
+        }
+        if (middlewareChain === MiddlewareChain.ETHEREUM) {
+          setEthereumFailed(true);
+          setIsEthereumSuccess(false);
+          setIsCreatingSafe(false);
+          return;
+        }
+        if (middlewareChain === MiddlewareChain.BASE) {
+          setBaseFailed(true);
+          setIsBaseSuccess(false);
+          setIsCreatingSafe(false);
+          return;
+        }
         return;
       }
 
       // Try to create the safe
-      WalletService.createSafe(MiddlewareChain.OPTIMISM, backupSigner)
+      WalletService.createSafe(middlewareChain, backupSigner)
         .then(async () => {
           // Backend returned success
-          message.success('Account created');
+          message.success(
+            `${capitalizedMiddlewareChainNames[middlewareChain]} account created`,
+          );
 
           // Attempt wallet and master safe updates before proceeding
           try {
@@ -55,8 +84,7 @@ export const SetupCreateSafe = () => {
 
           // Set states for successful creation
           setIsCreatingSafe(false);
-          setIsCreateSafeSuccessful(true);
-          setFailed(false);
+          setOptimismFailed(false);
         })
         .catch(async (e) => {
           console.error(e);
@@ -69,27 +97,84 @@ export const SetupCreateSafe = () => {
           } else {
             message.error('Failed to create account, retrying in 5 seconds');
           }
-          createSafeWithRetries(newRetries);
+          createSafeWithRetries(middlewareChain, newRetries);
         });
     },
     [backupSigner, updateMasterSafeOwners, updateWallets],
   );
 
+  const createAllSafes = useCallback(async () => {
+    await createSafeWithRetries(MiddlewareChain.OPTIMISM, 3);
+    await createSafeWithRetries(MiddlewareChain.ETHEREUM, 3);
+    await createSafeWithRetries(MiddlewareChain.BASE, 3);
+  }, [createSafeWithRetries]);
+
   const creationStatusText = useMemo(() => {
-    if (isCreatingSafe) return 'Creating account';
+    if (isCreatingSafe) return 'Creating accounts';
     if (masterSafeAddress && backupSafeAddress) return 'Account created';
     return 'Account creation in progress';
   }, [backupSafeAddress, isCreatingSafe, masterSafeAddress]);
 
   useEffect(() => {
-    if (failed || isCreatingSafe || isCreateSafeSuccessful) return;
-    createSafeWithRetries(3);
+    if (
+      /**
+       * Avoid creating safes if any of the following conditions are met:
+       */
+      [optimismFailed, baseFailed, ethereumFailed].some(Boolean) ||
+      isCreatingSafe ||
+      [isBaseSuccess, isEthereumSuccess, isOptimismSuccess].some((x) => !x)
+    )
+      return;
+
+    const chainsToCreateSafesFor = {
+      [MiddlewareChain.OPTIMISM]: masterSafeAddressKeyExistsForChain(
+        MiddlewareChain.OPTIMISM,
+      ),
+      [MiddlewareChain.ETHEREUM]: masterSafeAddressKeyExistsForChain(
+        MiddlewareChain.ETHEREUM,
+      ),
+      [MiddlewareChain.BASE]: masterSafeAddressKeyExistsForChain(
+        MiddlewareChain.BASE,
+      ),
+    };
+
+    const safeCreationQueue = Object.entries(chainsToCreateSafesFor).reduce(
+      (acc, [chain, safeAddressAlreadyExists]) => {
+        const middlewareChain = +chain as MiddlewareChain;
+        if (safeAddressAlreadyExists) {
+          switch (middlewareChain) {
+            case MiddlewareChain.OPTIMISM:
+              setIsOptimismSuccess(true);
+              break;
+            case MiddlewareChain.ETHEREUM:
+              setIsEthereumSuccess(true);
+              break;
+            case MiddlewareChain.BASE:
+              setIsBaseSuccess(true);
+              break;
+          }
+          return acc;
+        }
+        return [...acc, createSafeWithRetries(middlewareChain, 3)];
+      },
+      [] as Promise<void>[],
+    );
+
+    safeCreationQueue.reduce((acc, promise) => {
+      return acc.then(() => promise);
+    }, Promise.resolve());
   }, [
     backupSigner,
+    createAllSafes,
     createSafeWithRetries,
-    failed,
-    isCreateSafeSuccessful,
+    optimismFailed,
     isCreatingSafe,
+    isBaseSuccess,
+    isEthereumSuccess,
+    isOptimismSuccess,
+    baseFailed,
+    ethereumFailed,
+    masterSafeAddressKeyExistsForChain,
   ]);
 
   useEffect(() => {
@@ -106,7 +191,7 @@ export const SetupCreateSafe = () => {
         padding="80px 24px"
         gap={12}
       >
-        {failed ? (
+        {optimismFailed ? (
           <>
             <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
             <Text type="secondary" className="mt-12">

@@ -138,4 +138,5 @@ export type WalletResponse = {
 export type Wallet = WalletResponse & {
   ethBalance?: number;
   olasBalance?: number;
+  usdcBalance?: number;
 };

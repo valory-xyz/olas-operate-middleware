@@ -1,4 +1,10 @@
-import { createContext, PropsWithChildren, useContext, useState } from 'react';
+import {
+  createContext,
+  PropsWithChildren,
+  useCallback,
+  useContext,
+  useState,
+} from 'react';
 import { useInterval } from 'usehooks-ts';
 
 import { MiddlewareChain, Wallet } from '@/client';
@@ -13,11 +19,15 @@ export const WalletContext = createContext<{
   masterSafeAddress?: Address;
   wallets?: Wallet[];
   updateWallets: () => Promise<void>;
+  masterSafeAddressKeyExistsForChain: (
+    middlewareChain: MiddlewareChain,
+  ) => boolean;
 }>({
   masterEoaAddress: undefined,
   masterSafeAddress: undefined,
   wallets: undefined,
   updateWallets: async () => {},
+  masterSafeAddressKeyExistsForChain: () => false,
 });
 
 export const WalletProvider = ({ children }: PropsWithChildren) => {
@@ -28,6 +38,12 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
   const masterEoaAddress: Address | undefined = wallets?.[0]?.address;
   const masterSafeAddress: Address | undefined =
     wallets?.[0]?.safes[MiddlewareChain.OPTIMISM];
+
+  const masterSafeAddressKeyExistsForChain = useCallback(
+    (middlewareChain: MiddlewareChain) =>
+      !!wallets?.[0]?.safes[middlewareChain],
+    [wallets],
+  );
 
   const updateWallets = async () => {
     try {
@@ -47,6 +63,7 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
         masterSafeAddress,
         wallets,
         updateWallets,
+        masterSafeAddressKeyExistsForChain,
       }}
     >
       {children}

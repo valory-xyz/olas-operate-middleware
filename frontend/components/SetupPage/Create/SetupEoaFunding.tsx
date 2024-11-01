@@ -73,7 +73,7 @@ const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
         </Flex>
 
         <span className="can-select-text break-word">
-          {`GNO: ${masterEoaAddress}`}
+          {`ETH: ${masterEoaAddress}`}
         </span>
         {/* <CustomAlert
           type="info"
@@ -155,7 +155,7 @@ export const SetupEoaFunding = () => {
     null,
   );
 
-  const isOptimusFunded = useMemo(() => {
+  const isOptimismFunded = useMemo(() => {
     if (!eoaBalance) return false;
     return (
       eoaBalance.ETH >=
@@ -184,10 +184,10 @@ export const SetupEoaFunding = () => {
   // Set the current chain to the first chain that the user has not funded
   useEffect(() => {
     if (currentChain) return;
-    if (!isOptimusFunded) setCurrentChain(MiddlewareChain.OPTIMISM);
+    if (!isOptimismFunded) setCurrentChain(MiddlewareChain.OPTIMISM);
     if (!isEthereumFunded) setCurrentChain(MiddlewareChain.ETHEREUM);
     if (!isBaseFunded) setCurrentChain(MiddlewareChain.BASE);
-  }, [isOptimusFunded, isEthereumFunded, isBaseFunded, currentChain]);
+  }, [isOptimismFunded, isEthereumFunded, isBaseFunded, currentChain]);
 
   // If the user has not funded their account on any chain, show the funding instructions
   const screen = useMemo(() => {
@@ -195,7 +195,7 @@ export const SetupEoaFunding = () => {
       case MiddlewareChain.OPTIMISM:
         return (
           <SetupEoaFundingForChain
-            isFunded={isOptimusFunded}
+            isFunded={isOptimismFunded}
             minRequiredBalance={
               MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
             }
@@ -231,7 +231,7 @@ export const SetupEoaFunding = () => {
       default:
         return null;
     }
-  }, [currentChain, isOptimusFunded, isEthereumFunded, isBaseFunded, goto]);
+  }, [currentChain, isOptimismFunded, isEthereumFunded, isBaseFunded, goto]);
 
   return screen;
 };
