@@ -98,19 +98,28 @@ export const StakingContractInfoProvider = ({
     //   AutonolasService.getStakingContractInfoByStakingProgram(
     //     StakingProgramId.BetaMechMarketplace,
     //   );
-    // try {
-    //   const [alphaInfo, betaInfo, beta2Info, betaMechMarketplaceInfo] =
-    //     await Promise.all([alpha, beta, beta2, betaMechMarketplace]);
-    //   setStakingContractInfoRecord({
-    //     [StakingProgramId.Alpha]: alphaInfo,
-    //     [StakingProgramId.Beta]: betaInfo,
-    //     [StakingProgramId.Beta2]: beta2Info,
-    //     [StakingProgramId.BetaMechMarketplace]: betaMechMarketplaceInfo,
-    //   });
-    //   setIsStakingContractInfoLoaded(true);
-    // } catch (e) {
-    //   console.error(e);
-    // }
+
+    const optimusAlpha =
+      AutonolasService.getStakingContractInfoByStakingProgram(
+        StakingProgramId.OptimusAlpha,
+      );
+
+    try {
+      const [
+        // alphaInfo, betaInfo, beta2Info, betaMechMarketplaceInfo,
+        optimusAlphaInfo,
+      ] = await Promise.all([optimusAlpha]);
+      setStakingContractInfoRecord({
+        // [StakingProgramId.Alpha]: alphaInfo,
+        // [StakingProgramId.Beta]: betaInfo,
+        // [StakingProgramId.Beta2]: beta2Info,
+        // [StakingProgramId.BetaMechMarketplace]: betaMechMarketplaceInfo,
+        [StakingProgramId.OptimusAlpha]: optimusAlphaInfo,
+      });
+      setIsStakingContractInfoLoaded(true);
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   useEffect(() => {
