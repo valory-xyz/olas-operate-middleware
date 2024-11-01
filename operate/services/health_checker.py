@@ -19,15 +19,16 @@
 # ------------------------------------------------------------------------------
 """Source code for checking aea is alive.."""
 import asyncio
-from traceback import print_exc
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
+from traceback import print_exc
 
 import aiohttp  # type: ignore
 from aea.helpers.logging import setup_logger
 
-from operate.services.manage import ServiceManager  # type: ignore
 from operate.constants import HEALTH_CHECK_URL
+from operate.services.manage import ServiceManager  # type: ignore
+
 
 HTTP_OK = 200
 

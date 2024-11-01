@@ -18,10 +18,6 @@
 # ------------------------------------------------------------------------------
 
 """Operate app CLI module."""
-# set encoding!
-import sys
-sys.setdefaultencoding('utf-8') 
-
 import asyncio
 import logging
 import os
@@ -148,7 +144,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 ) -> FastAPI:
     """Create FastAPI object."""
     HEALTH_CHECKER_OFF = os.environ.get("HEALTH_CHECKER_OFF", "0") == "1"
-    number_of_fails = int(os.environ.get("HEALTH_CHECKER_TRIES", str(HealthChecker.NUMBER_OF_FAILS_DEFAULT)))
+    number_of_fails = int(
+        os.environ.get(
+            "HEALTH_CHECKER_TRIES", str(HealthChecker.NUMBER_OF_FAILS_DEFAULT)
+        )
+    )
 
     logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
