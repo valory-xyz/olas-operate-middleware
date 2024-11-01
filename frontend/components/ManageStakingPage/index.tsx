@@ -2,6 +2,7 @@ import { CloseOutlined } from '@ant-design/icons';
 import { Button, Card } from 'antd';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
+import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { Pages } from '@/enums/PageState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
@@ -14,8 +15,7 @@ import { WhatAreStakingContractsSection } from './WhatAreStakingContracts';
 
 export const ManageStakingPage = () => {
   const { goto } = usePageState();
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
   const orderedStakingProgramIds: StakingProgramId[] = Object.values(
     StakingProgramId,
@@ -28,7 +28,7 @@ export const ManageStakingPage = () => {
     // put default at the top if no activeStakingProgram
     if (
       activeStakingProgramId === null &&
-      stakingProgramId === defaultStakingProgramId
+      stakingProgramId === DEFAULT_STAKING_PROGRAM_ID
     )
       return [stakingProgramId, ...acc];
 

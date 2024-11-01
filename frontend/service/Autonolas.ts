@@ -135,8 +135,6 @@ const getAgentStakingRewardsInfo = async ({
     serviceStakingTokenMechUsageContracts[stakingProgram].tsCheckpoint(),
   ];
 
-  await optimismMulticallProvider.init();
-
   const multicallResponse = await optimismMulticallProvider.all(contractCalls);
 
   const [
@@ -215,8 +213,6 @@ const getAvailableRewardsForEpoch = async (
     serviceStakingTokenMechUsageContracts[stakingProgramId].tsCheckpoint(), // last checkpoint timestamp
   ];
 
-  await optimismMulticallProvider.init();
-
   const multicallResponse = await optimismMulticallProvider.all(contractCalls);
   const [rewardsPerSecond, livenessPeriod, tsCheckpoint] = multicallResponse;
   const nowInSeconds = Math.floor(Date.now() / 1000);
@@ -248,8 +244,6 @@ const getStakingContractInfoByServiceIdStakingProgram = async (
     ),
     serviceStakingTokenMechUsageContracts[stakingProgramId].minStakingDeposit(),
   ];
-
-  await optimismMulticallProvider.init();
 
   const multicallResponse = await optimismMulticallProvider.all(contractCalls);
   const [
@@ -296,8 +290,6 @@ const getStakingContractInfoByStakingProgram = async (
     serviceStakingTokenMechUsageContracts[stakingProgram].numAgentInstances(),
     serviceStakingTokenMechUsageContracts[stakingProgram].livenessPeriod(),
   ];
-
-  await optimismMulticallProvider.init();
 
   const multicallResponse = await optimismMulticallProvider.all(contractCalls);
   const [
@@ -363,8 +355,6 @@ const getServiceRegistryInfo = async (
     serviceRegistryL2Contract.mapServices(serviceId),
   ];
 
-  await optimismMulticallProvider.init();
-
   const [
     operatorBalanceResponse,
     serviceIdTokenDepositResponse,
@@ -405,7 +395,6 @@ const getCurrentStakingProgramByServiceId = async (
   );
 
   try {
-    await optimismMulticallProvider.init();
     const [
       isOptimusAlphaStaked,
       // isAlphaStaked,

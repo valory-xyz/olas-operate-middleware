@@ -76,12 +76,7 @@ const checkRpc = async (rpc: string): Promise<boolean> => {
   try {
     if (!rpc) throw new Error('RPC is required');
 
-    const provider = new providers.StaticJsonRpcProvider(rpc, {
-      name: 'Gnosis',
-      chainId: 100, // we currently only support Gnosis Trader agent
-    });
-
-    const networkId = (await provider.getNetwork()).chainId;
+    const networkId = (await optimismProvider.getNetwork()).chainId;
     if (!networkId) throw new Error('Failed to get network ID');
 
     return Promise.resolve(true);

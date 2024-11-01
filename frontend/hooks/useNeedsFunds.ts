@@ -25,7 +25,7 @@ export const useNeedsFunds = () => {
 
   const serviceFundRequirements = useMemo(() => {
     const gasEstimate =
-      serviceTemplate.configurations[CHAINS.GNOSIS.chainId]
+      serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
         .monthly_gas_estimate;
     const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
     const minimumStakedAmountRequired =

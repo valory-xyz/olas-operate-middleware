@@ -7,11 +7,12 @@ export const useAddress = () => {
 
   /** agent safe multisig address */
   const multisigAddress =
-    service?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.multisig;
+    service?.chain_configs?.[CHAINS.OPTIMISM.chainId]?.chain_data?.multisig;
 
   /** agent instance EOA address */
   const instanceAddress =
-    service?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data?.instances?.[0];
+    service?.chain_configs?.[CHAINS.OPTIMISM.chainId]?.chain_data
+      ?.instances?.[0];
 
   return { instanceAddress, multisigAddress };
 };

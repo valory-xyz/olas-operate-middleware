@@ -14,7 +14,7 @@ const checkServiceIsFunded = async (
 ): Promise<boolean> => {
   const {
     chain_configs: {
-      [CHAINS.GNOSIS.chainId]: {
+      [CHAINS.OPTIMISM.chainId]: {
         chain_data: { instances, multisig },
       },
     },
@@ -33,10 +33,10 @@ const checkServiceIsFunded = async (
       Object.assign(acc, {
         [address]: instances.includes(address)
           ? balances[address] >
-            serviceTemplate.configurations[CHAINS.GNOSIS.chainId]
+            serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
               .fund_requirements.agent
           : balances[address] >
-            serviceTemplate.configurations[CHAINS.GNOSIS.chainId]
+            serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
               .fund_requirements.safe,
       }),
     {},
@@ -58,7 +58,7 @@ export const useServices = () => {
   } = useContext(ServicesContext);
 
   const serviceId =
-    services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token;
+    services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token;
 
   // STATE METHODS
   const getServiceFromState = (

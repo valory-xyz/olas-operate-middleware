@@ -28,9 +28,9 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
   const updateActiveStakingProgramId = useCallback(async () => {
     // if no service nft, not staked
     const serviceId =
-      service?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token;
+      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token;
 
-    if (!service?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token) {
+    if (!service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token) {
       setActiveStakingProgramId(null);
       return;
     }

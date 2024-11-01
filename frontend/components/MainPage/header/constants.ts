@@ -5,7 +5,7 @@ import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 
 export const requiredGas = Number(
   formatUnits(
-    `${SERVICE_TEMPLATES[0].configurations[CHAINS.GNOSIS.chainId].monthly_gas_estimate}`,
+    `${SERVICE_TEMPLATES[0].configurations[CHAINS.OPTIMISM.chainId].monthly_gas_estimate}`,
     18,
   ),
 );

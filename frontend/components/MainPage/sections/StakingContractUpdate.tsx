@@ -3,6 +3,7 @@ import { Button, Flex, Popover, Skeleton, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
+import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { Pages } from '@/enums/PageState';
 import { useBalance } from '@/hooks/useBalance';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
@@ -17,16 +18,13 @@ export const StakingContractUpdate = () => {
   const { goto } = usePageState();
   const { isBalanceLoaded, isLowBalance } = useBalance();
   const { needsInitialFunding } = useNeedsFunds();
-  const {
-    activeStakingProgramMeta,
-    isActiveStakingProgramLoaded,
-    defaultStakingProgramId,
-  } = useStakingProgram();
+  const { activeStakingProgramMeta, isActiveStakingProgramLoaded } =
+    useStakingProgram();
 
   const stakingContractName = useMemo(() => {
     if (activeStakingProgramMeta) return activeStakingProgramMeta.name;
-    return STAKING_PROGRAM_META[defaultStakingProgramId].name;
-  }, [activeStakingProgramMeta, defaultStakingProgramId]);
+    return STAKING_PROGRAM_META[DEFAULT_STAKING_PROGRAM_ID].name;
+  }, [activeStakingProgramMeta]);
 
   const canUpdateStakingContract = useMemo(() => {
     if (!isBalanceLoaded) return false;

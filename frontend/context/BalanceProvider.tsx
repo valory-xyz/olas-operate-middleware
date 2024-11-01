@@ -133,21 +133,26 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const updateBalances = useCallback(async (): Promise<void> => {
     if (!masterEoaAddress) return;
 
-    try {
-      const walletAddresses: Address[] = [];
-      if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
-      if (isAddress(`${masterSafeAddress}`))
-        walletAddresses.push(masterSafeAddress as Address);
-      if (serviceAddresses)
-        walletAddresses.push(...serviceAddresses.filter(isAddress));
+    const walletAddresses: Address[] = [];
 
+    if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
+
+    if (isAddress(`${masterSafeAddress}`)) {
+      walletAddresses.push(masterSafeAddress as Address);
+    }
+
+    if (serviceAddresses) {
+      walletAddresses.push(...serviceAddresses.filter(isAddress));
+    }
+
+    try {
       const walletBalances = await getWalletBalances(walletAddresses);
       if (!walletBalances) return;
 
       setWalletBalances(walletBalances);
 
       const serviceId =
-        services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data.token;
+        services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.token;
 
       if (!isNumber(serviceId)) {
         setIsLoaded(true);
@@ -202,25 +207,25 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentEoaAddress = useMemo(
     () =>
-      services?.[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
+      services?.[0]?.chain_configs?.[CHAINS.OPTIMISM.chainId]?.chain_data
         ?.instances?.[0],
     [services],
   );
 
-  const eoaBalance = useMemo(
+  const masterEoaBalance = useMemo(
     () => masterEoaAddress && walletBalances[masterEoaAddress],
     [masterEoaAddress, walletBalances],
   );
-  const safeBalance = useMemo(
+  const masterSafeBalance = useMemo(
     () => masterSafeAddress && walletBalances[masterSafeAddress],
     [masterSafeAddress, walletBalances],
   );
   const agentSafeBalance = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data
+      services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data
         ?.multisig &&
       walletBalances[
-        services[0].chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig!
+        services[0].chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig!
       ],
     [services, walletBalances],
   );
@@ -230,15 +235,15 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 
   const isLowBalance = useMemo(() => {
-    if (!safeBalance || !agentSafeBalance) return false;
+    if (!masterSafeBalance || !agentSafeBalance) return false;
     if (
-      safeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
+      masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
       // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
       agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
     )
       return true;
     return false;
-  }, [safeBalance, agentSafeBalance]);
+  }, [masterSafeBalance, agentSafeBalance]);
 
   useInterval(
     () => {
@@ -255,8 +260,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isBalanceLoaded,
         olasBondBalance,
         olasDepositBalance,
-        masterEoaBalance: eoaBalance,
-        masterSafeBalance: safeBalance,
+        masterEoaBalance,
+        masterSafeBalance,
         totalEthBalance,
         totalOlasBalance,
         isLowBalance,
@@ -277,10 +282,20 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 export const getEthBalances = async (
   walletAddresses: Address[],
 ): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
+  const rpcIsValid = await EthersService.checkRpc(
+    `${process.env.OPTIMISM_RPC}`,
+  );
   if (!rpcIsValid) return;
 
-  const ethBalances = await MulticallService.getEthBalances(walletAddresses);
+  const ethBalances = await MulticallService.getEthBalances(
+    walletAddresses,
+  ).catch((e) => {
+    console.error(e);
+    return walletAddresses.reduce((acc, address) => {
+      acc[address] = 0;
+      return acc;
+    }, {} as AddressNumberRecord);
+  });
 
   return ethBalances;
 };
@@ -288,12 +303,14 @@ export const getEthBalances = async (
 export const getOlasBalances = async (
   walletAddresses: Address[],
 ): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
+  const rpcIsValid = await EthersService.checkRpc(
+    `${process.env.OPTIMISM_RPC}`,
+  );
   if (!rpcIsValid) return;
 
   const olasBalances = await MulticallService.getErc20Balances(
     walletAddresses,
-    TOKENS.gnosis.OLAS,
+    TOKENS[CHAINS.OPTIMISM.chainId].OLAS.address,
   );
 
   return olasBalances;
