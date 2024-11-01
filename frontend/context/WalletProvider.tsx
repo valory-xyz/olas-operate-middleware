@@ -1,7 +1,7 @@
 import { createContext, PropsWithChildren, useContext, useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { Wallet } from '@/client';
+import { MiddlewareChain, Wallet } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { WalletService } from '@/service/Wallet';
 import { Address } from '@/types/Address';
@@ -26,7 +26,8 @@ export const WalletProvider = ({ children }: PropsWithChildren) => {
   const [wallets, setWallets] = useState<Wallet[]>();
 
   const masterEoaAddress: Address | undefined = wallets?.[0]?.address;
-  const masterSafeAddress: Address | undefined = wallets?.[0]?.safes[0];
+  const masterSafeAddress: Address | undefined =
+    wallets?.[0]?.safes[MiddlewareChain.OPTIMISM];
 
   const updateWallets = async () => {
     try {
