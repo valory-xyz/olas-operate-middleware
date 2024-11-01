@@ -1,16 +1,6 @@
-import {
-  CopyOutlined,
-  // QrcodeOutlined
-} from '@ant-design/icons';
-import {
-  Flex,
-  message,
-  // Popover,
-  // QRCode,
-  Tooltip,
-  Typography,
-} from 'antd';
-import { useEffect, useMemo } from 'react';
+import { CopyOutlined } from '@ant-design/icons';
+import { Flex, message, Tooltip, Typography } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { MiddlewareChain } from '@/client';
@@ -24,141 +14,11 @@ import { useBalance } from '@/hooks/useBalance';
 import { useSetup } from '@/hooks/useSetup';
 import { useWallet } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
+import { delayInSeconds } from '@/utils/delay';
 
 import { SetupCreateHeader } from './SetupCreateHeader';
 
-export const SetupEoaFunding = ({
-  isIncomplete,
-}: {
-  isIncomplete?: boolean;
-}) => {
-  const { masterEoaBalance: eoaBalance } = useBalance();
-  const { goto } = useSetup();
-
-  const isFundedMasterEoa =
-    eoaBalance?.ETH &&
-    eoaBalance.ETH >=
-      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation;
-
-  const statusMessage = useMemo(() => {
-    if (isFundedMasterEoa) {
-      return 'Funds have been received!';
-    } else {
-      return 'Waiting for transaction';
-    }
-  }, [isFundedMasterEoa]);
-
-  useEffect(() => {
-    // Move to create the safe stage once the master EOA is funded
-    if (!isFundedMasterEoa) return;
-    message.success('Funds have been received!');
-    goto(SetupScreen.SetupCreateSafe);
-  }, [goto, isFundedMasterEoa]);
-
-  return (
-    <CardFlex>
-      <SetupCreateHeader
-        prev={SetupScreen.SetupBackupSigner}
-        disabled={isIncomplete}
-      />
-      <Typography.Title level={3}>
-        Deposit{' '}
-        {MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation}{' '}
-        {CHAINS.OPTIMISM.currency} on {CHAINS.OPTIMISM.name}
-      </Typography.Title>
-      <Typography.Paragraph style={{ marginBottom: 0 }}>
-        The app needs these funds to create your account on-chain.
-      </Typography.Paragraph>
-
-      <CardSection
-        padding="12px 24px"
-        bordertop="true"
-        borderbottom={isFundedMasterEoa ? 'true' : 'false'}
-      >
-        <Typography.Text
-          className={isFundedMasterEoa ? '' : 'loading-ellipses'}
-        >
-          Status: {statusMessage}
-        </Typography.Text>
-      </CardSection>
-      {!isFundedMasterEoa && <SetupEoaFundingWaiting />}
-    </CardFlex>
-  );
-};
-
-const SetupEoaFundingWaiting = () => {
-  const { masterEoaAddress } = useWallet();
-
-  return (
-    <>
-      <CardSection>
-        <CustomAlert
-          fullWidth
-          type="warning"
-          showIcon
-          message={
-            <Flex vertical gap={5}>
-              <Typography.Text strong>
-                Only send funds on {CHAINS.OPTIMISM.name}!
-              </Typography.Text>
-              <Typography.Text>
-                You will lose any assets you send on other chains.
-              </Typography.Text>
-            </Flex>
-          }
-        />
-      </CardSection>
-      <AccountCreationCard>
-        <Flex justify="space-between">
-          <Typography.Text className="text-sm" type="secondary">
-            Account creation address
-          </Typography.Text>
-          <Flex gap={10} align="center">
-            <Tooltip title="Copy to clipboard">
-              <CopyOutlined
-                style={ICON_STYLE}
-                onClick={() =>
-                  masterEoaAddress &&
-                  copyToClipboard(masterEoaAddress).then(() =>
-                    message.success('Address copied!'),
-                  )
-                }
-              />
-            </Tooltip>
-
-            {/* {masterEoaAddress && (
-                <Popover
-                  title="Scan QR code"
-                  content={
-                    <QRCode
-                      size={250}
-                      value={`https://metamask.app.link/send/${masterEoaAddress}@${100}`}
-                    />
-                  }
-                >
-                  <QrcodeOutlined style={ICON_STYLE}/>
-                </Popover>
-              )} */}
-          </Flex>
-        </Flex>
-
-        <span className="can-select-text break-word">
-          {`GNO: ${masterEoaAddress}`}
-        </span>
-        <CustomAlert
-          type="info"
-          showIcon
-          message={
-            'After this point, do not send more funds to this address. Once your account is created, you will be given a new address - send further funds there.'
-          }
-        />
-      </AccountCreationCard>
-      {/* <Button type="link" target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-        Get XDAI on Gnosis Chain {UNICODE_SYMBOLS.EXTERNAL_LINK}
-      </Button> */}
-    </>
-  );
-};
+const { Text, Title, Paragraph } = Typography;
 
 const AccountCreationCard = styled.div`
   display: flex;
@@ -172,3 +32,202 @@ const AccountCreationCard = styled.div`
 `;
 
 const ICON_STYLE = { color: '#606F85' };
+
+type SetupEoaFundingWaitingProps = { chainName: string };
+const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
+  const { masterEoaAddress } = useWallet();
+
+  return (
+    <>
+      <CardSection>
+        <CustomAlert
+          fullWidth
+          type="warning"
+          showIcon
+          message={
+            <Flex vertical gap={5}>
+              <Text strong>Only send funds on {chainName}!</Text>
+              <Text>You will lose any assets you send on other chains.</Text>
+            </Flex>
+          }
+        />
+      </CardSection>
+      <AccountCreationCard>
+        <Flex justify="space-between">
+          <Text className="text-sm" type="secondary">
+            Account creation address
+          </Text>
+          <Flex gap={10} align="center">
+            <Tooltip title="Copy to clipboard">
+              <CopyOutlined
+                style={ICON_STYLE}
+                onClick={() =>
+                  masterEoaAddress &&
+                  copyToClipboard(masterEoaAddress).then(() =>
+                    message.success('Address copied!'),
+                  )
+                }
+              />
+            </Tooltip>
+          </Flex>
+        </Flex>
+
+        <span className="can-select-text break-word">
+          {`ETH: ${masterEoaAddress}`}
+        </span>
+        {/* <CustomAlert
+          type="info"
+          showIcon
+          message={
+            'After this point, do not send more funds to this address. Once your account is created, you will be given a new address - send further funds there.'
+          }
+        /> */}
+      </AccountCreationCard>
+    </>
+  );
+};
+
+type SetupEoaFundingProps = {
+  isFunded: boolean;
+  minRequiredBalance: number;
+  currency: string;
+  chainName: string;
+  onFunded: () => void;
+};
+export const SetupEoaFundingForChain = ({
+  isFunded,
+  minRequiredBalance,
+  currency,
+  chainName,
+  onFunded,
+}: SetupEoaFundingProps) => {
+  const { goto } = useSetup();
+
+  const statusMessage = useMemo(() => {
+    if (isFunded) {
+      return 'Funds have been received!';
+    } else {
+      return 'Waiting for transaction';
+    }
+  }, [isFunded]);
+
+  useEffect(() => {
+    if (!isFunded) return;
+
+    message.success('Funds have been received!');
+
+    // Wait for a second before moving to the next step
+    delayInSeconds(1).then(onFunded);
+  }, [goto, isFunded, onFunded]);
+
+  return (
+    <CardFlex>
+      <SetupCreateHeader prev={SetupScreen.SetupBackupSigner} disabled />
+      <Title level={3}>
+        {`Deposit ${minRequiredBalance} ${currency} on ${chainName}`}
+      </Title>
+      <Paragraph style={{ marginBottom: 0 }}>
+        The app needs these funds to create your account on-chain.
+      </Paragraph>
+
+      <CardSection
+        padding="12px 24px"
+        bordertop="true"
+        borderbottom={isFunded ? 'true' : 'false'}
+      >
+        <Text className={isFunded ? '' : 'loading-ellipses'}>
+          Status: {statusMessage}
+        </Text>
+      </CardSection>
+      {!isFunded && <SetupEoaFundingWaiting chainName={chainName} />}
+    </CardFlex>
+  );
+};
+
+export const SetupEoaFunding = () => {
+  const { goto } = useSetup();
+  const { optimismBalance, baseBalance, ethereumBalance } = useBalance();
+  const [currentChain, setCurrentChain] = useState<MiddlewareChain | null>(
+    null,
+  );
+
+  const isOptimismFunded = useMemo(() => {
+    if (!optimismBalance) return false;
+    return (
+      optimismBalance >=
+      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
+    );
+  }, [optimismBalance]);
+
+  const isEthereumFunded = useMemo(() => {
+    if (!ethereumBalance) return false;
+
+    return (
+      ethereumBalance >=
+      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation
+    );
+  }, [ethereumBalance]);
+
+  const isBaseFunded = useMemo(() => {
+    if (!baseBalance) return false;
+
+    return (
+      baseBalance >=
+      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation
+    );
+  }, [baseBalance]);
+
+  // Set the current chain to the first chain that the user has not funded
+  useEffect(() => {
+    if (currentChain) return;
+    if (!isOptimismFunded) setCurrentChain(MiddlewareChain.OPTIMISM);
+    if (!isEthereumFunded) setCurrentChain(MiddlewareChain.ETHEREUM);
+    if (!isBaseFunded) setCurrentChain(MiddlewareChain.BASE);
+  }, [isOptimismFunded, isEthereumFunded, isBaseFunded, currentChain]);
+
+  // If the user has not funded their account on any chain, show the funding instructions
+  const screen = useMemo(() => {
+    switch (currentChain) {
+      case MiddlewareChain.OPTIMISM:
+        return (
+          <SetupEoaFundingForChain
+            isFunded={isOptimismFunded}
+            minRequiredBalance={
+              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
+            }
+            currency={CHAINS.OPTIMISM.currency}
+            chainName={CHAINS.OPTIMISM.name}
+            onFunded={() => setCurrentChain(MiddlewareChain.ETHEREUM)}
+          />
+        );
+      case MiddlewareChain.ETHEREUM:
+        return (
+          <SetupEoaFundingForChain
+            isFunded={isEthereumFunded}
+            minRequiredBalance={
+              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation
+            }
+            currency={CHAINS.ETHEREUM.currency}
+            chainName={CHAINS.ETHEREUM.name}
+            onFunded={() => setCurrentChain(MiddlewareChain.BASE)}
+          />
+        );
+      case MiddlewareChain.BASE:
+        return (
+          <SetupEoaFundingForChain
+            isFunded={isBaseFunded}
+            minRequiredBalance={
+              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation
+            }
+            currency={CHAINS.BASE.currency}
+            chainName={CHAINS.BASE.name}
+            onFunded={() => goto(SetupScreen.SetupCreateSafe)}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [currentChain, isOptimismFunded, isEthereumFunded, isBaseFunded, goto]);
+
+  return screen;
+};
