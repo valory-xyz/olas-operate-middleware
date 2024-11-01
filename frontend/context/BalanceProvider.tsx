@@ -133,21 +133,26 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const updateBalances = useCallback(async (): Promise<void> => {
     if (!masterEoaAddress) return;
 
-    try {
-      const walletAddresses: Address[] = [];
-      if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
-      if (isAddress(`${masterSafeAddress}`))
-        walletAddresses.push(masterSafeAddress as Address);
-      if (serviceAddresses)
-        walletAddresses.push(...serviceAddresses.filter(isAddress));
+    const walletAddresses: Address[] = [];
 
+    if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
+
+    if (isAddress(`${masterSafeAddress}`)) {
+      walletAddresses.push(masterSafeAddress as Address);
+    }
+
+    if (serviceAddresses) {
+      walletAddresses.push(...serviceAddresses.filter(isAddress));
+    }
+
+    try {
       const walletBalances = await getWalletBalances(walletAddresses);
       if (!walletBalances) return;
 
       setWalletBalances(walletBalances);
 
       const serviceId =
-        services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data.token;
+        services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.token;
 
       if (!isNumber(serviceId)) {
         setIsLoaded(true);
@@ -202,7 +207,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentEoaAddress = useMemo(
     () =>
-      services?.[0]?.chain_configs?.[CHAINS.GNOSIS.chainId]?.chain_data
+      services?.[0]?.chain_configs?.[CHAINS.OPTIMISM.chainId]?.chain_data
         ?.instances?.[0],
     [services],
   );
@@ -217,10 +222,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
   const agentSafeBalance = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data
+      services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data
         ?.multisig &&
       walletBalances[
-        services[0].chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig!
+        services[0].chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig!
       ],
     [services, walletBalances],
   );
@@ -277,7 +282,9 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 export const getEthBalances = async (
   walletAddresses: Address[],
 ): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
+  const rpcIsValid = await EthersService.checkRpc(
+    `${process.env.OPTIMISM_RPC}`,
+  );
   if (!rpcIsValid) return;
 
   const ethBalances = await MulticallService.getEthBalances(walletAddresses);
@@ -288,12 +295,14 @@ export const getEthBalances = async (
 export const getOlasBalances = async (
   walletAddresses: Address[],
 ): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(`${process.env.GNOSIS_RPC}`);
+  const rpcIsValid = await EthersService.checkRpc(
+    `${process.env.OPTIMISM_RPC}`,
+  );
   if (!rpcIsValid) return;
 
   const olasBalances = await MulticallService.getErc20Balances(
     walletAddresses,
-    TOKENS.gnosis.OLAS,
+    TOKENS[CHAINS.OPTIMISM.chainId].OLAS.address,
   );
 
   return olasBalances;

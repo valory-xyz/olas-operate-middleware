@@ -77,14 +77,14 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
     // only check for rewards if there's a currentStakingProgram active
     if (
       activeStakingProgramId &&
-      service?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.multisig &&
-      service?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token
+      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.multisig &&
+      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token
     ) {
       stakingRewardsInfoPromise = AutonolasService.getAgentStakingRewardsInfo({
         agentMultisigAddress:
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig!,
+          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig!,
         serviceId:
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.token!,
+          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.token!,
         stakingProgram: activeStakingProgramId,
       });
     }

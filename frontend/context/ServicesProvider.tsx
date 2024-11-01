@@ -60,13 +60,13 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     () =>
       services?.reduce<Address[]>((acc, service: Service) => {
         const instances =
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.instances;
+          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.instances;
         if (instances) {
           acc.push(...instances);
         }
 
         const multisig =
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig;
+          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig;
         if (multisig) {
           acc.push(multisig);
         }

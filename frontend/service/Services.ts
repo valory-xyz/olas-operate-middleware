@@ -77,7 +77,7 @@ const createService = async ({
       if (response.ok) {
         resolve(response.json());
       }
-      reject('Failed to create service');
+      reject(response);
     }),
   );
 

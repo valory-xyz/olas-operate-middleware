@@ -59,7 +59,8 @@ export const StakingContractInfoProvider = ({
     useState<Record<StakingProgramId, Partial<StakingContractInfo>>>();
 
   const serviceId = useMemo(
-    () => services?.[0]?.chain_configs[CHAINS.GNOSIS.chainId].chain_data?.token,
+    () =>
+      services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token,
     [services],
   );
 
