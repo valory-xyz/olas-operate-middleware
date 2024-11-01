@@ -24,9 +24,12 @@ const capitalizedMiddlewareChainNames = {
 
 export const SetupCreateSafe = () => {
   const { goto } = usePageState();
-  const { updateWallets, masterSafeAddressKeyExistsForChain } = useWallet();
-  const { updateMasterSafeOwners, masterSafeAddress, backupSafeAddress } =
-    useMasterSafe();
+  const {
+    updateWallets,
+    masterSafeAddressKeyExistsForChain,
+    masterSafeAddress,
+  } = useWallet();
+  const { updateMasterSafeOwners } = useMasterSafe();
   const { backupSigner } = useSetup();
 
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);
@@ -48,19 +51,16 @@ export const SetupCreateSafe = () => {
         if (middlewareChain === MiddlewareChain.OPTIMISM) {
           setOptimismFailed(true);
           setIsOptimismSuccess(false);
-          setIsCreatingSafe(false);
           return;
         }
         if (middlewareChain === MiddlewareChain.ETHEREUM) {
           setEthereumFailed(true);
           setIsEthereumSuccess(false);
-          setIsCreatingSafe(false);
           return;
         }
         if (middlewareChain === MiddlewareChain.BASE) {
           setBaseFailed(true);
           setIsBaseSuccess(false);
-          setIsCreatingSafe(false);
           return;
         }
         return;
@@ -111,18 +111,18 @@ export const SetupCreateSafe = () => {
 
   const creationStatusText = useMemo(() => {
     if (isCreatingSafe) return 'Creating accounts';
-    if (masterSafeAddress && backupSafeAddress) return 'Account created';
+    if (masterSafeAddress) return 'Account created';
     return 'Account creation in progress';
-  }, [backupSafeAddress, isCreatingSafe, masterSafeAddress]);
+  }, [isCreatingSafe, masterSafeAddress]);
 
   useEffect(() => {
     if (
       /**
        * Avoid creating safes if any of the following conditions are met:
        */
-      [optimismFailed, baseFailed, ethereumFailed].some(Boolean) ||
-      isCreatingSafe ||
-      [isBaseSuccess, isEthereumSuccess, isOptimismSuccess].some((x) => !x)
+      [optimismFailed, baseFailed, ethereumFailed].some((x) => x) || // any of the chains failed
+      isCreatingSafe //|| // already creating a safe
+      // [isBaseSuccess, isEthereumSuccess, isOptimismSuccess].some((x) => !x) // any of the chains are not successful
     )
       return;
 
@@ -138,7 +138,7 @@ export const SetupCreateSafe = () => {
       ),
     };
 
-    const safeCreationQueue = Object.entries(chainsToCreateSafesFor).reduce(
+    const safeCreationsRequired = Object.entries(chainsToCreateSafesFor).reduce(
       (acc, [chain, safeAddressAlreadyExists]) => {
         const middlewareChain = +chain as MiddlewareChain;
         if (safeAddressAlreadyExists) {
@@ -155,14 +155,18 @@ export const SetupCreateSafe = () => {
           }
           return acc;
         }
-        return [...acc, createSafeWithRetries(middlewareChain, 3)];
+        return [...acc, middlewareChain];
       },
-      [] as Promise<void>[],
+      [] as MiddlewareChain[],
     );
 
-    safeCreationQueue.reduce((acc, promise) => {
-      return acc.then(() => promise);
-    }, Promise.resolve());
+    (async () => {
+      for (const middlewareChain of safeCreationsRequired) {
+        await createSafeWithRetries(middlewareChain, 3);
+      }
+    })().then(() => {
+      setIsCreatingSafe(false);
+    });
   }, [
     backupSigner,
     createAllSafes,
@@ -180,7 +184,7 @@ export const SetupCreateSafe = () => {
   useEffect(() => {
     // Only progress is the safe is created and accessible via context (updates on interval)
     if (masterSafeAddress) goto(Pages.Main);
-  }, [backupSafeAddress, goto, masterSafeAddress]);
+  }, [goto, masterSafeAddress]);
 
   return (
     <Card bordered={false}>
