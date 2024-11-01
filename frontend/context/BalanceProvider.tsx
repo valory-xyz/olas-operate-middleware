@@ -287,7 +287,15 @@ export const getEthBalances = async (
   );
   if (!rpcIsValid) return;
 
-  const ethBalances = await MulticallService.getEthBalances(walletAddresses);
+  const ethBalances = await MulticallService.getEthBalances(
+    walletAddresses,
+  ).catch((e) => {
+    console.error(e);
+    return walletAddresses.reduce((acc, address) => {
+      acc[address] = 0;
+      return acc;
+    }, {} as AddressNumberRecord);
+  });
 
   return ethBalances;
 };
