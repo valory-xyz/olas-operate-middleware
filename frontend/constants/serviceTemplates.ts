@@ -32,7 +32,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   // },
   {
     name: 'Mock Optimus for Testing Frontend',
-    hash: 'bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u',
+    hash: 'bafybeibiiuhqronhgkxjo7x5xve24lkbqom5rqcjxg7vrl6jwavfyypmhu',
     description: 'Mock Optimus for Testing Frontend',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
