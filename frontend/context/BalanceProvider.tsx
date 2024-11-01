@@ -58,6 +58,7 @@ export const BalanceContext = createContext<{
   totalOlasStakedBalance?: number;
   baseBalance?: number;
   ethereumBalance?: number;
+  optimismBalance?: number;
 }>({
   isLoaded: false,
   setIsLoaded: () => {},
@@ -78,6 +79,7 @@ export const BalanceContext = createContext<{
   totalOlasStakedBalance: undefined,
   baseBalance: undefined,
   ethereumBalance: undefined,
+  optimismBalance: undefined,
 });
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
@@ -97,6 +99,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     useState<WalletAddressNumberRecord>({});
   const [baseBalance, setBaseBalance] = useState<number>();
   const [ethereumBalance, setEthereumBalance] = useState<number>();
+  const [optimismBalance, setOptimismBalance] = useState<number>();
 
   const totalEthBalance: number | undefined = useMemo(() => {
     if (!isLoaded) return;
@@ -151,12 +154,23 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     // fetch balances for other chains
     try {
       const baseBalanceTemp =
-        await EthersService.getBaseBalance(masterEoaAddress);
-      setBaseBalance(baseBalanceTemp);
+        EthersService.getBaseBalance(masterEoaAddress).then(setBaseBalance);
 
       const ethereumBalanceTemp =
-        await EthersService.getEthereumBalance(masterEoaAddress);
-      setEthereumBalance(ethereumBalanceTemp);
+        EthersService.getEthereumBalance(masterEoaAddress).then(
+          setEthereumBalance,
+        );
+
+      const optimismBalanceTemp =
+        EthersService.getOptimismBalance(masterEoaAddress).then(
+          setOptimismBalance,
+        );
+
+      await Promise.allSettled([
+        baseBalanceTemp,
+        ethereumBalanceTemp,
+        optimismBalanceTemp,
+      ]);
     } catch (error) {
       console.error(error);
     }
@@ -289,6 +303,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         totalOlasStakedBalance,
         baseBalance,
         ethereumBalance,
+        optimismBalance,
       }}
     >
       {children}

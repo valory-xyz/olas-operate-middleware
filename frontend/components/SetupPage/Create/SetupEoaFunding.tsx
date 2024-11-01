@@ -146,22 +146,18 @@ export const SetupEoaFundingForChain = ({
 
 export const SetupEoaFunding = () => {
   const { goto } = useSetup();
-  const {
-    masterEoaBalance: eoaBalance,
-    baseBalance,
-    ethereumBalance,
-  } = useBalance();
+  const { optimismBalance, baseBalance, ethereumBalance } = useBalance();
   const [currentChain, setCurrentChain] = useState<MiddlewareChain | null>(
     null,
   );
 
   const isOptimismFunded = useMemo(() => {
-    if (!eoaBalance) return false;
+    if (!optimismBalance) return false;
     return (
-      eoaBalance.ETH >=
+      optimismBalance >=
       MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
     );
-  }, [eoaBalance]);
+  }, [optimismBalance]);
 
   const isEthereumFunded = useMemo(() => {
     if (!ethereumBalance) return false;
