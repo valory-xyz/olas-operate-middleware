@@ -553,6 +553,29 @@ class _ChainUtil:
         )
         return ledger_api
 
+    @property
+    def service_manager_instance(self) -> Contract:
+        """Load service manager contract instance."""
+        contract_interface = registry_contracts.service_manager.contract_interface.get(
+            self.ledger_api.identifier, {}
+        )
+        instance = self.ledger_api.get_contract_instance(
+            contract_interface,
+            self.contracts["service_manager"],
+        )
+        return instance
+
+    def owner_of(self, token_id: int) -> str:
+        """Get owner of a service."""
+        self._patch()
+        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
+            chain_type=self.chain_type
+        )
+        owner = registry_contracts.service_manager.owner_of(
+            ledger_api=ledger_api, token_id=token_id
+        ).get("owner", "")
+        return owner
+
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""
         self._patch()
@@ -1063,11 +1086,8 @@ class EthSafeTxBuilder(_ChainUtil):
             .verify_service_dependencies(agent_id=agent_id)
             .publish_metadata()
         )
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
 
+        instance = self.service_manager_instance
         if update_token is None:
             safe = self.safe
             txd = instance.encodeABI(
