@@ -77,7 +77,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
   const { masterSafeAddress } = useWallet();
 
   const truncatedFundingAddress: string | undefined = useMemo(
-    () => masterSafeAddress && truncateAddress(masterSafeAddress),
+    () => masterSafeAddress && truncateAddress(masterSafeAddress, 4),
     [masterSafeAddress],
   );
 
@@ -140,7 +140,7 @@ const AddFundsAddressSection = ({
         </span>
       }
     >
-      <Text title={fundingAddress}>GNO: {truncatedFundingAddress ?? '--'}</Text>
+      <Text title={fundingAddress}>{truncatedFundingAddress ?? '--'}</Text>
     </Tooltip>
 
     <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
