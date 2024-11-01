@@ -81,7 +81,8 @@ const DebugItem = ({
               Balance
             </Text>
             <Text>{item.balance.OLAS} OLAS</Text>
-            <Text>{item.balance.ETH} XDAI</Text>
+            <Text>{item.balance.ETH} ETH</Text>
+            {/* <Text>{item.balance.USDC} USDC</Text> */}
           </Flex>
         </Col>
 
