@@ -31,9 +31,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   //   },
   // },
   {
-    name: 'Mock Optimus for Testing Frontend',
+    name: 'Optimus',
     hash: 'bafybeibiiuhqronhgkxjo7x5xve24lkbqom5rqcjxg7vrl6jwavfyypmhu',
-    description: 'Mock Optimus for Testing Frontend',
+    description: 'Optimus',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.2.8',
@@ -47,11 +47,11 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: true,
         use_mech_marketplace: false,
-        cost_of_bond: 10000000000000000,
-        monthly_gas_estimate: 10000000000000000000,
+        cost_of_bond: 1000,
+        monthly_gas_estimate: 1000,
         fund_requirements: {
-          agent: 100000000000000000,
-          safe: 5000000000000000000,
+          agent: 1000,
+          safe: 1000,
         },
       },
       [CHAINS.ETHEREUM.chainId]: {
@@ -63,10 +63,10 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         use_staking: false,
         use_mech_marketplace: false,
         cost_of_bond: 1,
-        monthly_gas_estimate: 10000000000000000000,
+        monthly_gas_estimate: 1000,
         fund_requirements: {
-          agent: 100000000000000000,
-          safe: 5000000000000000000,
+          agent: 1000,
+          safe: 1000,
         },
       },
       [CHAINS.BASE.chainId]: {
@@ -78,12 +78,12 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         use_staking: false,
         use_mech_marketplace: false,
         cost_of_bond: 1,
-        monthly_gas_estimate: 10000000000000000000,
+        monthly_gas_estimate: 1000,
         fund_requirements: {
-          agent: 100000000000000000,
-          safe: 5000000000000000000,
+          agent: 1000,
+          safe: 1000,
         },
-      }
+      },
     },
   },
 ];
