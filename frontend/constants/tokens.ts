@@ -12,12 +12,12 @@ export type TokenConfig = {
 export const TOKENS: {
   [chain: number]: TokenConfig;
 } = {
-  // [CHAINS.GNOSIS.chainId]: {
-  //   OLAS: {
-  //     address: '0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f',
-  //     decimals: 18,
-  //   },
-  // },
+  [CHAINS.GNOSIS.chainId]: {
+    OLAS: {
+      address: '0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f',
+      decimals: 18,
+    },
+  },
   [CHAINS.OPTIMISM.chainId]: {
     OLAS: {
       address: '0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527',
