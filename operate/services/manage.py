@@ -1298,13 +1298,39 @@ class ServiceManager:
     ) -> None:
         """Fund service if required."""
         service = self.load_or_create(hash=hash)
-        chain_id = service.home_chain_id
+
+        for chain_id in service.chain_configs.keys():
+            self.logger.info(f"Funding chain_id {chain_id}")
+            self.fund_service_single_chain(
+                hash=hash,
+                rpc=rpc,
+                agent_topup=agent_topup,
+                safe_topup=safe_topup,
+                agent_fund_threshold=agent_fund_threshold,
+                safe_fund_treshold=safe_fund_treshold,
+                from_safe=from_safe,
+                chain_id=chain_id,
+            )
+
+    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals
+        self,
+        hash: str,
+        rpc: t.Optional[str] = None,
+        agent_topup: t.Optional[float] = None,
+        safe_topup: t.Optional[float] = None,
+        agent_fund_threshold: t.Optional[float] = None,
+        safe_fund_treshold: t.Optional[float] = None,
+        from_safe: bool = True,
+        chain_id: str = "100",
+    ) -> None:
+        """Fund service if required."""
+        service = self.load_or_create(hash=hash)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.type)
         ledger_api = wallet.ledger_api(
-            chain_type=ledger_config.chain, rpc=rpc if rpc else ledger_config.rpc
+            chain_type=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
             agent_fund_threshold or chain_data.user_params.fund_requirements.agent
