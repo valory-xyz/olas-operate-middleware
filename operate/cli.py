@@ -18,6 +18,9 @@
 # ------------------------------------------------------------------------------
 
 """Operate app CLI module."""
+# set encoding!
+import sys
+sys.setdefaultencoding('utf-8') 
 
 import asyncio
 import logging
