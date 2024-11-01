@@ -36,7 +36,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     description: 'Optimus',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
-    service_version: 'v0.2.8',
+    service_version: 'v0.2.9',
     home_chain_id: `${CHAINS.OPTIMISM.chainId}`,
     configurations: {
       [CHAINS.OPTIMISM.chainId]: {
