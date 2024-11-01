@@ -36,7 +36,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     description: 'Mock Optimus for Testing Frontend',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
-    service_version: 'v0.18.4',
+    service_version: 'v0.2.8',
     home_chain_id: `${CHAINS.OPTIMISM.chainId}`,
     configurations: {
       [CHAINS.OPTIMISM.chainId]: {
@@ -54,6 +54,36 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
           safe: 5000000000000000000,
         },
       },
+      [CHAINS.ETHEREUM.chainId]: {
+        staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
+        nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
+        // rpc: 'http://localhost:8545',
+        agent_id: 14,
+        threshold: 1,
+        use_staking: false,
+        use_mech_marketplace: false,
+        cost_of_bond: 1,
+        monthly_gas_estimate: 10000000000000000000,
+        fund_requirements: {
+          agent: 100000000000000000,
+          safe: 5000000000000000000,
+        },
+      },
+      [CHAINS.BASE.chainId]: {
+        staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
+        nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
+        // rpc: 'http://localhost:8545',
+        agent_id: 14,
+        threshold: 1,
+        use_staking: false,
+        use_mech_marketplace: false,
+        cost_of_bond: 1,
+        monthly_gas_estimate: 10000000000000000000,
+        fund_requirements: {
+          agent: 100000000000000000,
+          safe: 5000000000000000000,
+        },
+      }
     },
   },
 ];
