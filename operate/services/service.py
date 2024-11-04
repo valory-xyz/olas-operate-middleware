@@ -65,11 +65,8 @@ from operate.constants import (
     DOCKER_COMPOSE_YAML,
     KEYS_JSON,
 )
-from operate.operate_http.exceptions import NotAllowed
 from operate.keys import Keys
-from operate.resource import LocalResource
-from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
-from operate.services.utils import tendermint
+from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     ChainConfig,
     ChainConfigs,
@@ -85,6 +82,9 @@ from operate.operate_types import (
     OnChainUserParams,
     ServiceTemplate,
 )
+from operate.resource import LocalResource
+from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
+from operate.services.utils import tendermint
 
 
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals

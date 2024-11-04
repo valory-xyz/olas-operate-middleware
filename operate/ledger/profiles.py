@@ -87,7 +87,7 @@ STAKING = {
     },
     ChainType.ETHEREUM: {},
     ChainType.BASE: {},
-    ChainType.MODE: {}
+    ChainType.MODE: {},
 }
 
 OLAS = {
@@ -95,5 +95,5 @@ OLAS = {
     ChainType.OPTIMISM: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     ChainType.BASE: "0x54330d28ca3357F294334BDC454a032e7f353416",
     ChainType.ETHEREUM: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-    ChainType.MODE: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9"
+    ChainType.MODE: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
 }

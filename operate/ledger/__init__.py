@@ -28,16 +28,26 @@ from operate.ledger.solana import Solana
 from operate.operate_types import ChainType, LedgerType
 
 
-ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_DEV_RPC", "https://ethereum.publicnode.com")
-GNOSIS_PUBLIC_RPC = os.environ.get("GNOSIS_DEV_RPC", "https://gnosis-rpc.publicnode.com")
-GOERLI_PUBLIC_RPC = os.environ.get("GOERLI_DEV_RPC", "https://ethereum-goerli.publicnode.com")
-SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_DEV_RPC", "https://api.mainnet-beta.solana.com")
+ETHEREUM_PUBLIC_RPC = os.environ.get(
+    "ETHEREUM_DEV_RPC", "https://ethereum.publicnode.com"
+)
+GNOSIS_PUBLIC_RPC = os.environ.get(
+    "GNOSIS_DEV_RPC", "https://gnosis-rpc.publicnode.com"
+)
+GOERLI_PUBLIC_RPC = os.environ.get(
+    "GOERLI_DEV_RPC", "https://ethereum-goerli.publicnode.com"
+)
+SOLANA_PUBLIC_RPC = os.environ.get(
+    "SOLANA_DEV_RPC", "https://api.mainnet-beta.solana.com"
+)
 BASE_PUBLIC_RPC = os.environ.get("BASE_DEV_RPC", "https://mainnet.base.org")
 OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_DEV_RPC", "https://mainnet.optimism.io")
 MODE_PUBLIC_RPC = os.environ.get("MODE_DEV_RPC", "https://rpc.mode.network")
 
 ETHEREUM_RPC = os.environ.get("ETHEREUM_DEV_RPC", "https://ethereum.publicnode.com")
-GNOSIS_RPC = os.environ.get("GNOSIS_DEV_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
+GNOSIS_RPC = os.environ.get(
+    "GNOSIS_DEV_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+)
 GOERLI_RPC = os.environ.get("GOERLI_DEV_RPC", "https://ethereum-goerli.publicnode.com")
 SOLANA_RPC = os.environ.get("SOLANA_DEV_RPC", "https://api.mainnet-beta.solana.com")
 BASE_RPC = os.environ.get("BASE_DEV_RPC", "https://mainnet.base.org")
@@ -97,7 +107,14 @@ def get_default_rpc(chain: ChainType) -> str:
 
 def get_ledger_type_from_chain_type(chain: ChainType) -> LedgerType:
     """Get LedgerType from ChainType."""
-    if chain in (ChainType.ETHEREUM, ChainType.GOERLI, ChainType.GNOSIS, ChainType.BASE, ChainType.OPTIMISM, ChainType.MODE):
+    if chain in (
+        ChainType.ETHEREUM,
+        ChainType.GOERLI,
+        ChainType.GNOSIS,
+        ChainType.BASE,
+        ChainType.OPTIMISM,
+        ChainType.MODE,
+    ):
         return LedgerType.ETHEREUM
     return LedgerType.SOLANA
 

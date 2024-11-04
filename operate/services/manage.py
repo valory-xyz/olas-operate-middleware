@@ -38,6 +38,7 @@ from autonomy.chain.base import registry_contracts
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
+from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -49,7 +50,6 @@ from operate.services.service import (
     OnChainUserParams,
     Service,
 )
-from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
 from operate.utils.gnosis import NULL_ADDRESS
 from operate.wallet.master import MasterWalletManager
 
@@ -563,9 +563,6 @@ class ServiceManager:
         )
         staking_params["agent_ids"] = [agent_id]
 
-        from icecream import ic
-        ic(staking_params)
-
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
@@ -581,10 +578,10 @@ class ServiceManager:
             and (
                 # TODO Discuss how to manage on-chain hash updates with staking programs.
                 # on_chain_hash != service.hash or  # noqa
-                current_agent_id != staking_params["agent_ids"][0]
-
+                current_agent_id
+                != staking_params["agent_ids"][0]
                 # TODO Temporary removed for Optimus. Needs to be put back!
-                #or current_agent_bond != staking_params["min_staking_deposit"]
+                # or current_agent_bond != staking_params["min_staking_deposit"]
             )
         )
         current_staking_program = self._get_current_staking_program(

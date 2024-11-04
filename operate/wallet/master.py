@@ -38,8 +38,8 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
 )
 from operate.ledger import get_default_rpc
-from operate.resource import LocalResource
 from operate.operate_types import ChainType, LedgerType
+from operate.resource import LocalResource
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import get_owners, swap_owner

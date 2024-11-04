@@ -69,7 +69,6 @@ from operate.data import DATA_DIR
 from operate.data.contracts.service_staking_token.contract import (
     ServiceStakingTokenContract,
 )
-from operate.operate_types import ContractAddresses
 from operate.ledger.profiles import STAKING
 from operate.operate_types import ChainType as OperateChainType
 from operate.operate_types import ContractAddresses
@@ -811,7 +810,9 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.operate_types.ChainType.GNOSIS]["pearl_beta_mech_marketplace"]
+            == STAKING[operate.operate_types.ChainType.GNOSIS][
+                "pearl_beta_mech_marketplace"
+            ]
         ):
             agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
         else:
