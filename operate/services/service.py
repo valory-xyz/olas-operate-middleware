@@ -66,6 +66,7 @@ from operate.constants import (
     KEYS_JSON,
 )
 from operate.keys import Keys
+from operate.ledger import PUBLIC_RPCS
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     ChainConfig,
@@ -568,6 +569,25 @@ class Deployment(LocalResource):
             if build.exists():
                 shutil.rmtree(build)
             raise e
+
+        # Optimus ledger patch
+        agent_vars = json.loads(Path(build, "agent.json").read_text(encoding="utf-8"))
+
+        override_values = {
+            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_ETHEREUM_ADDRESS": PUBLIC_RPCS[ChainType.ETHEREUM],
+            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_BASE_ADDRESS": PUBLIC_RPCS[ChainType.BASE],
+            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_OPTIMISM_ADDRESS": PUBLIC_RPCS[ChainType.OPTIMISM],
+        }
+
+        for key, value in override_values.items():
+            if key in agent_vars:
+                agent_vars[key] = value
+
+        Path(build, "agent.json").write_text(
+            json.dumps(agent_vars, indent=4),
+            encoding="utf-8",
+        )
+        # End Optimus ledger patch
 
         self.status = DeploymentStatus.BUILT
         self.store()

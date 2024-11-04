@@ -624,7 +624,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
                 manager.deploy_service_onchain_from_safe(hash=service.hash)
                 manager.fund_service(hash=service.hash)
-                manager.deploy_service_locally(hash=service.hash)
+
+                # TODO Optimus patch, chain_id="10"
+                chain_id = "10"
+                manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
 
             await run_in_executor(_fn)
             schedule_funding_job(service=service.hash)
@@ -651,7 +654,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             manager.deploy_service_onchain_from_safe(hash=service.hash)
             manager.fund_service(hash=service.hash)
-            manager.deploy_service_locally(hash=service.hash)
+
+            # TODO Optimus patch, chain_id="10"
+            chain_id = "10"
+            manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
+
             schedule_funding_job(service=service.hash)
             schedule_healthcheck_job(service=service.hash)
 

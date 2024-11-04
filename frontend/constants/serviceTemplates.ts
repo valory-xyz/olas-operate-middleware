@@ -32,7 +32,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   // },
   {
     name: 'Optimus',
-    hash: 'bafybeiejrmmbh7upqd3ahfi5rrpyexv55txegrfrtlmn6mn3u3d5zz4m6u',
+    hash: 'bafybeicflr7tulgcr7knovo4tiuhalsz4p5oi3it5dewfx7i5f456mkkwy',
     description: 'Optimus',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
@@ -43,7 +43,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
-        agent_id: 14,
+        agent_id: 40,
         threshold: 1,
         use_staking: true,
         use_mech_marketplace: false,
@@ -58,7 +58,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
-        agent_id: 14,
+        agent_id: 40,
         threshold: 1,
         use_staking: false,
         use_mech_marketplace: false,
@@ -73,7 +73,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
-        agent_id: 14,
+        agent_id: 40,
         threshold: 1,
         use_staking: false,
         use_mech_marketplace: false,

@@ -161,7 +161,9 @@ class HealthChecker:
             async def _restart(service_manager: ServiceManager, service: str) -> None:
                 def _do_restart() -> None:
                     service_manager.stop_service_locally(hash=service)
-                    service_manager.deploy_service_locally(hash=service)
+                    # TODO Optimus patch, chain_id="10"
+                    chain_id = "10"                    
+                    service_manager.deploy_service_locally(hash=service, chain_id=chain_id)
 
                 loop = asyncio.get_event_loop()
                 with ThreadPoolExecutor() as executor:
