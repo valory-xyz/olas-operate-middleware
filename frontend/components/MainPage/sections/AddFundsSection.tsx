@@ -11,19 +11,27 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
+import { BigNumber, Contract, ethers } from 'ethers';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
+import { useInterval } from 'usehooks-ts';
 
+import { ERC20_BALANCEOF_FRAGMENT } from '@/abis/erc20';
 import { CHAINS } from '@/constants/chains';
+import {
+  baseProvider,
+  ethereumProvider,
+  optimismProvider,
+} from '@/constants/providers';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { TOKENS } from '@/constants/tokens';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
 import { useWallet } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 import { truncateAddress } from '@/utils/truncate';
 
-import { CustomAlert } from '../../Alert';
 import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
@@ -81,6 +89,14 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
     [masterSafeAddress],
   );
 
+  const [ethEth, setethEth] = useState(0);
+  const [ethUsdc, setethUsdc] = useState(0);
+
+  const [opEth, setopEth] = useState(0);
+  const [opOlas, setopOlas] = useState(0);
+
+  const [baseEth, setbaseEth] = useState(0);
+
   const handleCopyAddress = useCallback(
     () =>
       masterSafeAddress &&
@@ -89,39 +105,96 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
       ),
     [masterSafeAddress],
   );
+
+  useInterval(async () => {
+    if (!masterSafeAddress) return;
+    await Promise.allSettled([
+      ethereumProvider
+        .getBalance(masterSafeAddress)
+        .then(ethers.utils.formatEther)
+        .then(Number)
+        .then(setethEth),
+      //USDC balance
+      new Contract(
+        TOKENS[CHAINS.ETHEREUM.chainId]['USDC'].address,
+        ERC20_BALANCEOF_FRAGMENT,
+        ethereumProvider,
+      )
+        .balanceOf(masterSafeAddress)
+        .then((wei: BigNumber) => ethers.utils.formatUnits(wei, 6))
+        .then(Number)
+        .then(setethUsdc),
+      optimismProvider
+        .getBalance(masterSafeAddress)
+        .then(ethers.utils.formatEther)
+        .then(Number)
+        .then(setopEth),
+      new Contract(
+        TOKENS[CHAINS.OPTIMISM.chainId]['OLAS'].address,
+        ERC20_BALANCEOF_FRAGMENT,
+        optimismProvider,
+      )
+        .balanceOf(masterSafeAddress)
+        .then(ethers.utils.formatEther)
+        .then(Number)
+        .then(setopOlas),
+      baseProvider
+        .getBalance(masterSafeAddress)
+        .then(ethers.utils.formatEther)
+        .then(Number)
+        .then(setbaseEth),
+    ]);
+  }, 5000);
+
   return (
     <Flex vertical ref={ref}>
-      <AddFundsWarningAlertSection />
+      {/* <AddFundsWarningAlertSection /> */}
+
       <AddFundsAddressSection
         truncatedFundingAddress={truncatedFundingAddress}
         fundingAddress={masterSafeAddress}
         handleCopy={handleCopyAddress}
       />
+      <pre style={{ fontSize: 12 }}>
+        {`
+-- Master Safe Balances --
+Ethereum
+ETH ${ethEth}
+USDC ${ethUsdc}
+
+Optimism 
+ETH ${opEth} 
+OLAS ${opOlas}
+
+Base
+ETH ${baseEth}
+`}
+      </pre>
       <AddFundsGetTokensSection />
     </Flex>
   );
 });
 OpenAddFundsSection.displayName = 'OpenAddFundsSection';
 
-const AddFundsWarningAlertSection = () => (
-  <CardSection>
-    <CustomAlert
-      type="warning"
-      fullWidth
-      showIcon
-      message={
-        <Flex vertical gap={2.5}>
-          <Text className="text-base" strong>
-            Only send funds on {CHAINS.OPTIMISM.name}!
-          </Text>
-          <Text className="text-base">
-            You will lose any assets you send on other chains.
-          </Text>
-        </Flex>
-      }
-    />
-  </CardSection>
-);
+// const AddFundsWarningAlertSection = () => (
+//   <CardSection>
+//     <CustomAlert
+//       type="warning"
+//       fullWidth
+//       showIcon
+//       message={
+//         <Flex vertical gap={2.5}>
+//           <Text className="text-base" strong>
+//             Only send funds on {CHAINS.OPTIMISM.name}!
+//           </Text>
+//           <Text className="text-base">
+//             You will lose any assets you send on other chains.
+//           </Text>
+//         </Flex>
+//       }
+//     />
+//   </CardSection>
+// );
 
 const AddFundsAddressSection = ({
   fundingAddress,
