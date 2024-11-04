@@ -1,18 +1,25 @@
 import { CopyOutlined } from '@ant-design/icons';
 import { Flex, message, Tooltip, Typography } from 'antd';
-import { useEffect, useMemo, useState } from 'react';
+import { BigNumber, ethers } from 'ethers';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
+import { useInterval } from 'usehooks-ts';
 
 import { MiddlewareChain } from '@/client';
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
 import { CHAINS } from '@/constants/chains';
+import {
+  baseProvider,
+  ethereumProvider,
+  optimismProvider,
+} from '@/constants/providers';
 import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
 import { SetupScreen } from '@/enums/SetupScreen';
-import { useBalance } from '@/hooks/useBalance';
 import { useSetup } from '@/hooks/useSetup';
 import { useWallet } from '@/hooks/useWallet';
+import { Address } from '@/types/Address';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 
@@ -112,13 +119,11 @@ export const SetupEoaFundingForChain = ({
   }, [isFunded]);
 
   useEffect(() => {
-    if (!isFunded) return;
-
-    message.success('Funds have been received!');
+    message.success(`${chainName} funds have been received!`);
 
     // Wait for a second before moving to the next step
     delayInSeconds(1).then(onFunded);
-  }, [goto, isFunded, onFunded]);
+  }, [chainName, goto, isFunded, onFunded]);
 
   return (
     <CardFlex>
@@ -144,90 +149,105 @@ export const SetupEoaFundingForChain = ({
   );
 };
 
+const eoaFundingMap = {
+  [MiddlewareChain.OPTIMISM]: {
+    provider: optimismProvider,
+    chainConfig: CHAINS.OPTIMISM,
+    requiredEth:
+      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation,
+  },
+  [MiddlewareChain.ETHEREUM]: {
+    provider: ethereumProvider,
+    chainConfig: CHAINS.ETHEREUM,
+    requiredEth:
+      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation,
+  },
+  [MiddlewareChain.BASE]: {
+    provider: baseProvider,
+    chainConfig: CHAINS.BASE,
+    requiredEth: MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation,
+  },
+};
+
 export const SetupEoaFunding = () => {
   const { goto } = useSetup();
-  const { optimismBalance, baseBalance, ethereumBalance } = useBalance();
-  const [currentChain, setCurrentChain] = useState<MiddlewareChain | null>(
-    null,
+  const { masterEoaAddress } = useWallet();
+  const [currentChain, setCurrentChain] = useState<MiddlewareChain>(
+    +Object.keys(eoaFundingMap)[0] as MiddlewareChain,
   );
 
-  const isOptimismFunded = useMemo(() => {
-    if (!optimismBalance) return false;
-    return (
-      optimismBalance >=
-      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
-    );
-  }, [optimismBalance]);
+  const currentFundingMapObject =
+    eoaFundingMap[+currentChain as keyof typeof eoaFundingMap];
 
-  const isEthereumFunded = useMemo(() => {
-    if (!ethereumBalance) return false;
+  const getIsCurrentChainFunded = useCallback(
+    async (
+      currentFundingMapObject: (typeof eoaFundingMap)[keyof typeof eoaFundingMap],
+      masterEoaAddress: Address,
+    ) => {
+      const { provider, requiredEth } = currentFundingMapObject;
 
-    return (
-      ethereumBalance >=
-      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation
-    );
-  }, [ethereumBalance]);
-
-  const isBaseFunded = useMemo(() => {
-    if (!baseBalance) return false;
-
-    return (
-      baseBalance >=
-      MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation
-    );
-  }, [baseBalance]);
-
-  // Set the current chain to the first chain that the user has not funded
-  useEffect(() => {
-    if (currentChain) return;
-    if (!isOptimismFunded) setCurrentChain(MiddlewareChain.OPTIMISM);
-    if (!isEthereumFunded) setCurrentChain(MiddlewareChain.ETHEREUM);
-    if (!isBaseFunded) setCurrentChain(MiddlewareChain.BASE);
-  }, [isOptimismFunded, isEthereumFunded, isBaseFunded, currentChain]);
-
-  // If the user has not funded their account on any chain, show the funding instructions
-  const screen = useMemo(() => {
-    switch (currentChain) {
-      case MiddlewareChain.OPTIMISM:
-        return (
-          <SetupEoaFundingForChain
-            isFunded={isOptimismFunded}
-            minRequiredBalance={
-              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation
-            }
-            currency={CHAINS.OPTIMISM.currency}
-            chainName={CHAINS.OPTIMISM.name}
-            onFunded={() => setCurrentChain(MiddlewareChain.ETHEREUM)}
-          />
+      return provider
+        .getBalance(masterEoaAddress)
+        .then(
+          (balance: BigNumber) =>
+            parseFloat(ethers.utils.formatEther(balance)) >= requiredEth,
         );
-      case MiddlewareChain.ETHEREUM:
-        return (
-          <SetupEoaFundingForChain
-            isFunded={isEthereumFunded}
-            minRequiredBalance={
-              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation
-            }
-            currency={CHAINS.ETHEREUM.currency}
-            chainName={CHAINS.ETHEREUM.name}
-            onFunded={() => setCurrentChain(MiddlewareChain.BASE)}
-          />
-        );
-      case MiddlewareChain.BASE:
-        return (
-          <SetupEoaFundingForChain
-            isFunded={isBaseFunded}
-            minRequiredBalance={
-              MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation
-            }
-            currency={CHAINS.BASE.currency}
-            chainName={CHAINS.BASE.name}
-            onFunded={() => goto(SetupScreen.SetupCreateSafe)}
-          />
-        );
-      default:
-        return null;
+    },
+    [],
+  );
+
+  useInterval(async () => {
+    if (!masterEoaAddress) return;
+
+    const currentChainIsFunded = await getIsCurrentChainFunded(
+      currentFundingMapObject,
+      masterEoaAddress,
+    );
+
+    if (!currentChainIsFunded) return;
+
+    message.success(
+      `${currentFundingMapObject.chainConfig.name} funds have been received!`,
+    );
+
+    const indexOfCurrentChain = Object.keys(eoaFundingMap).indexOf(
+      currentChain.toString(),
+    );
+    const nextChainExists =
+      Object.keys(eoaFundingMap).length > indexOfCurrentChain + 1;
+    if (nextChainExists) {
+      // goto next chain
+      setCurrentChain(
+        +Object.keys(eoaFundingMap)[indexOfCurrentChain + 1] as MiddlewareChain,
+      );
+      return;
     }
-  }, [currentChain, isOptimismFunded, isEthereumFunded, isBaseFunded, goto]);
+    goto(SetupScreen.SetupCreateSafe);
+  }, 5000);
 
-  return screen;
+  return (
+    <CardFlex>
+      <SetupCreateHeader prev={SetupScreen.SetupBackupSigner} disabled />
+      <Title level={3}>
+        {`Deposit ${currentFundingMapObject.requiredEth} ${currentFundingMapObject.chainConfig.currency} on ${currentFundingMapObject.chainConfig.name}`}
+      </Title>
+      <Paragraph style={{ marginBottom: 0 }}>
+        The app needs these funds to create your account on-chain.
+      </Paragraph>
+
+      {/* <CardSection
+        padding="12px 24px"
+        bordertop="true"
+        borderbottom={isFunded ? 'true' : 'false'}
+      >
+        <Text className={isFunded ? '' : 'loading-ellipses'}>
+          Status: {statusMessage}
+        </Text>
+      </CardSection> */}
+
+      <SetupEoaFundingWaiting
+        chainName={currentFundingMapObject.chainConfig.name}
+      />
+    </CardFlex>
+  );
 };

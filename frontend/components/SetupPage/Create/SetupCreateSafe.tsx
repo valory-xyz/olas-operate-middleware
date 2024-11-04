@@ -51,29 +51,24 @@ export const SetupCreateSafe = () => {
         if (middlewareChain === MiddlewareChain.OPTIMISM) {
           setOptimismFailed(true);
           setIsOptimismSuccess(false);
-          return;
+          throw new Error('Failed to create safe on Ethereum');
         }
         if (middlewareChain === MiddlewareChain.ETHEREUM) {
           setEthereumFailed(true);
           setIsEthereumSuccess(false);
-          return;
+          throw new Error('Failed to create safe on Ethereum');
         }
         if (middlewareChain === MiddlewareChain.BASE) {
           setBaseFailed(true);
           setIsBaseSuccess(false);
-          return;
+          throw new Error('Failed to create safe on Base');
         }
-        return;
+        throw new Error('Failed to create safe as chain is not supported');
       }
 
       // Try to create the safe
       WalletService.createSafe(middlewareChain, backupSigner)
         .then(async () => {
-          // Backend returned success
-          message.success(
-            `${capitalizedMiddlewareChainNames[middlewareChain]} account created`,
-          );
-
           // Attempt wallet and master safe updates before proceeding
           try {
             await updateWallets();
@@ -102,12 +97,6 @@ export const SetupCreateSafe = () => {
     },
     [backupSigner, updateMasterSafeOwners, updateWallets],
   );
-
-  const createAllSafes = useCallback(async () => {
-    await createSafeWithRetries(MiddlewareChain.OPTIMISM, 3);
-    await createSafeWithRetries(MiddlewareChain.ETHEREUM, 3);
-    await createSafeWithRetries(MiddlewareChain.BASE, 3);
-  }, [createSafeWithRetries]);
 
   const creationStatusText = useMemo(() => {
     if (isCreatingSafe) return 'Creating accounts';
@@ -162,14 +151,23 @@ export const SetupCreateSafe = () => {
 
     (async () => {
       for (const middlewareChain of safeCreationsRequired) {
-        await createSafeWithRetries(middlewareChain, 3);
+        try {
+          await createSafeWithRetries(middlewareChain, 3);
+          message.success(
+            `${capitalizedMiddlewareChainNames[middlewareChain]} account created`,
+          );
+        } catch (e) {
+          message.warning(
+            `Failed to create ${capitalizedMiddlewareChainNames[middlewareChain]} account`,
+          );
+          console.error(e);
+        }
       }
     })().then(() => {
       setIsCreatingSafe(false);
     });
   }, [
     backupSigner,
-    createAllSafes,
     createSafeWithRetries,
     optimismFailed,
     isCreatingSafe,
