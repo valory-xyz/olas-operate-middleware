@@ -144,7 +144,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         .then(Number)
         .then(setbaseEth),
     ]);
-  }, 5000);
+  }, 2000);
 
   return (
     <Flex vertical ref={ref}>
