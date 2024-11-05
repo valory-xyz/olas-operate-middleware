@@ -1,7 +1,7 @@
 import { Flex } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { MiddlewareDeploymentStatus } from '@/client';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
@@ -18,11 +18,11 @@ const useSetupTrayIcon = () => {
   useEffect(() => {
     if (isLowBalance) {
       setTrayIcon?.('low-gas');
-    } else if (serviceStatus === DeploymentStatus.DEPLOYED) {
+    } else if (serviceStatus === MiddlewareDeploymentStatus.DEPLOYED) {
       setTrayIcon?.('running');
-    } else if (serviceStatus === DeploymentStatus.STOPPED) {
+    } else if (serviceStatus === MiddlewareDeploymentStatus.STOPPED) {
       setTrayIcon?.('paused');
-    } else if (serviceStatus === DeploymentStatus.BUILT) {
+    } else if (serviceStatus === MiddlewareDeploymentStatus.BUILT) {
       setTrayIcon?.('logged-out');
     }
   }, [isLowBalance, serviceStatus, setTrayIcon]);

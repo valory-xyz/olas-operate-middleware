@@ -1,4 +1,9 @@
-import { Deployment, Service, ServiceHash, ServiceTemplate } from '@/client';
+import {
+  Deployment,
+  MiddlewareServiceResponse,
+  ServiceHash,
+  ServiceTemplate,
+} from '@/client';
 import { CHAINS } from '@/constants/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
@@ -9,7 +14,9 @@ import { StakingProgramId } from '@/enums/StakingProgram';
  * @param serviceHash
  * @returns
  */
-const getService = async (serviceHash: ServiceHash): Promise<Service> =>
+const getService = async (
+  serviceHash: ServiceHash,
+): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL}/services/${serviceHash}`, {
     method: 'GET',
     headers: {
@@ -26,7 +33,7 @@ const getService = async (serviceHash: ServiceHash): Promise<Service> =>
  * Gets an array of services from the backend
  * @returns An array of services
  */
-const getServices = async (): Promise<Service[]> =>
+const getServices = async (): Promise<MiddlewareServiceResponse[]> =>
   fetch(`${BACKEND_URL}/services`, {
     method: 'GET',
     headers: {
@@ -54,7 +61,7 @@ const createService = async ({
   serviceTemplate: ServiceTemplate;
   stakingProgramId: StakingProgramId;
   useMechMarketplace?: boolean;
-}): Promise<Service> =>
+}): Promise<MiddlewareServiceResponse> =>
   new Promise((resolve, reject) =>
     fetch(`${BACKEND_URL}/services`, {
       method: 'POST',
