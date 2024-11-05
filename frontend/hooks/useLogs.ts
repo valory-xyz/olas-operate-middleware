@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { MiddlewareDeploymentStatus } from '@/client';
 
 import { useBalance } from './useBalance';
 import { useMasterSafe } from './useMasterSafe';
@@ -53,7 +53,7 @@ const useServicesLogs = () => {
     isLoaded: hasInitialLoaded,
     data: {
       serviceStatus: serviceStatus
-        ? DeploymentStatus[serviceStatus]
+        ? MiddlewareDeploymentStatus[serviceStatus]
         : 'undefined',
       services:
         services?.map((item) => ({
