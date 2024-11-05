@@ -18,7 +18,10 @@ import { AutonolasService } from '@/service/Autonolas';
 import { StakingContractInfo } from '@/types/Autonolas';
 
 import { ServicesContext } from './ServicesProvider';
-import { StakingProgramContext } from './StakingProgramProvider';
+import {
+  DEFAULT_STAKING_PROGRAM_ID,
+  StakingProgramContext,
+} from './StakingProgramProvider';
 
 type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
@@ -85,37 +88,28 @@ export const StakingContractInfoProvider = ({
 
   /** Updates general staking contract information, not user or service specific */
   const updateStakingContractInfoRecord = async () => {
-    // const alpha = AutonolasService.getStakingContractInfoByStakingProgram(
-    //   StakingProgramId.Alpha,
-    // );
-    // const beta = AutonolasService.getStakingContractInfoByStakingProgram(
-    //   StakingProgramId.Beta,
-    // );
-    // const beta2 = AutonolasService.getStakingContractInfoByStakingProgram(
-    //   StakingProgramId.Beta2,
-    // );
-    // const betaMechMarketplace =
-    //   AutonolasService.getStakingContractInfoByStakingProgram(
-    //     StakingProgramId.BetaMechMarketplace,
-    //   );
-
-    const optimusAlpha =
-      AutonolasService.getStakingContractInfoByStakingProgram(
-        StakingProgramId.OptimusAlpha,
-      );
+    const stakingPrograms = Object.values([DEFAULT_STAKING_PROGRAM_ID]);
 
     try {
-      const [
-        // alphaInfo, betaInfo, beta2Info, betaMechMarketplaceInfo,
-        optimusAlphaInfo,
-      ] = await Promise.all([optimusAlpha]);
-      setStakingContractInfoRecord({
-        // [StakingProgramId.Alpha]: alphaInfo,
-        // [StakingProgramId.Beta]: betaInfo,
-        // [StakingProgramId.Beta2]: beta2Info,
-        // [StakingProgramId.BetaMechMarketplace]: betaMechMarketplaceInfo,
-        [StakingProgramId.OptimusAlpha]: optimusAlphaInfo,
-      });
+      const stakingInfoPromises = stakingPrograms.map((programId) =>
+        AutonolasService.getStakingContractInfoByStakingProgram(programId),
+      );
+
+      const stakingInfos = await Promise.allSettled(stakingInfoPromises);
+
+      const stakingContractInfoRecord = stakingPrograms.reduce(
+        (record, programId, index) => {
+          if (stakingInfos[index].status === 'rejected') {
+            console.error(stakingInfos[index].reason);
+            return record;
+          }
+          record[programId] = stakingInfos[index].value;
+          return record;
+        },
+        {} as Record<string, Partial<StakingContractInfo>>,
+      );
+
+      setStakingContractInfoRecord(stakingContractInfoRecord);
       setIsStakingContractInfoLoaded(true);
     } catch (e) {
       console.error(e);

@@ -90,9 +90,9 @@ const AgentTitle = () => {
             >
               <Text strong>{agentName}</Text>
             </Tooltip>
-
-            {/* @note: removed until predict ui resolution */}
-            {/* <a
+            {/* 
+            ONLY APPLIES TO PREDICT AGENT
+            <a
               href={`https://predict.olas.network/agents/${agentSafeAddress}`}
               target="_blank"
               className="text-sm"

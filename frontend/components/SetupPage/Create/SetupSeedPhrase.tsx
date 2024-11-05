@@ -18,14 +18,19 @@ export const SetupSeedPhrase = () => {
     <Card>
       <SetupCreateHeader prev={SetupScreen.SetupPassword} disabled={true} />
       <Typography.Title level={3}>Back up seed phrase</Typography.Title>
-      <Flex gap={10} vertical>
+      <Flex gap={16} vertical>
         <Typography.Text>
           Seed phrase is needed to regain access to your account if you forget
           the password.
         </Typography.Text>
-        <Flex gap={10} wrap="wrap">
+        <Flex gap={10} wrap="wrap" style={{ marginBottom: 8 }}>
           {mnemonic.map((word: string) => (
-            <Tag key={word}>{word}</Tag>
+            <Tag
+              key={word}
+              style={{ width: 80, textAlign: 'center', fontSize: 14 }}
+            >
+              {word}
+            </Tag>
           ))}
         </Flex>
         <Flex gap={10}>

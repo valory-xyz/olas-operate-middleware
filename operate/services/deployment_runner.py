@@ -124,7 +124,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         # TODO: Dynamic port allocation, backport to service builder
         env["CONNECTION_ABCI_CONFIG_HOST"] = "localhost"
         env["CONNECTION_ABCI_CONFIG_PORT"] = "26658"
-
+        env["PYTHONUTF8"] = "1"
         for var in env:
             # Fix tendermint connection params
             if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_COM_URL"):
@@ -234,6 +234,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._aea_bin, "run"],
@@ -254,6 +256,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Start tendermint process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf8"
+
         env = {
             **os.environ,
             **env,
@@ -311,6 +316,9 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf8"
+
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._aea_bin, "run"],
             cwd=str(working_dir / "agent"),
@@ -328,6 +336,9 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         """Start tendermint process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
+        env["PYTHONUTF8"] = "1"
+        env["PYTHONIOENCODING"] = "utf8"
+
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
                 str(self._venv_dir / "bin" / "flask"),

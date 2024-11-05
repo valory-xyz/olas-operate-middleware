@@ -29,38 +29,18 @@ const ServiceStakingTokenAbi = SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
 const serviceStakingTokenMechUsageContracts: Record<
   StakingProgramId,
   MulticallContract
-> = {
-  // [StakingProgramId.Alpha]: new MulticallContract(
-  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-  //     StakingProgramId.Alpha
-  //   ],
-  //   ServiceStakingTokenAbi,
-  // ),
-  // [StakingProgramId.Beta]: new MulticallContract(
-  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-  //     StakingProgramId.Beta
-  //   ],
-  //   ServiceStakingTokenAbi,
-  // ),
-  // [StakingProgramId.Beta2]: new MulticallContract(
-  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-  //     StakingProgramId.Beta2
-  //   ],
-  //   ServiceStakingTokenAbi,
-  // ),
-  // [StakingProgramId.BetaMechMarketplace]: new MulticallContract(
-  //   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS][
-  //     StakingProgramId.BetaMechMarketplace
-  //   ],
-  //   ServiceStakingTokenAbi,
-  // ),
-  [StakingProgramId.OptimusAlpha]: new MulticallContract(
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
-      MiddlewareChain.OPTIMISM
-    ][StakingProgramId.OptimusAlpha],
-    ServiceStakingTokenAbi,
-  ),
-};
+> = Object.values(StakingProgramId).reduce(
+  (contracts, programId) => {
+    contracts[programId] = new MulticallContract(
+      SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[MiddlewareChain.OPTIMISM][
+        programId
+      ],
+      ServiceStakingTokenAbi,
+    );
+    return contracts;
+  },
+  {} as Record<StakingProgramId, MulticallContract>,
+);
 
 const serviceRegistryTokenUtilityContract = new MulticallContract(
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
@@ -306,19 +286,26 @@ const getStakingContractInfoByStakingProgram = async (
   const availableRewards = parseFloat(
     ethers.utils.formatUnits(availableRewardsInBN, 18),
   );
+
   const serviceIds = getServiceIdsInBN.map((id: BigNumber) => id.toNumber());
   const maxNumServices = maxNumServicesInBN.toNumber();
 
   // APY
   const rewardsPerYear = rewardsPerSecond.mul(ONE_YEAR);
-  const apy =
-    Number(rewardsPerYear.mul(100).div(minStakingDeposit)) /
-    (1 + numAgentInstances.toNumber());
+
+  let apy = 0;
+
+  if (rewardsPerSecond.gt(0) && minStakingDeposit.gt(0)) {
+    apy =
+      Number(rewardsPerYear.mul(100).div(minStakingDeposit)) /
+      (1 + numAgentInstances.toNumber());
+  }
 
   // Amount of OLAS required for Stake
   const stakeRequiredInWei = minStakingDeposit.add(
     minStakingDeposit.mul(numAgentInstances),
   );
+
   const olasStakeRequired = Number(formatEther(stakeRequiredInWei));
 
   // Rewards per work period
