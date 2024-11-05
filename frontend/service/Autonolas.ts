@@ -32,9 +32,9 @@ const serviceStakingTokenMechUsageContracts: Record<
 > = Object.values(StakingProgramId).reduce(
   (contracts, programId) => {
     contracts[programId] = new MulticallContract(
-      SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[MiddlewareChain.OPTIMISM][
-        programId
-      ],
+      SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
+        MiddlewareChain.OPTIMISM
+      ][programId],
       ServiceStakingTokenAbi,
     );
     return contracts;
@@ -88,6 +88,7 @@ const getAgentStakingRewardsInfo = async ({
 }): Promise<StakingRewardsInfo | undefined> => {
   if (!agentMultisigAddress) return;
   if (!serviceId) return;
+  if (stakingProgram === StakingProgramId.OptimusAlpha) return;
 
   // const mechContract = agentMechContract;
 
