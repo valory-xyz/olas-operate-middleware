@@ -13,8 +13,15 @@ endef
 
 ./dist/aea_win.exe: ./trader/
 	mkdir -p dist
-	cd trader && poetry install && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_win
+	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_win
 	cp -f trader/dist/trader_win.exe ./dist/aea_win.exe
+	pwd
+
+
+./dist/aea_bin: ./trader/
+	mkdir -p dist
+	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_bin
+	cp -f trader/dist/trader_bin ./dist/aea_bin
 	pwd
 
 
