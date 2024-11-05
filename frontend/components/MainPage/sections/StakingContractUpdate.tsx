@@ -4,36 +4,31 @@ import { useMemo } from 'react';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { Pages } from '@/enums/PageState';
-import { useBalance } from '@/hooks/useBalance';
-import { useNeedsFunds } from '@/hooks/useNeedsFunds';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
+import { useMigrate } from '../../ManageStakingPage/StakingContractSection/useMigrate';
 import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
 
-export const StakingContractUpdate = () => {
+type StakingContractUpdateProps = { stakingProgramId: StakingProgramId };
+export const StakingContractUpdate = ({
+  stakingProgramId,
+}: StakingContractUpdateProps) => {
   const { goto } = usePageState();
-  const { isBalanceLoaded, isLowBalance } = useBalance();
-  const { needsInitialFunding } = useNeedsFunds();
   const {
     activeStakingProgramMeta,
     isActiveStakingProgramLoaded,
     defaultStakingProgramId,
   } = useStakingProgram();
+  const { canUpdateStakingContract } = useMigrate(stakingProgramId);
 
   const stakingContractName = useMemo(() => {
     if (activeStakingProgramMeta) return activeStakingProgramMeta.name;
     return STAKING_PROGRAM_META[defaultStakingProgramId].name;
   }, [activeStakingProgramMeta, defaultStakingProgramId]);
-
-  const canUpdateStakingContract = useMemo(() => {
-    if (!isBalanceLoaded) return false;
-    if (isLowBalance) return false;
-    if (needsInitialFunding) return false;
-    return true;
-  }, [isBalanceLoaded, isLowBalance, needsInitialFunding]);
 
   const stakingButton = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return <Skeleton.Input />;
