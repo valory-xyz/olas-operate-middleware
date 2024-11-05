@@ -59,7 +59,8 @@ jobs:
         run: |
           trader_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/trader.yaml')); print(config['service_version'])")
           echo $trader_version
-          mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ matrix.arch }}"
+          make ./dist/aea_bin
+        #instead of this one mwe use make; mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
 
       - name: Build with PyInstaller
         run: |
