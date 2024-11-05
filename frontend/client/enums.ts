@@ -1,4 +1,4 @@
-export enum Action {
+export enum MiddlewareAction {
   STATUS = 0,
   BUILD = 1,
   DEPLOY = 2,
@@ -15,12 +15,12 @@ export enum MiddlewareChain {
   MODE = 6,
 }
 
-export enum Ledger {
+export enum MiddlewareLedger {
   ETHEREUM = 0,
   SOLANA = 1,
 }
 
-export enum DeploymentStatus {
+export enum MiddlewareDeploymentStatus {
   CREATED = 0,
   BUILT = 1,
   DEPLOYING = 2,
@@ -30,7 +30,7 @@ export enum DeploymentStatus {
   DELETED = 6,
 }
 
-export enum AccountIsSetup {
+export enum MiddlewareAccountIsSetup {
   True,
   False,
   Loading,
