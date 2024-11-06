@@ -58,11 +58,6 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   const { isServiceStaked, isServiceStakedForMinimumDuration } =
     useActiveStakingContractInfo();
 
-  console.log({
-    isServiceStaked,
-    isServiceStakedForMinimumDuration,
-  });
-
   const { stakingContractInfo, hasEnoughServiceSlots } =
     useStakingContractInfo(stakingProgramId);
 
