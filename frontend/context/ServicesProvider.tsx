@@ -1,29 +1,47 @@
 import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
-import { createContext, PropsWithChildren, useContext } from 'react';
+import { noop } from 'lodash';
+import {
+  createContext,
+  PropsWithChildren,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 
 import { MiddlewareServiceResponse } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { UsePause, usePause } from '@/hooks/usePause';
 import { ServicesService } from '@/service/Services';
+import { Service } from '@/types/Service';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
+  selectService: (serviceUuid: string) => void;
+  selectedService?: Service;
 } & Partial<QueryObserverBaseResult<MiddlewareServiceResponse[]>> &
   UsePause;
 
 export const ServicesContext = createContext<ServicesContextType>({
   paused: false,
-  setPaused: () => {},
-  togglePaused: () => {},
+  setPaused: noop,
+  togglePaused: noop,
+  selectService: noop,
 });
 
+/**
+ * Polls for available services via the middleware API globally
+ */
 export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
-
   const { paused, setPaused, togglePaused } = usePause();
+
+  // user selected service identifier
+  const [selectedServiceUuid, setSelectedServiceUuid] = useState<string>();
 
   const {
     data: services,
@@ -38,6 +56,20 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     enabled: isOnline && !paused,
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
+
+  const selectedService = useMemo<Service | undefined>(() => {
+    if (!services) return;
+    return services.find((service) => service.hash === selectedServiceUuid); // TODO: use uuid instead of hash once middleware refactored
+  }, [selectedServiceUuid, services]);
+
+  const selectService = useCallback((serviceUuid: string) => {
+    setSelectedServiceUuid(serviceUuid);
+  }, []);
+
+  useEffect(() => {
+    if (!services) return;
+    setSelectedServiceUuid(services[0]?.hash); // TODO: use uuid instead of hash once middleware refactored
+  }, [services]);
 
   // const serviceAddresses = useMemo(
   //   () =>
@@ -100,6 +132,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         paused,
         setPaused,
         togglePaused,
+        selectService,
+        selectedService,
       }}
     >
       {children}

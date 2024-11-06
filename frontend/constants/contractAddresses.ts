@@ -4,7 +4,7 @@ import { MiddlewareChain } from '@/client';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
-import { CHAINS } from './chains';
+import { CHAIN_CONFIGS } from './chains';
 
 export const MULTICALL_CONTRACT_ADDRESS: Address =
   '0xcA11bde05977b3631167028862bE2a173976CA11'; // https://github.com/mds1/multicall, https://www.multicall3.com/
@@ -15,7 +15,7 @@ export const MULTICALL_CONTRACT_ADDRESS: Address =
  * @see https://github.com/cavanmflynn/ethers-multicall/blob/fb84bcc3763fe54834a35a44c34d610bafc87ce5/src/provider.ts#L35C1-L53C1
  * @note will use different multicall package in future
  */
-Object.entries(CHAINS).forEach(([, { chainId }]) => {
+Object.entries(CHAIN_CONFIGS).forEach(([, { chainId }]) => {
   setMulticallAddress(chainId, MULTICALL_CONTRACT_ADDRESS);
 });
 

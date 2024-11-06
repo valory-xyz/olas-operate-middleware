@@ -5,10 +5,9 @@ import {
   ServiceHash,
   ServiceTemplate,
 } from '@/client';
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIGS } from '@/constants/chains';
 import { ServicesContext } from '@/context/ServicesProvider';
 import MulticallService from '@/service/Multicall';
-import { ServicesService } from '@/service/Services';
 import { Address } from '@/types/Address';
 import { AddressBooleanRecord } from '@/types/Records';
 
@@ -18,7 +17,7 @@ const checkServiceIsFunded = async (
 ): Promise<boolean> => {
   const {
     chain_configs: {
-      [CHAINS.OPTIMISM.chainId]: {
+      [CHAIN_CONFIGS.OPTIMISM.chainId]: {
         chain_data: { instances, multisig },
       },
     },
@@ -37,10 +36,10 @@ const checkServiceIsFunded = async (
       Object.assign(acc, {
         [address]: instances.includes(address)
           ? balances[address] >
-            serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
+            serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId]
               .fund_requirements.agent
           : balances[address] >
-            serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
+            serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId]
               .fund_requirements.safe,
       }),
     {},
@@ -50,19 +49,10 @@ const checkServiceIsFunded = async (
 };
 
 export const useServices = () => {
-  const {
-    services,
-    updateServices: updateServicesState,
-    hasInitialLoaded,
-    setServices,
-    serviceStatus,
-    setServiceStatus,
-    updateServiceStatus,
-    setIsPaused,
-  } = useContext(ServicesContext);
+  const { services, isFetched: hasInitialLoaded } = useContext(ServicesContext);
 
   const serviceId =
-    services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token;
+    services?.[0]?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token;
 
   // STATE METHODS
   const getServiceFromState = (
@@ -72,29 +62,6 @@ export const useServices = () => {
     if (!services) return;
     return services.find((service) => service.hash === serviceHash);
   };
-
-  const getServicesFromState = (): MiddlewareServiceResponse[] | undefined =>
-    hasInitialLoaded ? services : [];
-
-  const updateServiceState = (serviceHash: ServiceHash) => {
-    ServicesService.getService(serviceHash).then(
-      (service: MiddlewareServiceResponse) => {
-        setServices((prev) => {
-          if (!prev) return [service];
-
-          const index = prev.findIndex((s) => s.hash === serviceHash); // findIndex returns -1 if not found
-          if (index === -1) return [...prev, service];
-
-          const newServices = [...prev];
-          newServices[index] = service;
-          return newServices;
-        });
-      },
-    );
-  };
-
-  const deleteServiceState = (serviceHash: ServiceHash) =>
-    setServices((prev) => prev?.filter((s) => s.hash !== serviceHash));
 
   return {
     // service: services?.[0],

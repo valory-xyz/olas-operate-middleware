@@ -1,7 +1,7 @@
 import { Token } from '@/enums/Token';
 import { Address } from '@/types/Address';
 
-import { CHAINS } from './chains';
+import { CHAIN_CONFIGS } from './chains';
 
 export type TokenConfig = {
   [symbol: string]: {
@@ -13,19 +13,19 @@ export type TokenConfig = {
 export const TOKENS: {
   [chain: number]: TokenConfig;
 } = {
-  [CHAINS.GNOSIS.chainId]: {
+  [CHAIN_CONFIGS.GNOSIS.chainId]: {
     [Token.OLAS]: {
       address: '0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f',
       decimals: 18,
     },
   },
-  [CHAINS.OPTIMISM.chainId]: {
+  [CHAIN_CONFIGS.OPTIMISM.chainId]: {
     [Token.OLAS]: {
       address: '0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527',
       decimals: 18,
     },
   },
-  [CHAINS.ETHEREUM.chainId]: {
+  [CHAIN_CONFIGS.ETHEREUM.chainId]: {
     [Token.OLAS]: {
       address: '0x0001A500A6B18995B03f44bb040A5fFc28E45CB0',
       decimals: 18,
@@ -40,7 +40,7 @@ export const TOKENS: {
       decimals: 6,
     },
   },
-  [CHAINS.BASE.chainId]: {
+  [CHAIN_CONFIGS.BASE.chainId]: {
     [Token.OLAS]: {
       address: '0x4B1a99467a284CC690e3237bc69105956816F762',
       decimals: 18,

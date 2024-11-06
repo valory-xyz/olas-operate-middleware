@@ -15,7 +15,7 @@ import {
 import { useInterval } from 'usehooks-ts';
 
 import { Wallet } from '@/client';
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIGS } from '@/constants/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import {
   LOW_AGENT_SAFE_BALANCE,
@@ -86,7 +86,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
   const { wallets, masterEoaAddress, masterSafeAddress } =
     useContext(WalletContext);
-  const { services, serviceAddresses } = useContext(ServicesContext);
+  const { services } = useContext(ServicesContext);
   const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
     useContext(RewardContext);
 
@@ -182,7 +182,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       setWalletBalances(walletBalances);
 
       const serviceId =
-        services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.token;
+        services?.[0]?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data.token;
 
       if (!isNumber(serviceId)) {
         setIsLoaded(true);
@@ -237,7 +237,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentEoaAddress = useMemo(
     () =>
-      services?.[0]?.chain_configs?.[CHAINS.OPTIMISM.chainId]?.chain_data
+      services?.[0]?.chain_configs?.[CHAIN_CONFIGS.OPTIMISM.chainId]?.chain_data
         ?.instances?.[0],
     [services],
   );
@@ -251,10 +251,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
   const agentSafeBalance = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data
+      services?.[0]?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data
         ?.multisig &&
       walletBalances[
-        services[0].chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig!
+        services[0].chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data.multisig!
       ],
     [services, walletBalances],
   );
@@ -342,7 +342,7 @@ export const getOlasBalances = async (
 
   const olasBalances = await MulticallService.getErc20Balances(
     walletAddresses,
-    TOKENS[CHAINS.OPTIMISM.chainId].OLAS.address,
+    TOKENS[CHAIN_CONFIGS.OPTIMISM.chainId].OLAS.address,
   );
 
   return olasBalances;

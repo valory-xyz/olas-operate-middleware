@@ -1,7 +1,7 @@
 import { ServiceTemplate } from '@/client';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
-import { CHAINS } from './chains';
+import { CHAIN_CONFIGS } from './chains';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   // {
@@ -37,9 +37,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.2.9',
-    home_chain_id: `${CHAINS.OPTIMISM.chainId}`,
+    home_chain_id: `${CHAIN_CONFIGS.OPTIMISM.chainId}`,
     configurations: {
-      [CHAINS.OPTIMISM.chainId]: {
+      [CHAIN_CONFIGS.OPTIMISM.chainId]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
@@ -54,7 +54,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
           safe: 1000,
         },
       },
-      [CHAINS.ETHEREUM.chainId]: {
+      [CHAIN_CONFIGS.ETHEREUM.chainId]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
@@ -69,7 +69,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
           safe: 1000,
         },
       },
-      [CHAINS.BASE.chainId]: {
+      [CHAIN_CONFIGS.BASE.chainId]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',

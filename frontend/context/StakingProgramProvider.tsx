@@ -1,7 +1,7 @@
 import { createContext, PropsWithChildren, useCallback, useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIGS } from '@/constants/chains';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 import { AutonolasService } from '@/service/Autonolas';
@@ -28,9 +28,9 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
   const updateActiveStakingProgramId = useCallback(async () => {
     // if no service nft, not staked
     const serviceId =
-      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token;
+      service?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token;
 
-    if (!service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token) {
+    if (!service?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token) {
       setActiveStakingProgramId(null);
       return;
     }

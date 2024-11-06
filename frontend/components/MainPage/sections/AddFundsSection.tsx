@@ -18,11 +18,11 @@ import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCEOF_FRAGMENT } from '@/abis/erc20';
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIGS } from '@/constants/chains';
 import {
-  baseProvider,
-  ethereumProvider,
-  optimismProvider,
+  BASE_PROVIDER,
+  ETHEREUM_PROVIDER,
+  OPTIMISM_PROVIDER,
 } from '@/constants/providers';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { TOKENS } from '@/constants/tokens';
@@ -109,37 +109,34 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
   useInterval(async () => {
     if (!masterSafeAddress) return;
     await Promise.allSettled([
-      ethereumProvider
-        .getBalance(masterSafeAddress)
+      ETHEREUM_PROVIDER.getBalance(masterSafeAddress)
         .then(ethers.utils.formatEther)
         .then(Number)
         .then(setethEth),
       //USDC balance
       new Contract(
-        TOKENS[CHAINS.ETHEREUM.chainId]['USDC'].address,
+        TOKENS[CHAIN_CONFIGS.ETHEREUM.chainId]['USDC'].address,
         ERC20_BALANCEOF_FRAGMENT,
-        ethereumProvider,
+        ETHEREUM_PROVIDER,
       )
         .balanceOf(masterSafeAddress)
         .then((wei: BigNumber) => ethers.utils.formatUnits(wei, 6))
         .then(Number)
         .then(setethUsdc),
-      optimismProvider
-        .getBalance(masterSafeAddress)
+      OPTIMISM_PROVIDER.getBalance(masterSafeAddress)
         .then(ethers.utils.formatEther)
         .then(Number)
         .then(setopEth),
       new Contract(
-        TOKENS[CHAINS.OPTIMISM.chainId]['OLAS'].address,
+        TOKENS[CHAIN_CONFIGS.OPTIMISM.chainId]['OLAS'].address,
         ERC20_BALANCEOF_FRAGMENT,
-        optimismProvider,
+        OPTIMISM_PROVIDER,
       )
         .balanceOf(masterSafeAddress)
         .then(ethers.utils.formatEther)
         .then(Number)
         .then(setopOlas),
-      baseProvider
-        .getBalance(masterSafeAddress)
+      BASE_PROVIDER.getBalance(masterSafeAddress)
         .then(ethers.utils.formatEther)
         .then(Number)
         .then(setbaseEth),
@@ -235,8 +232,8 @@ const AddFundsAddressSection = ({
 const AddFundsGetTokensSection = () => (
   <CardSection justify="center" bordertop="true" padding="16px 24px">
     <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-      Get OLAS + {CHAINS.OPTIMISM.currency} on {CHAINS.OPTIMISM.name}{' '}
-      {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      Get OLAS + {CHAIN_CONFIGS.OPTIMISM.currency} on{' '}
+      {CHAIN_CONFIGS.OPTIMISM.name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
     </Link>
   </CardSection>
 );

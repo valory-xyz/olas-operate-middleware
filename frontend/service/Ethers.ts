@@ -1,9 +1,9 @@
 import { ContractInterface, ethers, providers, utils } from 'ethers';
 
 import {
-  baseProvider,
-  ethereumProvider,
-  optimismProvider,
+  BASE_PROVIDER,
+  ETHEREUM_PROVIDER,
+  OPTIMISM_PROVIDER,
 } from '@/constants/providers';
 import { Address } from '@/types/Address';
 import { TransactionInfo } from '@/types/TransactionInfo';
@@ -81,7 +81,7 @@ const getErc20Balance = async (
  */
 const getOptimismBalance = async (address: Address): Promise<number> => {
   try {
-    return optimismProvider.getBalance(address).then((balance) => {
+    return OPTIMISM_PROVIDER.getBalance(address).then((balance) => {
       const formattedBalance = utils.formatEther(balance);
       return Number(formattedBalance);
     });
@@ -95,7 +95,7 @@ const getOptimismBalance = async (address: Address): Promise<number> => {
  */
 const getEthereumBalance = async (address: Address): Promise<number> => {
   try {
-    return ethereumProvider.getBalance(address).then((balance) => {
+    return ETHEREUM_PROVIDER.getBalance(address).then((balance) => {
       const formattedBalance = utils.formatEther(balance);
       return Number(formattedBalance);
     });
@@ -109,7 +109,7 @@ const getEthereumBalance = async (address: Address): Promise<number> => {
  */
 const getBaseBalance = async (address: Address): Promise<number> => {
   try {
-    return baseProvider.getBalance(address).then((balance) => {
+    return BASE_PROVIDER.getBalance(address).then((balance) => {
       const formattedBalance = utils.formatEther(balance);
       return Number(formattedBalance);
     });
@@ -127,7 +127,7 @@ const checkRpc = async (rpc: string): Promise<boolean> => {
   try {
     if (!rpc) throw new Error('RPC is required');
 
-    const networkId = (await optimismProvider.getNetwork()).chainId;
+    const networkId = (await OPTIMISM_PROVIDER.getNetwork()).chainId;
     if (!networkId) throw new Error('Failed to get network ID');
 
     return Promise.resolve(true);
@@ -154,7 +154,7 @@ const getLogsList = async (
     fromBlock,
     toBlock,
   };
-  const list = await optimismProvider.getLogs(filter);
+  const list = await OPTIMISM_PROVIDER.getLogs(filter);
 
   if (list.length > 0) return list;
 
@@ -172,7 +172,7 @@ const getLogsList = async (
 export const getLatestTransaction = async (
   contractAddress: Address,
 ): Promise<TransactionInfo | null> => {
-  const latestBlock = await optimismProvider.getBlockNumber();
+  const latestBlock = await OPTIMISM_PROVIDER.getBlockNumber();
 
   const logs = await getLogsList(
     contractAddress,
@@ -187,8 +187,8 @@ export const getLatestTransaction = async (
   // Get the last log entry and fetch the transaction details
   const lastLog = logs[logs.length - 1];
   const txHash = lastLog.transactionHash;
-  const receipt = await optimismProvider.getTransactionReceipt(txHash);
-  const block = await optimismProvider.getBlock(receipt.blockNumber);
+  const receipt = await OPTIMISM_PROVIDER.getTransactionReceipt(txHash);
+  const block = await OPTIMISM_PROVIDER.getBlock(receipt.blockNumber);
   const timestamp = block.timestamp;
 
   return { hash: txHash, timestamp };
@@ -201,7 +201,7 @@ const readContract = ({
   address: string;
   abi: ContractInterface;
 }) => {
-  const contract = new ethers.Contract(address, abi, optimismProvider);
+  const contract = new ethers.Contract(address, abi, OPTIMISM_PROVIDER);
   return contract;
 };
 

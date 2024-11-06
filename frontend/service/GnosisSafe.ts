@@ -1,7 +1,7 @@
 import { ethers } from 'ethers';
 
 import { GNOSIS_SAFE_ABI } from '@/abis/gnosisSafe';
-import { optimismProvider } from '@/constants/providers';
+import { OPTIMISM_PROVIDER } from '@/constants/providers';
 import { Address } from '@/types/Address';
 
 const getOwners = async ({
@@ -12,7 +12,7 @@ const getOwners = async ({
   const gnosisSafeContract = new ethers.Contract(
     address,
     GNOSIS_SAFE_ABI,
-    optimismProvider,
+    OPTIMISM_PROVIDER,
   );
 
   return gnosisSafeContract.getOwners();

@@ -15,10 +15,10 @@ export const useStakingContractInfo = () => {
     setIsPaused,
   } = useContext(StakingContractInfoContext);
 
-  const { service } = useServices();
+  const { selectedService } = useServices();
 
   // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
-  if (!service || !activeStakingContractInfo)
+  if (!selectedService || !activeStakingContractInfo)
     return {
       stakingContractInfoRecord,
       updateActiveStakingContractInfo,

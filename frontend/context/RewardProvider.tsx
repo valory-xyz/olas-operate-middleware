@@ -10,7 +10,7 @@ import {
 } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIGS } from '@/constants/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useStore } from '@/hooks/useStore';
@@ -77,14 +77,14 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
     // only check for rewards if there's a currentStakingProgram active
     if (
       activeStakingProgramId &&
-      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.multisig &&
-      service?.chain_configs[CHAINS.OPTIMISM.chainId].chain_data?.token
+      service?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.multisig &&
+      service?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token
     ) {
       stakingRewardsInfoPromise = AutonolasService.getAgentStakingRewardsInfo({
         agentMultisigAddress:
-          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig!,
+          service.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data.multisig!,
         serviceId:
-          service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.token!,
+          service.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data.token!,
         stakingProgram: activeStakingProgramId,
       });
     }
