@@ -20,7 +20,7 @@
 
 name: "Optimus"
 description: "Optimus"
-hash: bafybeibwebacnng63cksl2d4c4ieaunrpi5gl3hitwahbzaoasvf3sagti
+hash: bafybeibzujtdlgsft3hnjmboa5yfni7vqc2iocjlyti5nadc55jxj3kxbu
 image: https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75
 service_version: v0.2.9
 home_chain_id: 10
