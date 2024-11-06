@@ -4,11 +4,13 @@ import { useContext } from 'react';
 import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
+import { useStakingProgram } from './useStakingProgram';
+
 export const useStakingContractContext = () => {
   const {
     activeStakingContractInfo,
     isPaused,
-    isStakingContractInfoLoaded,
+    isStakingContractInfoRecordLoaded: isStakingContractInfoLoaded,
     stakingContractInfoRecord,
     updateActiveStakingContractInfo,
     setIsPaused,
@@ -24,9 +26,15 @@ export const useStakingContractContext = () => {
 };
 
 export const useStakingContractInfo = (stakingProgramId: StakingProgramId) => {
-  const { stakingContractInfoRecord } = useStakingContractContext();
+  const { activeStakingProgramId } = useStakingProgram();
 
-  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+  const { stakingContractInfoRecord, activeStakingContractInfo } =
+    useStakingContractContext();
+
+  const stakingContractInfo =
+    activeStakingProgramId === stakingProgramId
+      ? stakingContractInfoRecord?.[stakingProgramId]
+      : activeStakingContractInfo;
 
   const {
     serviceStakingState,

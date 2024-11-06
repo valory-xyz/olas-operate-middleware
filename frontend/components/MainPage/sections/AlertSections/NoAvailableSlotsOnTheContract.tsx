@@ -24,7 +24,7 @@ export const NoAvailableSlotsOnTheContract = () => {
   } = useStakingProgram();
 
   const { isStakingContractInfoLoaded } = useStakingContractContext();
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
+  const { hasEnoughServiceSlots, isServiceStaked } = useStakingContractInfo(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
@@ -43,6 +43,7 @@ export const NoAvailableSlotsOnTheContract = () => {
 
   if (!isStakingContractInfoLoaded) return null;
   if (hasEnoughServiceSlots) return null;
+  if (isServiceStaked) return null;
 
   return (
     <CustomAlert

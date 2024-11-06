@@ -22,12 +22,13 @@ import { StakingProgramContext } from './StakingProgramProvider';
 
 type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
+  isActiveStakingContractInfoLoaded: boolean;
   isPaused: boolean;
-  isStakingContractInfoLoaded: boolean;
   stakingContractInfoRecord?: Record<
     StakingProgramId,
     Partial<StakingContractInfo>
   >;
+  isStakingContractInfoRecordLoaded: boolean;
   updateActiveStakingContractInfo: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
 };
@@ -36,7 +37,8 @@ export const StakingContractInfoContext =
   createContext<StakingContractInfoContextProps>({
     activeStakingContractInfo: undefined,
     isPaused: false,
-    isStakingContractInfoLoaded: false,
+    isStakingContractInfoRecordLoaded: false,
+    isActiveStakingContractInfoLoaded: false,
     stakingContractInfoRecord: undefined,
     updateActiveStakingContractInfo: async () => {},
     setIsPaused: () => {},
@@ -49,8 +51,14 @@ export const StakingContractInfoProvider = ({
   const { activeStakingProgramId } = useContext(StakingProgramContext);
 
   const [isPaused, setIsPaused] = useState(false);
-  const [isStakingContractInfoLoaded, setIsStakingContractInfoLoaded] =
-    useState(false);
+  const [
+    isStakingContractInfoRecordLoaded,
+    setIsStakingContractInfoRecordLoaded,
+  ] = useState(false);
+  const [
+    isActiveStakingContractInfoLoaded,
+    setIsActiveStakingContractInfoLoaded,
+  ] = useState(false);
 
   const [activeStakingContractInfo, setActiveStakingContractInfo] =
     useState<Partial<StakingContractInfo>>();
@@ -72,6 +80,8 @@ export const StakingContractInfoProvider = ({
       serviceId,
       activeStakingProgramId,
     ).then(setActiveStakingContractInfo);
+
+    setIsActiveStakingContractInfoLoaded(true);
   }, [activeStakingProgramId, serviceId]);
 
   /** Updates general staking contract information, not user or service specific */
@@ -98,7 +108,7 @@ export const StakingContractInfoProvider = ({
       );
 
       setStakingContractInfoRecord(stakingContractInfoRecord);
-      setIsStakingContractInfoLoaded(true);
+      setIsStakingContractInfoRecordLoaded(true);
     } catch (e) {
       console.error({ e });
     }
@@ -120,7 +130,8 @@ export const StakingContractInfoProvider = ({
     <StakingContractInfoContext.Provider
       value={{
         activeStakingContractInfo,
-        isStakingContractInfoLoaded,
+        isStakingContractInfoRecordLoaded,
+        isActiveStakingContractInfoLoaded,
         stakingContractInfoRecord,
         isPaused,
         setIsPaused,
