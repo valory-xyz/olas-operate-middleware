@@ -74,14 +74,6 @@ export const StakingContractInfoProvider = ({
     ).then(setActiveStakingContractInfo);
   }, [activeStakingProgramId, serviceId]);
 
-  useInterval(
-    async () => {
-      await updateStakingContractInfoRecord().catch(console.error);
-      await updateActiveStakingContractInfo().catch(console.error);
-    },
-    isPaused ? null : FIVE_SECONDS_INTERVAL,
-  );
-
   /** Updates general staking contract information, not user or service specific */
   const updateStakingContractInfoRecord = async () => {
     const stakingPrograms = Object.values(StakingProgramId);
@@ -108,14 +100,21 @@ export const StakingContractInfoProvider = ({
       setStakingContractInfoRecord(stakingContractInfoRecord);
       setIsStakingContractInfoLoaded(true);
     } catch (e) {
-      console.error(e);
+      console.error({ e });
     }
   };
 
   useEffect(() => {
-    // Load generic staking contract info record on mount
-    updateStakingContractInfoRecord();
+    updateStakingContractInfoRecord().catch(console.error);
   }, []);
+
+  useInterval(
+    async () => {
+      await updateStakingContractInfoRecord().catch(console.error);
+      await updateActiveStakingContractInfo().catch(console.error);
+    },
+    isPaused ? null : FIVE_SECONDS_INTERVAL,
+  );
 
   return (
     <StakingContractInfoContext.Provider

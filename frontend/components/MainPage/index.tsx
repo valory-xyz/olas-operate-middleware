@@ -8,7 +8,10 @@ import { useBalance } from '@/hooks/useBalance';
 import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { MainHeader } from './header';
@@ -25,21 +28,43 @@ export const Main = () => {
   const { goto } = usePageState();
   const { backupSafeAddress } = useMasterSafe();
   const { updateServicesState } = useServices();
-  const { updateBalances, isLoaded, setIsLoaded } = useBalance();
-  const { activeStakingProgramId } = useStakingProgram();
-  const { hasEnoughServiceSlots } = useStakingContractInfo();
+  const {
+    updateBalances,
+    isLoaded: isBalanceLoaded,
+    setIsLoaded: setIsBalanceLoaded,
+  } = useBalance();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
 
+  const { isStakingContractInfoLoaded } = useStakingContractContext();
+
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
+
+  /**
+   * @todo fix this isLoaded logic
+   */
   useEffect(() => {
-    if (!isLoaded) {
-      setIsLoaded(true);
+    if (!isBalanceLoaded) {
       updateServicesState().then(() => updateBalances());
+      setIsBalanceLoaded(true);
     }
-  }, [isLoaded, setIsLoaded, updateBalances, updateServicesState]);
+  }, [
+    isBalanceLoaded,
+    setIsBalanceLoaded,
+    updateBalances,
+    updateServicesState,
+  ]);
 
+  /**
+   * @todo rename, unclear why this is needed
+   * assuming only relevant when alerts not visible
+   */
   const hideMainOlasBalanceTopBorder = [
     !backupSafeAddress,
     activeStakingProgramId === StakingProgramId.Alpha,
-    !hasEnoughServiceSlots,
+    isStakingContractInfoLoaded && !hasEnoughServiceSlots,
   ].some((condition) => !!condition);
 
   return (

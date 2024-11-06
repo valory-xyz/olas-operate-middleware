@@ -30,10 +30,18 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
     hasInitialLoaded: isServicesLoaded,
     service,
   } = useServices();
+
+  const {
+    activeStakingProgramId,
+    defaultStakingProgramId,
+    setDefaultStakingProgramId,
+  } = useStakingProgram();
   const { setIsPaused: setIsBalancePollingPaused } = useBalance();
-  const { updateActiveStakingProgramId: updateStakingProgram } =
-    useStakingProgram();
-  const { activeStakingContractInfo } = useStakingContractInfo();
+  const { updateActiveStakingProgramId } = useStakingProgram();
+
+  const { stakingContractInfo: currentStakingContractInfo } =
+    useStakingContractInfo(activeStakingProgramId ?? defaultStakingProgramId);
+
   const { setMigrationModalOpen } = useModals();
 
   const { migrateValidation, firstDeployValidation } =
@@ -43,7 +51,6 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
   const isFirstDeploy = useMemo(() => {
     if (!isServicesLoaded) return false;
     if (service) return false;
-
     return true;
   }, [isServicesLoaded, service]);
 
@@ -54,17 +61,17 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
 
     if (
       validation.reason === CantMigrateReason.NotStakedForMinimumDuration &&
-      !isNil(activeStakingContractInfo)
+      !isNil(currentStakingContractInfo)
     ) {
       return (
         <CountdownUntilMigration
-          activeStakingContractInfo={activeStakingContractInfo}
+          activeStakingContractInfo={currentStakingContractInfo}
         />
       );
     }
 
     return validation.reason;
-  }, [activeStakingContractInfo, validation]);
+  }, [currentStakingContractInfo, validation]);
 
   return (
     <Popover content={popoverContent}>
@@ -75,6 +82,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
         onClick={async () => {
           setIsServicePollingPaused(true);
           setIsBalancePollingPaused(true);
+          setDefaultStakingProgramId(stakingProgramId);
 
           try {
             setServiceStatus(DeploymentStatus.DEPLOYING);
@@ -88,7 +96,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
                 stakingProgramId === StakingProgramId.BetaMechMarketplace,
             });
 
-            await updateStakingProgram();
+            await updateActiveStakingProgramId();
 
             setMigrationModalOpen(true);
           } catch (error) {

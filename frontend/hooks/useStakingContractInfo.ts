@@ -2,10 +2,9 @@ import { isNil } from 'lodash';
 import { useContext } from 'react';
 
 import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
+import { StakingProgramId } from '@/enums/StakingProgram';
 
-import { useServices } from './useServices';
-
-export const useStakingContractInfo = () => {
+export const useStakingContractContext = () => {
   const {
     activeStakingContractInfo,
     isPaused,
@@ -14,17 +13,20 @@ export const useStakingContractInfo = () => {
     updateActiveStakingContractInfo,
     setIsPaused,
   } = useContext(StakingContractInfoContext);
+  return {
+    activeStakingContractInfo,
+    isPaused,
+    isStakingContractInfoLoaded,
+    stakingContractInfoRecord,
+    updateActiveStakingContractInfo,
+    setIsPaused,
+  };
+};
 
-  const { service } = useServices();
+export const useStakingContractInfo = (stakingProgramId: StakingProgramId) => {
+  const { stakingContractInfoRecord } = useStakingContractContext();
 
-  // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
-  if (!service || !activeStakingContractInfo)
-    return {
-      stakingContractInfoRecord,
-      updateActiveStakingContractInfo,
-      setIsPaused,
-      isPaused,
-    };
+  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
 
   const {
     serviceStakingState,
@@ -33,7 +35,7 @@ export const useStakingContractInfo = () => {
     maxNumServices,
     minimumStakingDuration,
     availableRewards,
-  } = activeStakingContractInfo;
+  } = stakingContractInfo ?? {};
 
   const isRewardsAvailable = availableRewards ?? 0 > 0;
 
@@ -81,18 +83,13 @@ export const useStakingContractInfo = () => {
     (serviceStakingStartTime ?? 0) + (minimumStakingDuration ?? 0);
 
   return {
-    activeStakingContractInfo,
     hasEnoughServiceSlots,
     isAgentEvicted,
     evictionExpiresAt,
     isEligibleForStaking,
-    isPaused,
     isRewardsAvailable,
     isServiceStakedForMinimumDuration,
     isServiceStaked,
-    isStakingContractInfoLoaded,
-    stakingContractInfoRecord,
-    updateActiveStakingContractInfo,
-    setIsPaused,
+    stakingContractInfo,
   };
 };

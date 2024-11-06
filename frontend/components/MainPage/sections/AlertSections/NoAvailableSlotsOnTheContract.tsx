@@ -1,8 +1,13 @@
 import { Flex, Typography } from 'antd';
+import { useMemo } from 'react';
 
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CustomAlert } from '../../../Alert';
 
@@ -10,11 +15,33 @@ const { Text } = Typography;
 
 export const NoAvailableSlotsOnTheContract = () => {
   const { goto } = usePageState();
-  const { hasEnoughServiceSlots } = useStakingContractInfo();
 
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const {
+    activeStakingProgramId,
+    defaultStakingProgramId,
+    activeStakingProgramMeta,
+    defaultStakingProgramMeta,
+  } = useStakingProgram();
 
+  const { isStakingContractInfoLoaded } = useStakingContractContext();
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
+
+  const stakingProgramName = useMemo(() => {
+    if (!isStakingContractInfoLoaded) return null;
+    if (activeStakingProgramId) {
+      return activeStakingProgramMeta?.name;
+    }
+    return defaultStakingProgramMeta?.name;
+  }, [
+    activeStakingProgramId,
+    activeStakingProgramMeta?.name,
+    defaultStakingProgramMeta?.name,
+    isStakingContractInfoLoaded,
+  ]);
+
+  if (!isStakingContractInfoLoaded) return null;
   if (hasEnoughServiceSlots) return null;
 
   return (
@@ -25,11 +52,10 @@ export const NoAvailableSlotsOnTheContract = () => {
       message={
         <Flex justify="space-between" gap={4} vertical>
           <Text className="font-weight-600">
-            No available slots on the contract
+            No available staking slots on {stakingProgramName}
           </Text>
           <span className="text-sm">
-            Select a contract with available slots to be able to start your
-            agent.
+            Select a contract with available slots to start your agent.
           </span>
           <Text
             className="pointer hover-underline text-primary text-sm"

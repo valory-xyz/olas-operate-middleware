@@ -7,7 +7,10 @@ import { useBalance } from '@/hooks/useBalance';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
@@ -47,16 +50,15 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     useStakingProgram();
   const { needsInitialFunding } = useNeedsFunds();
 
+  const { stakingContractInfoRecord, isStakingContractInfoLoaded } =
+    useStakingContractContext();
+
   const {
-    activeStakingContractInfo,
+    stakingContractInfo,
     isServiceStaked,
     isServiceStakedForMinimumDuration,
-    isStakingContractInfoLoaded,
-    stakingContractInfoRecord,
     hasEnoughServiceSlots,
-  } = useStakingContractInfo();
-
-  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+  } = useStakingContractInfo(stakingProgramId);
 
   const { hasInitialLoaded: isServicesLoaded } = useServices();
 
@@ -94,11 +96,25 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
     }
 
+    // Services must be not be running or in a transitional state
+    if (
+      [
+        DeploymentStatus.DEPLOYED,
+        DeploymentStatus.DEPLOYING,
+        DeploymentStatus.STOPPING,
+      ].some((status) => status === serviceStatus)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.PearlCurrentlyRunning,
+      };
+    }
+
     if (!isBalanceLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (isServicesLoaded && !isStakingContractInfoLoaded) {
+    if (!isStakingContractInfoLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
@@ -117,6 +133,16 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return {
         canMigrate: false,
         reason: CantMigrateReason.ContractAlreadySelected,
+      };
+    }
+
+    if (
+      (stakingContractInfo.serviceIds ?? [])?.length >=
+      (stakingContractInfo.maxNumServices ?? 0)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.NoAvailableStakingSlots,
       };
     }
 
@@ -144,20 +170,6 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
-    // Services must be not be running or in a transitional state
-    if (
-      [
-        DeploymentStatus.DEPLOYED,
-        DeploymentStatus.DEPLOYING,
-        DeploymentStatus.STOPPING,
-      ].some((status) => status === serviceStatus)
-    ) {
-      return {
-        canMigrate: false,
-        reason: CantMigrateReason.PearlCurrentlyRunning,
-      };
-    }
-
     if (activeStakingProgramId === null && !isServiceStaked) {
       return { canMigrate: true };
     }
@@ -171,7 +183,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
-    if (activeStakingContractInfo && !isServiceStakedForMinimumDuration) {
+    if (stakingContractInfo && !isServiceStakedForMinimumDuration) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.NotStakedForMinimumDuration,
@@ -189,7 +201,6 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     hasEnoughOlasToMigrate,
     isServiceStaked,
     activeStakingProgramMeta?.canMigrateTo,
-    activeStakingContractInfo,
     isServiceStakedForMinimumDuration,
     serviceStatus,
   ]);
@@ -199,18 +210,51 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
     }
 
+    // Services must be not be running or in a transitional state
+    if (
+      [
+        DeploymentStatus.DEPLOYED,
+        DeploymentStatus.DEPLOYING,
+        DeploymentStatus.STOPPING,
+      ].some((status) => status === serviceStatus)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.PearlCurrentlyRunning,
+      };
+    }
+
     if (!isBalanceLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (!hasEnoughOlasForFirstRun) {
+    // staking contract requirements
+
+    if (!isStakingContractInfoLoaded) {
       return {
         canMigrate: false,
-        reason: CantMigrateReason.InsufficientOlasToMigrate,
+        reason: CantMigrateReason.LoadingStakingContractInfo,
       };
     }
 
     const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+
+    if (!stakingContractInfo) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.CannotFindStakingContractInfo,
+      };
+    }
+
+    if (
+      (stakingContractInfo.serviceIds ?? [])?.length >=
+      (stakingContractInfo.maxNumServices ?? 0)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.NoAvailableStakingSlots,
+      };
+    }
 
     if ((stakingContractInfo?.availableRewards ?? 0) <= 0) {
       return {
@@ -226,13 +270,23 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
+    // fund requirements
+
+    if (!hasEnoughOlasForFirstRun) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.InsufficientOlasToMigrate,
+      };
+    }
+
     return { canMigrate: true };
   }, [
     isServicesLoaded,
     isBalanceLoaded,
-    hasEnoughOlasForFirstRun,
+    isStakingContractInfoLoaded,
     stakingContractInfoRecord,
     stakingProgramId,
+    hasEnoughOlasForFirstRun,
   ]);
 
   const canUpdateStakingContract = useMemo(() => {

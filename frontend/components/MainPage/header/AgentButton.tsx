@@ -10,7 +10,10 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -140,15 +143,22 @@ const AgentNotRunningButton = () => {
     updateBalances,
   } = useBalance();
   const { storeState } = useStore();
+
+  const {
+    isStakingContractInfoLoaded,
+    setIsPaused: setIsStakingContractInfoPollingPaused,
+    updateActiveStakingContractInfo,
+  } = useStakingContractContext();
+
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
+
   const {
     isEligibleForStaking,
     isAgentEvicted,
-    setIsPaused: setIsStakingContractInfoPollingPaused,
-    updateActiveStakingContractInfo,
     hasEnoughServiceSlots,
-  } = useStakingContractInfo();
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+    isServiceStaked,
+  } = useStakingContractInfo(activeStakingProgramId ?? defaultStakingProgramId);
 
   // const minStakingDeposit =
   //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
@@ -266,6 +276,8 @@ const AgentNotRunningButton = () => {
   ]);
 
   const isDeployable = useMemo(() => {
+    if (!isStakingContractInfoLoaded) return false;
+
     // if the agent is NOT running and the balance is too low,
     // user should not be able to start the agent
     const isServiceInactive =
@@ -282,7 +294,7 @@ const AgentNotRunningButton = () => {
     if (!requiredOlas) return false;
 
     // If no slots available, agent cannot be started
-    if (!hasEnoughServiceSlots) return false;
+    if (!hasEnoughServiceSlots && !isServiceStaked) return false;
 
     // case where service exists & user has initial funded
     if (service && storeState?.isInitialFunded) {
@@ -299,16 +311,18 @@ const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
+    isStakingContractInfoLoaded,
     serviceStatus,
+    isLowBalance,
+    requiredOlas,
+    hasEnoughServiceSlots,
+    isServiceStaked,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,
     isAgentEvicted,
     safeOlasBalanceWithStaked,
-    requiredOlas,
     totalEthBalance,
-    isLowBalance,
-    hasEnoughServiceSlots,
   ]);
 
   const buttonProps: ButtonProps = {
@@ -324,11 +338,20 @@ const AgentNotRunningButton = () => {
 };
 
 export const AgentButton = () => {
-  const { service, serviceStatus, hasInitialLoaded } = useServices();
-  const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
+  const {
+    service,
+    serviceStatus,
+    hasInitialLoaded: isServicesLoaded,
+  } = useServices();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
+  const { isStakingContractInfoLoaded } = useStakingContractContext();
+  const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
 
   return useMemo(() => {
-    if (!hasInitialLoaded) {
+    if (!isServicesLoaded || !isStakingContractInfoLoaded) {
       return <Button type="primary" size="large" disabled loading />;
     }
 
@@ -359,7 +382,8 @@ export const AgentButton = () => {
 
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
-    hasInitialLoaded,
+    isServicesLoaded,
+    isStakingContractInfoLoaded,
     serviceStatus,
     isEligibleForStaking,
     isAgentEvicted,
