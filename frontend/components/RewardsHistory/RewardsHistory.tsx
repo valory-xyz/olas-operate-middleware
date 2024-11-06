@@ -29,6 +29,7 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
@@ -141,13 +142,15 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   );
 };
 
+type ContractRewardsProps = {
+  stakingProgramId: StakingProgramId;
+  checkpoints: Checkpoint[];
+};
+
 const ContractRewards = ({
   stakingProgramId,
   checkpoints,
-}: {
-  stakingProgramId: StakingProgramId;
-  checkpoints: Checkpoint[];
-}) => (
+}: ContractRewardsProps) => (
   <Flex vertical>
     <ContractName>
       <Text strong>{STAKING_PROGRAM_META[stakingProgramId].name}</Text>
@@ -179,16 +182,36 @@ export const RewardsHistory = () => {
   const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
     useRewardsHistory();
   const { goto } = usePageState();
+  const { serviceId } = useServices();
 
   const history = useMemo(() => {
-    if (isLoading || isFetching) return <Loading />;
+    if (isLoading || isFetching || !serviceId) return <Loading />;
     if (isError) return <ErrorLoadingHistory refetch={refetch} />;
     if (!contractCheckpoints) return <NoRewardsHistory />;
-    if (Object.keys(contractCheckpoints).length === 0)
+    if (Object.keys(contractCheckpoints).length === 0) {
       return <NoRewardsHistory />;
+    }
+
+    // find the latest contract address where the service has participated in
+    const recentContractAddress = Object.values(contractCheckpoints)
+      .flat()
+      .sort((a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp)
+      .find((checkpoint) =>
+        checkpoint.serviceIds.includes(`${serviceId}`),
+      )?.contractAddress;
+
+    // put the latest contract address at the top of the list of contracts
+    const latestContractAddresses = Object.keys(contractCheckpoints).sort(
+      (a, b) => {
+        if (a === recentContractAddress) return -1;
+        if (b === recentContractAddress) return 1;
+        return 0;
+      },
+    );
+
     return (
       <Flex vertical gap={16}>
-        {Object.keys(contractCheckpoints).map((contractAddress: string) => {
+        {latestContractAddresses.map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
             SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
@@ -212,7 +235,7 @@ export const RewardsHistory = () => {
         })}
       </Flex>
     );
-  }, [isLoading, isFetching, isError, refetch, contractCheckpoints]);
+  }, [isLoading, isFetching, isError, serviceId, contractCheckpoints, refetch]);
 
   return (
     <ConfigProvider theme={yourWalletTheme}>

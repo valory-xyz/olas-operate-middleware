@@ -42,7 +42,7 @@ type CheckpointResponse = z.infer<typeof CheckpointGraphResponseSchema>;
 
 const fetchRewardsQuery = gql`
   {
-    checkpoints(orderBy: epoch, orderDirection: desc) {
+    checkpoints(orderBy: epoch, orderDirection: desc, first: 1000) {
       id
       availableRewards
       blockTimestamp
