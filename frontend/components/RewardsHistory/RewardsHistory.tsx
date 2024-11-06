@@ -192,7 +192,7 @@ export const RewardsHistory = () => {
       return <NoRewardsHistory />;
     }
 
-    // find the latest contract address where the service has participated in
+    // find the recent contract address where the service has participated in
     const recentContractAddress = Object.values(contractCheckpoints)
       .flat()
       .sort((a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp)
@@ -200,7 +200,7 @@ export const RewardsHistory = () => {
         checkpoint.serviceIds.includes(`${serviceId}`),
       )?.contractAddress;
 
-    // put the latest contract address at the top of the list of contracts
+    // most recent transaction staking contract at the top of the list
     const latestContractAddresses = Object.keys(contractCheckpoints).sort(
       (a, b) => {
         if (a === recentContractAddress) return -1;
