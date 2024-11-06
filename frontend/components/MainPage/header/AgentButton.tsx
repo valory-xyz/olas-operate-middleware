@@ -89,7 +89,7 @@ const AgentRunningButton = () => {
       await ServicesService.stopDeployment(service.hash);
     } catch (error) {
       console.error(error);
-      showNotification?.('Error while stopping agent');
+      showNotification?.('Some error occurred while stopping agent');
     } finally {
       // Resume polling, will update to correct status regardless of success
       setIsServicePollingPaused(false);
@@ -145,6 +145,7 @@ const AgentNotRunningButton = () => {
     isAgentEvicted,
     setIsPaused: setIsStakingContractInfoPollingPaused,
     updateActiveStakingContractInfo,
+    hasEnoughServiceSlots,
   } = useStakingContractInfo();
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
@@ -192,7 +193,7 @@ const AgentNotRunningButton = () => {
     } catch (error) {
       console.error(error);
       setServiceStatus(undefined);
-      showNotification?.('Error while creating safe');
+      showNotification?.('Some error occurred while creating safe');
       setIsStakingContractInfoPollingPaused(false);
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
@@ -211,7 +212,7 @@ const AgentNotRunningButton = () => {
     } catch (error) {
       console.error(error);
       setServiceStatus(undefined);
-      showNotification?.('Error while deploying service');
+      showNotification?.('Some error occurred while deploying service');
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
       setIsStakingContractInfoPollingPaused(false);
@@ -223,7 +224,9 @@ const AgentNotRunningButton = () => {
       showNotification?.(`Your agent is running!`);
     } catch (error) {
       console.error(error);
-      showNotification?.('Error while showing "running" notification');
+      showNotification?.(
+        'Some error occurred while showing "running" notification',
+      );
     }
 
     // Can assume successful deployment
@@ -278,6 +281,9 @@ const AgentNotRunningButton = () => {
 
     if (!requiredOlas) return false;
 
+    // If no slots available, agent cannot be started
+    if (!hasEnoughServiceSlots) return false;
+
     // case where service exists & user has initial funded
     if (service && storeState?.isInitialFunded) {
       if (!safeOlasBalanceWithStaked) return false;
@@ -302,6 +308,7 @@ const AgentNotRunningButton = () => {
     requiredOlas,
     totalEthBalance,
     isLowBalance,
+    hasEnoughServiceSlots,
   ]);
 
   const buttonProps: ButtonProps = {
