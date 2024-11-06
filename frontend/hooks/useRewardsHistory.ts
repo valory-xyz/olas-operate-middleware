@@ -6,6 +6,8 @@ import { useEffect, useMemo } from 'react';
 import { z } from 'zod';
 
 import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
+import { Address } from '@/types/Address';
+import { getStakingProgramIdByAddress } from '@/utils/service';
 
 import { useServices } from './useServices';
 
@@ -32,7 +34,7 @@ const CheckpointGraphResponseSchema = z.object({
     message: 'Expected epochLength to be a string',
   }),
   contractAddress: z.string({
-    message: 'Expected contractAddress to be a string',
+    message: 'Expected contractAddress to be a valid Ethereum address',
   }),
 });
 type CheckpointGraphResponse = z.infer<typeof CheckpointGraphResponseSchema>;
@@ -61,6 +63,7 @@ export type TransformedCheckpoint = {
   transactionHash: string;
   epochLength: string;
   contractAddress: string;
+  contractName?: string;
   epochEndTimeStamp: number;
   epochStartTimeStamp: number;
   reward: number;
@@ -99,13 +102,17 @@ const transformCheckpoints = (
           ? Number(checkpoint.blockTimestamp) - Number(checkpoint.epochLength)
           : checkpoints[index + 1]?.blockTimestamp ?? 0;
 
+      const stakingContractId = getStakingProgramIdByAddress(
+        checkpoint.contractAddress as Address,
+      );
+
       return {
         ...checkpoint,
         epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
         epochStartTimeStamp: Number(epochStartTimeStamp),
         reward: Number(ethers.utils.formatUnits(reward, 18)),
         earned: serviceIdIndex !== -1,
-        // contractName: checkpoint.contractAddress,
+        contractName: stakingContractId,
       };
     })
     .filter((epoch) => {
