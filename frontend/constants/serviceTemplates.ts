@@ -32,7 +32,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   // },
   {
     name: 'Optimus',
-    hash: 'bafybeibwebacnng63cksl2d4c4ieaunrpi5gl3hitwahbzaoasvf3sagti',
+    hash: 'bafybeibzujtdlgsft3hnjmboa5yfni7vqc2iocjlyti5nadc55jxj3kxbu',
     description: 'Optimus',
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
