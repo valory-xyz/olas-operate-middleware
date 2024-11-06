@@ -26,7 +26,8 @@ export const Main = () => {
   const { backupSafeAddress } = useMasterSafe();
   const { updateServicesState } = useServices();
   const { updateBalances, isLoaded, setIsLoaded } = useBalance();
-  const { activeStakingProgramId: currentStakingProgram } = useStakingProgram();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
   const { hasEnoughServiceSlots } = useStakingContractInfo();
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export const Main = () => {
 
   const hideMainOlasBalanceTopBorder = [
     !backupSafeAddress,
-    currentStakingProgram === StakingProgramId.Alpha,
+    activeStakingProgramId === StakingProgramId.Alpha,
     !hasEnoughServiceSlots,
   ].some((condition) => !!condition);
 
@@ -74,9 +75,9 @@ export const Main = () => {
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <RewardsSection />
         <KeepAgentRunningSection />
-        {currentStakingProgram && (
-          <StakingContractUpdate stakingProgramId={currentStakingProgram} />
-        )}
+        <StakingContractUpdate
+          stakingProgramId={activeStakingProgramId ?? defaultStakingProgramId}
+        />
         <GasBalanceSection />
         <MainNeedsFunds />
         <AddFundsSection />
