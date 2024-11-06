@@ -8,8 +8,8 @@ import { useBalance } from '@/hooks/useBalance';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
+  useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
 } from '@/hooks/useStakingContractInfo';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
@@ -23,8 +23,8 @@ const AlertInsufficientMigrationFunds = ({
   stakingProgramId,
 }: CantMigrateAlertProps) => {
   const { serviceTemplate } = useServiceTemplates();
-  const { isStakingContractInfoLoaded } = useStakingContractContext();
-  const { isServiceStaked } = useStakingContractInfo(stakingProgramId);
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isServiceStaked } = useActiveStakingContractInfo();
   const { masterSafeBalance: safeBalance, totalOlasStakedBalance } =
     useBalance();
   const { serviceFundRequirements, isInitialFunded } = useNeedsFunds();
@@ -34,7 +34,7 @@ const AlertInsufficientMigrationFunds = ({
     stakingProgramId,
   );
 
-  if (!isStakingContractInfoLoaded) return null;
+  if (!isStakingContractInfoRecordLoaded) return null;
   if (isNil(totalOlasRequiredForStaking)) return null;
   if (isNil(safeBalance?.OLAS)) return null;
   if (isNil(totalOlasStakedBalance)) return null;

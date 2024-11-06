@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 import {
+  useActiveStakingContractInfo,
   useStakingContractContext,
   useStakingContractInfo,
 } from '@/hooks/useStakingContractInfo';
@@ -23,13 +24,14 @@ export const NoAvailableSlotsOnTheContract = () => {
     defaultStakingProgramMeta,
   } = useStakingProgram();
 
-  const { isStakingContractInfoLoaded } = useStakingContractContext();
-  const { hasEnoughServiceSlots, isServiceStaked } = useStakingContractInfo(
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isServiceStaked } = useActiveStakingContractInfo();
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
   const stakingProgramName = useMemo(() => {
-    if (!isStakingContractInfoLoaded) return null;
+    if (!isStakingContractInfoRecordLoaded) return null;
     if (activeStakingProgramId) {
       return activeStakingProgramMeta?.name;
     }
@@ -38,10 +40,10 @@ export const NoAvailableSlotsOnTheContract = () => {
     activeStakingProgramId,
     activeStakingProgramMeta?.name,
     defaultStakingProgramMeta?.name,
-    isStakingContractInfoLoaded,
+    isStakingContractInfoRecordLoaded,
   ]);
 
-  if (!isStakingContractInfoLoaded) return null;
+  if (!isStakingContractInfoRecordLoaded) return null;
   if (hasEnoughServiceSlots) return null;
   if (isServiceStaked) return null;
 

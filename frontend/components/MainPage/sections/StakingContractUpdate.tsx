@@ -22,7 +22,7 @@ export const StakingContractUpdate = () => {
     defaultStakingProgramId,
   } = useStakingProgram();
 
-  const { isStakingContractInfoLoaded } = useStakingContractContext();
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
   const { serviceStatus } = useServices();
 
   const serviceIsTransitioning = useMemo(
@@ -44,7 +44,7 @@ export const StakingContractUpdate = () => {
         type="link"
         className="p-0"
         onClick={() => goto(Pages.ManageStaking)}
-        disabled={!isStakingContractInfoLoaded || serviceIsTransitioning}
+        disabled={!isStakingContractInfoRecordLoaded || serviceIsTransitioning}
       >
         {stakingContractName}
         <RightOutlined />
@@ -53,7 +53,7 @@ export const StakingContractUpdate = () => {
   }, [
     goto,
     isActiveStakingProgramLoaded,
-    isStakingContractInfoLoaded,
+    isStakingContractInfoRecordLoaded,
     serviceIsTransitioning,
     stakingContractName,
   ]);

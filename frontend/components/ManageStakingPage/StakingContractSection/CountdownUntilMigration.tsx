@@ -9,17 +9,17 @@ import { StakingContractInfo } from '@/types/Autonolas';
 const { Text } = Typography;
 
 export const CountdownUntilMigration = ({
-  activeStakingContractInfo,
+  currentStakingContractInfo,
 }: {
-  activeStakingContractInfo: Partial<StakingContractInfo>;
+  currentStakingContractInfo: Partial<StakingContractInfo>;
 }) => {
   const [secondsUntilReady, setSecondsUntilMigration] = useState<number>();
 
   useInterval(() => {
-    if (!activeStakingContractInfo) return;
+    if (!currentStakingContractInfo) return;
 
     const { serviceStakingStartTime, minimumStakingDuration } =
-      activeStakingContractInfo;
+      currentStakingContractInfo;
 
     if (isNil(minimumStakingDuration)) return;
     if (isNil(serviceStakingStartTime)) return;

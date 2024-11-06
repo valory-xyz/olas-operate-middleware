@@ -5,6 +5,7 @@ import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import {
+  useActiveStakingContractInfo,
   useStakingContractContext,
   useStakingContractInfo,
 } from '@/hooks/useStakingContractInfo';
@@ -49,16 +50,11 @@ export const CannotStartAgentDueToUnexpectedError = () => (
 const evictedDescription =
   "You didn't run your agent enough and it missed its targets multiple times. You can run the agent again when the eviction period ends.";
 const AgentEvictedPopover = () => {
-  const { isStakingContractInfoLoaded } = useStakingContractContext();
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
 
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { evictionExpiresAt } = useActiveStakingContractInfo();
 
-  const { evictionExpiresAt } = useStakingContractInfo(
-    activeStakingProgramId ?? defaultStakingProgramId,
-  );
-
-  if (!isStakingContractInfoLoaded) return null;
+  if (!isStakingContractInfoRecordLoaded) return null;
 
   return (
     <Popover
@@ -122,19 +118,19 @@ const NoJobsAvailablePopover = () => (
 );
 
 export const CannotStartAgentPopover = () => {
-  const { isStakingContractInfoLoaded } = useStakingContractContext();
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
 
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
 
-  const {
-    isEligibleForStaking,
-    hasEnoughServiceSlots,
-    isRewardsAvailable,
-    isAgentEvicted,
-  } = useStakingContractInfo(activeStakingProgramId ?? defaultStakingProgramId);
+  const { isAgentEvicted, isEligibleForStaking } =
+    useActiveStakingContractInfo();
 
-  if (!isStakingContractInfoLoaded) return null;
+  const { hasEnoughServiceSlots, isRewardsAvailable } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
+
+  if (!isStakingContractInfoRecordLoaded) return null;
   if (isEligibleForStaking) return null;
   if (!hasEnoughServiceSlots) return <NoJobsAvailablePopover />;
   if (!isRewardsAvailable) return <NoRewardsAvailablePopover />;

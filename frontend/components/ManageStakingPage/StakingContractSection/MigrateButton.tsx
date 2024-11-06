@@ -10,7 +10,10 @@ import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useActiveStakingContractInfo,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
 
@@ -31,16 +34,26 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
     service,
   } = useServices();
 
-  const {
-    activeStakingProgramId,
-    defaultStakingProgramId,
-    setDefaultStakingProgramId,
-  } = useStakingProgram();
+  const { defaultStakingProgramId, setDefaultStakingProgramId } =
+    useStakingProgram();
+
   const { setIsPaused: setIsBalancePollingPaused } = useBalance();
   const { updateActiveStakingProgramId } = useStakingProgram();
 
-  const { stakingContractInfo: currentStakingContractInfo } =
-    useStakingContractInfo(activeStakingProgramId ?? defaultStakingProgramId);
+  const { activeStakingContractInfo, isActiveStakingContractInfoLoaded } =
+    useActiveStakingContractInfo();
+  const { stakingContractInfo: defaultStakingContractInfo } =
+    useStakingContractInfo(defaultStakingProgramId);
+
+  const currentStakingContractInfo = useMemo(() => {
+    if (!isActiveStakingContractInfoLoaded) return;
+    if (activeStakingContractInfo) return activeStakingContractInfo;
+    return defaultStakingContractInfo;
+  }, [
+    activeStakingContractInfo,
+    defaultStakingContractInfo,
+    isActiveStakingContractInfoLoaded,
+  ]);
 
   const { setMigrationModalOpen } = useModals();
 
@@ -65,7 +78,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
     ) {
       return (
         <CountdownUntilMigration
-          activeStakingContractInfo={currentStakingContractInfo}
+          currentStakingContractInfo={currentStakingContractInfo}
         />
       );
     }

@@ -10,11 +10,11 @@ export const StakingContractDetails = ({
 }: {
   stakingProgramId: StakingProgramId;
 }) => {
-  const { stakingContractInfoRecord, isStakingContractInfoLoaded } =
+  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
     useStakingContractContext();
 
   const list = useMemo(() => {
-    if (!isStakingContractInfoLoaded) return;
+    if (!isStakingContractInfoRecordLoaded) return;
     if (!stakingContractInfoRecord) return;
     if (!stakingProgramId) return;
     if (!stakingContractInfoRecord?.[stakingProgramId]) return;
@@ -41,12 +41,12 @@ export const StakingContractDetails = ({
       },
     ];
   }, [
-    isStakingContractInfoLoaded,
+    isStakingContractInfoRecordLoaded,
     stakingContractInfoRecord,
     stakingProgramId,
   ]);
 
-  if (!isStakingContractInfoLoaded) {
+  if (!isStakingContractInfoRecordLoaded) {
     return <Skeleton active />;
   }
 
