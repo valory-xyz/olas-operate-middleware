@@ -4,6 +4,7 @@ import styled from 'styled-components';
 
 import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
 import { FireStreak } from '@/components/custom-icons/FireStreak';
+import { NA } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
@@ -20,17 +21,23 @@ const RewardsStreakFlex = styled(Flex)`
   align-items: center;
 `;
 
-type StreakProps = { streak: number; isLoading: boolean };
-
-const Streak = ({ streak, isLoading }: StreakProps) => {
+const Streak = () => {
   const { isEligibleForRewards } = useReward();
+  const {
+    latestRewardStreak: streak,
+    isLoading,
+    isFetching,
+    isError,
+  } = useRewardsHistory();
 
-  if (isLoading) {
-    return <Skeleton.Input active size="small" />;
-  }
+  if (isLoading || isFetching) return <Skeleton.Input active size="small" />;
 
-  // Graph does not account for the current day, so we need to add 1 to the streak
-  const optimisticStreak = isEligibleForRewards ? streak + 1 : streak;
+  if (isError) return NA;
+
+  // Graph does not account for the current day so, so we need to add 1 to the streak.
+  // Also, if previously streak was not 0.
+  const optimisticStreak =
+    isEligibleForRewards && streak !== 0 ? streak + 1 : streak;
 
   return (
     <span style={{ display: 'inline-flex', gap: 8 }}>
@@ -49,11 +56,10 @@ const Streak = ({ streak, isLoading }: StreakProps) => {
 
 export const RewardsStreak = () => {
   const { goto } = usePageState();
-  const { latestRewardStreak, isLoading, isFetching } = useRewardsHistory();
 
   return (
     <RewardsStreakFlex>
-      <Streak isLoading={isLoading || isFetching} streak={latestRewardStreak} />
+      <Streak />
 
       <Text
         type="secondary"
