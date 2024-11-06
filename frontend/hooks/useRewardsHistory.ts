@@ -37,6 +37,7 @@ const CheckpointGraphResponseSchema = z.object({
     message: 'Expected contractAddress to be a valid Ethereum address',
   }),
 });
+const CheckpointsGraphResponseSchema = z.array(CheckpointGraphResponseSchema);
 type CheckpointGraphResponse = z.infer<typeof CheckpointGraphResponseSchema>;
 
 const fetchRewardsQuery = gql`
@@ -139,17 +140,27 @@ const useContractCheckpoints = () => {
   return useQuery({
     queryKey: [],
     async queryFn() {
-      if (!serviceId) return { checkpoints: [] };
+      if (!serviceId) return [];
 
       const checkpointsResponse = await request<CheckpointsResponse>(
         GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
         fetchRewardsQuery,
       );
-      return checkpointsResponse;
-    },
-    select: (data): { [contractAddress: string]: TransformedCheckpoint[] } => {
-      const checkpoints = data?.checkpoints;
 
+      const parsedCheckpoints = CheckpointsGraphResponseSchema.safeParse(
+        checkpointsResponse.checkpoints,
+      );
+
+      if (parsedCheckpoints.error) {
+        console.error(parsedCheckpoints.error);
+        return [];
+      }
+
+      return parsedCheckpoints.data;
+    },
+    select: (
+      checkpoints,
+    ): { [contractAddress: string]: TransformedCheckpoint[] } => {
       if (!serviceId) return {};
       if (!checkpoints) return {};
 
