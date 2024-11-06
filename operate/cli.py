@@ -591,6 +591,56 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get available services."""
         return JSONResponse(content=operate.service_manager().json)
 
+    @app.post("/api/v2/services")
+    @with_retries
+    async def _create_services_v2(request: Request) -> JSONResponse:
+        """Create a service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        template = await request.json()
+        manager = operate.service_manager()
+        output = manager.create(service_template=template)
+        # if len(manager.json) > 0:
+        #     old_hash = manager.json[0]["hash"]
+        #     if old_hash == template["hash"]:
+        #         logger.info(f'Loading service {template["hash"]}')
+        #         service = manager.load_or_create(
+        #             hash=template["hash"],
+        #             service_template=template,
+        #         )
+        #     else:
+        #         logger.info(f"Updating service from {old_hash} to " + template["hash"])
+        #         service = manager.update_service(
+        #             old_hash=old_hash,
+        #             new_hash=template["hash"],
+        #             service_template=template,
+        #         )
+        # else:
+        #     logger.info(f'Creating service {template["hash"]}')
+        #     service = manager.load_or_create(
+        #         hash=template["hash"],
+        #         service_template=template,
+        #     )
+
+        # if template.get("deploy", False):
+
+        #     def _fn() -> None:
+        #         # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
+        #         manager.deploy_service_onchain_from_safe(hash=service.hash)
+        #         manager.fund_service(hash=service.hash)
+
+        #         # TODO Optimus patch, chain_id="10"
+        #         chain_id = "10"
+        #         manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
+
+        #     await run_in_executor(_fn)
+        #     schedule_funding_job(service=service.hash)
+        #     schedule_healthcheck_job(service=service.hash)
+
+        return JSONResponse(
+            content=output
+        )
+
     @app.post("/api/services")
     @with_retries
     async def _create_services(request: Request) -> JSONResponse:

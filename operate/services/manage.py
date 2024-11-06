@@ -192,6 +192,51 @@ class ServiceManager:
 
         return service
 
+    def create(
+        self,
+        service_template: t.Optional[ServiceTemplate] = None,
+        keys: t.Optional[t.List[Key]] = None,
+    ) -> Service:
+        """
+        Create a service
+
+        :param service_template: Service template
+        :param keys: Keys
+        :return: Service instance
+        """
+        path = self.path / hash
+        # if path.exists():
+        #     service = Service.load(path=path)
+
+        #     if service_template is not None:
+        #         service.update_user_params_from_template(
+        #             service_template=service_template
+        #         )
+
+        #     return service
+
+        if service_template is None:
+            raise ValueError(
+                "'service_template' cannot be None when creating a new service"
+            )
+
+        service = Service.new(
+            hash=hash,
+            keys=keys or [],
+            storage=self.path,
+            service_template=service_template,
+        )
+
+        if not service.keys:
+            service.keys = [
+                self.keys_manager.get(self.keys_manager.create())
+                for _ in range(service.helper.config.number_of_agents)
+            ]
+            service.store()
+
+        return service
+
+
     def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
         chain_config = service.chain_configs[chain_id]
         chain_data = chain_config.chain_data
