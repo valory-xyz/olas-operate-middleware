@@ -1,9 +1,6 @@
 import { Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
 
-import { useMigrate } from '@/components/ManageStakingPage/StakingContractSection/useMigrate';
 import { Pages } from '@/enums/PageState';
-import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 
@@ -11,17 +8,14 @@ import { CustomAlert } from '../../../Alert';
 
 const { Text } = Typography;
 
-type NoAvailableSlotsOnTheContractProps = {
-  stakingProgramId: StakingProgramId;
-};
-export const NoAvailableSlotsOnTheContract = ({
-  stakingProgramId,
-}: NoAvailableSlotsOnTheContractProps) => {
+export const NoAvailableSlotsOnTheContract = () => {
   const { goto } = usePageState();
   const { hasEnoughServiceSlots } = useStakingContractInfo();
-  const { canUpdateStakingContract } = useMigrate(stakingProgramId);
 
-  if (hasEnoughServiceSlots || isNil(hasEnoughServiceSlots)) return null;
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
+
+  if (hasEnoughServiceSlots) return null;
 
   return (
     <CustomAlert
@@ -37,14 +31,12 @@ export const NoAvailableSlotsOnTheContract = ({
             Select a contract with available slots to be able to start your
             agent.
           </span>
-          {canUpdateStakingContract && (
-            <Text
-              className="pointer hover-underline text-primary text-sm"
-              onClick={() => goto(Pages.ManageStaking)}
-            >
-              Change staking contract
-            </Text>
-          )}
+          <Text
+            className="pointer hover-underline text-primary text-sm"
+            onClick={() => goto(Pages.ManageStaking)}
+          >
+            Change staking contract
+          </Text>
         </Flex>
       }
     />

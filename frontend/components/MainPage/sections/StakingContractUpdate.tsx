@@ -1,5 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
-import { Button, Flex, Popover, Skeleton, Typography } from 'antd';
+import { Button, Flex, Skeleton, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
@@ -36,19 +36,13 @@ export const StakingContractUpdate = ({
       <Button
         type="link"
         className="p-0"
-        disabled={!canUpdateStakingContract}
         onClick={() => goto(Pages.ManageStaking)}
       >
         {stakingContractName}
         <RightOutlined />
       </Button>
     );
-  }, [
-    goto,
-    isActiveStakingProgramLoaded,
-    stakingContractName,
-    canUpdateStakingContract,
-  ]);
+  }, [goto, isActiveStakingProgramLoaded, stakingContractName]);
 
   return (
     <CardSection bordertop="true" padding="16px 24px">
@@ -60,18 +54,7 @@ export const StakingContractUpdate = ({
       >
         <Text type="secondary">Staking contract</Text>
 
-        {canUpdateStakingContract ? (
-          stakingButton
-        ) : (
-          <Popover
-            placement="topLeft"
-            trigger={['hover']}
-            arrow={false}
-            content={<Text>Fund your agent to manage staking contracts</Text>}
-          >
-            {stakingButton}
-          </Popover>
-        )}
+        {stakingButton}
       </Flex>
     </CardSection>
   );
