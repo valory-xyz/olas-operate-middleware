@@ -201,13 +201,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # dont start health checker if it's switched off
             health_checker.start_for_service(service)
 
-    def cancel_funding_job(service: str) -> None:
+    def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
-        if service not in funding_jobs:
+        if service_config_id not in funding_jobs:
             return
-        status = funding_jobs[service].cancel()
+        status = funding_jobs[service_config_id].cancel()
         if not status:
-            logger.info(f"Funding job cancellation for {service} failed")
+            logger.info(f"Funding job cancellation for {service_config_id} failed")
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
@@ -215,19 +215,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
-        service_hashes = [i["hash"] for i in operate.service_manager().json]
+        service_config_ids = [i["service_config_id"] for i in operate.service_manager().json]
 
-        for service in service_hashes:
-            if not operate.service_manager().exists(service=service):
+        for service_config_id in service_config_ids:
+            if not operate.service_manager().exists(service_config_id=service_config_id):
                 continue
-            deployment = operate.service_manager().load_or_create(service).deployment
+            deployment = operate.service_manager().load(service_config_id=service_config_id).deployment
             if deployment.status == DeploymentStatus.DELETED:
                 continue
-            logger.info(f"stopping service {service}")
+            logger.info(f"stopping service {service_config_id}")
             deployment.stop(force=True)
-            logger.info(f"Cancelling funding job for {service}")
-            cancel_funding_job(service=service)
-            health_checker.stop_for_service(service=service)
+            logger.info(f"Cancelling funding job for {service_config_id}")
+            cancel_funding_job(service_config_id=service_config_id)
+            health_checker.stop_for_service(service_config_id=service_config_id)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
@@ -591,55 +591,54 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get available services."""
         return JSONResponse(content=operate.service_manager().json)
 
-    @app.post("/api/v2/services")
+    @app.post("/api/v2/service")
     @with_retries
     async def _create_services_v2(request: Request) -> JSONResponse:
-        """Create a service."""
+        """Create a service with a random id."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
         manager = operate.service_manager()
         output = manager.create(service_template=template)
-        # if len(manager.json) > 0:
-        #     old_hash = manager.json[0]["hash"]
-        #     if old_hash == template["hash"]:
-        #         logger.info(f'Loading service {template["hash"]}')
-        #         service = manager.load_or_create(
-        #             hash=template["hash"],
-        #             service_template=template,
-        #         )
-        #     else:
-        #         logger.info(f"Updating service from {old_hash} to " + template["hash"])
-        #         service = manager.update_service(
-        #             old_hash=old_hash,
-        #             new_hash=template["hash"],
-        #             service_template=template,
-        #         )
-        # else:
-        #     logger.info(f'Creating service {template["hash"]}')
-        #     service = manager.load_or_create(
-        #         hash=template["hash"],
-        #         service_template=template,
-        #     )
-
-        # if template.get("deploy", False):
-
-        #     def _fn() -> None:
-        #         # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-        #         manager.deploy_service_onchain_from_safe(hash=service.hash)
-        #         manager.fund_service(hash=service.hash)
-
-        #         # TODO Optimus patch, chain_id="10"
-        #         chain_id = "10"
-        #         manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
-
-        #     await run_in_executor(_fn)
-        #     schedule_funding_job(service=service.hash)
-        #     schedule_healthcheck_job(service=service.hash)
 
         return JSONResponse(
-            content=output
+            content=output.json
         )
+
+    @app.post("/api/v2/service/{service_config_id}")
+    @with_retries
+    async def _deploy_service_onchain(request: Request) -> JSONResponse:
+        """Deploy a service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        def _fn() -> None:
+            # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
+            manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
+            # manager.fund_service(service_id=service_id)
+
+            # TODO Optimus patch, chain_id="10"
+            # chain_id = "10"
+            # manager.deploy_service_locally(service_id=service_id, chain_id=chain_id)
+
+        await run_in_executor(_fn)
+        # schedule_funding_job(service=service.hash)
+        # schedule_healthcheck_job(service=service.hash)
+
+        return JSONResponse(content={"status": "ok"})
+        # return JSONResponse(
+        #     content=(
+        #         operate.service_manager()
+        #         .load_or_create(hash=request.path_params["service"])
+        #         .json
+        #     )
+        # )
 
     @app.post("/api/services")
     @with_retries

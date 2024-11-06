@@ -25,6 +25,7 @@ import platform
 import shutil
 import subprocess  # nosec
 import sys
+import uuid
 import typing as t
 from copy import copy, deepcopy
 from dataclasses import dataclass
@@ -94,7 +95,8 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 3
+SERVICE_CONFIG_VERSION = 4
+SERVICE_CONFIG_PREFIX = "sc-"
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -643,6 +645,7 @@ class Service(LocalResource):
     """Service class."""
 
     version: int
+    service_config_id: str
     hash: str
     keys: Keys
     home_chain_id: str
@@ -661,29 +664,23 @@ class Service(LocalResource):
     @classmethod
     def migrate_format(cls, path: Path) -> None:
         """Migrate the JSON file format if needed."""
-        file_path = (
-            path / Service._file
-            if Service._file is not None and path.name != Service._file
-            else path
-        )
 
-        with open(file_path, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        version = data.get("version", 0)
-        if version >= 3:
+        print(f"{path=}")
+        if not path.is_dir():
+            return
+        
+        if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith("bafybei"):
             return
 
-        # Migrate from old formats to new format
-        if version == 2:
-            data["chain_configs"]["100"]["chain_data"]["user_params"][
-                "use_mech_marketplace"
-            ] = data["chain_configs"]["100"]["chain_data"]["user_params"].get(
-                "use_mech_marketplace", False
-            )
-            data["version"] = 3
-            new_data = data
-        elif version == 0:
+        with open(path / Service._file, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        data["version"] = data.get("version", 0)
+        if data.get("version") >= 4:
+            return
+
+        # Migration steps for older versions
+        if data.get("version") == 0:
             new_data = {
                 "version": 3,
                 "hash": data.get("hash"),
@@ -731,14 +728,33 @@ class Service(LocalResource):
                 "service_path": data.get("service_path", ""),
                 "name": data.get("name", ""),
             }
+            data = new_data
 
-        with open(file_path, "w", encoding="utf-8") as file:
-            json.dump(new_data, file, indent=2)
+        if data.get("version") == 2:
+            data["chain_configs"]["100"]["chain_data"]["user_params"][
+                "use_mech_marketplace"
+            ] = data["chain_configs"]["100"]["chain_data"]["user_params"].get(
+                "use_mech_marketplace", False
+            )
+            data["version"] = 3
+
+        if data.get("version") == 3:
+            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+            data["service_config_id"] = service_config_id
+            data["version"] = 4
+            new_path = path.parent / service_config_id
+            path = path.rename(new_path)
+
+        print("....")
+        print(path)
+        print(path / Service._file)
+
+        with open(path / Service._file, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
 
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
-        cls.migrate_format(path)
         return super().load(path)  # type: ignore
 
     @property
@@ -761,17 +777,22 @@ class Service(LocalResource):
 
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        hash: str,
         keys: Keys,
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
         """Create a new service."""
-        path = storage / hash
+
+        while True:
+            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+            path = storage / service_config_id
+            if not path.exists():
+                break
+
         path.mkdir()
         service_path = Path(
             IPFSTool().download(
-                hash_id=hash,
+                hash_id=service_template["hash"],
                 target_dir=path,
             )
         )
@@ -801,6 +822,7 @@ class Service(LocalResource):
 
         service = Service(
             version=SERVICE_CONFIG_VERSION,
+            service_config_id=service_config_id,
             name=service_yaml["author"] + "/" + service_yaml["name"],
             hash=service_template["hash"],
             keys=keys,
