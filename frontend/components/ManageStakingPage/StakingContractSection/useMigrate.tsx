@@ -19,6 +19,7 @@ export enum CantMigrateReason {
   LoadingBalance = 'Loading balance...',
   LoadingStakingContractInfo = 'Loading staking contract information...',
   InsufficientOlasToMigrate = 'Insufficient OLAS to switch',
+  InsufficientGasToMigrate = 'Insufficient XDAI to switch', // TODO: make chain agnostic
   MigrationNotSupported = 'Switching to this program is not currently supported',
   NoAvailableRewards = 'This program has no rewards available',
   NoAvailableStakingSlots = 'The program has no more available slots',
@@ -61,6 +62,8 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   } = useStakingContractInfo(stakingProgramId);
 
   const { hasInitialLoaded: isServicesLoaded } = useServices();
+
+  const { hasEnoughEthForInitialFunding } = useNeedsFunds();
 
   const minimumOlasRequiredToMigrate = useMemo(
     () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgramId),
@@ -206,6 +209,10 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   ]);
 
   const firstDeployValidation = useMemo<MigrateValidation>(() => {
+    /**
+     * @todo fix temporary check for xDai balance on first deploy (same as initial funding requirement)
+     */
+
     if (!isServicesLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
     }
@@ -270,8 +277,6 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
-    // fund requirements
-
     if (!hasEnoughOlasForFirstRun) {
       return {
         canMigrate: false,
@@ -279,14 +284,23 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
+    if (!hasEnoughEthForInitialFunding) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.InsufficientGasToMigrate,
+      };
+    }
+
     return { canMigrate: true };
   }, [
     isServicesLoaded,
     isBalanceLoaded,
+    hasEnoughEthForInitialFunding,
     isStakingContractInfoLoaded,
     stakingContractInfoRecord,
     stakingProgramId,
     hasEnoughOlasForFirstRun,
+    serviceStatus,
   ]);
 
   const canUpdateStakingContract = useMemo(() => {
