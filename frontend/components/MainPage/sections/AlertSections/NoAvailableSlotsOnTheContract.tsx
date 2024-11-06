@@ -1,4 +1,5 @@
 import { Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 
 import { useMigrate } from '@/components/ManageStakingPage/StakingContractSection/useMigrate';
 import { Pages } from '@/enums/PageState';
@@ -20,7 +21,7 @@ export const NoAvailableSlotsOnTheContract = ({
   const { hasEnoughServiceSlots } = useStakingContractInfo();
   const { canUpdateStakingContract } = useMigrate(stakingProgramId);
 
-  if (hasEnoughServiceSlots) return null;
+  if (hasEnoughServiceSlots || isNil(hasEnoughServiceSlots)) return null;
 
   return (
     <CustomAlert
