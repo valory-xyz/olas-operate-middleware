@@ -66,7 +66,9 @@ export const StakingContractSection = ({
   const showFundingButton = useMemo(() => {
     if (migrateValidation.canMigrate) return false;
     return (
-      migrateValidation.reason === CantMigrateReason.InsufficientOlasToMigrate
+      migrateValidation.reason ===
+        CantMigrateReason.InsufficientOlasToMigrate ||
+      migrateValidation.reason === CantMigrateReason.InsufficientGasToMigrate
     );
   }, [migrateValidation]);
 
