@@ -69,13 +69,13 @@ export type TransformedCheckpoint = {
 
 const transformCheckpoints = (
   checkpoints: CheckpointGraphResponse[],
-  serviceId?: number,
+  serviceId: number,
   timestampToIgnore?: null | number,
 ): TransformedCheckpoint[] => {
   if (!checkpoints || checkpoints.length === 0) return [];
   if (!serviceId) return [];
 
-  const transformed = checkpoints
+  return checkpoints
     .map((checkpoint: CheckpointGraphResponse, index: number) => {
       const serviceIdIndex =
         checkpoint.serviceIds?.findIndex((id) => Number(id) === serviceId) ??
@@ -105,6 +105,7 @@ const transformCheckpoints = (
         epochStartTimeStamp: Number(epochStartTimeStamp),
         reward: Number(ethers.utils.formatUnits(reward, 18)),
         earned: serviceIdIndex !== -1,
+        // contractName: checkpoint.contractAddress,
       };
     })
     .filter((epoch) => {
@@ -118,8 +119,6 @@ const transformCheckpoints = (
       if (!epoch.epochEndTimeStamp) return false;
       return epoch.epochEndTimeStamp < timestampToIgnore;
     });
-
-  return transformed;
 };
 
 export const useRewardsHistory = () => {
@@ -147,7 +146,7 @@ export const useRewardsHistory = () => {
       if (!serviceId) return {};
       if (!checkpoints) return {};
 
-      // group checkpoints by contract address / staking program
+      // group checkpoints by contract address (staking program)
       const checkpointsByContractAddress = groupBy(
         checkpoints,
         'contractAddress',
@@ -168,18 +167,18 @@ export const useRewardsHistory = () => {
           // skip if there are no checkpoints for the contract address
           if (!checkpoints) return acc;
           if (checkpoints.length <= 0) return acc;
-          if (
-            !checkpoints.some((checkpoint) =>
-              checkpoint.serviceIds.includes(`${serviceId}`),
-            )
-          )
-            return acc;
+
+          // check if the service has participated in the staking
+          const isServiceParticipatedInContract = checkpoints.some(
+            (checkpoint) => checkpoint.serviceIds.includes(`${serviceId}`),
+          );
+          if (!isServiceParticipatedInContract) return acc;
 
           // transform the checkpoints ..
           // includes epoch start and end time, rewards, etc
           const transformedCheckpoints = transformCheckpoints(
             checkpoints,
-            serviceId as number,
+            serviceId,
             null,
           );
 
@@ -242,7 +241,7 @@ export const useRewardsHistory = () => {
         break;
       }
 
-      // nth interations
+      // nth iterations
       const previous = sorted[i - 1];
       const epochGap = previous.epochStartTimeStamp - current.epochEndTimeStamp;
 

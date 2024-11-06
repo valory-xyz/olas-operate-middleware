@@ -22,13 +22,11 @@ export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
 > = {
   [Chain.GNOSIS]: {
     [StakingProgramId.Alpha]: '0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A',
-
     [StakingProgramId.Beta]: '0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d',
     [StakingProgramId.Beta2]: '0x1c2F82413666d2a3fD8bC337b0268e62dDF67434',
     [StakingProgramId.Beta3]: '0xBd59Ff0522aA773cB6074ce83cD1e4a05A457bc1',
     [StakingProgramId.Beta4]: '0x3052451e1eAee78e62E169AfdF6288F8791F2918',
     [StakingProgramId.Beta5]: '0x4Abe376Fda28c2F43b84884E5f822eA775DeA9F4',
-
     [StakingProgramId.BetaMechMarketplace]:
       '0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA',
   },
