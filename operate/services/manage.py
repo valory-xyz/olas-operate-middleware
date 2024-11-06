@@ -566,6 +566,9 @@ class ServiceManager:
             "staking_contract"
         ]
         os.environ["PRIORITY_MECH_ADDRESS"] = staking_params["agent_mech"]
+        os.environ["ETHEREUM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.ETHEREUM]
+        os.environ["BASE_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.BASE]
+        os.environ["OPTIMISM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.OPTIMISM]
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
