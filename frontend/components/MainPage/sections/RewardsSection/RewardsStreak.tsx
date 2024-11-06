@@ -1,5 +1,5 @@
 import { RightOutlined } from '@ant-design/icons';
-import { Flex, Typography } from 'antd';
+import { Flex, Skeleton, Typography } from 'antd';
 import styled from 'styled-components';
 
 import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
@@ -20,38 +20,40 @@ const RewardsStreakFlex = styled(Flex)`
   align-items: center;
 `;
 
-const Streak = ({
-  streak,
-  isLoading,
-}: {
-  streak: number;
-  isLoading: boolean;
-}) => {
+type StreakProps = { streak: number; isLoading: boolean };
+
+const Streak = ({ streak, isLoading }: StreakProps) => {
   const { isEligibleForRewards } = useReward();
-  if (isLoading) return <div>Loading...</div>;
+
+  if (isLoading) {
+    return <Skeleton.Input active size="small" />;
+  }
 
   // Graph does not account for the current day, so we need to add 1 to the streak
   const optimisticStreak = isEligibleForRewards ? streak + 1 : streak;
 
-  const streakText =
-    optimisticStreak > 0 ? `${optimisticStreak} day streak` : 'No streak';
-  const streakIcon = optimisticStreak > 0 ? <FireStreak /> : <FireNoStreak />;
-
   return (
     <span style={{ display: 'inline-flex', gap: 8 }}>
-      {streakIcon}
-      {streakText}
+      {optimisticStreak > 0 ? (
+        <>
+          <FireStreak /> {optimisticStreak} day streak
+        </>
+      ) : (
+        <>
+          <FireNoStreak /> No streak
+        </>
+      )}
     </span>
   );
 };
 
 export const RewardsStreak = () => {
   const { goto } = usePageState();
-  const { latestRewardStreak, isLoading } = useRewardsHistory();
+  const { latestRewardStreak, isLoading, isFetching } = useRewardsHistory();
 
   return (
     <RewardsStreakFlex>
-      <Streak streak={latestRewardStreak} isLoading={isLoading} />
+      <Streak isLoading={isLoading || isFetching} streak={latestRewardStreak} />
 
       <Text
         type="secondary"

@@ -128,28 +128,28 @@ const transformCheckpoints = (
     });
 };
 
-export const useRewardsHistory = () => {
+type CheckpointsResponse = { checkpoints: CheckpointGraphResponse[] };
+
+/**
+ * hook to fetch rewards history for all contracts
+ */
+const useContractCheckpoints = () => {
   const { serviceId } = useServices();
 
-  const {
-    data: contractCheckpoints,
-    isError,
-    isLoading,
-    isFetching,
-    refetch,
-  } = useQuery({
+  return useQuery({
     queryKey: [],
     async queryFn() {
       if (!serviceId) return { checkpoints: [] };
 
-      const checkpointsResponse: {
-        checkpoints: CheckpointGraphResponse[];
-      } = await request(GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL, fetchRewardsQuery);
+      const checkpointsResponse = await request<CheckpointsResponse>(
+        GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
+        fetchRewardsQuery,
+      );
       return checkpointsResponse;
     },
-    select: ({
-      checkpoints,
-    }): { [contractAddress: string]: TransformedCheckpoint[] } => {
+    select: (data): { [contractAddress: string]: TransformedCheckpoint[] } => {
+      const checkpoints = data?.checkpoints;
+
       if (!serviceId) return {};
       if (!checkpoints) return {};
 
@@ -159,50 +159,49 @@ export const useRewardsHistory = () => {
         'contractAddress',
       );
 
-      // only need relevant contract history that service has participated in
+      // only need relevant contract history that service has participated in,
       // ignore contract addresses with no activity from the service
-      const relevantTransformedCheckpoints = Object.keys(
-        checkpointsByContractAddress,
-      ).reduce(
-        (
-          acc: { [stakingContractAddress: string]: TransformedCheckpoint[] },
-          stakingContractAddress: string,
-        ) => {
-          const checkpoints =
-            checkpointsByContractAddress[stakingContractAddress];
+      return Object.keys(checkpointsByContractAddress).reduce<{
+        [stakingContractAddress: string]: TransformedCheckpoint[];
+      }>((acc, stakingContractAddress: string) => {
+        const checkpoints =
+          checkpointsByContractAddress[stakingContractAddress];
 
-          // skip if there are no checkpoints for the contract address
-          if (!checkpoints) return acc;
-          if (checkpoints.length <= 0) return acc;
+        // skip if there are no checkpoints for the contract address
+        if (!checkpoints) return acc;
+        if (checkpoints.length <= 0) return acc;
 
-          // check if the service has participated in the staking
-          const isServiceParticipatedInContract = checkpoints.some(
-            (checkpoint) => checkpoint.serviceIds.includes(`${serviceId}`),
-          );
-          if (!isServiceParticipatedInContract) return acc;
+        // check if the service has participated in the staking
+        const isServiceParticipatedInContract = checkpoints.some((checkpoint) =>
+          checkpoint.serviceIds.includes(`${serviceId}`),
+        );
+        if (!isServiceParticipatedInContract) return acc;
 
-          // transform the checkpoints ..
-          // includes epoch start and end time, rewards, etc
-          const transformedCheckpoints = transformCheckpoints(
-            checkpoints,
-            serviceId,
-            null,
-          );
+        // transform the checkpoints, includes epoch start and end time, rewards, etc
+        const transformedCheckpoints = transformCheckpoints(
+          checkpoints,
+          serviceId,
+          null,
+        );
 
-          return {
-            ...acc,
-            [stakingContractAddress]: transformedCheckpoints,
-          };
-        },
-        {},
-      );
-
-      return relevantTransformedCheckpoints;
+        return { ...acc, [stakingContractAddress]: transformedCheckpoints };
+      }, {});
     },
     refetchOnWindowFocus: false,
     refetchInterval: ONE_DAY_IN_MS,
     enabled: !!serviceId,
   });
+};
+
+export const useRewardsHistory = () => {
+  const { serviceId } = useServices();
+  const {
+    isError,
+    isLoading,
+    isFetching,
+    refetch,
+    data: contractCheckpoints,
+  } = useContractCheckpoints();
 
   const allCheckpoints = useMemo<TransformedCheckpoint[]>(
     () =>
@@ -213,6 +212,7 @@ export const useRewardsHistory = () => {
   );
 
   const latestRewardStreak = useMemo<number>(() => {
+    if (isLoading || isFetching) return 0;
     if (!contractCheckpoints) return 0;
 
     // remove all histories that are not earned
@@ -225,42 +225,42 @@ export const useRewardsHistory = () => {
       (a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp,
     );
 
-    let streak = 0;
-    for (let i = 0; i < sorted.length; i++) {
-      const current = sorted[i];
+    const timeNow = Math.trunc(Date.now() / 1000);
+
+    let isStreakBroken = false; // flag to break the streak
+    return sorted.reduce((streakCount, current, i) => {
+      if (isStreakBroken) return streakCount;
 
       // first iteration
       if (i === 0) {
-        const timeNow = Date.now() / 1000;
+        const initialEpochGap = Math.trunc(timeNow - current.epochEndTimeStamp);
 
-        // multiplied by 2 to give a buffer of 2 days
-        const initialEpochGap = timeNow - current.epochEndTimeStamp;
-
-        // if the last epoch was more than 1 day ago, break
-        if (initialEpochGap > ONE_DAY_IN_S) break;
-
-        // if the last epoch was less than 1 day ago, increment streak
-        if (current.earned) {
-          streak++;
-          continue;
+        // If the epoch gap is greater than the epoch length
+        if (initialEpochGap > Number(current.epochLength)) {
+          isStreakBroken = true;
+          return streakCount;
         }
 
-        break;
+        if (current.earned) {
+          return streakCount + 1;
+        }
+
+        isStreakBroken = true;
+        return streakCount;
       }
 
-      // nth iterations
+      // other iterations
       const previous = sorted[i - 1];
       const epochGap = previous.epochStartTimeStamp - current.epochEndTimeStamp;
 
-      if (current.earned && epochGap <= ONE_DAY_IN_S) {
-        streak++;
-        continue;
+      if (current.earned && epochGap <= Number(current.epochLength)) {
+        return streakCount + 1;
       }
-      break;
-    }
 
-    return streak;
-  }, [allCheckpoints, contractCheckpoints]);
+      isStreakBroken = true;
+      return streakCount;
+    }, 0);
+  }, [isLoading, isFetching, allCheckpoints, contractCheckpoints]);
 
   useEffect(() => {
     serviceId && refetch();
