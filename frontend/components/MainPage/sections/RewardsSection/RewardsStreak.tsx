@@ -4,8 +4,10 @@ import styled from 'styled-components';
 
 import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
 import { FireStreak } from '@/components/custom-icons/FireStreak';
+import { COLOR } from '@/constants/colors';
 import { NA } from '@/constants/symbols';
 import { Pages } from '@/enums/PageState';
+import { useBalance } from '@/hooks/useBalance';
 import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useRewardsHistory } from '@/hooks/useRewardsHistory';
@@ -14,14 +16,13 @@ const { Text } = Typography;
 
 const RewardsStreakFlex = styled(Flex)`
   padding: 8px 16px;
-  background: #f2f4f9;
-  border-radius: 6px;
-  justify-content: space-between;
   height: 40px;
-  align-items: center;
+  background: ${COLOR.GRAY_1};
+  border-radius: 6px;
 `;
 
 const Streak = () => {
+  const { isBalanceLoaded } = useBalance();
   const { isEligibleForRewards } = useReward();
   const {
     latestRewardStreak: streak,
@@ -30,14 +31,17 @@ const Streak = () => {
     isError,
   } = useRewardsHistory();
 
-  if (isLoading || isFetching) return <Skeleton.Input active size="small" />;
+  if (isLoading || isFetching || !isBalanceLoaded) {
+    return <Skeleton.Input active size="small" />;
+  }
 
-  if (isError) return NA;
+  if (isError) {
+    return NA;
+  }
 
-  // Graph does not account for the current day so, so we need to add 1 to the streak.
-  // Also, if previously streak was not 0.
-  const optimisticStreak =
-    isEligibleForRewards && streak !== 0 ? streak + 1 : streak;
+  // Graph does not account for the current day,
+  // so we need to add 1 to the streak, if the user is eligible for rewards
+  const optimisticStreak = isEligibleForRewards ? streak + 1 : streak;
 
   return (
     <span style={{ display: 'inline-flex', gap: 8 }}>
@@ -58,7 +62,7 @@ export const RewardsStreak = () => {
   const { goto } = usePageState();
 
   return (
-    <RewardsStreakFlex>
+    <RewardsStreakFlex align="center" justify="space-between">
       <Streak />
 
       <Text

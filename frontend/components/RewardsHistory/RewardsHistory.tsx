@@ -32,10 +32,7 @@ import { usePageState } from '@/hooks/usePageState';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
-import {
-  TransformedCheckpoint,
-  useRewardsHistory,
-} from '../../hooks/useRewardsHistory';
+import { Checkpoint, useRewardsHistory } from '../../hooks/useRewardsHistory';
 import { EpochDetails } from './types';
 
 const { Text, Title } = Typography;
@@ -149,7 +146,7 @@ const ContractRewards = ({
   checkpoints,
 }: {
   stakingProgramId: StakingProgramId;
-  checkpoints: TransformedCheckpoint[];
+  checkpoints: Checkpoint[];
 }) => (
   <Flex vertical>
     <ContractName>
