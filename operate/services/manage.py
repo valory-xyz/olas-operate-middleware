@@ -103,10 +103,9 @@ class ServiceManager:
     @property
     def json(self) -> t.List[t.Dict]:
         """Returns the list of available services."""
-        # TODO Probably format migration should only happen once at startup
-        self.migrate_formats()
         data = []
         for path in self.path.iterdir():
+            # TODO possibly the logic to identify invalid services should be migrated to Service.load
             if path.name.startswith(DELETE_PREFIX):
                 shutil.rmtree(path)
                 continue
@@ -128,11 +127,6 @@ class ServiceManager:
                 )
 
         return data
-
-    def migrate_formats(self) -> None:
-        """Migrate old format of all services"""
-        for path in self.path.iterdir():
-            Service.migrate_format(path)
 
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
@@ -1488,7 +1482,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         force: bool = True,
-        chain_id: str = "100",
+        chain_id: t.Optional[str] = None,
         use_docker: bool = False,
     ) -> Deployment:
         """
@@ -1499,7 +1493,12 @@ class ServiceManager:
         :return: Deployment instance
         """
         self._set_env_variables(service_config_id=service_config_id)
-        deployment = self.load(service_config_id=service_config_id).deployment
+        service = self.load(service_config_id=service_config_id)
+
+        if not chain_id:
+            chain_id = service.home_chain_id
+
+        deployment = service.deployment
         deployment.build(use_docker=use_docker, force=force, chain_id=chain_id)
         deployment.start(use_docker=use_docker)
         return deployment

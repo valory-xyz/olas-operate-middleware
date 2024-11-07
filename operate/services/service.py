@@ -755,6 +755,8 @@ class Service(LocalResource):
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
+        # TODO Probably format migration should only happen once at startup
+        cls.migrate_format(path)
         return super().load(path)  # type: ignore
 
     @property

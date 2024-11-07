@@ -175,31 +175,31 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return res
 
     def schedule_funding_job(
-        service: str,
+        service_config_id: str,
         from_safe: bool = True,
     ) -> None:
         """Schedule a funding job."""
-        logger.info(f"Starting funding job for {service}")
-        if service in funding_jobs:
-            logger.info(f"Cancelling existing funding job for {service}")
-            cancel_funding_job(service=service)
+        logger.info(f"Starting funding job for {service_config_id}")
+        if service_config_id in funding_jobs:
+            logger.info(f"Cancelling existing funding job for {service_config_id}")
+            cancel_funding_job(service_config_id=service_config_id)
 
         loop = asyncio.get_running_loop()
-        funding_jobs[service] = loop.create_task(
+        funding_jobs[service_config_id] = loop.create_task(
             operate.service_manager().funding_job(
-                hash=service,
+                service_config_id=service_config_id,
                 loop=loop,
                 from_safe=from_safe,
             )
         )
 
     def schedule_healthcheck_job(
-        service: str,
+        service_config_id: str,
     ) -> None:
         """Schedule a healthcheck job."""
         if not HEALTH_CHECKER_OFF:
             # dont start health checker if it's switched off
-            health_checker.start_for_service(service)
+            health_checker.start_for_service(service_config_id)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -608,11 +608,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.post("/api/v2/service/{service_config_id}")
     @with_retries
-    async def _deploy_service_onchain(request: Request) -> JSONResponse:
+    async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
+        pause_all_services()
         service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
 
@@ -622,73 +623,66 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         def _fn() -> None:
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
-            manager.fund_service(service_id=service_id)
-
-            # TODO Optimus patch, chain_id="10"
-            # chain_id = "10"
-            # manager.deploy_service_locally(service_id=service_id, chain_id=chain_id)
+            manager.fund_service(service_config_id=service_config_id)
+            manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
-        # schedule_funding_job(service=service.hash)
-        # schedule_healthcheck_job(service=service.hash)
-
-        return JSONResponse(content={"status": "ok"})
-        # return JSONResponse(
-        #     content=(
-        #         operate.service_manager()
-        #         .load_or_create(hash=request.path_params["service"])
-        #         .json
-        #     )
-        # )
-
-    @app.post("/api/services")
-    @with_retries
-    async def _create_services(request: Request) -> JSONResponse:
-        """Create a service."""
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
-        template = await request.json()
-        manager = operate.service_manager()
-        if len(manager.json) > 0:
-            old_hash = manager.json[0]["hash"]
-            if old_hash == template["hash"]:
-                logger.info(f'Loading service {template["hash"]}')
-                service = manager.load_or_create(
-                    hash=template["hash"],
-                    service_template=template,
-                )
-            else:
-                logger.info(f"Updating service from {old_hash} to " + template["hash"])
-                service = manager.update_service(
-                    old_hash=old_hash,
-                    new_hash=template["hash"],
-                    service_template=template,
-                )
-        else:
-            logger.info(f'Creating service {template["hash"]}')
-            service = manager.load_or_create(
-                hash=template["hash"],
-                service_template=template,
-            )
-
-        if template.get("deploy", False):
-
-            def _fn() -> None:
-                # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-                manager.deploy_service_onchain_from_safe(hash=service.hash)
-                manager.fund_service(hash=service.hash)
-
-                # TODO Optimus patch, chain_id="10"
-                chain_id = "10"
-                manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
-
-            await run_in_executor(_fn)
-            schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
+        schedule_funding_job(service_config_id=service_config_id)
+        schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
-            content=operate.service_manager().load_or_create(hash=service.hash).json
+            content=(
+                operate.service_manager()
+                .load(service_config_id=service_config_id)
+                .json
+            )
         )
+
+    # @app.post("/api/services")
+    # @with_retries
+    # async def _create_services(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if operate.password is None:
+    #         return USER_NOT_LOGGED_IN_ERROR
+    #     template = await request.json()
+    #     manager = operate.service_manager()
+    #     if len(manager.json) > 0:
+    #         old_hash = manager.json[0]["hash"]
+    #         if old_hash == template["hash"]:
+    #             logger.info(f'Loading service {template["hash"]}')
+    #             service = manager.load_or_create(
+    #                 hash=template["hash"],
+    #                 service_template=template,
+    #             )
+    #         else:
+    #             logger.info(f"Updating service from {old_hash} to " + template["hash"])
+    #             service = manager.update_service(
+    #                 old_hash=old_hash,
+    #                 new_hash=template["hash"],
+    #                 service_template=template,
+    #             )
+    #     else:
+    #         logger.info(f'Creating service {template["hash"]}')
+    #         service = manager.load_or_create(
+    #             hash=template["hash"],
+    #             service_template=template,
+    #         )
+
+    #     if template.get("deploy", False):
+
+    #         def _fn() -> None:
+    #             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
+    #             manager.deploy_service_onchain_from_safe(service_config_id=service.service_config_id)
+    #             manager.fund_service(service_config_id=service_config_id)
+    #             manager.deploy_service_locally(service_config_id=service_config_id)
+
+    #         await run_in_executor(_fn)
+    #         schedule_funding_job(service=service.hash)
+    #         schedule_healthcheck_job(service=service.hash)
+
+    #     return JSONResponse(
+    #         content=operate.service_manager().load_or_create(hash=service.hash).json
+    #     )
 
     @app.put("/api/services")
     @with_retries
@@ -733,10 +727,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         )
 
-    # TODO this endpoint is possibly not used
+    # TODO these endpoints below are possibly not used
+
     @app.post("/api/services/{service}/onchain/deploy")
     @with_retries
-    async def _deploy_service_onchain(request: Request) -> JSONResponse:
+    async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Create a service."""
         if not operate.service_manager().exists(service=request.path_params["service"]):
             return service_not_found_error(service=request.path_params["service"])
