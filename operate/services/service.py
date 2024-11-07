@@ -739,15 +739,15 @@ class Service(LocalResource):
             data["version"] = 3
 
         if data.get("version") == 3:
-            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+            while True:
+                service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+                new_path = path.parent / service_config_id
+                if not new_path.exists():
+                    break
+
             data["service_config_id"] = service_config_id
             data["version"] = 4
-            new_path = path.parent / service_config_id
             path = path.rename(new_path)
-
-        print("....")
-        print(path)
-        print(path / Service._file)
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)

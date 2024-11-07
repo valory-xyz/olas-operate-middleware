@@ -218,6 +218,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         service_config_ids = [i["service_config_id"] for i in operate.service_manager().json]
 
         for service_config_id in service_config_ids:
+            logger.info(f"Stopping service {service_config_id=}")
             if not operate.service_manager().exists(service_config_id=service_config_id):
                 continue
             deployment = operate.service_manager().load(service_config_id=service_config_id).deployment
@@ -621,7 +622,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         def _fn() -> None:
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
             manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
-            # manager.fund_service(service_id=service_id)
+            manager.fund_service(service_id=service_id)
 
             # TODO Optimus patch, chain_id="10"
             # chain_id = "10"
