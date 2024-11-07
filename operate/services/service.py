@@ -44,7 +44,7 @@ from aea.configurations.data_types import PackageType
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
-from autonomy.configurations.loader import load_service_config
+from autonomy.configurations.loader import apply_env_variables, load_service_config
 from autonomy.deploy.base import BaseDeploymentGenerator
 from autonomy.deploy.base import ServiceBuilder as BaseServiceBuilder
 from autonomy.deploy.constants import (
@@ -244,6 +244,7 @@ class ServiceHelper:
         """Initialize object."""
         self.path = path
         self.config = load_service_config(service_path=path)
+        self.config.overrides = apply_env_variables(self.config.overrides, os.environ.copy())
 
     def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
@@ -569,25 +570,6 @@ class Deployment(LocalResource):
             if build.exists():
                 shutil.rmtree(build)
             raise e
-
-        # Optimus ledger patch
-        agent_vars = json.loads(Path(build, "agent.json").read_text(encoding="utf-8"))
-
-        override_values = {
-            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_ETHEREUM_ADDRESS": PUBLIC_RPCS[ChainType.ETHEREUM],
-            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_BASE_ADDRESS": PUBLIC_RPCS[ChainType.BASE],
-            "CONNECTION_LEDGER_CONFIG_LEDGER_APIS_OPTIMISM_ADDRESS": PUBLIC_RPCS[ChainType.OPTIMISM],
-        }
-
-        for key, value in override_values.items():
-            if key in agent_vars:
-                agent_vars[key] = value
-
-        Path(build, "agent.json").write_text(
-            json.dumps(agent_vars, indent=4),
-            encoding="utf-8",
-        )
-        # End Optimus ledger patch
 
         self.status = DeploymentStatus.BUILT
         self.store()
