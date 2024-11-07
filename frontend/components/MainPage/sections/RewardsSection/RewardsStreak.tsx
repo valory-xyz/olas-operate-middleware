@@ -44,7 +44,7 @@ const Streak = () => {
   const optimisticStreak = isEligibleForRewards ? streak + 1 : streak;
 
   return (
-    <span style={{ display: 'inline-flex', gap: 8 }}>
+    <Flex gap={6}>
       {optimisticStreak > 0 ? (
         <>
           <FireStreak /> {optimisticStreak} day streak
@@ -54,7 +54,7 @@ const Streak = () => {
           <FireNoStreak /> No streak
         </>
       )}
-    </span>
+    </Flex>
   );
 };
 
