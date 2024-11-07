@@ -2,27 +2,29 @@ import { Alert, Skeleton } from 'antd';
 import { useMemo } from 'react';
 
 import { InfoBreakdownList } from '@/components/InfoBreakdown';
-import { NA } from '@/constants/symbols';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import { useStakingContractContext } from '@/hooks/useStakingContractInfo';
 
 export const StakingContractDetails = ({
   stakingProgramId,
 }: {
   stakingProgramId: StakingProgramId;
 }) => {
-  const { stakingContractInfoRecord } = useStakingContractInfo();
+  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
+    useStakingContractContext();
 
-  const balances = useMemo(() => {
-    if (!stakingContractInfoRecord) return null;
-    if (!stakingProgramId) return null;
-    if (!stakingContractInfoRecord?.[stakingProgramId]) return null;
+  const list = useMemo(() => {
+    if (!isStakingContractInfoRecordLoaded) return;
+    if (!stakingContractInfoRecord) return;
+    if (!stakingProgramId) return;
+    if (!stakingContractInfoRecord?.[stakingProgramId]) return;
 
     const details = stakingContractInfoRecord[stakingProgramId];
+
     return [
       {
         left: 'Available slots',
-        right: details.maxNumServices || NA,
+        right: `${details.maxNumServices! - details.serviceIds!.length} / ${details.maxNumServices}`,
       },
       {
         left: 'Rewards per epoch',
@@ -38,13 +40,17 @@ export const StakingContractDetails = ({
         right: `${details.olasStakeRequired} OLAS`,
       },
     ];
-  }, [stakingContractInfoRecord, stakingProgramId]);
+  }, [
+    isStakingContractInfoRecordLoaded,
+    stakingContractInfoRecord,
+    stakingProgramId,
+  ]);
 
-  if (!stakingContractInfoRecord) {
+  if (!isStakingContractInfoRecordLoaded) {
     return <Skeleton active />;
   }
 
-  if (!balances) {
+  if (!stakingContractInfoRecord) {
     return (
       <Alert
         message="No staking information available."
@@ -55,10 +61,6 @@ export const StakingContractDetails = ({
   }
 
   return (
-    <InfoBreakdownList
-      list={balances}
-      parentStyle={{ gap: 12 }}
-      color="primary"
-    />
+    <InfoBreakdownList list={list!} parentStyle={{ gap: 12 }} color="primary" />
   );
 };
