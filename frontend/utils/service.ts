@@ -1,5 +1,5 @@
 import { ServiceTemplate } from '@/client';
-import { SERVICE_STAKING_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
+import { GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
 import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
@@ -47,7 +47,7 @@ export const getMinimumStakedAmountRequired = (
 export const getStakingProgramIdByAddress = (
   contractAddress: `0x${string}`,
 ): StakingProgramId | undefined => {
-  const entries = Object.entries(SERVICE_STAKING_CONTRACT_ADDRESSES) as [
+  const entries = Object.entries(GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES) as [
     StakingProgramId,
     `0x${string}`,
   ][];

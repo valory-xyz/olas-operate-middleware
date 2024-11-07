@@ -16,7 +16,7 @@ export const SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS: Record<
   [Chain.GNOSIS]: '0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8',
 };
 
-export const SERVICE_STAKING_CONTRACT_ADDRESSES: Record<
+export const GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES: Record<
   StakingProgramId,
   `0x${string}`
 > = {
@@ -34,7 +34,7 @@ export const SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES: Record<
   number,
   Record<StakingProgramId, Address>
 > = {
-  [Chain.GNOSIS]: SERVICE_STAKING_CONTRACT_ADDRESSES,
+  [Chain.GNOSIS]: GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES,
 };
 
 /**
