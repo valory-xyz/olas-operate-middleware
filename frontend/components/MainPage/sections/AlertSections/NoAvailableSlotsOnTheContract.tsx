@@ -1,26 +1,51 @@
 import { Flex, Typography } from 'antd';
+import { useMemo } from 'react';
 
-import { useMigrate } from '@/components/ManageStakingPage/StakingContractSection/useMigrate';
 import { Pages } from '@/enums/PageState';
-import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useActiveStakingContractInfo,
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CustomAlert } from '../../../Alert';
 
 const { Text } = Typography;
 
-type NoAvailableSlotsOnTheContractProps = {
-  stakingProgramId: StakingProgramId;
-};
-export const NoAvailableSlotsOnTheContract = ({
-  stakingProgramId,
-}: NoAvailableSlotsOnTheContractProps) => {
+export const NoAvailableSlotsOnTheContract = () => {
   const { goto } = usePageState();
-  const { hasEnoughServiceSlots } = useStakingContractInfo();
-  const { canUpdateStakingContract } = useMigrate(stakingProgramId);
 
+  const {
+    activeStakingProgramId,
+    defaultStakingProgramId,
+    activeStakingProgramMeta,
+    defaultStakingProgramMeta,
+  } = useStakingProgram();
+
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isServiceStaked } = useActiveStakingContractInfo();
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
+
+  const stakingProgramName = useMemo(() => {
+    if (!isStakingContractInfoRecordLoaded) return null;
+    if (activeStakingProgramId) {
+      return activeStakingProgramMeta?.name;
+    }
+    return defaultStakingProgramMeta?.name;
+  }, [
+    activeStakingProgramId,
+    activeStakingProgramMeta?.name,
+    defaultStakingProgramMeta?.name,
+    isStakingContractInfoRecordLoaded,
+  ]);
+
+  if (!isStakingContractInfoRecordLoaded) return null;
   if (hasEnoughServiceSlots) return null;
+  if (isServiceStaked) return null;
 
   return (
     <CustomAlert
@@ -30,20 +55,17 @@ export const NoAvailableSlotsOnTheContract = ({
       message={
         <Flex justify="space-between" gap={4} vertical>
           <Text className="font-weight-600">
-            No available slots on the contract
+            No available staking slots on {stakingProgramName}
           </Text>
           <span className="text-sm">
-            Select a contract with available slots to be able to start your
-            agent.
+            Select a contract with available slots to start your agent.
           </span>
-          {canUpdateStakingContract && (
-            <Text
-              className="pointer hover-underline text-primary text-sm"
-              onClick={() => goto(Pages.ManageStaking)}
-            >
-              Change staking contract
-            </Text>
-          )}
+          <Text
+            className="pointer hover-underline text-primary text-sm"
+            onClick={() => goto(Pages.ManageStaking)}
+          >
+            Change staking contract
+          </Text>
         </Flex>
       }
     />
