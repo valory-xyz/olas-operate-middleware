@@ -18,7 +18,6 @@ import { useWallet } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import {
   CannotStartAgentDueToUnexpectedError,

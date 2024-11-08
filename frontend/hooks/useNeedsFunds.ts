@@ -2,7 +2,6 @@ import { formatUnits } from 'ethers/lib/utils';
 import { useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import { useBalance } from './useBalance';
 import { useServiceTemplates } from './useServiceTemplates';

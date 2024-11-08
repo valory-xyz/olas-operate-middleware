@@ -6,7 +6,6 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import { CantMigrateReason } from './useMigrate';
 

@@ -8,7 +8,6 @@ import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 export enum CantMigrateReason {
   ContractAlreadySelected = 'This staking program is already selected',
