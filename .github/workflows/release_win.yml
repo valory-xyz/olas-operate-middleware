@@ -23,6 +23,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Install OpenSSL using Chocolatey and add to PATH
+      - name: Install OpenSSL
+        run: |
+          choco install openssl -y
+          echo "C:\Program Files\OpenSSL-Win64\bin" >> $GITHUB_PATH
+          openssl version
+    
+      # Install certifi for Python's CA certificate handling
+      - name: Install certifi for SSL
+        run: |
+          python -m pip install certifi
+          echo "REQUESTS_CA_BUNDLE=$(python -c 'import certifi; print(certifi.where())')" >> $GITHUB_ENV
+
       - uses: actions/setup-python@v4
         id: setup-python
         with:
