@@ -40,7 +40,7 @@ jobs:
           virtualenvs-path: ~/my-custom-path
           installer-parallel: true
 
-      # Set architecture for macos-latest-large as x64 and arm64 for other versions
+      # Set OS_ARCH env
       - name: Set architecture environment variable
         run: 
             echo "OS_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV; 
@@ -81,7 +81,7 @@ jobs:
 
   # Jobs for production and development, running separately for x64 and arm64
   build-release:
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       matrix:
         env: [production, development]
