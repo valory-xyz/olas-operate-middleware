@@ -17,6 +17,15 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      # Install OpenSSL (fixes SSL module issue in Python on Mac only)
+      - name: Install OpenSSL
+        run: |
+          brew install openssl
+          echo "Adding OpenSSL to PATH"
+          echo "$(brew --prefix openssl)/bin" >> $GITHUB_PATH
+          echo "$(brew --prefix openssl)/lib" >> $GITHUB_PATH
+          echo "$(brew --prefix openssl)/include" >> $GITHUB_PATH
+
       # Setup Python
       - uses: actions/setup-python@v4
         with:
@@ -35,7 +44,11 @@ jobs:
       # Set architecture for macos-latest-large as x64 and arm64 for other versions
       - name: Set architecture environment variable
         run: |
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then echo "OS_ARCH=x64" >> $GITHUB_ENV; else echo "OS_ARCH=arm64" >> $GITHUB_ENV; fi
+          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
+            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
+          else 
+            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
+          fi
 
       # Cache Poetry dependencies with unique key for each environment and architecture
       - name: Cache Poetry dependencies
