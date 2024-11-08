@@ -17,7 +17,7 @@ import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL } from '@/constants/urls';
 import { MODAL_WIDTH } from '@/constants/width';
-import { Token } from '@/enums/Token';
+import { TokenSymbol } from '@/enums/Token';
 import { useAddress } from '@/hooks/useAddress';
 import { useBalance } from '@/hooks/useBalance';
 import { useWallet } from '@/hooks/useWallet';
@@ -55,7 +55,7 @@ const DebugItem = ({
 }: {
   item: {
     title: string;
-    balance: Record<Token.ETH | Token.OLAS, string>;
+    balance: Record<TokenSymbol.ETH | TokenSymbol.OLAS, string>;
     address: `0x${string}`;
     truncatedAddress: string;
     link?: { title: string; href: string };
