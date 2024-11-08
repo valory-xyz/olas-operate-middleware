@@ -17,19 +17,28 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Install OpenSSL for Mac with Homebrew and set up the environment for Python to locate it
+      # Install OpenSSL with Homebrew and set environment variables
       - name: Install OpenSSL
         run: |
           brew install openssl
-          echo "Adding OpenSSL to PATH"
-          echo "$(brew --prefix openssl)/bin" >> $GITHUB_PATH
           echo "SSL_CERT_FILE=$(brew --prefix openssl)/etc/openssl/cert.pem" >> $GITHUB_ENV
           echo "REQUESTS_CA_BUNDLE=$(brew --prefix openssl)/etc/openssl/cert.pem" >> $GITHUB_ENV
 
-      # Setup Python
+      # Set up Python with setup-python action and add it to PATH
       - uses: actions/setup-python@v4
+        id: setup-python
         with:
           python-version: "3.10"
+
+      - name: Add Python to PATH
+        run: |
+          echo "${{ steps.setup-python.outputs.python-path }}/bin" >> $GITHUB_PATH
+
+      # Verify which Python is being used
+      - name: Verify Python Version and Location
+        run: |
+          which python
+          python --version
     
       # Verify SSL by testing a simple HTTPS request
       - name: Test SSL with HTTPS Request
