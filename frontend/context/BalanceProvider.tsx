@@ -16,14 +16,14 @@ import { useInterval } from 'usehooks-ts';
 
 import { Wallet } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
+import { TOKEN_CONFIG } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import {
   LOW_AGENT_SAFE_BALANCE,
   LOW_MASTER_SAFE_BALANCE,
 } from '@/constants/thresholds';
-import { TOKEN_CONFIG } from '@/config/tokens';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
-import { Token } from '@/enums/Token';
+import { TokenSymbol } from '@/enums/Token';
 import { AutonolasService } from '@/service/Autonolas';
 import { EthersService } from '@/service/Ethers';
 import MulticallService from '@/service/Multicall';
@@ -182,7 +182,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       setWalletBalances(walletBalances);
 
       const serviceId =
-        services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data.token;
+        services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
+          .token;
 
       if (!isNumber(serviceId)) {
         setIsLoaded(true);
@@ -254,7 +255,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
         ?.multisig &&
       walletBalances[
-        services[0].chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data.multisig!
+        services[0].chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
+          .multisig!
       ],
     [services, walletBalances],
   );
@@ -385,8 +387,8 @@ export const getWalletBalances = async (
   const tempWalletBalances: WalletAddressNumberRecord = {};
   for (const [address, balance] of Object.entries(ethBalances)) {
     tempWalletBalances[address as Address] = {
-      [Token.ETH]: balance,
-      [Token.OLAS]: olasBalances[address as Address],
+      [TokenSymbol.ETH]: balance,
+      [TokenSymbol.OLAS]: olasBalances[address as Address],
     };
   }
 

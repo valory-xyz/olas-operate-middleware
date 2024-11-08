@@ -1,4 +1,5 @@
 import { ChainId } from '@/enums/Chain';
+import { TokenSymbol } from '@/enums/Token';
 import { Address } from '@/types/Address';
 
 enum TokenType {
@@ -27,12 +28,12 @@ type TokenConfig = {
 };
 
 export const GNOSIS_TOKEN_CONFIG = {
-  XDAI: {
+  [TokenSymbol.XDAI]: {
     address: '0x0001A500A6B18995B03f44bb040A5fFc28E45CB0',
     decimals: 18,
     tokenType: TokenType.NativeGas,
   },
-  OLAS: {
+  [TokenSymbol.OLAS]: {
     address: '0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f',
     decimals: 18,
     tokenType: TokenType.Erc20,
@@ -40,11 +41,11 @@ export const GNOSIS_TOKEN_CONFIG = {
 };
 
 export const OPTIMISM_TOKEN_CONFIG = {
-  ETH: {
+  [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
   },
-  OLAS: {
+  [TokenSymbol.OLAS]: {
     address: '0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527',
     decimals: 18,
     tokenType: TokenType.Erc20,
@@ -52,11 +53,11 @@ export const OPTIMISM_TOKEN_CONFIG = {
 } satisfies TokenConfig;
 
 export const ETHEREUM_TOKEN_CONFIG = {
-  ETH: {
+  [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
   },
-  OLAS: {
+  [TokenSymbol.OLAS]: {
     address: '0x0001A500A6B18995B03f44bb040A5fFc28E45CB0',
     decimals: 18,
     tokenType: TokenType.Erc20,
@@ -66,19 +67,19 @@ export const ETHEREUM_TOKEN_CONFIG = {
    * https://etherscan.io/address/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48#readProxyContract#F11
    * @note When parsing or formatting units, use `decimals` (6) instead of the standard `ether` sizing (10^18).
    */
-  USDC: {
+  [TokenSymbol.USDC]: {
     address: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
     decimals: 6,
     tokenType: TokenType.Erc20,
   },
 };
 
-export const BASE_TOKEN_CONFIG: TokenConfig = {
-  ETH: {
+export const BASE_TOKEN_CONFIG = {
+  [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
   },
-  OLAS: {
+  [TokenSymbol.OLAS]: {
     address: '0x4B1a99467a284CC690e3237bc69105956816F762',
     decimals: 18,
     tokenType: TokenType.Erc20,
