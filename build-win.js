@@ -46,4 +46,8 @@ const main = async () => {
   });
 };
 
-main().then((response) => { console.log('Build & Notarize complete'); })
+main().then(() => {
+  console.log('Build & Notarize complete');
+}).catch(() => {
+  throw new Error('Failed to build and notarize.');
+});
