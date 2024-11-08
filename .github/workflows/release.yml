@@ -17,14 +17,14 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      # Install OpenSSL (fixes SSL module issue in Python on Mac only)
+      # Install OpenSSL for Mac with Homebrew and set up the environment for Python to locate it
       - name: Install OpenSSL
         run: |
           brew install openssl
           echo "Adding OpenSSL to PATH"
           echo "$(brew --prefix openssl)/bin" >> $GITHUB_PATH
-          echo "$(brew --prefix openssl)/lib" >> $GITHUB_PATH
-          echo "$(brew --prefix openssl)/include" >> $GITHUB_PATH
+          echo "SSL_CERT_FILE=$(brew --prefix openssl)/etc/openssl/cert.pem" >> $GITHUB_ENV
+          echo "REQUESTS_CA_BUNDLE=$(brew --prefix openssl)/etc/openssl/cert.pem" >> $GITHUB_ENV
 
       # Setup Python
       - uses: actions/setup-python@v4
