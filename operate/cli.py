@@ -57,10 +57,10 @@ USER_NOT_LOGGED_IN_ERROR = JSONResponse(
 )
 
 
-def service_not_found_error(service: str) -> JSONResponse:
+def service_not_found_error(service_config_id: str) -> JSONResponse:
     """Service not found error response"""
     return JSONResponse(
-        content={"error": f"Service {service} not found"}, status_code=404
+        content={"error": f"Service {service_config_id} not found"}, status_code=404
     )
 
 
@@ -152,8 +152,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
-        logger.warning("healthchecker is off!!!")
+        logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
+
+    operate.service_manager().log_directories()
+    logger.info("Migrating service configs...")
+    operate.service_manager().migrate_service_configs()
+    logger.info("Migrating service configs done.")
+    operate.service_manager().log_directories()
+
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails
@@ -586,16 +593,50 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
         return JSONResponse(content=wallet.json)
 
-    @app.get("/api/services")
+    @app.get("/api/v2/services")
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
-        """Get available services."""
+        """Get all services."""
         return JSONResponse(content=operate.service_manager().json)
+
+    @app.get("/api/v2/service/{service_config_id}")
+    @with_retries
+    async def _get_service(request: Request) -> JSONResponse:
+        """Get a service."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+        return JSONResponse(
+            content=(
+                operate.service_manager()
+                .load(
+                    service_config_id=service_config_id,
+                )
+                .json
+            )
+        )
+
+    @app.get("/api/v2/service/{service_config_id}/deployment")
+    @with_retries
+    async def _get_service_deployment(request: Request) -> JSONResponse:
+        """Get a service deployment."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+        return JSONResponse(
+            content=operate.service_manager()
+            .load(
+                service_config_id=service_config_id,
+            )
+            .deployment.json
+        )
 
     @app.post("/api/v2/service")
     @with_retries
     async def _create_services_v2(request: Request) -> JSONResponse:
-        """Create a service with a random id."""
+        """Create a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
@@ -637,6 +678,48 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 .json
             )
         )
+
+    @app.put("/api/v2/service/{service_config_id}")
+    @with_retries
+    async def _update_service(request: Request) -> JSONResponse:
+        """Deploy a service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        print(service_config_id)
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        template = await request.json()
+        output = manager.update(service_config_id=service_config_id, service_template=template)
+
+        return JSONResponse(
+            content=output.json
+        )        
+
+    @app.post("/api/v2/service/{service_config_id}/deployment/stop")
+    @with_retries
+    async def _stop_service_locally(request: Request) -> JSONResponse:
+        """Stop a service deployment."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        deployment = operate.service_manager().load(service_config_id=service_config_id).deployment
+        health_checker.stop_for_service(service_config_id=service_config_id)
+
+        await run_in_executor(deployment.stop)
+        logger.info(f"Cancelling funding job for {service_config_id}")
+        cancel_funding_job(service_config_id=service_config_id)
+        return JSONResponse(content=deployment.json)
 
     # @app.post("/api/services")
     # @with_retries
@@ -684,184 +767,155 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     #         content=operate.service_manager().load_or_create(hash=service.hash).json
     #     )
 
-    @app.put("/api/services")
-    @with_retries
-    async def _update_services(request: Request) -> JSONResponse:
-        """Create a service."""
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
-        template = await request.json()
-        service = operate.service_manager().update_service(
-            old_hash=template["old_service_hash"],
-            new_hash=template["new_service_hash"],
-        )
-        if template.get("deploy", False):
-            manager = operate.service_manager()
+    # @app.put("/api/services")
+    # @with_retries
+    # async def _update_services(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if operate.password is None:
+    #         return USER_NOT_LOGGED_IN_ERROR
+    #     template = await request.json()
+    #     service = operate.service_manager().update_service(
+    #         old_hash=template["old_service_hash"],
+    #         new_hash=template["new_service_hash"],
+    #     )
+    #     if template.get("deploy", False):
+    #         manager = operate.service_manager()
 
-            # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-            manager.deploy_service_onchain_from_safe(hash=service.hash)
-            manager.fund_service(hash=service.hash)
+    #         # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
+    #         manager.deploy_service_onchain_from_safe(hash=service.hash)
+    #         manager.fund_service(hash=service.hash)
 
-            # TODO Optimus patch, chain_id="10"
-            chain_id = "10"
-            manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
+    #         # TODO Optimus patch, chain_id="10"
+    #         chain_id = "10"
+    #         manager.deploy_service_locally(hash=service.hash, chain_id=chain_id)
 
-            schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
+    #         schedule_funding_job(service=service.hash)
+    #         schedule_healthcheck_job(service=service.hash)
 
-        return JSONResponse(content=service.json)
+    #     return JSONResponse(content=service.json)
 
-    @app.get("/api/services/{service}")
-    @with_retries
-    async def _get_service(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load_or_create(
-                    hash=request.path_params["service"],
-                )
-                .json
-            )
-        )
 
     # TODO these endpoints below are possibly not used
 
-    @app.post("/api/services/{service}/onchain/deploy")
-    @with_retries
-    async def _deploy_and_run_service(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
-        operate.service_manager().deploy_service_onchain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().stake_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load_or_create(hash=request.path_params["service"])
-                .json
-            )
-        )
+    # @app.post("/api/services/{service}/onchain/deploy")
+    # @with_retries
+    # async def _deploy_and_run_service(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     if operate.password is None:
+    #         return USER_NOT_LOGGED_IN_ERROR
+    #     operate.service_manager().deploy_service_onchain(
+    #         hash=request.path_params["service"]
+    #     )
+    #     operate.service_manager().stake_service_on_chain(
+    #         hash=request.path_params["service"]
+    #     )
+    #     return JSONResponse(
+    #         content=(
+    #             operate.service_manager()
+    #             .load_or_create(hash=request.path_params["service"])
+    #             .json
+    #         )
+    #     )
 
-    @app.post("/api/services/{service}/onchain/stop")
-    @with_retries
-    async def _stop_service_onchain(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
-        operate.service_manager().terminate_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().unbond_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().unstake_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load_or_create(hash=request.path_params["service"])
-                .json
-            )
-        )
+    # @app.post("/api/services/{service}/onchain/stop")
+    # @with_retries
+    # async def _stop_service_onchain(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     if operate.password is None:
+    #         return USER_NOT_LOGGED_IN_ERROR
+    #     operate.service_manager().terminate_service_on_chain(
+    #         hash=request.path_params["service"]
+    #     )
+    #     operate.service_manager().unbond_service_on_chain(
+    #         hash=request.path_params["service"]
+    #     )
+    #     operate.service_manager().unstake_service_on_chain(
+    #         hash=request.path_params["service"]
+    #     )
+    #     return JSONResponse(
+    #         content=(
+    #             operate.service_manager()
+    #             .load_or_create(hash=request.path_params["service"])
+    #             .json
+    #         )
+    #     )
 
-    @app.get("/api/services/{service}/deployment")
-    @with_retries
-    async def _get_service_deployment(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        return JSONResponse(
-            content=operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment.json
-        )
+    # @app.post("/api/services/{service}/deployment/build")
+    # @with_retries
+    # async def _build_service_locally(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     # TODO: add support for chain id.
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     deployment = (
+    #         operate.service_manager()
+    #         .load_or_create(
+    #             request.path_params["service"],
+    #         )
+    #         .deployment
+    #     )
 
-    @app.post("/api/services/{service}/deployment/build")
-    @with_retries
-    async def _build_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        # TODO: add support for chain id.
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        deployment = (
-            operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment
-        )
+    #     def _fn() -> None:
+    #         deployment.build(force=True)
 
-        def _fn() -> None:
-            deployment.build(force=True)
+    #     await run_in_executor(_fn)
+    #     return JSONResponse(content=deployment.json)
 
-        await run_in_executor(_fn)
-        return JSONResponse(content=deployment.json)
+    # @app.post("/api/services/{service}/deployment/start")
+    # @with_retries
+    # async def _start_service_locally(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     service = request.path_params["service"]
+    #     manager = operate.service_manager()
 
-    @app.post("/api/services/{service}/deployment/start")
-    @with_retries
-    async def _start_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        service = request.path_params["service"]
-        manager = operate.service_manager()
+    #     def _fn() -> None:
+    #         manager.deploy_service_onchain(hash=service)
+    #         manager.stake_service_on_chain(hash=service)
+    #         manager.fund_service(hash=service)
+    #         manager.deploy_service_locally(hash=service, force=True)
 
-        def _fn() -> None:
-            manager.deploy_service_onchain(hash=service)
-            manager.stake_service_on_chain(hash=service)
-            manager.fund_service(hash=service)
-            manager.deploy_service_locally(hash=service, force=True)
+    #     await run_in_executor(_fn)
+    #     schedule_funding_job(service=service)
+    #     schedule_healthcheck_job(service=service.hash)
+    #     return JSONResponse(content=manager.load_or_create(service).deployment)
 
-        await run_in_executor(_fn)
-        schedule_funding_job(service=service)
-        schedule_healthcheck_job(service=service.hash)
-        return JSONResponse(content=manager.load_or_create(service).deployment)
+    # @app.post("/api/services/{service}/deployment/stop")
+    # @with_retries
+    # async def _stop_service_locally(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     service = request.path_params["service"]
+    #     deployment = operate.service_manager().load_or_create(service).deployment
+    #     health_checker.stop_for_service(service=service)
 
-    @app.post("/api/services/{service}/deployment/stop")
-    @with_retries
-    async def _stop_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        service = request.path_params["service"]
-        deployment = operate.service_manager().load_or_create(service).deployment
-        health_checker.stop_for_service(service=service)
+    #     await run_in_executor(deployment.stop)
+    #     logger.info(f"Cancelling funding job for {service}")
+    #     cancel_funding_job(service=service)
+    #     return JSONResponse(content=deployment.json)
 
-        await run_in_executor(deployment.stop)
-        logger.info(f"Cancelling funding job for {service}")
-        cancel_funding_job(service=service)
-        return JSONResponse(content=deployment.json)
-
-    @app.post("/api/services/{service}/deployment/delete")
-    @with_retries
-    async def _delete_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        # TODO: Drain safe before deleting service
-        deployment = (
-            operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment
-        )
-        deployment.delete()
-        return JSONResponse(content=deployment.json)
+    # @app.post("/api/services/{service}/deployment/delete")
+    # @with_retries
+    # async def _delete_service_locally(request: Request) -> JSONResponse:
+    #     """Create a service."""
+    #     if not operate.service_manager().exists(service=request.path_params["service"]):
+    #         return service_not_found_error(service=request.path_params["service"])
+    #     # TODO: Drain safe before deleting service
+    #     deployment = (
+    #         operate.service_manager()
+    #         .load_or_create(
+    #             request.path_params["service"],
+    #         )
+    #         .deployment
+    #     )
+    #     deployment.delete()
+    #     return JSONResponse(content=deployment.json)
 
     return app
 

@@ -94,7 +94,6 @@ class ServiceManager:
         self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.manager")
-        self._log_directories()
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -105,10 +104,6 @@ class ServiceManager:
         """Returns the list of available services."""
         data = []
         for path in self.path.iterdir():
-            # TODO possibly the logic to identify invalid services should be migrated to Service.load
-            if path.name.startswith(DELETE_PREFIX):
-                shutil.rmtree(path)
-                continue
             if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith("bafybei"):
                 continue
             try:
@@ -1556,7 +1551,7 @@ class ServiceManager:
         # The following logging has been added to identify OS issues when
         # deleting old service folder
         try:
-            self._log_directories()
+            self.log_directories()
             self.logger.info("Trying to delete old service")
             old_service.delete()
         except Exception as e:  # pylint: disable=broad-except
@@ -1565,9 +1560,35 @@ class ServiceManager:
             )
             self.logger.error(traceback.format_exc())
 
-        self._log_directories()
+        self.log_directories()
         return new_service
 
-    def _log_directories(self) -> None:
-        directories = [str(p) for p in self.path.iterdir() if p.is_dir()]
-        self.logger.info(f"Directories in {self.path}: {', '.join(directories)}")
+    def log_directories(self) -> None:
+        """Log directories."""
+        directories = [f"  - {str(p)}" for p in self.path.iterdir() if p.is_dir()]
+        directories_str = "\n".join(directories)
+        self.logger.info(f"Directories in {self.path}\n: {directories_str}")
+
+    def update(
+        self,
+        service_config_id: str,
+        service_template: ServiceTemplate,
+    ) -> Service:
+        """Update a service."""
+
+        self.logger.info(f"Updating {service_config_id=}")
+        service = self.load(service_config_id=service_config_id)
+        service.update(service_template)
+        return service
+
+    def migrate_service_configs(self) -> None:
+        """Migrate old service config formats to new ones, if applies."""
+        paths = list(self.path.iterdir())
+        for path in paths:
+            if path.name.startswith(DELETE_PREFIX):
+                shutil.rmtree(path)
+                self.logger.info(f"Deleted folder: {path.name}")
+
+            if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith("bafybei"):
+                self.logger.info(f"Migrate_format path={str(path)}")
+                Service.migrate_format(path)

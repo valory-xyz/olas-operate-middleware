@@ -27,6 +27,7 @@ import subprocess  # nosec
 import sys
 import uuid
 import typing as t
+import tempfile
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -665,7 +666,6 @@ class Service(LocalResource):
     def migrate_format(cls, path: Path) -> None:
         """Migrate the JSON file format if needed."""
 
-        print(f"{path=}")
         if not path.is_dir():
             return
         
@@ -739,15 +739,19 @@ class Service(LocalResource):
             data["version"] = 3
 
         if data.get("version") == 3:
-            while True:
-                service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
-                new_path = path.parent / service_config_id
-                if not new_path.exists():
-                    break
-
+            service_config_id = Service.get_new_service_config_id(path)
+            new_path = path.parent / service_config_id
             data["service_config_id"] = service_config_id
             data["version"] = 4
+            shutil.rmtree(data["service_path"])
             path = path.rename(new_path)
+            service_path = Path(
+                IPFSTool().download(
+                    hash_id=data["hash"],
+                    target_dir=path,
+                )
+            )
+            data["service_path"] = str(service_path)
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
@@ -755,8 +759,6 @@ class Service(LocalResource):
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
-        # TODO Probably format migration should only happen once at startup
-        cls.migrate_format(path)
         return super().load(path)  # type: ignore
 
     @property
@@ -785,12 +787,8 @@ class Service(LocalResource):
     ) -> "Service":
         """Create a new service."""
 
-        while True:
-            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
-            path = storage / service_config_id
-            if not path.exists():
-                break
-
+        service_config_id = Service.get_new_service_config_id(storage)
+        path = storage / service_config_id
         path.mkdir()
         service_path = Path(
             IPFSTool().download(
@@ -835,6 +833,71 @@ class Service(LocalResource):
         )
         service.store()
         return service
+
+    @property
+    def service_public_id(self) -> str:
+        with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
+            service_yaml, *_ = yaml_load_all(fp)
+            
+        return f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
+
+    @staticmethod
+    def get_service_public_id(hash: str, dir: t.Optional[str]) -> str:
+        """
+        Get the service public ID from IPFS based on the hash.
+
+        :param hash: The IPFS hash of the service.
+        :param dir: Optional directory path where the temporary download folder will be created.
+                    If None, a system-default temporary directory will be used.
+        :return: The public ID of the service in the format "author/name:version".
+        """        
+        with tempfile.TemporaryDirectory(dir=dir) as path:
+            package_path = Path(
+                IPFSTool().download(
+                    hash_id=hash,
+                    target_dir=path,
+                )
+            )
+
+            print(package_path)
+            with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
+                service_yaml, *_ = yaml_load_all(fp)
+
+            public_id = f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
+            return public_id
+
+    @staticmethod
+    def get_new_service_config_id(path: Path) -> str:
+        """Get a new service config id that does not clash with any directory in path."""
+        while True:
+            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+            new_path = path.parent / service_config_id
+            if not new_path.exists():
+                return service_config_id
+
+    def update(self, service_template: ServiceTemplate) -> None:
+        """Update service."""
+
+        target_hash = service_template["hash"]
+        target_service_public_id = Service.get_service_public_id(target_hash, self.path)
+
+        if(self.service_public_id != target_service_public_id):
+            raise ValueError(f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}.")
+
+        self.name = service_template["name"]
+        self.hash = service_template["hash"]
+        self.image = service_template["image"]
+        self.description = service_template["description"]          # TODO fix defined
+        self.home_chain_id = service_template["home_chain_id"]
+
+        for chain, config in service_template["configurations"].items():
+            self.chain_configs[
+                chain
+            ].chain_data.user_params = OnChainUserParams.from_json(
+                config  # type: ignore
+            )
+
+        self.store()
 
     def update_user_params_from_template(
         self, service_template: ServiceTemplate
