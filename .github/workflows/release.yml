@@ -168,7 +168,7 @@ jobs:
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
           APPLE_ID: ${{ secrets.APPLEID }}
-          APPLETEAMID: ${{ secrets.APPLETEAMID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           GH_TOKEN: ${{ secrets.github_token }}
@@ -184,7 +184,7 @@ jobs:
         env:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
           APPLE_ID: ${{ secrets.APPLEID }}
-          APPLETEAMID: ${{ secrets.APPLETEAMID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           GH_TOKEN: ${{ secrets.github_token }}
