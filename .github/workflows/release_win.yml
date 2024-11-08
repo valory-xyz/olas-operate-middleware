@@ -33,18 +33,6 @@ jobs:
         run: |
           echo "${{ steps.setup-python.outputs.python-path }}" >> $GITHUB_PATH
 
-      # Verify which Python is being used
-      - name: Verify Python Version and Location
-        run: |
-          where python
-          python --version
-
-      # Verify SSL by testing a simple HTTPS request
-      - name: Test SSL with HTTPS Request
-        run: |
-          python -c "import ssl; print(ssl.OPENSSL_VERSION)"
-          python -c "import urllib.request; urllib.request.urlopen('https://pypi.org')"
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20.x"
