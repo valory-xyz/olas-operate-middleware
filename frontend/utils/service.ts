@@ -1,13 +1,13 @@
 import { ServiceTemplate } from '@/client';
 import { GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
-import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
+import { INITIAL_DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
 /** TODO: update from hardcoded, workaround for quick release */
 export const getMinimumStakedAmountRequired = (
   serviceTemplate?: ServiceTemplate, //TODO: remove, as unused
-  stakingProgramId: StakingProgramId = DEFAULT_STAKING_PROGRAM_ID,
+  stakingProgramId: StakingProgramId = INITIAL_DEFAULT_STAKING_PROGRAM_ID,
 ): number | undefined => {
   if (stakingProgramId === StakingProgramId.Alpha) {
     return 20;
