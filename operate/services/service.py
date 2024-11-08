@@ -26,13 +26,13 @@ import shutil
 import subprocess  # nosec
 import sys
 import uuid
+import time
 import typing as t
 import tempfile
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from time import sleep
 from traceback import print_exc
 
 from aea.configurations.constants import (
@@ -505,12 +505,12 @@ class Deployment(LocalResource):
             stop_host_deployment(build_dir=build)
             try:
                 # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
-                sleep(3)
+                time.sleep(3)
                 shutil.rmtree(build)
             except:  # noqa  # pylint: disable=bare-except
                 # sleep and try again. exception if fails
                 print_exc()
-                sleep(3)
+                time.sleep(3)
                 shutil.rmtree(build)
 
         service = Service.load(path=self.path)
@@ -648,9 +648,11 @@ class Service(LocalResource):
     version: int
     service_config_id: str
     hash: str
+    hash_history: t.Dict[int, str]
     keys: Keys
     home_chain_id: str
     chain_configs: ChainConfigs
+    description: str
 
     path: Path
     service_path: Path
@@ -743,6 +745,9 @@ class Service(LocalResource):
             new_path = path.parent / service_config_id
             data["service_config_id"] = service_config_id
             data["version"] = 4
+            data["description"] = data["name"]
+            current_timestamp = int(time.time())
+            data["hash_history"] = {current_timestamp: data["hash"]}
             shutil.rmtree(data["service_path"])
             path = path.rename(new_path)
             service_path = Path(
@@ -820,13 +825,16 @@ class Service(LocalResource):
                 chain_data=chain_data,
             )
 
+        current_timestamp = int(time.time())
         service = Service(
             version=SERVICE_CONFIG_VERSION,
             service_config_id=service_config_id,
-            name=service_yaml["author"] + "/" + service_yaml["name"],
+            name=service_template["name"],
+            description=service_template["description"],
             hash=service_template["hash"],
             keys=keys,
             home_chain_id=service_template["home_chain_id"],
+            hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
@@ -859,7 +867,6 @@ class Service(LocalResource):
                 )
             )
 
-            print(package_path)
             with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
                 service_yaml, *_ = yaml_load_all(fp)
 
@@ -881,21 +888,53 @@ class Service(LocalResource):
         target_hash = service_template["hash"]
         target_service_public_id = Service.get_service_public_id(target_hash, self.path)
 
-        if(self.service_public_id != target_service_public_id):
+        if self.service_public_id != target_service_public_id:
             raise ValueError(f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}.")
 
         self.name = service_template["name"]
         self.hash = service_template["hash"]
-        self.image = service_template["image"]
-        self.description = service_template["description"]          # TODO fix defined
+        self.description = service_template["description"]
+
+        # Only update hash_history if latest inserted hash is different
+        if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:
+            current_timestamp = int(time.time())
+            self.hash_history[current_timestamp] = service_template["hash"]
+
+        self.image = service_template["image"]  # TODO fix defined outside __init__
+        self.description = service_template["description"]
         self.home_chain_id = service_template["home_chain_id"]
 
+        ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
         for chain, config in service_template["configurations"].items():
-            self.chain_configs[
-                chain
-            ].chain_data.user_params = OnChainUserParams.from_json(
-                config  # type: ignore
-            )
+            if chain in self.chain_configs:
+                # The template is providing a chain configuration that already
+                # exists in this service - update only the user parameters.
+                # This is to avoid losing on-chain data like safe, token, etc.
+                self.chain_configs[
+                    chain
+                ].chain_data.user_params = OnChainUserParams.from_json(
+                    config  # type: ignore
+                )
+            else:
+                # The template is providing a chain configuration that does
+                # not currently exist in this service - copy all config as
+                # when creating a new service.
+                ledger_config = ledger_configs[chain]
+                ledger_config.rpc = config["rpc"]
+
+                chain_data = OnChainData(
+                    instances=[],
+                    token=NON_EXISTENT_TOKEN,
+                    multisig=DUMMY_MULTISIG,
+                    staked=False,
+                    on_chain_state=OnChainState.NON_EXISTENT,
+                    user_params=OnChainUserParams.from_json(config),  # type: ignore
+                )
+
+                self.chain_configs[chain] = ChainConfig(
+                    ledger_config=ledger_config,
+                    chain_data=chain_data,
+                )
 
         self.store()
 

@@ -682,7 +682,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.put("/api/v2/service/{service_config_id}")
     @with_retries
     async def _update_service(request: Request) -> JSONResponse:
-        """Deploy a service."""
+        """Update a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
@@ -698,7 +698,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content=output.json
-        )        
+        )
+
+    @app.put("/api/v2/services")
+    @with_retries
+    async def _update_all_services(request: Request) -> JSONResponse:
+        """Update all services of the same kind."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        manager = operate.service_manager()
+        template = await request.json()
+        updated_services = manager.update_all_matching(service_template=template)
+
+        return JSONResponse(
+            content=updated_services
+        )
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
     @with_retries

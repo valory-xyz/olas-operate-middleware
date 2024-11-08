@@ -99,16 +99,14 @@ class ServiceManager:
         """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
-    @property
-    def json(self) -> t.List[t.Dict]:
-        """Returns the list of available services."""
-        data = []
+    def _get_all_services(self) -> t.List[Service]:
+        services = []
         for path in self.path.iterdir():
             if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith("bafybei"):
                 continue
             try:
                 service = Service.load(path=path)
-                data.append(service.json)
+                services.append(service)
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.warning(
                     f"Failed to load service: {path.name}. Exception: {e}"
@@ -121,7 +119,12 @@ class ServiceManager:
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
 
-        return data
+        return services
+
+    @property
+    def json(self) -> t.List[t.Dict]:
+        """Returns the list of available services."""
+        return [service.json for service in self._get_all_services()]
 
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
@@ -1514,55 +1517,6 @@ class ServiceManager:
             deployment.delete()
         return deployment
 
-    def update_service(
-        self,
-        old_hash: str,
-        new_hash: str,
-        service_template: t.Optional[ServiceTemplate] = None,
-    ) -> Service:
-        """Update a service."""
-
-        self.logger.info("-----Entering update local service-----")
-        old_service = self.load_or_create(hash=old_hash)
-        new_service = self.load_or_create(
-            hash=new_hash, service_template=service_template
-        )
-        new_service.keys = old_service.keys
-
-        # TODO Ensure this is as intended.
-        new_service.home_chain_id = old_service.home_chain_id
-
-        # new_service must copy all chain_data from old_service.
-        # Additionally, if service_template is not None, it must overwrite
-        # the user_params on all chain_data by the values passed through the
-        # service_template.
-        new_service.chain_configs = {}
-        for chain_id, config in old_service.chain_configs.items():
-            new_service.chain_configs[chain_id] = config
-            if service_template:
-                new_service.chain_configs[
-                    chain_id
-                ].chain_data.user_params = OnChainUserParams.from_json(
-                    service_template["configurations"][chain_id]  # type: ignore  # TODO fix mypy
-                )
-
-        new_service.store()
-
-        # The following logging has been added to identify OS issues when
-        # deleting old service folder
-        try:
-            self.log_directories()
-            self.logger.info("Trying to delete old service")
-            old_service.delete()
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.error(
-                f"An error occurred while trying to delete {old_service.path}: {e}"
-            )
-            self.logger.error(traceback.format_exc())
-
-        self.log_directories()
-        return new_service
-
     def log_directories(self) -> None:
         """Log directories."""
         directories = [f"  - {str(p)}" for p in self.path.iterdir() if p.is_dir()]
@@ -1580,6 +1534,22 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.update(service_template)
         return service
+
+    def update_all_matching(
+        self,
+        service_template: ServiceTemplate,
+    ) -> t.List[t.Dict]:
+        """Update all services with service id matching the service id from the template hash."""
+
+        updated_services: t.List[t.Dict] = []
+        for service in self._get_all_services():
+            try:
+                service.update(service_template=service_template)
+                updated_services.append(service.json)
+            except ValueError:
+                pass
+
+        return updated_services
 
     def migrate_service_configs(self) -> None:
         """Migrate old service config formats to new ones, if applies."""
