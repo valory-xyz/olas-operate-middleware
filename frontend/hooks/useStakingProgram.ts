@@ -1,7 +1,7 @@
 import { useContext, useMemo } from 'react';
 
 import { MiddlewareChain } from '@/client';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/config/contracts';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import {
   DEFAULT_STAKING_PROGRAM_ID,

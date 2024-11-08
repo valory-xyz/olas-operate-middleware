@@ -5,7 +5,7 @@ import {
   ServiceHash,
   ServiceTemplate,
 } from '@/client';
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { ServicesContext } from '@/context/ServicesProvider';
 import MulticallService from '@/service/Multicall';
 import { Address } from '@/types/Address';
@@ -17,7 +17,7 @@ const checkServiceIsFunded = async (
 ): Promise<boolean> => {
   const {
     chain_configs: {
-      [CHAIN_CONFIGS.OPTIMISM.chainId]: {
+      [CHAIN_CONFIG.OPTIMISM.chainId]: {
         chain_data: { instances, multisig },
       },
     },
@@ -36,10 +36,10 @@ const checkServiceIsFunded = async (
       Object.assign(acc, {
         [address]: instances.includes(address)
           ? balances[address] >
-            serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId]
+            serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
               .fund_requirements.agent
           : balances[address] >
-            serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId]
+            serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
               .fund_requirements.safe,
       }),
     {},
@@ -52,7 +52,7 @@ export const useServices = () => {
   const { services, isFetched: hasInitialLoaded } = useContext(ServicesContext);
 
   const serviceId =
-    services?.[0]?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token;
+    services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token;
 
   // STATE METHODS
   const getServiceFromState = (

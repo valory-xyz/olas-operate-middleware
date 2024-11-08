@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { MiddlewareChain } from '@/client';
-import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
+import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/config/contracts';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { useAddress } from '@/hooks/useAddress';
 import { useBalance } from '@/hooks/useBalance';

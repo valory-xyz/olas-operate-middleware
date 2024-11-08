@@ -9,7 +9,7 @@ import { MiddlewareChain } from '@/client';
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import {
   BASE_PROVIDER,
   ETHEREUM_PROVIDER,
@@ -152,19 +152,19 @@ export const SetupEoaFundingForChain = ({
 const eoaFundingMap = {
   [MiddlewareChain.OPTIMISM]: {
     provider: OPTIMISM_PROVIDER,
-    chainConfig: CHAIN_CONFIGS.OPTIMISM,
+    chainConfig: CHAIN_CONFIG.OPTIMISM,
     requiredEth:
       MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation,
   },
   [MiddlewareChain.ETHEREUM]: {
     provider: ETHEREUM_PROVIDER,
-    chainConfig: CHAIN_CONFIGS.ETHEREUM,
+    chainConfig: CHAIN_CONFIG.ETHEREUM,
     requiredEth:
       MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation,
   },
   [MiddlewareChain.BASE]: {
     provider: BASE_PROVIDER,
-    chainConfig: CHAIN_CONFIGS.BASE,
+    chainConfig: CHAIN_CONFIG.BASE,
     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation,
   },
 };

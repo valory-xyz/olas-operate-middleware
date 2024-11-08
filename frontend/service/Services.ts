@@ -4,7 +4,7 @@ import {
   ServiceHash,
   ServiceTemplate,
 } from '@/client';
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -69,8 +69,8 @@ const createService = async ({
         ...serviceTemplate,
         deploy,
         configurations: {
-          [CHAIN_CONFIGS.OPTIMISM.chainId]: {
-            ...serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId],
+          [CHAIN_CONFIG.OPTIMISM.chainId]: {
+            ...serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId],
             staking_program_id: stakingProgramId,
             rpc: `${process.env.OPTIMISM_RPC}`,
             use_mech_marketplace: useMechMarketplace,

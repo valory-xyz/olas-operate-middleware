@@ -1,4 +1,6 @@
-export const SERVICE_REGISTRY_L2_ABI = [
+import { ContractInterface } from 'ethers';
+
+export const SERVICE_REGISTRY_L2_ABI: ContractInterface = [
   {
     inputs: [
       { internalType: 'string', name: '_name', type: 'string' },

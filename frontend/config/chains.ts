@@ -15,38 +15,38 @@ type ChainConfig = {
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
+  chainId: 100,
   name: 'Gnosis',
   currency: 'XDAI',
-  chainId: 100,
   middlewareChain: MiddlewareChain.GNOSIS,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
+  chainId: 10,
   name: 'Optimism',
   currency: 'ETH',
-  chainId: 10,
   middlewareChain: MiddlewareChain.OPTIMISM,
   rpc: process.env.OPTIMISM_RPC as HttpUrl,
 };
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
+  chainId: 8453,
   name: 'Base',
   currency: 'ETH',
-  chainId: 8453,
   middlewareChain: MiddlewareChain.BASE,
   rpc: process.env.BASE_RPC as HttpUrl,
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
+  chainId: 1,
   name: 'Ethereum',
   currency: 'ETH',
-  chainId: 1,
   middlewareChain: MiddlewareChain.ETHEREUM,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
-export const CHAIN_CONFIGS = {
+export const CHAIN_CONFIG = {
   BASE: BASE_CHAIN_CONFIG,
   ETHEREUM: ETHEREUM_CHAIN_CONFIG,
   GNOSIS: GNOSIS_CHAIN_CONFIG,

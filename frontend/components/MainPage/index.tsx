@@ -2,7 +2,7 @@ import { QuestionCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { Button, Card, Flex } from 'antd';
 import { useEffect } from 'react';
 
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 // import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 // import { useMasterSafe } from '@/hooks/useMasterSafe';

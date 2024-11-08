@@ -1,0 +1,16 @@
+export enum ContractType {
+  Multicall3,
+  ServiceRegistryL2,
+  ServiceRegistryTokenUtility,
+  StakingTokenProxy,
+  AgentMech,
+  MechMarketplace,
+  AgentMechActivity,
+  MechMarketplaceActivity,
+  StakingActivity,
+  Erc20,
+  Erc721,
+  Erc1155,
+  LiquidityPoolV2,
+  LiquidityPoolV3,
+}

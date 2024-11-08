@@ -18,14 +18,14 @@ import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCEOF_FRAGMENT } from '@/abis/erc20';
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import {
   BASE_PROVIDER,
   ETHEREUM_PROVIDER,
   OPTIMISM_PROVIDER,
 } from '@/constants/providers';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { TOKENS } from '@/constants/tokens';
+import { TOKEN_CONFIG } from '@/config/tokens';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
 import { useWallet } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
@@ -115,7 +115,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         .then(setethEth),
       //USDC balance
       new Contract(
-        TOKENS[CHAIN_CONFIGS.ETHEREUM.chainId]['USDC'].address,
+        TOKEN_CONFIG[CHAIN_CONFIG.ETHEREUM.chainId]['USDC'].address,
         ERC20_BALANCEOF_FRAGMENT,
         ETHEREUM_PROVIDER,
       )
@@ -128,7 +128,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         .then(Number)
         .then(setopEth),
       new Contract(
-        TOKENS[CHAIN_CONFIGS.OPTIMISM.chainId]['OLAS'].address,
+        TOKEN_CONFIG[CHAIN_CONFIG.OPTIMISM.chainId]['OLAS'].address,
         ERC20_BALANCEOF_FRAGMENT,
         OPTIMISM_PROVIDER,
       )
@@ -232,8 +232,8 @@ const AddFundsAddressSection = ({
 const AddFundsGetTokensSection = () => (
   <CardSection justify="center" bordertop="true" padding="16px 24px">
     <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-      Get OLAS + {CHAIN_CONFIGS.OPTIMISM.currency} on{' '}
-      {CHAIN_CONFIGS.OPTIMISM.name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      Get OLAS + {CHAIN_CONFIG.OPTIMISM.currency} on{' '}
+      {CHAIN_CONFIG.OPTIMISM.name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
     </Link>
   </CardSection>
 );

@@ -3,7 +3,7 @@ import { Contract as MulticallContract, ContractCall } from 'ethers-multicall';
 
 import { ERC20_BALANCEOF_FRAGMENT } from '@/abis/erc20';
 import { MULTICALL3_ABI } from '@/abis/multicall3';
-import { MULTICALL_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
+import { MULTICALL_CONTRACT_ADDRESS } from '@/config/contracts';
 import { OPTIMISM_MULTICALL_PROVIDER } from '@/constants/providers';
 import { Address } from '@/types/Address';
 import { AddressNumberRecord } from '@/types/Records';

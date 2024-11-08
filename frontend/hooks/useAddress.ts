@@ -1,4 +1,4 @@
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 
 import { useServices } from './useServices';
 
@@ -7,11 +7,11 @@ export const useAddress = () => {
 
   /** agent safe multisig address */
   const multisigAddress =
-    service?.chain_configs?.[CHAIN_CONFIGS.OPTIMISM.chainId]?.chain_data?.multisig;
+    service?.chain_configs?.[CHAIN_CONFIG.OPTIMISM.chainId]?.chain_data?.multisig;
 
   /** agent instance EOA address */
   const instanceAddress =
-    service?.chain_configs?.[CHAIN_CONFIGS.OPTIMISM.chainId]?.chain_data
+    service?.chain_configs?.[CHAIN_CONFIG.OPTIMISM.chainId]?.chain_data
       ?.instances?.[0];
 
   return { instanceAddress, multisigAddress };

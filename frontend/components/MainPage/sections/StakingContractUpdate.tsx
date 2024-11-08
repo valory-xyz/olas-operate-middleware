@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 import { useBalance } from '@/hooks/useBalance';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { usePageState } from '@/hooks/usePageState';

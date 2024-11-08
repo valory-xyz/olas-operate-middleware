@@ -1,7 +1,7 @@
 import { formatUnits } from 'ethers/lib/utils';
 import { useMemo } from 'react';
 
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 import { useBalance } from './useBalance';
@@ -25,7 +25,7 @@ export const useNeedsFunds = () => {
 
   const serviceFundRequirements = useMemo(() => {
     const gasEstimate =
-      serviceTemplate.configurations[CHAIN_CONFIGS.OPTIMISM.chainId]
+      serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
         .monthly_gas_estimate;
     const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
     const minimumStakedAmountRequired =

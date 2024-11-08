@@ -11,7 +11,7 @@ import {
 } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { CHAIN_CONFIGS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { AutonolasService } from '@/service/Autonolas';
@@ -63,7 +63,7 @@ export const StakingContractInfoProvider = ({
 
   const serviceId = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAIN_CONFIGS.OPTIMISM.chainId].chain_data?.token,
+      services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token,
     [services],
   );
 

@@ -4,7 +4,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_ABI } from '@/abis/serviceStakingTokenMechUsage';
+import { STAKING_TOKEN_PROXY_ABI } from '@/abis/serviceStakingTokenMechUsage';
 import { STAKING_ACTIVITY_CHECKER_ABI } from '@/abis/stakingActivityChecker';
 import { MiddlewareChain } from '@/client';
 import {
@@ -12,7 +12,7 @@ import {
   SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
   SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES,
   STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
-} from '@/constants/contractAddresses';
+} from '@/config/contracts';
 import { OPTIMISM_MULTICALL_PROVIDER } from '@/constants/providers';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -22,7 +22,7 @@ import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
 const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
 const REQUIRED_MECH_REQUESTS_SAFETY_MARGIN = 1;
 
-const ServiceStakingTokenAbi = SERVICE_STAKING_TOKEN_MECH_USAGE_ABI.filter(
+const ServiceStakingTokenAbi = STAKING_TOKEN_PROXY_ABI.filter(
   (abi) => abi.type === 'function',
 );
 
