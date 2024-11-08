@@ -32,7 +32,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@electron/notarize": "^2.3.0",
+    "@electron/notarize": "^2.5.0",
     "dotenv-cli": "^7.4.2",
     "electron": "30.0.6",
     "electron-builder": "^24.12.0",
