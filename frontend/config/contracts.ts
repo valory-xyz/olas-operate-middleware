@@ -4,12 +4,11 @@ import { MULTICALL3_ABI } from '@/abis/multicall3';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
 import { STAKING_TOKEN_PROXY_ABI } from '@/abis/stakingTokenProxy';
+import { ChainId } from '@/enums/Chain';
 import { ContractType } from '@/enums/Contract';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Abi } from '@/types/ABI';
 import { Address } from '@/types/Address';
-
-import { CHAIN_CONFIG } from './chains';
 
 export type ContractParams = {
   address: Address;
@@ -112,8 +111,8 @@ export const GNOSIS_CONTRACT_CONFIG: ContractsConfig = {
 };
 
 export const CONTRACT_CONFIG = {
-  [CHAIN_CONFIG.GNOSIS.chainId]: GNOSIS_CONTRACT_CONFIG,
-  [CHAIN_CONFIG.OPTIMISM.chainId]: OPTIMISM_CONTRACT_CONFIG,
+  [ChainId.Gnosis]: GNOSIS_CONTRACT_CONFIG,
+  [ChainId.Optimism]: OPTIMISM_CONTRACT_CONFIG,
 };
 
 /**
