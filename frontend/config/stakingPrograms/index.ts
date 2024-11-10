@@ -26,7 +26,11 @@ export type StakingProgramMap = {
   [stakingProgramId: string]: StakingProgramConfig;
 };
 
-export const STAKING_PROGRAMS: StakingProgramMap = {
-  ...GNOSIS_STAKING_PROGRAMS,
-  ...OPTIMISM_STAKING_PROGRAMS,
+export type StakingProgramMapByChains = {
+  [chainId: number | ChainId]: StakingProgramMap;
+};
+
+export const STAKING_PROGRAMS: StakingProgramMapByChains = {
+  [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS,
+  [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS,
 };
