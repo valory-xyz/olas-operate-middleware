@@ -1,4 +1,4 @@
-import { Abi } from '@/types/ABI';
+import { Abi } from '@/types/Abi';
 
 export const AGENT_MECH_ABI: Abi = [
   {

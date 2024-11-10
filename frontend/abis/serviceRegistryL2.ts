@@ -1,4 +1,4 @@
-import { Abi } from '@/types/ABI';
+import { Abi } from '@/types/Abi';
 
 export const SERVICE_REGISTRY_L2_ABI: Abi = [
   {

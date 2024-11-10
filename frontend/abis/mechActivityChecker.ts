@@ -1,4 +1,4 @@
-import { Abi } from '@/types/ABI';
+import { Abi } from '@/types/Abi';
 
 export const MECH_ACTIVITY_CHECKER_ABI: Abi = [
   {

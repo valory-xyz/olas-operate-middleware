@@ -1,4 +1,4 @@
-import { Abi } from '@/types/ABI';
+import { Abi } from '@/types/Abi';
 
 export const GNOSIS_SAFE_ABI: Abi = [
   { inputs: [], stateMutability: 'nonpayable', type: 'constructor' },
