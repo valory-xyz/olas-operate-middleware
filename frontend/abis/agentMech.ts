@@ -1,4 +1,6 @@
-export const AGENT_MECH_ABI = [
+import { Abi } from '@/types/ABI';
+
+export const AGENT_MECH_ABI: Abi = [
   {
     inputs: [
       { internalType: 'address', name: '_token', type: 'address' },
