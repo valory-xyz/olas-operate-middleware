@@ -3,52 +3,54 @@
  * - add new chains to the CHAIN_CONFIGS object
  */
 import { MiddlewareChain } from '@/client';
+import { ChainId } from '@/enums/Chain';
+import { TokenSymbol } from '@/enums/Token';
 
 type HttpUrl = `http${'s' | ''}://${string}`;
 
 type ChainConfig = {
   name: string;
-  currency: string;
-  chainId: number;
+  currency: TokenSymbol;
+  chainId: ChainId;
   middlewareChain: MiddlewareChain;
   rpc: HttpUrl;
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
-  chainId: 100,
+  chainId: ChainId.Gnosis,
   name: 'Gnosis',
-  currency: 'XDAI',
+  currency: TokenSymbol.XDAI,
   middlewareChain: MiddlewareChain.GNOSIS,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
-  chainId: 10,
+  chainId: ChainId.Optimism,
   name: 'Optimism',
-  currency: 'ETH',
+  currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChain.OPTIMISM,
   rpc: process.env.OPTIMISM_RPC as HttpUrl,
 };
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
-  chainId: 8453,
+  chainId: ChainId.Base,
   name: 'Base',
-  currency: 'ETH',
+  currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChain.BASE,
   rpc: process.env.BASE_RPC as HttpUrl,
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
-  chainId: 1,
+  chainId: ChainId.Ethereum,
   name: 'Ethereum',
-  currency: 'ETH',
+  currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChain.ETHEREUM,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
 export const CHAIN_CONFIG = {
-  BASE: BASE_CHAIN_CONFIG,
-  ETHEREUM: ETHEREUM_CHAIN_CONFIG,
-  GNOSIS: GNOSIS_CHAIN_CONFIG,
-  OPTIMISM: OPTIMISM_CHAIN_CONFIG,
+  [ChainId.Base]: BASE_CHAIN_CONFIG,
+  [ChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,
+  [ChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
+  [ChainId.Optimism]: OPTIMISM_CHAIN_CONFIG,
 } as const;
