@@ -6,9 +6,9 @@ export enum TokenType {
   NativeGas = 'native',
   Erc20 = 'erc20',
   Erc721 = 'erc721',
-  Erc1155 = 'erc1155',
-  UniswapV2Lp = 'v2lp',
-  UniswapV3Lp = 'v3lp',
+  // Erc1155 = 'erc1155',
+  // UniswapV2Lp = 'v2lp',
+  // UniswapV3Lp = 'v3lp',
 }
 
 export type Erc20TokenConfig = {
@@ -24,7 +24,7 @@ export type NativeTokenConfig = {
 };
 
 export type ChainTokenConfig = {
-  [tokenSymbol: string | TokenSymbol]: Erc20TokenConfig | NativeTokenConfig;
+  [tokenSymbol: string]: Erc20TokenConfig | NativeTokenConfig;
 };
 
 export const GNOSIS_TOKEN_CONFIG: ChainTokenConfig = {
@@ -106,8 +106,8 @@ export const ERC20_TOKEN_CONFIG = Object.fromEntries(
     ),
   ]),
 ) as {
-  [chainId in ChainId]: {
-    [tokenSymbol: string | TokenSymbol]: Erc20TokenConfig;
+  [chainId: number]: {
+    [tokenSymbol: string]: Erc20TokenConfig;
   };
 };
 
@@ -124,7 +124,7 @@ export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
     ),
   ]),
 ) as {
-  [chainId in ChainId]: {
-    [tokenSymbol: string | TokenSymbol]: NativeTokenConfig;
+  [chainId: number]: {
+    [tokenSymbol: string]: NativeTokenConfig;
   };
 };
