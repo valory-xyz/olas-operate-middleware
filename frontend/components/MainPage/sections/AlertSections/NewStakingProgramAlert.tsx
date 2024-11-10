@@ -14,6 +14,7 @@ export const NewStakingProgramAlert = () => {
   const { activeStakingProgramId, isActiveStakingProgramLoaded } =
     useStakingProgram();
 
+  // TODO: remove single staking program check
   if (
     !isActiveStakingProgramLoaded ||
     activeStakingProgramId !== StakingProgramId.OptimusAlpha
