@@ -13,6 +13,8 @@ import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 
+import { MechType } from './mechs';
+
 /**
  * Single non-chain specific staking program configuration
  */
@@ -20,9 +22,10 @@ export type StakingProgramConfig = {
   deprecated?: boolean; // hides program from UI unless user is already staked in this program
   name: string;
   supportedAgents: AgentType[];
-  stakingRequirements?: {
+  stakingRequirements: {
     [tokenSymbol: string | TokenSymbol]: number;
   };
+  supportedMech?: MechType;
 };
 
 /**
@@ -42,6 +45,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 20,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBeta]: {
     name: 'Pearl Beta',
@@ -49,6 +53,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 40,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBeta2]: {
     name: 'Pearl Beta 2',
@@ -56,6 +61,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBeta3]: {
     name: 'Pearl Beta 3',
@@ -63,6 +69,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBeta4]: {
     name: 'Pearl Beta 4',
@@ -70,6 +77,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBeta5]: {
     name: 'Pearl Beta 5',
@@ -77,6 +85,7 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 10,
     },
+    supportedMech: MechType.Agent,
   },
   [StakingProgramId.PearlBetaMechMarketplace]: {
     name: 'Pearl Beta Mech Marketplace',
@@ -84,12 +93,12 @@ const GNOSIS_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 40,
     },
+    supportedMech: MechType.Marketplace,
   },
 };
 
-const OPTIMISM_STAKING_PROGRAM_CONFIG = {
+const OPTIMISM_STAKING_PROGRAM_CONFIG: StakingProgramConfigs = {
   [StakingProgramId.OptimusAlpha]: {
-    id: 'optimus_alpha',
     name: 'Optimus Alpha',
     supportedAgents: [AgentType.Optimus],
     stakingRequirements: {
@@ -101,6 +110,7 @@ const OPTIMISM_STAKING_PROGRAM_CONFIG = {
 type StakingProgramConfigsByChain = {
   [chainId: number | ChainId]: StakingProgramConfigs;
 };
+
 export const STAKING_PROGRAM_CONFIG: StakingProgramConfigsByChain = {
   [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAM_CONFIG,
   [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAM_CONFIG,
