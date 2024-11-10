@@ -2,18 +2,9 @@ import { BigNumber, ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
 
-import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
-import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
-import { STAKING_TOKEN_PROXY_ABI } from '@/abis/serviceStakingTokenMechUsage';
-import { STAKING_ACTIVITY_CHECKER_ABI } from '@/abis/stakingActivityChecker';
-import { MiddlewareChain } from '@/client';
-import {
-  SERVICE_REGISTRY_L2_CONTRACT_ADDRESS,
-  SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS,
-  SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES,
-  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS,
-} from '@/config/contracts';
-import { OPTIMISM_MULTICALL_PROVIDER } from '@/constants/providers';
+import { CONTRACT_CONFIG } from '@/config/contracts';
+import { STAKING_PROGRAM_CONFIG as STAKING_PROGRAM_CONFIGS } from '@/config/stakingPrograms';
+import { ChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
@@ -22,71 +13,27 @@ import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
 const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
 const REQUIRED_MECH_REQUESTS_SAFETY_MARGIN = 1;
 
-const ServiceStakingTokenAbi = STAKING_TOKEN_PROXY_ABI.filter(
-  (abi) => abi.type === 'function',
-);
-
-const stakingTokenProxyContracts: Record<StakingProgramId, MulticallContract> =
-  Object.values(StakingProgramId).reduce(
-    (contracts, programId) => {
-      contracts[programId] = new MulticallContract(
-        SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
-          MiddlewareChain.OPTIMISM
-        ][programId],
-        ServiceStakingTokenAbi,
-      );
-      return contracts;
-    },
-    {} as Record<StakingProgramId, MulticallContract>,
-  );
-
-const serviceRegistryTokenUtilityContract = new MulticallContract(
-  SERVICE_REGISTRY_TOKEN_UTILITY_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
-  SERVICE_REGISTRY_TOKEN_UTILITY_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const serviceRegistryL2Contract = new MulticallContract(
-  SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
-  SERVICE_REGISTRY_L2_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const agentMechContract = new MulticallContract(
-  AGENT_MECH_CONTRACT_ADDRESS[Chain.GNOSIS],
-  AGENT_MECH_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const agentMechActivityCheckerContract = new MulticallContract(
-  AGENT_MECH_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
-  MECH_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const mechMarketplaceContract = new MulticallContract(
-  MECH_MARKETPLACE_CONTRACT_ADDRESS[Chain.GNOSIS],
-  MECH_MARKETPLACE_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const mechMarketplaceActivityChecker = new MulticallContract(
-  REQUESTER_ACTIVITY_CHECKER_CONTRACT_ADDRESS[Chain.GNOSIS],
-  REQUESTER_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
-);
-
-const stakingActivityCheckerContract = new MulticallContract(
-  STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM],
-  STAKING_ACTIVITY_CHECKER_ABI.filter((abi) => abi.type === 'function'),
-);
-
 const getAgentStakingRewardsInfo = async ({
   agentMultisigAddress,
   serviceId,
   stakingProgram,
+  chainId,
 }: {
   agentMultisigAddress: Address;
   serviceId: number;
   stakingProgram: StakingProgramId;
+  chainId: ChainId;
 }): Promise<StakingRewardsInfo | undefined> => {
   if (!agentMultisigAddress) return;
   if (!serviceId) return;
-  if (stakingProgram === StakingProgramId.OptimusAlpha) return;
+
+  const stakingProgramConfig =
+    STAKING_PROGRAM_CONFIGS[chainId as keyof typeof STAKING_PROGRAM_CONFIGS][
+      stakingProgram
+    ];
+
+  const contractConfig =
+    CONTRACT_CONFIG[chainId as keyof typeof CONTRACT_CONFIG];
 
   // const mechContract = agentMechContract;
 
@@ -362,14 +309,20 @@ const getServiceRegistryInfo = async (
  */
 const getCurrentStakingProgramByServiceId = async (
   serviceId: number,
+  chainId: keyof typeof STAKING_PROGRAM_CONFIGS,
 ): Promise<StakingProgramId | null> => {
   if (serviceId <= -1) return null;
 
-  const contractCalls = Object.values(StakingProgramId).reduce(
-    (acc, stakingProgramId: StakingProgramId) => ({
+  const stakingTokenProxiesForChain =
+    CONTRACT_CONFIG[chainId].STAKING_TOKEN_PROXYS;
+
+  const contractCalls = Object.entries(stakingTokenProxiesForChain).reduce(
+    (acc, [stakingProgramId, { address, abi }]) => ({
       ...acc,
-      [stakingProgramId]:
-        stakingTokenProxyContracts[stakingProgramId].getStakingState(serviceId),
+      [stakingProgramId as StakingProgramId]: new MulticallContract(
+        address,
+        abi,
+      ).getStakingState(serviceId),
     }),
     {},
   );
