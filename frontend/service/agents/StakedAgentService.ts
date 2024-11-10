@@ -10,7 +10,6 @@
 import { Address } from 'cluster';
 import { ethers } from 'ethers';
 import { Contract as MulticallContract } from 'ethers-multicall';
-import { noop } from 'lodash';
 
 import { CONTRACTS } from '@/config/contracts';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
@@ -26,17 +25,15 @@ export const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
  *
  */
 export abstract class StakedAgentService {
-  static activityCheckerContract: MulticallContract;
-  static olasStakingTokenProxyContract: MulticallContract;
-  static serviceRegistryTokenUtilityContract: MulticallContract;
+  abstract activityCheckerContract: MulticallContract;
+  abstract olasStakingTokenProxyContract: MulticallContract;
+  abstract serviceRegistryTokenUtilityContract: MulticallContract;
 
-  public static getStakingRewardsInfo = () => noop;
-
-  public static getAvailableRewardsForEpoch = () => noop;
-
-  public static getStakingContractInfo = () => noop;
-  private getStakingContractInfoByServiceIdStakingProgramId = () => noop;
-  private getStakingContractInfoByStakingProgramId = () => noop;
+  abstract getStakingRewardsInfo: Promise<unknown>;
+  abstract getAvailableRewardsForEpoch: Promise<unknown>;
+  abstract getStakingContractInfo: Promise<unknown>;
+  abstract getStakingContractInfoByServiceIdStakingProgramId: Promise<unknown>;
+  abstract getStakingContractInfoByStakingProgramId: Promise<unknown>;
 
   static getCurrentStakingProgramByServiceId = async (
     serviceId: number,
@@ -46,12 +43,12 @@ export abstract class StakedAgentService {
       const { multicallProvider } = PROVIDERS[chainId];
 
       // filter out staking programs that are not on the chain
-      const stakingProgramEntries = Object.entries(STAKING_PROGRAMS).filter(
-        (entry) => {
-          const [, program] = entry;
-          return program.chainId === chainId;
-        },
-      );
+      const stakingProgramEntries = Object.entries(
+        STAKING_PROGRAMS[chainId],
+      ).filter((entry) => {
+        const [, program] = entry;
+        return program.chainId === chainId;
+      });
 
       // create contract calls
       const contractCalls = stakingProgramEntries.map((entry) => {
