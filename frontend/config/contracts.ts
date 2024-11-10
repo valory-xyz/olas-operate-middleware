@@ -1,19 +1,19 @@
-import { ethers } from 'ethers';
 import { setMulticallAddress } from 'ethers-multicall';
 
 import { MULTICALL3_ABI } from '@/abis/multicall3';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
-import { STAKING_TOKEN_PROXY_ABI } from '@/abis/serviceStakingTokenMechUsage';
+import { STAKING_TOKEN_PROXY_ABI } from '@/abis/stakingTokenProxy';
 import { ContractType } from '@/enums/Contract';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { Abi } from '@/types/ABI';
 import { Address } from '@/types/Address';
 
 import { CHAIN_CONFIG } from './chains';
 
 export type ContractParams = {
   address: Address;
-  abi: ethers.ContractInterface;
+  abi: Abi;
   type?: ContractType;
 };
 
