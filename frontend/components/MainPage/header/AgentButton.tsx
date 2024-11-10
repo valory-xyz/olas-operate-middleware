@@ -205,7 +205,6 @@ const AgentNotRunningButton = () => {
         serviceTemplate,
         deploy: true,
         useMechMarketplace: false,
-        // stakingProgramId === StakingProgramId.BetaMechMarketplace,
       });
     } catch (error) {
       console.error(error);
