@@ -1,3 +1,9 @@
+/*
+  This context provider is responsible for determining the current active staking program, if any.
+  It does so by checking if the current service is staked, and if so, which staking program it is staked in.
+  It also provides a method to update the active staking program id in state.
+*/
+
 import { createContext, PropsWithChildren, useCallback, useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
@@ -6,6 +12,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 import { AutonolasService } from '@/service/Autonolas';
 
+// TODO: consider that users may not want to default to optimus
 export const DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.OptimusAlpha;
 
 export const StakingProgramContext = createContext<{
@@ -30,7 +37,9 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
     const serviceId =
       service?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token;
 
-    if (!service?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token) {
+    if (
+      !service?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token
+    ) {
       setActiveStakingProgramId(null);
       return;
     }
