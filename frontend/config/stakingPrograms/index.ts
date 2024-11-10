@@ -3,7 +3,6 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 import { AgentType } from '@/enums/Agent';
 import { ChainId } from '@/enums/Chain';
 
-import { MechType } from '../mechs';
 import { GNOSIS_STAKING_PROGRAMS } from './gnosis';
 import { OPTIMISM_STAKING_PROGRAMS } from './optimism';
 
@@ -18,8 +17,9 @@ export type StakingProgramConfig = {
   stakingRequirements: {
     [tokenSymbol: string]: number;
   };
-  mech?: MechType;
   contract: MulticallContract;
+  mech?: MulticallContract;
+  activityChecker: MulticallContract;
 };
 
 export type StakingProgramMap = {
