@@ -1,17 +1,14 @@
-import { BigNumber, ethers } from 'ethers';
+import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
-import {
-  STAKING_PROGRAMS,
-  StakingProgramConfig,
-} from '@/config/stakingPrograms';
+import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
 import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
 
-import { StakedAgentService } from './StakedAgentService';
+import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
 const MECH_REQUESTS_SAFETY_MARGIN = 1;
 
@@ -20,25 +17,23 @@ export abstract class PredictTraderService extends StakedAgentService {
     agentMultisigAddress,
     serviceId,
     stakingProgramId,
+    chainId = ChainId.Gnosis,
   }: {
     agentMultisigAddress: Address;
     serviceId: number;
-    stakingProgramId: string;
+    stakingProgramId: StakingProgramId;
+    chainId?: ChainId;
   }): Promise<StakingRewardsInfo | undefined> => {
     if (!agentMultisigAddress) return;
     if (!serviceId) return;
 
-    const [, stakingProgramConfig] = Object.entries(STAKING_PROGRAMS).find(
-      ([entryKey]) => entryKey === stakingProgramId,
-    ) as [unknown, StakingProgramConfig];
+    const stakingProgramConfig =
+      STAKING_PROGRAMS[ChainId.Gnosis][stakingProgramId];
 
     if (!stakingProgramConfig) throw new Error('Staking program not found');
 
-    const {
-      activityChecker,
-      contract: stakingTokenProxyContract,
-      chainId,
-    } = stakingProgramConfig;
+    const { activityChecker, contract: stakingTokenProxyContract } =
+      stakingProgramConfig;
 
     const provider = PROVIDERS[chainId].multicallProvider;
 
@@ -123,9 +118,11 @@ export abstract class PredictTraderService extends StakedAgentService {
 
   static getAvailableRewardsForEpoch = async (
     stakingProgramId: StakingProgramId,
+    chainId: ChainId = ChainId.Gnosis,
   ): Promise<number | undefined> => {
-    const stakingTokenProxy = STAKING_PROGRAMS[stakingProgramId].contract;
-    const provider = PROVIDERS[ChainId.Gnosis].multicallProvider;
+    const { contract: stakingTokenProxy } =
+      STAKING_PROGRAMS[chainId][stakingProgramId];
+    const { multicallProvider } = PROVIDERS[chainId];
 
     const contractCalls = [
       stakingTokenProxy.rewardsPerSecond(),
@@ -133,7 +130,7 @@ export abstract class PredictTraderService extends StakedAgentService {
       stakingTokenProxy.tsCheckpoint(), // last checkpoint timestamp
     ];
 
-    const multicallResponse = await provider.all(contractCalls);
+    const multicallResponse = await multicallProvider.all(contractCalls);
     const [rewardsPerSecond, livenessPeriod, tsCheckpoint] = multicallResponse;
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
@@ -146,9 +143,14 @@ export abstract class PredictTraderService extends StakedAgentService {
   static getStakingContractInfoByServiceIdStakingProgram = async (
     serviceId: number,
     stakingProgramId: StakingProgramId,
+    chainId: ChainId = ChainId.Gnosis,
   ): Promise<Partial<StakingContractInfo> | undefined> => {
     if (!serviceId) return;
-    const stakingTokenProxy = STAKING_PROGRAMS[stakingProgramId].contract;
+
+    const { multicallProvider } = PROVIDERS[chainId];
+
+    const { contract: stakingTokenProxy } =
+      STAKING_PROGRAMS[chainId][stakingProgramId].contract;
 
     const contractCalls = [
       stakingTokenProxy.availableRewards(),
@@ -160,8 +162,7 @@ export abstract class PredictTraderService extends StakedAgentService {
       stakingTokenProxy.minStakingDeposit(),
     ];
 
-    const multicallResponse =
-      await OPTIMISM_MULTICALL_PROVIDER.all(contractCalls);
+    const multicallResponse = await multicallProvider.all(contractCalls);
     const [
       availableRewardsInBN,
       maxNumServicesInBN,
@@ -175,7 +176,8 @@ export abstract class PredictTraderService extends StakedAgentService {
     const availableRewards = parseFloat(
       ethers.utils.formatUnits(availableRewardsInBN, 18),
     );
-    const serviceIds = getServiceIdsInBN.map((id: BigNumber) => id.toNumber());
+    const serviceIds = getServiceIdsInBN.map(Number);
+
     const maxNumServices = maxNumServicesInBN.toNumber();
 
     return {
@@ -197,23 +199,26 @@ export abstract class PredictTraderService extends StakedAgentService {
    */
   static getStakingContractInfoByStakingProgram = async (
     stakingProgramId: StakingProgramId,
+    chainId: ChainId,
   ): Promise<Partial<StakingContractInfo>> => {
-    const stakingContract =
-      STAKING_PROGRAMS[StakingProgramId][stakingProgramId];
+    const provider = PROVIDERS[chainId].multicallProvider;
+
+    const { contract: stakingTokenProxy } =
+      STAKING_PROGRAMS[chainId][stakingProgramId];
 
     const contractCalls = [
-      stakingTokenProxyContracts[stakingProgramId].availableRewards(),
-      stakingTokenProxyContracts[stakingProgramId].maxNumServices(),
-      stakingTokenProxyContracts[stakingProgramId].getServiceIds(),
-      stakingTokenProxyContracts[stakingProgramId].minStakingDuration(),
-      stakingTokenProxyContracts[stakingProgramId].minStakingDeposit(),
-      stakingTokenProxyContracts[stakingProgramId].rewardsPerSecond(),
-      stakingTokenProxyContracts[stakingProgramId].numAgentInstances(),
-      stakingTokenProxyContracts[stakingProgramId].livenessPeriod(),
+      stakingTokenProxy.availableRewards(),
+      stakingTokenProxy.maxNumServices(),
+      stakingTokenProxy.getServiceIds(),
+      stakingTokenProxy.minStakingDuration(),
+      stakingTokenProxy.minStakingDeposit(),
+      stakingTokenProxy.rewardsPerSecond(),
+      stakingTokenProxy.numAgentInstances(),
+      stakingTokenProxy.livenessPeriod(),
     ];
 
-    const multicallResponse =
-      await OPTIMISM_MULTICALL_PROVIDER.all(contractCalls);
+    const multicallResponse = await provider.all(contractCalls);
+
     const [
       availableRewardsInBN,
       maxNumServicesInBN,
@@ -229,7 +234,7 @@ export abstract class PredictTraderService extends StakedAgentService {
       ethers.utils.formatUnits(availableRewardsInBN, 18),
     );
 
-    const serviceIds = getServiceIdsInBN.map((id: BigNumber) => id.toNumber());
+    const serviceIds = getServiceIdsInBN.map((id: bigint) => id);
     const maxNumServices = maxNumServicesInBN.toNumber();
 
     // APY
@@ -252,7 +257,7 @@ export abstract class PredictTraderService extends StakedAgentService {
 
     // Rewards per work period
     const rewardsPerWorkPeriod =
-      Number(formatEther(rewardsPerSecond as BigNumber)) *
+      Number(formatEther(rewardsPerSecond as bigint)) *
       livenessPeriod.toNumber();
 
     return {
