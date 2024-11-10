@@ -8,9 +8,3 @@ export enum StakingProgramId {
   PearlBetaMechMarketplace = 'pearl_beta_mech_marketplace',
   OptimusAlpha = 'optimus_alpha',
 }
-
-export type ValidStakingProgramId = keyof typeof StakingProgramId;
-
-export type StakingProgramIdMapping<ValueType> = {
-  [K in string]: K extends ValidStakingProgramId ? ValueType : never;
-};
