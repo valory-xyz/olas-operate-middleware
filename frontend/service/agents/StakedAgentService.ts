@@ -11,7 +11,7 @@ import { Address } from 'cluster';
 import { ethers } from 'ethers';
 import { Contract as MulticallContract } from 'ethers-multicall';
 
-import { CONTRACTS } from '@/config/contracts';
+import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
 import { ChainId } from '@/enums/Chain';
@@ -94,12 +94,12 @@ export abstract class StakedAgentService {
     depositValue: number;
     serviceState: ServiceRegistryL2ServiceState;
   }> => {
-    if (!CONTRACTS[chainId]) {
+    if (!OLAS_CONTRACTS[chainId]) {
       throw new Error('Chain not supported');
     }
 
     const { serviceRegistryTokenUtilityContract, serviceRegistryL2Contract } =
-      CONTRACTS[chainId];
+      OLAS_CONTRACTS[chainId];
 
     const contractCalls = [
       serviceRegistryTokenUtilityContract.getOperatorBalance(
@@ -114,7 +114,8 @@ export abstract class StakedAgentService {
       getOperatorBalanceReponse,
       mapServiceIdTokenDepositResponse,
       mapServicesResponse,
-    ] = await CONTRACTS[chainId][ContractType.Multicall3].all(contractCalls);
+    ] =
+      await OLAS_CONTRACTS[chainId][ContractType.Multicall3].all(contractCalls);
 
     const [bondValue, depositValue, serviceState] = [
       parseFloat(ethers.utils.formatUnits(getOperatorBalanceReponse, 18)),
