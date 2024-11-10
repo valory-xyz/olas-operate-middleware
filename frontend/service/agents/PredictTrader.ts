@@ -1,20 +1,21 @@
 import { BigNumber, ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
-import { Contract } from 'ethers-multicall';
 
-import { ContractParams, CONTRACTS } from '@/config/contracts';
-import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
+import {
+  STAKING_PROGRAMS,
+  StakingProgramConfig,
+} from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
 import { ChainId } from '@/enums/Chain';
-import { ContractType } from '@/enums/Contract';
-import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
 
-import { AgentServiceApi } from './Agent';
+import { StakedAgentService } from './StakedAgentService';
 
-export abstract class PredictTraderServiceApi extends AgentServiceApi {
+const MECH_REQUESTS_SAFETY_MARGIN = 1;
+
+export abstract class PredictTraderService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
     serviceId,
@@ -27,47 +28,32 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
     if (!agentMultisigAddress) return;
     if (!serviceId) return;
 
-    const stakingProgramConfig = Object.entries(STAKING_PROGRAMS)
-      .filter(([chainIdKey, stakingProgram]) => chainIdKey === chainId)
-      .find((stakingProgram) => stakingProgram === stakingProgramId);
+    const [, stakingProgramConfig] = Object.entries(STAKING_PROGRAMS).find(
+      ([entryKey]) => entryKey === stakingProgramId,
+    ) as [unknown, StakingProgramConfig];
 
     if (!stakingProgramConfig) throw new Error('Staking program not found');
 
-    const mechContractConfig = contractConfig[
-      stakingProgramConfig.supportedMech
-    ] as ContractParams;
+    const {
+      activityChecker,
+      contract: stakingTokenProxyContract,
+      chainId,
+    } = stakingProgramConfig;
 
-    if (!mechContractConfig) throw new Error('Mech contract not found');
-
-    const mechContract = new Contract(
-      mechContractConfig.address,
-      mechContractConfig.abi,
-    );
-
-    // stakingProgram === StakingProgramId.BetaMechMarketplace
-    //   ? mechMarketplaceContract
-    //   : agentMechContract;
-
-    const activityCheckerContract = stakingActivityCheckerContract;
-    // stakingProgram === StakingProgramId.BetaMechMarketplace
-    //   ? mechMarketplaceActivityCheckerContract
-    //   : agentMechActivityCheckerContract;
+    const provider = PROVIDERS[chainId].multicallProvider;
 
     const contractCalls = [
       // mechContract.getRequestsCount(agentMultisigAddress),
-      stakingTokenProxyContracts[stakingProgramId].getServiceInfo(serviceId),
-      stakingTokenProxyContracts[stakingProgramId].livenessPeriod(),
-      activityCheckerContract.livenessRatio(),
-      stakingTokenProxyContracts[stakingProgramId].rewardsPerSecond(),
-      stakingTokenProxyContracts[stakingProgramId].calculateStakingReward(
-        serviceId,
-      ),
-      stakingTokenProxyContracts[stakingProgramId].minStakingDeposit(),
-      stakingTokenProxyContracts[stakingProgramId].tsCheckpoint(),
+      stakingTokenProxyContract.getServiceInfo(serviceId),
+      stakingTokenProxyContract.livenessPeriod(),
+      activityChecker.livenessRatio(),
+      stakingTokenProxyContract.rewardsPerSecond(),
+      stakingTokenProxyContract.calculateStakingReward(serviceId),
+      stakingTokenProxyContract.minStakingDeposit(),
+      stakingTokenProxyContract.tsCheckpoint(),
     ];
 
-    const multicallResponse =
-      await OPTIMISM_MULTICALL_PROVIDER.all(contractCalls);
+    const multicallResponse = await provider.all(contractCalls);
 
     const [
       mechRequestCount,
@@ -102,7 +88,7 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
       (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
         livenessRatio) /
         1e18 +
-      REQUIRED_MECH_REQUESTS_SAFETY_MARGIN;
+      MECH_REQUESTS_SAFETY_MARGIN;
 
     const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
     const eligibleRequests =
@@ -138,16 +124,16 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
   static getAvailableRewardsForEpoch = async (
     stakingProgramId: StakingProgramId,
   ): Promise<number | undefined> => {
-    return 0;
+    const stakingTokenProxy = STAKING_PROGRAMS[stakingProgramId].contract;
+    const provider = PROVIDERS[ChainId.Gnosis].multicallProvider;
 
     const contractCalls = [
-      stakingTokenProxyContracts[stakingProgramId].rewardsPerSecond(),
-      stakingTokenProxyContracts[stakingProgramId].livenessPeriod(), // epoch length
-      stakingTokenProxyContracts[stakingProgramId].tsCheckpoint(), // last checkpoint timestamp
+      stakingTokenProxy.rewardsPerSecond(),
+      stakingTokenProxy.livenessPeriod(), // epoch length
+      stakingTokenProxy.tsCheckpoint(), // last checkpoint timestamp
     ];
 
-    const multicallResponse =
-      await OPTIMISM_MULTICALL_PROVIDER.all(contractCalls);
+    const multicallResponse = await provider.all(contractCalls);
     const [rewardsPerSecond, livenessPeriod, tsCheckpoint] = multicallResponse;
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
@@ -162,15 +148,16 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
     stakingProgramId: StakingProgramId,
   ): Promise<Partial<StakingContractInfo> | undefined> => {
     if (!serviceId) return;
+    const stakingTokenProxy = STAKING_PROGRAMS[stakingProgramId].contract;
 
     const contractCalls = [
-      stakingTokenProxyContracts[stakingProgramId].availableRewards(),
-      stakingTokenProxyContracts[stakingProgramId].maxNumServices(),
-      stakingTokenProxyContracts[stakingProgramId].getServiceIds(),
-      stakingTokenProxyContracts[stakingProgramId].minStakingDuration(),
-      stakingTokenProxyContracts[stakingProgramId].getServiceInfo(serviceId),
-      stakingTokenProxyContracts[stakingProgramId].getStakingState(serviceId),
-      stakingTokenProxyContracts[stakingProgramId].minStakingDeposit(),
+      stakingTokenProxy.availableRewards(),
+      stakingTokenProxy.maxNumServices(),
+      stakingTokenProxy.getServiceIds(),
+      stakingTokenProxy.minStakingDuration(),
+      stakingTokenProxy.getServiceInfo(serviceId),
+      stakingTokenProxy.getStakingState(serviceId),
+      stakingTokenProxy.minStakingDeposit(),
     ];
 
     const multicallResponse =
@@ -209,17 +196,20 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
    * eg. Alpha, Beta, Beta2
    */
   static getStakingContractInfoByStakingProgram = async (
-    stakingProgram: StakingProgramId,
+    stakingProgramId: StakingProgramId,
   ): Promise<Partial<StakingContractInfo>> => {
+    const stakingContract =
+      STAKING_PROGRAMS[StakingProgramId][stakingProgramId];
+
     const contractCalls = [
-      stakingTokenProxyContracts[stakingProgram].availableRewards(),
-      stakingTokenProxyContracts[stakingProgram].maxNumServices(),
-      stakingTokenProxyContracts[stakingProgram].getServiceIds(),
-      stakingTokenProxyContracts[stakingProgram].minStakingDuration(),
-      stakingTokenProxyContracts[stakingProgram].minStakingDeposit(),
-      stakingTokenProxyContracts[stakingProgram].rewardsPerSecond(),
-      stakingTokenProxyContracts[stakingProgram].numAgentInstances(),
-      stakingTokenProxyContracts[stakingProgram].livenessPeriod(),
+      stakingTokenProxyContracts[stakingProgramId].availableRewards(),
+      stakingTokenProxyContracts[stakingProgramId].maxNumServices(),
+      stakingTokenProxyContracts[stakingProgramId].getServiceIds(),
+      stakingTokenProxyContracts[stakingProgramId].minStakingDuration(),
+      stakingTokenProxyContracts[stakingProgramId].minStakingDeposit(),
+      stakingTokenProxyContracts[stakingProgramId].rewardsPerSecond(),
+      stakingTokenProxyContracts[stakingProgramId].numAgentInstances(),
+      stakingTokenProxyContracts[stakingProgramId].livenessPeriod(),
     ];
 
     const multicallResponse =
@@ -277,101 +267,5 @@ export abstract class PredictTraderServiceApi extends AgentServiceApi {
       olasStakeRequired,
       rewardsPerWorkPeriod,
     };
-  };
-
-  /**
-   * Gets service registry info, including:
-   * - bondValue
-   * - depositValue
-   * - serviceState
-   */
-  static getServiceRegistryInfo = async (
-    address: Address, // generally masterSafeAddress
-    serviceId: number,
-    chainId: ChainId,
-  ): Promise<{
-    bondValue: number;
-    depositValue: number;
-    serviceState: ServiceRegistryL2ServiceState;
-  }> => {
-    if (!CONTRACTS[chainId]) {
-      throw new Error('Chain not supported');
-    }
-
-    const { serviceRegistryTokenUtilityContract, serviceRegistryL2Contract } =
-      CONTRACTS[chainId];
-
-    const contractCalls = [
-      serviceRegistryTokenUtilityContract.getOperatorBalance(
-        address,
-        serviceId,
-      ),
-      serviceRegistryTokenUtilityContract.mapServiceIdTokenDeposit(serviceId),
-      serviceRegistryL2Contract.mapServices(serviceId),
-    ];
-
-    const [
-      getOperatorBalanceReponse,
-      mapServiceIdTokenDepositResponse,
-      mapServicesResponse,
-    ] = await CONTRACTS[chainId][ContractType.Multicall3].all(contractCalls);
-
-    const [bondValue, depositValue, serviceState] = [
-      parseFloat(ethers.utils.formatUnits(getOperatorBalanceReponse, 18)),
-      parseFloat(
-        ethers.utils.formatUnits(mapServiceIdTokenDepositResponse[1], 18),
-      ),
-      mapServicesResponse.state as ServiceRegistryL2ServiceState,
-    ];
-
-    return {
-      bondValue,
-      depositValue,
-      serviceState,
-    };
-  };
-
-  static getCurrentStakingProgramByServiceId = async (
-    serviceId: number,
-    chainId: ChainId,
-  ): Promise<StakingProgramId | null> => {
-    try {
-      const { multicallProvider } = PROVIDERS[chainId];
-
-      // filter out staking programs that are not on the chain
-      const stakingProgramEntries = Object.entries(STAKING_PROGRAMS).filter(
-        (entry) => {
-          const [, program] = entry;
-          return program.chainId === chainId;
-        },
-      );
-
-      // create contract calls
-      const contractCalls = stakingProgramEntries.map((entry) => {
-        const [, stakingProgram] = entry;
-        return stakingProgram.contract.getStakingState(serviceId);
-      });
-
-      // get multicall response
-      const multicallResponse = await multicallProvider.all(
-        Object.values(contractCalls),
-      );
-
-      // find the first staking program that is active
-      const activeStakingProgramIndex = multicallResponse.findIndex(Boolean);
-
-      // if no staking program is active, return null
-      if (activeStakingProgramIndex === -1) {
-        return null;
-      }
-
-      // return the staking program id
-      return stakingProgramEntries[
-        activeStakingProgramIndex
-      ][0] as StakingProgramId;
-    } catch (error) {
-      console.error('Error while getting current staking program', error);
-      return null;
-    }
   };
 }
