@@ -17,15 +17,10 @@ import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
-import { ERC20_BALANCEOF_FRAGMENT } from '@/abis/erc20';
+import { ERC20_BALANCEOF_STRING_FRAGMENT } from '@/abis/erc20';
 import { CHAIN_CONFIG } from '@/config/chains';
-import {
-  BASE_PROVIDER,
-  ETHEREUM_PROVIDER,
-  OPTIMISM_PROVIDER,
-} from '@/constants/providers';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { TOKEN_CONFIG } from '@/config/tokens';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
 import { useWallet } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
@@ -116,7 +111,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
       //USDC balance
       new Contract(
         TOKEN_CONFIG[CHAIN_CONFIG.ETHEREUM.chainId]['USDC'].address,
-        ERC20_BALANCEOF_FRAGMENT,
+        ERC20_BALANCEOF_STRING_FRAGMENT,
         ETHEREUM_PROVIDER,
       )
         .balanceOf(masterSafeAddress)
@@ -129,7 +124,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         .then(setopEth),
       new Contract(
         TOKEN_CONFIG[CHAIN_CONFIG.OPTIMISM.chainId]['OLAS'].address,
-        ERC20_BALANCEOF_FRAGMENT,
+        ERC20_BALANCEOF_STRING_FRAGMENT,
         OPTIMISM_PROVIDER,
       )
         .balanceOf(masterSafeAddress)
