@@ -1,3 +1,3 @@
-export abstract class MechServiceApi {}
+export abstract class MechService {}
 
-export abstract class MechMarketplaceServiceApi extends MechServiceApi {}
+export abstract class MechMarketplaceService extends MechService {}
