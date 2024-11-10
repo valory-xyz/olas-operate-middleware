@@ -1,9 +1,9 @@
 import { Contract as MulticallContract } from 'ethers-multicall';
 import { noop } from 'lodash';
 
-import { AgentApi } from './Agent';
+import { AgentServiceApi } from './Agent';
 
-export class OptimusService extends AgentApi {
+export class OptimusServiceApi extends AgentServiceApi {
   static activityCheckerContract: MulticallContract;
   static stakingContracts: MulticallContract;
   static serviceRegistryTokenUtilityContract: MulticallContract;

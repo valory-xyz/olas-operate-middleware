@@ -13,7 +13,7 @@ import { noop } from 'lodash';
 /**
  *
  */
-export abstract class AgentApi {
+export abstract class AgentServiceApi {
   static activityCheckerContract: MulticallContract;
   static olasStakingTokenProxyContract: MulticallContract;
   static serviceRegistryTokenUtilityContract: MulticallContract;

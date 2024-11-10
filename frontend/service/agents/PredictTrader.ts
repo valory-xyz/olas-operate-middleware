@@ -1,12 +1,8 @@
-import { Contract as MulticallContract } from 'ethers-multicall';
 import { noop } from 'lodash';
 
-import { AgentApi } from './Agent';
+import { AgentServiceApi } from './Agent';
 
-export class PredictTraderService extends AgentApi {
-  readonly stakingContracts = Object.reduce(() => {}, []);
-  readonly serviceRegistryTokenUtilityContract: MulticallContract;
-
+export abstract class PredictTraderServiceApi extends AgentServiceApi {
   public static getStakingRewardsInfo = () => noop;
 
   public static getAvailableRewardsForEpoch = () => noop;

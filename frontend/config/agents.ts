@@ -1,12 +1,21 @@
 import { AgentType } from '@/enums/Agent';
-import { OptimusService } from '@/service/agents/Optimus';
-import { PredictTraderService } from '@/service/agents/PredictTrader';
+import { ChainId } from '@/enums/Chain';
+import { OptimusServiceApi } from '@/service/agents/Optimus';
+import { PredictTraderServiceApi } from '@/service/agents/PredictTrader';
 
 export const AGENT_CONFIG = {
   [AgentType.PredictTrader]: {
-    service: PredictTraderService,
+    name: 'Predict Trader',
+    homeChainId: ChainId.Gnosis,
+    requiresAgentSafesOn: [ChainId.Gnosis],
+    requiresMasterSafesOn: [ChainId.Gnosis],
+    serviceApi: PredictTraderServiceApi,
   },
   [AgentType.Optimus]: {
-    service: OptimusService,
+    name: 'Optimus',
+    homeChainId: ChainId.Optimism,
+    requiresAgentSafesOn: [ChainId.Optimism, ChainId.Ethereum, ChainId.Base],
+    requiresMasterSafesOn: [ChainId.Optimism, ChainId.Ethereum, ChainId.Base],
+    serviceApi: OptimusServiceApi,
   },
 };
