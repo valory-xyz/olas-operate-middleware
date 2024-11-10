@@ -1,7 +1,6 @@
 import { ServiceTemplate } from '@/client';
+import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
-
-import { CHAIN_CONFIG } from '../config/chains';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   // {
@@ -37,9 +36,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.2.9',
-    home_chain_id: `${CHAIN_CONFIG.OPTIMISM.chainId}`,
+    home_chain_id: `${ChainId.Optimism}`,
     configurations: {
-      [CHAIN_CONFIG.OPTIMISM.chainId]: {
+      [ChainId.Optimism]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
@@ -47,6 +46,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: true,
         use_mech_marketplace: false,
+        // TODO: pull fund requirements from staking program config
         cost_of_bond: 1000,
         monthly_gas_estimate: 1000,
         fund_requirements: {
@@ -54,7 +54,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
           safe: 1000,
         },
       },
-      [CHAIN_CONFIG.ETHEREUM.chainId]: {
+      [ChainId.Ethereum]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
@@ -62,6 +62,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: false,
         use_mech_marketplace: false,
+        // TODO: pull fund requirements from staking program config
         cost_of_bond: 1,
         monthly_gas_estimate: 1000,
         fund_requirements: {
@@ -69,7 +70,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
           safe: 1000,
         },
       },
-      [CHAIN_CONFIG.BASE.chainId]: {
+      [ChainId.Base]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         // rpc: 'http://localhost:8545',
@@ -77,6 +78,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: false,
         use_mech_marketplace: false,
+        // TODO: pull fund requirements from staking program config
         cost_of_bond: 1,
         monthly_gas_estimate: 1000,
         fund_requirements: {
