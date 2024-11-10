@@ -2,7 +2,7 @@ import { ChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { Address } from '@/types/Address';
 
-enum TokenType {
+export enum TokenType {
   NativeGas = 'native',
   Erc20 = 'erc20',
   Erc721 = 'erc721',
@@ -11,23 +11,23 @@ enum TokenType {
   UniswapV3Lp = 'v3lp',
 }
 
-type TokenConfig = {
-  [symbol: string]:
-    | {
-        // @note `TokenType.Native` only
-        tokenType: TokenType.NativeGas;
-        address?: Address; // @note optional `address`, use a wrapped address for reference if pricing needed
-        decimals: number;
-      }
-    | {
-        // @note any `TokenType` that is NOT `TokenType.Native`
-        address: Address;
-        tokenType: Exclude<TokenType, TokenType.NativeGas>;
-        decimals: number;
-      };
+export type Erc20TokenConfig = {
+  address: Address;
+  tokenType: TokenType.Erc20;
+  decimals: number;
 };
 
-export const GNOSIS_TOKEN_CONFIG = {
+export type NativeTokenConfig = {
+  address?: Address;
+  tokenType: TokenType.NativeGas;
+  decimals: number;
+};
+
+export type ChainTokenConfig = {
+  [tokenSymbol: string | TokenSymbol]: Erc20TokenConfig | NativeTokenConfig;
+};
+
+export const GNOSIS_TOKEN_CONFIG: ChainTokenConfig = {
   [TokenSymbol.XDAI]: {
     address: '0x0001A500A6B18995B03f44bb040A5fFc28E45CB0',
     decimals: 18,
@@ -40,7 +40,7 @@ export const GNOSIS_TOKEN_CONFIG = {
   },
 };
 
-export const OPTIMISM_TOKEN_CONFIG = {
+export const OPTIMISM_TOKEN_CONFIG: ChainTokenConfig = {
   [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
@@ -50,9 +50,9 @@ export const OPTIMISM_TOKEN_CONFIG = {
     decimals: 18,
     tokenType: TokenType.Erc20,
   },
-} satisfies TokenConfig;
+} satisfies ChainTokenConfig;
 
-export const ETHEREUM_TOKEN_CONFIG = {
+export const ETHEREUM_TOKEN_CONFIG: ChainTokenConfig = {
   [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
@@ -74,7 +74,7 @@ export const ETHEREUM_TOKEN_CONFIG = {
   },
 };
 
-export const BASE_TOKEN_CONFIG = {
+export const BASE_TOKEN_CONFIG: ChainTokenConfig = {
   [TokenSymbol.ETH]: {
     tokenType: TokenType.NativeGas,
     decimals: 18,
@@ -92,3 +92,39 @@ export const TOKEN_CONFIG = {
   [ChainId.Ethereum]: ETHEREUM_TOKEN_CONFIG,
   [ChainId.Base]: BASE_TOKEN_CONFIG,
 } as const;
+
+/**
+ * @note This is a mapping of all ERC20 tokens on each chain.
+ */
+export const ERC20_TOKEN_CONFIG = Object.fromEntries(
+  Object.entries(TOKEN_CONFIG).map(([chainId, chainTokenConfig]) => [
+    +chainId as ChainId,
+    Object.fromEntries(
+      Object.entries(chainTokenConfig).filter(
+        ([, tokenConfig]) => tokenConfig.tokenType === TokenType.Erc20,
+      ),
+    ),
+  ]),
+) as {
+  [chainId in ChainId]: {
+    [tokenSymbol: string | TokenSymbol]: Erc20TokenConfig;
+  };
+};
+
+/**
+ * @note This is a mapping of all native tokens on each chain.
+ */
+export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
+  Object.entries(TOKEN_CONFIG).map(([chainId, chainTokenConfig]) => [
+    +chainId as ChainId,
+    Object.fromEntries(
+      Object.entries(chainTokenConfig).filter(
+        ([, tokenConfig]) => tokenConfig.tokenType === TokenType.NativeGas,
+      ),
+    ),
+  ]),
+) as {
+  [chainId in ChainId]: {
+    [tokenSymbol: string | TokenSymbol]: NativeTokenConfig;
+  };
+};
