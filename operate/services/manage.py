@@ -1537,7 +1537,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         service_template: ServiceTemplate,
-        allow_different_service_public_id: bool = False
+        allow_different_service_public_id: bool = False,
     ) -> Service:
         """Update a service."""
 
@@ -1559,9 +1559,13 @@ class ServiceManager:
             try:
                 service.update(service_template=service_template)
                 updated_services.append(service.json)
-                self.logger.info(f"Updated service_config_id={service.service_config_id}")
+                self.logger.info(
+                    f"Updated service_config_id={service.service_config_id}"
+                )
             except ValueError:
-                self.logger.info(f"Not updated service_config_id={service.service_config_id}")
+                self.logger.info(
+                    f"Not updated service_config_id={service.service_config_id}"
+                )
 
         return updated_services
 

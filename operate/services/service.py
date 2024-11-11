@@ -682,7 +682,9 @@ class Service(LocalResource):
 
         version = data.get("version", 0)
         if version > SERVICE_CONFIG_VERSION:
-            raise ValueError(f"Service configuration in {path} has version {version}, but only versions <= {SERVICE_CONFIG_VERSION} are supported.")
+            raise ValueError(
+                f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
+            )
 
         if version == SERVICE_CONFIG_VERSION:
             return False
@@ -739,10 +741,14 @@ class Service(LocalResource):
 
         # Add missing fields introduced in later versions, if necessary.
         for _, chain_data in data.get("chain_configs", {}).items():
-            chain_data.setdefault("chain_data", {}).setdefault("user_params", {}).setdefault("use_mech_marketplace", False)
+            chain_data.setdefault("chain_data", {}).setdefault(
+                "user_params", {}
+            ).setdefault("use_mech_marketplace", False)
 
         data["description"] = data.setdefault("description", data.get("name"))
-        data["hash_history"] = data.setdefault("hash_history", {int(time.time()): data["hash"]})
+        data["hash_history"] = data.setdefault(
+            "hash_history", {int(time.time()): data["hash"]}
+        )
 
         if "service_config_id" not in data:
             service_config_id = Service.get_new_service_config_id(path)
@@ -849,7 +855,7 @@ class Service(LocalResource):
         """Get the public id (based on the service hash)."""
         with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
             service_yaml, *_ = yaml_load_all(fp)
-        
+
         public_id = f"{service_yaml['author']}/{service_yaml['name']}"
 
         if include_version:
@@ -858,7 +864,9 @@ class Service(LocalResource):
         return public_id
 
     @staticmethod
-    def get_service_public_id(hash: str, dir: t.Optional[str] = None, include_version: bool = True) -> str:
+    def get_service_public_id(
+        hash: str, dir: t.Optional[str] = None, include_version: bool = True
+    ) -> str:
         """
         Get the service public ID from IPFS based on the hash.
 
@@ -894,13 +902,19 @@ class Service(LocalResource):
             if not new_path.exists():
                 return service_config_id
 
-    def update(self, service_template: ServiceTemplate, allow_different_service_public_id: bool = False) -> None:
+    def update(
+        self,
+        service_template: ServiceTemplate,
+        allow_different_service_public_id: bool = False,
+    ) -> None:
         """Update service."""
 
         target_hash = service_template["hash"]
         target_service_public_id = Service.get_service_public_id(target_hash, self.path)
 
-        if not allow_different_service_public_id and (self.service_public_id != target_service_public_id):
+        if not allow_different_service_public_id and (
+            self.service_public_id != target_service_public_id
+        ):
             raise ValueError(
                 f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}."
             )

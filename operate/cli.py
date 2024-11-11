@@ -700,9 +700,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         template = await request.json()
-        allow_different_service_public_id = template.get("allow_different_service_public_id", False)
+        allow_different_service_public_id = template.get(
+            "allow_different_service_public_id", False
+        )
         output = manager.update(
-            service_config_id=service_config_id, service_template=template, allow_different_service_public_id=allow_different_service_public_id
+            service_config_id=service_config_id,
+            service_template=template,
+            allow_different_service_public_id=allow_different_service_public_id,
         )
 
         return JSONResponse(content=output.json)
