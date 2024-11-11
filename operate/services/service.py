@@ -682,7 +682,7 @@ class Service(LocalResource):
 
         version = data.get("version", 0)
         if version > SERVICE_CONFIG_VERSION:
-            raise ValueError(
+            raise RuntimeError(
                 f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
             )
 
