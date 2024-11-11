@@ -108,6 +108,8 @@ class ServiceManager:
             try:
                 service = Service.load(path=path)
                 services.append(service)
+            except ValueError as e:
+                raise e
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.warning(
                     f"Failed to load service: {path.name}. Exception: {e}"
