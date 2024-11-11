@@ -845,16 +845,20 @@ class Service(LocalResource):
         return service
 
     @property
-    def service_public_id(self) -> str:
+    def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""
         with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
             service_yaml, *_ = yaml_load_all(fp)
-        return (
-            f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
-        )
+        
+        public_id = f"{service_yaml['author']}/{service_yaml['name']}"
+
+        if include_version:
+            public_id += f":{service_yaml['version']}"
+
+        return public_id
 
     @staticmethod
-    def get_service_public_id(hash: str, dir: t.Optional[str]) -> str:
+    def get_service_public_id(hash: str, dir: t.Optional[str] = None, include_version: bool = True) -> str:
         """
         Get the service public ID from IPFS based on the hash.
 
@@ -874,7 +878,11 @@ class Service(LocalResource):
             with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
                 service_yaml, *_ = yaml_load_all(fp)
 
-            public_id = f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
+            public_id = f"{service_yaml['author']}/{service_yaml['name']}"
+
+            if include_version:
+                public_id += f":{service_yaml['version']}"
+
             return public_id
 
     @staticmethod
