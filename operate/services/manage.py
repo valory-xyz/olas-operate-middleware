@@ -112,6 +112,8 @@ class ServiceManager:
             try:
                 service = Service.load(path=path)
                 data.append(service.json)
+            except ValueError as e:
+                raise e
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.warning(
                     f"Failed to load service: {path.name}. Exception: {e}"
@@ -476,6 +478,10 @@ class ServiceManager:
 
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+
+
+        print("!!!!!!!!!!!!!")
+        print(ledger_config.rpc)
 
         current_agent_id = None
         if chain_data.token > -1:
