@@ -25,10 +25,10 @@ import platform
 import shutil
 import subprocess  # nosec
 import sys
-import uuid
+import tempfile
 import time
 import typing as t
-import tempfile
+import uuid
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from json import JSONDecodeError
@@ -68,7 +68,6 @@ from operate.constants import (
     KEYS_JSON,
 )
 from operate.keys import Keys
-from operate.ledger import PUBLIC_RPCS
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     ChainConfig,
@@ -247,7 +246,9 @@ class ServiceHelper:
         """Initialize object."""
         self.path = path
         self.config = load_service_config(service_path=path)
-        self.config.overrides = apply_env_variables(self.config.overrides, os.environ.copy())
+        self.config.overrides = apply_env_variables(
+            self.config.overrides, os.environ.copy()
+        )
 
     def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
@@ -670,15 +671,20 @@ class Service(LocalResource):
 
         if not path.is_dir():
             return
-        
-        if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith("bafybei"):
+
+        if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
+            "bafybei"
+        ):
             return
 
         with open(path / Service._file, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         data["version"] = data.get("version", 0)
-        if data.get("version") >= 4:
+        if data.get("version") > SERVICE_CONFIG_VERSION:
+            raise ValueError(f"Service configuration in {path} has version {data.get('version')}, but only versions <= {SERVICE_CONFIG_VERSION} are supported.")
+
+        if data.get("version") == SERVICE_CONFIG_VERSION:
             return
 
         # Migration steps for older versions
@@ -731,6 +737,12 @@ class Service(LocalResource):
                 "name": data.get("name", ""),
             }
             data = new_data
+
+
+        for chain_id, chain_data in data.get("chain_configs", {}).items():
+            chain_data.setdefault("chain_data", {}).setdefault("user_params", {}).setdefault("use_mech_marketplace", False)
+
+
 
         if data.get("version") == 2:
             data["chain_configs"]["100"]["chain_data"]["user_params"][
@@ -801,8 +813,6 @@ class Service(LocalResource):
                 target_dir=path,
             )
         )
-        with (service_path / "service.yaml").open("r", encoding="utf-8") as fp:
-            service_yaml, *_ = yaml_load_all(fp)
 
         ledger_configs = ServiceHelper(path=service_path).ledger_configs()
 
@@ -844,10 +854,12 @@ class Service(LocalResource):
 
     @property
     def service_public_id(self) -> str:
+        """Get the public id (based on the service hash)."""
         with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
             service_yaml, *_ = yaml_load_all(fp)
-            
-        return f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
+        return (
+            f"{service_yaml['author']}/{service_yaml['name']}:{service_yaml['version']}"
+        )
 
     @staticmethod
     def get_service_public_id(hash: str, dir: t.Optional[str]) -> str:
@@ -858,7 +870,7 @@ class Service(LocalResource):
         :param dir: Optional directory path where the temporary download folder will be created.
                     If None, a system-default temporary directory will be used.
         :return: The public ID of the service in the format "author/name:version".
-        """        
+        """
         with tempfile.TemporaryDirectory(dir=dir) as path:
             package_path = Path(
                 IPFSTool().download(
@@ -882,15 +894,25 @@ class Service(LocalResource):
             if not new_path.exists():
                 return service_config_id
 
-    def update(self, service_template: ServiceTemplate) -> None:
+    def update(self, service_template: ServiceTemplate, allow_different_service_public_id: bool = False) -> None:
         """Update service."""
 
         target_hash = service_template["hash"]
         target_service_public_id = Service.get_service_public_id(target_hash, self.path)
 
-        if self.service_public_id != target_service_public_id:
-            raise ValueError(f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}.")
+        if not allow_different_service_public_id and (self.service_public_id != target_service_public_id):
+            raise ValueError(
+                f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}."
+            )
 
+        shutil.rmtree(self.service_path)
+        service_path = Path(
+            IPFSTool().download(
+                hash_id=service_template["hash"],
+                target_dir=self.path,
+            )
+        )
+        self.service_path = service_path
         self.name = service_template["name"]
         self.hash = service_template["hash"]
         self.description = service_template["description"]
@@ -900,7 +922,6 @@ class Service(LocalResource):
             current_timestamp = int(time.time())
             self.hash_history[current_timestamp] = service_template["hash"]
 
-        self.image = service_template["image"]  # TODO fix defined outside __init__
         self.description = service_template["description"]
         self.home_chain_id = service_template["home_chain_id"]
 

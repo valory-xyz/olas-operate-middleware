@@ -222,13 +222,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
-        service_config_ids = [i["service_config_id"] for i in operate.service_manager().json]
+        service_config_ids = [
+            i["service_config_id"] for i in operate.service_manager().json
+        ]
 
         for service_config_id in service_config_ids:
             logger.info(f"Stopping service {service_config_id=}")
-            if not operate.service_manager().exists(service_config_id=service_config_id):
+            if not operate.service_manager().exists(
+                service_config_id=service_config_id
+            ):
                 continue
-            deployment = operate.service_manager().load(service_config_id=service_config_id).deployment
+            deployment = (
+                operate.service_manager()
+                .load(service_config_id=service_config_id)
+                .deployment
+            )
             if deployment.status == DeploymentStatus.DELETED:
                 continue
             logger.info(f"stopping service {service_config_id}")
@@ -643,9 +651,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         manager = operate.service_manager()
         output = manager.create(service_template=template)
 
-        return JSONResponse(
-            content=output.json
-        )
+        return JSONResponse(content=output.json)
 
     @app.post("/api/v2/service/{service_config_id}")
     @with_retries
@@ -663,7 +669,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         def _fn() -> None:
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-            manager.deploy_service_onchain_from_safe(service_config_id=service_config_id)
+            manager.deploy_service_onchain_from_safe(
+                service_config_id=service_config_id
+            )
             manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
 
@@ -673,9 +681,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content=(
-                operate.service_manager()
-                .load(service_config_id=service_config_id)
-                .json
+                operate.service_manager().load(service_config_id=service_config_id).json
             )
         )
 
@@ -694,16 +700,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         template = await request.json()
-        output = manager.update(service_config_id=service_config_id, service_template=template)
-
-        return JSONResponse(
-            content=output.json
+        allow_different_service_public_id = template.get("allow_different_service_public_id", False)
+        output = manager.update(
+            service_config_id=service_config_id, service_template=template, allow_different_service_public_id=allow_different_service_public_id
         )
+
+        return JSONResponse(content=output.json)
 
     @app.put("/api/v2/services")
     @with_retries
     async def _update_all_services(request: Request) -> JSONResponse:
-        """Update all services of the same kind."""
+        """Update all services of matching the public id referenced in the hash."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
@@ -711,9 +718,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         template = await request.json()
         updated_services = manager.update_all_matching(service_template=template)
 
-        return JSONResponse(
-            content=updated_services
-        )
+        return JSONResponse(content=updated_services)
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
     @with_retries
@@ -728,7 +733,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        deployment = operate.service_manager().load(service_config_id=service_config_id).deployment
+        deployment = (
+            operate.service_manager()
+            .load(service_config_id=service_config_id)
+            .deployment
+        )
         health_checker.stop_for_service(service_config_id=service_config_id)
 
         await run_in_executor(deployment.stop)
@@ -808,7 +817,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     #         schedule_healthcheck_job(service=service.hash)
 
     #     return JSONResponse(content=service.json)
-
 
     # TODO these endpoints below are possibly not used
 

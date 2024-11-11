@@ -58,7 +58,9 @@ class HealthChecker:
 
     def start_for_service(self, service_config_id: str) -> None:
         """Start for a specific service."""
-        self.logger.info(f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}")
+        self.logger.info(
+            f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
+        )
         if service_config_id in self._jobs:
             self.stop_for_service(service_config_id=service_config_id)
 
@@ -150,7 +152,9 @@ class HealthChecker:
                             f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
                         )
                     else:
-                        self.logger.info(f"[HEALTH_CHECKER] {service_config_id} is HEALTHY")
+                        self.logger.info(
+                            f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"
+                        )
                         # reset fails if comes healty
                         fails = 0
 
@@ -163,9 +167,13 @@ class HealthChecker:
 
                     await asyncio.sleep(sleep_period)
 
-            async def _restart(service_manager: ServiceManager, service_config_id: str) -> None:
+            async def _restart(
+                service_manager: ServiceManager, service_config_id: str
+            ) -> None:
                 def _do_restart() -> None:
-                    service_manager.stop_service_locally(service_config_id=service_config_id)
+                    service_manager.stop_service_locally(
+                        service_config_id=service_config_id
+                    )
                     # TODO Optimus patch, chain_id="10"
                     chain_id = "10"
                     service_manager.deploy_service_locally(
@@ -182,7 +190,9 @@ class HealthChecker:
 
             # upper cycle
             while True:
-                self.logger.info(f"[HEALTH_CHECKER]  {service_config_id} wait for port ready")
+                self.logger.info(
+                    f"[HEALTH_CHECKER] {service_config_id} wait for port ready"
+                )
                 if await _check_port_ready(timeout=self.port_up_timeout):
                     # blocking till restart needed
                     self.logger.info(
@@ -202,5 +212,7 @@ class HealthChecker:
                 # TODO: blocking!!!!!!!
                 await _restart(self._service_manager, service_config_id)
         except Exception:
-            self.logger.exception(f"problems running healthcheckr for {service_config_id}")
+            self.logger.exception(
+                f"Problems running healthcheck job for {service_config_id}"
+            )
             raise

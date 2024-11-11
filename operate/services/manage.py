@@ -43,12 +43,11 @@ from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingS
 from operate.services.service import (
     ChainConfig,
     DELETE_PREFIX,
-    SERVICE_CONFIG_PREFIX,
     Deployment,
     NON_EXISTENT_TOKEN,
     OnChainData,
     OnChainState,
-    OnChainUserParams,
+    SERVICE_CONFIG_PREFIX,
     Service,
 )
 from operate.utils.gnosis import NULL_ADDRESS
@@ -102,7 +101,9 @@ class ServiceManager:
     def _get_all_services(self) -> t.List[Service]:
         services = []
         for path in self.path.iterdir():
-            if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith("bafybei"):
+            if not path.name.startswith(
+                SERVICE_CONFIG_PREFIX
+            ) and not path.name.startswith("bafybei"):
                 continue
             try:
                 service = Service.load(path=path)
@@ -627,7 +628,9 @@ class ServiceManager:
         self.logger.info(f"{is_update=}")
 
         if is_update:
-            self._terminate_service_on_chain_from_safe(service_config_id=service_config_id, chain_id=chain_id)
+            self._terminate_service_on_chain_from_safe(
+                service_config_id=service_config_id, chain_id=chain_id
+            )
             # Update service
             if (
                 self._get_on_chain_state(service=service, chain_id=chain_id)
@@ -724,7 +727,7 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.PRE_REGISTRATION
         ):
-            # cost_of_bond = staking_params["min_staking_deposit"]
+            # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
                 token_utility = staking_params["service_registry_token_utility"]
@@ -862,7 +865,9 @@ class ServiceManager:
         chain_data.on_chain_state = OnChainState(info["service_state"])
         service.store()
         if user_params.use_staking:
-            self.stake_service_on_chain_from_safe(service_config_id=service_config_id, chain_id=chain_id)
+            self.stake_service_on_chain_from_safe(
+                service_config_id=service_config_id, chain_id=chain_id
+            )
 
     def terminate_service_on_chain(
         self, service_config_id: str, chain_id: t.Optional[str] = None
@@ -943,7 +948,9 @@ class ServiceManager:
         # Unstake the service if applies
         if is_staked and can_unstake:
             self.unstake_service_on_chain_from_safe(
-                service_config_id=service_config_id, chain_id=chain_id, staking_program_id=current_staking_program
+                service_config_id=service_config_id,
+                chain_id=chain_id,
+                staking_program_id=current_staking_program,
             )
 
         if self._get_on_chain_state(service=service, chain_id=chain_id) in (
@@ -1243,7 +1250,10 @@ class ServiceManager:
         service.store()
 
     def unstake_service_on_chain_from_safe(
-        self, service_config_id: str, chain_id: str, staking_program_id: t.Optional[str] = None
+        self,
+        service_config_id: str,
+        chain_id: str,
+        staking_program_id: t.Optional[str] = None,
     ) -> None:
         """Unbond service on-chain"""
 
@@ -1527,12 +1537,13 @@ class ServiceManager:
         self,
         service_config_id: str,
         service_template: ServiceTemplate,
+        allow_different_service_public_id: bool = False
     ) -> Service:
         """Update a service."""
 
         self.logger.info(f"Updating {service_config_id=}")
         service = self.load(service_config_id=service_config_id)
-        service.update(service_template)
+        service.update(service_template, allow_different_service_public_id)
         return service
 
     def update_all_matching(
@@ -1541,13 +1552,16 @@ class ServiceManager:
     ) -> t.List[t.Dict]:
         """Update all services with service id matching the service id from the template hash."""
 
+        self.logger.info("update_all_matching")
+        self.logger.info(f"{service_template['hash']=}")
         updated_services: t.List[t.Dict] = []
         for service in self._get_all_services():
             try:
                 service.update(service_template=service_template)
                 updated_services.append(service.json)
+                self.logger.info(f"Updated service_config_id={service.service_config_id}")
             except ValueError:
-                pass
+                self.logger.info(f"Not updated service_config_id={service.service_config_id}")
 
         return updated_services
 
@@ -1559,6 +1573,8 @@ class ServiceManager:
                 shutil.rmtree(path)
                 self.logger.info(f"Deleted folder: {path.name}")
 
-            if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith("bafybei"):
+            if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
+                "bafybei"
+            ):
                 self.logger.info(f"Migrate_format path={str(path)}")
                 Service.migrate_format(path)
