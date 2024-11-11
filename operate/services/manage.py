@@ -479,10 +479,6 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-
-        print("!!!!!!!!!!!!!")
-        print(ledger_config.rpc)
-
         current_agent_id = None
         if chain_data.token > -1:
             self.logger.info("Syncing service state")
