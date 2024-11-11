@@ -666,31 +666,31 @@ class Service(LocalResource):
     _file = "config.json"
 
     @classmethod
-    def migrate_format(cls, path: Path) -> None:
+    def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
 
         if not path.is_dir():
-            return
+            return False
 
         if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
             "bafybei"
         ):
-            return
+            return False
 
         with open(path / Service._file, "r", encoding="utf-8") as file:
             data = json.load(file)
 
-        data["version"] = data.get("version", 0)
-        if data.get("version") > SERVICE_CONFIG_VERSION:
-            raise ValueError(f"Service configuration in {path} has version {data.get('version')}, but only versions <= {SERVICE_CONFIG_VERSION} are supported.")
+        version = data.get("version", 0)
+        if version > SERVICE_CONFIG_VERSION:
+            raise ValueError(f"Service configuration in {path} has version {version}, but only versions <= {SERVICE_CONFIG_VERSION} are supported.")
 
-        if data.get("version") == SERVICE_CONFIG_VERSION:
-            return
+        if version == SERVICE_CONFIG_VERSION:
+            return False
 
         # Migration steps for older versions
-        if data.get("version") == 0:
+        if version == 0:
             new_data = {
-                "version": 3,
+                "version": 2,
                 "hash": data.get("hash"),
                 "keys": data.get("keys"),
                 "home_chain_id": "100",  # Assuming a default value for home_chain_id
@@ -722,7 +722,6 @@ class Service(LocalResource):
                                 "use_staking": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("use_staking"),
-                                "use_mech_marketplace": False,
                                 "cost_of_bond": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("cost_of_bond"),
@@ -738,28 +737,17 @@ class Service(LocalResource):
             }
             data = new_data
 
-
-        for chain_id, chain_data in data.get("chain_configs", {}).items():
+        # Add missing fields introduced in later versions, if necessary.
+        for _, chain_data in data.get("chain_configs", {}).items():
             chain_data.setdefault("chain_data", {}).setdefault("user_params", {}).setdefault("use_mech_marketplace", False)
 
+        data["description"] = data.setdefault("description", data.get("name"))
+        data["hash_history"] = data.setdefault("hash_history", {int(time.time()): data["hash"]})
 
-
-        if data.get("version") == 2:
-            data["chain_configs"]["100"]["chain_data"]["user_params"][
-                "use_mech_marketplace"
-            ] = data["chain_configs"]["100"]["chain_data"]["user_params"].get(
-                "use_mech_marketplace", False
-            )
-            data["version"] = 3
-
-        if data.get("version") == 3:
+        if "service_config_id" not in data:
             service_config_id = Service.get_new_service_config_id(path)
             new_path = path.parent / service_config_id
             data["service_config_id"] = service_config_id
-            data["version"] = 4
-            data["description"] = data["name"]
-            current_timestamp = int(time.time())
-            data["hash_history"] = {current_timestamp: data["hash"]}
             shutil.rmtree(data["service_path"])
             path = path.rename(new_path)
             service_path = Path(
@@ -770,8 +758,12 @@ class Service(LocalResource):
             )
             data["service_path"] = str(service_path)
 
+        data["version"] = 4
+
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
+
+        return True
 
     @classmethod
     def load(cls, path: Path) -> "Service":

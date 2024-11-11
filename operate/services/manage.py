@@ -1567,6 +1567,7 @@ class ServiceManager:
 
     def migrate_service_configs(self) -> None:
         """Migrate old service config formats to new ones, if applies."""
+
         paths = list(self.path.iterdir())
         for path in paths:
             if path.name.startswith(DELETE_PREFIX):
@@ -1576,5 +1577,7 @@ class ServiceManager:
             if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
                 "bafybei"
             ):
-                self.logger.info(f"Migrate_format path={str(path)}")
-                Service.migrate_format(path)
+                self.logger.info(f"migrate_service_configs {str(path)}")
+                migrated = Service.migrate_format(path)
+                if migrated:
+                    self.logger.info(f"Folder {str(path)} has been migrated.")
