@@ -754,7 +754,11 @@ class Service(LocalResource):
             service_config_id = Service.get_new_service_config_id(path)
             new_path = path.parent / service_config_id
             data["service_config_id"] = service_config_id
-            shutil.rmtree(data["service_path"])
+
+            service_path = Path(data["service_path"])
+            if service_path.exists() and service_path.is_dir():
+                shutil.rmtree(service_path)
+            
             path = path.rename(new_path)
             service_path = Path(
                 IPFSTool().download(

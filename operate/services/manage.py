@@ -98,7 +98,7 @@ class ServiceManager:
         """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
-    def c(self) -> t.List[Service]:
+    def _get_all_services(self) -> t.List[Service]:
         services = []
         for path in self.path.iterdir():
             if not path.name.startswith(SERVICE_CONFIG_PREFIX):
@@ -1575,7 +1575,7 @@ class ServiceManager:
         bafybei_count = sum(1 for path in self.path.iterdir() if path.name.startswith("bafybei"))
         if bafybei_count > 1:
             self.log_directories()
-            raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
+            # raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
 
         paths = list(self.path.iterdir())
         for path in paths:
