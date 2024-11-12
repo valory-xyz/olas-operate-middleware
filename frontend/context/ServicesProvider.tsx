@@ -41,7 +41,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const { paused, setPaused, togglePaused } = usePause();
 
   // user selected service identifier
-  const [selectedServiceUuid, setSelectedServiceUuid] = useState<string>();
+  const [selectedServiceConfigId, setSelectedServiceConfigId] =
+    useState<string>();
 
   const {
     data: services,
@@ -59,17 +60,23 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
-    return services.find((service) => service.hash === selectedServiceUuid); // TODO: use uuid instead of hash once middleware refactored
-  }, [selectedServiceUuid, services]);
+    return services.find((service) => service.hash === selectedServiceConfigId); // TODO: use uuid instead of hash once middleware refactored
+  }, [selectedServiceConfigId, services]);
 
   const selectService = useCallback((serviceUuid: string) => {
-    setSelectedServiceUuid(serviceUuid);
+    setSelectedServiceConfigId(serviceUuid);
   }, []);
 
+  /**
+   * Select the first service by default
+   */
   useEffect(() => {
     if (!services) return;
-    setSelectedServiceUuid(services[0]?.hash); // TODO: use uuid instead of hash once middleware refactored
-  }, [services]);
+    if (selectedServiceConfigId) return;
+    // only select a service by default if services are fetched, but there has been no selection yet
+    if (isFetched && services.length > 0 && !selectedServiceConfigId)
+      setSelectedServiceConfigId(services[0].service_config_id); // TODO: use uuid instead of hash once middleware refactored
+  }, [isFetched, selectedServiceConfigId, services]);
 
   // const serviceAddresses = useMemo(
   //   () =>
