@@ -29,7 +29,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         },
       },
     },
-    service_env_variables: {
+    env_variables: {
       GNOSIS_LEDGER_RPC: {
         name: "Gnosis ledger RPC",
         env_variable_name: "GNOSIS_LEDGER_RPC",

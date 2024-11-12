@@ -203,7 +203,7 @@ class ConfigurationTemplate(TypedDict):
     fallback_chain_params: t.Optional[t.Dict]
 
 
-class ServiceEnvProvisionType(enum.Enum):
+class ServiceEnvProvisionType(str, enum.Enum):
     """Service environment variable provision type."""
 
     FIXED = "fixed"
@@ -235,7 +235,7 @@ class ServiceTemplate(TypedDict):
     service_version: str
     home_chain_id: str
     configurations: ConfigurationTemplates
-    service_env_variables: ServiceEnvVariables
+    env_variables: ServiceEnvVariables
 
 
 @dataclass

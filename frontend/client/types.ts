@@ -1,7 +1,7 @@
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
-import { DeploymentStatus, Ledger, MiddlewareChain, EnvProvisionType } from './enums';
+import { DeploymentStatus, Ledger, MiddlewareChain } from './enums';
 
 export type ServiceHash = string;
 
@@ -50,6 +50,8 @@ export type Service = {
 };
 
 
+export type EnvProvisionType = "fixed" | "user" | "computed";
+
 export type ServiceEnvVariable = {
   name: string;
   env_variable_name: string;
@@ -66,7 +68,7 @@ export type ServiceTemplate = {
   service_version: string;
   home_chain_id: string;
   configurations: { [key: string]: ConfigurationTemplate };
-  service_env_variables: { [key: string]: ServiceEnvVariable };
+  env_variables: { [key: string]: ServiceEnvVariable };
   deploy?: boolean;
 };
 
