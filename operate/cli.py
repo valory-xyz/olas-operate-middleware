@@ -161,6 +161,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     logger.info("Migrating service configs done.")
     operate.service_manager().log_directories()
 
+    logger.info("Migrating wallet configs...")
+    operate.wallet_manager.migrate_wallet_configs()
+    logger.info("Migrating wallet configs done.")
+
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails
