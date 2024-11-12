@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 
 import { MiddlewareServiceResponse } from '@/client';
 import { ServicesContext } from '@/context/ServicesProvider';
@@ -83,24 +83,37 @@ export const useServices = () => {
     services,
     isFetched: isLoaded,
     paused,
-    setPaused: setServicesPollingPaused,
+    setPaused: setPaused,
+    selectedService,
+    selectService,
   } = useContext(ServicesContext);
 
-  const getServicesByChain = (
-    chainId: ChainId,
-  ): MiddlewareServiceResponse[] | undefined => {
+  const servicesByChain = useMemo(() => {
     if (!isLoaded) return;
     if (!services) return;
-    return services.filter(
-      (service) => service.chain_configs[chainId] !== undefined,
+    return Object.keys(ChainId).reduce(
+      (
+        acc: Record<number, MiddlewareServiceResponse[]>,
+        chainIdKey: string,
+      ) => {
+        const chainIdNumber = +chainIdKey;
+        acc[chainIdNumber] = services.filter(
+          (service: MiddlewareServiceResponse) =>
+            service.chain_configs[chainIdNumber],
+        );
+        return acc;
+      },
+      {},
     );
-  };
+  }, [isLoaded, services]);
 
   return {
     services,
-    getServicesByChain,
+    servicesByChain,
     isLoaded,
-    setServicesPollingPaused,
+    setPaused,
     paused,
+    selectedService,
+    selectService,
   };
 };
