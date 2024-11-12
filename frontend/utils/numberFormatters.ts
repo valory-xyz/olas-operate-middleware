@@ -17,7 +17,8 @@ export const balanceFormat = (
 
 /**
  * Formats larger numbers into small numbers
- * i.e. wei to ether `formatUnits('1000000000000000000', 18)` => '1.0'
+ * @note **divides** the input by 10^decimals
+ * @example `formatUnits('1000000000000000000', 18)` => '1.0'
  */
 export const formatUnits = (value: BigNumberish, decimals = 18): string => {
   return ethers.utils.formatUnits(value, decimals);
@@ -31,16 +32,20 @@ export const formatEther = (wei: BigNumberish): string => {
 };
 
 /**
- * Parse converts smaller numbers into larger numbers
+ * Parse converts small numbers into larger numbers
+ * @note **multiplies** the input by `10 ** decimals`
  * @example parseUnits('1.0', 18) => '1000000000000000000'
  */
-export const parseUnits = (value: string, decimals: 18): string => {
-  return ethers.utils.parseUnits(value, decimals).toString();
+export const parseUnits = (
+  value: BigNumberish,
+  decimals: number = 18,
+): string => {
+  return ethers.utils.parseUnits(`${value}`, decimals).toString();
 };
 
 /**
  * Assumes the input is in ether and converts it to wei
  */
-export const parseEther = (ether: string | number | bigint): string => {
+export const parseEther = (ether: BigNumberish): string => {
   return ethers.utils.parseEther(`${ether}`).toString();
 };
