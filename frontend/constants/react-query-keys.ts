@@ -1,4 +1,5 @@
 export const REACT_QUERY_KEYS = {
-  SERVICES: ['services'] as const,
-  SERVICE_STATUS: (uuid: string) => ['serviceStatus', uuid] as const,
+  SERVICES_KEY: ['services'] as const,
+  SERVICE_DEPLOYMENT_STATUS_KEY: (serviceConfigId: string) =>
+    ['serviceStatus', serviceConfigId] as const,
 } as const;
