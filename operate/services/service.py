@@ -82,6 +82,7 @@ from operate.operate_types import (
     OnChainData,
     OnChainState,
     OnChainUserParams,
+    ServiceEnvVariables,
     ServiceTemplate,
 )
 from operate.resource import LocalResource
@@ -540,6 +541,7 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
+            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -654,6 +656,7 @@ class Service(LocalResource):
     home_chain_id: str
     chain_configs: ChainConfigs
     description: str
+    env_variables: ServiceEnvVariables
 
     path: Path
     service_path: Path
@@ -775,6 +778,11 @@ class Service(LocalResource):
 
         return True
 
+    def consume_env_variables(self) -> None:
+        """Consume environment variables."""
+        for variable in self.env_variables.values():
+            os.environ[variable["env_variable_name"]] = str(variable["value"])
+
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
@@ -850,6 +858,7 @@ class Service(LocalResource):
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
+            env_variables=service_template["service_env_variables"],
         )
         service.store()
         return service
