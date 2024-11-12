@@ -47,7 +47,6 @@ const useBalancesLogs = () => {
   };
 };
 
-// TODO: refactor to support logs for multiple services
 const useServicesLogs = () => {
   const { services, isLoaded } = useServices();
   const { getQueryData } = useQueryClient();
