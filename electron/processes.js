@@ -24,8 +24,8 @@ function killProcesses(pid) {
       for (const pid of pidsToKill) {
         logger.electron('killing: ' + pid);
         exec(`${killCommand} ${pid}`, (err) => {
-          logger.electron(`error killing pid ${pid}`);
-          logger.electron(JSON.stringify(err, null, 2));
+          err && logger.electron(`error killing pid ${pid}`);
+          err && logger.electron(JSON.stringify(err, null, 2));
           if (
             err?.message?.includes(isWindows ? 'not found' : 'No such process')
           ) {
