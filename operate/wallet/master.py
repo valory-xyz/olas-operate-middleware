@@ -174,6 +174,7 @@ class MasterWallet(LocalResource):
 class EthereumMasterWallet(MasterWallet):
     """Master wallet manager."""
 
+    path: Path
     address: str
 
     safes: t.Optional[t.Dict[ChainType, str]] = field(default_factory=dict)  # type: ignore
@@ -424,7 +425,17 @@ class EthereumMasterWallet(MasterWallet):
     @classmethod
     def load(cls, path: Path) -> "EthereumMasterWallet":
         """Load master wallet."""
-        return super().load(path)  # type: ignore
+        # TODO: This is a complex way to read the 'safes' dictionary.
+        # The reason for that is that wallet.safes[chain_type] would fail 
+        # (for example in service manager) when passed a ChainType key.
+
+        raw_ethereum_wallet = super().load(path)  # type: ignore
+        safes = {}
+        for id_, safe_address in raw_ethereum_wallet.safes.items():  # type: ignore
+            safes[ChainType(int(id_))] = safe_address
+
+        raw_ethereum_wallet.safes = safes  # type: ignore
+        return t.cast(EthereumMasterWallet, raw_ethereum_wallet)
 
     @classmethod
     def migrate_format(cls, path: Path) -> bool:
