@@ -235,7 +235,7 @@ class ServiceTemplate(TypedDict):
     service_version: str
     home_chain_id: str
     configurations: ConfigurationTemplates
-    env_variables: ServiceEnvVariables
+    service_env_variables: ServiceEnvVariables
 
 
 @dataclass

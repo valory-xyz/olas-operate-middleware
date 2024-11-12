@@ -29,7 +29,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         },
       },
     },
-    env_variables: {},  // TODO: add env variables
+    service_env_variables: {},  // TODO: add env variables
   },
   //   {
   //     name: 'Optimus Test',

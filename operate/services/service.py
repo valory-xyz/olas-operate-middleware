@@ -656,7 +656,7 @@ class Service(LocalResource):
     home_chain_id: str
     chain_configs: ChainConfigs
     description: str
-    env_variables: ServiceEnvVariables
+    service_env_variables: ServiceEnvVariables
 
     path: Path
     service_path: Path
@@ -780,7 +780,7 @@ class Service(LocalResource):
 
     def consume_env_variables(self) -> None:
         """Consume environment variables."""
-        for variable in self.env_variables.values():
+        for variable in self.service_env_variables.values():
             os.environ[variable["env_variable_name"]] = str(variable["value"])
 
     @classmethod
@@ -858,7 +858,7 @@ class Service(LocalResource):
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
-            env_variables=service_template["service_env_variables"],
+            service_env_variables=service_template["service_env_variables"],
         )
         service.store()
         return service
