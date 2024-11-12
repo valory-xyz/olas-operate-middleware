@@ -65,9 +65,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
 )
 from operate.data import DATA_DIR
-from operate.data.contracts.service_staking_token.contract import (
-    ServiceStakingTokenContract,
-)
+from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING
 from operate.operate_types import ChainType as OperateChainType
 from operate.operate_types import ContractAddresses
@@ -203,9 +201,9 @@ class StakingManager(OnChainHelper):
         """Initialize object."""
         super().__init__(key=key, chain_type=chain_type, password=password)
         self.staking_ctr = t.cast(
-            ServiceStakingTokenContract,
-            ServiceStakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "service_staking_token")
+            StakingTokenContract,
+            StakingTokenContract.from_dir(
+                directory=str(DATA_DIR / "contracts" / "staking_token")
             ),
         )
 
