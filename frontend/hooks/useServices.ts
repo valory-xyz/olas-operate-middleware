@@ -86,6 +86,7 @@ export const useServices = () => {
     setPaused: setPaused,
     selectedService,
     selectService,
+    refetch,
   } = useContext(ServicesContext);
 
   const servicesByChain = useMemo(() => {
@@ -115,5 +116,6 @@ export const useServices = () => {
     paused,
     selectedService,
     selectService,
+    refetch,
   };
 };
