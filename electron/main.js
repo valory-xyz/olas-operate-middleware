@@ -80,6 +80,7 @@ let devNextApp;
 let devNextAppPid;
 
 // Next.js app instance for production
+// requires http server wrap to work; assign port, receive requests, deliver responses
 // @ts-ignore - Workaround for the missing type definitions
 const nextApp = next({
   dev: false, // DO NOT SET TO TRUE
