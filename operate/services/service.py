@@ -428,6 +428,7 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
+            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
