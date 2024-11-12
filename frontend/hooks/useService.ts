@@ -1,6 +1,8 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { Address } from '@/types/Address';
 
 import { useServices } from './useServices';
@@ -16,11 +18,12 @@ type ServiceChainIdAddressRecord = {
  * Hook for interacting with a single service.
  */
 export const useService = ({
-  serviceConfigId,
+  serviceConfigId = '',
 }: {
-  serviceConfigId: string;
+  serviceConfigId?: string;
 }) => {
   const { services, isLoaded } = useServices();
+  const queryClient = useQueryClient();
 
   const service = useMemo(() => {
     return services?.find(
@@ -55,10 +58,25 @@ export const useService = ({
     return addressesByChainId;
   }, [service]);
 
+  /**
+   * Overrides the deployment status of the service in the cache.
+   * @note Overwrite is only temporary if ServicesContext is polling
+   */
+  const setDeploymentStatus = (deploymentStatus?: MiddlewareDeploymentStatus) =>
+    queryClient.setQueryData(
+      REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
+      deploymentStatus,
+    );
+
+  const deploymentStatus = queryClient.getQueryData<
+    MiddlewareDeploymentStatus | undefined
+  >(REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId));
+
   return {
     service,
     addresses,
-    serviceStatus: MiddlewareDeploymentStatus.DEPLOYED, // TODO support other statuses
     isLoaded,
+    deploymentStatus, // TODO support other statuses
+    setDeploymentStatus,
   };
 };
