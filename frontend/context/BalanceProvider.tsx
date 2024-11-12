@@ -1,6 +1,7 @@
+// TODO: large refactor needed, provider is way too big, needs to support multiple chains, multiple services, and multiple tokens
 import { message } from 'antd';
 import { isAddress } from 'ethers/lib/utils';
-import { isNumber } from 'lodash';
+import { isNil, isNumber } from 'lodash';
 import { ValueOf } from 'next/dist/shared/lib/constants';
 import {
   createContext,
@@ -22,9 +23,10 @@ import {
   LOW_AGENT_SAFE_BALANCE,
   LOW_MASTER_SAFE_BALANCE,
 } from '@/constants/thresholds';
+import { ChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
-import { AutonolasService } from '@/service/Autonolas';
+import { StakedAgentService } from '@/service/agents/StakedAgentService';
 import { EthersService } from '@/service/Ethers';
 import MulticallService from '@/service/Multicall';
 import { Address } from '@/types/Address';
@@ -97,10 +99,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const [isBalanceLoaded, setIsBalanceLoaded] = useState<boolean>(false);
   const [walletBalances, setWalletBalances] =
     useState<WalletAddressNumberRecord>({});
-  const [baseBalance, setBaseBalance] = useState<number>();
-  const [ethereumBalance, setEthereumBalance] = useState<number>();
-  const [optimismBalance, setOptimismBalance] = useState<number>();
 
+  // TODO: refactor to support multiple chains, and gas tokens from config
   const totalEthBalance: number | undefined = useMemo(() => {
     if (!isLoaded) return;
     return Object.values(walletBalances).reduce(
@@ -152,28 +152,16 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     }
 
     // fetch balances for other chains
-    try {
-      const baseBalanceTemp =
-        EthersService.getBaseBalance(masterEoaAddress).then(setBaseBalance);
-
-      const ethereumBalanceTemp =
-        EthersService.getEthereumBalance(masterEoaAddress).then(
-          setEthereumBalance,
-        );
-
-      const optimismBalanceTemp =
-        EthersService.getOptimismBalance(masterEoaAddress).then(
-          setOptimismBalance,
-        );
-
-      await Promise.allSettled([
-        baseBalanceTemp,
-        ethereumBalanceTemp,
-        optimismBalanceTemp,
-      ]);
-    } catch (error) {
-      console.error(error);
-    }
+    // TODO: refactor to dynamically fetch balances for all chains
+    // try {
+    //   await Promise.allSettled([
+    //     baseBalanceTemp,
+    //     ethereumBalanceTemp,
+    //     optimismBalanceTemp,
+    //   ]);
+    // } catch (error) {
+    //   console.error(error);
+    // }
 
     try {
       const walletBalances = await getWalletBalances(walletAddresses);
@@ -181,6 +169,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
       setWalletBalances(walletBalances);
 
+      // TODO: refactor to use ChainId enum, service from useService(),
       const serviceId =
         services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
           .token;
@@ -191,11 +180,16 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         return;
       }
 
-      if (isAddress(`${masterSafeAddress}`) && serviceId > 0) {
+      if (
+        !isNil(masterSafeAddress) &&
+        isAddress(masterSafeAddress) &&
+        serviceId > 0
+      ) {
         const { depositValue, bondValue, serviceState } =
-          await AutonolasService.getServiceRegistryInfo(
-            masterSafeAddress as Address,
+          await StakedAgentService.getServiceRegistryInfo(
+            masterSafeAddress,
             serviceId,
+            ChainId.Gnosis, // TODO: refactor to get chain id from service
           );
 
         switch (serviceState) {
@@ -234,7 +228,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       message.error('Unable to retrieve wallet balances');
       setIsBalanceLoaded(true);
     }
-  }, [masterEoaAddress, masterSafeAddress, serviceAddresses, services]);
+  }, [masterEoaAddress, masterSafeAddress, services]);
 
   const agentEoaAddress = useMemo(
     () =>
@@ -242,14 +236,17 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         ?.instances?.[0],
     [services],
   );
+
   const masterEoaBalance = useMemo(
     () => masterEoaAddress && walletBalances[masterEoaAddress],
     [masterEoaAddress, walletBalances],
   );
+
   const masterSafeBalance = useMemo(
     () => masterSafeAddress && walletBalances[masterSafeAddress],
     [masterSafeAddress, walletBalances],
   );
+
   const agentSafeBalance = useMemo(
     () =>
       services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
