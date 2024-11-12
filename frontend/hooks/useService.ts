@@ -76,7 +76,7 @@ export const useService = ({
     service,
     addresses,
     isLoaded,
-    deploymentStatus, // TODO support other statuses
+    deploymentStatus,
     setDeploymentStatus,
   };
 };
