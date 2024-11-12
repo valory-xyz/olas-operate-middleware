@@ -53,10 +53,10 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
 
   const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
 
-  const { hasInitialLoaded: isServicesLoaded } = useServices();
+  const { isLoaded: isServicesLoaded } = useServices();
 
   const minimumOlasRequiredToMigrate = useMemo(
-    () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgramId),
+    () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgramId), // TODO: refactor, can no longer use service template, must use config for funding requirements
     [serviceTemplate, stakingProgramId],
   );
 
