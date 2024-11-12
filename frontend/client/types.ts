@@ -49,6 +49,17 @@ export type Service = {
   };
 };
 
+
+export type EnvProvisionType = "fixed" | "user" | "computed";
+
+export type ServiceEnvVariable = {
+  name: string;
+  env_variable_name: string;
+  description: string;
+  value: string;
+  provision_type: EnvProvisionType;
+}
+
 export type ServiceTemplate = {
   name: string;
   hash: string;
@@ -57,6 +68,7 @@ export type ServiceTemplate = {
   service_version: string;
   home_chain_id: string;
   configurations: { [key: string]: ConfigurationTemplate };
+  env_variables: { [key: string]: ServiceEnvVariable };
   deploy?: boolean;
 };
 
