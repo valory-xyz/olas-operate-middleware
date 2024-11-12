@@ -1,82 +1,106 @@
 import { useContext } from 'react';
 
-import {
-  MiddlewareServiceResponse,
-  ServiceHash,
-  ServiceTemplate,
-} from '@/client';
-import { CHAIN_CONFIG } from '@/config/chains';
+import { MiddlewareServiceResponse } from '@/client';
 import { ServicesContext } from '@/context/ServicesProvider';
-import MulticallService from '@/service/Multicall';
-import { Address } from '@/types/Address';
-import { AddressBooleanRecord } from '@/types/Records';
+import { ChainId } from '@/enums/Chain';
 
-const checkServiceIsFunded = async (
-  service: MiddlewareServiceResponse,
-  serviceTemplate: ServiceTemplate,
-): Promise<boolean> => {
-  const {
-    chain_configs: {
-      [CHAIN_CONFIG.OPTIMISM.chainId]: {
-        chain_data: { instances, multisig },
-      },
-    },
-  } = service;
+// const checkServiceIsFundedOnChain = async ({
+//   service,
+//   chainId,
+// }: {
+//   service: MiddlewareServiceResponse;
+//   chainId: ChainId;
+// }) => {
+//   if (!service.chain_configs[chainId].chain_data.instances) return false;
+//   if (!service.chain_configs[chainId].chain_data.multisig) return false;
 
-  if (!instances || !multisig) return false;
+//   const instances: Address[] =
+//     service.chain_configs[chainId].chain_data.instances;
 
-  const addresses = [...instances, multisig];
+//   const multisig: Address = service.chain_configs[chainId].chain_data.multisig;
 
-  const balances = await MulticallService.getEthBalances(addresses);
+//   const addresses = [...instances, multisig];
 
-  if (!balances) return false;
+//   const balances = await MulticallService.getEthBalances(addresses, chainId);
 
-  const fundRequirements: AddressBooleanRecord = addresses.reduce(
-    (acc: AddressBooleanRecord, address: Address) =>
-      Object.assign(acc, {
-        [address]: instances.includes(address)
-          ? balances[address] >
-            serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
-              .fund_requirements.agent
-          : balances[address] >
-            serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
-              .fund_requirements.safe,
-      }),
-    {},
-  );
+//   if (!balances) return false;
 
-  return Object.values(fundRequirements).every((f) => f);
-};
+//   const fundRequirements: AddressBooleanRecord = addresses.reduce(
+//     (acc: AddressBooleanRecord, address: Address) =>
+//       Object.assign(acc, {
+//         [address]: instances.includes(address)
+//           ? balances[address] > stakingProgram
+//           : balances[address] >
+//             serviceTemplate.configurations[chainId].fund_requirements.safe,
+//       }),
+//     {},
+//   );
+
+//   return Object.values(fundRequirements).every((f) => f);
+// };
+
+// const checkServiceIsFunded = async (
+//   service: MiddlewareServiceResponse,
+//   stakingProgramFundingRequirements:
+// ): Promise<boolean> => {
+//   // get all the chainIds from the service
+//   const chainIds: ChainId[] = Object.keys(service.chain_configs).map(
+//     (chainId) => +chainId,
+//   );
+
+//   // loop over the chainIds and check if the service is funded
+//   const instanceAddresses = chainIds.map(
+//     (chainId) => service.chain_configs[chainId].chain_data.instances,
+//   );
+
+//   if (!instances || !multisig) return false;
+
+//   const addresses = [...instances, multisig];
+
+//   const balances = await MulticallService.getEthBalances(addresses);
+
+//   if (!balances) return false;
+
+//   const fundRequirements: AddressBooleanRecord = addresses.reduce(
+//     (acc: AddressBooleanRecord, address: Address) =>
+//       Object.assign(acc, {
+//         [address]: instances.includes(address)
+//           ? balances[address] >
+//             serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
+//               .fund_requirements.agent
+//           : balances[address] >
+//             serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
+//               .fund_requirements.safe,
+//       }),
+//     {},
+//   );
+
+//   return Object.values(fundRequirements).every((f) => f);
+// };
 
 export const useServices = () => {
-  const { services, isFetched: hasInitialLoaded } = useContext(ServicesContext);
+  const {
+    services,
+    isFetched: isLoaded,
+    paused,
+    setPaused: setServicesPollingPaused,
+  } = useContext(ServicesContext);
 
-  const serviceId =
-    services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token;
-
-  // STATE METHODS
-  const getServiceFromState = (
-    serviceHash: ServiceHash,
-  ): MiddlewareServiceResponse | undefined => {
-    if (!hasInitialLoaded) return;
+  const getServicesByChain = (
+    chainId: ChainId,
+  ): MiddlewareServiceResponse[] | undefined => {
+    if (!isLoaded) return;
     if (!services) return;
-    return services.find((service) => service.hash === serviceHash);
+    return services.filter(
+      (service) => service.chain_configs[chainId] !== undefined,
+    );
   };
 
   return {
-    // service: services?.[0],
     services,
-    serviceId,
-    serviceStatus,
-    setServiceStatus,
-    getServiceFromState,
-    getServicesFromState,
-    checkServiceIsFunded,
-    updateServicesState,
-    updateServiceState,
-    updateServiceStatus,
-    deleteServiceState,
-    hasInitialLoaded,
-    setIsServicePollingPaused: setIsPaused,
+    getServicesByChain,
+    isLoaded,
+    setServicesPollingPaused,
+    paused,
   };
 };
