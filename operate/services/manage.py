@@ -237,7 +237,7 @@ class ServiceManager:
 
         return service
 
-    def _compute_service_variables(
+    def _compute_service_env_variables(
         self, service: Service, staking_params: t.Dict[str, str]
     ) -> None:
         """Compute values to override service.yaml variables for the deployment."""
@@ -575,7 +575,7 @@ class ServiceManager:
                 agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
-        self._compute_service_variables(service, staking_params)
+        self._compute_service_env_variables(service, staking_params)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
