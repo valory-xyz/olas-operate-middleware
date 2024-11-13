@@ -498,7 +498,7 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         chain_type = ChainType.from_id(int(chain_id))
-        safe = wallet.safes[chain_type]
+        safe = wallet.safes[chain_type]  # type: ignore
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -924,7 +924,7 @@ class ServiceManager:
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.type)
         chain_type = ChainType.from_id(int(chain_id))
-        safe = wallet.safes[chain_type]
+        safe = wallet.safes[chain_type]  # type: ignore
 
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
