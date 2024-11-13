@@ -19,10 +19,12 @@
 
 """Chain profiles."""
 
+import typing as t
+
 from operate.operate_types import ChainType, ContractAddresses
 
 
-CONTRACTS = {
+CONTRACTS: t.Dict[ChainType, ContractAddresses] = {
     ChainType.GNOSIS: ContractAddresses(
         {
             "service_manager": "0x04b0007b2aFb398015B76e5f22993a1fddF83644",
@@ -75,7 +77,7 @@ CONTRACTS = {
     ),
 }
 
-STAKING = {
+STAKING: t.Dict[ChainType, t.Dict[str, str]] = {
     ChainType.GNOSIS: {
         "pearl_alpha": "0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A",
         "pearl_beta": "0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d",
@@ -95,7 +97,7 @@ STAKING = {
     },
 }
 
-OLAS = {
+OLAS: t.Dict[ChainType, str] = {
     ChainType.GNOSIS: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
     ChainType.OPTIMISM: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     ChainType.BASE: "0x54330d28ca3357F294334BDC454a032e7f353416",

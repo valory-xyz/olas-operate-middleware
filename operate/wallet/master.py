@@ -53,7 +53,7 @@ class MasterWallet(LocalResource):
     """Master wallet."""
 
     path: Path
-    safes: t.Optional[t.Dict[ChainType, str]] = {}
+    safes: t.Dict[ChainType, str] = {}
     safe_chains: t.List[ChainType] = []
     ledger_type: LedgerType
 
@@ -177,7 +177,7 @@ class EthereumMasterWallet(MasterWallet):
     path: Path
     address: str
 
-    safes: t.Optional[t.Dict[ChainType, str]] = field(default_factory=dict)  # type: ignore
+    safes: t.Dict[ChainType, str] = field(default_factory=dict)  # type: ignore
     safe_chains: t.List[ChainType] = field(default_factory=list)  # type: ignore
     ledger_type: LedgerType = LedgerType.ETHEREUM
     safe_nonce: t.Optional[int] = None  # For cross-chain reusability

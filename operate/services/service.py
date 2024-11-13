@@ -881,7 +881,7 @@ class Service(LocalResource):
 
     @staticmethod
     def get_service_public_id(
-        hash: str, dir: t.Optional[str] = None, include_version: bool = True
+        hash: str, temp_dir: t.Optional[Path] = None, include_version: bool = True
     ) -> str:
         """
         Get the service public ID from IPFS based on the hash.
@@ -891,7 +891,7 @@ class Service(LocalResource):
                     If None, a system-default temporary directory will be used.
         :return: The public ID of the service in the format "author/name:version".
         """
-        with tempfile.TemporaryDirectory(dir=dir) as path:
+        with tempfile.TemporaryDirectory(dir=temp_dir) as path:
             package_path = Path(
                 IPFSTool().download(
                     hash_id=hash,
@@ -1008,7 +1008,7 @@ class Service(LocalResource):
             os.environ[env_var] = str(attributes["value"])
 
     def update_env_variables_values(
-        self, env_var_to_value: t.Dict[str, str], except_if_undefined: bool = False
+        self, env_var_to_value: t.Dict[str, t.Any], except_if_undefined: bool = False
     ) -> None:
         """
         Updates and stores the values of the env variables to override service.yaml on the deployment.
@@ -1019,14 +1019,15 @@ class Service(LocalResource):
 
         updated = False
         for var, value in env_var_to_value.items():
+            value_str = str(value)
             attributes = self.env_variables.get(var)
             if (
                 attributes
                 and self.env_variables[var]["provision_type"]
                 == ServiceEnvProvisionType.COMPUTED
-                and attributes["value"] != value
+                and attributes["value"] != value_str
             ):
-                attributes["value"] = str(value)
+                attributes["value"] = value_str
                 updated = True
             elif except_if_undefined:
                 raise ValueError(
