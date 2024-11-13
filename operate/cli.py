@@ -743,7 +743,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _stop_service_locally(request: Request) -> JSONResponse:
         """Stop a service deployment."""
-        
+
         # No authentication required to stop services.
 
         service_config_id = request.path_params["service_config_id"]

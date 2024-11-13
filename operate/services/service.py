@@ -76,13 +76,13 @@ from operate.operate_types import (
     DeployedNodes,
     DeploymentConfig,
     DeploymentStatus,
+    EnvVariables,
     LedgerConfig,
     LedgerConfigs,
     LedgerType,
     OnChainData,
     OnChainState,
     OnChainUserParams,
-    EnvVariables,
     ServiceTemplate,
 )
 from operate.resource import LocalResource
