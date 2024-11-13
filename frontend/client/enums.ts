@@ -5,6 +5,7 @@ export enum MiddlewareAction {
   STOP = 3,
 }
 
+/** commented unused chain enums as interferes with types */
 export enum MiddlewareChain {
   ETHEREUM = 0,
   GOERLI = 1,
@@ -38,7 +39,7 @@ export enum MiddlewareAccountIsSetup {
 }
 
 export enum EnvProvisionType {
-  FIXED = "fixed",
-  USER = "user",
-  COMPUTED = "computed"
+  FIXED = 'fixed',
+  USER = 'user',
+  COMPUTED = 'computed',
 }
