@@ -601,8 +601,7 @@ class Deployment(LocalResource):
         :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
         :return: Deployment object
         """
-        # TODO: chain_id should be used properly! Added as a hotfix for now.
-        # Maybe remove usage of chain_id and use home_chain_id always?
+        # TODO: Maybe remove usage of chain_id and use home_chain_id always?
         if use_docker:
             return self._build_docker(force=force, chain_id=chain_id)
         return self._build_host(force=force, chain_id=chain_id)
