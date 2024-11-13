@@ -394,7 +394,7 @@ class Deployment(LocalResource):
     def _build_docker(
         self,
         force: bool = True,
-        chain_id: str = "100",
+        chain_id: t.Optional[str] = None,
     ) -> None:
         """Build docker deployment."""
         service = Service.load(path=self.path)
@@ -437,20 +437,23 @@ class Deployment(LocalResource):
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
-            home_chain_data = service.chain_configs[service.home_chain_id].chain_data
-            home_chain_ledger_config = service.chain_configs[
-                service.home_chain_id
-            ].ledger_config
+            if not chain_id:
+                chain_id = service.home_chain_id
+
+            chain_config = service.chain_configs[chain_id]
+            ledger_config = chain_config.ledger_config
+            chain_data = chain_config.chain_data
+
             builder.try_update_runtime_params(
-                multisig_address=home_chain_data.multisig,
-                agent_instances=home_chain_data.instances,
-                service_id=home_chain_data.token,
+                multisig_address=chain_data.multisig,
+                agent_instances=chain_data.instances,
+                service_id=chain_data.token,
                 consensus_threshold=None,
             )
             # TODO: Support for multiledger
             builder.try_update_ledger_params(
-                chain=LedgerType(home_chain_ledger_config.type).name.lower(),
-                address=home_chain_ledger_config.rpc,
+                chain=LedgerType(ledger_config.type).name.lower(),
+                address=ledger_config.rpc,
             )
 
             # build deployment
@@ -498,7 +501,7 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain_id: str = "100") -> None:
+    def _build_host(self, force: bool = True, chain_id: t.Optional[str] = None) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT
         if build.exists() and not force:
@@ -521,6 +524,9 @@ class Deployment(LocalResource):
             raise RuntimeError(
                 "Host deployment currently only supports single agent deployments"
             )
+
+        if not chain_id:
+            chain_id = service.home_chain_id
 
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
@@ -585,16 +591,18 @@ class Deployment(LocalResource):
         self,
         use_docker: bool = False,
         force: bool = True,
-        chain_id: str = "100",
+        chain_id: t.Optional[str] = None,
     ) -> None:
         """
         Build a deployment
 
-        :param use_docker: Use docker deployment
+        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).        
         :param force: Remove existing deployment and build a new one
+        :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
         :return: Deployment object
         """
         # TODO: chain_id should be used properly! Added as a hotfix for now.
+        # Maybe remove usage of chain_id and use home_chain_id always?
         if use_docker:
             return self._build_docker(force=force, chain_id=chain_id)
         return self._build_host(force=force, chain_id=chain_id)

@@ -1525,13 +1525,12 @@ class ServiceManager:
 
         :param hash: Service hash
         :param force: Remove previous deployment and start a new one.
+        :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
+        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
         :return: Deployment instance
         """
         self._set_env_variables(service_config_id=service_config_id)
         service = self.load(service_config_id=service_config_id)
-
-        if not chain_id:
-            chain_id = service.home_chain_id
 
         deployment = service.deployment
         deployment.build(use_docker=use_docker, force=force, chain_id=chain_id)
