@@ -5,7 +5,6 @@ export enum MiddlewareAction {
   STOP = 3,
 }
 
-/** commented unused chain enums as interferes with types */
 export enum MiddlewareChain {
   ETHEREUM = 0,
   GOERLI = 1,
