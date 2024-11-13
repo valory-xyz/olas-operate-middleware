@@ -682,7 +682,6 @@ def run_stoppable_main() -> None:
         with contextlib.suppress(Exception):
             p.join(timeout=10)
             p.terminate()
-        
 
 
 def main() -> None:
