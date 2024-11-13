@@ -12,7 +12,7 @@ type ChainConfig = {
   name: string;
   currency: string;
   chainId: number;
-  middlewareChain: number;
+  middlewareChain: MiddlewareChainId;
   rpc: HttpUrl;
 };
 

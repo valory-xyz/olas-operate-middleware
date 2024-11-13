@@ -38,7 +38,7 @@ from autonomy.chain.base import registry_contracts
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
-from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
+from operate.operate_types import Chain, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -109,8 +109,8 @@ class ServiceManager:
             except ValueError as e:
                 raise e
             except Exception as e:  # pylint: disable=broad-except
-                self.logger.warning(
-                    f"Failed to load service: {path.name}. Exception: {e}"
+                self.logger.error(
+                    f"Failed to load service: {path.name}. Exception: {traceback.format_exc()}"
                 )
                 # rename the invalid path
                 timestamp = int(time.time())
@@ -232,8 +232,8 @@ class ServiceManager:
 
         return service
 
-    def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
-        chain_config = service.chain_configs[chain_id]
+    def _get_on_chain_state(self, service: Service, chain: str) -> OnChainState:
+        chain_config = service.chain_configs[chain]
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         if chain_data.token == NON_EXISTENT_TOKEN:
@@ -273,23 +273,23 @@ class ServiceManager:
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
         service = self.load(service_config_id=service_config_id)
-        for chain_id in service.chain_configs.keys():
+        for chain in service.chain_configs.keys():
             self._deploy_service_onchain(
                 service_config_id=service_config_id,
-                chain_id=chain_id,
+                chain=chain,
             )
 
     def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
         self,
         service_config_id: str,
-        chain_id: str,
+        chain: str,
     ) -> None:
         """Deploy as service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
-        self.logger.info(f"_deploy_service_onchain_from_safe {chain_id=}")
+        self.logger.info(f"_deploy_service_onchain_from_safe {chain=}")
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         user_params = chain_config.chain_data.user_params
@@ -367,7 +367,7 @@ class ServiceManager:
             "min_staking_deposit"
         ]  # TODO fixme, read from service registry token utility contract
         is_first_mint = (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         )
         is_update = (
@@ -474,22 +474,22 @@ class ServiceManager:
         """Deploy as service on-chain"""
 
         service = self.load(service_config_id=service_config_id)
-        for chain_id in service.chain_configs.keys():
+        for chain in service.chain_configs.keys():
             self._deploy_service_onchain_from_safe(
                 service_config_id=service_config_id,
-                chain_id=chain_id,
+                chain=chain,
             )
 
     def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
         self,
         service_config_id: str,
-        chain_id: str,
+        chain: str,
     ) -> None:
         """Deploy service on-chain"""
 
-        self.logger.info(f"_deploy_service_onchain_from_safe {chain_id=}")
+        self.logger.info(f"_deploy_service_onchain_from_safe {chain=}")
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         user_params = chain_config.chain_data.user_params
@@ -497,8 +497,7 @@ class ServiceManager:
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        chain_type = ChainType.from_id(int(chain_id))
-        safe = wallet.safes[chain_type]  # type: ignore
+        safe = wallet.safes[Chain(chain)]
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -533,10 +532,10 @@ class ServiceManager:
 
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {
-            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[ChainType.ETHEREUM],
-            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[ChainType.GNOSIS],
-            "BASE_LEDGER_RPC": PUBLIC_RPCS[ChainType.BASE],
-            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[ChainType.OPTIMISM],
+            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
+            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
+            "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
+            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
             "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
             "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
             "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
@@ -544,7 +543,7 @@ class ServiceManager:
             "USE_MECH_MARKETPLACE": str(
                 "mech_marketplace"
                 in service.chain_configs[
-                    service.home_chain_id
+                    service.home_chain
                 ].chain_data.user_params.staking_program_id
             ),
             "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
@@ -602,7 +601,7 @@ class ServiceManager:
         )
 
         is_first_mint = (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         )
         is_update = (
@@ -635,11 +634,11 @@ class ServiceManager:
 
         if is_update:
             self._terminate_service_on_chain_from_safe(
-                service_config_id=service_config_id, chain_id=chain_id
+                service_config_id=service_config_id, chain=chain
             )
             # Update service
             if (
-                self._get_on_chain_state(service=service, chain_id=chain_id)
+                self._get_on_chain_state(service=service, chain=chain)
                 == OnChainState.PRE_REGISTRATION
             ):
                 self.logger.info("Updating service")
@@ -681,7 +680,7 @@ class ServiceManager:
 
         # Mint service
         if (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         ):
             if user_params.use_staking and not sftxb.staking_slots_available(
@@ -730,7 +729,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
         ):
             # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
@@ -783,7 +782,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.ACTIVE_REGISTRATION
         ):
             cost_of_bond = user_params.cost_of_bond
@@ -839,7 +838,7 @@ class ServiceManager:
             service.store()
 
         if (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.FINISHED_REGISTRATION
         ):
             self.logger.info("Deploying service")
@@ -872,11 +871,11 @@ class ServiceManager:
         service.store()
         if user_params.use_staking:
             self.stake_service_on_chain_from_safe(
-                service_config_id=service_config_id, chain_id=chain_id
+                service_config_id=service_config_id, chain=chain
             )
 
     def terminate_service_on_chain(
-        self, service_config_id: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Terminate service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
@@ -884,10 +883,7 @@ class ServiceManager:
         self.logger.info("terminate_service_on_chain")
         service = self.load(service_config_id=service_config_id)
 
-        if chain_id is None:
-            chain_id = service.home_chain_id
-
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain or service.home_chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
@@ -911,20 +907,19 @@ class ServiceManager:
         service.store()
 
     def _terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain_id: str
+        self, service_config_id: str, chain: str
     ) -> None:
         """Terminate service on-chain"""
 
         self.logger.info("terminate_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         keys = service.keys
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.type)
-        chain_type = ChainType.from_id(int(chain_id))
-        safe = wallet.safes[chain_type]  # type: ignore
+        safe = wallet.safes[Chain(chain)]  # type: ignore
 
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
@@ -955,11 +950,11 @@ class ServiceManager:
         if is_staked and can_unstake:
             self.unstake_service_on_chain_from_safe(
                 service_config_id=service_config_id,
-                chain_id=chain_id,
+                chain=chain,
                 staking_program_id=current_staking_program,
             )
 
-        if self._get_on_chain_state(service=service, chain_id=chain_id) in (
+        if self._get_on_chain_state(service=service, chain=chain) in (
             OnChainState.ACTIVE_REGISTRATION,
             OnChainState.FINISHED_REGISTRATION,
             OnChainState.DEPLOYED,
@@ -972,7 +967,7 @@ class ServiceManager:
             ).settle()
 
         if (
-            self._get_on_chain_state(service=service, chain_id=chain_id)
+            self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.TERMINATED_BONDED
         ):
             self.logger.info("Unbonding service")
@@ -1030,17 +1025,14 @@ class ServiceManager:
         return current_staking_program
 
     def unbond_service_on_chain(
-        self, service_config_id: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
         service = self.load(service_config_id=service_config_id)
 
-        if chain_id is None:
-            chain_id = service.home_chain_id
-
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain or service.home_chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
@@ -1072,12 +1064,12 @@ class ServiceManager:
         raise NotImplementedError
 
     def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
-        self, service_config_id: str, chain_id: str
+        self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
 
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         user_params = chain_data.user_params
@@ -1110,7 +1102,7 @@ class ServiceManager:
                 )
                 self.unstake_service_on_chain_from_safe(
                     service_config_id=service_config_id,
-                    chain_id=chain_id,
+                    chain=chain,
                     staking_program_id=current_staking_program,
                 )
 
@@ -1127,7 +1119,7 @@ class ServiceManager:
                 )
                 self.unstake_service_on_chain_from_safe(
                     service_config_id=service_config_id,
-                    chain_id=chain_id,
+                    chain=chain,
                     staking_program_id=current_staking_program,
                 )
 
@@ -1142,7 +1134,7 @@ class ServiceManager:
                 )
                 self.unstake_service_on_chain_from_safe(
                     service_config_id=service_config_id,
-                    chain_id=chain_id,
+                    chain=chain,
                     staking_program_id=current_staking_program,
                 )
 
@@ -1156,7 +1148,7 @@ class ServiceManager:
                 )
                 self.unstake_service_on_chain_from_safe(
                     service_config_id=service_config_id,
-                    chain_id=chain_id,
+                    chain=chain,
                     staking_program_id=current_staking_program,
                 )
 
@@ -1170,7 +1162,7 @@ class ServiceManager:
             target_staking_contract
         )
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
-        on_chain_state = self._get_on_chain_state(service=service, chain_id=chain_id)
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
             chain_data, ledger_config, sftxb
         )
@@ -1218,17 +1210,13 @@ class ServiceManager:
         self.logger.info(f"{current_staking_program=}")
 
     def unstake_service_on_chain(
-        self, service_config_id: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
         service = self.load(service_config_id=service_config_id)
-
-        if chain_id is None:
-            chain_id = service.home_chain_id
-
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain or service.home_chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
@@ -1258,14 +1246,14 @@ class ServiceManager:
     def unstake_service_on_chain_from_safe(
         self,
         service_config_id: str,
-        chain_id: str,
+        chain: str,
         staking_program_id: t.Optional[str] = None,
     ) -> None:
         """Unbond service on-chain"""
 
         self.logger.info("unstake_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
 
@@ -1314,8 +1302,8 @@ class ServiceManager:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
 
-        for chain_id in service.chain_configs.keys():
-            self.logger.info(f"Funding chain_id {chain_id}")
+        for chain in service.chain_configs.keys():
+            self.logger.info(f"Funding {chain=}")
             self.fund_service_single_chain(
                 service_config_id=service_config_id,
                 rpc=rpc,
@@ -1324,7 +1312,7 @@ class ServiceManager:
                 agent_fund_threshold=agent_fund_threshold,
                 safe_fund_treshold=safe_fund_treshold,
                 from_safe=from_safe,
-                chain_id=chain_id,
+                chain=chain,
             )
 
     def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals
@@ -1336,17 +1324,17 @@ class ServiceManager:
         agent_fund_threshold: t.Optional[float] = None,
         safe_fund_treshold: t.Optional[float] = None,
         from_safe: bool = True,
-        chain_id: str = "100",
+        chain: str = "gnosis",
     ) -> None:
         """Fund service if required."""
 
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.type)
         ledger_api = wallet.ledger_api(
-            chain_type=ledger_config.chain, rpc=rpc or ledger_config.rpc
+            chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
             agent_fund_threshold
@@ -1404,16 +1392,16 @@ class ServiceManager:
         agent_fund_threshold: t.Optional[float] = None,
         safe_fund_treshold: t.Optional[float] = None,
         from_safe: bool = True,
-        chain_id: str = "100",
+        chain: str = "gnosis",
     ) -> None:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.type)
         ledger_api = wallet.ledger_api(
-            chain_type=ledger_config.chain, rpc=rpc or ledger_config.rpc
+            chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
             agent_fund_threshold or chain_data.user_params.fund_requirements.agent
@@ -1471,8 +1459,7 @@ class ServiceManager:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
         service = self.load(service_config_id=service_config_id)
-        chain_id = service.home_chain_id
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[service.home_chain]
         ledger_config = chain_config.ledger_config
         with ThreadPoolExecutor() as executor:
             while True:
@@ -1501,7 +1488,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         force: bool = True,
-        chain_id: t.Optional[str] = None,
+        chain: t.Optional[str] = None,
         use_docker: bool = False,
     ) -> Deployment:
         """
@@ -1509,7 +1496,7 @@ class ServiceManager:
 
         :param hash: Service hash
         :param force: Remove previous deployment and start a new one.
-        :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
+        :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
         :return: Deployment instance
         """
@@ -1517,7 +1504,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         deployment = service.deployment
-        deployment.build(use_docker=use_docker, force=force, chain_id=chain_id)
+        deployment.build(use_docker=use_docker, force=force, chain=chain or service.home_chain)
         deployment.start(use_docker=use_docker)
         return deployment
 

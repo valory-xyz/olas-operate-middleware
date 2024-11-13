@@ -6,6 +6,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { useBalance } from './useBalance';
 import { useServiceTemplates } from './useServiceTemplates';
 import { useStore } from './useStore';
+import { ChainId } from '@/enums/Chain';
 
 export const useNeedsFunds = () => {
   const { getServiceTemplates } = useServiceTemplates();
@@ -26,7 +27,7 @@ export const useNeedsFunds = () => {
 
   const serviceFundRequirements = useMemo(() => {
     const gasEstimate =
-      serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
+      serviceTemplate.configurations[CHAIN_CONFIG[ChainId.Optimism].middlewareChain]
         .monthly_gas_estimate;
     const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
     const minimumStakedAmountRequired =

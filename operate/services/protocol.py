@@ -67,7 +67,7 @@ from operate.constants import (
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING
-from operate.operate_types import ChainType as OperateChainType
+from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
@@ -520,12 +520,12 @@ class _ChainUtil:
     def safe(self) -> str:
         """Get safe address."""
         chain_id = self.ledger_api.api.eth.chain_id
-        chain_type = OperateChainType.from_id(chain_id)
+        chain = OperateChain.from_id(chain_id)
         if self.wallet.safes is None:
             raise ValueError("Safes not initialized")
-        if chain_type not in self.wallet.safes:
-            raise ValueError(f"Safe for chain type {chain_type} not found")
-        return self.wallet.safes[chain_type]
+        if chain not in self.wallet.safes:
+            raise ValueError(f"Safe for chain type {chain} not found")
+        return self.wallet.safes[chain]
 
     @property
     def crypto(self) -> Crypto:
@@ -807,7 +807,7 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.operate_types.ChainType.GNOSIS][
+            == STAKING[operate.operate_types.Chain.GNOSIS][
                 "pearl_beta_mech_marketplace"
             ]
         ):

@@ -1,4 +1,5 @@
 import { ServiceTemplate, EnvProvisionType } from '@/client';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
@@ -10,9 +11,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.18.4',
-    home_chain_id: ChainId.Gnosis.toString(),
+    home_chain: CHAIN_CONFIG[ChainId.Gnosis].middlewareChain,
     configurations: {
-      [ChainId.Optimism]: {
+      [CHAIN_CONFIG[ChainId.Optimism].middlewareChain]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         rpc: 'http://localhost:8545',
@@ -105,9 +106,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   //     image:
   //       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
   //     service_version: 'v0.2.9',
-  //     home_chain_id: `${CHAINS.OPTIMISM.chainId}`,
+  //     home_chain: `${CHAINS.OPTIMISM}`,
   //     configurations: {
-  //       [CHAINS.OPTIMISM.chainId]: {
+  //       [CHAINS.OPTIMISM.middlewareChain]: {
   //         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
   //         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
   //         // rpc: 'http://localhost:8545',
@@ -122,7 +123,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   //           safe: 1000,
   //         },
   //       },
-  //       [CHAINS.ETHEREUM.chainId]: {
+  //       [CHAINS.ETHEREUM.middlewareChain]: {
   //         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
   //         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
   //         // rpc: 'http://localhost:8545',
@@ -137,7 +138,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   //           safe: 1000,
   //         },
   //       },
-  //       [CHAINS.BASE.chainId]: {
+  //       [CHAINS.BASE.middlewareChain]: {
   //         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
   //         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
   //         // rpc: 'http://localhost:8545',

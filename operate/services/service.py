@@ -72,7 +72,7 @@ from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     ChainConfig,
     ChainConfigs,
-    ChainType,
+    Chain,
     DeployedNodes,
     DeploymentConfig,
     DeploymentStatus,
@@ -97,7 +97,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 4
+SERVICE_CONFIG_VERSION = 5
 SERVICE_CONFIG_PREFIX = "sc-"
 
 DUMMY_MULTISIG = "0xm"
@@ -262,7 +262,7 @@ class ServiceHelper:
             ):
                 for _, config in override["config"]["ledger_apis"].items():
                     # TODO chain name is inferred from the chain_id. The actual id provided on service.yaml is ignored.
-                    chain = ChainType.from_id(cid=config["chain_id"])
+                    chain = Chain.from_id(chain_id=config["chain_id"])
                     ledger_configs[str(config["chain_id"])] = LedgerConfig(
                         rpc=config["address"],
                         chain=chain,
@@ -395,7 +395,7 @@ class Deployment(LocalResource):
     def _build_docker(
         self,
         force: bool = True,
-        chain_id: t.Optional[str] = None,
+        chain: t.Optional[str] = None,
     ) -> None:
         """Build docker deployment."""
         service = Service.load(path=self.path)
@@ -438,10 +438,10 @@ class Deployment(LocalResource):
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
-            if not chain_id:
-                chain_id = service.home_chain_id
+            if not chain:
+                chain = service.home_chain
 
-            chain_config = service.chain_configs[chain_id]
+            chain_config = service.chain_configs[chain]
             ledger_config = chain_config.ledger_config
             chain_data = chain_config.chain_data
 
@@ -453,7 +453,7 @@ class Deployment(LocalResource):
             )
             # TODO: Support for multiledger
             builder.try_update_ledger_params(
-                chain=LedgerType(ledger_config.type).name.lower(),
+                chain=chain,
                 address=ledger_config.rpc,
             )
 
@@ -502,7 +502,7 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain_id: t.Optional[str] = None) -> None:
+    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT
         if build.exists() and not force:
@@ -526,10 +526,10 @@ class Deployment(LocalResource):
                 "Host deployment currently only supports single agent deployments"
             )
 
-        if not chain_id:
-            chain_id = service.home_chain_id
+        if not chain:
+            chain = service.home_chain
 
-        chain_config = service.chain_configs[chain_id]
+        chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
 
@@ -592,20 +592,20 @@ class Deployment(LocalResource):
         self,
         use_docker: bool = False,
         force: bool = True,
-        chain_id: t.Optional[str] = None,
+        chain: t.Optional[str] = None,
     ) -> None:
         """
         Build a deployment
 
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
         :param force: Remove existing deployment and build a new one
-        :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
+        :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :return: Deployment object
         """
-        # TODO: Maybe remove usage of chain_id and use home_chain_id always?
+        # TODO: Maybe remove usage of chain and use home_chain always?
         if use_docker:
-            return self._build_docker(force=force, chain_id=chain_id)
-        return self._build_host(force=force, chain_id=chain_id)
+            return self._build_docker(force=force, chain=chain)
+        return self._build_host(force=force, chain=chain)
 
     def start(self, use_docker: bool = False) -> None:
         """Start the service"""
@@ -662,7 +662,7 @@ class Service(LocalResource):
     hash: str
     hash_history: t.Dict[int, str]
     keys: Keys
-    home_chain_id: str
+    home_chain: str
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
@@ -707,9 +707,9 @@ class Service(LocalResource):
                 "version": 2,
                 "hash": data.get("hash"),
                 "keys": data.get("keys"),
-                "home_chain_id": "100",  # Assuming a default value for home_chain_id
+                "home_chain": "gnosis",  # Assuming a default value for home_chain
                 "chain_configs": {
-                    "100": {
+                    "gnosis": {
                         "ledger_config": {
                             "rpc": data.get("ledger_config", {}).get("rpc"),
                             "type": data.get("ledger_config", {}).get("type"),
@@ -780,7 +780,25 @@ class Service(LocalResource):
             )
             data["service_path"] = str(service_path)
 
-        data["version"] = 4
+        old_to_new_ledgers = ["ethereum", "solana"]
+        for key_data in data["keys"]:
+            key_data["ledger"] = old_to_new_ledgers[key_data["ledger"]]
+
+        old_to_new_chains = ["ethereum", "goerli", "gnosis", "solana", "optimistic", "base", "mode"]
+        new_chain_configs = {}
+        for chain_id, chain_data in data["chain_configs"].items():
+            chain_data["ledger_config"]["chain"] = old_to_new_chains[chain_data["ledger_config"]["chain"]]
+            chain_data["ledger_config"]["type"] = old_to_new_ledgers[chain_data["ledger_config"]["type"]]
+            new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data
+        
+        data["chain_configs"] = new_chain_configs
+        data["home_chain"] = Chain.from_id(int(data["home_chain"])).value
+        del data["home_chain"]
+
+        if "env_variables" not in data:
+            data["env_variables"] = {}
+
+        data["version"] = 5
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
@@ -857,7 +875,7 @@ class Service(LocalResource):
             description=service_template["description"],
             hash=service_template["hash"],
             keys=keys,
-            home_chain_id=service_template["home_chain_id"],
+            home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
             path=service_path.parent,
@@ -953,7 +971,7 @@ class Service(LocalResource):
             self.hash_history[current_timestamp] = service_template["hash"]
 
         self.description = service_template["description"]
-        self.home_chain_id = service_template["home_chain_id"]
+        self.home_chain = service_template["home_chain"]
 
         ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
         for chain, config in service_template["configurations"].items():

@@ -3,9 +3,9 @@ description: "A single-agent service (sovereign agent) placing bets on Omen"
 hash: bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u
 image: https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75
 service_version: v0.18.4
-home_chain_id: 100
+home_chain: "gnosis"
 configurations:
-  100:
+  gnosis:
     staking_program_id: pearl_beta
     nft: bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq
     rpc: http://localhost:8545 # User provided

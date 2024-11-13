@@ -42,8 +42,7 @@ from uvicorn.main import run as uvicorn
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
-from operate.ledger import get_ledger_type_from_chain_type
-from operate.operate_types import ChainType, DeploymentStatus
+from operate.operate_types import Chain, DeploymentStatus
 from operate.services.health_checker import HealthChecker
 from operate.wallet.master import MasterWalletManager
 
@@ -408,9 +407,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_wallet_by_chain(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        ledger_type = get_ledger_type_from_chain_type(
-            chain=ChainType.from_string(request.path_params["chain"])
-        )
+        ledger_type = Chain.from_string(request.path_params["chain"]).ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -438,8 +435,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain_type = Chain(data["chain_type"])
+        ledger_type = chain_type.ledger_type
         manager = operate.wallet_manager
         if manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -467,8 +464,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        chain_type = ChainType.from_string(request.path_params["chain"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain_type = Chain.from_string(request.path_params["chain"])
+        ledger_type = chain_type.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -502,8 +499,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain_type = Chain(data["chain_type"])
+        ledger_type = chain_type.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(content={"error": "Wallet does not exist"})
@@ -517,7 +514,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 }
             )
 
-        safes = t.cast(t.Dict[ChainType, str], wallet.safes)
+        safes = t.cast(t.Dict[Chain, str], wallet.safes)
         wallet.create_safe(  # pylint: disable=no-member
             chain_type=chain_type,
             owner=data.get("owner"),
@@ -549,10 +546,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_types = [ChainType(chain_type) for chain_type in data["chain_types"]]
+        chain_types = [Chain(chain_type) for chain_type in data["chain_types"]]
         # check that all chains are supported
         for chain_type in chain_types:
-            ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+            ledger_type = chain_type.ledger_type
             manager = operate.wallet_manager
             if not manager.exists(ledger_type=ledger_type):
                 return JSONResponse(
@@ -563,7 +560,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         # mint the safes
         for chain_type in chain_types:
-            ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+            ledger_type = chain_type.ledger_type
             manager = operate.wallet_manager
 
             wallet = manager.load(ledger_type=ledger_type)
@@ -571,7 +568,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 logger.info(f"Safe already exists for chain_type {chain_type}")
                 continue
 
-            safes = t.cast(t.Dict[ChainType, str], wallet.safes)
+            safes = t.cast(t.Dict[Chain, str], wallet.safes)
             wallet.create_safe(  # pylint: disable=no-member
                 chain_type=chain_type,
                 owner=data.get("owner"),
@@ -603,8 +600,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain_type = Chain(data["chain_type"])
+        ledger_type = chain_type.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(content={"error": "Wallet does not exist"})

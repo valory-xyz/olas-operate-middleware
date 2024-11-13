@@ -75,7 +75,7 @@ export type ServiceTemplate = {
   description: string;
   image: string;
   service_version: string;
-  home_chain_id: string;
+  home_chain: string;
   configurations: { [key: string]: ConfigurationTemplate };
   env_variables: { [key: string]: EnvVariableAttributes };
   deploy?: boolean;
