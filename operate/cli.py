@@ -513,7 +513,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "safe": wallet.safes.get(chain_type),
-                    "message": "Safe already exists!",
+                    "message": f"Safe already exists {chain_type=}.",
                 }
             )
 
