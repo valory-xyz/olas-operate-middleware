@@ -32,7 +32,7 @@ export const formatEther = (wei: BigNumberish): string => {
 };
 
 /**
- * Parse converts small numbers into larger numbers
+ * Converts small numbers into larger numbers
  * @note **multiplies** the input by `10 ** decimals`
  * @example parseUnits('1.0', 18) => '1000000000000000000'
  */
