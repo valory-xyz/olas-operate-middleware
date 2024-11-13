@@ -7,7 +7,7 @@ import {
 } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { MiddlewareChain, Wallet } from '@/client';
+import { MiddlewareChain, MiddlewareWalletResponse } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { WalletService } from '@/service/Wallet';
 import { Address } from '@/types/Address';
@@ -18,7 +18,7 @@ export const WalletContext = createContext<{
   masterEoaAddress?: Address;
   masterSafeAddress?: Address;
   masterSafeAddresses?: Record<MiddlewareChain, Address>;
-  wallets?: Wallet[];
+  wallets?: MiddlewareWalletResponse[];
   updateWallets: () => Promise<void>;
   masterSafeAddressKeyExistsForChain: (
     middlewareChain: MiddlewareChain,
@@ -34,7 +34,7 @@ export const WalletContext = createContext<{
 export const WalletProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
 
-  const [wallets, setWallets] = useState<Wallet[]>();
+  const [wallets, setWallets] = useState<MiddlewareWalletResponse[]>();
 
   const masterEoaAddress: Address | undefined = wallets?.[0]?.address;
   const masterSafeAddress: Address | undefined =
