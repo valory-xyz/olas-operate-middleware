@@ -41,7 +41,6 @@ from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
 from operate.operate_types import (
     ChainType,
     LedgerConfig,
-    ServiceEnvProvisionType,
     ServiceTemplate,
 )
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
@@ -236,44 +235,6 @@ class ServiceManager:
             service.store()
 
         return service
-
-    def _compute_service_env_variables(
-        self, service: Service, staking_params: t.Dict[str, str]
-    ) -> None:
-        """Compute values to override service.yaml variables for the deployment."""
-
-        # TODO A customized, arbitrary computation mechanism should be devised.
-        computed_values = {
-            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[ChainType.ETHEREUM],
-            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[ChainType.GNOSIS],
-            "BASE_LEDGER_RPC": PUBLIC_RPCS[ChainType.BASE],
-            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[ChainType.OPTIMISM],
-            "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-            "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
-            "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
-            "MECH_REQUEST_PRICE": "10000000000000000",
-            "USE_MECH_MARKETPLACE": "mech_marketplace"
-            in service.chain_configs[
-                service.home_chain_id
-            ].chain_data.user_params.staking_program_id,
-            "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
-                "staking_contract"
-            ),
-            "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
-        }
-
-        updated = False
-        for env_var, attributes in service.env_variables.items():
-            if (
-                env_var in computed_values
-                and attributes["provision_type"] == ServiceEnvProvisionType.COMPUTED
-                and attributes["value"] != computed_values.get(env_var)
-            ):
-                attributes["value"] = str(computed_values.get(env_var))
-                updated = True
-
-        if updated:
-            service.store()
 
     def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
         chain_config = service.chain_configs[chain_id]
@@ -574,7 +535,29 @@ class ServiceManager:
                 agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
-        self._compute_service_env_variables(service, staking_params)
+        # TODO A customized, arbitrary computation mechanism should be devised.
+        env_var_to_value = {
+            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[ChainType.ETHEREUM],
+            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[ChainType.GNOSIS],
+            "BASE_LEDGER_RPC": PUBLIC_RPCS[ChainType.BASE],
+            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[ChainType.OPTIMISM],
+            "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+            "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
+            "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+            "MECH_REQUEST_PRICE": "10000000000000000",
+            "USE_MECH_MARKETPLACE": str(
+                "mech_marketplace"
+                in service.chain_configs[
+                    service.home_chain_id
+                ].chain_data.user_params.staking_program_id
+            ),
+            "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                "staking_contract"
+            ),
+            "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+        }
+
+        service.update_env_variables_values(env_var_to_value)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
@@ -1370,7 +1353,9 @@ class ServiceManager:
             chain_type=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
-            agent_fund_threshold if agent_fund_threshold is not None else chain_data.user_params.fund_requirements.agent
+            agent_fund_threshold
+            if agent_fund_threshold is not None
+            else chain_data.user_params.fund_requirements.agent
         )
 
         for key in service.keys:
@@ -1383,7 +1368,9 @@ class ServiceManager:
                     to_transfer = (
                         agent_topup or chain_data.user_params.fund_requirements.agent
                     )
-                    self.logger.info(f"Transferring {to_transfer} units to {key.address}")
+                    self.logger.info(
+                        f"Transferring {to_transfer} units to {key.address}"
+                    )
                     wallet.transfer(
                         to=key.address,
                         amount=int(to_transfer),

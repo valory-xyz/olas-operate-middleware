@@ -84,6 +84,7 @@ from operate.operate_types import (
     OnChainState,
     OnChainUserParams,
     ServiceTemplate,
+    ServiceEnvProvisionType,
 )
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
@@ -596,7 +597,7 @@ class Deployment(LocalResource):
         """
         Build a deployment
 
-        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).        
+        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
         :param force: Remove existing deployment and build a new one
         :param chain_id: Chain ID to set runtime parameters on the deployment (home_chain_id if not provided).
         :return: Deployment object
@@ -786,11 +787,6 @@ class Service(LocalResource):
 
         return True
 
-    def consume_env_variables(self) -> None:
-        """Consume environment variables."""
-        for env_var, attributes in self.env_variables.items():
-            os.environ[env_var] = str(attributes["value"])
-
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
@@ -871,7 +867,6 @@ class Service(LocalResource):
         service.store()
         return service
 
-    @property
     def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""
         with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
@@ -934,10 +929,10 @@ class Service(LocalResource):
         target_service_public_id = Service.get_service_public_id(target_hash, self.path)
 
         if not allow_different_service_public_id and (
-            self.service_public_id != target_service_public_id
+            self.service_public_id() != target_service_public_id
         ):
             raise ValueError(
-                f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}."
+                f"Trying to update a service with a different public id: {self.service_public_id()=} {self.hash=} {target_service_public_id=} {target_hash=}."
             )
 
         shutil.rmtree(self.service_path)
@@ -1006,6 +1001,37 @@ class Service(LocalResource):
             )
 
         self.store()
+
+    def consume_env_variables(self) -> None:
+        """Consume (apply) environment variables."""
+        for env_var, attributes in self.env_variables.items():
+            os.environ[env_var] = str(attributes["value"])
+
+    def update_env_variables_values(
+        self, env_var_to_value: t.Dict[str, str], except_if_undefined: bool = False
+    ) -> None:
+        """Updates and stores the values of the env variables to override service.yaml on the deployment.
+        This method does not apply the variables to the environment. Use consume_env_variables to apply the
+        env variables."""
+
+        updated = False
+        for var, value in env_var_to_value.items():
+            attributes = self.env_variables.get(var)
+            if (
+                attributes
+                and self.env_variables[var]["provision_type"]
+                == ServiceEnvProvisionType.COMPUTED
+                and attributes["value"] != value
+            ):
+                attributes["value"] = str(value)
+                updated = True
+            elif except_if_undefined:
+                raise ValueError(
+                    f"Trying to set value for an environment variable ({var}) not present on service configuration {self.service_config_id}."
+                )
+
+        if updated:
+            self.store()
 
     def delete(self) -> None:
         """Delete a service."""
