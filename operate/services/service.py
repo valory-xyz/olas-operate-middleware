@@ -1010,9 +1010,12 @@ class Service(LocalResource):
     def update_env_variables_values(
         self, env_var_to_value: t.Dict[str, str], except_if_undefined: bool = False
     ) -> None:
-        """Updates and stores the values of the env variables to override service.yaml on the deployment.
+        """
+        Updates and stores the values of the env variables to override service.yaml on the deployment.
+
         This method does not apply the variables to the environment. Use consume_env_variables to apply the
-        env variables."""
+        env variables.
+        """
 
         updated = False
         for var, value in env_var_to_value.items():

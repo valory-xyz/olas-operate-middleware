@@ -1587,7 +1587,7 @@ class ServiceManager:
         )
         if bafybei_count > 1:
             self.log_directories()
-            # raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
+            raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
 
         paths = list(self.path.iterdir())
         for path in paths:
