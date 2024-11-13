@@ -12,6 +12,7 @@ export type StakingRewardsInfo = {
 
 export type StakingContractInfo = {
   availableRewards: number;
+  /* number of slots available for staking */
   maxNumServices: number;
   serviceIds: number[];
   /** minimum staking duration (in seconds) */
@@ -28,4 +29,6 @@ export type StakingContractInfo = {
   olasStakeRequired: number;
   /** rewards per work period */
   rewardsPerWorkPeriod: number;
+  /** current epoch */
+  epochCounter: number;
 };
