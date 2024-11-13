@@ -17,4 +17,4 @@
 #
 # ------------------------------------------------------------------------------
 
-"""This module contains the support resources for the staking token contract."""
+"""This module contains the support resources for the staking contract."""
