@@ -32,7 +32,7 @@ export const AgentRunningButton = () => {
   const { showNotification } = useElectronApi();
   const { isEligibleForRewards } = useReward();
 
-  const { selectedService, isLoaded, setPaused } = useServices();
+  const { selectedService, isFetched: isLoaded, setPaused } = useServices();
 
   const { service, setDeploymentStatus } = useService({
     serviceConfigId:

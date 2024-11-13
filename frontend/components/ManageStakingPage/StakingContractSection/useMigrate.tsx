@@ -60,7 +60,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   const { stakingContractInfo, hasEnoughServiceSlots } =
     useStakingContractInfo(stakingProgramId);
 
-  const { isLoaded: isServicesLoaded } = useServices();
+  const { isFetched: isServicesLoaded } = useServices();
 
   const { hasEnoughEthForInitialFunding } = useNeedsFunds();
 

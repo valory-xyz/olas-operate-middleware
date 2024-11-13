@@ -48,7 +48,7 @@ const useBalancesLogs = () => {
 };
 
 const useServicesLogs = () => {
-  const { services, isLoaded } = useServices();
+  const { services, isFetched: isLoaded } = useServices();
   const { getQueryData } = useQueryClient();
 
   return {

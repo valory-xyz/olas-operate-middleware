@@ -32,7 +32,7 @@ export const MigrateButton = ({
   const { serviceTemplate } = useServiceTemplates();
   const {
     setPaused: setIsServicePollingPaused,
-    isLoaded: isServicesLoaded,
+    isFetched: isServicesLoaded,
     selectedService,
   } = useServices();
 

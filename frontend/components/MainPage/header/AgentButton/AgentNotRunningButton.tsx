@@ -30,7 +30,7 @@ export const AgentNotRunningButton = () => {
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
-    isLoaded,
+    isFetched: isLoaded,
     refetch: updateServicesState,
   } = useServices();
 
