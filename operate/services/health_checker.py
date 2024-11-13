@@ -174,11 +174,7 @@ class HealthChecker:
                     service_manager.stop_service_locally(
                         service_config_id=service_config_id
                     )
-                    # TODO Optimus patch, chain_id="10"
-                    chain_id = "10"
-                    service_manager.deploy_service_locally(
-                        service_config_id=service_config_id, chain_id=chain_id
-                    )
+                    service_manager.deploy_service_locally(service_config_id=service_config_id)
 
                 loop = asyncio.get_event_loop()
                 with ThreadPoolExecutor() as executor:
