@@ -5,6 +5,7 @@ import { useCallback, useMemo } from 'react';
 import { MiddlewareChain, MiddlewareDeploymentStatus } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
+import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
@@ -86,7 +87,7 @@ const AgentRunningButton = () => {
     // Optimistically update service status
     setServiceStatus(MiddlewareDeploymentStatus.STOPPING);
     try {
-      await ServicesService.stopDeployment(service.hash);
+      await ServicesService.stopDeployment(service.service_config_id);
     } catch (error) {
       console.error(error);
       showNotification?.('Error while stopping agent');
@@ -205,7 +206,10 @@ const AgentNotRunningButton = () => {
         serviceTemplate,
         deploy: true,
         useMechMarketplace: false,
+        chainId: ChainId.Gnosis, // TODO: Add support for other chains
       });
+
+      await ServicesService.startService(serviceTemplate.service_config_id);
     } catch (error) {
       console.error(error);
       setServiceStatus(undefined);

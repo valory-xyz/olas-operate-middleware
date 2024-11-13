@@ -9,16 +9,16 @@ import {
 
 export type ServiceHash = string;
 
-export type LedgerConfig = {
-  rpc: string;
-  type: MiddlewareLedger;
-  chain: MiddlewareChain;
-};
-
 export type ServiceKeys = {
   address: Address;
   private_key: string;
   ledger: MiddlewareChain;
+};
+
+export type LedgerConfig = {
+  rpc: string;
+  type: MiddlewareLedger;
+  chain: MiddlewareChain;
 };
 
 export type ChainData = {
@@ -28,6 +28,7 @@ export type ChainData = {
   on_chain_state: number;
   staked: boolean;
   user_params: {
+    agent_id: number;
     cost_of_bond: number;
     fund_requirements: {
       agent: number;
@@ -36,15 +37,23 @@ export type ChainData = {
     nft: string;
     staking_program_id: StakingProgramId;
     threshold: number;
+    use_mech_marketplace: true;
     use_staking: true;
   };
 };
 
 export type MiddlewareServiceResponse = {
-  name: string;
+  description: string;
   hash: string;
+  hash_history: {
+    [block: string]: string;
+  };
+  home_chain_id: number;
   keys: ServiceKeys[];
-  readme?: string;
+  name: string;
+  service_path?: string;
+  service_config_id: string;
+  version: string;
   chain_configs: {
     [chainId: number]: {
       ledger_config: LedgerConfig;
@@ -56,18 +65,27 @@ export type MiddlewareServiceResponse = {
 export type ServiceTemplate = {
   name: string;
   hash: string;
-  image: string;
   description: string;
+  image: string;
   service_version: string;
   home_chain_id: string;
   configurations: { [key: string]: ConfigurationTemplate };
   deploy?: boolean;
+  service_env_variables?: {
+    [key: string]: {
+      name: string;
+      env_variable_name: string;
+      description: string;
+      value: string;
+      provision_type: string;
+    };
+  };
 };
 
 export type ConfigurationTemplate = {
-  rpc?: string; // added on deployment
   staking_program_id?: StakingProgramId; // added on deployment
   nft: string;
+  rpc?: string; // added on deployment
   agent_id: number;
   threshold: number;
   use_staking: boolean;
@@ -90,37 +108,6 @@ export type DeployedNodes = {
 export type Deployment = {
   status: MiddlewareDeploymentStatus;
   nodes: DeployedNodes;
-};
-
-export type EmptyPayload = Record<string, never>;
-
-export type EmptyResponse = Record<string, never>;
-
-export type HttpResponse = {
-  error?: string;
-  data?: string;
-};
-
-export type ClientResponse<ResponseType> = {
-  error?: string;
-  data?: ResponseType;
-};
-
-export type StopDeployment = {
-  delete: boolean /* Delete deployment*/;
-};
-
-export type UpdateServicePayload = {
-  old: ServiceHash;
-  new: ServiceTemplate;
-};
-
-export type DeleteServicesPayload = {
-  hashes: ServiceHash[];
-};
-
-export type DeleteServicesResponse = {
-  hashes: ServiceHash[];
 };
 
 export type AppInfo = {
