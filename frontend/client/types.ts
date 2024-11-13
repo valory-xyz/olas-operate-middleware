@@ -2,6 +2,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
 import {
+  EnvProvisionType,
   MiddlewareChain,
   MiddlewareDeploymentStatus,
   MiddlewareLedger,
@@ -62,6 +63,13 @@ export type MiddlewareServiceResponse = {
   };
 };
 
+export type EnvVariableAttributes = {
+  name: string;
+  description: string;
+  value: string;
+  provision_type: EnvProvisionType;
+};
+
 export type ServiceTemplate = {
   name: string;
   hash: string;
@@ -70,16 +78,8 @@ export type ServiceTemplate = {
   service_version: string;
   home_chain_id: string;
   configurations: { [key: string]: ConfigurationTemplate };
+  env_variables: { [key: string]: EnvVariableAttributes };
   deploy?: boolean;
-  service_env_variables?: {
-    [key: string]: {
-      name: string;
-      env_variable_name: string;
-      description: string;
-      value: string;
-      provision_type: string;
-    };
-  };
 };
 
 export type ConfigurationTemplate = {

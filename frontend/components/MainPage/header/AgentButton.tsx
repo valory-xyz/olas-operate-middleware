@@ -12,7 +12,11 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useActiveStakingContractInfo,
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -90,7 +94,7 @@ const AgentRunningButton = () => {
       await ServicesService.stopDeployment(service.service_config_id);
     } catch (error) {
       console.error(error);
-      showNotification?.('Error while stopping agent');
+      showNotification?.('Some error occurred while stopping agent');
     } finally {
       // Resume polling, will update to correct status regardless of success
       setIsServicePollingPaused(false);
@@ -141,13 +145,22 @@ const AgentNotRunningButton = () => {
     updateBalances,
   } = useBalance();
   const { storeState } = useStore();
+
   const {
-    isEligibleForStaking,
-    isAgentEvicted,
+    isStakingContractInfoRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
     updateActiveStakingContractInfo,
-  } = useStakingContractInfo();
-  const { activeStakingProgramId } = useStakingProgram();
+  } = useStakingContractContext();
+
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
+
+  const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
+    useActiveStakingContractInfo();
+
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
 
   // const minStakingDeposit =
   //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
@@ -192,7 +205,7 @@ const AgentNotRunningButton = () => {
     } catch (error) {
       console.error(error);
       setServiceStatus(undefined);
-      showNotification?.('Error while creating safe');
+      showNotification?.('Some error occurred while creating safe');
       setIsStakingContractInfoPollingPaused(false);
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
@@ -213,7 +226,7 @@ const AgentNotRunningButton = () => {
     } catch (error) {
       console.error(error);
       setServiceStatus(undefined);
-      showNotification?.('Error while deploying service');
+      showNotification?.('Some error occurred while deploying service');
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
       setIsStakingContractInfoPollingPaused(false);
@@ -225,7 +238,9 @@ const AgentNotRunningButton = () => {
       showNotification?.(`Your agent is running!`);
     } catch (error) {
       console.error(error);
-      showNotification?.('Error while showing "running" notification');
+      showNotification?.(
+        'Some error occurred while showing "running" notification',
+      );
     }
 
     // Can assume successful deployment
@@ -264,6 +279,8 @@ const AgentNotRunningButton = () => {
   ]);
 
   const isDeployable = useMemo(() => {
+    if (!isStakingContractInfoRecordLoaded) return false;
+
     // if the agent is NOT running and the balance is too low,
     // user should not be able to start the agent
     const isServiceInactive =
@@ -278,6 +295,9 @@ const AgentNotRunningButton = () => {
     if (serviceStatus === MiddlewareDeploymentStatus.STOPPING) return false;
 
     if (!requiredOlas) return false;
+
+    // If no slots available, agent cannot be started
+    if (!hasEnoughServiceSlots && !isServiceStaked) return false;
 
     // case where service exists & user has initial funded
     if (service && storeState?.isInitialFunded) {
@@ -294,15 +314,18 @@ const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
+    isStakingContractInfoRecordLoaded,
     serviceStatus,
+    isLowBalance,
+    requiredOlas,
+    hasEnoughServiceSlots,
+    isServiceStaked,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,
     isAgentEvicted,
     safeOlasBalanceWithStaked,
-    requiredOlas,
     totalEthBalance,
-    isLowBalance,
   ]);
 
   const buttonProps: ButtonProps = {
@@ -318,11 +341,17 @@ const AgentNotRunningButton = () => {
 };
 
 export const AgentButton = () => {
-  const { service, serviceStatus, hasInitialLoaded } = useServices();
-  const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
+  const {
+    serviceStatus,
+    isServiceNotRunning,
+    hasInitialLoaded: isServicesLoaded,
+  } = useServices();
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isEligibleForStaking, isAgentEvicted } =
+    useActiveStakingContractInfo();
 
   return useMemo(() => {
-    if (!hasInitialLoaded) {
+    if (!isServicesLoaded || !isStakingContractInfoRecordLoaded) {
       return <Button type="primary" size="large" disabled loading />;
     }
 
@@ -338,25 +367,21 @@ export const AgentButton = () => {
       return <AgentRunningButton />;
     }
 
-    if (!isEligibleForStaking && isAgentEvicted)
+    if (!isEligibleForStaking && isAgentEvicted) {
       return <CannotStartAgentPopover />;
+    }
 
-    if (
-      !service ||
-      serviceStatus === MiddlewareDeploymentStatus.STOPPED ||
-      serviceStatus === MiddlewareDeploymentStatus.CREATED ||
-      serviceStatus === MiddlewareDeploymentStatus.BUILT ||
-      serviceStatus === MiddlewareDeploymentStatus.DELETED
-    ) {
+    if (isServiceNotRunning) {
       return <AgentNotRunningButton />;
     }
 
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
-    hasInitialLoaded,
+    isServicesLoaded,
+    isStakingContractInfoRecordLoaded,
     serviceStatus,
     isEligibleForStaking,
     isAgentEvicted,
-    service,
+    isServiceNotRunning,
   ]);
 };

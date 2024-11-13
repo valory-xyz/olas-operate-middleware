@@ -1,9 +1,11 @@
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 
-import {
-  MiddlewareServiceResponse,
+import type {
+  DeploymentStatus,
+  Service,
   ServiceHash,
   ServiceTemplate,
+  MiddlewareServiceResponse,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { ServicesContext } from '@/context/ServicesProvider';
@@ -71,6 +73,7 @@ export const useServices = () => {
     services,
     serviceId,
     serviceStatus,
+    isServiceNotRunning,
     setServiceStatus,
     getServiceFromState,
     getServicesFromState,

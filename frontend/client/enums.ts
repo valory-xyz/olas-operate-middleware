@@ -36,3 +36,9 @@ export enum MiddlewareAccountIsSetup {
   Loading,
   Error,
 }
+
+export enum EnvProvisionType {
+  FIXED = "fixed",
+  USER = "user",
+  COMPUTED = "computed"
+}
