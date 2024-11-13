@@ -22,11 +22,13 @@
 import json
 import os
 import typing as t
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
+from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
@@ -52,6 +54,7 @@ class MasterWallet(LocalResource):
 
     path: Path
     safes: t.Optional[t.Dict[ChainType, str]] = {}
+    safe_chains: t.List[ChainType] = []
     ledger_type: LedgerType
 
     _key: str
@@ -161,6 +164,11 @@ class MasterWallet(LocalResource):
         """Add or swap backup owner."""
         raise NotImplementedError()
 
+    @classmethod
+    def migrate_format(cls, path: Path) -> bool:
+        """Migrate the JSON file format if needed."""
+        raise NotImplementedError
+
 
 @dataclass
 class EthereumMasterWallet(MasterWallet):
@@ -168,10 +176,10 @@ class EthereumMasterWallet(MasterWallet):
 
     path: Path
     address: str
-    safe_chains: t.List[ChainType]  # For cross-chain support
 
-    ledger_type: LedgerType = LedgerType.ETHEREUM
     safes: t.Optional[t.Dict[ChainType, str]] = field(default_factory=dict)  # type: ignore
+    safe_chains: t.List[ChainType] = field(default_factory=list)  # type: ignore
+    ledger_type: LedgerType = LedgerType.ETHEREUM
     safe_nonce: t.Optional[int] = None  # For cross-chain reusability
 
     _file = ledger_type.config_file
@@ -417,6 +425,10 @@ class EthereumMasterWallet(MasterWallet):
     @classmethod
     def load(cls, path: Path) -> "EthereumMasterWallet":
         """Load master wallet."""
+        # TODO: This is a complex way to read the 'safes' dictionary.
+        # The reason for that is that wallet.safes[chain_type] would fail 
+        # (for example in service manager) when passed a ChainType key.
+
         raw_ethereum_wallet = super().load(path)  # type: ignore
         safes = {}
         for id_, safe_address in raw_ethereum_wallet.safes.items():  # type: ignore
@@ -424,6 +436,27 @@ class EthereumMasterWallet(MasterWallet):
 
         raw_ethereum_wallet.safes = safes  # type: ignore
         return t.cast(EthereumMasterWallet, raw_ethereum_wallet)
+
+    @classmethod
+    def migrate_format(cls, path: Path) -> bool:
+        """Migrate the JSON file format if needed."""
+        wallet_path = path / cls._file
+        with open(wallet_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        migrated = False
+        if "safes" not in data:
+            safes = {}
+            for chain in data["safe_chains"]:
+                safes[chain] = data["safe"]
+            data.pop("safe")
+            data["safes"] = safes
+            migrated = True
+
+        with open(wallet_path, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+
+        return migrated
 
 
 LEDGER_TYPE_TO_WALLET_CLASS = {
@@ -434,10 +467,11 @@ LEDGER_TYPE_TO_WALLET_CLASS = {
 class MasterWalletManager:
     """Master wallet manager."""
 
-    def __init__(self, path: Path, password: t.Optional[str] = None) -> None:
+    def __init__(self, path: Path, password: t.Optional[str] = None, logger: t.Optional[logging.Logger] = None) -> None:
         """Initialize master wallet manager."""
         self.path = path
         self._password = password
+        self.logger = logger or setup_logger(name="operate.master_wallet_manager")
 
     @property
     def json(self) -> t.List[t.Dict]:
@@ -503,3 +537,16 @@ class MasterWalletManager:
             if not self.exists(ledger_type=ledger_type):
                 continue
             yield LEDGER_TYPE_TO_WALLET_CLASS[ledger_type].load(path=self.path)
+
+    def migrate_wallet_configs(self) -> None:
+        """Migrate old wallet config formats to new ones, if applies."""
+
+        print(self.path)
+
+        for ledger_type in LedgerType:
+            if not self.exists(ledger_type=ledger_type):
+                continue
+            wallet_class = LEDGER_TYPE_TO_WALLET_CLASS[ledger_type]
+            migrated = wallet_class.migrate_format(path=self.path)
+            if migrated:
+                self.logger.info(f"Wallet {wallet_class} has been migrated.")

@@ -25,12 +25,14 @@ import platform
 import shutil
 import subprocess  # nosec
 import sys
+import tempfile
+import time
 import typing as t
+import uuid
 from copy import copy, deepcopy
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
-from time import sleep
 from traceback import print_exc
 
 from aea.configurations.constants import (
@@ -66,7 +68,6 @@ from operate.constants import (
     KEYS_JSON,
 )
 from operate.keys import Keys
-from operate.ledger import PUBLIC_RPCS
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     ChainConfig,
@@ -81,6 +82,7 @@ from operate.operate_types import (
     OnChainData,
     OnChainState,
     OnChainUserParams,
+    ServiceEnvVariables,
     ServiceTemplate,
 )
 from operate.resource import LocalResource
@@ -94,7 +96,8 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 3
+SERVICE_CONFIG_VERSION = 4
+SERVICE_CONFIG_PREFIX = "sc-"
 
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
@@ -244,7 +247,9 @@ class ServiceHelper:
         """Initialize object."""
         self.path = path
         self.config = load_service_config(service_path=path)
-        self.config.overrides = apply_env_variables(self.config.overrides, os.environ.copy())
+        self.config.overrides = apply_env_variables(
+            self.config.overrides, os.environ.copy()
+        )
 
     def ledger_configs(self) -> LedgerConfigs:
         """Get ledger configs."""
@@ -502,12 +507,12 @@ class Deployment(LocalResource):
             stop_host_deployment(build_dir=build)
             try:
                 # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
-                sleep(3)
+                time.sleep(3)
                 shutil.rmtree(build)
             except:  # noqa  # pylint: disable=bare-except
                 # sleep and try again. exception if fails
                 print_exc()
-                sleep(3)
+                time.sleep(3)
                 shutil.rmtree(build)
 
         service = Service.load(path=self.path)
@@ -536,6 +541,7 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
+            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -643,10 +649,14 @@ class Service(LocalResource):
     """Service class."""
 
     version: int
+    service_config_id: str
     hash: str
+    hash_history: t.Dict[int, str]
     keys: Keys
     home_chain_id: str
     chain_configs: ChainConfigs
+    description: str
+    service_env_variables: ServiceEnvVariables
 
     path: Path
     service_path: Path
@@ -659,33 +669,33 @@ class Service(LocalResource):
     _file = "config.json"
 
     @classmethod
-    def migrate_format(cls, path: Path) -> None:
+    def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
-        file_path = (
-            path / Service._file
-            if Service._file is not None and path.name != Service._file
-            else path
-        )
 
-        with open(file_path, "r", encoding="utf-8") as file:
+        if not path.is_dir():
+            return False
+
+        if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
+            "bafybei"
+        ):
+            return False
+
+        with open(path / Service._file, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         version = data.get("version", 0)
-        if version >= 3:
-            return
-
-        # Migrate from old formats to new format
-        if version == 2:
-            data["chain_configs"]["100"]["chain_data"]["user_params"][
-                "use_mech_marketplace"
-            ] = data["chain_configs"]["100"]["chain_data"]["user_params"].get(
-                "use_mech_marketplace", False
+        if version > SERVICE_CONFIG_VERSION:
+            raise RuntimeError(
+                f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
             )
-            data["version"] = 3
-            new_data = data
-        elif version == 0:
+
+        if version == SERVICE_CONFIG_VERSION:
+            return False
+
+        # Migration steps for older versions
+        if version == 0:
             new_data = {
-                "version": 3,
+                "version": 2,
                 "hash": data.get("hash"),
                 "keys": data.get("keys"),
                 "home_chain_id": "100",  # Assuming a default value for home_chain_id
@@ -717,7 +727,6 @@ class Service(LocalResource):
                                 "use_staking": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("use_staking"),
-                                "use_mech_marketplace": False,
                                 "cost_of_bond": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("cost_of_bond"),
@@ -731,14 +740,52 @@ class Service(LocalResource):
                 "service_path": data.get("service_path", ""),
                 "name": data.get("name", ""),
             }
+            data = new_data
 
-        with open(file_path, "w", encoding="utf-8") as file:
-            json.dump(new_data, file, indent=2)
+        # Add missing fields introduced in later versions, if necessary.
+        for _, chain_data in data.get("chain_configs", {}).items():
+            chain_data.setdefault("chain_data", {}).setdefault(
+                "user_params", {}
+            ).setdefault("use_mech_marketplace", False)
+
+        data["description"] = data.setdefault("description", data.get("name"))
+        data["hash_history"] = data.setdefault(
+            "hash_history", {int(time.time()): data["hash"]}
+        )
+
+        if "service_config_id" not in data:
+            service_config_id = Service.get_new_service_config_id(path)
+            new_path = path.parent / service_config_id
+            data["service_config_id"] = service_config_id
+
+            service_path = Path(data["service_path"])
+            if service_path.exists() and service_path.is_dir():
+                shutil.rmtree(service_path)
+            
+            path = path.rename(new_path)
+            service_path = Path(
+                IPFSTool().download(
+                    hash_id=data["hash"],
+                    target_dir=path,
+                )
+            )
+            data["service_path"] = str(service_path)
+
+        data["version"] = 4
+
+        with open(path / Service._file, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+
+        return True
+
+    def consume_env_variables(self) -> None:
+        """Consume environment variables."""
+        for variable in self.service_env_variables.values():
+            os.environ[variable["env_variable_name"]] = str(variable["value"])
 
     @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
-        cls.migrate_format(path)
         return super().load(path)  # type: ignore
 
     @property
@@ -761,22 +808,21 @@ class Service(LocalResource):
 
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        hash: str,
         keys: Keys,
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
         """Create a new service."""
-        path = storage / hash
+
+        service_config_id = Service.get_new_service_config_id(storage)
+        path = storage / service_config_id
         path.mkdir()
         service_path = Path(
             IPFSTool().download(
-                hash_id=hash,
+                hash_id=service_template["hash"],
                 target_dir=path,
             )
         )
-        with (service_path / "service.yaml").open("r", encoding="utf-8") as fp:
-            service_yaml, *_ = yaml_load_all(fp)
 
         ledger_configs = ServiceHelper(path=service_path).ledger_configs()
 
@@ -799,18 +845,146 @@ class Service(LocalResource):
                 chain_data=chain_data,
             )
 
+        current_timestamp = int(time.time())
         service = Service(
             version=SERVICE_CONFIG_VERSION,
-            name=service_yaml["author"] + "/" + service_yaml["name"],
+            service_config_id=service_config_id,
+            name=service_template["name"],
+            description=service_template["description"],
             hash=service_template["hash"],
             keys=keys,
             home_chain_id=service_template["home_chain_id"],
+            hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
+            service_env_variables=service_template["service_env_variables"],
         )
         service.store()
         return service
+
+    @property
+    def service_public_id(self, include_version: bool = True) -> str:
+        """Get the public id (based on the service hash)."""
+        with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
+            service_yaml, *_ = yaml_load_all(fp)
+
+        public_id = f"{service_yaml['author']}/{service_yaml['name']}"
+
+        if include_version:
+            public_id += f":{service_yaml['version']}"
+
+        return public_id
+
+    @staticmethod
+    def get_service_public_id(
+        hash: str, dir: t.Optional[str] = None, include_version: bool = True
+    ) -> str:
+        """
+        Get the service public ID from IPFS based on the hash.
+
+        :param hash: The IPFS hash of the service.
+        :param dir: Optional directory path where the temporary download folder will be created.
+                    If None, a system-default temporary directory will be used.
+        :return: The public ID of the service in the format "author/name:version".
+        """
+        with tempfile.TemporaryDirectory(dir=dir) as path:
+            package_path = Path(
+                IPFSTool().download(
+                    hash_id=hash,
+                    target_dir=path,
+                )
+            )
+
+            with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
+                service_yaml, *_ = yaml_load_all(fp)
+
+            public_id = f"{service_yaml['author']}/{service_yaml['name']}"
+
+            if include_version:
+                public_id += f":{service_yaml['version']}"
+
+            return public_id
+
+    @staticmethod
+    def get_new_service_config_id(path: Path) -> str:
+        """Get a new service config id that does not clash with any directory in path."""
+        while True:
+            service_config_id = f"{SERVICE_CONFIG_PREFIX}{uuid.uuid4()}"
+            new_path = path.parent / service_config_id
+            if not new_path.exists():
+                return service_config_id
+
+    def update(
+        self,
+        service_template: ServiceTemplate,
+        allow_different_service_public_id: bool = False,
+    ) -> None:
+        """Update service."""
+
+        target_hash = service_template["hash"]
+        target_service_public_id = Service.get_service_public_id(target_hash, self.path)
+
+        if not allow_different_service_public_id and (
+            self.service_public_id != target_service_public_id
+        ):
+            raise ValueError(
+                f"Trying to update a service with a different public id: {self.service_public_id=} {self.hash=} {target_service_public_id=} {target_hash=}."
+            )
+
+        shutil.rmtree(self.service_path)
+        service_path = Path(
+            IPFSTool().download(
+                hash_id=service_template["hash"],
+                target_dir=self.path,
+            )
+        )
+        self.service_path = service_path
+        self.name = service_template["name"]
+        self.hash = service_template["hash"]
+        self.description = service_template["description"]
+
+        # Only update hash_history if latest inserted hash is different
+        if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:
+            current_timestamp = int(time.time())
+            self.hash_history[current_timestamp] = service_template["hash"]
+
+        self.description = service_template["description"]
+        self.home_chain_id = service_template["home_chain_id"]
+
+        ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
+        for chain, config in service_template["configurations"].items():
+            if chain in self.chain_configs:
+                # The template is providing a chain configuration that already
+                # exists in this service - update only the user parameters.
+                # This is to avoid losing on-chain data like safe, token, etc.
+                self.chain_configs[
+                    chain
+                ].chain_data.user_params = OnChainUserParams.from_json(
+                    config  # type: ignore
+                )
+            else:
+                # The template is providing a chain configuration that does
+                # not currently exist in this service - copy all config as
+                # when creating a new service.
+                ledger_config = ledger_configs[chain]
+                ledger_config.rpc = config["rpc"]
+
+                chain_data = OnChainData(
+                    instances=[],
+                    token=NON_EXISTENT_TOKEN,
+                    multisig=DUMMY_MULTISIG,
+                    staked=False,
+                    on_chain_state=OnChainState.NON_EXISTENT,
+                    user_params=OnChainUserParams.from_json(config),  # type: ignore
+                )
+
+                self.chain_configs[chain] = ChainConfig(
+                    ledger_config=ledger_config,
+                    chain_data=chain_data,
+                )
+
+        self.store()
 
     def update_user_params_from_template(
         self, service_template: ServiceTemplate

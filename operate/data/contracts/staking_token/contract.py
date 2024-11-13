@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""This module contains the class to connect to the `ServiceStakingTokenMechUsage` contract."""
+"""This module contains the class to connect to the `StakingToken` contract."""
 
 from enum import Enum
 
@@ -27,18 +27,10 @@ from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 
 
-class StakingState(Enum):
-    """Staking state enumeration for the staking."""
+class StakingTokenContract(Contract):
+    """The Staking Token contract."""
 
-    UNSTAKED = 0
-    STAKED = 1
-    EVICTED = 2
-
-
-class ServiceStakingTokenContract(Contract):
-    """The Service Staking contract."""
-
-    contract_id = PublicId.from_str("valory/service_staking_token:0.1.0")
+    contract_id = PublicId.from_str("valory/staking_token:0.1.0")
 
     @classmethod
     def get_service_staking_state(
@@ -50,7 +42,7 @@ class ServiceStakingTokenContract(Contract):
         """Check whether the service is staked."""
         contract_instance = cls.get_instance(ledger_api, contract_address)
         res = contract_instance.functions.getStakingState(service_id).call()
-        return dict(data=StakingState(res))
+        return dict(data=res)
 
     @classmethod
     def build_stake_tx(
@@ -120,6 +112,28 @@ class ServiceStakingTokenContract(Contract):
         contract = cls.get_instance(ledger_api, contract_address)
         ts = contract.functions.getNextRewardCheckpointTimestamp().call()
         return dict(data=ts)
+
+    @classmethod
+    def ts_checkpoint(
+        cls,
+        ledger_api: LedgerApi,
+        contract_address: str,
+    ) -> JSONLike:
+        """Retrieve the checkpoint's timestamp."""
+        contract = cls.get_instance(ledger_api, contract_address)
+        ts_checkpoint = contract.functions.tsCheckpoint().call()
+        return dict(data=ts_checkpoint)
+
+    @classmethod
+    def liveness_ratio(
+        cls,
+        ledger_api: LedgerApi,
+        contract_address: str,
+    ) -> JSONLike:
+        """Retrieve the liveness ratio."""
+        contract = cls.get_instance(ledger_api, contract_address)
+        liveness_ratio = contract.functions.livenessRatio().call()
+        return dict(data=liveness_ratio)
 
     @classmethod
     def get_liveness_period(

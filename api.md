@@ -196,7 +196,7 @@ Creates a master key for given chain type.
     "address": "0xAafd5cb31a611C5e5aa65ea8c6226EB4328175E1",
     "safe_chains": [],
     "ledger_type": 0,
-    "safe": null,
+    "safes": {},
     "safe_nonce": null
   },
   "mnemonic": [...]
@@ -205,7 +205,7 @@ Creates a master key for given chain type.
 </details>
 
 ---
-#### `PUT /api/wallet`
+#### `POST /api/wallet/safe`
 
 Creates a gnosis safe for given chain type.
 
@@ -230,7 +230,9 @@ Creates a gnosis safe for given chain type.
     2
   ],
   "ledger_type": 0,
-  "safe": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22",
+  "safes": {
+    "2": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22"
+  },
   "safe_nonce": 110558881674480320952254000342160989674913430251157716140571305138121962898821
 }
 ```

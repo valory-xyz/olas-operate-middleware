@@ -10,8 +10,8 @@ packages = [
 include = [
     "operate/data/acn/*",
     "operate/data/contracts/*",
-    "operate/data/contracts/service_staking_token/*",
-    "operate/data/contracts/service_staking_token/build/*",
+    "operate/data/contracts/staking_token/*",
+    "operate/data/contracts/staking_token/build/*",
 ]
 
 [tool.poetry.scripts]
