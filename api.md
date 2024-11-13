@@ -1,6 +1,10 @@
-#### `GET /api`
+# Olas-Operate API reference
 
-Returns information of the operate daemon
+## General
+
+### `GET /api`
+
+Returns information of the operate daemon.
 
 <details>
   <summary>Response</summary>
@@ -19,35 +23,39 @@ Returns information of the operate daemon
 </details>
 
 ---
-#### `GET /api/account`
 
-Returns account status
+## Account
 
-<details>
-  <summary>Before setup</summary>
+### `GET /api/account`
 
-```json
-{
-  "is_setup": false
-}
-```
-
-</details>
+Returns account status.
 
 <details>
-  <summary>After setup</summary>
+  <summary>Response</summary>
 
-```json
-{
-  "is_setup": true
-}
-```
+- Before setup:
+
+    ```json
+    {
+      "is_setup": false
+    }
+    ```
+
+- After setup:
+
+  ```json
+  {
+    "is_setup": true
+  }
+  ```
+
 </details>
 
 ---
-#### `POST /api/account`
 
-Create a local user account
+### `POST /api/account`
+
+Create a local user account.
 
 <details>
   <summary>Request</summary>
@@ -63,29 +71,29 @@ Create a local user account
 <details>
   <summary>Response</summary>
 
-```json
-{
-  "error": null
-}
-```
-</details>
+- If account did not exist:
 
-If account already exists
+  ```json
+  {
+    "error": null
+  }
+  ```
 
-<details>
-  <summary>Response</summary>
+- If account already exists:
 
-```json
-{
-  "error": "Account already exists"
-}
-```
+  ```json
+  {
+    "error": "Account already exists"
+  }
+  ```
+
 </details>
 
 ---
-#### `PUT /api/account`
 
-Update password
+### `PUT /api/account`
+
+Update account password.
 
 <details>
   <summary>Request</summary>
@@ -102,30 +110,30 @@ Update password
 <details>
   <summary>Response</summary>
 
-```json
-{
-  "error": null
-}
-```
-</details>
+- If old password is valid:
 
-Old password is not valid
+  ```json
+  {
+    "error": null
+  }
+  ```
 
-<details>
-  <summary>Response</summary>
+- If old password is not valid:
 
-```json
-{
-  "error": "Old password is not valid",
-  "traceback": "..."
-}
-```
+  ```json
+  {
+    "error": "Old password is not valid",
+    "traceback": "..."
+  }
+  ```
+
 </details>
 
 ---
-#### `POST /api/account/login`
 
-Login and create a session
+### `POST /api/account/login`
+
+Login and create a session.
 
 <details>
   <summary>Request</summary>
@@ -141,15 +149,29 @@ Login and create a session
 <details>
   <summary>Response</summary>
 
-```json
-{
-  "message": "Login successful"
-}
-```
+- If password is valid:
+
+  ```json
+  {
+    "message": "Login successful"
+  }
+  ```
+
+- If password is not valid:
+
+  ```json
+  {
+    "error": "Password is not valid"
+  }
+  ```
+
 </details>
 
 ---
-#### `GET /api/wallet`
+
+## Wallet
+
+### `GET /api/wallet`
 
 Returns a list of available wallets
 
@@ -169,12 +191,14 @@ Returns a list of available wallets
   }
 ]
 ```
+
 </details>
 
 ---
-#### `POST /api/wallet`
 
-Creates a master key for given chain type.
+### `POST /api/wallet`
+
+Creates a master wallet for given chain type. If a wallet already exists for a given chain type, it returns the already existing wallet without creating an additional one.
 
 <details>
   <summary>Request</summary>
@@ -199,13 +223,15 @@ Creates a master key for given chain type.
     "safes": {},
     "safe_nonce": null
   },
-  "mnemonic": [...]
+  "mnemonic": ["polar", "mail", "tattoo", "write", "track", ... ]
 }
 ```
+
 </details>
 
 ---
-#### `POST /api/wallet/safe`
+
+### `POST /api/wallet/safe`
 
 Creates a gnosis safe for given chain type.
 
@@ -223,25 +249,40 @@ Creates a gnosis safe for given chain type.
 <details>
   <summary>Response</summary>
 
-```json
-{
-  "address": "0xaaFd5cb31A611C5e5aa65ea8c6226EB4328175E3",
-  "safe_chains": [
-    2
-  ],
-  "ledger_type": 0,
-  "safes": {
-    "2": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22"
-  },
-  "safe_nonce": 110558881674480320952254000342160989674913430251157716140571305138121962898821
-}
-```
+- If gnosis safe creation is successful:
+
+  ```json
+  {
+    "address": "0xaaFd5cb31A611C5e5aa65ea8c6226EB4328175E3",
+    "safe_chains": [
+      2
+    ],
+    "ledger_type": 0,
+    "safes": {
+      "2": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22"
+    },
+    "safe_nonce": 110558881674480320952254000342160989674913430251157716140571305138121962898821
+  }
+  ```
+
+- If gnosis safe creation is not successful:
+
+  ```json
+  {
+    "error": "Error message",
+    "traceback": "Traceback message"
+  }
+  ```
+
 </details>
 
 ---
-#### `GET /api/services`
 
-Returns the list of services
+## Services
+
+### `GET /api/v2/services`
+
+Returns the list of existing services (service configurations).
 
 <details>
   <summary>Response</summary>
@@ -377,7 +418,8 @@ Optionally you can add `deploy` parameter and set it to `true` for a full deploy
 </details>
 
 ---
-#### `PUT /api/services`
+
+### `PUT /api/v2/services`
 
 Update a service
 
@@ -444,7 +486,8 @@ Optionally you can add `deploy` parameter and set it to `true` for a full deploy
 </details>
 
 ---
-#### `GET /api/services/{service}`
+
+### `GET /api/v2/services/{service}`
 
 <details>
   <summary>Response</summary>
@@ -495,7 +538,10 @@ Optionally you can add `deploy` parameter and set it to `true` for a full deploy
 </details>
 
 ---
-#### `POST /api/services/{service}/onchain/deploy`
+
+### `POST /api/services/{service}/onchain/deploy`
+
+**:warning: Deprecated**
 
 Deploy service on-chain
 
@@ -516,7 +562,10 @@ Deploy service on-chain
 </details>
 
 ---
-#### `POST /api/services/{service}/onchain/stop`
+
+### `POST /api/services/{service}/onchain/stop`
+
+**:warning: Deprecated**
 
 Stop service on-chain
 
@@ -537,7 +586,10 @@ Stop service on-chain
 </details>
 
 ---
-#### `GET /api/services/{service}/deployment`
+
+### `GET /api/services/{service}/deployment`
+
+**:warning: Deprecated**
 
 <details>
   <summary>Response</summary>
@@ -559,7 +611,10 @@ Stop service on-chain
 </details>
 
 ---
-#### `POST /api/services/{service}/deployment/build`
+
+### `POST /api/services/{service}/deployment/build`
+
+**:warning: Deprecated**
 
 Build service locally
 
@@ -580,7 +635,10 @@ Build service locally
 </details>
 
 ---
-#### `POST /api/services/{service}/deployment/start`
+
+### `POST /api/services/{service}/deployment/start`
+
+**:warning: Deprecated**
 
 Start agent
 
@@ -601,7 +659,10 @@ Start agent
 </details>
 
 ---
-#### `POST /api/services/{service}/deployment/stop`
+
+### `POST /api/services/{service}/deployment/stop`
+
+**:warning: Deprecated**
 
 Stop agent
 
@@ -609,7 +670,10 @@ Stop agent
 ```
 
 ---
-#### `POST /api/services/{service}/deployment/delete`
+
+### `POST /api/services/{service}/deployment/delete`
+
+**:warning: Deprecated**
 
 Delete local deployment
 
