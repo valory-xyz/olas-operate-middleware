@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "olas-operate-middleware"
-version = "0.1.0-rc184"
+version = "0.1.0-rc196"
 description = ""
 authors = ["David Vilela <dvilelaf@gmail.com>", "Viraj Patel <vptl185@gmail.com>"]
 readme = "README.md"
@@ -10,8 +10,8 @@ packages = [
 include = [
     "operate/data/acn/*",
     "operate/data/contracts/*",
-    "operate/data/contracts/service_staking_token/*",
-    "operate/data/contracts/service_staking_token/build/*",
+    "operate/data/contracts/staking_token/*",
+    "operate/data/contracts/staking_token/build/*",
 ]
 
 [tool.poetry.scripts]

@@ -38,7 +38,12 @@ from autonomy.chain.base import registry_contracts
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
-from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
+from operate.operate_types import (
+    ChainType,
+    LedgerConfig,
+    ServiceEnvProvisionType,
+    ServiceTemplate,
+)
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -47,7 +52,7 @@ from operate.services.service import (
     NON_EXISTENT_TOKEN,
     OnChainData,
     OnChainState,
-    OnChainUserParams,
+    SERVICE_CONFIG_PREFIX,
     Service,
 )
 from operate.utils.gnosis import NULL_ADDRESS
@@ -93,25 +98,21 @@ class ServiceManager:
         self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.manager")
-        self._log_directories()
 
     def setup(self) -> None:
         """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
-    @property
-    def json(self) -> t.List[t.Dict]:
-        """Returns the list of available services."""
-        data = []
+    def _get_all_services(self) -> t.List[Service]:
+        services = []
         for path in self.path.iterdir():
-            if path.name.startswith(DELETE_PREFIX):
-                shutil.rmtree(path)
-                continue
-            if not path.name.startswith("bafybei"):
+            if not path.name.startswith(SERVICE_CONFIG_PREFIX):
                 continue
             try:
                 service = Service.load(path=path)
-                data.append(service.json)
+                services.append(service)
+            except ValueError as e:
+                raise e
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.warning(
                     f"Failed to load service: {path.name}. Exception: {e}"
@@ -124,11 +125,16 @@ class ServiceManager:
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
 
-        return data
+        return services
 
-    def exists(self, service: str) -> bool:
+    @property
+    def json(self) -> t.List[t.Dict]:
+        """Returns the list of available services."""
+        return [service.json for service in self._get_all_services()]
+
+    def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
-        return (self.path / service).exists()
+        return (self.path / service_config_id).exists()
 
     def get_on_chain_manager(self, ledger_config: LedgerConfig) -> OnChainManager:
         """Get OnChainManager instance."""
@@ -177,7 +183,6 @@ class ServiceManager:
             )
 
         service = Service.new(
-            hash=hash,
             keys=keys or [],
             storage=self.path,
             service_template=service_template,
@@ -191,6 +196,84 @@ class ServiceManager:
             service.store()
 
         return service
+
+    def load(
+        self,
+        service_config_id: str,
+    ) -> Service:
+        """
+        Load a service
+
+        :param service_id: Service id
+        :return: Service instance
+        """
+        path = self.path / service_config_id
+        return Service.load(path=path)
+
+    def create(
+        self,
+        service_template: ServiceTemplate,
+        keys: t.Optional[t.List[Key]] = None,
+    ) -> Service:
+        """
+        Create a service
+
+        :param service_template: Service template
+        :param keys: Keys
+        :return: Service instance
+        """
+        service = Service.new(
+            keys=keys or [],
+            storage=self.path,
+            service_template=service_template,
+        )
+
+        if not service.keys:
+            service.keys = [
+                self.keys_manager.get(self.keys_manager.create())
+                for _ in range(service.helper.config.number_of_agents)
+            ]
+            service.store()
+
+        return service
+
+    def _compute_service_env_variables(
+        self, service: Service, staking_params: t.Dict[str, str]
+    ) -> None:
+        """Compute values to override service.yaml variables for the deployment."""
+
+        # TODO A customized, arbitrary computation mechanism should be devised.
+        computed_values = {
+            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[ChainType.ETHEREUM],
+            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[ChainType.GNOSIS],
+            "BASE_LEDGER_RPC": PUBLIC_RPCS[ChainType.BASE],
+            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[ChainType.OPTIMISM],
+            "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+            "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
+            "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+            "MECH_REQUEST_PRICE": "10000000000000000",
+            "USE_MECH_MARKETPLACE": "mech_marketplace"
+            in service.chain_configs[
+                service.home_chain_id
+            ].chain_data.user_params.staking_program_id,
+            "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                "staking_contract"
+            ),
+            "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+        }
+
+        updated = False
+        for env_var, attributes in service.env_variables.items():
+            if (
+                env_var in computed_values
+                and attributes["provision_type"] == ServiceEnvProvisionType.COMPUTED
+                and attributes["value"] != computed_values.get(env_var)
+            ):
+                attributes["value"] = str(computed_values.get(env_var))
+                updated = True
+
+        if updated:
+            service.store()
 
     def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
         chain_config = service.chain_configs[chain_id]
@@ -227,37 +310,28 @@ class ServiceManager:
 
     def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
     ) -> None:
-        """
-        Deploy as service on-chain
-
-        :param hash: Service hash
-        """
+        """Deploy service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         for chain_id in service.chain_configs.keys():
             self._deploy_service_onchain(
-                hash=hash,
+                service_config_id=service_config_id,
                 chain_id=chain_id,
             )
 
     def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
         chain_id: str,
     ) -> None:
-        """
-        Deploy as service on-chain
-
-        :param hash: Service hash
-        :param update: Update the existing deployment
-        """
+        """Deploy as service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
         self.logger.info(f"_deploy_service_onchain_from_safe {chain_id=}")
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -438,33 +512,26 @@ class ServiceManager:
 
     def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
     ) -> None:
-        """
-        Deploy as service on-chain
+        """Deploy as service on-chain"""
 
-        :param hash: Service hash
-        """
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         for chain_id in service.chain_configs.keys():
             self._deploy_service_onchain_from_safe(
-                hash=hash,
+                service_config_id=service_config_id,
                 chain_id=chain_id,
             )
 
     def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
         chain_id: str,
     ) -> None:
-        """
-        Deploy as service on-chain
-
-        :param hash: Service hash
-        """
+        """Deploy service on-chain"""
 
         self.logger.info(f"_deploy_service_onchain_from_safe {chain_id=}")
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -507,23 +574,7 @@ class ServiceManager:
                 agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
-        # Override service.yaml variables for the deployment
-        os.environ["STAKING_CONTRACT_ADDRESS"] = staking_params["staking_contract"]
-        os.environ["MECH_ACTIVITY_CHECKER_CONTRACT"] = staking_params[
-            "activity_checker"
-        ]
-        os.environ["MECH_CONTRACT_ADDRESS"] = staking_params["agent_mech"]
-        os.environ["MECH_REQUEST_PRICE"] = "10000000000000000"
-        os.environ["USE_MECH_MARKETPLACE"] = str(
-            chain_data.user_params.use_mech_marketplace
-        )
-        os.environ["REQUESTER_STAKING_INSTANCE_ADDRESS"] = staking_params[
-            "staking_contract"
-        ]
-        os.environ["PRIORITY_MECH_ADDRESS"] = staking_params["agent_mech"]
-        os.environ["ETHEREUM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.ETHEREUM]
-        os.environ["BASE_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.BASE]
-        os.environ["OPTIMISM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.OPTIMISM]
+        self._compute_service_env_variables(service, staking_params)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
@@ -604,7 +655,9 @@ class ServiceManager:
         self.logger.info(f"{is_update=}")
 
         if is_update:
-            self._terminate_service_on_chain_from_safe(hash=hash, chain_id=chain_id)
+            self._terminate_service_on_chain_from_safe(
+                service_config_id=service_config_id, chain_id=chain_id
+            )
             # Update service
             if (
                 self._get_on_chain_state(service=service, chain_id=chain_id)
@@ -701,7 +754,7 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain_id=chain_id)
             == OnChainState.PRE_REGISTRATION
         ):
-            # cost_of_bond = staking_params["min_staking_deposit"]
+            # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
                 token_utility = staking_params["service_registry_token_utility"]
@@ -839,20 +892,18 @@ class ServiceManager:
         chain_data.on_chain_state = OnChainState(info["service_state"])
         service.store()
         if user_params.use_staking:
-            self.stake_service_on_chain_from_safe(hash=hash, chain_id=chain_id)
+            self.stake_service_on_chain_from_safe(
+                service_config_id=service_config_id, chain_id=chain_id
+            )
 
     def terminate_service_on_chain(
-        self, hash: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain_id: t.Optional[str] = None
     ) -> None:
-        """
-        Terminate service on-chain
-
-        :param hash: Service hash
-        """
+        """Terminate service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
         self.logger.info("terminate_service_on_chain")
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
 
         if chain_id is None:
             chain_id = service.home_chain_id
@@ -881,15 +932,12 @@ class ServiceManager:
         service.store()
 
     def _terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
-        self, hash: str, chain_id: str
+        self, service_config_id: str, chain_id: str
     ) -> None:
-        """
-        Terminate service on-chain
+        """Terminate service on-chain"""
 
-        :param hash: Service hash
-        """
         self.logger.info("terminate_service_on_chain_from_safe")
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -927,7 +975,9 @@ class ServiceManager:
         # Unstake the service if applies
         if is_staked and can_unstake:
             self.unstake_service_on_chain_from_safe(
-                hash=hash, chain_id=chain_id, staking_program_id=current_staking_program
+                service_config_id=service_config_id,
+                chain_id=chain_id,
+                staking_program_id=current_staking_program,
             )
 
         if self._get_on_chain_state(service=service, chain_id=chain_id) in (
@@ -961,7 +1011,7 @@ class ServiceManager:
         if counter_current_safe_owners == counter_instances:
             self.logger.info("Service funded for safe swap")
             self.fund_service(
-                hash=hash,
+                service_config_id=service_config_id,
                 rpc=ledger_config.rpc,
                 agent_topup=chain_data.user_params.fund_requirements.agent,
                 agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
@@ -1001,16 +1051,12 @@ class ServiceManager:
         return current_staking_program
 
     def unbond_service_on_chain(
-        self, hash: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain_id: t.Optional[str] = None
     ) -> None:
-        """
-        Unbond service on-chain
-
-        :param hash: Service hash
-        """
+        """Unbond service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
 
         if chain_id is None:
             chain_id = service.home_chain_id
@@ -1047,16 +1093,11 @@ class ServiceManager:
         raise NotImplementedError
 
     def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
-        self, hash: str, chain_id: str
+        self, service_config_id: str, chain_id: str
     ) -> None:
-        """
-        Stake service on-chain
+        """Stake service on-chain"""
 
-        :param hash: Service hash
-        :param chain_id: The chain id to use.
-        :param target_staking_program_id: The staking program id the agent should be on.
-        """
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -1089,7 +1130,7 @@ class ServiceManager:
                     f"Use staking is set to false, but service {chain_config.chain_data.token} is staked and can be unstaked. Unstaking..."
                 )
                 self.unstake_service_on_chain_from_safe(
-                    hash=hash,
+                    service_config_id=service_config_id,
                     chain_id=chain_id,
                     staking_program_id=current_staking_program,
                 )
@@ -1106,7 +1147,7 @@ class ServiceManager:
                     f"Service {chain_config.chain_data.token} has been evicted and can be unstaked. Unstaking..."
                 )
                 self.unstake_service_on_chain_from_safe(
-                    hash=hash,
+                    service_config_id=service_config_id,
                     chain_id=chain_id,
                     staking_program_id=current_staking_program,
                 )
@@ -1121,7 +1162,7 @@ class ServiceManager:
                     f"is already staked and can be unstaked. Unstaking..."
                 )
                 self.unstake_service_on_chain_from_safe(
-                    hash=hash,
+                    service_config_id=service_config_id,
                     chain_id=chain_id,
                     staking_program_id=current_staking_program,
                 )
@@ -1135,7 +1176,7 @@ class ServiceManager:
                     f"{chain_config.chain_data.token} is staked in a different staking program. Unstaking..."
                 )
                 self.unstake_service_on_chain_from_safe(
-                    hash=hash,
+                    service_config_id=service_config_id,
                     chain_id=chain_id,
                     staking_program_id=current_staking_program,
                 )
@@ -1198,16 +1239,12 @@ class ServiceManager:
         self.logger.info(f"{current_staking_program=}")
 
     def unstake_service_on_chain(
-        self, hash: str, chain_id: t.Optional[str] = None
+        self, service_config_id: str, chain_id: t.Optional[str] = None
     ) -> None:
-        """
-        Unbond service on-chain
-
-        :param hash: Service hash
-        """
+        """Unbond service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
 
         if chain_id is None:
             chain_id = service.home_chain_id
@@ -1240,16 +1277,15 @@ class ServiceManager:
         service.store()
 
     def unstake_service_on_chain_from_safe(
-        self, hash: str, chain_id: str, staking_program_id: t.Optional[str] = None
+        self,
+        service_config_id: str,
+        chain_id: str,
+        staking_program_id: t.Optional[str] = None,
     ) -> None:
-        """
-        Unbond service on-chain
-
-        :param hash: Service hash
-        """
+        """Unbond service on-chain"""
 
         self.logger.info("unstake_service_on_chain_from_safe")
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -1288,7 +1324,7 @@ class ServiceManager:
 
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
         rpc: t.Optional[str] = None,
         agent_topup: t.Optional[float] = None,
         safe_topup: t.Optional[float] = None,
@@ -1297,12 +1333,12 @@ class ServiceManager:
         from_safe: bool = True,
     ) -> None:
         """Fund service if required."""
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
 
         for chain_id in service.chain_configs.keys():
             self.logger.info(f"Funding chain_id {chain_id}")
             self.fund_service_single_chain(
-                hash=hash,
+                service_config_id=service_config_id,
                 rpc=rpc,
                 agent_topup=agent_topup,
                 safe_topup=safe_topup,
@@ -1314,7 +1350,7 @@ class ServiceManager:
 
     def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
         rpc: t.Optional[str] = None,
         agent_topup: t.Optional[float] = None,
         safe_topup: t.Optional[float] = None,
@@ -1324,7 +1360,8 @@ class ServiceManager:
         chain_id: str = "100",
     ) -> None:
         """Fund service if required."""
-        service = self.load_or_create(hash=hash)
+
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -1375,7 +1412,7 @@ class ServiceManager:
 
     def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
         self,
-        hash: str,
+        service_config_id: str,
         token: str,
         rpc: t.Optional[str] = None,
         agent_topup: t.Optional[float] = None,
@@ -1386,7 +1423,7 @@ class ServiceManager:
         chain_id: str = "100",
     ) -> None:
         """Fund service if required."""
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -1443,13 +1480,13 @@ class ServiceManager:
 
     async def funding_job(
         self,
-        hash: str,
+        service_config_id: str,
         loop: t.Optional[asyncio.AbstractEventLoop] = None,
         from_safe: bool = True,
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        service = self.load_or_create(hash=hash)
+        service = self.load(service_config_id=service_config_id)
         chain_id = service.home_chain_id
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
@@ -1459,7 +1496,7 @@ class ServiceManager:
                     await loop.run_in_executor(
                         executor,
                         self.fund_service,
-                        hash,  # Service hash
+                        service_config_id,  # Service id
                         PUBLIC_RPCS[ledger_config.chain],  # RPC
                         100000000000000000,  # agent_topup
                         2000000000000000000,  # safe_topup
@@ -1473,14 +1510,14 @@ class ServiceManager:
                     )
                 await asyncio.sleep(60)
 
-    def _set_env_variables(self, hash: str) -> None:
-        self.logger.info(f"_set_env_variables {hash} - not implemented")
+    def _set_env_variables(self, service_config_id: str) -> None:
+        self.logger.info(f"_set_env_variables {service_config_id} - not implemented")
 
     def deploy_service_locally(
         self,
-        hash: str,
+        service_config_id: str,
         force: bool = True,
-        chain_id: str = "100",
+        chain_id: t.Optional[str] = None,
         use_docker: bool = False,
     ) -> Deployment:
         """
@@ -1490,77 +1527,95 @@ class ServiceManager:
         :param force: Remove previous deployment and start a new one.
         :return: Deployment instance
         """
-        self._set_env_variables(hash=hash)
-        deployment = self.load_or_create(hash=hash).deployment
+        self._set_env_variables(service_config_id=service_config_id)
+        service = self.load(service_config_id=service_config_id)
+
+        if not chain_id:
+            chain_id = service.home_chain_id
+
+        deployment = service.deployment
         deployment.build(use_docker=use_docker, force=force, chain_id=chain_id)
         deployment.start(use_docker=use_docker)
         return deployment
 
     def stop_service_locally(
-        self, hash: str, delete: bool = False, use_docker: bool = False
+        self, service_config_id: str, delete: bool = False, use_docker: bool = False
     ) -> Deployment:
         """
         Stop service locally
 
-        :param hash: Service hash
+        :param service_id: Service id
         :param delete: Delete local deployment.
         :return: Deployment instance
         """
-        deployment = self.load_or_create(hash=hash).deployment
+        deployment = self.load(service_config_id=service_config_id).deployment
         deployment.stop(use_docker)
         if delete:
             deployment.delete()
         return deployment
 
-    def update_service(
+    def log_directories(self) -> None:
+        """Log directories."""
+        directories = [f"  - {str(p)}" for p in self.path.iterdir() if p.is_dir()]
+        directories_str = "\n".join(directories)
+        self.logger.info(f"Directories in {self.path}\n: {directories_str}")
+
+    def update(
         self,
-        old_hash: str,
-        new_hash: str,
-        service_template: t.Optional[ServiceTemplate] = None,
+        service_config_id: str,
+        service_template: ServiceTemplate,
+        allow_different_service_public_id: bool = False,
     ) -> Service:
         """Update a service."""
 
-        self.logger.info("-----Entering update local service-----")
-        old_service = self.load_or_create(hash=old_hash)
-        new_service = self.load_or_create(
-            hash=new_hash, service_template=service_template
-        )
-        new_service.keys = old_service.keys
+        self.logger.info(f"Updating {service_config_id=}")
+        service = self.load(service_config_id=service_config_id)
+        service.update(service_template, allow_different_service_public_id)
+        return service
 
-        # TODO Ensure this is as intended.
-        new_service.home_chain_id = old_service.home_chain_id
+    def update_all_matching(
+        self,
+        service_template: ServiceTemplate,
+    ) -> t.List[t.Dict]:
+        """Update all services with service id matching the service id from the template hash."""
 
-        # new_service must copy all chain_data from old_service.
-        # Additionally, if service_template is not None, it must overwrite
-        # the user_params on all chain_data by the values passed through the
-        # service_template.
-        new_service.chain_configs = {}
-        for chain_id, config in old_service.chain_configs.items():
-            new_service.chain_configs[chain_id] = config
-            if service_template:
-                new_service.chain_configs[
-                    chain_id
-                ].chain_data.user_params = OnChainUserParams.from_json(
-                    service_template["configurations"][chain_id]  # type: ignore  # TODO fix mypy
+        self.logger.info("update_all_matching")
+        self.logger.info(f"{service_template['hash']=}")
+        updated_services: t.List[t.Dict] = []
+        for service in self._get_all_services():
+            try:
+                service.update(service_template=service_template)
+                updated_services.append(service.json)
+                self.logger.info(
+                    f"Updated service_config_id={service.service_config_id}"
+                )
+            except ValueError:
+                self.logger.info(
+                    f"Not updated service_config_id={service.service_config_id}"
                 )
 
-        new_service.store()
+        return updated_services
 
-        # The following logging has been added to identify OS issues when
-        # deleting old service folder
-        try:
-            self._log_directories()
-            self.logger.info("Trying to delete old service")
-            old_service.delete()
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.error(
-                f"An error occurred while trying to delete {old_service.path}: {e}"
-            )
-            self.logger.error(traceback.format_exc())
+    def migrate_service_configs(self) -> None:
+        """Migrate old service config formats to new ones, if applies."""
 
-        self._log_directories()
-        return new_service
+        bafybei_count = sum(
+            1 for path in self.path.iterdir() if path.name.startswith("bafybei")
+        )
+        if bafybei_count > 1:
+            self.log_directories()
+            # raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
 
-    def _log_directories(self) -> None:
-        directories = [str(p) for p in self.path.iterdir() if p.is_dir()]
-        self.logger.info(f"Directories in {self.path}: {', '.join(directories)}")
+        paths = list(self.path.iterdir())
+        for path in paths:
+            if path.name.startswith(DELETE_PREFIX):
+                shutil.rmtree(path)
+                self.logger.info(f"Deleted folder: {path.name}")
+
+            if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
+                "bafybei"
+            ):
+                self.logger.info(f"migrate_service_configs {str(path)}")
+                migrated = Service.migrate_format(path)
+                if migrated:
+                    self.logger.info(f"Folder {str(path)} has been migrated.")

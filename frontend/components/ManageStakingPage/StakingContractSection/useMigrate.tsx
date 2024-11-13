@@ -4,9 +4,14 @@ import { useMemo } from 'react';
 import { MiddlewareDeploymentStatus } from '@/client';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
+import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useActiveStakingContractInfo,
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 export enum CantMigrateReason {
@@ -14,6 +19,7 @@ export enum CantMigrateReason {
   LoadingBalance = 'Loading balance...',
   LoadingStakingContractInfo = 'Loading staking contract information...',
   InsufficientOlasToMigrate = 'Insufficient OLAS to switch',
+  InsufficientGasToMigrate = 'Insufficient XDAI to switch', // TODO: make chain agnostic
   MigrationNotSupported = 'Switching to this program is not currently supported',
   NoAvailableRewards = 'This program has no rewards available',
   NoAvailableStakingSlots = 'The program has no more available slots',
@@ -39,21 +45,24 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     isBalanceLoaded,
     masterSafeBalance: safeBalance,
     totalOlasStakedBalance,
+    isLowBalance,
   } = useBalance();
   const { activeStakingProgramId, activeStakingProgramMeta } =
     useStakingProgram();
+  const { needsInitialFunding } = useNeedsFunds();
 
-  const {
-    activeStakingContractInfo,
-    isServiceStaked,
-    isServiceStakedForMinimumDuration,
-    isStakingContractInfoLoaded,
-    stakingContractInfoRecord,
-  } = useStakingContractInfo();
+  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
+    useStakingContractContext();
 
-  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+  const { isServiceStaked, isServiceStakedForMinimumDuration } =
+    useActiveStakingContractInfo();
+
+  const { stakingContractInfo, hasEnoughServiceSlots } =
+    useStakingContractInfo(stakingProgramId);
 
   const { isLoaded: isServicesLoaded } = useServices();
+
+  const { hasEnoughEthForInitialFunding } = useNeedsFunds();
 
   const minimumOlasRequiredToMigrate = useMemo(
     () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgramId), // TODO: refactor, can no longer use service template, must use config for funding requirements
@@ -89,11 +98,25 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
     }
 
+    // Services must be not be running or in a transitional state
+    if (
+      [
+        DeploymentStatus.DEPLOYED,
+        DeploymentStatus.DEPLOYING,
+        DeploymentStatus.STOPPING,
+      ].some((status) => status === serviceStatus)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.PearlCurrentlyRunning,
+      };
+    }
+
     if (!isBalanceLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (isServicesLoaded && !isStakingContractInfoLoaded) {
+    if (!isStakingContractInfoRecordLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
@@ -112,6 +135,16 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return {
         canMigrate: false,
         reason: CantMigrateReason.ContractAlreadySelected,
+      };
+    }
+
+    if (
+      (stakingContractInfo.serviceIds ?? [])?.length >=
+      (stakingContractInfo.maxNumServices ?? 0)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.NoAvailableStakingSlots,
       };
     }
 
@@ -139,6 +172,50 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
+    if (activeStakingProgramId === null && !isServiceStaked) {
+      return { canMigrate: true };
+    }
+
+    // user must be staked from hereon
+
+    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgramId)) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.MigrationNotSupported,
+      };
+    }
+
+    if (stakingContractInfo && !isServiceStakedForMinimumDuration) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.NotStakedForMinimumDuration,
+      };
+    }
+
+    return { canMigrate: true };
+  }, [
+    isServicesLoaded,
+    isBalanceLoaded,
+    isStakingContractInfoRecordLoaded,
+    stakingContractInfo,
+    activeStakingProgramId,
+    stakingProgramId,
+    hasEnoughOlasToMigrate,
+    isServiceStaked,
+    activeStakingProgramMeta?.canMigrateTo,
+    isServiceStakedForMinimumDuration,
+    serviceStatus,
+  ]);
+
+  const firstDeployValidation = useMemo<MigrateValidation>(() => {
+    /**
+     * @todo fix temporary check for xDai balance on first deploy (same as initial funding requirement)
+     */
+
+    if (!isServicesLoaded) {
+      return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
+    }
+
     // Services must be not be running or in a transitional state
     if (
       [
@@ -153,59 +230,37 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
-    if (activeStakingProgramId === null && !isServiceStaked) {
-      return { canMigrate: true };
-    }
-
-    // user must be staked from hereon
-
-    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgramId)) {
-      return {
-        canMigrate: false,
-        reason: CantMigrateReason.MigrationNotSupported,
-      };
-    }
-
-    if (activeStakingContractInfo && !isServiceStakedForMinimumDuration) {
-      return {
-        canMigrate: false,
-        reason: CantMigrateReason.NotStakedForMinimumDuration,
-      };
-    }
-
-    return { canMigrate: true };
-  }, [
-    isServicesLoaded,
-    isBalanceLoaded,
-    isStakingContractInfoLoaded,
-    stakingContractInfo,
-    activeStakingProgramId,
-    stakingProgramId,
-    hasEnoughOlasToMigrate,
-    isServiceStaked,
-    activeStakingProgramMeta?.canMigrateTo,
-    activeStakingContractInfo,
-    isServiceStakedForMinimumDuration,
-    serviceStatus,
-  ]);
-
-  const firstDeployValidation = useMemo<MigrateValidation>(() => {
-    if (!isServicesLoaded) {
-      return { canMigrate: false, reason: CantMigrateReason.LoadingServices };
-    }
-
     if (!isBalanceLoaded) {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (!hasEnoughOlasForFirstRun) {
+    // staking contract requirements
+
+    if (!isStakingContractInfoRecordLoaded) {
       return {
         canMigrate: false,
-        reason: CantMigrateReason.InsufficientOlasToMigrate,
+        reason: CantMigrateReason.LoadingStakingContractInfo,
       };
     }
 
     const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+
+    if (!stakingContractInfo) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.CannotFindStakingContractInfo,
+      };
+    }
+
+    if (
+      (stakingContractInfo.serviceIds ?? [])?.length >=
+      (stakingContractInfo.maxNumServices ?? 0)
+    ) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.NoAvailableStakingSlots,
+      };
+    }
 
     if ((stakingContractInfo?.availableRewards ?? 0) <= 0) {
       return {
@@ -221,17 +276,48 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       };
     }
 
+    if (!hasEnoughOlasForFirstRun) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.InsufficientOlasToMigrate,
+      };
+    }
+
+    if (!hasEnoughEthForInitialFunding) {
+      return {
+        canMigrate: false,
+        reason: CantMigrateReason.InsufficientGasToMigrate,
+      };
+    }
+
     return { canMigrate: true };
   }, [
     isServicesLoaded,
     isBalanceLoaded,
-    hasEnoughOlasForFirstRun,
+    hasEnoughEthForInitialFunding,
+    isStakingContractInfoRecordLoaded,
     stakingContractInfoRecord,
     stakingProgramId,
+    hasEnoughOlasForFirstRun,
+    serviceStatus,
+  ]);
+
+  const canUpdateStakingContract = useMemo(() => {
+    if (!isBalanceLoaded) return false;
+    if (isLowBalance) return false;
+    if (needsInitialFunding) return false;
+    if (!hasEnoughServiceSlots) return false;
+    return true;
+  }, [
+    isBalanceLoaded,
+    isLowBalance,
+    needsInitialFunding,
+    hasEnoughServiceSlots,
   ]);
 
   return {
     migrateValidation,
     firstDeployValidation,
+    canUpdateStakingContract,
   };
 };

@@ -16,6 +16,8 @@ export const useNeedsFunds = () => {
   );
 
   const { storeState } = useStore();
+  const isInitialFunded = storeState?.isInitialFunded;
+
   const {
     isBalanceLoaded,
     masterSafeBalance: safeBalance,
@@ -50,7 +52,6 @@ export const useNeedsFunds = () => {
     serviceFundRequirements?.olas,
   ]);
 
-  const isInitialFunded = storeState?.isInitialFunded;
   const needsInitialFunding: boolean = useMemo(() => {
     if (isInitialFunded) return false;
     if (!isBalanceLoaded) return false;

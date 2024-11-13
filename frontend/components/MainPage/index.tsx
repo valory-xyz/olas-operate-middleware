@@ -8,6 +8,11 @@ import { useBalance } from '@/hooks/useBalance';
 // import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
+import {
+  useStakingContractContext,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 // import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { MainHeader } from './header';
@@ -24,20 +29,40 @@ export const Main = () => {
   const { goto } = usePageState();
   // const { backupSafeAddress } = useMasterSafe();
   const { updateServicesState } = useServices();
-  const { updateBalances, isLoaded, setIsLoaded } = useBalance();
-  // const { activeStakingProgramId: currentStakingProgram } = useStakingProgram();
+  const {
+    updateBalances,
+    isLoaded: isBalanceLoaded,
+    setIsLoaded: setIsBalanceLoaded,
+  } = useBalance();
+  const { activeStakingProgramId, defaultStakingProgramId } =
+    useStakingProgram();
 
+  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+
+  const { hasEnoughServiceSlots } = useStakingContractInfo(
+    activeStakingProgramId ?? defaultStakingProgramId,
+  );
+
+  /**
+   * @todo fix this isLoaded logic
+   */
   useEffect(() => {
-    if (!isLoaded) {
-      setIsLoaded(true);
+    if (!isBalanceLoaded) {
       updateServicesState().then(() => updateBalances());
+      setIsBalanceLoaded(true);
     }
-  }, [isLoaded, setIsLoaded, updateBalances, updateServicesState]);
+  }, [
+    isBalanceLoaded,
+    setIsBalanceLoaded,
+    updateBalances,
+    updateServicesState,
+  ]);
 
-  // const hideMainOlasBalanceTopBorder = [
-  //   !backupSafeAddress,
-  //   currentStakingProgram === StakingProgramId.PearlAlpha,
-  // ].some((condition) => !!condition);
+  const hideMainOlasBalanceTopBorder = [
+    !backupSafeAddress,
+    activeStakingProgramId === StakingProgramId.Alpha,
+    isStakingContractInfoRecordLoaded && !hasEnoughServiceSlots,
+  ].some((condition) => !!condition);
 
   return (
     <Card

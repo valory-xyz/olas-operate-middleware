@@ -3,6 +3,7 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { ChainId } from '@/enums/Chain';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
@@ -11,7 +12,10 @@ import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractInfo } from '@/hooks/useStakingContractInfo';
+import {
+  useActiveStakingContractInfo,
+  useStakingContractInfo,
+} from '@/hooks/useStakingContractInfo';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
 
@@ -40,9 +44,23 @@ export const MigrateButton = ({
   });
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalance();
-  const { updateActiveStakingProgramId: updateStakingProgram } =
-    useStakingProgram();
-  const { activeStakingContractInfo } = useStakingContractInfo();
+  const { updateActiveStakingProgramId } = useStakingProgram();
+
+  const { activeStakingContractInfo, isActiveStakingContractInfoLoaded } =
+    useActiveStakingContractInfo();
+  const { stakingContractInfo: defaultStakingContractInfo } =
+    useStakingContractInfo(defaultStakingProgramId);
+
+  const currentStakingContractInfo = useMemo(() => {
+    if (!isActiveStakingContractInfoLoaded) return;
+    if (activeStakingContractInfo) return activeStakingContractInfo;
+    return defaultStakingContractInfo;
+  }, [
+    activeStakingContractInfo,
+    defaultStakingContractInfo,
+    isActiveStakingContractInfoLoaded,
+  ]);
+
   const { setMigrationModalOpen } = useModals();
 
   const { migrateValidation, firstDeployValidation } = useMigrate(
@@ -64,17 +82,17 @@ export const MigrateButton = ({
 
     if (
       validation.reason === CantMigrateReason.NotStakedForMinimumDuration &&
-      !isNil(activeStakingContractInfo)
+      !isNil(currentStakingContractInfo)
     ) {
       return (
         <CountdownUntilMigration
-          activeStakingContractInfo={activeStakingContractInfo}
+          currentStakingContractInfo={currentStakingContractInfo}
         />
       );
     }
 
     return validation.reason;
-  }, [activeStakingContractInfo, validation]);
+  }, [currentStakingContractInfo, validation]);
 
   return (
     <Popover content={popoverContent}>
@@ -85,19 +103,26 @@ export const MigrateButton = ({
         onClick={async () => {
           setIsServicePollingPaused(true);
           setIsBalancePollingPaused(true);
+          setDefaultStakingProgramId(stakingProgramId);
 
           try {
             setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            // TODO: create type for this response, we need the service_config_id to update the relevant service
-            // eslint-disable-next-line @typescript-eslint/no-unused-vars
-            const createServiceResponse = await ServicesService.createService({
-              stakingProgramId: stakingProgramIdToMigrateTo,
+            // update service
+            await ServicesService.updateService({
+              stakingProgramId,
               serviceTemplate,
+              serviceUuid: serviceTemplate.service_config_id,
               deploy: true,
-              useMechMarketplace: false,
+              useMechMarketplace:
+                stakingProgramId === StakingProgramId.BetaMechMarketplace,
             });
+
+            // start service after updating
+            await ServicesService.startService(
+              serviceTemplate.service_config_id,
+            );
 
             await updateStakingProgram(); // TODO: refactor to support single staking program & multi staking programs, this on longer works
 
