@@ -16,6 +16,7 @@ export type MasterEoa = {
   type: WalletType.EOA;
   owner: WalletOwner;
 };
+
 export type MasterSafe = Omit<MasterEoa, 'type'> & {
   type: WalletType.Safe;
   chainId: ChainId;
@@ -34,3 +35,4 @@ export type AgentSafe = Omit<AgentEoa, 'type'> & {
 
 export type MasterWallets = (MasterEoa | MasterSafe)[];
 export type AgentWallets = (AgentEoa | AgentSafe)[];
+export type Wallets = (MasterEoa | MasterSafe | AgentEoa | AgentSafe)[];
