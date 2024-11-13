@@ -50,9 +50,8 @@ export type Service = {
 };
 
 
-export type ServiceEnvVariable = {
+export type EnvVariableAttributes = {
   name: string;
-  env_variable_name: string;
   description: string;
   value: string;
   provision_type: EnvProvisionType;
@@ -66,7 +65,7 @@ export type ServiceTemplate = {
   service_version: string;
   home_chain_id: string;
   configurations: { [key: string]: ConfigurationTemplate };
-  service_env_variables: { [key: string]: ServiceEnvVariable };
+  env_variables: { [key: string]: EnvVariableAttributes };
   deploy?: boolean;
 };
 

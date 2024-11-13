@@ -38,7 +38,12 @@ from autonomy.chain.base import registry_contracts
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
-from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
+from operate.operate_types import (
+    ChainType,
+    LedgerConfig,
+    ServiceEnvProvisionType,
+    ServiceTemplate,
+)
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -231,6 +236,44 @@ class ServiceManager:
             service.store()
 
         return service
+
+    def _compute_service_env_variables(
+        self, service: Service, staking_params: t.Dict[str, str]
+    ) -> None:
+        """Compute values to override service.yaml variables for the deployment."""
+
+        # TODO A customized, arbitrary computation mechanism should be devised.
+        computed_values = {
+            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[ChainType.ETHEREUM],
+            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[ChainType.GNOSIS],
+            "BASE_LEDGER_RPC": PUBLIC_RPCS[ChainType.BASE],
+            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[ChainType.OPTIMISM],
+            "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+            "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
+            "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+            "MECH_REQUEST_PRICE": "10000000000000000",
+            "USE_MECH_MARKETPLACE": "mech_marketplace"
+            in service.chain_configs[
+                service.home_chain_id
+            ].chain_data.user_params.staking_program_id,
+            "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                "staking_contract"
+            ),
+            "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+        }
+
+        updated = False
+        for env_var, attributes in service.env_variables.items():
+            if (
+                env_var in computed_values
+                and attributes["provision_type"] == ServiceEnvProvisionType.COMPUTED
+                and attributes["value"] != computed_values.get(env_var)
+            ):
+                attributes["value"] = str(computed_values.get(env_var))
+                updated = True
+
+        if updated:
+            service.store()
 
     def _get_on_chain_state(self, service: Service, chain_id: str) -> OnChainState:
         chain_config = service.chain_configs[chain_id]
@@ -531,23 +574,7 @@ class ServiceManager:
                 agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
-        # Override service.yaml variables for the deployment
-        os.environ["STAKING_CONTRACT_ADDRESS"] = staking_params["staking_contract"]
-        os.environ["MECH_ACTIVITY_CHECKER_CONTRACT"] = staking_params[
-            "activity_checker"
-        ]
-        os.environ["MECH_CONTRACT_ADDRESS"] = staking_params["agent_mech"]
-        os.environ["MECH_REQUEST_PRICE"] = "10000000000000000"
-        os.environ["USE_MECH_MARKETPLACE"] = str(
-            chain_data.user_params.use_mech_marketplace
-        )
-        os.environ["REQUESTER_STAKING_INSTANCE_ADDRESS"] = staking_params[
-            "staking_contract"
-        ]
-        os.environ["PRIORITY_MECH_ADDRESS"] = staking_params["agent_mech"]
-        os.environ["ETHEREUM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.ETHEREUM]
-        os.environ["BASE_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.BASE]
-        os.environ["OPTIMISM_LEDGER_RPC"] = PUBLIC_RPCS[ChainType.OPTIMISM]
+        self._compute_service_env_variables(service, staking_params)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
@@ -1572,7 +1599,9 @@ class ServiceManager:
     def migrate_service_configs(self) -> None:
         """Migrate old service config formats to new ones, if applies."""
 
-        bafybei_count = sum(1 for path in self.path.iterdir() if path.name.startswith("bafybei"))
+        bafybei_count = sum(
+            1 for path in self.path.iterdir() if path.name.startswith("bafybei")
+        )
         if bafybei_count > 1:
             self.log_directories()
             # raise RuntimeError(f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support.")
