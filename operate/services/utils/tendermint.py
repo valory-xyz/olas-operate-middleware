@@ -662,7 +662,7 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:
             tendermint_node.stop()
         finally:
             q.put(True)
-            return {"node": "stopped"}
+        return {"node": "stopped"}
 
     app.run(host="localhost", port=8080)
 
