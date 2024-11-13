@@ -14,7 +14,12 @@ import { MiddlewareServiceResponse } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { ChainId } from '@/enums/Chain';
-import { EoaWallet, SafeWallet, WalletOwner, WalletType } from '@/enums/Wallet';
+import {
+  AgentEoa,
+  AgentWallets,
+  WalletOwner,
+  WalletType,
+} from '@/enums/Wallet';
 import { UsePause, usePause } from '@/hooks/usePause';
 import { ServicesService } from '@/service/Services';
 import { Service } from '@/types/Service';
@@ -23,7 +28,7 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
-  serviceAddresses?: (SafeWallet | EoaWallet)[];
+  serviceAddresses?: AgentWallets;
   servicesByChain?: Record<number, MiddlewareServiceResponse[]>;
   selectService: (serviceUuid: string) => void;
   selectedService?: Service;
@@ -96,12 +101,12 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     if (!isFetched) return;
     if (isEmpty(services)) return [];
 
-    return services?.reduce<(SafeWallet | EoaWallet)[]>(
+    return services?.reduce<AgentWallets>(
       (acc, service: MiddlewareServiceResponse) => {
         return [
           ...acc,
           ...Object.keys(service.chain_configs).reduce(
-            (acc: (SafeWallet | EoaWallet)[], chainIdKey: string) => {
+            (acc: AgentWallets, chainIdKey: string) => {
               const chainId = +chainIdKey;
               const chainConfig = service.chain_configs[chainId];
               if (!chainConfig) return acc;
@@ -117,7 +122,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
                         address: instance,
                         type: WalletType.EOA,
                         owner: WalletOwner.Agent,
-                      }) as EoaWallet,
+                      }) as AgentEoa,
                   ),
                 );
               }
