@@ -75,7 +75,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     if (selectedServiceConfigId) return;
     // only select a service by default if services are fetched, but there has been no selection yet
     if (isFetched && services.length > 0 && !selectedServiceConfigId)
-      setSelectedServiceConfigId(services[0].service_config_id); // TODO: use uuid instead of hash once middleware refactored
+      setSelectedServiceConfigId(services[0].service_config_id);
   }, [isFetched, selectedServiceConfigId, services]);
 
   // const serviceAddresses = useMemo(
