@@ -263,14 +263,13 @@ class ServiceManager:
         }
 
         updated = False
-        for var in service.env_variables.values():
-            env_variable_name = var["env_variable_name"]
+        for env_var, attributes in service.env_variables.items():
             if (
-                env_variable_name in computed_values
-                and var["provision_type"] == ServiceEnvProvisionType.COMPUTED
-                and var["value"] != computed_values.get(env_variable_name)
+                env_var in computed_values
+                and attributes["provision_type"] == ServiceEnvProvisionType.COMPUTED
+                and attributes["value"] != computed_values.get(env_var)
             ):
-                var["value"] = str(computed_values.get(env_variable_name))
+                attributes["value"] = str(computed_values.get(env_var))
                 updated = True
 
         if updated:

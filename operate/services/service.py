@@ -82,7 +82,7 @@ from operate.operate_types import (
     OnChainData,
     OnChainState,
     OnChainUserParams,
-    ServiceEnvVariables,
+    EnvVariables,
     ServiceTemplate,
 )
 from operate.resource import LocalResource
@@ -657,7 +657,7 @@ class Service(LocalResource):
     home_chain_id: str
     chain_configs: ChainConfigs
     description: str
-    env_variables: ServiceEnvVariables
+    env_variables: EnvVariables
 
     path: Path
     service_path: Path
@@ -781,8 +781,8 @@ class Service(LocalResource):
 
     def consume_env_variables(self) -> None:
         """Consume environment variables."""
-        for variable in self.env_variables.values():
-            os.environ[variable["env_variable_name"]] = str(variable["value"])
+        for env_var, attributes in self.env_variables.items():
+            os.environ[env_var] = str(attributes["value"])
 
     @classmethod
     def load(cls, path: Path) -> "Service":
