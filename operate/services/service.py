@@ -82,7 +82,7 @@ from operate.operate_types import (
     OnChainData,
     OnChainState,
     OnChainUserParams,
-    ServiceEnvVariables,
+    EnvVariables,
     ServiceTemplate,
 )
 from operate.resource import LocalResource
@@ -428,6 +428,7 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
+            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -656,7 +657,7 @@ class Service(LocalResource):
     home_chain_id: str
     chain_configs: ChainConfigs
     description: str
-    service_env_variables: ServiceEnvVariables
+    env_variables: EnvVariables
 
     path: Path
     service_path: Path
@@ -761,7 +762,7 @@ class Service(LocalResource):
             service_path = Path(data["service_path"])
             if service_path.exists() and service_path.is_dir():
                 shutil.rmtree(service_path)
-            
+
             path = path.rename(new_path)
             service_path = Path(
                 IPFSTool().download(
@@ -780,8 +781,8 @@ class Service(LocalResource):
 
     def consume_env_variables(self) -> None:
         """Consume environment variables."""
-        for variable in self.service_env_variables.values():
-            os.environ[variable["env_variable_name"]] = str(variable["value"])
+        for env_var, attributes in self.env_variables.items():
+            os.environ[env_var] = str(attributes["value"])
 
     @classmethod
     def load(cls, path: Path) -> "Service":
@@ -858,7 +859,7 @@ class Service(LocalResource):
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
-            service_env_variables=service_template["service_env_variables"],
+            env_variables=service_template["env_variables"],
         )
         service.store()
         return service

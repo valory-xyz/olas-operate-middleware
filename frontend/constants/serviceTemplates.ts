@@ -29,80 +29,69 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         },
       },
     },
-    service_env_variables: {
+    env_variables: {
       GNOSIS_LEDGER_RPC: {
         name: "Gnosis ledger RPC",
-        env_variable_name: "GNOSIS_LEDGER_RPC",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       // ETHEREUM_LEDGER_RPC: {
       //   name: "Ethereum ledger RPC",
-      //   env_variable_name: "ETHEREUM_LEDGER_RPC",
       //   description: "",
       //   value: "",
       //   provision_type: EnvProvisionType.COMPUTED
       // },
       // BASE_LEDGER_RPC: {
       //   name: "Base ledger RPC",
-      //   env_variable_name: "BASE_LEDGER_RPC",
       //   description: "",
       //   value: "",
       //   provision_type: EnvProvisionType.COMPUTED
       // },
       // OPTIMISM_LEDGER_RPC: {
       //   name: "Optimism ledger RPC",
-      //   env_variable_name: "OPTIMISM_LEDGER_RPC",
       //   description: "",
       //   value: "",
       //   provision_type: EnvProvisionType.COMPUTED
       // },      
       STAKING_CONTRACT_ADDRESS: {
         name: "Staking contract address",
-        env_variable_name: "STAKING_CONTRACT_ADDRESS",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       MECH_ACTIVITY_CHECKER_CONTRACT: {
         name: "Mech activity checker contract",
-        env_variable_name: "MECH_ACTIVITY_CHECKER_CONTRACT",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       MECH_CONTRACT_ADDRESS: {
         name: "Mech contract address",
-        env_variable_name: "MECH_CONTRACT_ADDRESS",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       MECH_REQUEST_PRICE: {
         name: "Mech request price",
-        env_variable_name: "MECH_REQUEST_PRICE",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       USE_MECH_MARKETPLACE: {
         name: "Use Mech marketplace",
-        env_variable_name: "USE_MECH_MARKETPLACE",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       REQUESTER_STAKING_INSTANCE_ADDRESS: {
         name: "Requester staking instance address",
-        env_variable_name: "REQUESTER_STAKING_INSTANCE_ADDRESS",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
       },
       PRIORITY_MECH_ADDRESS: {
         name: "Priority Mech address",
-        env_variable_name: "PRIORITY_MECH_ADDRESS",
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED

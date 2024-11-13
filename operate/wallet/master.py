@@ -20,9 +20,9 @@
 """Master key implementation"""
 
 import json
+import logging
 import os
 import typing as t
-import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -426,7 +426,7 @@ class EthereumMasterWallet(MasterWallet):
     def load(cls, path: Path) -> "EthereumMasterWallet":
         """Load master wallet."""
         # TODO: This is a complex way to read the 'safes' dictionary.
-        # The reason for that is that wallet.safes[chain_type] would fail 
+        # The reason for that is that wallet.safes[chain_type] would fail
         # (for example in service manager) when passed a ChainType key.
 
         raw_ethereum_wallet = super().load(path)  # type: ignore
@@ -467,7 +467,12 @@ LEDGER_TYPE_TO_WALLET_CLASS = {
 class MasterWalletManager:
     """Master wallet manager."""
 
-    def __init__(self, path: Path, password: t.Optional[str] = None, logger: t.Optional[logging.Logger] = None) -> None:
+    def __init__(
+        self,
+        path: Path,
+        password: t.Optional[str] = None,
+        logger: t.Optional[logging.Logger] = None,
+    ) -> None:
         """Initialize master wallet manager."""
         self.path = path
         self._password = password
