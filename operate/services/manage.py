@@ -38,11 +38,7 @@ from autonomy.chain.base import registry_contracts
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
-from operate.operate_types import (
-    ChainType,
-    LedgerConfig,
-    ServiceTemplate,
-)
+from operate.operate_types import ChainType, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,

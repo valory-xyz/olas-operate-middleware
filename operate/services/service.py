@@ -83,8 +83,8 @@ from operate.operate_types import (
     OnChainData,
     OnChainState,
     OnChainUserParams,
-    ServiceTemplate,
     ServiceEnvProvisionType,
+    ServiceTemplate,
 )
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
