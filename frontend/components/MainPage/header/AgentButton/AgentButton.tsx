@@ -17,13 +17,11 @@ import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
   const { selectedService } = useServices();
-
   const {
     service,
     deploymentStatus: serviceStatus,
     isLoaded,
   } = useService({ serviceConfigId: selectedService?.service_config_id });
-
   const { isEligibleForStaking, isAgentEvicted } = useStakingContractInfo();
 
   return useMemo(() => {
