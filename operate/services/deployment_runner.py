@@ -202,7 +202,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _stop_tendermint(self) -> None:
         """Start tendermint process."""
         try:
-            get(self._get_tm_exit_url())
+            get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
         except Exception:  # pylint: disable=broad-except
             print_exc()
