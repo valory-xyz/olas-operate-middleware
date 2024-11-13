@@ -10,7 +10,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.18.4',
-    home_chain_id: ChainId.Optimism.toString(),
+    home_chain_id: ChainId.Gnosis.toString(),
     configurations: {
       [ChainId.Optimism]: {
         staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
