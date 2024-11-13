@@ -115,7 +115,7 @@ export type AppInfo = {
   };
 };
 
-export type WalletResponse = {
+export type MiddlewareWalletResponse = {
   address: Address;
   safe_chains: MiddlewareChain[];
   ledger_type: MiddlewareLedger;
@@ -123,10 +123,4 @@ export type WalletResponse = {
     [middlewareChainId in (typeof MiddlewareChain)[keyof typeof MiddlewareChain]]: Address;
   };
   safe_nonce: number;
-};
-
-export type Wallet = WalletResponse & {
-  ethBalance?: number;
-  olasBalance?: number;
-  usdcBalance?: number;
 };
