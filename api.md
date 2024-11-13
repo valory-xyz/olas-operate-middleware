@@ -233,7 +233,7 @@ Creates a master wallet for given chain type. If a wallet already exists for a g
 
 ### `POST /api/wallet/safe`
 
-Creates a gnosis safe for given chain type.
+Creates a Gnosis safe for given chain type.
 
 <details>
   <summary>Request</summary>
@@ -249,7 +249,7 @@ Creates a gnosis safe for given chain type.
 <details>
   <summary>Response</summary>
 
-- If gnosis safe creation is successful:
+- If Gnosis safe creation is successful:
 
   ```json
   {
@@ -265,7 +265,7 @@ Creates a gnosis safe for given chain type.
   }
   ```
 
-- If gnosis safe creation is not successful:
+- If Gnosis safe creation is not successful:
 
   ```json
   {
@@ -282,7 +282,7 @@ Creates a gnosis safe for given chain type.
 
 ### `GET /api/v2/services`
 
-Returns the list of existing services (service configurations).
+Returns the list of existing service configurations.
 
 <details>
   <summary>Response</summary>
@@ -290,128 +290,64 @@ Returns the list of existing services (service configurations).
 ```json
 [
   {
-    "hash": "bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-    "keys": [
-      {
-        "ledger": 0,
-        "address": "0x6Db941e0e82feA3c02Ba83B20e3fB5Ea6ee539cf",
-        "private_key": "0x34f58dcc11acec007644e49921fd81b9c8a959f651d6d66a42242a1b2dbaf4be"
-      }
-    ],
-    "ledger_config": {
-      "rpc": "http://localhost:8545",
-      "type": 0,
-      "chain": 2
-    },
-    "chain_data": {
-      "instances": [
-        "0x6Db941e0e82feA3c02Ba83B20e3fB5Ea6ee539cf"
-      ],
-      "token": 380,
-      "multisig": "0x7F3e460Cf596E783ca490791643C0055Fa2034AC",
-      "staked": false,
-      "on_chain_state": 6,
-      "user_params": {
-        "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-        "agent_id": 14,
-        "threshold": 1,
-        "use_staking": false,
-        "cost_of_bond": 10000000000000000,
-        "olas_cost_of_bond": 10000000000000000000,
-        "olas_required_to_stake": 10000000000000000000,
-        "fund_requirements": {
-          "agent": 0.1,
-          "safe": 0.5
-        }
-      }
-    },
-    "path": "/Users/virajpatel/valory/olas-operate-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-    "service_path": "/Users/virajpatel/valory/olas-operate-app/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq/trader_omen_gnosis",
-    "name": "valory/trader_omen_gnosis"
-  }
+    "chain_configs": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
+    "home_chain_id": "100",
+    "keys": [...],
+    "name": "valory/trader_omen_gnosis",
+    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "version": 4
+  },
+  ...
 ]
 ```
 
 </details>
 
 ---
-#### `POST /api/services`
 
-Create a service using the service template
+#### `POST /api/v2/services`
+
+Create a service configuration using a template.
 
 <details>
   <summary>Request</summary>
 
 ```json
-{
-  "name": "Trader Agent",
-  "description": "Trader agent for omen prediction markets",
-  "hash": "bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-  "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-  "configuration": {
-    "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-    "rpc": "http://localhost:8545",
-    "agent_id": 14,
-    "threshold": 1,
-    "use_staking": false,
-    "cost_of_bond": 10000000000000000,
-    "olas_cost_of_bond": 10000000000000000000,
-    "olas_required_to_stake": 10000000000000000000,
-    "fund_requirements": {
-      "agent": 0.1,
-      "safe": 0.5
-    }
+  {
+    "configurations": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
+    "home_chain_id": "100",
+    "name": "valory/trader_omen_gnosis",
+    "service_version": "v0.18.4"
   }
-}
 ```
 
 </details>
-
-Optionally you can add `deploy` parameter and set it to `true` for a full deployment in a single request.
 
 <details>
   <summary>Response</summary>
 
 ```json
 {
-  "hash": "bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-  "keys": [
-    {
-      "ledger": 0,
-      "address": "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0",
-      "private_key": "0x00000000000000000000000000000000000000000000000000000000000000000"
-    }
-  ],
-  "ledger_config": {
-    "rpc": "http: //localhost:8545",
-    "type": 0,
-    "chain": 2
-  },
-  "chain_data": {
-    "instances": [
-      "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0"
-    ],
-    "token": 382,
-    "multisig": "0xf21d8A424e83BBa2588306D1C574FE695AD410b5",
-    "staked": false,
-    "on_chain_state": 4,
-    "user_params": {
-      "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-      "agent_id": 14,
-      "threshold": 1,
-      "use_staking": false,
-      "cost_of_bond": 10000000000000000,
-      "olas_cost_of_bond": 10000000000000000000,
-      "olas_required_to_stake": 10000000000000000000,
-      "fund_requirements": {
-        "agent": 0.1,
-        "safe": 0.5
-      }
-    }
-  },
-  "path": "~/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-  "service_path": "~/.operate/services/bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq/trader_omen_gnosis",
-  "name": "valory/trader_omen_gnosis"
+  "chain_configs": {...},
+  "description": "Trader agent for omen prediction markets",
+  "env_variables": {...},
+  "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+  "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
+  "home_chain_id": "100",
+  "keys": [...],
+  "name": "valory/trader_omen_gnosis",
+  "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+  "version": 4
 }
 ```
 
@@ -421,123 +357,238 @@ Optionally you can add `deploy` parameter and set it to `true` for a full deploy
 
 ### `PUT /api/v2/services`
 
-Update a service
+Update all the service configurations whose Service Public ID match the Service Public ID in the provided hash.
 
 <details>
   <summary>Request</summary>
 
 ```json
-{
-    "old_service_hash": "bafybeiha6dxygx2ntgjxhs6zzymgqk3s5biy3ozeqw6zuhr6yxgjlebfmq",
-    "new_service_hash": "bafybeicxdpkuk5z5zfbkso7v5pywf4v7chxvluyht7dtgalg6dnhl7ejoe",
-}
+  {
+    "configurations": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me",
+    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
+    "home_chain_id": "100",
+    "name": "valory/trader_omen_gnosis",
+    "service_version": "v0.19.0"
+  }
 ```
 
 </details>
 
-Optionally you can add `deploy` parameter and set it to `true` for a full deployment in a single request.
-
 <details>
   <summary>Response</summary>
 
+The response contains an array of the services which have been updated (an empty array if no service matches the Service Public ID in the provided hash).
+
 ```json
-{
-  "hash": "bafybeicxdpkuk5z5zfbkso7v5pywf4v7chxvluyht7dtgalg6dnhl7ejoe",
-  "keys": [
-    {
-      "ledger": 0,
-      "address": "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0",
-      "private_key": "0x00000000000000000000000000000000000000000000000000000000000000000"
-    }
-  ],
-  "ledger_config": {
-    "rpc": "http: //localhost:8545",
-    "type": 0,
-    "chain": 2
+[
+  {
+    "chain_configs": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u", "1731490000": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me"},
+    "home_chain_id": "100",
+    "keys": [...],
+    "name": "valory/trader_omen_gnosis",
+    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "version": 4
   },
-  "chain_data": {
-    "instances": [
-      "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0"
-    ],
-    "token": 382,
-    "multisig": "0xf21d8A424e83BBa2588306D1C574FE695AD410b5",
-    "staked": false,
-    "on_chain_state": 4,
-    "user_params": {
-      "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-      "agent_id": 14,
-      "threshold": 1,
-      "use_staking": false,
-      "cost_of_bond": 10000000000000000,
-      "olas_cost_of_bond": 10000000000000000000,
-      "olas_required_to_stake": 10000000000000000000,
-      "fund_requirements": {
-        "agent": 0.1,
-        "safe": 0.5
-      }
-    }
-  },
-  "path": "~/.operate/services/bafybeicxdpkuk5z5zfbkso7v5pywf4v7chxvluyht7dtgalg6dnhl7ejoe",
-  "service_path": "~/.operate/services/bafybeicxdpkuk5z5zfbkso7v5pywf4v7chxvluyht7dtgalg6dnhl7ejoe/trader_omen_gnosis",
-  "name": "valory/trader_omen_gnosis"
-}
+  ...
+]
 ```
 
 </details>
 
 ---
 
-### `GET /api/v2/services/{service}`
+#### `POST /api/v2/services/stop` (alias `GET /stop_all_services`)
+
+Stop all running deployments.
 
 <details>
   <summary>Response</summary>
 
+- If the operation was successful:
+  
+  ```json
+  {
+    "message": "Services stopped."
+  }
+  ```
+
+- If the operation was not successful:
+
+  ```json
+  {
+    "error": "Error message",
+    "traceback": "Traceback message"
+  }
+  ```
+
+</details>
+
+---
+
+## Service
+
+### `GET /api/v2/service/{service_config_id}`
+
+Returns the service configuration `service_config_id`.
+
+<details>
+  <summary>Response</summary>
+
+- If service configuration `service_config_id` exists:
+
+  ```json
+  {
+    "chain_configs": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
+    "home_chain_id": "100",
+    "keys": [...],
+    "name": "valory/trader_omen_gnosis",
+    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "version": 4
+  }
+
+  ```
+
+- If service configuration `service_config_id` does not exist:
+  
+  ```json
+  {
+    "error": "Service foo not found"
+  }
+  ```
+
+</details>
+
+---
+
+### `POST /api/v2/service/{service_config_id}`
+
+Deploy service with service configuration `service_config_id` on-chain and run local deployment. This endpoint executes the following tasks:
+
+1. Stops any running service.
+2. Ensures that the service is deployed on-chain on all the configured chains.
+3. Ensures that the the service is staked on all the configured chains.
+4. Runs the service locally.
+5. Starts funding job.
+6. Starts healthcheck job.
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+The response contains the updated service configuration following the on-chain operations, including service Gnosis safe, on-chain token, etc.
+
 ```json
 {
-  "hash": "{service}",
-  "keys": [
-    {
-      "ledger": 0,
-      "address": "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0",
-      "private_key": "0x00000000000000000000000000000000000000000000000000000000000000000"
-    }
-  ],
-  "ledger_config": {
-    "rpc": "http: //localhost:8545",
-    "type": 0,
-    "chain": 2
-  },
-  "chain_data": {
-    "instances": [
-      "0x10EB940024913dfCAE95D21E04Ba662cdfB79fF0"
-    ],
-    "token": 382,
-    "multisig": "0xf21d8A424e83BBa2588306D1C574FE695AD410b5",
-    "staked": false,
-    "on_chain_state": 4,
-    "user_params": {
-      "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-      "agent_id": 14,
-      "threshold": 1,
-      "use_staking": false,
-      "cost_of_bond": 10000000000000000,
-      "olas_cost_of_bond": 10000000000000000000,
-      "olas_required_to_stake": 10000000000000000000,
-      "fund_requirements": {
-        "agent": 0.1,
-        "safe": 0.5
-      }
-    }
-  },
-  "path": "~/.operate/services/{service}",
-  "service_path": "~/.operate/services/{service}/trader_omen_gnosis",
-  "name": "valory/trader_omen_gnosis"
+  "chain_configs": {...},
+  "description": "Trader agent for omen prediction markets",
+  "env_variables": {...},
+  "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+  "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
+  "home_chain_id": "100",
+  "keys": [...],
+  "name": "valory/trader_omen_gnosis",
+  "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
 }
+
 ```
 
 </details>
 
 ---
+
+### `PUT /api/v2/service/{service_config_id}`
+
+Update service configuration `service_config_id` with the provided template.
+
+<details>
+  <summary>Request</summary>
+
+```json
+  {
+    "configurations": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me",
+    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
+    "home_chain_id": "100",
+    "name": "valory/trader_omen_gnosis",
+    "service_version": "v0.19.0"
+  }
+```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+- If the update is successful, the response contains the updated service configuration:
+
+  ```json
+  {
+    "chain_configs": {...},
+    "description": "Trader agent for omen prediction markets",
+    "env_variables": {...},
+    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
+    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u", "1731490000": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me"},
+    "home_chain_id": "100",
+    "keys": [...],
+    "name": "valory/trader_omen_gnosis",
+    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
+    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+  }
+
+  ```
+
+- If the update is not successful:
+
+  ```json
+  {
+    "error": "Error message",
+    "traceback": "Traceback message"
+  }
+  ```
+
+</details>
+
+---
+
+### `POST /api/service/{service_config_id}/stop`
+
+Stop service with service configuration `service_configuration_id`.
+
+<details>
+  <summary>Response</summary>
+
+```json
+  {
+    "nodes": {
+      "agent": [],
+      "tendermint": []
+    },
+    "status": 1
+  }
+```
+
+</details>
+
+---
+
+## Unused endpoints
 
 ### `POST /api/services/{service}/onchain/deploy`
 
@@ -711,5 +762,3 @@ Delete local deployment
 </details>
 
 -->
-
-
