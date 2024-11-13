@@ -303,12 +303,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
 
+    @app.post("/api/v2/services/stop")
     @app.get("/stop_all_services")
     async def _stop_all_services(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
-        logger.info("Stopping services on demand...")
-        pause_all_services()
-        logger.info("Stopping services on demand done.")
+
+        # No authentication required to stop services.
+
+        try:
+            logger.info("Stopping services on demand...")
+            pause_all_services()
+            logger.info("Stopping services on demand done.")
+            return JSONResponse(content={"message": "Services stopped."})
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=500,
+            )
 
     @app.get("/api")
     @with_retries
@@ -732,8 +743,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _stop_service_locally(request: Request) -> JSONResponse:
         """Stop a service deployment."""
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
+        
+        # No authentication required to stop services.
 
         service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
