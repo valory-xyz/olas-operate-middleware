@@ -9,6 +9,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
 import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
@@ -24,19 +25,23 @@ import { CantMigrateReason, useMigrate } from './useMigrate';
 type MigrateButtonProps = {
   stakingProgramId: StakingProgramId;
 };
-export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
+export const MigrateButton = ({
+  stakingProgramId: stakingProgramIdToMigrateTo,
+}: MigrateButtonProps) => {
   const { goto } = usePageState();
   const { serviceTemplate } = useServiceTemplates();
   const {
-    setIsServicePollingPaused,
-    setServiceStatus,
-    updateServiceStatus,
-    hasInitialLoaded: isServicesLoaded,
-    service,
+    setPaused: setIsServicePollingPaused,
+    isLoaded: isServicesLoaded,
+    selectedService,
   } = useServices();
 
-  const { defaultStakingProgramId, setDefaultStakingProgramId } =
-    useStakingProgram();
+  const { setDeploymentStatus } = useService({
+    serviceConfigId:
+      isServicesLoaded && selectedService
+        ? selectedService.service_config_id
+        : '',
+  });
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalance();
   const { updateActiveStakingProgramId } = useStakingProgram();
@@ -58,15 +63,17 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
 
   const { setMigrationModalOpen } = useModals();
 
-  const { migrateValidation, firstDeployValidation } =
-    useMigrate(stakingProgramId);
+  const { migrateValidation, firstDeployValidation } = useMigrate(
+    stakingProgramIdToMigrateTo,
+  );
 
   // if false, user is migrating, not running for first time
   const isFirstDeploy = useMemo(() => {
     if (!isServicesLoaded) return false;
-    if (service) return false;
+    if (selectedService) return false;
+
     return true;
-  }, [isServicesLoaded, service]);
+  }, [isServicesLoaded, selectedService]);
 
   const validation = isFirstDeploy ? firstDeployValidation : migrateValidation;
 
@@ -99,7 +106,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
           setDefaultStakingProgramId(stakingProgramId);
 
           try {
-            setServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
+            setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
             // update service
@@ -117,7 +124,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
               serviceTemplate.service_config_id,
             );
 
-            await updateActiveStakingProgramId();
+            await updateStakingProgram(); // TODO: refactor to support single staking program & multi staking programs, this on longer works
 
             setMigrationModalOpen(true);
           } catch (error) {
@@ -125,7 +132,7 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
           } finally {
             setIsServicePollingPaused(false);
             setIsBalancePollingPaused(false);
-            updateServiceStatus();
+            // updateServiceStatus(); // TODO: update service status
           }
         }}
       >

@@ -44,16 +44,15 @@ export type ChainData = {
 };
 
 export type MiddlewareServiceResponse = {
-  description: string;
+  service_config_id: string; // TODO: update with uuid once middleware integrated
+  name: string;
   hash: string;
   hash_history: {
     [block: string]: string;
   };
   home_chain_id: number;
   keys: ServiceKeys[];
-  name: string;
   service_path?: string;
-  service_config_id: string;
   version: string;
   chain_configs: {
     [chainId: number]: {

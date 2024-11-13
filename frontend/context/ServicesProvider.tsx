@@ -41,7 +41,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const { paused, setPaused, togglePaused } = usePause();
 
   // user selected service identifier
-  const [selectedServiceUuid, setSelectedServiceUuid] = useState<string>();
+  const [selectedServiceConfigId, setSelectedServiceConfigId] =
+    useState<string>();
 
   const {
     data: services,
@@ -51,7 +52,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     isFetching,
     refetch,
   } = useQuery<MiddlewareServiceResponse[]>({
-    queryKey: REACT_QUERY_KEYS.SERVICES,
+    queryKey: REACT_QUERY_KEYS.SERVICES_KEY,
     queryFn: ServicesService.getServices,
     enabled: isOnline && !paused,
     refetchInterval: FIVE_SECONDS_INTERVAL,
@@ -65,13 +66,19 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   }, [selectedServiceUuid, services]);
 
   const selectService = useCallback((serviceUuid: string) => {
-    setSelectedServiceUuid(serviceUuid);
+    setSelectedServiceConfigId(serviceUuid);
   }, []);
 
+  /**
+   * Select the first service by default
+   */
   useEffect(() => {
     if (!services) return;
-    setSelectedServiceUuid(services[0]?.service_config_id);
-  }, [services]);
+    if (selectedServiceConfigId) return;
+    // only select a service by default if services are fetched, but there has been no selection yet
+    if (isFetched && services.length > 0 && !selectedServiceConfigId)
+      setSelectedServiceConfigId(services[0].service_config_id);
+  }, [isFetched, selectedServiceConfigId, services]);
 
   // const serviceAddresses = useMemo(
   //   () =>

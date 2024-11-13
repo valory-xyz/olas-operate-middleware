@@ -58,10 +58,6 @@ export const Main = () => {
     updateServicesState,
   ]);
 
-  /**
-   * @todo rename, unclear why this is needed
-   * assuming only relevant when alerts not visible
-   */
   const hideMainOlasBalanceTopBorder = [
     !backupSafeAddress,
     activeStakingProgramId === StakingProgramId.Alpha,
