@@ -36,7 +36,7 @@ export const Main = () => {
 
   // const hideMainOlasBalanceTopBorder = [
   //   !backupSafeAddress,
-  //   currentStakingProgram === StakingProgramId.Alpha,
+  //   currentStakingProgram === StakingProgramId.PearlAlpha,
   // ].some((condition) => !!condition);
 
   return (
