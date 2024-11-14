@@ -625,7 +625,7 @@ process.on('uncaughtException', (error) => {
   });
 });
 
-['SIGINT', 'SIGTERM'].forEach((signal) => {
+['SIGINT', 'SIGTERM', 'SIGKILL'].forEach((signal) => {
   process.on(signal, () => {
     logger.electron(`Received ${signal}. Cleaning up...`);
     beforeQuit().then(() => {
