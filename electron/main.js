@@ -410,9 +410,7 @@ async function launchNextApp() {
   const handle = prodNextApp.getRequestHandler();
 
   logger.electron('Creating Next App Server');
-  const server = http.createServer(async (req, res) => {
-    await handle(req, res); // Handle requests using the Next.js request handler
-  });
+  const server = http.createServer((req, res) => handle(req, res));
 
   logger.electron('Listening on Next App Server');
   server.listen(portConfig.ports.prod.next, () => {
