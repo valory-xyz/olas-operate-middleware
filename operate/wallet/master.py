@@ -573,6 +573,9 @@ class MasterWalletManager:
         print(self.path)
 
         for ledger_type in LedgerType:
+            if not self.exists(ledger_type=ledger_type):
+                continue
+
             wallet_class = LEDGER_TYPE_TO_WALLET_CLASS.get(ledger_type)
             if wallet_class is None:
                 continue
