@@ -1581,14 +1581,26 @@ class ServiceManager:
 
         paths = list(self.path.iterdir())
         for path in paths:
-            if path.name.startswith(DELETE_PREFIX):
-                shutil.rmtree(path)
-                self.logger.info(f"Deleted folder: {path.name}")
+            try:
+                if path.name.startswith(DELETE_PREFIX):
+                    shutil.rmtree(path)
+                    self.logger.info(f"Deleted folder: {path.name}")
 
-            if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
-                "bafybei"
-            ):
-                self.logger.info(f"migrate_service_configs {str(path)}")
-                migrated = Service.migrate_format(path)
-                if migrated:
-                    self.logger.info(f"Folder {str(path)} has been migrated.")
+                if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
+                    "bafybei"
+                ):
+                    self.logger.info(f"migrate_service_configs {str(path)}")
+                    migrated = Service.migrate_format(path)
+                    if migrated:
+                        self.logger.info(f"Folder {str(path)} has been migrated.")
+            except Exception:  # pylint: disable=broad-except
+                self.logger.error(
+                    f"Failed to migrate service: {path.name}. Exception: {traceback.format_exc()}"
+                )
+                # rename the invalid path
+                timestamp = int(time.time())
+                invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
+                os.rename(path, invalid_path)
+                self.logger.info(
+                    f"Renamed invalid service: {path.name} to {invalid_path.name}"
+                )
