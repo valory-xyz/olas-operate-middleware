@@ -51,7 +51,7 @@ export const BalanceContext = createContext<{
   totalEthBalance?: number;
   totalOlasBalance?: number;
   isLowBalance: boolean;
-  wallets?: Wallets[];
+  wallets?: Wallets;
   walletBalances: WalletAddressNumberRecord;
   agentSafeBalance?: ValueOf<WalletAddressNumberRecord>;
   agentEoaBalance?: ValueOf<WalletAddressNumberRecord>;
