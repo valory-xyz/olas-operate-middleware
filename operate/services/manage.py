@@ -110,9 +110,9 @@ class ServiceManager:
                 raise e
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.error(
-                    f"Failed to load service: {path.name}. Exception: {traceback.format_exc()}"
+                    f"Failed to load service: {path.name}. Exception {e}: {traceback.format_exc()}"
                 )
-                # rename the invalid path
+                # Rename the invalid path
                 timestamp = int(time.time())
                 invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
                 os.rename(path, invalid_path)
@@ -1597,11 +1597,11 @@ class ServiceManager:
                     migrated = Service.migrate_format(path)
                     if migrated:
                         self.logger.info(f"Folder {str(path)} has been migrated.")
-            except Exception:  # pylint: disable=broad-except
+            except Exception as e:  # pylint: disable=broad-except
                 self.logger.error(
-                    f"Failed to migrate service: {path.name}. Exception: {traceback.format_exc()}"
+                    f"Failed to migrate service: {path.name}. Exception {e}: {traceback.format_exc()}"
                 )
-                # rename the invalid path
+                # Rename the invalid path
                 timestamp = int(time.time())
                 invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
                 os.rename(path, invalid_path)

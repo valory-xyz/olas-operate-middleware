@@ -23,7 +23,6 @@ import enum
 import os
 import typing as t
 from dataclasses import dataclass
-from types import MethodType
 
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
