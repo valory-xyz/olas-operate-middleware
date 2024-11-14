@@ -1,73 +1,75 @@
-import {
-  createContext,
-  PropsWithChildren,
-  useCallback,
-  useContext,
-  useState,
-} from 'react';
-import { useInterval } from 'usehooks-ts';
+import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
+import { createContext, PropsWithChildren, useContext, useState } from 'react';
 
-import { MiddlewareChain, Wallet } from '@/client';
+import { MiddlewareWalletResponse } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
+import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import {
+  MasterEoa,
+  MasterSafe,
+  MasterWallets,
+  WalletOwner,
+  WalletType,
+} from '@/enums/Wallet';
+import { UsePause } from '@/hooks/usePause';
 import { WalletService } from '@/service/Wallet';
-import { Address } from '@/types/Address';
+import { convertMiddlewareChainToChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
-export const WalletContext = createContext<{
-  masterEoaAddress?: Address;
-  masterSafeAddress?: Address;
-  masterSafeAddresses?: Record<MiddlewareChain, Address>;
-  wallets?: Wallet[];
-  updateWallets: () => Promise<void>;
-  masterSafeAddressKeyExistsForChain: (
-    middlewareChain: MiddlewareChain,
-  ) => boolean;
-}>({
-  masterEoaAddress: undefined,
-  masterSafeAddress: undefined,
+type WalletContextType = {
+  wallets?: (MasterEoa | MasterSafe)[];
+} & Partial<QueryObserverBaseResult<(MasterEoa | MasterSafe)[]>> &
+  UsePause;
+
+export const WalletContext = createContext<WalletContextType>({
   wallets: undefined,
-  updateWallets: async () => {},
-  masterSafeAddressKeyExistsForChain: () => false,
+  paused: false,
+  setPaused: () => {},
+  togglePaused: () => {},
 });
+
+const transformMiddlewareWalletResponse = (
+  data: MiddlewareWalletResponse,
+): MasterWallets => {
+  const masterEoa: MasterEoa = {
+    address: data.address,
+    owner: WalletOwner.Master,
+    type: WalletType.EOA,
+  };
+
+  const masterSafes: MasterSafe[] = Object.entries(data.safes).map(
+    ([middlewareChain, address]) => ({
+      address,
+      chainId: convertMiddlewareChainToChainId(+middlewareChain),
+      owner: WalletOwner.Master,
+      type: WalletType.Safe,
+    }),
+  );
+
+  return [masterEoa, ...masterSafes];
+};
 
 export const WalletProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
 
-  const [wallets, setWallets] = useState<Wallet[]>();
+  const [paused, setPaused] = useState(false);
 
-  const masterEoaAddress: Address | undefined = wallets?.[0]?.address;
-  const masterSafeAddress: Address | undefined =
-    wallets?.[0]?.safes[MiddlewareChain.OPTIMISM];
-
-  const masterSafeAddresses = wallets?.[0]?.safes;
-
-  const masterSafeAddressKeyExistsForChain = useCallback(
-    (middlewareChain: MiddlewareChain) =>
-      !!wallets?.[0]?.safes[middlewareChain],
-    [wallets],
-  );
-
-  const updateWallets = async () => {
-    try {
-      const wallets = await WalletService.getWallets();
-      setWallets(wallets);
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  useInterval(updateWallets, isOnline ? FIVE_SECONDS_INTERVAL : null);
+  const { data: wallets, refetch } = useQuery({
+    queryKey: REACT_QUERY_KEYS.WALLETS_KEY,
+    queryFn: WalletService.getWallets,
+    refetchInterval: isOnline && !paused ? FIVE_SECONDS_INTERVAL : false,
+    select: (data) => transformMiddlewareWalletResponse(data),
+  });
 
   return (
     <WalletContext.Provider
       value={{
-        masterEoaAddress,
-        masterSafeAddress,
-        masterSafeAddresses,
         wallets,
-        updateWallets,
-        masterSafeAddressKeyExistsForChain,
+        setPaused,
+        paused,
+        togglePaused: () => setPaused((prev) => !prev),
+        refetch,
       }}
     >
       {children}

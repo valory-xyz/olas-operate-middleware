@@ -1,4 +1,3 @@
-// TODO: large refactor needed, provider is way too big, needs to support multiple chains, multiple services, and multiple tokens
 import { message } from 'antd';
 import { isAddress } from 'ethers/lib/utils';
 import { isNil, isNumber } from 'lodash';
@@ -15,7 +14,7 @@ import {
 } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { Wallet } from '@/client';
+import { MiddlewareWalletResponse } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { TOKEN_CONFIG } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
@@ -26,6 +25,8 @@ import {
 import { ChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
+import { Wallets } from '@/enums/Wallet';
+import { useServices } from '@/hooks/useServices';
 import { StakedAgentService } from '@/service/agents/StakedAgentService';
 import { EthersService } from '@/service/Ethers';
 import MulticallService from '@/service/Multicall';
@@ -37,7 +38,6 @@ import {
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { RewardContext } from './RewardProvider';
-import { ServicesContext } from './ServicesProvider';
 import { WalletContext } from './WalletProvider';
 
 export const BalanceContext = createContext<{
@@ -51,16 +51,13 @@ export const BalanceContext = createContext<{
   totalEthBalance?: number;
   totalOlasBalance?: number;
   isLowBalance: boolean;
-  wallets?: Wallet[];
+  wallets?: Wallets;
   walletBalances: WalletAddressNumberRecord;
   agentSafeBalance?: ValueOf<WalletAddressNumberRecord>;
   agentEoaBalance?: ValueOf<WalletAddressNumberRecord>;
   updateBalances: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
   totalOlasStakedBalance?: number;
-  baseBalance?: number;
-  ethereumBalance?: number;
-  optimismBalance?: number;
 }>({
   isLoaded: false,
   setIsLoaded: () => {},
@@ -86,9 +83,8 @@ export const BalanceContext = createContext<{
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { wallets, masterEoaAddress, masterSafeAddress } =
-    useContext(WalletContext);
-  const { services } = useContext(ServicesContext);
+  const { wallets } = useContext(WalletContext);
+  const { services, serviceAddresses } = useServices();
   const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
     useContext(RewardContext);
 
@@ -348,7 +344,7 @@ export const getOlasBalances = async (
 };
 
 export const getWalletAddresses = (
-  wallets: Wallet[],
+  wallets: MiddlewareWalletResponse[],
   serviceAddresses: Address[],
 ): Address[] => {
   const walletsToCheck: Address[] = [];

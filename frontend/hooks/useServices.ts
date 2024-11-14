@@ -1,9 +1,8 @@
-import { useContext, useMemo } from 'react';
-import { useContext, useMemo } from 'react';
+import { useContext } from 'react';
 
-import { MiddlewareServiceResponse } from '@/client';
 import { ServicesContext } from '@/context/ServicesProvider';
-import { ChainId } from '@/enums/Chain';
+
+export const useServices = () => useContext(ServicesContext);
 
 // const checkServiceIsFundedOnChain = async ({
 //   service,
@@ -78,45 +77,3 @@ import { ChainId } from '@/enums/Chain';
 
 //   return Object.values(fundRequirements).every((f) => f);
 // };
-
-export const useServices = () => {
-  const {
-    services,
-    isFetched: isLoaded,
-    paused,
-    setPaused: setPaused,
-    selectedService,
-    selectService,
-    refetch,
-  } = useContext(ServicesContext);
-
-  const servicesByChain = useMemo(() => {
-    if (!isLoaded) return;
-    if (!services) return;
-    return Object.keys(ChainId).reduce(
-      (
-        acc: Record<number, MiddlewareServiceResponse[]>,
-        chainIdKey: string,
-      ) => {
-        const chainIdNumber = +chainIdKey;
-        acc[chainIdNumber] = services.filter(
-          (service: MiddlewareServiceResponse) =>
-            service.chain_configs[chainIdNumber],
-        );
-        return acc;
-      },
-      {},
-    );
-  }, [isLoaded, services]);
-
-  return {
-    services,
-    servicesByChain,
-    isLoaded,
-    setPaused,
-    paused,
-    selectedService,
-    selectService,
-    refetch,
-  };
-};

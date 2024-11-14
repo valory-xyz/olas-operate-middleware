@@ -30,7 +30,7 @@ export const AgentNotRunningButton = () => {
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
-    isLoaded,
+    isFetched: isLoaded,
     refetch: updateServicesState,
   } = useServices();
 
@@ -217,7 +217,12 @@ export const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
+    isStakingContractInfoRecordLoaded,
     deploymentStatus,
+    isLowBalance,
+    requiredOlas,
+    hasEnoughServiceSlots,
+    isServiceStaked,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,

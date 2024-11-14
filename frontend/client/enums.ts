@@ -38,7 +38,7 @@ export enum MiddlewareAccountIsSetup {
 }
 
 export enum EnvProvisionType {
-  FIXED = "fixed",
-  USER = "user",
-  COMPUTED = "computed"
+  FIXED = 'fixed',
+  USER = 'user',
+  COMPUTED = 'computed',
 }

@@ -1,5 +1,5 @@
 import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
-import { noop } from 'lodash';
+import { isEmpty, noop } from 'lodash';
 import {
   createContext,
   PropsWithChildren,
@@ -13,6 +13,13 @@ import {
 import { MiddlewareServiceResponse } from '@/client';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { ChainId } from '@/enums/Chain';
+import {
+  AgentEoa,
+  AgentWallets,
+  WalletOwner,
+  WalletType,
+} from '@/enums/Wallet';
 import { UsePause, usePause } from '@/hooks/usePause';
 import { ServicesService } from '@/service/Services';
 import { Service } from '@/types/Service';
@@ -21,6 +28,8 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
+  serviceAddresses?: AgentWallets;
+  servicesByChain?: Record<number, MiddlewareServiceResponse[]>;
   selectService: (serviceUuid: string) => void;
   selectedService?: Service;
 } & Partial<QueryObserverBaseResult<MiddlewareServiceResponse[]>> &
@@ -61,13 +70,81 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
     return services.find(
-      (service) => service.service_config_id === selectedServiceUuid,
+      (service) => service.service_config_id === selectedServiceConfigId,
     );
-  }, [selectedServiceUuid, services]);
+  }, [selectedServiceConfigId, services]);
 
   const selectService = useCallback((serviceUuid: string) => {
     setSelectedServiceConfigId(serviceUuid);
   }, []);
+
+  const servicesByChain = useMemo(() => {
+    if (!isFetched) return;
+    if (!services) return;
+    return Object.keys(ChainId).reduce(
+      (
+        acc: Record<number, MiddlewareServiceResponse[]>,
+        chainIdKey: string,
+      ) => {
+        const chainIdNumber = +chainIdKey;
+        acc[chainIdNumber] = services.filter(
+          (service: MiddlewareServiceResponse) =>
+            service.chain_configs[chainIdNumber],
+        );
+        return acc;
+      },
+      {},
+    );
+  }, [isFetched, services]);
+
+  const serviceAddresses = useMemo(() => {
+    if (!isFetched) return;
+    if (isEmpty(services)) return [];
+
+    return services?.reduce<AgentWallets>(
+      (acc, service: MiddlewareServiceResponse) => {
+        return [
+          ...acc,
+          ...Object.keys(service.chain_configs).reduce(
+            (acc: AgentWallets, chainIdKey: string) => {
+              const chainId = +chainIdKey;
+              const chainConfig = service.chain_configs[chainId];
+              if (!chainConfig) return acc;
+
+              const instances = chainConfig.chain_data.instances;
+              const multisig = chainConfig.chain_data.multisig;
+
+              if (instances) {
+                acc.push(
+                  ...instances.map(
+                    (instance: string) =>
+                      ({
+                        address: instance,
+                        type: WalletType.EOA,
+                        owner: WalletOwner.Agent,
+                      }),
+                  ),
+                );
+              }
+
+              if (multisig) {
+                acc.push({
+                  address: multisig,
+                  type: WalletType.Safe,
+                  owner: WalletOwner.Agent,
+                  chainId,
+                });
+              }
+
+              return acc;
+            },
+            [],
+          ),
+        ];
+      },
+      [],
+    );
+  }, [isFetched, services]);
 
   /**
    * Select the first service by default
@@ -80,59 +157,18 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       setSelectedServiceConfigId(services[0].service_config_id);
   }, [isFetched, selectedServiceConfigId, services]);
 
-  // const serviceAddresses = useMemo(
-  //   () =>
-  //     services?.reduce<Address[]>((acc, service: MiddlewareServiceResponse) => {
-  //       const instances =
-  //         service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.instances;
-  //       if (instances) {
-  //         acc.push(...instances);
-  //       }
-
-  //       const multisig =
-  //         service.chain_configs[CHAINS.OPTIMISM.chainId].chain_data.multisig;
-  //       if (multisig) {
-  //         acc.push(multisig);
-  //       }
-  //       return acc;
-  //     }, []),
-  //   [services],
-  // );
-
-  // const updateServicesState = useCallback(
-  //   async (): Promise<void> =>
-  //     ServicesService.getServices()
-  //       .then((data: MiddlewareServiceResponse[]) => {
-  //         if (!Array.isArray(data)) return;
-  //         setServices(data);
-  //         setHasInitialLoaded(true);
-  //       })
-  //       .catch((e) => {
-  //         console.error(e);
-  //         // message.error(e.message); Commented out to avoid showing error message; need to handle "isAuthenticated" in a better way
-  //       }),
-  //   [],
-  // );
-
   // const updateServiceStatus = useCallback(async () => {
   //   if (!services?.[0]) return;
   //   const serviceStatus = await ServicesService.getDeployment(services[0].service_config_id);
   //   setServiceStatuses(serviceStatus.status);
   // }, [services]);
 
-  // Update service state
-  // useInterval(
-  //   () =>
-  //     updateServicesState()
-  //       .then(() => updateServiceStatus())
-  //       .catch((e) => message.error(e.message)),
-  //   isOnline && !isPaused ? FIVE_SECONDS_INTERVAL : null,
-  // );
-
   return (
     <ServicesContext.Provider
       value={{
         services,
+        serviceAddresses,
+        servicesByChain,
         isError,
         isFetched,
         isLoading,

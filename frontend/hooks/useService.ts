@@ -22,7 +22,7 @@ export const useService = ({
 }: {
   serviceConfigId?: string;
 }) => {
-  const { services, isLoaded } = useServices();
+  const { services, isFetched: isLoaded } = useServices();
   const queryClient = useQueryClient();
 
   const service = useMemo(() => {

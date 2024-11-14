@@ -3,7 +3,6 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
-import { ChainId } from '@/enums/Chain';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
@@ -32,7 +31,7 @@ export const MigrateButton = ({
   const { serviceTemplate } = useServiceTemplates();
   const {
     setPaused: setIsServicePollingPaused,
-    isLoaded: isServicesLoaded,
+    isFetched: isServicesLoaded,
     selectedService,
   } = useServices();
 
