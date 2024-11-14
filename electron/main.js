@@ -50,7 +50,11 @@ const binaryPaths = {
   },
 };
 
-let appConfig = {
+/**
+ * @note - The port configuration is used to manage the ports used by the application.
+ * @note - Ports are overwritten if they are already in use.
+ */
+let portConfig = {
   ports: {
     dev: {
       operate: 8000,
@@ -101,9 +105,10 @@ async function beforeQuit() {
   if (operateDaemon || operateDaemonPid) {
     // gracefully stop running services
     try {
-      await fetch(
-        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
-      );
+      const operatePort = isDev
+        ? portConfig.ports.dev.operate
+        : portConfig.ports.prod.operate;
+      await fetch(`http://localhost:${operatePort}/stop_all_services`);
     } catch (e) {
       logger.electron("Couldn't stop_all_services gracefully:");
       logger.electron(JSON.stringify(e));
@@ -280,16 +285,16 @@ const createMainWindow = async () => {
   }
 
   if (isDev) {
-    mainWindow.loadURL(`http://localhost:${appConfig.ports.dev.next}`);
+    mainWindow.loadURL(`http://localhost:${portConfig.ports.dev.next}`);
   } else {
-    mainWindow.loadURL(`http://localhost:${appConfig.ports.prod.next}`);
+    mainWindow.loadURL(`http://localhost:${portConfig.ports.prod.next}`);
   }
 };
 
 async function launchDaemon() {
   // Free up backend port if already occupied
   try {
-    await fetch(`http://localhost:${appConfig.ports.prod.operate}/api`);
+    await fetch(`http://localhost:${portConfig.ports.prod.operate}/api`);
   } catch (err) {
     logger.electron('Backend `api` endpoint did not respond');
     logger.electron(JSON.stringify(err));
@@ -303,7 +308,9 @@ async function launchDaemon() {
       .toString()
       .trim();
 
-    await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
+    await fetch(
+      `http://localhost:${portConfig.ports.prod.operate}/${endpoint}`,
+    );
   } catch (err) {
     logger.electron(
       `Error killing backend server: ${JSON.stringify(err)} (Backend server may not exist)`,
@@ -319,7 +326,7 @@ async function launchDaemon() {
       ),
       [
         'daemon',
-        `--port=${appConfig.ports.prod.operate}`,
+        `--port=${portConfig.ports.prod.operate}`,
         `--home=${paths.dotOperateDirectory}`,
       ],
       { env: Env },
@@ -358,7 +365,7 @@ async function launchDaemonDev() {
       'run',
       'operate',
       'daemon',
-      `--port=${appConfig.ports.dev.operate}`,
+      `--port=${portConfig.ports.dev.operate}`,
       '--home=.operate',
     ]);
     operateDaemonPid = operateDaemon.pid;
@@ -395,9 +402,9 @@ async function launchNextApp() {
   });
 
   logger.electron('Listening on Next App Server');
-  server.listen(appConfig.ports.prod.next, () => {
+  server.listen(portConfig.ports.prod.next, () => {
     logger.next(
-      `> Next server running on http://localhost:${appConfig.ports.prod.next}`,
+      `> Next server running on http://localhost:${portConfig.ports.prod.next}`,
     );
   });
 }
@@ -406,12 +413,12 @@ async function launchNextAppDev() {
   await new Promise(function (resolve, _reject) {
     devNextApp = spawn(
       'yarn',
-      ['dev:frontend', '--port', appConfig.ports.dev.next],
+      ['dev:frontend', '--port', portConfig.ports.dev.next],
       {
         shell: true,
         env: {
           ...process.env,
-          MIDDLEWARE_PORT: appConfig.ports.dev.operate,
+          MIDDLEWARE_PORT: portConfig.ports.dev.operate,
           NEXT_PUBLIC_PEARL_VERSION: app.getVersion(),
         },
       },
@@ -465,11 +472,11 @@ ipcMain.on('check', async function (event, _argument) {
       );
 
       const daemonDevPortAvailable = await isPortAvailable(
-        appConfig.ports.dev.operate,
+        portConfig.ports.dev.operate,
       );
 
       if (!daemonDevPortAvailable) {
-        appConfig.ports.dev.operate = await findAvailablePort({
+        portConfig.ports.dev.operate = await findAvailablePort({
           ...PORT_RANGE,
         });
       }
@@ -480,13 +487,13 @@ ipcMain.on('check', async function (event, _argument) {
       );
 
       const frontendDevPortAvailable = await isPortAvailable(
-        appConfig.ports.dev.next,
+        portConfig.ports.dev.next,
       );
 
       if (!frontendDevPortAvailable) {
-        appConfig.ports.dev.next = await findAvailablePort({
+        portConfig.ports.dev.next = await findAvailablePort({
           ...PORT_RANGE,
-          excludePorts: [appConfig.ports.dev.operate],
+          excludePorts: [portConfig.ports.dev.operate],
         });
       }
       await launchNextAppDev();
@@ -496,12 +503,12 @@ ipcMain.on('check', async function (event, _argument) {
 
       event.sender.send('response', 'Starting Frontend Server');
       const frontendPortAvailable = await isPortAvailable(
-        appConfig.ports.prod.next,
+        portConfig.ports.prod.next,
       );
       if (!frontendPortAvailable) {
-        appConfig.ports.prod.next = await findAvailablePort({
+        portConfig.ports.prod.next = await findAvailablePort({
           ...PORT_RANGE,
-          excludePorts: [appConfig.ports.prod.operate],
+          excludePorts: [portConfig.ports.prod.operate],
         });
       }
       prodNextApp = next({
@@ -566,42 +573,44 @@ app.once('ready', async () => {
 
   // check ports are available
   if (process.env.NODE_ENV === 'production') {
-    const prodOperatePortAvailable = await isPortAvailable(
-      appConfig.ports.prod.operate,
+    const isMiddlewarePortAvailable = await isPortAvailable(
+      portConfig.ports.prod.operate,
     );
-    if (!prodOperatePortAvailable) {
-      appConfig.ports.prod.operate = await findAvailablePort({
+    if (!isMiddlewarePortAvailable) {
+      portConfig.ports.prod.operate = await findAvailablePort({
         ...PORT_RANGE,
       });
     }
 
-    const prodNextPortAvailable = await isPortAvailable(
-      appConfig.ports.prod.next,
+    const isNextPortAvailable = await isPortAvailable(
+      portConfig.ports.prod.next,
     );
-    if (!prodNextPortAvailable) {
-      appConfig.ports.prod.next = await findAvailablePort({
+    if (!isNextPortAvailable) {
+      portConfig.ports.prod.next = await findAvailablePort({
         ...PORT_RANGE,
-        excludePorts: [appConfig.ports.prod.operate],
+        excludePorts: [portConfig.ports.prod.operate],
       });
     }
   } else {
     // development checks
-    const devOperatePortAvailable = await isPortAvailable(
-      appConfig.ports.dev.operate,
+    const isMiddlewarePortAvailable = await isPortAvailable(
+      portConfig.ports.dev.operate,
     );
-    if (!devOperatePortAvailable) {
-      appConfig.ports.dev.operate = await findAvailablePort({
+
+    if (!isMiddlewarePortAvailable) {
+      portConfig.ports.dev.operate = await findAvailablePort({
         ...PORT_RANGE,
       });
     }
 
     const devNextPortAvailable = await isPortAvailable(
-      appConfig.ports.dev.next,
+      portConfig.ports.dev.next,
     );
+
     if (!devNextPortAvailable) {
-      appConfig.ports.dev.next = await findAvailablePort({
+      portConfig.ports.dev.next = await findAvailablePort({
         ...PORT_RANGE,
-        excludePorts: [appConfig.ports.dev.operate],
+        excludePorts: [portConfig.ports.dev.operate],
       });
     }
   }
