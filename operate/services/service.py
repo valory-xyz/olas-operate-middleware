@@ -262,8 +262,8 @@ class ServiceHelper:
             ):
                 for _, config in override["config"]["ledger_apis"].items():
                     # TODO chain name is inferred from the chain_id. The actual id provided on service.yaml is ignored.
-                    chain = Chain.from_id(chain_id=config["chain_id"])
-                    ledger_configs[str(config["chain_id"])] = LedgerConfig(
+                    chain = Chain.from_id(chain_id=config["chain_id"])  # type: ignore
+                    ledger_configs[chain.value] = LedgerConfig(
                         rpc=config["address"],
                         chain=chain,
                     )
