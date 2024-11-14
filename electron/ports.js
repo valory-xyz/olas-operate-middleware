@@ -1,5 +1,6 @@
 const net = require('net');
 const { ERROR_ADDRESS_IN_USE } = require('./constants');
+const { logger } = require('./logger');
 
 /**
  * Finds an available port within the specified range, excluding specified ports.
@@ -58,18 +59,32 @@ function findAvailablePort({ startPort, endPort, excludePorts = [] }) {
  * @returns {Promise<boolean>} Whether the port is available.
  */
 function isPortAvailable(port) {
+  logger.electron(`Checking if port is available: ${port}`);
   return new Promise((resolve) => {
     const server = net.createServer();
 
-    server.listen(port, () => {
-      server.close(() => {
-        resolve(true);
-      });
+    // If the port is available
+    server.once('listening', () => {
+      server.close();
+      logger.electron(`Port is available: ${port}`);
+      resolve(true);
     });
 
-    server.on('error', () => {
-      resolve(false);
+    // If the port is already in use
+    server.once('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        logger.electron(`Port is NOT available: ${port}`);
+        resolve(false);
+      } else {
+        logger.electron(
+          `Error checking port: ${port} | ${JSON.stringify(err)}`,
+        );
+        resolve(false);
+      }
     });
+
+    // Try to listen on the specified port and host
+    server.listen(port, 'localhost');
   });
 }
 
