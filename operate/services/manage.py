@@ -1359,7 +1359,7 @@ class ServiceManager:
                     wallet.transfer(
                         to=key.address,
                         amount=int(to_transfer),
-                        chain_type=ledger_config.chain,
+                        chain=ledger_config.chain,
                         from_safe=from_safe,
                         rpc=rpc or ledger_config.rpc,
                     )
@@ -1379,7 +1379,7 @@ class ServiceManager:
             wallet.transfer(
                 to=t.cast(str, chain_data.multisig),
                 amount=int(to_transfer),
-                chain_type=ledger_config.chain,
+                chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
 
@@ -1422,7 +1422,7 @@ class ServiceManager:
                     token=token,
                     to=key.address,
                     amount=int(to_transfer),
-                    chain_type=ledger_config.chain,
+                    chain=ledger_config.chain,
                     from_safe=from_safe,
                     rpc=rpc or ledger_config.rpc,
                 )
@@ -1447,7 +1447,7 @@ class ServiceManager:
                 token=token,
                 to=t.cast(str, chain_data.multisig),
                 amount=int(to_transfer),
-                chain_type=ledger_config.chain,
+                chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
 

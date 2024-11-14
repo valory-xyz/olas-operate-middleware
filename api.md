@@ -203,9 +203,9 @@ Creates a master wallet for given chain type. If a wallet already exists for a g
 <details>
   <summary>Request</summary>
 
-```js
+```json
 {
-  "chain_type": ChainType,
+  "chain": Chain,
 }
 ```
 
@@ -240,7 +240,7 @@ Creates a Gnosis safe for given chain type.
 
 ```js
 {
-  "chain_type": ChainType,
+  "chain": Chain,
 }
 ```
 

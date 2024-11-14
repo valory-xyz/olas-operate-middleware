@@ -17,7 +17,7 @@ const createEoa = async (chain: MiddlewareChain) =>
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain_type: chain }),
+    body: JSON.stringify({ chain: chain }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create EOA');
@@ -29,7 +29,7 @@ const createSafe = async (chain: MiddlewareChain, owner?: string) =>
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain_type: chain, owner: owner }),
+    body: JSON.stringify({ chain: chain, owner: owner }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create safe');
@@ -41,7 +41,7 @@ const addBackupOwner = async (chain: MiddlewareChain, owner: string) =>
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain_type: chain, owner: owner }),
+    body: JSON.stringify({ chain: chain, owner: owner }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to add backup owner');

@@ -102,7 +102,7 @@ class MasterWallet(LocalResource):
         self,
         to: str,
         amount: int,
-        chain_type: Chain,
+        chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -115,7 +115,7 @@ class MasterWallet(LocalResource):
         token: str,
         to: str,
         amount: int,
-        chain_type: Chain,
+        chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -129,7 +129,7 @@ class MasterWallet(LocalResource):
 
     def create_safe(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -138,7 +138,7 @@ class MasterWallet(LocalResource):
 
     def add_backup_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: str,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -147,7 +147,7 @@ class MasterWallet(LocalResource):
 
     def swap_backup_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         old_owner: str,
         new_owner: str,
         rpc: t.Optional[str] = None,
@@ -157,7 +157,7 @@ class MasterWallet(LocalResource):
 
     def add_or_swap_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: str,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -187,11 +187,11 @@ class EthereumMasterWallet(MasterWallet):
     _crypto_cls = EthereumCrypto
 
     def _transfer_from_eoa(
-        self, to: str, amount: int, chain_type: Chain, rpc: t.Optional[str] = None
+        self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> None:
         """Transfer funds from EOA wallet."""
         ledger_api = t.cast(
-            EthereumApi, self.ledger_api(chain=chain_type, rpc=rpc)
+            EthereumApi, self.ledger_api(chain=chain, rpc=rpc)
         )
         tx_helper = TxSettler(
             ledger_api=ledger_api,
@@ -214,7 +214,7 @@ class EthereumMasterWallet(MasterWallet):
                 amount=amount,
                 tx_fee=50000,
                 tx_nonce="0x",
-                chain_id=chain_type.id,
+                chain_id=chain.id,
                 raise_on_try=True,
                 max_fee_per_gas=int(max_fee_per_gas) if max_fee_per_gas else None,
                 max_priority_fee_per_gas=int(max_priority_fee_per_gas)
@@ -230,14 +230,14 @@ class EthereumMasterWallet(MasterWallet):
         tx_helper.transact(lambda x: x, "", kwargs={})
 
     def _transfer_from_safe(
-        self, to: str, amount: int, chain_type: Chain, rpc: t.Optional[str] = None
+        self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> None:
         """Transfer funds from safe wallet."""
         if self.safes is not None:
             transfer_from_safe(
-                ledger_api=self.ledger_api(chain=chain_type, rpc=rpc),
+                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
                 crypto=self.crypto,
-                safe=t.cast(str, self.safes[chain_type]),
+                safe=t.cast(str, self.safes[chain]),
                 to=to,
                 amount=amount,
             )
@@ -249,15 +249,15 @@ class EthereumMasterWallet(MasterWallet):
         token: str,
         to: str,
         amount: int,
-        chain_type: Chain,
+        chain: Chain,
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer funds from safe wallet."""
         transfer_erc20_from_safe(
-            ledger_api=self.ledger_api(chain=chain_type, rpc=rpc),
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             token=token,
-            safe=t.cast(str, self.safes[chain_type]),  # type: ignore
+            safe=t.cast(str, self.safes[chain]),  # type: ignore
             to=to,
             amount=amount,
         )
@@ -266,7 +266,7 @@ class EthereumMasterWallet(MasterWallet):
         self,
         to: str,
         amount: int,
-        chain_type: Chain,
+        chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -275,13 +275,13 @@ class EthereumMasterWallet(MasterWallet):
             return self._transfer_from_safe(
                 to=to,
                 amount=amount,
-                chain_type=chain_type,
+                chain=chain,
                 rpc=rpc,
             )
         return self._transfer_from_eoa(
             to=to,
             amount=amount,
-            chain_type=chain_type,
+            chain=chain,
             rpc=rpc,
         )
 
@@ -291,7 +291,7 @@ class EthereumMasterWallet(MasterWallet):
         token: str,
         to: str,
         amount: int,
-        chain_type: Chain,
+        chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -302,7 +302,7 @@ class EthereumMasterWallet(MasterWallet):
             token=token,
             to=to,
             amount=amount,
-            chain_type=chain_type,
+            chain=chain,
             rpc=rpc,
         )
 
@@ -334,36 +334,36 @@ class EthereumMasterWallet(MasterWallet):
 
     def create_safe(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
     ) -> None:
         """Create safe."""
-        if chain_type in self.safe_chains:
+        if chain in self.safe_chains:
             return
         safe, self.safe_nonce = create_gnosis_safe(
-            ledger_api=self.ledger_api(chain=chain_type, rpc=rpc),
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             owner=owner,
             salt_nonce=self.safe_nonce,
         )
-        self.safe_chains.append(chain_type)
+        self.safe_chains.append(chain)
         if self.safes is None:
             self.safes = {}
-        self.safes[chain_type] = safe
+        self.safes[chain] = safe
         self.store()
 
     def add_backup_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: str,
         rpc: t.Optional[str] = None,
     ) -> None:
         """Add a backup owner."""
-        ledger_api = self.ledger_api(chain=chain_type, rpc=rpc)
-        if chain_type not in self.safes:  # type: ignore
-            raise ValueError(f"Safes not created for chain_type {chain_type}!")
-        safe = t.cast(str, self.safes[chain_type])  # type: ignore
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        if chain not in self.safes:  # type: ignore
+            raise ValueError(f"Safes not created for chain {chain}!")
+        safe = t.cast(str, self.safes[chain])  # type: ignore
         if len(get_owners(ledger_api=ledger_api, safe=safe)) == 2:
             raise ValueError("Backup owner already exist!")
         add_owner(
@@ -375,16 +375,16 @@ class EthereumMasterWallet(MasterWallet):
 
     def swap_backup_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         old_owner: str,
         new_owner: str,
         rpc: t.Optional[str] = None,
     ) -> None:
         """Swap backup owner."""
-        ledger_api = self.ledger_api(chain=chain_type, rpc=rpc)
-        if chain_type not in self.safes:  # type: ignore
-            raise ValueError(f"Safes not created for chain_type {chain_type}!")
-        safe = t.cast(str, self.safes[chain_type])  # type: ignore
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        if chain not in self.safes:  # type: ignore
+            raise ValueError(f"Safes not created for chain {chain}!")
+        safe = t.cast(str, self.safes[chain])  # type: ignore
         if len(get_owners(ledger_api=ledger_api, safe=safe)) == 1:
             raise ValueError("Backup owner does not exist, cannot swap!")
         swap_owner(
@@ -397,18 +397,18 @@ class EthereumMasterWallet(MasterWallet):
 
     def add_or_swap_owner(
         self,
-        chain_type: Chain,
+        chain: Chain,
         owner: str,
         rpc: t.Optional[str] = None,
     ) -> None:
         """Add or swap backup owner."""
-        ledger_api = self.ledger_api(chain=chain_type, rpc=rpc)
-        if self.safes is None or chain_type not in self.safes:
-            raise ValueError(f"Safes not created for chain_type {chain_type}!")
-        safe = t.cast(str, self.safes[chain_type])
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        if self.safes is None or chain not in self.safes:
+            raise ValueError(f"Safes not created for chain {chain}!")
+        safe = t.cast(str, self.safes[chain])
         owners = get_owners(ledger_api=ledger_api, safe=safe)
         if len(owners) == 1:
-            return self.add_backup_owner(chain_type=chain_type, owner=owner, rpc=rpc)
+            return self.add_backup_owner(chain=chain, owner=owner, rpc=rpc)
 
         owners.remove(self.address)
         (old_owner,) = owners
@@ -416,7 +416,7 @@ class EthereumMasterWallet(MasterWallet):
             return None
 
         return self.swap_backup_owner(
-            chain_type=chain_type,
+            chain=chain,
             old_owner=old_owner,
             new_owner=owner,
             rpc=rpc,
@@ -426,7 +426,7 @@ class EthereumMasterWallet(MasterWallet):
     def load(cls, path: Path) -> "EthereumMasterWallet":
         """Load master wallet."""
         # TODO: This is a complex way to read the 'safes' dictionary.
-        # The reason for that is that wallet.safes[chain_type] would fail
+        # The reason for that is that wallet.safes[chain] would fail
         # (for example in service manager) when passed a ChainType key.
 
         raw_ethereum_wallet = t.cast(EthereumMasterWallet, super().load(path))  # type: ignore
