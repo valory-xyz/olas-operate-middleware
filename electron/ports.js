@@ -26,27 +26,25 @@ function findAvailablePort({ startPort, endPort, excludePorts = [] }) {
         }
         return;
       }
-
-      const server = net.createServer();
-
-      server.listen(port, () => {
-        server.close(() => {
-          resolve(port);
-        });
-      });
-
-      server.on('error', (err) => {
-        if (err.code === ERROR_ADDRESS_IN_USE && currentPort < endPort) {
-          // Try the next port if the current one is in use or excluded
-          tryPort(++currentPort);
-        } else {
+      isPortAvailable(port)
+        .then((available) => {
+          if (available) {
+            resolve(port);
+          } else if (currentPort < endPort) {
+            tryPort(++currentPort);
+          } else {
+            reject(
+              new Error(
+                `Unable to find an available port between ${startPort} and ${endPort} excluding specified ports.`,
+              ),
+            );
+          }
+        })
+        .catch((err) => {
           reject(
-            new Error(
-              `Unable to find an available port between ${startPort} and ${endPort} excluding specified ports.`,
-            ),
+            new Error(`Error checking port: ${port} | ${JSON.stringify(err)}`),
           );
-        }
-      });
+        });
     };
 
     tryPort(currentPort);
@@ -72,7 +70,7 @@ function isPortAvailable(port) {
 
     // If the port is already in use
     server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
+      if (err.code === ERROR_ADDRESS_IN_USE) {
         logger.electron(`Port is NOT available: ${port}`);
         resolve(false);
       } else {
