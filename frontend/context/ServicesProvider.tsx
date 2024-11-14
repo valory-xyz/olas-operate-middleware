@@ -122,7 +122,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
                         address: instance,
                         type: WalletType.EOA,
                         owner: WalletOwner.Agent,
-                      }) as AgentEoa,
+                      }),
                   ),
                 );
               }
