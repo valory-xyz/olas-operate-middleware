@@ -963,6 +963,7 @@ class Service(LocalResource):
         self.name = service_template["name"]
         self.hash = service_template["hash"]
         self.description = service_template["description"]
+        self.env_variables = service_template["env_variables"]
 
         # Only update hash_history if latest inserted hash is different
         if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:

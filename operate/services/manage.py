@@ -531,28 +531,29 @@ class ServiceManager:
             )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
-        env_var_to_value = {
-            "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
-            "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
-            "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
-            "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
-            "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-            "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
-            "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
-            "MECH_REQUEST_PRICE": "10000000000000000",
-            "USE_MECH_MARKETPLACE": str(
-                "mech_marketplace"
-                in service.chain_configs[
-                    service.home_chain
-                ].chain_data.user_params.staking_program_id
-            ),
-            "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
-                "staking_contract"
-            ),
-            "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
-        }
+        if chain == service.home_chain:
+            env_var_to_value = {
+                "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
+                "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
+                "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
+                "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+                "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
+                "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+                "MECH_REQUEST_PRICE": "10000000000000000",
+                "USE_MECH_MARKETPLACE": str(
+                    "mech_marketplace"
+                    in service.chain_configs[
+                        service.home_chain
+                    ].chain_data.user_params.staking_program_id
+                ),
+                "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                    "staking_contract"
+                ),
+                "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+            }
 
-        service.update_env_variables_values(env_var_to_value)
+            service.update_env_variables_values(env_var_to_value)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
