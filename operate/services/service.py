@@ -266,7 +266,6 @@ class ServiceHelper:
                     ledger_configs[str(config["chain_id"])] = LedgerConfig(
                         rpc=config["address"],
                         chain=chain,
-                        type=LedgerType.ETHEREUM,
                     )
         return ledger_configs
 
@@ -565,7 +564,7 @@ class Deployment(LocalResource):
             )
             # TODO: Support for multiledger
             builder.try_update_ledger_params(
-                chain=LedgerType(ledger_config.type).name.lower(),
+                chain=ledger_config.chain.ledger_type.name.lower(),
                 address=ledger_config.rpc,
             )
 
@@ -788,12 +787,12 @@ class Service(LocalResource):
         new_chain_configs = {}
         for chain_id, chain_data in data["chain_configs"].items():
             chain_data["ledger_config"]["chain"] = old_to_new_chains[chain_data["ledger_config"]["chain"]]
-            chain_data["ledger_config"]["type"] = old_to_new_ledgers[chain_data["ledger_config"]["type"]]
+            del chain_data["ledger_config"]["type"]
             new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data
         
         data["chain_configs"] = new_chain_configs
-        data["home_chain"] = Chain.from_id(int(data["home_chain"])).value
-        del data["home_chain"]
+        data["home_chain"] = Chain.from_id(int(data["home_chain_id"])).value
+        del data["home_chain_id"]
 
         if "env_variables" not in data:
             data["env_variables"] = {}

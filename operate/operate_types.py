@@ -179,7 +179,6 @@ class LedgerConfig(LocalResource):
     """Ledger config."""
 
     rpc: str
-    type: LedgerType
     chain: Chain
 
 

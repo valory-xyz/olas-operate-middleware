@@ -135,7 +135,7 @@ class ServiceManager:
         """Get OnChainManager instance."""
         return OnChainManager(
             rpc=ledger_config.rpc,
-            wallet=self.wallet_manager.load(ledger_config.type),
+            wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
             contracts=CONTRACTS[ledger_config.chain],
         )
 
@@ -143,7 +143,7 @@ class ServiceManager:
         """Get EthSafeTxBuilder instance."""
         return EthSafeTxBuilder(
             rpc=ledger_config.rpc,
-            wallet=self.wallet_manager.load(ledger_config.type),
+            wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
             contracts=CONTRACTS[ledger_config.chain],
         )
 
@@ -495,7 +495,7 @@ class ServiceManager:
         user_params = chain_config.chain_data.user_params
         keys = service.keys
         instances = [key.address for key in keys]
-        wallet = self.wallet_manager.load(ledger_config.type)
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
         # TODO fix this
@@ -918,7 +918,7 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         keys = service.keys
         instances = [key.address for key in keys]
-        wallet = self.wallet_manager.load(ledger_config.type)
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         safe = wallet.safes[Chain(chain)]  # type: ignore
 
         # TODO fixme
@@ -1332,7 +1332,7 @@ class ServiceManager:
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.type)
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
@@ -1399,7 +1399,7 @@ class ServiceManager:
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.type)
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )

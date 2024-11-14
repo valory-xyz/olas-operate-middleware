@@ -18,7 +18,6 @@ export type ServiceKeys = {
 
 export type LedgerConfig = {
   rpc: string;
-  type: MiddlewareLedger;
   chain: MiddlewareChain;
 };
 
@@ -50,12 +49,12 @@ export type MiddlewareServiceResponse = {
   hash_history: {
     [block: string]: string;
   };
-  home_chain_id: number;
+  home_chain: MiddlewareChain;
   keys: ServiceKeys[];
   service_path?: string;
   version: string;
   chain_configs: {
-    [chainId: number]: {
+    [chain in MiddlewareChain]: {
       ledger_config: LedgerConfig;
       chain_data: ChainData;
     };
