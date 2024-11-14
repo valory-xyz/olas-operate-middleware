@@ -9,11 +9,11 @@ import { MiddlewareChain } from '@/client';
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
-import { CHAINS } from '@/constants/chains';
+import { CHAIN_CONFIG } from '@/config/chains';
 import {
-  baseProvider,
-  ethereumProvider,
-  optimismProvider,
+  BASE_PROVIDER,
+  ETHEREUM_PROVIDER,
+  OPTIMISM_PROVIDER,
 } from '@/constants/providers';
 import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
 import { SetupScreen } from '@/enums/SetupScreen';
@@ -151,20 +151,20 @@ export const SetupEoaFundingForChain = ({
 
 const eoaFundingMap = {
   [MiddlewareChain.OPTIMISM]: {
-    provider: optimismProvider,
-    chainConfig: CHAINS.OPTIMISM,
+    provider: OPTIMISM_PROVIDER,
+    chainConfig: CHAIN_CONFIG.OPTIMISM,
     requiredEth:
       MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.OPTIMISM].safeCreation,
   },
   [MiddlewareChain.ETHEREUM]: {
-    provider: ethereumProvider,
-    chainConfig: CHAINS.ETHEREUM,
+    provider: ETHEREUM_PROVIDER,
+    chainConfig: CHAIN_CONFIG.ETHEREUM,
     requiredEth:
       MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.ETHEREUM].safeCreation,
   },
   [MiddlewareChain.BASE]: {
-    provider: baseProvider,
-    chainConfig: CHAINS.BASE,
+    provider: BASE_PROVIDER,
+    chainConfig: CHAIN_CONFIG.BASE,
     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation,
   },
 };

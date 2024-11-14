@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { MiddlewareChain } from '@/client';
 import { CardSection } from '@/components/styled/CardSection';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
+import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/config/olasContracts';
 import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL } from '@/constants/urls';
@@ -39,36 +39,37 @@ export const StakingContractSection = ({
 
   const stakingProgramMeta = STAKING_PROGRAM_META[stakingProgramId];
 
-  /**
-   * Returns `true` if this stakingProgram is active,
-   * or user is unstaked and this is the default
-   */
-  const isActiveStakingProgram = useMemo(() => {
-    if (activeStakingProgramId === null)
-      return DEFAULT_STAKING_PROGRAM_ID === stakingProgramId;
-    return activeStakingProgramId === stakingProgramId;
-  }, [activeStakingProgramId, stakingProgramId]);
+  // /**
+  //  * Returns `true` if this stakingProgram is active,
+  //  * or user is unstaked and this is the default
+  //  */
+  // const isActiveStakingProgram = useMemo(() => {
+  //   if (activeStakingProgramId === null)
+  //     return defaultStakingProgramId === stakingProgramId;
+  //   return activeStakingProgramId === stakingProgramId;
+  // }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
 
   const contractTagStatus = useMemo(() => {
     if (activeStakingProgramId === stakingProgramId)
-      return StakingProgramStatus.Selected;
+      return StakingProgramStatus.Active;
 
     // Pearl is not staked, set as Selected if default
-    if (
-      !activeStakingProgramId &&
-      stakingProgramId === DEFAULT_STAKING_PROGRAM_ID
-    )
-      return StakingProgramStatus.Selected;
+    if (!activeStakingProgramId && stakingProgramId === defaultStakingProgramId)
+      return StakingProgramStatus.Default;
 
     // Otherwise, no tag
     return null;
-  }, [activeStakingProgramId, stakingProgramId]);
+  }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
 
-  const showMigrateButton = !isActiveStakingProgram;
+  const showMigrateButton =
+    stakingProgramId !== (activeStakingProgramId ?? defaultStakingProgramId);
+
   const showFundingButton = useMemo(() => {
     if (migrateValidation.canMigrate) return false;
     return (
-      migrateValidation.reason === CantMigrateReason.InsufficientOlasToMigrate
+      migrateValidation.reason ===
+        CantMigrateReason.InsufficientOlasToMigrate ||
+      migrateValidation.reason === CantMigrateReason.InsufficientGasToMigrate
     );
   }, [migrateValidation]);
 

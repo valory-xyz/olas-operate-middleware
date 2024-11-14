@@ -1,8 +1,7 @@
 import { formatUnits } from 'ethers/lib/utils';
 import { useMemo } from 'react';
 
-import { CHAINS } from '@/constants/chains';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
+import { CHAIN_CONFIG } from '@/config/chains';
 
 import { useBalance } from './useBalance';
 import { useServiceTemplates } from './useServiceTemplates';
@@ -17,6 +16,8 @@ export const useNeedsFunds = () => {
   );
 
   const { storeState } = useStore();
+  const isInitialFunded = storeState?.isInitialFunded;
+
   const {
     isBalanceLoaded,
     masterSafeBalance: safeBalance,
@@ -25,7 +26,7 @@ export const useNeedsFunds = () => {
 
   const serviceFundRequirements = useMemo(() => {
     const gasEstimate =
-      serviceTemplate.configurations[CHAINS.OPTIMISM.chainId]
+      serviceTemplate.configurations[CHAIN_CONFIG.OPTIMISM.chainId]
         .monthly_gas_estimate;
     const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
     const minimumStakedAmountRequired =
@@ -51,7 +52,6 @@ export const useNeedsFunds = () => {
     serviceFundRequirements?.olas,
   ]);
 
-  const isInitialFunded = storeState?.isInitialFunded;
   const needsInitialFunding: boolean = useMemo(() => {
     if (isInitialFunded) return false;
     if (!isBalanceLoaded) return false;

@@ -1,6 +1,7 @@
 import { Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 
@@ -10,8 +11,9 @@ const { Text } = Typography;
 
 export const AddBackupWalletAlert = () => {
   const { goto } = usePageState();
-  const { backupSafeAddress } = useMasterSafe();
+  const { backupSafeAddress, masterSafeOwners } = useMasterSafe();
 
+  if (isNil(masterSafeOwners)) return null;
   if (backupSafeAddress) return null;
 
   return (

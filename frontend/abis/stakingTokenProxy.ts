@@ -1,4 +1,6 @@
-export const SERVICE_STAKING_TOKEN_MECH_USAGE_ABI = [
+import { JsonFragment } from '@ethersproject/abi';
+
+export const STAKING_TOKEN_PROXY_ABI: JsonFragment[] = [
   {
     inputs: [],
     name: 'AlreadyInitialized',
