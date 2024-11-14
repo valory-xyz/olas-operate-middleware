@@ -97,7 +97,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 5
+SERVICE_CONFIG_VERSION = 4
 SERVICE_CONFIG_PREFIX = "sc-"
 
 DUMMY_MULTISIG = "0xm"
@@ -797,7 +797,7 @@ class Service(LocalResource):
         if "env_variables" not in data:
             data["env_variables"] = {}
 
-        data["version"] = 5
+        data["version"] = SERVICE_CONFIG_VERSION
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
