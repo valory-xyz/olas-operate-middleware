@@ -79,7 +79,6 @@ from operate.operate_types import (
     EnvVariables,
     LedgerConfig,
     LedgerConfigs,
-    LedgerType,
     OnChainData,
     OnChainState,
     OnChainUserParams,
@@ -688,6 +687,14 @@ class Service(LocalResource):
         ):
             return False
 
+        if path.name.startswith("bafybei"):
+            backup_name = f"backup_{int(time.time())}_{path.name}"
+            backup_path = path.parent / backup_name
+            shutil.copytree(path, backup_path)
+            deployment_path = backup_path / 'deployment'
+            if deployment_path.is_dir():
+                shutil.rmtree(deployment_path)
+
         with open(path / Service._file, "r", encoding="utf-8") as file:
             data = json.load(file)
 
@@ -706,9 +713,9 @@ class Service(LocalResource):
                 "version": 2,
                 "hash": data.get("hash"),
                 "keys": data.get("keys"),
-                "home_chain": "gnosis",  # Assuming a default value for home_chain
+                "home_chain_id": "100",  # This is the default value for version 2 - do not change, will be corrected below
                 "chain_configs": {
-                    "gnosis": {
+                    "100": {  # This is the default value for version 2 - do not change, will be corrected below
                         "ledger_config": {
                             "rpc": data.get("ledger_config", {}).get("rpc"),
                             "type": data.get("ledger_config", {}).get("type"),
@@ -741,6 +748,9 @@ class Service(LocalResource):
                                 "fund_requirements": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("fund_requirements", {}),
+                                "agent_id": data.get("chain_data", {})
+                                .get("user_params", {})
+                                .get("agent_id", "14"),
                             },
                         },
                     }
@@ -765,19 +775,7 @@ class Service(LocalResource):
             service_config_id = Service.get_new_service_config_id(path)
             new_path = path.parent / service_config_id
             data["service_config_id"] = service_config_id
-
-            service_path = Path(data["service_path"])
-            if service_path.exists() and service_path.is_dir():
-                shutil.rmtree(service_path)
-
             path = path.rename(new_path)
-            service_path = Path(
-                IPFSTool().download(
-                    hash_id=data["hash"],
-                    target_dir=path,
-                )
-            )
-            data["service_path"] = str(service_path)
 
         old_to_new_ledgers = ["ethereum", "solana"]
         for key_data in data["keys"]:
@@ -788,16 +786,30 @@ class Service(LocalResource):
         for chain_id, chain_data in data["chain_configs"].items():
             chain_data["ledger_config"]["chain"] = old_to_new_chains[chain_data["ledger_config"]["chain"]]
             del chain_data["ledger_config"]["type"]
-            new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data
+            new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data  # type: ignore
         
         data["chain_configs"] = new_chain_configs
-        data["home_chain"] = Chain.from_id(int(data["home_chain_id"])).value
+        data["home_chain"] = data.setdefault("home_chain", Chain.from_id(int(data.get("home_chain_id", "100"))).value)  # type: ignore
         del data["home_chain_id"]
 
         if "env_variables" not in data:
             data["env_variables"] = {}
 
         data["version"] = SERVICE_CONFIG_VERSION
+
+        # Redownload service path
+        service_path = path / Path(data["service_path"]).name
+        if service_path.exists() and service_path.is_dir():
+            print("EXISTS")
+            shutil.rmtree(service_path)
+             
+        service_path = Path(
+            IPFSTool().download(
+                hash_id=data["hash"],
+                target_dir=path,
+            )
+        )
+        data["service_path"] = str(service_path)
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
