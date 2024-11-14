@@ -14,7 +14,12 @@ const next = require('next/dist/server/next');
 const http = require('http');
 const AdmZip = require('adm-zip');
 
-const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
+const {
+  setupDarwin,
+  setupUbuntu,
+  setupWindows,
+  Env: middlewareEnv,
+} = require('./install');
 
 const { paths } = require('./constants');
 const { killProcesses } = require('./processes');
@@ -299,54 +304,51 @@ const createMainWindow = async () => {
 };
 
 async function launchDaemon() {
+  logger.electron('Launching Pearl Daemon');
   // Free up backend port if already occupied
   try {
-    await fetch(`http://localhost:${portConfig.ports.prod.operate}/api`);
+    logger.electron('Checking if backend server is already running');
+    const response = await fetch(
+      `http://localhost:${portConfig.ports.prod.operate}/api`,
+    ).catch((e) => {
+      logger.electron('No backend server running');
+      return null;
+    });
+
+    if (response?.ok) {
+      logger.electron('Attempting to kill hanging backend server instances');
+
+      let endpoint = fs
+        .readFileSync(`${paths.dotOperateDirectory}/operate.kill`)
+        .toString()
+        .trim();
+
+      await fetch(
+        `http://localhost:${portConfig.ports.prod.operate}/${endpoint}`,
+      );
+    }
   } catch (err) {
-    logger.electron('Backend `api` endpoint did not respond');
     logger.electron(JSON.stringify(err));
   }
 
-  try {
-    logger.electron('Attempting to kill hanging backend server instances');
+  logger.electron('Spawning Pearl Daemon');
+  operateDaemon = spawn(
+    path.join(
+      process.resourcesPath,
+      binaryPaths[platform][process.arch.toString()],
+    ),
+    [
+      'daemon',
+      `--port=${portConfig.ports.prod.operate}`,
+      `--home=${paths.dotOperateDirectory}`,
+    ],
+    { env: middlewareEnv },
+  );
 
-    let endpoint = fs
-      .readFileSync(`${paths.dotOperateDirectory}/operate.kill`)
-      .toString()
-      .trim();
+  operateDaemonPid = operateDaemon.pid;
 
-    await fetch(
-      `http://localhost:${portConfig.ports.prod.operate}/${endpoint}`,
-    );
-  } catch (err) {
-    logger.electron(
-      `Error killing backend server: ${JSON.stringify(err)} (Backend server may not exist)`,
-    );
-  }
-
-  // TODO: rename, check is not a useful name
-  const check = new Promise(function (resolve, _reject) {
-    operateDaemon = spawn(
-      path.join(
-        process.resourcesPath,
-        binaryPaths[platform][process.arch.toString()],
-      ),
-      [
-        'daemon',
-        `--port=${portConfig.ports.prod.operate}`,
-        `--home=${paths.dotOperateDirectory}`,
-      ],
-      { env: Env },
-    );
-    operateDaemonPid = operateDaemon.pid;
-    // fs.appendFileSync(
-    //   `${paths.OperateDirectory}/operate.pip`,
-    //   `${operateDaemon.pid}`,
-    //   {
-    //     encoding: 'utf-8',
-    //   },
-    // );
-
+  logger.electron('Checking if Pearl Daemon is running');
+  const isMiddlewareRunning = await new Promise(function (resolve, _reject) {
     operateDaemon.stderr.on('data', (data) => {
       if (data.toString().includes('Uvicorn running on')) {
         resolve({ running: true, error: null });
@@ -363,7 +365,9 @@ async function launchDaemon() {
     });
   });
 
-  return await check;
+  if (!isMiddlewareRunning.running) {
+    throw new Error(isMiddlewareRunning.error);
+  }
 }
 
 async function launchDaemonDev() {
@@ -404,8 +408,8 @@ async function launchNextApp() {
   const handle = prodNextApp.getRequestHandler();
 
   logger.electron('Creating Next App Server');
-  const server = http.createServer((req, res) => {
-    handle(req, res); // Handle requests using the Next.js request handler
+  const server = http.createServer(async (req, res) => {
+    await handle(req, res); // Handle requests using the Next.js request handler
   });
 
   logger.electron('Listening on Next App Server');
@@ -509,9 +513,11 @@ ipcMain.on('check', async function (event, _argument) {
       await launchDaemon();
 
       event.sender.send('response', 'Starting Frontend Server');
+      logger.electron('Starting Frontend Server');
       const frontendPortAvailable = await isPortAvailable(
         portConfig.ports.prod.next,
       );
+
       if (!frontendPortAvailable) {
         portConfig.ports.prod.next = await findAvailablePort({
           ...PORT_RANGE,
@@ -625,7 +631,7 @@ process.on('uncaughtException', (error) => {
   });
 });
 
-['SIGINT', 'SIGTERM', 'SIGKILL'].forEach((signal) => {
+['SIGINT', 'SIGTERM'].forEach((signal) => {
   process.on(signal, () => {
     logger.electron(`Received ${signal}. Cleaning up...`);
     beforeQuit().then(() => {
