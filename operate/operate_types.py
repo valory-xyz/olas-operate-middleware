@@ -71,6 +71,9 @@ class LedgerType(str, enum.Enum):
 
 
 # Dynamically create the Chain enum from the ChainType
+# TODO: Migrate this to open-autonomy and remove this modified version of Chain here and use the one from open-autonomy
+# This version of open-autonomy must support the LedgerType to support SOLANA in the future
+# If solana support is not fuly implemented, decide to keep this half-baked feature
 Chain = enum.Enum('Chain', [(member.name, member.value) for member in ChainType] + [
     ('MODE', 'mode'),  # TODO: update open-autonomy version and remove this
     ('SOLANA', 'solana'),
