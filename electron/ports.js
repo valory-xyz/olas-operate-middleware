@@ -63,22 +63,24 @@ function isPortAvailable(port) {
 
     // If the port is available
     server.once('listening', () => {
-      server.close();
-      logger.electron(`Port is available: ${port}`);
-      resolve(true);
+      server.close(() => {
+        logger.electron(`Port is available: ${port}`);
+        resolve(true);
+      });
     });
 
     // If the port is already in use
     server.once('error', (err) => {
       if (err.code === ERROR_ADDRESS_IN_USE) {
         logger.electron(`Port is NOT available: ${port}`);
-        resolve(false);
       } else {
         logger.electron(
           `Error checking port: ${port} | ${JSON.stringify(err)}`,
         );
-        resolve(false);
       }
+      server.close(() => {
+        resolve(false);
+      });
     });
 
     // Try to listen on the specified port and host
