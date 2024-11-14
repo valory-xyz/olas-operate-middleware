@@ -22,7 +22,7 @@ const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE } = require('./constants');
 const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
-const { isDev } = require('./constants');
+const { isDev, isProd } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
 
 // Attempt to acquire the single instance lock
@@ -86,9 +86,17 @@ let devNextAppPid;
 
 // Next.js app instance for production
 // requires http server wrap to work; assign port, receive requests, deliver responses
-// @ts-ignore - Workaround for the missing type definitions
-/** @type {import {NextServer} from "next/server"} */
-let prodNextApp;
+/**
+ * @note - The Next.js app instance used to serve the frontend application in production.
+ * @note - Envs configured in `/frontend/next.config.mjs`, don't pass them here.
+ * @type {import('next/dist/server/next').NextServer | null}
+ */
+let prodNextApp = isProd
+  ? next({
+      dev: false,
+      dir: path.join(__dirname),
+    })
+  : null;
 
 const getActiveWindow = () => splashWindow ?? mainWindow;
 
@@ -511,15 +519,6 @@ ipcMain.on('check', async function (event, _argument) {
           excludePorts: [portConfig.ports.prod.operate],
         });
       }
-      prodNextApp = next({
-        dev: false,
-        dir: path.join(__dirname),
-        conf: {
-          env: {
-            ...process.env,
-          },
-        },
-      });
       await launchNextApp();
     }
 
