@@ -51,7 +51,6 @@ const binaryPaths = {
 };
 
 /**
- * @note - The port configuration is used to manage the ports used by the application.
  * @note - Ports are overwritten if they are already in use.
  */
 let portConfig = {
