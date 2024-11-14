@@ -217,7 +217,12 @@ export const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
+    isStakingContractInfoRecordLoaded,
     deploymentStatus,
+    isLowBalance,
+    requiredOlas,
+    hasEnoughServiceSlots,
+    isServiceStaked,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,
