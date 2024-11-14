@@ -32,6 +32,7 @@ const nextConfig = {
     return config;
   },
   env: {
+    MIDDLEWARE_PORT: process.env.MIDDLEWARE_PORT,
     GNOSIS_RPC:
       process.env.NODE_ENV === 'production'
         ? process.env.FORK_URL
