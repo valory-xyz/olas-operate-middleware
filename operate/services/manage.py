@@ -538,7 +538,9 @@ class ServiceManager:
                 "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
                 "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
                 "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-                "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get("activity_checker"),
+                "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
+                    "activity_checker"
+                ),
                 "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
                 "MECH_REQUEST_PRICE": "10000000000000000",
                 "USE_MECH_MARKETPLACE": str(
@@ -1505,7 +1507,9 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         deployment = service.deployment
-        deployment.build(use_docker=use_docker, force=force, chain=chain or service.home_chain)
+        deployment.build(
+            use_docker=use_docker, force=force, chain=chain or service.home_chain
+        )
         deployment.start(use_docker=use_docker)
         return deployment
 

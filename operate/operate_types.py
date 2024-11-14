@@ -21,9 +21,9 @@
 
 import enum
 import os
-from types import MethodType
 import typing as t
 from dataclasses import dataclass
+from types import MethodType
 
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
@@ -43,8 +43,7 @@ CHAIN_NAME_TO_CHAIN_ID["mode"] = 34443  # TODO: update open-autonomy and remove 
 CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
 
 _CHAIN_ID_TO_CHAIN_NAME = {
-    chain_id: chain_name
-    for chain_name, chain_id in CHAIN_NAME_TO_CHAIN_ID.items()
+    chain_id: chain_name for chain_name, chain_id in CHAIN_NAME_TO_CHAIN_ID.items()
 }
 
 
@@ -74,10 +73,14 @@ class LedgerType(str, enum.Enum):
 # TODO: Migrate this to open-autonomy and remove this modified version of Chain here and use the one from open-autonomy
 # This version of open-autonomy must support the LedgerType to support SOLANA in the future
 # If solana support is not fuly implemented, decide to keep this half-baked feature
-Chain = enum.Enum('Chain', [(member.name, member.value) for member in ChainType] + [
-    ('MODE', 'mode'),  # TODO: update open-autonomy version and remove this
-    ('SOLANA', 'solana'),
-])
+Chain = enum.Enum(
+    "Chain",
+    [(member.name, member.value) for member in ChainType]
+    + [
+        ("MODE", "mode"),  # TODO: update open-autonomy version and remove this
+        ("SOLANA", "solana"),
+    ],
+)
 
 
 class ChainMixin:
@@ -120,7 +123,7 @@ class ChainMixin:
 
 # Add the ChainMixin methods to the Chain enum
 for name in dir(ChainMixin):
-    if not name.startswith('__'):
+    if not name.startswith("__"):
         setattr(Chain, name, getattr(ChainMixin, name))
 
 

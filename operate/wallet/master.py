@@ -190,9 +190,7 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> None:
         """Transfer funds from EOA wallet."""
-        ledger_api = t.cast(
-            EthereumApi, self.ledger_api(chain=chain, rpc=rpc)
-        )
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
         tx_helper = TxSettler(
             ledger_api=ledger_api,
             crypto=self.crypto,
@@ -453,7 +451,15 @@ class EthereumMasterWallet(MasterWallet):
             data["safes"] = safes
             migrated = True
 
-        old_to_new_chains = ["ethereum", "goerli", "gnosis", "solana", "optimistic", "base", "mode"]
+        old_to_new_chains = [
+            "ethereum",
+            "goerli",
+            "gnosis",
+            "solana",
+            "optimistic",
+            "base",
+            "mode",
+        ]
         safe_chains = []
         for chain in data["safe_chains"]:
             if isinstance(chain, int):

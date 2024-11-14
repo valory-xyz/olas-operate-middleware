@@ -70,9 +70,9 @@ from operate.constants import (
 from operate.keys import Keys
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    Chain,
     ChainConfig,
     ChainConfigs,
-    Chain,
     DeployedNodes,
     DeploymentConfig,
     DeploymentStatus,
@@ -691,7 +691,7 @@ class Service(LocalResource):
             backup_name = f"backup_{int(time.time())}_{path.name}"
             backup_path = path.parent / backup_name
             shutil.copytree(path, backup_path)
-            deployment_path = backup_path / 'deployment'
+            deployment_path = backup_path / "deployment"
             if deployment_path.is_dir():
                 shutil.rmtree(deployment_path)
 
@@ -781,13 +781,23 @@ class Service(LocalResource):
         for key_data in data["keys"]:
             key_data["ledger"] = old_to_new_ledgers[key_data["ledger"]]
 
-        old_to_new_chains = ["ethereum", "goerli", "gnosis", "solana", "optimistic", "base", "mode"]
+        old_to_new_chains = [
+            "ethereum",
+            "goerli",
+            "gnosis",
+            "solana",
+            "optimistic",
+            "base",
+            "mode",
+        ]
         new_chain_configs = {}
         for chain_id, chain_data in data["chain_configs"].items():
-            chain_data["ledger_config"]["chain"] = old_to_new_chains[chain_data["ledger_config"]["chain"]]
+            chain_data["ledger_config"]["chain"] = old_to_new_chains[
+                chain_data["ledger_config"]["chain"]
+            ]
             del chain_data["ledger_config"]["type"]
             new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data  # type: ignore
-        
+
         data["chain_configs"] = new_chain_configs
         data["home_chain"] = data.setdefault("home_chain", Chain.from_id(int(data.get("home_chain_id", "100"))).value)  # type: ignore
         del data["home_chain_id"]
@@ -802,7 +812,7 @@ class Service(LocalResource):
         if service_path.exists() and service_path.is_dir():
             print("EXISTS")
             shutil.rmtree(service_path)
-             
+
         service_path = Path(
             IPFSTool().download(
                 hash_id=data["hash"],

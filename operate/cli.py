@@ -42,7 +42,7 @@ from uvicorn.main import run as uvicorn
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
-from operate.operate_types import Chain, LedgerType, DeploymentStatus
+from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.services.health_checker import HealthChecker
 from operate.wallet.master import MasterWalletManager
 
@@ -552,9 +552,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager = operate.wallet_manager
             if not manager.exists(ledger_type=ledger_type):
                 return JSONResponse(
-                    content={
-                        "error": f"Wallet does not exist for chain {chain}"
-                    }
+                    content={"error": f"Wallet does not exist for chain {chain}"}
                 )
 
         # mint the safes
