@@ -27,6 +27,7 @@ const { PearlTray } = require('./components/PearlTray');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
+
 if (!singleInstanceLock) {
   try {
     logger.electron('Could not obtain single instance lock. Quitting...');
@@ -82,10 +83,8 @@ let devNextAppPid;
 // Next.js app instance for production
 // requires http server wrap to work; assign port, receive requests, deliver responses
 // @ts-ignore - Workaround for the missing type definitions
-const nextApp = next({
-  dev: false, // DO NOT SET TO TRUE
-  dir: path.join(__dirname),
-});
+/** @type {import {NextServer} from "next/server"} */
+let prodNextApp;
 
 const getActiveWindow = () => splashWindow ?? mainWindow;
 
@@ -107,7 +106,7 @@ async function beforeQuit() {
       );
     } catch (e) {
       logger.electron("Couldn't stop_all_services gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
 
     // clean-up via pid first*
@@ -116,7 +115,7 @@ async function beforeQuit() {
       operateDaemonPid && (await killProcesses(operateDaemonPid));
     } catch (e) {
       logger.electron("Couldn't kill daemon processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
 
     // attempt to kill the daemon process via kill
@@ -128,7 +127,7 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill operate daemon process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
   }
 
@@ -141,7 +140,7 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill devNextApp process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
 
     // attempt to kill the dev next app process via pid
@@ -149,15 +148,15 @@ async function beforeQuit() {
       devNextAppPid && (await killProcesses(devNextAppPid));
     } catch (e) {
       logger.electron("Couldn't kill devNextApp processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
   }
 
-  if (nextApp) {
+  if (prodNextApp) {
     // attempt graceful close of prod next app
-    await nextApp.close().catch((e) => {
+    await prodNextApp.close().catch((e) => {
       logger.electron("Couldn't close NextApp gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     });
     // electron will kill next service on exit
   }
@@ -185,7 +184,9 @@ const createSplashWindow = () => {
   splashWindow.loadURL('file://' + __dirname + '/loading/index.html');
 
   if (isDev) {
-    splashWindow.webContents.openDevTools();
+    splashWindow.webContents.openDevTools({
+      mode: 'detach',
+    });
   }
 };
 
@@ -289,7 +290,14 @@ async function launchDaemon() {
   // Free up backend port if already occupied
   try {
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/api`);
-    logger.electron('Killing backend server!');
+  } catch (err) {
+    logger.electron('Backend `api` endpoint did not respond');
+    logger.electron(JSON.stringify(err));
+  }
+
+  try {
+    logger.electron('Attempting to kill hanging backend server instances');
+
     let endpoint = fs
       .readFileSync(`${paths.dotOperateDirectory}/operate.kill`)
       .toString()
@@ -297,9 +305,12 @@ async function launchDaemon() {
 
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
   } catch (err) {
-    logger.electron('Backend not running!');
+    logger.electron(
+      `Error killing backend server: ${JSON.stringify(err)} (Backend server may not exist)`,
+    );
   }
 
+  // TODO: rename, check is not a useful name
   const check = new Promise(function (resolve, _reject) {
     operateDaemon = spawn(
       path.join(
@@ -373,10 +384,10 @@ async function launchNextApp() {
   logger.electron('Launching Next App');
 
   logger.electron('Preparing Next App');
-  await nextApp.prepare();
+  await prodNextApp.prepare();
 
   logger.electron('Getting Next App Handler');
-  const handle = nextApp.getRequestHandler();
+  const handle = prodNextApp.getRequestHandler();
 
   logger.electron('Creating Next App Server');
   const server = http.createServer((req, res) => {
@@ -393,7 +404,6 @@ async function launchNextApp() {
 
 async function launchNextAppDev() {
   await new Promise(function (resolve, _reject) {
-    process.env.NEXT_PUBLIC_BACKEND_PORT = appConfig.ports.dev.operate; // must set next env var to connect to backend
     devNextApp = spawn(
       'yarn',
       ['dev:frontend', '--port', appConfig.ports.dev.next],
@@ -401,7 +411,7 @@ async function launchNextAppDev() {
         shell: true,
         env: {
           ...process.env,
-          NEXT_PUBLIC_BACKEND_PORT: appConfig.ports.dev.operate,
+          MIDDLEWARE_PORT: appConfig.ports.dev.operate,
           NEXT_PUBLIC_PEARL_VERSION: app.getVersion(),
         },
       },
@@ -494,6 +504,15 @@ ipcMain.on('check', async function (event, _argument) {
           excludePorts: [appConfig.ports.prod.operate],
         });
       }
+      prodNextApp = next({
+        dev: false,
+        dir: path.join(__dirname),
+        conf: {
+          env: {
+            ...process.env,
+          },
+        },
+      });
       await launchNextApp();
     }
 
@@ -544,6 +563,49 @@ app.once('ready', async () => {
       path.join(__dirname, 'assets/icons/splash-robot-head-dock.png'),
     );
   }
+
+  // check ports are available
+  if (process.env.NODE_ENV === 'production') {
+    const prodOperatePortAvailable = await isPortAvailable(
+      appConfig.ports.prod.operate,
+    );
+    if (!prodOperatePortAvailable) {
+      appConfig.ports.prod.operate = await findAvailablePort({
+        ...PORT_RANGE,
+      });
+    }
+
+    const prodNextPortAvailable = await isPortAvailable(
+      appConfig.ports.prod.next,
+    );
+    if (!prodNextPortAvailable) {
+      appConfig.ports.prod.next = await findAvailablePort({
+        ...PORT_RANGE,
+        excludePorts: [appConfig.ports.prod.operate],
+      });
+    }
+  } else {
+    // development checks
+    const devOperatePortAvailable = await isPortAvailable(
+      appConfig.ports.dev.operate,
+    );
+    if (!devOperatePortAvailable) {
+      appConfig.ports.dev.operate = await findAvailablePort({
+        ...PORT_RANGE,
+      });
+    }
+
+    const devNextPortAvailable = await isPortAvailable(
+      appConfig.ports.dev.next,
+    );
+    if (!devNextPortAvailable) {
+      appConfig.ports.dev.next = await findAvailablePort({
+        ...PORT_RANGE,
+        excludePorts: [appConfig.ports.dev.operate],
+      });
+    }
+  }
+
   createSplashWindow();
 });
 
