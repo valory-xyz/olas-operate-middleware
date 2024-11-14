@@ -398,6 +398,8 @@ async function launchNextApp() {
   logger.electron('Launching Next App');
 
   logger.electron('Preparing Next App');
+  prodNextApp.options.conf.env['MIDDLEWARE_PORT'] =
+    portConfig.ports.prod.operate;
   await prodNextApp.prepare();
 
   logger.electron('Getting Next App Handler');
