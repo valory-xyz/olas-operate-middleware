@@ -300,12 +300,35 @@ async function launchDaemon() {
     logger.electron('Backend not running!');
   }
 
-  const check = new Promise(function (resolve, _reject) {
+  const check = new Promise(function (resolve, reject) {
+    const binaryPath = path.join(
+      process.resourcesPath,
+      binaryPaths[platform][process.arch.toString()],
+    );
+
+    // Check if the binary exists
+    if (!fs.existsSync(binaryPath)) {
+      const errorMsg = `Binary not found at path: ${binaryPath}`;
+      logger.electron(errorMsg);
+      reject(new Error(errorMsg));
+      return;
+    }
+
+    // Ensure the binary is executable
+    try {
+      fs.chmodSync(binaryPath, '755');
+      logger.electron(
+        `Successfully set executable permissions on ${binaryPath}`,
+      );
+    } catch (err) {
+      logger.electron(`Failed to set permissions on ${binaryPath}:`, err);
+      reject(err);
+      return;
+    }
+
+    // Spawn the daemon process
     operateDaemon = spawn(
-      path.join(
-        process.resourcesPath,
-        binaryPaths[platform][process.arch.toString()],
-      ),
+      binaryPath,
       [
         'daemon',
         `--port=${appConfig.ports.prod.operate}`,
@@ -313,28 +336,42 @@ async function launchDaemon() {
       ],
       { env: Env },
     );
+
     operateDaemonPid = operateDaemon.pid;
-    // fs.appendFileSync(
-    //   `${paths.OperateDirectory}/operate.pip`,
-    //   `${operateDaemon.pid}`,
-    //   {
-    //     encoding: 'utf-8',
-    //   },
-    // );
 
     operateDaemon.stderr.on('data', (data) => {
-      if (data.toString().includes('Uvicorn running on')) {
+      const message = data.toString();
+      logger.cli(message.trim());
+
+      if (message.includes('Uvicorn running on')) {
         resolve({ running: true, error: null });
-      }
-      if (
-        data.toString().includes('error while attempting to bind on address')
+      } else if (
+        message.includes('error while attempting to bind on address')
       ) {
         resolve({ running: false, error: 'Port already in use' });
       }
-      logger.cli(data.toString().trim());
     });
+
     operateDaemon.stdout.on('data', (data) => {
-      logger.cli(data.toString().trim());
+      const message = data.toString();
+      logger.cli(message.trim());
+
+      // Also check stdout for the expected message
+      if (message.includes('Uvicorn running on')) {
+        resolve({ running: true, error: null });
+      }
+    });
+
+    operateDaemon.on('error', (error) => {
+      logger.cli('Daemon process error:');
+      logger.cli(JSON.stringify(error));
+      reject(error);
+    });
+
+    operateDaemon.on('exit', (code, signal) => {
+      const errorMsg = `Daemon process exited with code ${code}, signal ${signal}`;
+      logger.cli(errorMsg);
+      reject(new Error(errorMsg));
     });
   });
 
