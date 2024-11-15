@@ -17,7 +17,7 @@ const AdmZip = require('adm-zip');
 const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
 const { paths } = require('./constants');
-const { killProcesses } = require('./processes');
+const { killProcesses, killProcessesByNameRegex } = require('./processes');
 const { isPortAvailable, findAvailablePort } = require('./ports');
 const { PORT_RANGE } = require('./constants');
 const { setupStoreIpc } = require('./store');
@@ -129,6 +129,14 @@ async function beforeQuit() {
       operateDaemonPid && (await killProcesses(operateDaemonPid));
     } catch (e) {
       logger.electron("Couldn't kill daemon processes via pid:");
+      logger.electron(JSON.stringify(e));
+    }
+
+    // clean-up via name regex
+    try {
+      await killProcessesByNameRegex(new RegExp('pearl_*'));
+    } catch (e) {
+      logger.electron("Couldn't kill daemon processes via name regex:");
       logger.electron(JSON.stringify(e));
     }
   }
@@ -325,12 +333,14 @@ async function launchDaemon() {
 
     operateDaemon.stderr.on('data', (data) => {
       if (data.toString().includes('Uvicorn running on')) {
-        resolve({ running: true, error: null });
+        logger.cli(data.toString().trim());
+        return resolve({ running: true, error: null });
       }
       if (
         data.toString().includes('error while attempting to bind on address')
       ) {
-        resolve({ running: false, error: 'Port already in use' });
+        logger.cli(data.toString().trim());
+        return resolve({ running: false, error: 'Port already in use' });
       }
       logger.cli(data.toString().trim());
     });
@@ -354,12 +364,14 @@ async function launchDaemonDev() {
     operateDaemonPid = operateDaemon.pid;
     operateDaemon.stderr.on('data', (data) => {
       if (data.toString().includes('Uvicorn running on')) {
-        resolve({ running: true, error: null });
+        logger.cli(data.toString().trim());
+        return resolve({ running: true, error: null });
       }
       if (
         data.toString().includes('error while attempting to bind on address')
       ) {
-        resolve({ running: false, error: 'Port already in use' });
+        logger.cli(data.toString().trim());
+        return resolve({ running: false, error: 'Port already in use' });
       }
       logger.cli(data.toString().trim());
     });

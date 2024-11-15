@@ -1,4 +1,5 @@
 const psTree = require('ps-tree');
+const psList = require('ps-list');
 const { exec } = require('child_process');
 
 const unixKillCommand = 'kill -9';
@@ -42,4 +43,53 @@ function killProcesses(pid) {
   });
 }
 
-module.exports = { killProcesses };
+/**
+ *
+ * @param {RegExp} processNameRegex
+ * @returns
+ */
+async function killProcessesByNameRegex(processNameRegex) {
+  try {
+    // Get the list of processes
+    const processes = await psList();
+
+    // Find the process with the given name
+    const targetProcesses = processes.filter((p) =>
+      processNameRegex.test(p.name),
+    );
+
+    if (targetProcesses.length === 0) {
+      console.log(`No process found with name: ${processNameRegex}`);
+      return;
+    }
+
+    // Kill all matching processes
+    for (const process of targetProcesses) {
+      const killCommand =
+        process.platform === 'win32'
+          ? `taskkill /PID ${process.pid} /F`
+          : `kill -9 ${process.pid}`;
+
+      try {
+        exec(killCommand, (error, stdout, stderr) => {
+          if (error) {
+            console.error(
+              `Error killing process ${processNameRegex} with PID ${process.pid}:`,
+              error.message,
+            );
+            return;
+          }
+          console.log(
+            `Killed process ${processNameRegex} with PID ${process.pid}`,
+          );
+        });
+      } catch (error) {
+        console.error(`Failed to kill process: ${error.message}`);
+      }
+    }
+  } catch (error) {
+    console.error(`Failed to kill process: ${error.message}`);
+  }
+}
+
+module.exports = { killProcesses, killProcessesByNameRegex };
