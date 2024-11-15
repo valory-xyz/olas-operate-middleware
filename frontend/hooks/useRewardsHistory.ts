@@ -270,7 +270,7 @@ export const useRewardsHistory = () => {
       const previous = earnedCheckpoints[i - 1];
       const epochGap = previous.epochStartTimeStamp - current.epochEndTimeStamp;
 
-      if (current.earned && epochGap <= Number(current.epochLength)) {
+      if (current.earned && Number(current.epochLength) > epochGap) {
         return streakCount + 1;
       }
 
