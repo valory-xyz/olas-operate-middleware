@@ -33,9 +33,9 @@ from typing import Any
 from venv import main as venv_cli
 
 import psutil
+import requests
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
-from requests import get
 
 from operate import constants
 
@@ -202,8 +202,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _stop_tendermint(self) -> None:
         """Start tendermint process."""
         try:
-            get(self._get_tm_exit_url(), timeout=(1, 10))
+            requests.get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
+        except requests.ConnectionError:
+            print(f"No Tendermint process listening on {self._get_tm_exit_url()}.")
         except Exception:  # pylint: disable=broad-except
             print_exc()
 
