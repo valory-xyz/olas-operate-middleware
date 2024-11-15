@@ -146,42 +146,6 @@ def remove_service_network(service_name: str, force: bool = True) -> None:
 class ServiceBuilder(BaseServiceBuilder):
     """Service builder patch."""
 
-    def try_update_ledger_params(self, chain: str, address: str) -> None:
-        """Try to update the ledger params."""
-
-        for override in deepcopy(self.service.overrides):
-            (
-                override,
-                component_id,
-                _,
-            ) = self.service.process_metadata(
-                configuration=override,
-            )
-
-            if (
-                component_id.package_type == PackageType.CONNECTION
-                and component_id.name == "ledger"
-            ):
-                ledger_connection_overrides = deepcopy(override)
-                break
-        else:
-            return
-
-        # TODO: Support for multiple overrides
-        ledger_connection_overrides["config"]["ledger_apis"][chain]["address"] = address
-        service_overrides = deepcopy(self.service.overrides)
-        service_overrides = [
-            override
-            for override in service_overrides
-            if override["public_id"] != str(component_id.public_id)
-            or override["type"] != PackageType.CONNECTION.value
-        ]
-
-        ledger_connection_overrides["type"] = PackageType.CONNECTION.value
-        ledger_connection_overrides["public_id"] = str(component_id.public_id)
-        service_overrides.append(ledger_connection_overrides)
-        self.service.overrides = service_overrides
-
     def try_update_runtime_params(
         self,
         multisig_address: t.Optional[str] = None,
@@ -440,7 +404,6 @@ class Deployment(LocalResource):
                 chain = service.home_chain
 
             chain_config = service.chain_configs[chain]
-            ledger_config = chain_config.ledger_config
             chain_data = chain_config.chain_data
 
             builder.try_update_runtime_params(
@@ -448,11 +411,6 @@ class Deployment(LocalResource):
                 agent_instances=chain_data.instances,
                 service_id=chain_data.token,
                 consensus_threshold=None,
-            )
-            # TODO: Support for multiledger
-            builder.try_update_ledger_params(
-                chain=chain,
-                address=ledger_config.rpc,
             )
 
             # build deployment
@@ -528,7 +486,6 @@ class Deployment(LocalResource):
             chain = service.home_chain
 
         chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
 
         keys_file = self.path / KEYS_JSON
@@ -560,11 +517,6 @@ class Deployment(LocalResource):
                 agent_instances=chain_data.instances,
                 service_id=chain_data.token,
                 consensus_threshold=None,
-            )
-            # TODO: Support for multiledger
-            builder.try_update_ledger_params(
-                chain=ledger_config.chain.ledger_type.name.lower(),
-                address=ledger_config.rpc,
             )
 
             (
