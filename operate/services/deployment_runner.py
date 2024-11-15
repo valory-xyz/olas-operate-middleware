@@ -204,6 +204,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         try:
             get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
+        except ConnectionError:
+            print(f"No Tendermint process listening on {self._get_tm_exit_url()}.")
         except Exception:  # pylint: disable=broad-except
             print_exc()
 
