@@ -96,12 +96,6 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         description: "",
         value: "",
         provision_type: EnvProvisionType.COMPUTED
-      },
-      LEDGER_RPC_ADDRESS: {
-        name: "Address of Ethereum ledger connection",
-        description: "",
-        value: "https://virtual.gnosis.rpc.tenderly.co/0b10c83b-3fe8-4a39-aaac-93784a13541b",
-        provision_type: EnvProvisionType.FIXED
       }
     },
   },

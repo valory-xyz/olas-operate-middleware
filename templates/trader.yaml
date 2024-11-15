@@ -17,3 +17,44 @@ configurations:
     fund_requirements:
       agent: 100000000000000000
       safe: 5000000000000000000
+env_variables:
+  GNOSIS_LEDGER_RPC:
+    name: "Gnosis ledger RPC"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  STAKING_CONTRACT_ADDRESS:
+    name: "Staking contract address"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  MECH_ACTIVITY_CHECKER_CONTRACT:
+    name: "Mech activity checker contract"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  MECH_CONTRACT_ADDRESS:
+    name: "Mech contract address"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  MECH_REQUEST_PRICE:
+    name: "Mech request price"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  USE_MECH_MARKETPLACE:
+    name: "Use Mech marketplace"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  REQUESTER_STAKING_INSTANCE_ADDRESS:
+    name: "Requester staking instance address"
+    description: ""
+    value: ""
+    provision_type: "computed"
+  PRIORITY_MECH_ADDRESS:
+    name: "Priority Mech address"
+    description: ""
+    value: ""
+    provision_type: "computed"
