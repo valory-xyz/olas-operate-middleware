@@ -24,6 +24,7 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+const { isNil } = require('lodash');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -99,15 +100,27 @@ async function beforeQuit() {
   splashWindow?.destroy();
   mainWindow?.destroy();
 
-  if (operateDaemon || operateDaemonPid) {
-    // gracefully stop running services
+  // gracefully stop running services
+  try {
+    await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
+    );
+  } catch (e) {
+    logger.electron("Couldn't stop_all_services gracefully:");
+    logger.electron(JSON.stringify(e));
+  }
+
+  if (!isNil(operateDaemon) || !isNil(operateDaemonPid)) {
+    // attempt to kill the daemon process via kill
+    // middleware handles it's own subprocesses
     try {
-      await fetch(
-        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
-      );
+      const dead = operateDaemon?.kill();
+      if (!dead) {
+        logger.electron('Daemon process still alive after kill');
+      }
     } catch (e) {
-      logger.electron("Couldn't stop_all_services gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron("Couldn't kill operate daemon process via kill:");
+      logger.electron(JSON.stringify(e));
     }
 
     // clean-up via pid first*
@@ -116,19 +129,7 @@ async function beforeQuit() {
       operateDaemonPid && (await killProcesses(operateDaemonPid));
     } catch (e) {
       logger.electron("Couldn't kill daemon processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
-    }
-
-    // attempt to kill the daemon process via kill
-    // if the pid-based cleanup fails
-    try {
-      const dead = operateDaemon?.kill();
-      if (!dead) {
-        logger.electron('Daemon process still alive after kill');
-      }
-    } catch (e) {
-      logger.electron("Couldn't kill operate daemon process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
   }
 
@@ -141,7 +142,7 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill devNextApp process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
 
     // attempt to kill the dev next app process via pid
@@ -149,7 +150,7 @@ async function beforeQuit() {
       devNextAppPid && (await killProcesses(devNextAppPid));
     } catch (e) {
       logger.electron("Couldn't kill devNextApp processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     }
   }
 
@@ -157,7 +158,7 @@ async function beforeQuit() {
     // attempt graceful close of prod next app
     await nextApp.close().catch((e) => {
       logger.electron("Couldn't close NextApp gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
+      logger.electron(JSON.stringify(e));
     });
     // electron will kill next service on exit
   }
