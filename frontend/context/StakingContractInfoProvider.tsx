@@ -22,6 +22,7 @@ import {
   DEFAULT_STAKING_PROGRAM_ID,
   StakingProgramContext,
 } from './StakingProgramProvider';
+import { ChainId } from '@/enums/Chain';
 
 type StakingContractInfoContextProps = {
   activeStakingContractInfo?: Partial<StakingContractInfo>;
@@ -43,8 +44,8 @@ export const StakingContractInfoContext =
     isStakingContractInfoRecordLoaded: false,
     isActiveStakingContractInfoLoaded: false,
     stakingContractInfoRecord: undefined,
-    updateActiveStakingContractInfo: async () => {},
-    setIsPaused: () => {},
+    updateActiveStakingContractInfo: async () => { },
+    setIsPaused: () => { },
   });
 
 export const StakingContractInfoProvider = ({
@@ -71,7 +72,7 @@ export const StakingContractInfoProvider = ({
 
   const serviceId = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token,
+      services?.[0]?.chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data?.token,
     [services],
   );
 

@@ -63,7 +63,7 @@ export const BalanceContext = createContext<{
   optimismBalance?: number;
 }>({
   isLoaded: false,
-  setIsLoaded: () => {},
+  setIsLoaded: () => { },
   isBalanceLoaded: false,
   olasBondBalance: undefined,
   olasDepositBalance: undefined,
@@ -76,8 +76,8 @@ export const BalanceContext = createContext<{
   walletBalances: {},
   agentSafeBalance: undefined,
   agentEoaBalance: undefined,
-  updateBalances: async () => {},
-  setIsPaused: () => {},
+  updateBalances: async () => { },
+  setIsPaused: () => { },
   totalOlasStakedBalance: undefined,
   baseBalance: undefined,
   ethereumBalance: undefined,
@@ -171,7 +171,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
       // TODO: refactor to use ChainId enum, service from useService(),
       const serviceId =
-        services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
+        services?.[0]?.chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data
           .token;
 
       if (!isNumber(serviceId)) {
@@ -232,7 +232,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentEoaAddress = useMemo(
     () =>
-      services?.[0]?.chain_configs?.[CHAIN_CONFIG.OPTIMISM.chainId]?.chain_data
+      services?.[0]?.chain_configs?.[CHAIN_CONFIG[ChainId.Optimism].middlewareChain]?.chain_data
         ?.instances?.[0],
     [services],
   );
@@ -249,11 +249,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const agentSafeBalance = useMemo(
     () =>
-      services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
+      services?.[0]?.chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data
         ?.multisig &&
       walletBalances[
-        services[0].chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
-          .multisig!
+      services[0].chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data
+        .multisig!
       ],
     [services, walletBalances],
   );

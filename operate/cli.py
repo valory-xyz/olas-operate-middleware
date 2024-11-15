@@ -42,8 +42,7 @@ from uvicorn.main import run as uvicorn
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
-from operate.ledger import get_ledger_type_from_chain_type
-from operate.operate_types import ChainType, DeploymentStatus
+from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.services.health_checker import HealthChecker
 from operate.wallet.master import MasterWalletManager
 
@@ -408,9 +407,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_wallet_by_chain(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        ledger_type = get_ledger_type_from_chain_type(
-            chain=ChainType.from_string(request.path_params["chain"])
-        )
+        ledger_type = Chain.from_string(request.path_params["chain"]).ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -438,8 +435,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        ledger_type = LedgerType(data["ledger_type"])
         manager = operate.wallet_manager
         if manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -467,8 +463,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        chain_type = ChainType.from_string(request.path_params["chain"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain = Chain.from_string(request.path_params["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -476,12 +472,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=404,
             )
         safes = manager.load(ledger_type=ledger_type).safes
-        if safes is None or safes.get(chain_type) is None:
+        if safes is None or safes.get(chain) is None:
             return JSONResponse(content={"error": "No safes found"})
 
         return JSONResponse(
             content={
-                "safe": safes[chain_type],
+                "safe": safes[chain],
             },
         )
 
@@ -502,34 +498,34 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain = Chain(data["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(content={"error": "Wallet does not exist"})
 
         wallet = manager.load(ledger_type=ledger_type)
-        if wallet.safes is not None and wallet.safes.get(chain_type) is not None:
+        if wallet.safes is not None and wallet.safes.get(chain) is not None:
             return JSONResponse(
                 content={
-                    "safe": wallet.safes.get(chain_type),
-                    "message": f"Safe already exists {chain_type=}.",
+                    "safe": wallet.safes.get(chain),
+                    "message": f"Safe already exists {chain=}.",
                 }
             )
 
-        safes = t.cast(t.Dict[ChainType, str], wallet.safes)
+        safes = t.cast(t.Dict[Chain, str], wallet.safes)
         wallet.create_safe(  # pylint: disable=no-member
-            chain_type=chain_type,
+            chain=chain,
             owner=data.get("owner"),
         )
         wallet.transfer(
-            to=t.cast(str, safes.get(chain_type)),
+            to=t.cast(str, safes.get(chain)),
             amount=int(1e18),
-            chain_type=chain_type,
+            chain=chain,
             from_safe=False,
         )
         return JSONResponse(
-            content={"safe": safes.get(chain_type), "message": "Safe created!"}
+            content={"safe": safes.get(chain), "message": "Safe created!"}
         )
 
     @app.post("/api/wallet/safes")
@@ -549,37 +545,35 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_types = [ChainType(chain_type) for chain_type in data["chain_types"]]
+        chains = [Chain(chain_str) for chain_str in data["chains"]]
         # check that all chains are supported
-        for chain_type in chain_types:
-            ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        for chain in chains:
+            ledger_type = chain.ledger_type
             manager = operate.wallet_manager
             if not manager.exists(ledger_type=ledger_type):
                 return JSONResponse(
-                    content={
-                        "error": f"Wallet does not exist for chain_type {chain_type}"
-                    }
+                    content={"error": f"Wallet does not exist for chain {chain}"}
                 )
 
         # mint the safes
-        for chain_type in chain_types:
-            ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        for chain in chains:
+            ledger_type = chain.ledger_type
             manager = operate.wallet_manager
 
             wallet = manager.load(ledger_type=ledger_type)
-            if wallet.safes is not None and wallet.safes.get(chain_type) is not None:
-                logger.info(f"Safe already exists for chain_type {chain_type}")
+            if wallet.safes is not None and wallet.safes.get(chain) is not None:
+                logger.info(f"Safe already exists for chain {chain}")
                 continue
 
-            safes = t.cast(t.Dict[ChainType, str], wallet.safes)
+            safes = t.cast(t.Dict[Chain, str], wallet.safes)
             wallet.create_safe(  # pylint: disable=no-member
-                chain_type=chain_type,
+                chain=chain,
                 owner=data.get("owner"),
             )
             wallet.transfer(
-                to=t.cast(str, safes.get(chain_type)),
+                to=t.cast(str, safes.get(chain)),
                 amount=int(1e18),
-                chain_type=chain_type,
+                chain=chain,
                 from_safe=False,
             )
 
@@ -603,15 +597,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain = Chain(data["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(content={"error": "Wallet does not exist"})
 
         wallet = manager.load(ledger_type=ledger_type)
         wallet.add_or_swap_owner(
-            chain_type=chain_type,
+            chain=chain,
             owner=data.get("owner"),
         )
         return JSONResponse(content=wallet.json)

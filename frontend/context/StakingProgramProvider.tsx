@@ -11,6 +11,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 import { AutonolasService } from '@/service/Autonolas';
+import { ChainId } from '@/enums/Chain';
 
 export const INITIAL_DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.Beta;
 
@@ -22,8 +23,8 @@ export const StakingProgramContext = createContext<{
 }>({
   activeStakingProgramId: undefined,
   defaultStakingProgramId: INITIAL_DEFAULT_STAKING_PROGRAM_ID,
-  updateActiveStakingProgramId: async () => {},
-  setDefaultStakingProgramId: () => {},
+  updateActiveStakingProgramId: async () => { },
+  setDefaultStakingProgramId: () => { },
 });
 
 /** Determines the current active staking program, if any */
@@ -40,10 +41,10 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
   const updateActiveStakingProgramId = useCallback(async () => {
     // if no service nft, not staked
     const serviceId =
-      service?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token;
+      service?.chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data?.token;
 
     if (
-      !service?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data?.token
+      !service?.chain_configs[CHAIN_CONFIG[ChainId.Optimism].middlewareChain].chain_data?.token
     ) {
       setActiveStakingProgramId(null);
       return;

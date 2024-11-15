@@ -109,7 +109,7 @@ const AgentTitle = () => {
 const ServiceAndNftDetails = () => {
   const { serviceId } = useServices();
   const serviceAddress =
-    SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[`${MiddlewareChain.OPTIMISM}`];
+    SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[MiddlewareChain.OPTIMISM];
 
   return (
     <NftCard>
