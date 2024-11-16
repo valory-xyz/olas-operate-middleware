@@ -717,6 +717,9 @@ class Service(LocalResource):
             chain_data.setdefault("chain_data", {}).setdefault(
                 "user_params", {}
             ).setdefault("use_mech_marketplace", False)
+            chain_data.setdefault("chain_data", {}).setdefault(
+                "user_params", {}
+            ).setdefault("agent_id", 14)
 
         data["description"] = data.setdefault("description", data.get("name"))
         data["hash_history"] = data.setdefault(
