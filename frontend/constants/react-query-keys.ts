@@ -24,10 +24,14 @@ export const REACT_QUERY_KEYS = {
   // wallets
   WALLETS_KEY: ['wallets'] as const,
 
+  // epoch
+  LATEST_EPOCH_TIME_KEY: (chainId: number, stakingProgramId: string) =>
+    ['latestEpochTime', chainId, stakingProgramId] as const,
+
   // rewards
   REWARDS_KEY: (
     chainId: number,
-    serviceUuid: string,
+    serviceConfigId: string,
     stakingProgramId: string,
     multisig: string,
     token: number,
@@ -35,7 +39,7 @@ export const REACT_QUERY_KEYS = {
     [
       'rewards',
       chainId,
-      serviceUuid,
+      serviceConfigId,
       stakingProgramId,
       multisig,
       token,
@@ -53,4 +57,6 @@ export const REACT_QUERY_KEYS = {
       stakingProgramId,
       chainId,
     ] as const,
+  REWARDS_HISTORY_KEY: (chainId: number, serviceId: number) =>
+    ['rewardsHistory', chainId, serviceId] as const,
 } as const;
