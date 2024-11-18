@@ -16,14 +16,14 @@ const envSchema = z.object({
       nodeEnvRegex,
       'Invalid NODE_ENV, must be `development` or `production`',
     ),
-  BASE_DEV_RPC: z.string().url('Invalid BASE_DEV_RPC must be a valid URL'),
-  ETHEREUM_DEV_RPC: z
+  BASE_RPC: z.string().url('Invalid BASE_RPC must be a valid URL'),
+  ETHEREUM_RPC: z
     .string()
-    .url('Invalid ETHEREUM_DEV_RPC_URL must be a valid URL'),
-  GNOSIS_DEV_RPC: z.string().url('Invalid GNOSIS_DEV_RPC must be a valid URL'),
-  OPTIMISM_DEV_RPC: z
+    .url('Invalid ETHEREUM_RPC_URL must be a valid URL'),
+  GNOSIS_RPC: z.string().url('Invalid GNOSIS_RPC must be a valid URL'),
+  OPTIMISM_RPC: z
     .string()
-    .url('Invalid OPTIMISM_DEV_RPC must be a valid URL'),
+    .url('Invalid OPTIMISM_RPC must be a valid URL'),
 });
 
 const validateEnv = () => {

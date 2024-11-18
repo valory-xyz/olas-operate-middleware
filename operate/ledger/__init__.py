@@ -28,31 +28,23 @@ from operate.ledger.solana import Solana
 from operate.operate_types import Chain, LedgerType
 
 
-ETHEREUM_PUBLIC_RPC = os.environ.get(
-    "ETHEREUM_DEV_RPC", "https://ethereum.publicnode.com"
-)
-GNOSIS_PUBLIC_RPC = os.environ.get(
-    "GNOSIS_DEV_RPC", "https://gnosis-rpc.publicnode.com"
-)
+ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
+GNOSIS_PUBLIC_RPC = os.environ.get("GNOSIS_RPC", "https://gnosis-rpc.publicnode.com")
 GOERLI_PUBLIC_RPC = os.environ.get(
-    "GOERLI_DEV_RPC", "https://ethereum-goerli.publicnode.com"
+    "GOERLI_RPC", "https://ethereum-goerli.publicnode.com"
 )
-SOLANA_PUBLIC_RPC = os.environ.get(
-    "SOLANA_DEV_RPC", "https://api.mainnet-beta.solana.com"
-)
-BASE_PUBLIC_RPC = os.environ.get("BASE_DEV_RPC", "https://mainnet.base.org")
-OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_DEV_RPC", "https://mainnet.optimism.io")
-MODE_PUBLIC_RPC = os.environ.get("MODE_DEV_RPC", "https://rpc.mode.network")
+SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
+BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
+OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
+MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
 
-ETHEREUM_RPC = os.environ.get("ETHEREUM_DEV_RPC", "https://ethereum.publicnode.com")
-GNOSIS_RPC = os.environ.get(
-    "GNOSIS_DEV_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/"
-)
-GOERLI_RPC = os.environ.get("GOERLI_DEV_RPC", "https://ethereum-goerli.publicnode.com")
-SOLANA_RPC = os.environ.get("SOLANA_DEV_RPC", "https://api.mainnet-beta.solana.com")
-BASE_RPC = os.environ.get("BASE_DEV_RPC", "https://mainnet.base.org")
-OPTIMISM_RPC = os.environ.get("OPTIMISM_DEV_RPC", "https://mainnet.optimism.io")
-MODE_RPC = os.environ.get("MODE_DEV_RPC", "https://rpc.mode.network")
+ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
+GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
+GOERLI_RPC = os.environ.get("GOERLI_RPC", "https://ethereum-goerli.publicnode.com")
+SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
+BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
+OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
+MODE_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
 
 PUBLIC_RPCS = {
     Chain.ETHEREUM: ETHEREUM_PUBLIC_RPC,
