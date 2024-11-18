@@ -23,8 +23,8 @@ import json
 import typing as t
 from pathlib import Path
 
-import pytest
-from deepdiff import DeepDiff
+import pytest  # type: ignore
+from deepdiff import DeepDiff  # type: ignore
 
 from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
@@ -59,7 +59,7 @@ DEFAULT_CONFIG_KWARGS = {
 }
 
 
-def get_config_json_data_v0(**kwargs) -> t.Dict[str, t.Any]:
+def get_config_json_data_v0(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     """get_config_json_data_v0"""
 
     return {
@@ -97,7 +97,7 @@ def get_config_json_data_v0(**kwargs) -> t.Dict[str, t.Any]:
     }
 
 
-def get_config_json_data_v2(**kwargs) -> t.Dict[str, t.Any]:
+def get_config_json_data_v2(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     """get_config_json_data_v2"""
 
     return {
@@ -139,7 +139,7 @@ def get_config_json_data_v2(**kwargs) -> t.Dict[str, t.Any]:
     }
 
 
-def get_config_json_data_v3(**kwargs) -> t.Dict[str, t.Any]:
+def get_config_json_data_v3(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     """get_config_json_data_v3"""
 
     return {
@@ -182,7 +182,7 @@ def get_config_json_data_v3(**kwargs) -> t.Dict[str, t.Any]:
     }
 
 
-def get_config_json_data_v4(**kwargs) -> t.Dict[str, t.Any]:
+def get_config_json_data_v4(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     """get_config_json_data_v4"""
 
     return {
@@ -252,7 +252,7 @@ class TestService:
         use_mech_marketplace: bool,
         staking_program_id: str,
         tmp_path: Path,
-    ):
+    ) -> None:
         """Test services.service.Service.migrate_format()"""
 
         config_kwargs = DEFAULT_CONFIG_KWARGS.copy()
