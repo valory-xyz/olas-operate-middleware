@@ -23,8 +23,8 @@ import json
 import typing as t
 from pathlib import Path
 
-import pytest  # type: ignore
-from deepdiff import DeepDiff  # type: ignore
+import pytest
+from deepdiff import DeepDiff
 
 from operate.services.service import (
     SERVICE_CONFIG_PREFIX,

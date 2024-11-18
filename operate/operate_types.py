@@ -71,7 +71,17 @@ class LedgerType(str, enum.Enum):
 # Dynamically create the Chain enum from the ChainType
 # TODO: Migrate this to open-autonomy and remove this modified version of Chain here and use the one from open-autonomy
 # This version of open-autonomy must support the LedgerType to support SOLANA in the future
-# If solana support is not fuly implemented, decide to keep this half-baked feature
+# If solana support is not fuly implemented, decide to keep this half-baked feature.
+#
+# TODO: Once the above issue is properly implemented in Open Autonomy, remove the following
+# lines from tox.ini:
+#
+#    exclude = ^(operate/operate_types\.py|scripts/setup_wallet\.py|operate/ledger/profiles\.py|operate/ledger/__init__\.py|operate/wallet/master\.py|operate/services/protocol\.py|operate/services/manage\.py|operate/cli\.py)$
+#
+#    [mypy-operate.*]
+#    follow_imports = skip  # noqa
+#
+# These lines were itroduced to resolve mypy issues with the temporary Chain/ChainType solution.
 Chain = enum.Enum(
     "Chain",
     [(member.name, member.value) for member in ChainType]
