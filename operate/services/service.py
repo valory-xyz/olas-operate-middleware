@@ -29,7 +29,7 @@ import tempfile
 import time
 import typing as t
 import uuid
-from copy import copy, deepcopy
+from copy import copy
 from dataclasses import dataclass
 from json import JSONDecodeError
 from pathlib import Path
@@ -42,7 +42,6 @@ from aea.configurations.constants import (
     PRIVATE_KEY_PATH_SCHEMA,
     SKILL,
 )
-from aea.configurations.data_types import PackageType
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment

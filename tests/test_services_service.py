@@ -83,7 +83,7 @@ def get_config_json_data_v0(**kwargs) -> t.Dict[str, t.Any]:
                 "agent_id": kwargs.get("agent_id"),
                 "threshold": kwargs.get("threshold"),
                 "use_staking": kwargs.get("use_staking"),
-                "cost_of_bond": 10000000000000000,
+                "cost_of_bond": kwargs.get("cost_of_bond"),
                 "olas_cost_of_bond": 10000000000000000000,
                 "olas_required_to_stake": 10000000000000000000,
                 "fund_requirements": {
@@ -125,7 +125,7 @@ def get_config_json_data_v2(**kwargs) -> t.Dict[str, t.Any]:
                         "nft": kwargs.get("nft"),
                         "threshold": kwargs.get("threshold"),
                         "use_staking": kwargs.get("use_staking"),
-                        "cost_of_bond": 10000000000000000,
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "agent": kwargs.get("fund_requirements_agent"),
                             "safe": kwargs.get("fund_requirements_safe"),
@@ -168,7 +168,7 @@ def get_config_json_data_v3(**kwargs) -> t.Dict[str, t.Any]:
                         "threshold": kwargs.get("threshold"),
                         "use_staking": kwargs.get("use_staking"),
                         "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
-                        "cost_of_bond": 10000000000000000,
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "agent": kwargs.get("fund_requirements_agent"),
                             "safe": kwargs.get("fund_requirements_safe"),
