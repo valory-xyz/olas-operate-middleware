@@ -7,7 +7,7 @@ import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { Pages } from '@/enums/PageState';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
-import { useStakingContractContext } from '@/hooks/useStakingContractInfo';
+import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CardSection } from '../../styled/CardSection';
@@ -22,7 +22,8 @@ export const StakingContractUpdate = () => {
     defaultStakingProgramId,
   } = useStakingProgram();
 
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
   const { serviceStatus } = useServices();
 
   const serviceIsTransitioning = useMemo(
@@ -44,7 +45,9 @@ export const StakingContractUpdate = () => {
         type="link"
         className="p-0"
         onClick={() => goto(Pages.ManageStaking)}
-        disabled={!isStakingContractInfoRecordLoaded || serviceIsTransitioning}
+        disabled={
+          !isAllStakingContractDetailsRecordLoaded || serviceIsTransitioning
+        }
       >
         {stakingContractName}
         <RightOutlined />
@@ -53,7 +56,7 @@ export const StakingContractUpdate = () => {
   }, [
     goto,
     isActiveStakingProgramLoaded,
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     serviceIsTransitioning,
     stakingContractName,
   ]);

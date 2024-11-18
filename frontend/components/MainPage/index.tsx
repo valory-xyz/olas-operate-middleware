@@ -10,8 +10,8 @@ import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import {
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 // import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -37,9 +37,10 @@ export const Main = () => {
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
 
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
+  const { hasEnoughServiceSlots } = useStakingContractDetails(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
@@ -61,7 +62,7 @@ export const Main = () => {
   const hideMainOlasBalanceTopBorder = [
     !backupSafeAddress,
     activeStakingProgramId === StakingProgramId.Alpha,
-    isStakingContractInfoRecordLoaded && !hasEnoughServiceSlots,
+    isAllStakingContractDetailsRecordLoaded && !hasEnoughServiceSlots,
   ].some((condition) => !!condition);
 
   return (

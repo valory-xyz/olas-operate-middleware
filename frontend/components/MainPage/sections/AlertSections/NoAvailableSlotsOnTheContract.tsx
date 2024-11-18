@@ -6,8 +6,8 @@ import { usePageState } from '@/hooks/usePageState';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CustomAlert } from '../../../Alert';
@@ -24,14 +24,15 @@ export const NoAvailableSlotsOnTheContract = () => {
     defaultStakingProgramMeta,
   } = useStakingProgram();
 
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
   const { isServiceStaked } = useActiveStakingContractInfo();
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
+  const { hasEnoughServiceSlots } = useStakingContractDetails(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
   const stakingProgramName = useMemo(() => {
-    if (!isStakingContractInfoRecordLoaded) return null;
+    if (!isAllStakingContractDetailsRecordLoaded) return null;
     if (activeStakingProgramId) {
       return activeStakingProgramMeta?.name;
     }
@@ -40,10 +41,10 @@ export const NoAvailableSlotsOnTheContract = () => {
     activeStakingProgramId,
     activeStakingProgramMeta?.name,
     defaultStakingProgramMeta?.name,
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
   ]);
 
-  if (!isStakingContractInfoRecordLoaded) return null;
+  if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (hasEnoughServiceSlots) return null;
   if (isServiceStaked) return null;
 

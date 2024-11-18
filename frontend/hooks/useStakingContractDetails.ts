@@ -1,43 +1,51 @@
+import { useQuery } from '@tanstack/react-query';
 import { isNil } from 'lodash';
 import { useContext } from 'react';
 
-import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
+import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
+import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { StakingContractDetailsContext } from '@/context/StakingContractDetailsProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { Maybe } from '@/types/Util';
+
+import { useAgent } from './useAgent';
+import { useChainId } from './useChainId';
+import { useServiceId } from './useService';
 
 export const useStakingContractContext = () => {
   const {
-    activeStakingContractInfo,
+    activeStakingContractDetails,
     isPaused,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
-    updateActiveStakingContractInfo,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
+    refetchActiveStakingContractDetails,
     setIsPaused,
-    isActiveStakingContractInfoLoaded,
-  } = useContext(StakingContractInfoContext);
+    isActiveStakingContractDetailsLoaded,
+  } = useContext(StakingContractDetailsContext);
   return {
-    isActiveStakingContractInfoLoaded,
-    activeStakingContractInfo,
+    isActiveStakingContractDetailsLoaded,
+    activeStakingContractDetails,
     isPaused,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
-    updateActiveStakingContractInfo,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
+    refetchActiveStakingContractDetails,
     setIsPaused,
   };
 };
 
 export const useActiveStakingContractInfo = () => {
   const {
-    activeStakingContractInfo,
-    isActiveStakingContractInfoLoaded: isActiveStakingContractInfoLoaded,
+    activeStakingContractDetails,
+    isActiveStakingContractDetailsLoaded: isActiveStakingContractDetailsLoaded,
   } = useStakingContractContext();
 
   const { selectedService } = useServices();
 
   // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
-  if (!selectedService || !activeStakingContractInfo)
+  if (!selectedService || !activeStakingContractDetails)
     return {
-      stakingContractInfoRecord,
-      updateActiveStakingContractInfo,
+      allStakingContractDetailsRecord,
+      refetchActiveStakingContractDetails,
       setIsPaused,
       isPaused,
     };
@@ -49,7 +57,7 @@ export const useActiveStakingContractInfo = () => {
     availableRewards,
     serviceIds,
     maxNumServices,
-  } = activeStakingContractInfo ?? {};
+  } = activeStakingContractDetails ?? {};
 
   const isAgentEvicted = serviceStakingState === 2;
 
@@ -97,15 +105,48 @@ export const useActiveStakingContractInfo = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isActiveStakingContractInfoLoaded,
-    activeStakingContractInfo,
+    isActiveStakingContractDetailsLoaded,
+    activeStakingContractDetails,
   };
 };
 
-export const useStakingContractInfo = (stakingProgramId: StakingProgramId) => {
-  const { stakingContractInfoRecord } = useStakingContractContext();
+/**
+ * hook to get staking contract details by staking program
+ */
+export const useStakingContractDetailsByStakingProgram = (
+  stakingProgramId: Maybe<StakingProgramId>,
+  isPaused?: boolean,
+) => {
+  const serviceId = useServiceId();
+  const chainId = useChainId();
+  const agent = useAgent();
 
-  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+  return useQuery({
+    queryKey: REACT_QUERY_KEYS.STAKING_CONTRACT_DETAILS_BY_STAKING_PROGRAM_KEY(
+      chainId,
+      serviceId!,
+      stakingProgramId!,
+    ),
+    queryFn: async () => {
+      return await agent.serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
+        serviceId!,
+        stakingProgramId!,
+        chainId,
+      );
+    },
+    enabled: !!serviceId && !!stakingProgramId && !!chainId && !isPaused,
+    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : false,
+    refetchOnWindowFocus: false,
+  });
+};
+
+export const useStakingContractDetails = (
+  stakingProgramId: StakingProgramId,
+) => {
+  const { allStakingContractDetailsRecord } = useStakingContractContext();
+
+  const stakingContractInfo =
+    allStakingContractDetailsRecord?.[stakingProgramId];
 
   const { serviceIds, maxNumServices, availableRewards } =
     stakingContractInfo ?? {};

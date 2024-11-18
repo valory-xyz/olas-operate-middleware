@@ -7,8 +7,8 @@ import { SUPPORT_URL } from '@/constants/urls';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { formatToShortDateTime } from '@/utils/time';
 
@@ -50,11 +50,12 @@ export const CannotStartAgentDueToUnexpectedError = () => (
 const evictedDescription =
   "You didn't run your agent enough and it missed its targets multiple times. You can run the agent again when the eviction period ends.";
 const AgentEvictedPopover = () => {
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
   const { evictionExpiresAt } = useActiveStakingContractInfo();
 
-  if (!isStakingContractInfoRecordLoaded) return null;
+  if (!isAllStakingContractDetailsRecordLoaded) return null;
 
   return (
     <Popover
@@ -118,7 +119,8 @@ const NoJobsAvailablePopover = () => (
 );
 
 export const CannotStartAgentPopover = () => {
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
@@ -126,11 +128,11 @@ export const CannotStartAgentPopover = () => {
   const { isAgentEvicted, isEligibleForStaking } =
     useActiveStakingContractInfo();
 
-  const { hasEnoughServiceSlots, isRewardsAvailable } = useStakingContractInfo(
+  const { hasEnoughServiceSlots, isRewardsAvailable } = useStakingContractDetails(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
-  if (!isStakingContractInfoRecordLoaded) return null;
+  if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isEligibleForStaking) return null;
   if (!hasEnoughServiceSlots) return <NoJobsAvailablePopover />;
   if (!isRewardsAvailable) return <NoRewardsAvailablePopover />;

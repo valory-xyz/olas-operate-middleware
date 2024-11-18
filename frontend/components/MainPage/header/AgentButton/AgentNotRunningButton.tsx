@@ -14,8 +14,8 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -52,9 +52,9 @@ export const AgentNotRunningButton = () => {
   const { storeState } = useStore();
 
   const {
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
-    updateActiveStakingContractInfo,
+    refetchActiveStakingContractDetails,
   } = useStakingContractContext();
 
   const { activeStakingProgramId, defaultStakingProgramId } =
@@ -63,12 +63,12 @@ export const AgentNotRunningButton = () => {
   const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
     useActiveStakingContractInfo();
 
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
+  const { hasEnoughServiceSlots } = useStakingContractDetails(
     activeStakingProgramId ?? defaultStakingProgramId,
   );
 
   // const minStakingDeposit =
-  //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
+  //   allStakingContractDetailsRecord?.[activeStakingProgram ?? defaultStakingProgram]
   //     ?.minStakingDeposit;
 
   const requiredOlas =
@@ -153,10 +153,10 @@ export const AgentNotRunningButton = () => {
     await delayInSeconds(5);
 
     // update provider states sequentially
-    // service id is required before activeStakingContractInfo & balances can be updated
+    // service id is required before activeStakingContractDetails & balances can be updated
     try {
       await updateServicesState?.(); // reload the available services
-      await updateActiveStakingContractInfo(); // reload active staking contract with new service
+      await refetchActiveStakingContractDetails(); // reload active staking contract with new service
       await updateBalances(); // reload the balances
     } catch (error) {
       console.error(error);
@@ -177,12 +177,12 @@ export const AgentNotRunningButton = () => {
     activeStakingProgramId,
     serviceTemplate,
     updateServicesState,
-    updateActiveStakingContractInfo,
+    refetchActiveStakingContractDetails,
     updateBalances,
   ]);
 
   const isDeployable = useMemo(() => {
-    if (!isStakingContractInfoRecordLoaded) return false;
+    if (!isAllStakingContractDetailsRecordLoaded) return false;
 
     // if the agent is NOT running and the balance is too low,
     // user should not be able to start the agent
@@ -217,7 +217,7 @@ export const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     deploymentStatus,
     isLowBalance,
     requiredOlas,
