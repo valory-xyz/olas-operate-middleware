@@ -49,7 +49,7 @@ from operate.services.service import (
     OnChainUserParams,
     Service,
 )
-from operate.types import LedgerConfig, ServiceTemplate
+from operate.operate_types import LedgerConfig, ServiceTemplate
 from operate.utils.gnosis import NULL_ADDRESS
 from operate.wallet.master import MasterWalletManager
 
