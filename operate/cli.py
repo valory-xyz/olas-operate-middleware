@@ -29,6 +29,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import FrameType
 
+import psutil
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from compose.project import ProjectError
@@ -43,6 +44,7 @@ from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
+from operate.services.deployment_runner import kill_process
 from operate.services.health_checker import HealthChecker
 from operate.types import ChainType, DeploymentStatus
 from operate.wallet.master import MasterWalletManager
@@ -282,6 +284,30 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _kill_server(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
+
+    @app.get(f"/shutdown")
+    async def _shutdown(request: Request) -> JSONResponse:
+        """Kill backend server from inside."""
+        logger.info("Stopping services on demand...")
+        pause_all_services()
+        logger.info("Stopping services on demand done.")
+        my_pid = os.getpid() - my_pid
+        cur_proc = psutil.Process(pid=my_pid)
+        logger.warning(f"Cur proc pid: {my_pid}")
+        child_pids = set(cur_proc.children(recursive=True)) - set([])
+        logger.warning(f"Cur proc child pids: {child_pids}")
+        for pid in child_pids:
+            try:
+                logger.warning(f"Kill child pid: {pid}")
+                psutil.Process(pid=pid).kill()
+            except:
+                logger.exception("on kill")
+
+        try:
+            logger.warning(f"Kill Cur proc pid: {my_pid}")
+            cur_proc.kill()
+        except:
+            logger.exception("on kill")
 
     @app.get("/stop_all_services")
     async def _stop_all_services(request: Request) -> JSONResponse:

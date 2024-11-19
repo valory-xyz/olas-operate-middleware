@@ -110,6 +110,13 @@ async function beforeQuit() {
       logger.electron(JSON.stringify(e, null, 2));
     }
 
+    try {
+      logger.electron('Killing backend server by shutdown endpoint!');
+      await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+    } catch (err) {
+      logger.electron('Backend stopped: ' + JSON.stringify(err, null, 2));
+    }
+
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
@@ -297,7 +304,15 @@ async function launchDaemon() {
 
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
   } catch (err) {
-    logger.electron('Backend not running!');
+    logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
+  }
+
+
+  try {
+    logger.electron('Killing backend server by shutdown endpoint!');
+    await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+  } catch (err) {
+    logger.electron('Backend stopped: ' + JSON.stringify(err, null, 2));
   }
 
   const check = new Promise(function (resolve, _reject) {
