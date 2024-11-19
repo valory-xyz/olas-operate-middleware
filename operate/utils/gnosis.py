@@ -169,7 +169,9 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=[crypto.address] if backup_owner is None else [crypto.address, backup_owner],
+            owners=[crypto.address]
+            if backup_owner is None
+            else [crypto.address, backup_owner],
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -285,18 +287,18 @@ def add_owner(
         crypto=crypto,
     )
 
+
 def get_prev_owner(ledger_api: LedgerApi, safe: str, owner: str) -> str:
     """Retrieve the previous owner in the owners list of the Safe."""
 
-    owners = get_owners(
-        ledger_api=ledger_api,
-        safe=safe
-    )
+    owners = get_owners(ledger_api=ledger_api, safe=safe)
 
     try:
         index = owners.index(owner) - 1
     except ValueError as e:
-        raise ValueError(f"Owner {owner} not found in the owners' list of the Safe.") from e
+        raise ValueError(
+            f"Owner {owner} not found in the owners' list of the Safe."
+        ) from e
 
     if index < 0:
         return SENTINEL_OWNERS
@@ -312,11 +314,7 @@ def swap_owner(
 ) -> None:
     """Swap owner of a safe."""
 
-    prev_owner = get_prev_owner(
-        ledger_api=ledger_api,
-        safe=safe,
-        owner=old_owner
-    )
+    prev_owner = get_prev_owner(ledger_api=ledger_api, safe=safe, owner=old_owner)
     instance = registry_contracts.gnosis_safe.get_instance(
         ledger_api=ledger_api,
         contract_address=safe,
@@ -346,11 +344,7 @@ def remove_owner(
 ) -> None:
     """Remove owner from a safe."""
 
-    prev_owner = get_prev_owner(
-        ledger_api=ledger_api,
-        safe=safe,
-        owner=owner
-    )
+    prev_owner = get_prev_owner(ledger_api=ledger_api, safe=safe, owner=owner)
     instance = registry_contracts.gnosis_safe.get_instance(
         ledger_api=ledger_api,
         contract_address=safe,

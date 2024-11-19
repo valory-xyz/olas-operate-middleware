@@ -39,9 +39,9 @@ from operate.constants import (
 from operate.ledger import get_default_rpc
 from operate.operate_types import ChainType, LedgerType
 from operate.resource import LocalResource
-from operate.utils.gnosis import add_owner, remove_owner
+from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
-from operate.utils.gnosis import get_owners, swap_owner
+from operate.utils.gnosis import get_owners, remove_owner, swap_owner
 from operate.utils.gnosis import transfer as transfer_from_safe
 
 
@@ -267,7 +267,9 @@ class EthereumMasterWallet(MasterWallet):
             raise ValueError("The Safe address cannot be set as the Safe backup owner.")
 
         if backup_owner == self.address:
-            raise ValueError("The master wallet cannot be set as the Safe backup owner.")
+            raise ValueError(
+                "The master wallet cannot be set as the Safe backup owner."
+            )
 
         owners.remove(self.address)
         old_backup_owner = owners[0] if owners else None
@@ -288,7 +290,7 @@ class EthereumMasterWallet(MasterWallet):
                 safe=t.cast(str, self.safe),
                 owner=old_backup_owner,
                 crypto=self.crypto,
-                threshold=1
+                threshold=1,
             )
         elif old_backup_owner and backup_owner:
             swap_owner(
