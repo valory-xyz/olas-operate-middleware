@@ -1,6 +1,8 @@
 import { message } from 'antd';
+import { BigNumberish } from 'ethers';
 import { isAddress } from 'ethers/lib/utils';
-import { isNil, isNumber } from 'lodash';
+import { Contract as MulticallContract } from 'ethers-multicall';
+import { isNil } from 'lodash';
 import { ValueOf } from 'next/dist/shared/lib/constants';
 import {
   createContext,
@@ -9,35 +11,25 @@ import {
   SetStateAction,
   useCallback,
   useContext,
-  useMemo,
   useState,
 } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { MiddlewareWalletResponse } from '@/client';
+import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { CHAIN_CONFIG } from '@/config/chains';
-import { TOKEN_CONFIG } from '@/config/tokens';
+import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
-import {
-  LOW_AGENT_SAFE_BALANCE,
-  LOW_MASTER_SAFE_BALANCE,
-} from '@/constants/thresholds';
+import { PROVIDERS } from '@/constants/providers';
 import { ChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
-import { Wallets } from '@/enums/Wallet';
+import { Wallets, WalletType } from '@/enums/Wallet';
 import { useServices } from '@/hooks/useServices';
 import { StakedAgentService } from '@/service/agents/StakedAgentService';
-import { EthersService } from '@/service/Ethers';
-import MulticallService from '@/service/Multicall';
 import { Address } from '@/types/Address';
-import {
-  AddressNumberRecord,
-  WalletAddressNumberRecord,
-} from '@/types/Records';
+import { WalletAddressNumberRecord } from '@/types/Records';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
-import { RewardContext } from './RewardProvider';
 import { WalletContext } from './WalletProvider';
 
 export const BalanceContext = createContext<{
@@ -64,8 +56,6 @@ export const BalanceContext = createContext<{
   isBalanceLoaded: false,
   olasBondBalance: undefined,
   olasDepositBalance: undefined,
-  masterEoaBalance: undefined,
-  masterSafeBalance: undefined,
   totalEthBalance: undefined,
   totalOlasBalance: undefined,
   isLowBalance: false,
@@ -76,105 +66,66 @@ export const BalanceContext = createContext<{
   updateBalances: async () => {},
   setIsPaused: () => {},
   totalOlasStakedBalance: undefined,
-  baseBalance: undefined,
-  ethereumBalance: undefined,
-  optimismBalance: undefined,
 });
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
   const { wallets } = useContext(WalletContext);
   const { services, serviceAddresses } = useServices();
-  const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
-    useContext(RewardContext);
+  // const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
+  //   useContext(RewardContext);
 
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [olasDepositBalance, setOlasDepositBalance] = useState<number>();
-  const [olasBondBalance, setOlasBondBalance] = useState<number>();
+
   const [isBalanceLoaded, setIsBalanceLoaded] = useState<boolean>(false);
-  const [walletBalances, setWalletBalances] =
-    useState<WalletAddressNumberRecord>({});
 
-  // TODO: refactor to support multiple chains, and gas tokens from config
-  const totalEthBalance: number | undefined = useMemo(() => {
-    if (!isLoaded) return;
-    return Object.values(walletBalances).reduce(
-      (acc: number, walletBalance) => acc + walletBalance.ETH,
-      0,
-    );
-  }, [isLoaded, walletBalances]);
+  const [walletBalances, setWalletBalances] = useState<BalanceResult[]>([]);
 
-  const totalOlasBalance: number | undefined = useMemo(() => {
-    if (!isLoaded) return;
+  // // TODO: refactor to parse `walletbalances`
 
-    const sumWalletBalances = Object.values(walletBalances).reduce(
-      (acc: number, walletBalance) => acc + walletBalance.OLAS,
-      0,
-    );
+  // const totalEthBalance: number | undefined = useMemo(() => {
+  //   if (!isLoaded) return;
+  //   return Object.values(walletBalances).reduce(
+  //     (acc: number, walletBalance) => acc + walletBalance.ETH,
+  //     0,
+  //   );
+  // }, [isLoaded, walletBalances]);
 
-    const total =
-      sumWalletBalances +
-      (olasDepositBalance ?? 0) +
-      (olasBondBalance ?? 0) +
-      (optimisticRewardsEarnedForEpoch ?? 0) +
-      (accruedServiceStakingRewards ?? 0);
+  // const totalOlasBalance: number | undefined = useMemo(() => {
+  //   if (!isLoaded) return;
 
-    return total;
-  }, [
-    accruedServiceStakingRewards,
-    isLoaded,
-    olasBondBalance,
-    olasDepositBalance,
-    optimisticRewardsEarnedForEpoch,
-    walletBalances,
-  ]);
+  //   const sumWalletBalances = Object.values(walletBalances).reduce(
+  //     (acc: number, walletBalance) => acc + walletBalance.OLAS,
+  //     0,
+  //   );
 
-  const totalOlasStakedBalance: number | undefined = useMemo(() => {
-    if (!isLoaded) return;
-    return (olasBondBalance ?? 0) + (olasDepositBalance ?? 0);
-  }, [isLoaded, olasBondBalance, olasDepositBalance]);
+  //   const total =
+  //     sumWalletBalances +
+  //     (olasDepositBalance ?? 0) +
+  //     (olasBondBalance ?? 0) +
+  //     (optimisticRewardsEarnedForEpoch ?? 0) +
+  //     (accruedServiceStakingRewards ?? 0);
+
+  //   return total;
+  // }, [accruedServiceStakingRewards, isLoaded, optimisticRewardsEarnedForEpoch]);
+
+  // const totalOlasStakedBalance: number | undefined = useMemo(() => {
+  //   if (!isLoaded) return;
+  //   return (olasBondBalance ?? 0) + (olasDepositBalance ?? 0);
+  // }, [isLoaded, olasBondBalance, olasDepositBalance]);
 
   const updateBalances = useCallback(async (): Promise<void> => {
-    if (!masterEoaAddress) return;
+    if (!wallets) return;
 
-    const walletAddresses: Address[] = [];
-    if (isAddress(masterEoaAddress)) walletAddresses.push(masterEoaAddress);
-    if (isAddress(`${masterSafeAddress}`)) {
-      walletAddresses.push(masterSafeAddress as Address);
-    }
-    if (serviceAddresses) {
-      walletAddresses.push(...serviceAddresses.filter(isAddress));
-    }
-
-    // fetch balances for other chains
-    // TODO: refactor to dynamically fetch balances for all chains
-    // try {
-    //   await Promise.allSettled([
-    //     baseBalanceTemp,
-    //     ethereumBalanceTemp,
-    //     optimismBalanceTemp,
-    //   ]);
-    // } catch (error) {
-    //   console.error(error);
-    // }
+    const walletBalances = await getCrossChainWalletBalances(wallets);
+    setWalletBalances(walletBalances);
 
     try {
-      const walletBalances = await getWalletBalances(walletAddresses);
-      if (!walletBalances) return;
-
-      setWalletBalances(walletBalances);
-
       // TODO: refactor to use ChainId enum, service from useService(),
       const serviceId =
         services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
           .token;
-
-      if (!isNumber(serviceId)) {
-        setIsLoaded(true);
-        setIsBalanceLoaded(true);
-        return;
-      }
 
       if (
         !isNil(masterSafeAddress) &&
@@ -224,50 +175,19 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       message.error('Unable to retrieve wallet balances');
       setIsBalanceLoaded(true);
     }
-  }, [masterEoaAddress, masterSafeAddress, services]);
+  }, [services, wallets]);
 
-  const agentEoaAddress = useMemo(
-    () =>
-      services?.[0]?.chain_configs?.[CHAIN_CONFIG.OPTIMISM.chainId]?.chain_data
-        ?.instances?.[0],
-    [services],
-  );
-
-  const masterEoaBalance = useMemo(
-    () => masterEoaAddress && walletBalances[masterEoaAddress],
-    [masterEoaAddress, walletBalances],
-  );
-
-  const masterSafeBalance = useMemo(
-    () => masterSafeAddress && walletBalances[masterSafeAddress],
-    [masterSafeAddress, walletBalances],
-  );
-
-  const agentSafeBalance = useMemo(
-    () =>
-      services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
-        ?.multisig &&
-      walletBalances[
-        services[0].chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
-          .multisig!
-      ],
-    [services, walletBalances],
-  );
-  const agentEoaBalance = useMemo(
-    () => agentEoaAddress && walletBalances[agentEoaAddress],
-    [agentEoaAddress, walletBalances],
-  );
-
-  const isLowBalance = useMemo(() => {
-    if (!masterSafeBalance || !agentSafeBalance) return false;
-    if (
-      masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
-      // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
-      agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
-    )
-      return true;
-    return false;
-  }, [masterSafeBalance, agentSafeBalance]);
+  // TODO: include in walletBalances
+  // const isLowBalance = useMemo(() => {
+  //   if (!masterSafeBalance || !agentSafeBalance) return false;
+  //   if (
+  //     masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
+  //     // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
+  //     agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
+  //   )
+  //     return true;
+  //   return false;
+  // }, [masterSafeBalance, agentSafeBalance]);
 
   useInterval(
     () => {
@@ -282,23 +202,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isLoaded,
         setIsLoaded,
         isBalanceLoaded,
-        olasBondBalance,
-        olasDepositBalance,
-        masterEoaBalance,
-        masterSafeBalance,
-        totalEthBalance,
-        totalOlasBalance,
-        isLowBalance,
         wallets,
         walletBalances,
-        agentSafeBalance,
-        agentEoaBalance,
         updateBalances,
         setIsPaused,
-        totalOlasStakedBalance,
-        baseBalance,
-        ethereumBalance,
-        optimismBalance,
       }}
     >
       {children}
@@ -306,84 +213,126 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-export const getEthBalances = async (
-  walletAddresses: Address[],
-): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(
-    `${process.env.OPTIMISM_RPC}`,
+type BalanceResult = {
+  walletAddress: Address;
+  chainId: ChainId;
+  symbol: TokenSymbol;
+  isNative: boolean;
+  balance: BigNumberish;
+};
+
+const getCrossChainWalletBalances = async (
+  wallets: Wallets,
+): Promise<BalanceResult[]> => {
+  const providerEntries = Object.entries(PROVIDERS);
+
+  // Get balances for each chain
+  const balanceResults = await Promise.allSettled(
+    providerEntries.map(
+      async ([chainIdKey, { multicallProvider: chainMulticallProvider }]) => {
+        const chainId = +chainIdKey as ChainId;
+
+        // Get tokens for this chain
+        const tokens = TOKEN_CONFIG[chainId];
+        if (!tokens) return [] as BalanceResult[];
+
+        // Create balance checking promises for all tokens and wallets
+        const chainBalancePromises: Promise<BalanceResult[]>[] = Object.entries(
+          tokens,
+        ).map(async ([symbolKey, tokenConfig]) => {
+          const symbol = symbolKey as TokenSymbol;
+
+          const results: BalanceResult[] = [];
+          const isNative = tokenConfig.tokenType === TokenType.NativeGas;
+          const isErc20 = tokenConfig.tokenType === TokenType.Erc20;
+
+          // Filter relevant wallets
+          const relevantWallets = wallets.filter((wallet) => {
+            const isEoa = wallet.type === WalletType.EOA;
+            const isSafe = wallet.type === WalletType.Safe;
+            const isOnSameChain = isEoa || wallet.chainId === chainId;
+            return isEoa || (isSafe && isOnSameChain);
+          });
+
+          if (isNative) {
+            // Handle native token balances
+            const nativeBalances = await Promise.all(
+              relevantWallets.map(async (wallet) => {
+                const balance = await chainMulticallProvider.getEthBalance(
+                  wallet.address,
+                );
+                return {
+                  walletAddress: wallet.address,
+                  chainId,
+                  symbol,
+                  isNative: true,
+                  balance,
+                } as BalanceResult;
+              }),
+            );
+            results.push(...nativeBalances);
+          }
+
+          if (isErc20) {
+            // Create ERC20 contract interface for multicall
+            const erc20Contract = new MulticallContract(
+              tokenConfig.address,
+              ERC20_BALANCE_OF_STRING_FRAGMENT,
+            );
+
+            // Prepare multicall for ERC20 balances
+            const erc20Calls = relevantWallets.map((wallet) =>
+              erc20Contract.balanceOf(wallet.address),
+            );
+
+            // Execute multicall
+            const erc20Balances = await chainMulticallProvider.all(erc20Calls);
+
+            // Map results to balance objects
+            const erc20Results = relevantWallets.map((wallet, index) => ({
+              walletAddress: wallet.address,
+              chainId,
+              symbol,
+              isNative: false,
+              balance: erc20Balances[index],
+            })) as BalanceResult[];
+
+            results.push(...erc20Results);
+          }
+
+          return results;
+        });
+
+        // Wait for all token balance promises to resolve and handle results
+        const chainResults = await Promise.allSettled(chainBalancePromises);
+
+        // Filter and flatten successful results
+        return chainResults
+          .filter(
+            (result): result is PromiseFulfilledResult<BalanceResult[]> =>
+              result.status === 'fulfilled',
+          )
+          .map((result) => result.value)
+          .flat();
+      },
+    ),
   );
-  if (!rpcIsValid) return;
 
-  const ethBalances = await MulticallService.getEthBalances(
-    walletAddresses,
-  ).catch((e) => {
-    console.error(e);
-    return walletAddresses.reduce((acc, address) => {
-      acc[address] = 0;
-      return acc;
-    }, {} as AddressNumberRecord);
-  });
-
-  return ethBalances;
+  // Filter and flatten successful results from all chains
+  return balanceResults
+    .filter(
+      (result): result is PromiseFulfilledResult<BalanceResult[]> =>
+        result.status === 'fulfilled',
+    )
+    .map((result) => result.value)
+    .flat();
 };
 
-export const getOlasBalances = async (
-  walletAddresses: Address[],
-): Promise<AddressNumberRecord | undefined> => {
-  const rpcIsValid = await EthersService.checkRpc(
-    `${process.env.OPTIMISM_RPC}`,
-  );
-  if (!rpcIsValid) return;
+// TODO: implement staked balances cross-chain for all master safes
 
-  const olasBalances = await MulticallService.getErc20Balances(
-    walletAddresses,
-    TOKEN_CONFIG[CHAIN_CONFIG.OPTIMISM.chainId].OLAS.address,
-  );
-
-  return olasBalances;
-};
-
-export const getWalletAddresses = (
-  wallets: MiddlewareWalletResponse[],
-  serviceAddresses: Address[],
-): Address[] => {
-  const walletsToCheck: Address[] = [];
-
-  for (const wallet of wallets) {
-    const { address } = wallet;
-
-    if (address && isAddress(address)) {
-      walletsToCheck.push(address);
-    }
-  }
-
-  for (const serviceAddress of serviceAddresses) {
-    if (serviceAddress && isAddress(`${serviceAddress}`)) {
-      walletsToCheck.push(serviceAddress);
-    }
-  }
-
-  return walletsToCheck;
-};
-
-export const getWalletBalances = async (
-  walletAddresses: Address[],
-): Promise<WalletAddressNumberRecord | undefined> => {
-  const [ethBalances, olasBalances] = await Promise.all([
-    getEthBalances(walletAddresses),
-    getOlasBalances(walletAddresses),
-  ]);
-
-  if (!ethBalances) return;
-  if (!olasBalances) return;
-
-  const tempWalletBalances: WalletAddressNumberRecord = {};
-  for (const [address, balance] of Object.entries(ethBalances)) {
-    tempWalletBalances[address as Address] = {
-      [TokenSymbol.ETH]: balance,
-      [TokenSymbol.OLAS]: olasBalances[address as Address],
-    };
-  }
-
-  return tempWalletBalances;
-};
+// const getCrossChainStakedBalances = async (
+//   wallets: MasterSafe[],
+// ): Promise<{
+//   olasBondBalance?: number;
+//   olasDepositBalance?: number;
+// }>[] => ({});
