@@ -11,7 +11,6 @@ import {
   SetStateAction,
   useCallback,
   useContext,
-  useMemo,
   useState,
 } from 'react';
 import { useInterval } from 'usehooks-ts';
@@ -21,10 +20,6 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
-import {
-  LOW_AGENT_SAFE_BALANCE,
-  LOW_MASTER_SAFE_BALANCE,
-} from '@/constants/thresholds';
 import { ChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
@@ -87,7 +82,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const [walletBalances, setWalletBalances] = useState<BalanceResult[]>([]);
 
-  // // TODO: refactor to support multiple chains, and gas tokens from config
+  // // TODO: refactor to parse `walletbalances`
+
   // const totalEthBalance: number | undefined = useMemo(() => {
   //   if (!isLoaded) return;
   //   return Object.values(walletBalances).reduce(
@@ -179,18 +175,19 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       message.error('Unable to retrieve wallet balances');
       setIsBalanceLoaded(true);
     }
-  }, [serviceAddresses, services, wallets]);
+  }, [services, wallets]);
 
-  const isLowBalance = useMemo(() => {
-    if (!masterSafeBalance || !agentSafeBalance) return false;
-    if (
-      masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
-      // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
-      agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
-    )
-      return true;
-    return false;
-  }, [masterSafeBalance, agentSafeBalance]);
+  // TODO: include in walletBalances
+  // const isLowBalance = useMemo(() => {
+  //   if (!masterSafeBalance || !agentSafeBalance) return false;
+  //   if (
+  //     masterSafeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
+  //     // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
+  //     agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
+  //   )
+  //     return true;
+  //   return false;
+  // }, [masterSafeBalance, agentSafeBalance]);
 
   useInterval(
     () => {
@@ -205,14 +202,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         isLoaded,
         setIsLoaded,
         isBalanceLoaded,
-        olasBondBalance,
-        olasDepositBalance,
-        isLowBalance,
         wallets,
         walletBalances,
         updateBalances,
         setIsPaused,
-        totalOlasStakedBalance,
       }}
     >
       {children}
