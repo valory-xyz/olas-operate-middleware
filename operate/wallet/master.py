@@ -256,7 +256,7 @@ class EthereumMasterWallet(MasterWallet):
         backup_owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
     ) -> None:
-        """Adds a backup owner if not present, or updates it by the provided backup owner."""
+        """Adds a backup owner if not present, or updates it by the provided backup owner. Setting a None backup owner will remove the current one, if any."""
         ledger_api = self.ledger_api(chain_type=chain_type, rpc=rpc)
         owners = get_owners(ledger_api=ledger_api, safe=t.cast(str, self.safe))
 
