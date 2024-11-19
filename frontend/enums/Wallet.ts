@@ -6,7 +6,7 @@ export enum WalletType {
   Safe = 'multisig',
   EOA = 'eoa',
 }
-export enum WalletOwner {
+export enum WalletOwnerType {
   Master = 'master', // user
   Agent = 'agent',
 }
@@ -14,7 +14,7 @@ export enum WalletOwner {
 export type MasterEoa = {
   address: Address;
   type: WalletType.EOA;
-  owner: WalletOwner;
+  owner: WalletOwnerType.Master;
 };
 
 export type MasterSafe = Omit<MasterEoa, 'type'> & {
@@ -27,7 +27,7 @@ export type MasterWallet = MasterEoa | MasterSafe;
 export type AgentEoa = {
   address: Address;
   type: WalletType.EOA;
-  owner: WalletOwner.Agent;
+  owner: WalletOwnerType.Agent;
 };
 
 export type AgentSafe = Omit<AgentEoa, 'type'> & {
