@@ -35,13 +35,13 @@ const createSafe = async (chain: Chain, backupOwner?: string) =>
     throw new Error('Failed to create safe');
   });
 
-const updateSafeBackupOwner = async (chain: Chain, owner: string) =>
+const updateSafeBackupOwner = async (chain: Chain, backupOwner: string) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'PUT',
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain_type: chain, owner: owner }),
+    body: JSON.stringify({ chain_type: chain, backup_owner: backupOwner }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to update safe backup owner');
