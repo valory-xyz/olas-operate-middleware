@@ -110,10 +110,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   //   return total;
   // }, [accruedServiceStakingRewards, isLoaded, optimisticRewardsEarnedForEpoch]);
 
-  // const totalOlasStakedBalance: number | undefined = useMemo(() => {
-  //   if (!isLoaded) return;
-  //   return (olasBondBalance ?? 0) + (olasDepositBalance ?? 0);
-  // }, [isLoaded, olasBondBalance, olasDepositBalance]);
+  const totalOlasStakedBalance: number | undefined = useMemo(() => {
+    if (!isLoaded) return;
+    return (olasBondBalance ?? 0) + (olasDepositBalance ?? 0);
+  }, [isLoaded]);
 
   const updateBalances = useCallback(async (): Promise<void> => {
     if (!wallets) return;
@@ -330,9 +330,61 @@ const getCrossChainWalletBalances = async (
 
 // TODO: implement staked balances cross-chain for all master safes
 
-// const getCrossChainStakedBalances = async (
-//   wallets: MasterSafe[],
-// ): Promise<{
-//   olasBondBalance?: number;
-//   olasDepositBalance?: number;
-// }>[] => ({});
+const getCrossChainStakedBalances = async (
+  services: MiddlewareServiceResponse[],
+  wallets: MasterSafe[],
+): Promise<
+  {
+    address: `0x${string}`;
+    olasBondBalance?: number;
+    olasDepositBalance?: number;
+  }[]
+> => {
+  const serviceId =
+    services?.[0]?.chain_configs[CHAIN_CONFIG.OPTIMISM.chainId].chain_data
+      .token;
+
+  if (
+    !isNil(masterSafeAddress) &&
+    isAddress(masterSafeAddress) &&
+    serviceId > 0
+  ) {
+    const { depositValue, bondValue, serviceState } =
+      await StakedAgentService.getServiceRegistryInfo(
+        masterSafeAddress,
+        serviceId,
+        ChainId.Gnosis, // TODO: refactor to get chain id from service
+      );
+
+    switch (serviceState) {
+      case ServiceRegistryL2ServiceState.NonExistent:
+        setOlasBondBalance(0);
+        setOlasDepositBalance(0);
+        break;
+      case ServiceRegistryL2ServiceState.PreRegistration:
+        setOlasBondBalance(0);
+        setOlasDepositBalance(0);
+        break;
+      case ServiceRegistryL2ServiceState.ActiveRegistration:
+        setOlasBondBalance(0);
+        setOlasDepositBalance(depositValue);
+        break;
+      case ServiceRegistryL2ServiceState.FinishedRegistration:
+        setOlasBondBalance(bondValue);
+        setOlasDepositBalance(depositValue);
+        break;
+      case ServiceRegistryL2ServiceState.Deployed:
+        setOlasBondBalance(bondValue);
+        setOlasDepositBalance(depositValue);
+        break;
+      case ServiceRegistryL2ServiceState.TerminatedBonded:
+        setOlasBondBalance(bondValue);
+        setOlasDepositBalance(0);
+        break;
+    }
+  }
+
+  // update balance loaded state
+  setIsLoaded(true);
+  setIsBalanceLoaded(true);
+};
