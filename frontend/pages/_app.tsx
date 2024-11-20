@@ -19,7 +19,7 @@ import { StakingContractDetailsProvider } from '@/context/StakingContractDetails
 import { StakingProgramProvider } from '@/context/StakingProgramProvider';
 import { StoreProvider } from '@/context/StoreProvider';
 import { SystemNotificationTriggers } from '@/context/SystemNotificationTriggers';
-import { WalletProvider } from '@/context/WalletProvider';
+import { MasterWalletProvider } from '@/context/WalletProvider';
 import { mainTheme } from '@/theme';
 import { setupMulticallAddresses } from '@/utils/setupMulticall';
 
@@ -40,7 +40,7 @@ export default function App({ Component, pageProps }: AppProps) {
         <StoreProvider>
           <PageStateProvider>
             <ServicesProvider>
-              <WalletProvider>
+              <MasterWalletProvider>
                 <StakingProgramProvider>
                   <StakingContractDetailsProvider>
                     <RewardProvider>
@@ -66,7 +66,7 @@ export default function App({ Component, pageProps }: AppProps) {
                     </RewardProvider>
                   </StakingContractDetailsProvider>
                 </StakingProgramProvider>
-              </WalletProvider>
+              </MasterWalletProvider>
             </ServicesProvider>
           </PageStateProvider>
         </StoreProvider>
