@@ -33,7 +33,7 @@ const FineDot = styled(Dot)`
   background-color: ${COLOR.GREEN_2};
 `;
 
-const BalanceStatus = () => {
+const BalanceStatus = ({ serviceConfigId }: { serviceConfigId: string }) => {
   const { isLoaded, lowBalances } = useBalanceContext();
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
@@ -41,7 +41,11 @@ const BalanceStatus = () => {
   const [isLowBalanceNotificationShown, setIsLowBalanceNotificationShown] =
     useState(false);
 
-  const isLowBalance = lowBalances.length > 0;
+  const isLowBalance =
+    lowBalances.filter(
+      (lowBalanceResult) =>
+        lowBalanceResult.serviceConfigId === serviceConfigId,
+    ).length > 0;
 
   // show notification if balance is too low
   useEffect(() => {
@@ -140,7 +144,7 @@ export const GasBalanceSection = ({
 
       {isLoaded ? (
         <Text strong>
-          <BalanceStatus />
+          <BalanceStatus serviceConfig={serviceConfigId} />
         </Text>
       ) : (
         <Skeleton.Button active size="small" style={{ width: 96 }} />
