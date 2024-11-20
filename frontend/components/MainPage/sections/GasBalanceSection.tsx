@@ -1,16 +1,14 @@
-import { ArrowUpOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { InfoCircleOutlined } from '@ant-design/icons';
 import { Skeleton, Tooltip, Typography } from 'antd';
 import { isNil } from 'lodash';
 import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
-import { MiddlewareChain } from '@/client';
 import { COLOR } from '@/constants/colors';
-import { EXPLORER_URL } from '@/constants/urls';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useService } from '@/hooks/useService';
 import { useStore } from '@/hooks/useStore';
-import { useWallet } from '@/hooks/useWallet';
 
 import { CardSection } from '../../styled/CardSection';
 
@@ -36,16 +34,18 @@ const FineDot = styled(Dot)`
 `;
 
 const BalanceStatus = () => {
-  const { isBalanceLoaded, isLowBalance } = useBalanceContext();
+  const { isLoaded, lowBalances } = useBalanceContext();
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
   const [isLowBalanceNotificationShown, setIsLowBalanceNotificationShown] =
     useState(false);
 
+  const isLowBalance = lowBalances.length > 0;
+
   // show notification if balance is too low
   useEffect(() => {
-    if (!isBalanceLoaded) return;
+    if (!isLoaded) return;
     if (!showNotification) return;
     if (!storeState?.isInitialFunded) return;
 
@@ -60,7 +60,7 @@ const BalanceStatus = () => {
       setIsLowBalanceNotificationShown(false);
     }
   }, [
-    isBalanceLoaded,
+    isLoaded,
     isLowBalanceNotificationShown,
     isLowBalance,
     showNotification,
@@ -96,9 +96,13 @@ const TooltipContent = styled.div`
   }
 `;
 
-export const GasBalanceSection = () => {
-  const { masterSafeAddress } = useWallet();
-  const { isBalanceLoaded } = useBalanceContext();
+export const GasBalanceSection = ({
+  serviceConfigId,
+}: {
+  serviceConfigId: string;
+}) => {
+  const { isLoaded } = useBalanceContext();
+  const { masterSafes } = useService({ serviceConfigId });
 
   return (
     <CardSection
@@ -109,22 +113,23 @@ export const GasBalanceSection = () => {
     >
       <Text type="secondary">
         Trading balance&nbsp;
-        {masterSafeAddress && (
+        {masterSafes.length > 0 && (
           <Tooltip
             title={
               <TooltipContent>
                 Your agent uses this balance to fund trading activity on-chain.
-                <br />
+                {/* TODO: reintroduce, low prio */}
+                {/* <br />
                 <a
                   href={
-                    `${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/address/` +
+                    `${EXPLORER_URL[MiddlewareChain.GNOSIS]}/address/` +
                     masterSafeAddress
                   }
                   target="_blank"
                 >
                   Track activity on blockchain explorer{' '}
                   <ArrowUpOutlined style={{ rotate: '45deg' }} />
-                </a>
+                </a> */}
               </TooltipContent>
             }
           >
@@ -133,7 +138,7 @@ export const GasBalanceSection = () => {
         )}
       </Text>
 
-      {isBalanceLoaded ? (
+      {isLoaded ? (
         <Text strong>
           <BalanceStatus />
         </Text>
