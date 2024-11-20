@@ -3,14 +3,27 @@ import { Card, Flex, Typography } from 'antd';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { DISCORD_TICKET_URL } from '@/constants/urls';
-import { useWallet } from '@/hooks/useWallet';
+import { ChainId } from '@/enums/Chain';
+import { MasterSafe } from '@/enums/Wallet';
 
 import { GoToMainPageButton } from '../GoToMainPageButton';
 
 const { Text } = Typography;
 
-export const AddBackupWalletViaSafePage = () => {
-  const { masterSafeAddress } = useWallet();
+/**
+ * update as needed; check https://app.safe.global/new-safe/create for prefixes
+ */
+const safeChainPrefix = {
+  [ChainId.Ethereum]: 'eth',
+  [ChainId.Base]: 'base',
+  [ChainId.Optimism]: 'oeth',
+  [ChainId.Gnosis]: 'gno',
+};
+
+export const AddBackupWalletViaSafePage = (masterSafe: MasterSafe) => {
+  const { chainId, address } = masterSafe;
+
+  const safePrefix = safeChainPrefix[chainId];
 
   return (
     <Card
@@ -23,7 +36,7 @@ export const AddBackupWalletViaSafePage = () => {
           <Text>Manually add backup wallet via Safe interface:</Text>
           <a
             target="_blank"
-            href={`https://app.safe.global/settings/setup?safe=gno:${masterSafeAddress}`}
+            href={`https://app.safe.global/settings/setup?safe=${safePrefix}:${address}`}
           >
             Add backup wallet {UNICODE_SYMBOLS.EXTERNAL_LINK}
           </a>
