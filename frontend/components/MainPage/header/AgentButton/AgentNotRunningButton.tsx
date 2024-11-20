@@ -3,9 +3,12 @@ import { useCallback, useMemo } from 'react';
 
 import { MiddlewareChain, MiddlewareDeploymentStatus } from '@/client';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
-import { ChainId } from '@/enums/Chain';
-import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
+import { TokenSymbol } from '@/enums/Token';
+import {
+  useBalanceContext,
+  useServiceBalances,
+} from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
@@ -23,45 +26,37 @@ import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
 
 /** Button used to start / deploy the agent */
-export const AgentNotRunningButton = () => {
-  const { wallets, masterSafeAddress } = useWallet();
-
+export const AgentNotRunningButton = (serviceConfigId: string) => {
+  const { wallets } = useWallet();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
     isFetched: isLoaded,
     refetch: updateServicesState,
   } = useServices();
-
   const { service, deploymentStatus, setDeploymentStatus } = useService({
     serviceConfigId:
       isLoaded && selectedService ? selectedService?.service_config_id : '',
   });
-
   const { serviceTemplate } = useServiceTemplates();
   const { showNotification } = useElectronApi();
   const {
     setIsPaused: setIsBalancePollingPaused,
-    masterSafeBalance: safeBalance,
-    isLowBalance,
-    totalOlasStakedBalance,
+    totalStakedOlasBalance,
     totalEthBalance,
     updateBalances,
   } = useBalanceContext();
-
+  const { serviceSafeBalances, isLowBalance } =
+    useServiceBalances(serviceConfigId);
   const { storeState } = useStore();
-
   const {
     isAllStakingContractDetailsRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
     refetchActiveStakingContractDetails,
   } = useStakingContractContext();
-
   const { activeStakingProgramId } = useStakingProgram();
-
   const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
     useActiveStakingContractInfo();
-
   const { hasEnoughServiceSlots } = useStakingContractDetails(
     activeStakingProgramId,
   );
@@ -70,14 +65,19 @@ export const AgentNotRunningButton = () => {
   //   allStakingContractDetailsRecord?.[activeStakingProgram ?? defaultStakingProgram]
   //     ?.minStakingDeposit;
 
-  const requiredOlas =
-    STAKING_PROGRAMS[activeStakingProgramId]?.minStakingDeposit; // TODO: fix activeStakingProgramId
+  const requiredStakedOlas =
+    service &&
+    STAKING_PROGRAMS[service.home_chain_id][activeStakingProgramId]
+      ?.stakingRequirements[TokenSymbol.OLAS]; // TODO: fix activeStakingProgramId
 
-  const safeOlasBalance = safeBalance?.OLAS;
+  const safeOlasBalance = serviceSafeBalances.find((walletBalanceResult) => {
+    return walletBalanceResult.symbol === TokenSymbol.OLAS;
+  })?.balance;
+
   const safeOlasBalanceWithStaked =
-    safeOlasBalance === undefined || totalOlasStakedBalance === undefined
+    safeOlasBalance === undefined || totalStakedOlasBalance === undefined
       ? undefined
-      : safeOlasBalance + totalOlasStakedBalance;
+      : safeOlasBalance + totalStakedOlasBalance;
 
   const handleStart = useCallback(async () => {
     // Must have a wallet to start the agent
@@ -95,17 +95,16 @@ export const AgentNotRunningButton = () => {
     // Mock "DEPLOYING" status (service polling will update this once resumed)
     setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
-    // Get the active staking program id; default id if there's no agent yet
-    const stakingProgramId: StakingProgramId = activeStakingProgramId;
-
     // Create master safe if it doesn't exist
     try {
-      if (!masterSafeAddress) {
+      if (
+        !service?.chain_configs[service.home_chain_id]?.chain_data?.multisig
+      ) {
         await WalletService.createSafe(MiddlewareChain.OPTIMISM);
       }
     } catch (error) {
       console.error(error);
-      setServiceStatus(undefined);
+      // setServiceStatus(undefined); // TODO: reimplement state if it is missing
       showNotification?.('Some error occurred while creating safe');
       setIsStakingContractInfoPollingPaused(false);
       setIsServicePollingPaused(false);
@@ -116,17 +115,16 @@ export const AgentNotRunningButton = () => {
     // Then create / deploy the service
     try {
       await ServicesService.createService({
-        activeStakingProgramId,
+        stakingProgramId: activeStakingProgramId,
         serviceTemplate,
         deploy: true,
         useMechMarketplace: false,
-        chainId: ChainId.Gnosis, // TODO: Add support for other chains
       });
 
-      await ServicesService.startService(serviceTemplate.service_config_id);
+      await ServicesService.startService(serviceConfigId);
     } catch (error) {
       console.error(error);
-      setServiceStatus(undefined);
+      // setServiceStatus(undefined); TODO: reimplement state if it is missing
       showNotification?.('Some error occurred while deploying service');
       setIsServicePollingPaused(false);
       setIsBalancePollingPaused(false);
@@ -170,10 +168,12 @@ export const AgentNotRunningButton = () => {
     setIsBalancePollingPaused,
     setIsStakingContractInfoPollingPaused,
     setDeploymentStatus,
-    masterSafeAddress,
+    service?.chain_configs,
+    service?.home_chain_id,
     showNotification,
     activeStakingProgramId,
     serviceTemplate,
+    serviceConfigId,
     updateServicesState,
     refetchActiveStakingContractDetails,
     updateBalances,
@@ -195,7 +195,7 @@ export const AgentNotRunningButton = () => {
     if (deploymentStatus === MiddlewareDeploymentStatus.DEPLOYING) return false;
     if (deploymentStatus === MiddlewareDeploymentStatus.STOPPING) return false;
 
-    if (!requiredOlas) return false;
+    if (!requiredStakedOlas) return false;
 
     // If no slots available, agent cannot be started
     if (!hasEnoughServiceSlots && !isServiceStaked) return false;
@@ -204,21 +204,23 @@ export const AgentNotRunningButton = () => {
     if (service && storeState?.isInitialFunded) {
       if (!safeOlasBalanceWithStaked) return false;
       // at present agent will always require staked/bonded OLAS (or the ability to stake/bond)
-      return safeOlasBalanceWithStaked >= requiredOlas;
+      return safeOlasBalanceWithStaked >= requiredStakedOlas;
     }
 
     // case if agent is evicted and user has met the staking criteria
     if (isEligibleForStaking && isAgentEvicted) return true;
 
-    const hasEnoughOlas = (safeOlasBalanceWithStaked ?? 0) >= requiredOlas;
-    const hasEnoughEth = (totalEthBalance ?? 0) > requiredGas;
+    const hasEnoughOlas =
+      (safeOlasBalanceWithStaked ?? 0) >= requiredStakedOlas;
+
+    const hasEnoughEth = (totalEthBalance ?? 0) > LOW_MASTER_SAFE_BALANCE; // TODO: refactor to be dynamic to services cross-chain
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
     isAllStakingContractDetailsRecordLoaded,
     deploymentStatus,
     isLowBalance,
-    requiredOlas,
+    requiredStakedOlas,
     hasEnoughServiceSlots,
     isServiceStaked,
     service,
