@@ -33,6 +33,13 @@ import { formatEther } from '@/utils/numberFormatters';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { WalletContext } from './WalletProvider';
 
+type CrossChainStakedBalances = Array<{
+  serviceId: string;
+  chainId: number;
+  olasBondBalance: number;
+  olasDepositBalance: number;
+}>;
+
 export const BalanceContext = createContext<{
   isLoaded: boolean;
   setIsLoaded: Dispatch<SetStateAction<boolean>>;
@@ -58,7 +65,7 @@ export const BalanceContext = createContext<{
   isPaused: false,
   setIsPaused: () => {},
   walletBalances: [],
-  stakedBalances: {},
+  stakedBalances: [],
   totalOlasBalance: 0,
   totalEthBalance: 0,
   totalStakedOlasBalance: 0,
@@ -78,7 +85,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     [],
   );
   const [stakedBalances, setStakedBalances] =
-    useState<CrossChainStakedBalances>({});
+    useState<CrossChainStakedBalances>([]);
 
   const totalEthBalance = useMemo(() => {
     if (!isLoaded) return 0;
@@ -101,21 +108,11 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   }, [isLoaded, walletBalances]);
 
   const totalStakedOlasBalance = useMemo(() => {
-    return Object.values(stakedBalances).reduce(
-      (serviceAcc, serviceBalances) => {
-        return (
-          serviceAcc +
-          Object.values(serviceBalances).reduce((chainAcc, chainBalance) => {
-            return (
-              chainAcc +
-              (chainBalance.olasBondBalance || 0) +
-              (chainBalance.olasDepositBalance || 0)
-            );
-          }, 0)
-        );
-      },
-      0,
-    );
+    return stakedBalances.reduce((acc, balance) => {
+      return (
+        acc + (balance.olasBondBalance || 0) + (balance.olasDepositBalance || 0)
+      );
+    }, 0);
   }, [stakedBalances]);
 
   /**
@@ -135,25 +132,29 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     for (const service of services) {
       const serviceId = service.service_config_id;
       const serviceHomeChainId = service.home_chain_id;
-      const serviceStakedBalances = stakedBalances[serviceId];
-      if (!serviceStakedBalances) continue;
+
+      const stakedBalancesForService = stakedBalances.filter(
+        (balance) =>
+          balance.serviceId === serviceId &&
+          balance.chainId === serviceHomeChainId,
+      );
+
+      if (stakedBalancesForService.length === 0) continue;
 
       // Get addresses for master safe and agent home chain safe
       const masterSafeWallet = wallets.find(
         (wallet) =>
           wallet.owner === WalletOwnerType.Master &&
           wallet.type === WalletType.Safe &&
-          wallet.chainId === service.home_chain_id,
+          wallet.chainId === serviceHomeChainId,
       );
 
       const masterSafeAddress = masterSafeWallet?.address;
       const stakedAgentSafeAddress =
         service.chain_configs[serviceHomeChainId]?.chain_data.multisig;
 
-      // Skip invalid service
       if (!masterSafeAddress && !stakedAgentSafeAddress) continue;
 
-      // Balances
       const masterSafeBalanceResult = walletBalances.find(
         (balance) =>
           balance.walletAddress === masterSafeAddress && balance.isNative,
@@ -166,27 +167,27 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
       if (
         masterSafeBalanceResult &&
-        masterSafeBalanceResult.balance < LOW_MASTER_SAFE_BALANCE // TODO: use agent specific threshold
+        masterSafeBalanceResult.balance < LOW_MASTER_SAFE_BALANCE
       ) {
         result.push({
           serviceConfigId: service.service_config_id,
           chainId: serviceHomeChainId,
           walletAddress: masterSafeBalanceResult.walletAddress,
           balance: masterSafeBalanceResult.balance,
-          expectedBalance: LOW_MASTER_SAFE_BALANCE, // TODO: use agent specific threshold
+          expectedBalance: LOW_MASTER_SAFE_BALANCE,
         });
       }
 
       if (
         stakedAgentSafeBalanceResult &&
-        stakedAgentSafeBalanceResult.balance < LOW_AGENT_SAFE_BALANCE // TODO: use agent specific threshold
+        stakedAgentSafeBalanceResult.balance < LOW_AGENT_SAFE_BALANCE
       ) {
         result.push({
           serviceConfigId: service.service_config_id,
           chainId: serviceHomeChainId,
           walletAddress: stakedAgentSafeBalanceResult.walletAddress,
           balance: stakedAgentSafeBalanceResult.balance,
-          expectedBalance: LOW_AGENT_SAFE_BALANCE, // TODO: use agent specific threshold
+          expectedBalance: LOW_AGENT_SAFE_BALANCE,
         });
       }
     }
@@ -325,19 +326,10 @@ const getCrossChainWalletBalances = async (
   return balanceResults;
 };
 
-type CrossChainStakedBalances = {
-  [serviceId: string]: {
-    [chainId: number]: {
-      olasBondBalance: number;
-      olasDepositBalance: number;
-    };
-  };
-};
-
 const getCrossChainStakedBalances = async (
   services: MiddlewareServiceResponse[],
 ): Promise<CrossChainStakedBalances> => {
-  const result: CrossChainStakedBalances = {};
+  const result: CrossChainStakedBalances = [];
 
   const registryInfoPromises = services.map(async (service) => {
     const serviceId = service.service_config_id;
@@ -346,13 +338,7 @@ const getCrossChainStakedBalances = async (
     const { multisig, token } = homeChainConfig.chain_data;
 
     if (!multisig || !token) {
-      return {
-        serviceId,
-        homeChainId,
-        depositValue: 0,
-        bondValue: 0,
-        serviceState: ServiceRegistryL2ServiceState.NonExistent,
-      };
+      return null;
     }
 
     const registryInfo = await StakedAgentService.getServiceRegistryInfo(
@@ -363,29 +349,32 @@ const getCrossChainStakedBalances = async (
 
     return {
       serviceId,
-      homeChainId,
+      chainId: homeChainId,
       ...registryInfo,
     };
   });
 
-  // TODO: chunk and batch multicalls by chain,
-  // currently Promise is returned by `StakedAgentService.getServiceRegistryInfo`
-  // will not scale well with large number of services
   const registryInfos = await Promise.allSettled(registryInfoPromises);
 
-  registryInfos.forEach((res) => {
-    if (res.status === 'fulfilled') {
-      const { serviceId, homeChainId, depositValue, bondValue, serviceState } =
+  registryInfos.forEach((res, idx) => {
+    if (res.status === 'fulfilled' && res.value) {
+      const { serviceId, chainId, depositValue, bondValue, serviceState } =
         res.value;
 
-      if (!result[serviceId]) result[serviceId] = {};
-      result[serviceId][homeChainId] = correctBondDepositByServiceState({
-        olasBondBalance: bondValue,
-        olasDepositBalance: depositValue,
-        serviceState,
+      result.push({
+        serviceId,
+        chainId,
+        ...correctBondDepositByServiceState({
+          olasBondBalance: bondValue,
+          olasDepositBalance: depositValue,
+          serviceState,
+        }),
       });
     } else {
-      console.error('Error fetching registry info:', res.reason);
+      console.error(
+        'Error fetching registry info for',
+        services[idx].service_config_id,
+      );
     }
   });
 
