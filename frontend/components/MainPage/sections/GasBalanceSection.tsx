@@ -144,7 +144,7 @@ export const GasBalanceSection = ({
 
       {isLoaded ? (
         <Text strong>
-          <BalanceStatus serviceConfig={serviceConfigId} />
+          <BalanceStatus serviceConfigId={serviceConfigId} />
         </Text>
       ) : (
         <Skeleton.Button active size="small" style={{ width: 96 }} />
