@@ -1,3 +1,5 @@
+import { Safe } from '@/enums/Wallet';
+
 export const REACT_QUERY_KEYS = {
   // services
   SERVICES_KEY: ['services'] as const,
@@ -59,4 +61,8 @@ export const REACT_QUERY_KEYS = {
     ] as const,
   REWARDS_HISTORY_KEY: (chainId: number, serviceId: number) =>
     ['rewardsHistory', chainId, serviceId] as const,
+
+  // multisigs
+  MULTISIG_GET_OWNERS_KEY: (multisig: Safe) =>
+    ['multisig', 'getOwners', multisig.chainId, multisig.address] as const,
 } as const;
