@@ -4,15 +4,15 @@ import { useMemo } from 'react';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 
 import { useBalanceContext } from './useBalanceContext';
-import { useMasterSafe } from './useMasterSafe';
+import { useMultisig } from './useMultisig';
 import { useServices } from './useServices';
 import { useStore } from './useStore';
-import { useWallet } from './useWallet';
+import { useMasterWalletContext } from './useWallet';
 
 const useAddressesLogs = () => {
-  const { wallets, masterEoaAddress, masterSafeAddress } = useWallet();
+  const { wallets, masterEoaAddress, masterSafeAddress } = useMasterWalletContext();
 
-  const { backupSafeAddress, masterSafeOwners } = useMasterSafe();
+  const { backupSafeAddress, masterSafeOwners } = useMultisig();
 
   return {
     isLoaded: wallets?.length !== 0 && !!masterSafeOwners,

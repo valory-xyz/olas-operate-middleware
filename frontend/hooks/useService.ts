@@ -7,7 +7,7 @@ import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 
 import { useServices } from './useServices';
-import { useWallet } from './useWallet';
+import { useMasterWalletContext } from './useWallet';
 
 type ServiceChainIdAddressRecord = {
   [chainId: number]: {
@@ -26,7 +26,7 @@ export const useService = ({
 }) => {
   const { services, isFetched: isLoaded } = useServices();
   const queryClient = useQueryClient();
-  const { wallets } = useWallet();
+  const { wallets } = useMasterWalletContext();
 
   const service = useMemo(() => {
     return services?.find(
