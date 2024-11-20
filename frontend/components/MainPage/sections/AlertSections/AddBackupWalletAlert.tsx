@@ -2,19 +2,20 @@ import { Flex, Typography } from 'antd';
 import { isNil } from 'lodash';
 
 import { Pages } from '@/enums/Pages';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+import { MasterSafe } from '@/enums/Wallet';
+import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 
 import { CustomAlert } from '../../../Alert';
 
 const { Text } = Typography;
 
-export const AddBackupWalletAlert = () => {
+export const AddBackupWalletAlert = (masterSafe: MasterSafe) => {
   const { goto } = usePageState();
-  const { backupSafeAddress, masterSafeOwners } = useMasterSafe();
+  const { data: masterSafeOwners } = useMultisig(masterSafe);
 
   if (isNil(masterSafeOwners)) return null;
-  if (backupSafeAddress) return null;
+  if (masterSafeOwners) return null;
 
   return (
     <CustomAlert
