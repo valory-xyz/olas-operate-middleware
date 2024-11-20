@@ -30,8 +30,8 @@ import { StakedAgentService } from '@/service/agents/StakedAgentService';
 import { Address } from '@/types/Address';
 import { formatEther } from '@/utils/numberFormatters';
 
+import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
-import { WalletContext } from './WalletProvider';
 
 type CrossChainStakedBalances = Array<{
   serviceId: string;
@@ -75,7 +75,7 @@ export const BalanceContext = createContext<{
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { wallets } = useContext(WalletContext);
+  const { wallets } = useContext(MasterWalletContext);
   const { services } = useServices();
 
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
