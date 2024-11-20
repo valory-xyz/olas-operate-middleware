@@ -22,7 +22,7 @@ type MainOlasBalanceProps = { isBorderTopVisible?: boolean };
 export const MainOlasBalance = ({
   isBorderTopVisible = true,
 }: MainOlasBalanceProps) => {
-  const { isBalanceLoaded, totalOlasBalance } = useBalanceContext();
+  const { isLoaded: isBalanceLoaded, totalOlasBalance } = useBalanceContext();
   // const { goto } = usePageState();
 
   const balance = useMemo(() => {
