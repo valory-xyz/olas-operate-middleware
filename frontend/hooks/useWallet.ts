@@ -1,10 +1,5 @@
 import { useContext } from 'react';
 
-import { WalletContext } from '@/context/WalletProvider';
+import { MasterWalletContext } from '@/context/MasterWalletProvider';
 
-export const useWallet = () => {
-  const { wallets, setPaused, paused, togglePaused, refetch } =
-    useContext(WalletContext);
-
-  return { wallets, setPaused, paused, togglePaused, refetch };
-};
+export const useMasterWalletContext = () => useContext(MasterWalletContext);
