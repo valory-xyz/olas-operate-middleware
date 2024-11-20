@@ -22,7 +22,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { TOKEN_CONFIG } from '@/config/tokens';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 import { truncateAddress } from '@/utils/truncate';
@@ -77,7 +77,7 @@ export const AddFundsSection = () => {
 };
 
 export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
-  const { masterSafeAddress } = useWallet();
+  const { masterSafeAddress } = useMasterWalletContext();
 
   const truncatedFundingAddress: string | undefined = useMemo(
     () => masterSafeAddress && truncateAddress(masterSafeAddress, 4),
