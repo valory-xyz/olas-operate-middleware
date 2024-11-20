@@ -100,11 +100,10 @@ const TooltipContent = styled.div`
   }
 `;
 
+type GasBalanceSectionProps = { serviceConfigId: string };
 export const GasBalanceSection = ({
   serviceConfigId,
-}: {
-  serviceConfigId: string;
-}) => {
+}: GasBalanceSectionProps) => {
   const { isLoaded } = useBalanceContext();
   const { masterSafes } = useService({ serviceConfigId });
 
@@ -122,7 +121,7 @@ export const GasBalanceSection = ({
             title={
               <TooltipContent>
                 Your agent uses this balance to fund trading activity on-chain.
-                {/* TODO: reintroduce, low prio */}
+                {/* TODO: reintroduce, low priority */}
                 {/* <br />
                 <a
                   href={

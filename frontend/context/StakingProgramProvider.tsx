@@ -1,21 +1,22 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createContext, PropsWithChildren, useCallback } from 'react';
 
+import { INITIAL_DEFAULT_STAKING_PROGRAM_IDS } from '@/config/stakingPrograms';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServiceId } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { Nullable } from '@/types/Util';
-
-const INITIAL_DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.PearlBeta;
+import { Maybe, Nullable } from '@/types/Util';
 
 export const StakingProgramContext = createContext<{
   isActiveStakingProgramLoaded: boolean;
-  activeStakingProgramId: StakingProgramId;
+  initialDefaultStakingProgramId: Maybe<StakingProgramId>;
+  activeStakingProgramId: Maybe<StakingProgramId>;
 }>({
   isActiveStakingProgramLoaded: false,
-  activeStakingProgramId: INITIAL_DEFAULT_STAKING_PROGRAM_ID,
+  activeStakingProgramId: null,
+  initialDefaultStakingProgramId: null,
 });
 
 /**
@@ -35,7 +36,10 @@ const useGetActiveStakingProgramId = () => {
         serviceId!,
         homeChainId,
       );
-      return response || INITIAL_DEFAULT_STAKING_PROGRAM_ID;
+      return (
+        response ||
+        INITIAL_DEFAULT_STAKING_PROGRAM_IDS[selectedAgentConfig.homeChainId]
+      );
     },
     enabled: !!homeChainId && !!serviceId,
     refetchInterval: serviceId ? FIVE_SECONDS_INTERVAL : false,
@@ -64,6 +68,7 @@ const useGetActiveStakingProgramId = () => {
  * It also provides a method to update the active staking program id in state.
  */
 export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
+  const { selectedAgentConfig } = useServices();
   const { isLoading: isStakingProgramsLoading, data: activeStakingProgramId } =
     useGetActiveStakingProgramId();
 
@@ -72,8 +77,9 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
       value={{
         isActiveStakingProgramLoaded:
           !isStakingProgramsLoading && !!activeStakingProgramId,
-        activeStakingProgramId:
-          activeStakingProgramId || INITIAL_DEFAULT_STAKING_PROGRAM_ID,
+        activeStakingProgramId,
+        initialDefaultStakingProgramId:
+          INITIAL_DEFAULT_STAKING_PROGRAM_IDS[selectedAgentConfig.homeChainId],
       }}
     >
       {children}

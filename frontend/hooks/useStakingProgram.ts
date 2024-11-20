@@ -11,19 +11,22 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from './useServices';
 
 /**
- * Hook to get the active staking program and its metadata.
+ * Hook to get the staking program and its metadata.
  */
 export const useStakingProgram = () => {
-  const { isActiveStakingProgramLoaded, activeStakingProgramId } = useContext(
-    StakingProgramContext,
-  );
+  const {
+    isActiveStakingProgramLoaded,
+    activeStakingProgramId,
+    initialDefaultStakingProgramId,
+  } = useContext(StakingProgramContext);
   const { selectedAgentConfig } = useServices();
   const { homeChainId } = selectedAgentConfig;
 
   const allStakingProgramsKeys = Object.keys(STAKING_PROGRAMS[homeChainId]);
   const allStakingProgramNameAddressPair = STAKING_PROGRAM_ADDRESS[homeChainId];
 
-  const activeStakingProgramMeta = useMemo(() => {
+  // TODO: refactor to support allStakingPrograms, previously this was intented solely for the active staking program
+  const allStakingProgramsMeta = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return null;
     if (!activeStakingProgramId) return null;
     if (activeStakingProgramId.length === 0) return null;
@@ -41,6 +44,18 @@ export const useStakingProgram = () => {
     homeChainId,
     isActiveStakingProgramLoaded,
     allStakingProgramsKeys,
+    activeStakingProgramId,
+  ]);
+
+  const activeStakingProgramMeta = useMemo(() => {
+    if (!isActiveStakingProgramLoaded) return null;
+    if (!activeStakingProgramId) return null;
+    if (!allStakingProgramsMeta) return null;
+
+    return allStakingProgramsMeta[activeStakingProgramId];
+  }, [
+    isActiveStakingProgramLoaded,
+    allStakingProgramsMeta,
     activeStakingProgramId,
   ]);
 
@@ -62,6 +77,9 @@ export const useStakingProgram = () => {
   }, [allStakingProgramNameAddressPair, activeStakingProgramId]);
 
   return {
+    initialDefaultStakingProgramId,
+
+    // active staking program
     isActiveStakingProgramLoaded,
     activeStakingProgramId,
     activeStakingProgramAddress,
@@ -70,5 +88,6 @@ export const useStakingProgram = () => {
     // all staking programs
     allStakingProgramIds: Object.keys(allStakingProgramNameAddressPair),
     allStakingProgramAddress: Object.values(allStakingProgramNameAddressPair),
+    allStakingProgramsMeta,
   };
 };
