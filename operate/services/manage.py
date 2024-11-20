@@ -287,7 +287,7 @@ class ServiceManager:
         """Deploy as service on-chain"""
         # TODO This method has not been thoroughly reviewed. Deprecated usage in favour of Safe version.
 
-        self.logger.info(f"_deploy_service_onchain_from_safe {chain=}")
+        self.logger.info(f"_deploy_service_onchain {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
