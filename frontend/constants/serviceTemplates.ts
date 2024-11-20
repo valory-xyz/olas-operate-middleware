@@ -12,8 +12,8 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     service_version: 'v0.18.4',
     home_chain_id: ChainId.Gnosis.toString(),
     configurations: {
-      [ChainId.Optimism]: {
-        staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
+      [ChainId.Gnosis]: {
+        staking_program_id: StakingProgramId.PearlBeta, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         rpc: 'http://localhost:8545',
         agent_id: 14,
