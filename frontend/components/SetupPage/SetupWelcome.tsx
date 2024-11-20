@@ -18,7 +18,7 @@ import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { usePageState } from '@/hooks/usePageState';
 import { useSetup } from '@/hooks/useSetup';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
 
 import { FormFlex } from '../styled/FormFlex';
@@ -129,7 +129,7 @@ export const SetupWelcomeLogin = () => {
   const { goto } = useSetup();
   const { goto: gotoPage } = usePageState();
 
-  const { masterSafeAddress, wallets } = useWallet();
+  const { masterSafeAddress, wallets } = useMasterWalletContext();
   const { isBalanceLoaded, masterEoaBalance: eoaBalance } = useBalanceContext();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
