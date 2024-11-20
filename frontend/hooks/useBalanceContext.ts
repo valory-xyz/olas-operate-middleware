@@ -1,6 +1,6 @@
 import { useContext, useMemo } from 'react';
 
-import { BalanceContext } from '@/context/BalanceProvider';
+import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 
 import { useService } from './useService';
 
@@ -31,5 +31,24 @@ export const useServiceBalances = (serviceConfigId: string) => {
     [lowBalances],
   );
 
-  return { serviceWalletBalances, serviceLowBalances };
+  const isLowBalance = useMemo(
+    () => serviceLowBalances?.length > 0,
+    [serviceLowBalances],
+  );
+
+  const serviceSafeBalances = useMemo<WalletBalanceResult[]>(
+    () =>
+      walletBalances?.filter((balance) =>
+        flatAddresses.includes(balance.walletAddress),
+      ),
+    [flatAddresses, walletBalances],
+  );
+
+  return {
+    serviceWalletBalances,
+    serviceStakedBalances,
+    serviceSafeBalances,
+    serviceLowBalances,
+    isLowBalance,
+  };
 };
