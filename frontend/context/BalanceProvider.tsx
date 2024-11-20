@@ -38,7 +38,10 @@ type CrossChainStakedBalances = Array<{
   chainId: number;
   olasBondBalance: number;
   olasDepositBalance: number;
+<<<<<<< HEAD
   walletAddress: Address;
+=======
+>>>>>>> refactor/balance-provider-hooks
 }>;
 
 export const BalanceContext = createContext<{
@@ -370,8 +373,11 @@ const getCrossChainStakedBalances = async (
           olasDepositBalance: depositValue,
           serviceState,
         }),
+<<<<<<< HEAD
         walletAddress:
           services[idx].chain_configs[chainId].chain_data.multisig!, // multisig must exist if registry info is fetched
+=======
+>>>>>>> refactor/balance-provider-hooks
       });
     } else {
       console.error(
