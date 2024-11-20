@@ -1,19 +1,19 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Maybe } from 'graphql/jsutils/Maybe';
 import { createContext, PropsWithChildren, useCallback } from 'react';
 
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useAgent } from '@/hooks/useAgent';
-import { useChainId } from '@/hooks/useChainId';
 import { useServiceId } from '@/hooks/useService';
+import { useServices } from '@/hooks/useServices';
 import { Nullable } from '@/types/Util';
 
-export const INITIAL_DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.PearlBeta;
+const INITIAL_DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.PearlBeta;
 
 export const StakingProgramContext = createContext<{
   isActiveStakingProgramLoaded: boolean;
-  activeStakingProgramId?: Nullable<StakingProgramId>;
+  activeStakingProgramId: Maybe<StakingProgramId>;
 }>({
   isActiveStakingProgramLoaded: false,
   activeStakingProgramId: null,
@@ -24,55 +24,55 @@ export const StakingProgramContext = createContext<{
  */
 const useGetActiveStakingProgramId = () => {
   const queryClient = useQueryClient();
-  const agent = useAgent();
-  const chainId = useChainId();
+  const { selectedAgentConfig } = useServices();
   const serviceId = useServiceId();
 
+  const { serviceApi, homeChainId } = selectedAgentConfig;
+
   const response = useQuery({
-    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(chainId, serviceId!),
+    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(homeChainId, serviceId!),
     queryFn: async () => {
-      const response =
-        await agent.serviceApi.getCurrentStakingProgramByServiceId(
-          serviceId!,
-          chainId,
-        );
-      return response?.length === 0
-        ? INITIAL_DEFAULT_STAKING_PROGRAM_ID
-        : response;
+      const response = await serviceApi.getCurrentStakingProgramByServiceId(
+        serviceId!,
+        homeChainId,
+      );
+      return response || INITIAL_DEFAULT_STAKING_PROGRAM_ID;
     },
-    enabled: !!chainId && !!serviceId,
+    enabled: !!homeChainId && !!serviceId,
     refetchInterval: serviceId ? FIVE_SECONDS_INTERVAL : false,
   });
 
   const setActiveStakingProgramId = useCallback(
     (stakingProgramId: Nullable<StakingProgramId>) => {
       if (!serviceId) return;
+      if (!stakingProgramId) return;
 
+      // update the active staking program id in the cache
       queryClient.setQueryData(
-        REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(chainId, serviceId),
+        REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(homeChainId, serviceId),
         stakingProgramId,
       );
     },
-    [queryClient, chainId, serviceId],
+    [queryClient, homeChainId, serviceId],
   );
 
   return { ...response, setActiveStakingProgramId };
 };
 
 /**
- * context provider responsible for determining the current active staking program, if any.
+ * context provider responsible for determining the current active staking programs.
  * It does so by checking if the current service is staked, and if so, which staking program it is staked in.
  * It also provides a method to update the active staking program id in state.
  */
 export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
-  const { isLoading: isStakingProgramLoading, data: activeStakingProgramId } =
+  const { isLoading: isStakingProgramsLoading, data: activeStakingProgramId } =
     useGetActiveStakingProgramId();
 
   return (
     <StakingProgramContext.Provider
       value={{
         isActiveStakingProgramLoaded:
-          !isStakingProgramLoading && !!activeStakingProgramId,
+          !isStakingProgramsLoading && !!activeStakingProgramId,
         activeStakingProgramId,
       }}
     >

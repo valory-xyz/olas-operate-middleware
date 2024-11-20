@@ -21,12 +21,12 @@ import { ContractType } from '@/enums/Contract';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
-import { Nullable } from '@/types/Util';
+import { Maybe, Nullable } from '@/types/Util';
 
 export const ONE_YEAR = 1 * 24 * 60 * 60 * 365;
 
 /**
- *
+ * Staked agent service class.
  */
 export abstract class StakedAgentService {
   abstract activityCheckerContract: MulticallContract;
@@ -34,15 +34,31 @@ export abstract class StakedAgentService {
   abstract serviceRegistryTokenUtilityContract: MulticallContract;
 
   abstract getStakingRewardsInfo: Promise<unknown>;
-  abstract getAvailableRewardsForEpoch: Promise<unknown>;
-  abstract getStakingContractInfo: Promise<unknown>;
-  abstract getStakingContractInfoByServiceIdStakingProgramId: Promise<unknown>;
-  abstract getStakingContractInfoByStakingProgramId: Promise<unknown>;
+  abstract getAgentStakingRewardsInfo(
+    agentMultisigAddress: Address,
+    serviceId: number,
+    stakingProgramId: StakingProgramId,
+    chainId: ChainId,
+  ): Promise<unknown>;
+  abstract getAvailableRewardsForEpoch(
+    stakingProgramId: StakingProgramId,
+    chainId: ChainId,
+  ): Promise<unknown>;
+  abstract getStakingContractDetailsByServiceIdStakingProgram(
+    serviceId: number,
+    stakingProgramId: StakingProgramId,
+    chainId: ChainId,
+  ): Promise<unknown>;
+  abstract getStakingContractDetailsByName(
+    stakingProgramId: StakingProgramId,
+    chainId: ChainId,
+  ): Promise<unknown>;
+  abstract getInstance(): StakedAgentService;
 
   static getCurrentStakingProgramByServiceId = async (
     serviceId: number,
     chainId: ChainId,
-  ): Promise<StakingProgramId | null> => {
+  ): Promise<Maybe<StakingProgramId>> => {
     try {
       const { multicallProvider } = PROVIDERS[chainId];
 
@@ -74,9 +90,9 @@ export abstract class StakedAgentService {
       }
 
       // return the staking program id
-      return stakingProgramEntries[
-        activeStakingProgramIndex
-      ][0] as StakingProgramId;
+      const activeStakingProgram =
+        stakingProgramEntries[activeStakingProgramIndex][0];
+      return activeStakingProgram as StakingProgramId;
     } catch (error) {
       console.error('Error while getting current staking program', error);
       return null;

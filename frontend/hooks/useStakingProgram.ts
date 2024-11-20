@@ -1,34 +1,74 @@
 import { useContext, useMemo } from 'react';
 
-import { STAKING_PROGRAM_ADDRESS } from '@/config/stakingPrograms';
-import { GNOSIS_STAKING_PROGRAMS } from '@/config/stakingPrograms/gnosis';
+import {
+  STAKING_PROGRAM_ADDRESS,
+  STAKING_PROGRAMS,
+  StakingProgramConfig,
+} from '@/config/stakingPrograms';
 import { StakingProgramContext } from '@/context/StakingProgramProvider';
+import { StakingProgramId } from '@/enums/StakingProgram';
 
-import { useChainId } from './useChainId';
+import { useServices } from './useServices';
 
 /**
  * Hook to get the active staking program and its metadata.
  */
 export const useStakingProgram = () => {
-  const chainId = useChainId();
-  const { activeStakingProgramId, isActiveStakingProgramLoaded } = useContext(
+  const { isActiveStakingProgramLoaded, activeStakingProgramId } = useContext(
     StakingProgramContext,
   );
+  const { selectedAgentConfig } = useServices();
+  const { homeChainId } = selectedAgentConfig;
+
+  const allStakingProgramsKeys = Object.keys(STAKING_PROGRAMS[homeChainId]);
+  const allStakingProgramNameAddressPair = STAKING_PROGRAM_ADDRESS[homeChainId];
 
   const activeStakingProgramMeta = useMemo(() => {
+    if (!isActiveStakingProgramLoaded) return null;
     if (!activeStakingProgramId) return null;
-    return GNOSIS_STAKING_PROGRAMS[activeStakingProgramId];
-  }, [activeStakingProgramId]);
+    if (activeStakingProgramId.length === 0) return null;
+
+    return (allStakingProgramsKeys as StakingProgramId[]).reduce(
+      (acc, programId) => {
+        if (activeStakingProgramId.includes(programId)) {
+          acc[programId] = STAKING_PROGRAMS[homeChainId][programId];
+        }
+        return acc;
+      },
+      {} as Record<StakingProgramId, StakingProgramConfig>,
+    );
+  }, [
+    homeChainId,
+    isActiveStakingProgramLoaded,
+    allStakingProgramsKeys,
+    activeStakingProgramId,
+  ]);
 
   const activeStakingProgramAddress = useMemo(() => {
     if (!activeStakingProgramId) return null;
-    return STAKING_PROGRAM_ADDRESS[chainId][activeStakingProgramId];
-  }, [chainId, activeStakingProgramId]);
+    if (activeStakingProgramId.length === 0) return null;
+
+    return (
+      Object.keys(allStakingProgramNameAddressPair) as StakingProgramId[]
+    ).reduce(
+      (acc, programId) => {
+        if (activeStakingProgramId.includes(programId)) {
+          acc[programId] = allStakingProgramNameAddressPair[programId];
+        }
+        return acc;
+      },
+      {} as Record<StakingProgramId, string>,
+    );
+  }, [allStakingProgramNameAddressPair, activeStakingProgramId]);
 
   return {
     isActiveStakingProgramLoaded,
     activeStakingProgramId,
     activeStakingProgramAddress,
     activeStakingProgramMeta,
+
+    // all staking programs
+    allStakingProgramIds: Object.keys(allStakingProgramNameAddressPair),
+    allStakingProgramAddress: Object.values(allStakingProgramNameAddressPair),
   };
 };

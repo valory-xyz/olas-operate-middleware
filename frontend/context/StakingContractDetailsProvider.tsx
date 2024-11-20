@@ -1,4 +1,5 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
+import { Maybe } from 'graphql/jsutils/Maybe';
 import {
   createContext,
   Dispatch,
@@ -9,36 +10,34 @@ import {
   useState,
 } from 'react';
 
+import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useAgent } from '@/hooks/useAgent';
-import { useChainId } from '@/hooks/useChainId';
-import { useStakingContractDetailsByStakingProgram } from '@/hooks/useStakingContractDetails';
+import { useServiceId } from '@/hooks/useService';
+import { useServices } from '@/hooks/useServices';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { StakingContractDetails } from '@/types/Autonolas';
 
-import {
-  INITIAL_DEFAULT_STAKING_PROGRAM_ID,
-  StakingProgramContext,
-} from './StakingProgramProvider';
+import { StakingProgramContext } from './StakingProgramProvider';
 
 /**
  * hook to get all staking contract details
  */
 const useAllStakingContractDetails = () => {
-  const stakingPrograms = [INITIAL_DEFAULT_STAKING_PROGRAM_ID];
-  const chainId = useChainId();
-  const currentAgent = useAgent();
+  const { allStakingProgramIds } = useStakingProgram();
+  const { selectedAgentConfig } = useServices();
+  const { serviceApi, homeChainId } = selectedAgentConfig;
 
   const queryResults = useQueries({
-    queries: stakingPrograms.map((programId) => ({
+    queries: allStakingProgramIds.map((programId) => ({
       queryKey: REACT_QUERY_KEYS.ALL_STAKING_CONTRACT_DETAILS(
-        chainId,
+        homeChainId,
         programId,
       ),
       queryFn: async () =>
-        await currentAgent.serviceApi.getStakingContractDetailsByName(
-          programId,
-          chainId,
+        await serviceApi.getStakingContractDetailsByName(
+          programId as StakingProgramId,
+          homeChainId,
         ),
       onError: (error: Error) => {
         console.error(
@@ -50,7 +49,7 @@ const useAllStakingContractDetails = () => {
   });
 
   // Aggregate results into a record
-  const allStakingContractDetailsRecord = stakingPrograms.reduce(
+  const allStakingContractDetailsRecord = allStakingProgramIds.reduce(
     (record, programId, index) => {
       const query = queryResults[index];
       if (query.status === 'success') {
@@ -70,8 +69,37 @@ const useAllStakingContractDetails = () => {
   return { allStakingContractDetailsRecord, isAllStakingContractDetailsLoaded };
 };
 
+/**
+ * hook to get staking contract details by staking program
+ */
+const useStakingContractDetailsByStakingProgram = (
+  serviceId: Maybe<number>,
+  stakingProgramId: Maybe<StakingProgramId>,
+  isPaused?: boolean,
+) => {
+  const { selectedAgentConfig } = useServices();
+  const { serviceApi, homeChainId: chainId } = selectedAgentConfig;
+  return useQuery({
+    queryKey: REACT_QUERY_KEYS.STAKING_CONTRACT_DETAILS_BY_STAKING_PROGRAM_KEY(
+      chainId,
+      serviceId!,
+      stakingProgramId!,
+    ),
+    queryFn: async () => {
+      return await serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
+        serviceId!,
+        stakingProgramId!,
+        chainId,
+      );
+    },
+    enabled: !!serviceId && !!stakingProgramId && !!chainId && !isPaused,
+    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : () => false,
+    refetchOnWindowFocus: false,
+  });
+};
+
 type StakingContractDetailsContextProps = {
-  activeStakingContractDetails?: Partial<StakingContractDetails>;
+  activeStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
   isActiveStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
@@ -88,7 +116,7 @@ type StakingContractDetailsContextProps = {
  */
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
-    activeStakingContractDetails: undefined,
+    activeStakingContractDetails: null,
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
     isActiveStakingContractDetailsLoaded: false,
@@ -104,6 +132,7 @@ export const StakingContractDetailsProvider = ({
   children,
 }: PropsWithChildren) => {
   const [isPaused, setIsPaused] = useState(false);
+  const serviceId = useServiceId();
 
   const { activeStakingProgramId } = useContext(StakingProgramContext);
   const {
@@ -111,6 +140,7 @@ export const StakingContractDetailsProvider = ({
     isLoading: isActiveStakingContractDetailsLoading,
     refetch: refetchActiveStakingContract,
   } = useStakingContractDetailsByStakingProgram(
+    serviceId,
     activeStakingProgramId,
     isPaused,
   );
