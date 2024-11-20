@@ -181,7 +181,7 @@ export const AgentNotRunningButton = (serviceConfigId: string) => {
 
     return (
       (safeOlasBalanceWithStaked ?? 0) >= requiredStakedOlas &&
-      (totalEthBalance ?? 0) > LOW_MASTER_SAFE_BALANCE
+      (totalEthBalance ?? 0) > LOW_MASTER_SAFE_BALANCE // TODO: change to service/chain dynamic threshold
     );
   }, [
     isAllStakingContractDetailsRecordLoaded,
