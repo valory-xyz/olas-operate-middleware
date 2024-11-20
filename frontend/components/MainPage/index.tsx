@@ -28,20 +28,19 @@ import { RewardsSection } from './sections/RewardsSection';
 export const Main = () => {
   const { goto } = usePageState();
   // const { backupSafeAddress } = useMasterSafe();
-  const { updateServicesState } = useServices();
+  const { refetch: updateServicesState } = useServices();
   const {
     updateBalances,
     isLoaded: isBalanceLoaded,
     setIsLoaded: setIsBalanceLoaded,
   } = useBalanceContext();
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
   const { isAllStakingContractDetailsRecordLoaded } =
     useStakingContractContext();
 
   const { hasEnoughServiceSlots } = useStakingContractDetails(
-    activeStakingProgramId ?? defaultStakingProgramId,
+    activeStakingProgramId ?? INITIAL_DEFAULT_STAKING_PROGRAM_ID,
   );
 
   /**
