@@ -30,6 +30,7 @@ from pathlib import Path
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
+from autonomy.chain.base import registry_contracts
 from clea import group, params, run
 from compose.project import ProjectError
 from docker.errors import APIError
@@ -43,9 +44,11 @@ from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
+from operate.ledger.profiles import OLAS
 from operate.operate_types import ChainType, DeploymentStatus
 from operate.services.health_checker import HealthChecker
-from operate.wallet.master import MasterWalletManager
+from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
+from operate.wallet.master import EthereumMasterWallet, MasterWalletManager
 
 
 DEFAULT_HARDHAT_KEY = (
@@ -662,6 +665,89 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 .json
             )
         )
+
+    @app.post("/api/services/{service}/onchain/withdraw")
+    @with_retries
+    async def _withdraw_onchain(request: Request) -> JSONResponse:
+        """Withdraw all the funds from a service."""
+        if not operate.service_manager().exists(service=request.path_params["service"]):
+            return service_not_found_error(service=request.path_params["service"])
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        
+        withdrawal_address = (await request.json()).get("withdrawal_address")
+        if withdrawal_address is None:
+            return JSONResponse(
+                content={"error": "withdrawal_address is required"},
+                status_code=400,
+            )
+
+        try:
+            service_manager = operate.service_manager()
+            service = service_manager.load_or_create(hash=request.path_params["service"])
+
+            service_manager.terminate_service_on_chain_from_safe(
+                hash=request.path_params["service"],
+                chain_id=service.home_chain_id,
+                is_withdrawing=True,
+            )
+
+            service_manager.drain_service(
+                hash=request.path_params["service"],
+                withdrawal_address=withdrawal_address
+            )
+
+            # drain OLAS from the master safe
+            chain_config = service.chain_configs[service.home_chain_id]
+            master_wallet: EthereumMasterWallet = service_manager.wallet_manager.load(
+                ledger_type=chain_config.ledger_config.type
+            )
+            ocm = service_manager.get_on_chain_manager(ledger_config=chain_config.ledger_config)
+            token_instance = registry_contracts.erc20.get_instance(
+                ledger_api=ocm.ledger_api,
+                contract_address=OLAS[chain_config.ledger_config.chain],
+            )
+            balance = token_instance.functions.balanceOf(master_wallet.safe).call()
+            if balance == 0:
+                logger.info(f"No OLAS to drain from master safe: {master_wallet.safe}")
+            else:
+                logger.info(f"Draining {balance} OLAS out of master safe: {master_wallet.safe}")
+                transfer_erc20_from_safe(
+                    ledger_api=ocm.ledger_api,
+                    crypto=master_wallet.crypto,
+                    safe=master_wallet.safe,
+                    token=OLAS[chain_config.ledger_config.chain],
+                    to=withdrawal_address,
+                    amount=balance,
+                )
+
+            # drain xDAI from the master safe
+            balance = ocm.ledger_api.get_balance(master_wallet.safe)
+            if balance == 0:
+                logger.info(f"No xDAI to drain from master safe: {master_wallet.safe}")
+            else:
+                logger.info(f"Draining {balance} xDAI out of master safe: {master_wallet.safe}")
+                master_wallet.transfer(
+                    to=withdrawal_address,
+                    amount=balance,
+                    chain_type=chain_config.ledger_config.chain,
+                )
+
+            # drain xDAI from the master signer
+            drain_signer(
+                ledger_api=ocm.ledger_api,
+                crypto=master_wallet.crypto,
+                withdrawal_address=withdrawal_address,
+                chain_id=chain_config.ledger_config.chain.id,
+            )
+        except Exception as e:
+            logger.error(traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e), "traceback": traceback.format_exc()},
+            )
+
+        return JSONResponse(content={"error": None})
 
     @app.get("/api/services/{service}/deployment")
     @with_retries

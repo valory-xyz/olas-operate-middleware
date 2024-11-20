@@ -20,13 +20,16 @@
 """Safe helpers."""
 
 import binascii
+from contextlib import suppress
 import secrets
 import typing as t
 from enum import Enum
 
 from aea.crypto.base import Crypto, LedgerApi
+from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
+from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 
 from operate.constants import (
@@ -36,6 +39,7 @@ from operate.constants import (
 )
 
 
+logger = setup_logger(name="operate.manager")
 NULL_ADDRESS: str = "0x" + "0" * 40
 MAX_UINT256 = 2**256 - 1
 ZERO_ETH = 0
@@ -217,17 +221,19 @@ def send_safe_txs(
     safe: str,
     ledger_api: LedgerApi,
     crypto: Crypto,
+    to: t.Optional[str] = None,
 ) -> None:
     """Send internal safe transaction."""
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
+    to_address = to or safe
     safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
         ledger_api=ledger_api,
         contract_address=safe,
         value=0,
         safe_tx_gas=0,
-        to_address=safe,
+        to_address=to_address,
         data=txd,
         operation=SafeOperation.CALL.value,
     ).get("tx_hash")
@@ -245,7 +251,7 @@ def send_safe_txs(
         contract_address=safe,
         sender_address=owner,
         owners=(owner,),  # type: ignore
-        to_address=safe,
+        to_address=to_address,
         value=0,
         data=txd,
         safe_tx_gas=0,
@@ -415,3 +421,83 @@ def transfer(
             ),
         )
     )
+
+
+def transfer_erc20_from_safe(
+    ledger_api: LedgerApi,
+    crypto: Crypto,
+    safe: str,
+    token: str,
+    to: str,
+    amount: t.Union[float, int],
+) -> None:
+    """Transfer ERC20 assets from safe to given address."""
+    amount = int(amount)
+    instance = registry_contracts.erc20.get_instance(
+        ledger_api=ledger_api,
+        contract_address=token,
+    )
+    txd = instance.encodeABI(
+        fn_name="transfer",
+        args=[
+            to,
+            amount,
+        ],
+    )
+    send_safe_txs(
+        txd=bytes.fromhex(txd[2:]),
+        safe=safe,
+        ledger_api=ledger_api,
+        crypto=crypto,
+        to=token,
+    )
+
+
+def drain_signer(
+    ledger_api: LedgerApi,
+    crypto: Crypto,
+    withdrawal_address: str,
+    chain_id: int,
+) -> None:
+    """Drain all the native tokens from the crypto wallet."""
+    tx_helper = TxSettler(
+        ledger_api=ledger_api,
+        crypto=crypto,
+        chain_type=ChainProfile.CUSTOM,
+        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+        retries=ON_CHAIN_INTERACT_RETRIES,
+        sleep=ON_CHAIN_INTERACT_SLEEP,
+    )
+
+    def _build_tx(  # pylint: disable=unused-argument
+        *args: t.Any, **kwargs: t.Any
+    ) -> t.Dict:
+        """Build transaction"""
+        tx = ledger_api.get_transfer_transaction(
+            sender_address=crypto.address,
+            destination_address=withdrawal_address,
+            amount=0,
+            tx_fee=0,
+            tx_nonce="0x",
+            chain_id=chain_id,
+            raise_on_try=True,
+        )
+        tx = ledger_api.update_with_gas_estimate(
+            transaction=tx,
+            raise_on_try=True,
+        )
+        tx['value'] = ledger_api.get_balance(crypto.address) - tx['gas'] * tx['maxFeePerGas']
+        if tx['value'] <= 0:
+            logger.warning(f"No balance to drain from signer key: {crypto.address}")
+            raise ChainInteractionError("Insufficient balance")
+        else:
+            logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
+
+        return tx
+
+    setattr(tx_helper, "build", _build_tx)  # noqa: B010
+    try:
+        tx_helper.transact(lambda x: x, "", kwargs={})
+    except ChainInteractionError as e:
+        if "Insufficient balance" in str(e):
+            pass
