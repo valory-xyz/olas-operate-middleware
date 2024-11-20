@@ -3,7 +3,6 @@ import { useCallback, useMemo } from 'react';
 
 import { MiddlewareChain, MiddlewareDeploymentStatus } from '@/client';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
-import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
 import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalance } from '@/hooks/useBalance';
@@ -14,8 +13,8 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -52,23 +51,22 @@ export const AgentNotRunningButton = () => {
   const { storeState } = useStore();
 
   const {
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
-    updateActiveStakingContractInfo,
+    refetchActiveStakingContractDetails,
   } = useStakingContractContext();
 
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
   const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
     useActiveStakingContractInfo();
 
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
-    activeStakingProgramId ?? defaultStakingProgramId,
+  const { hasEnoughServiceSlots } = useStakingContractDetails(
+    activeStakingProgramId,
   );
 
   // const minStakingDeposit =
-  //   stakingContractInfoRecord?.[activeStakingProgram ?? defaultStakingProgram]
+  //   allStakingContractDetailsRecord?.[activeStakingProgram ?? defaultStakingProgram]
   //     ?.minStakingDeposit;
 
   const requiredOlas =
@@ -97,8 +95,7 @@ export const AgentNotRunningButton = () => {
     setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
     // Get the active staking program id; default id if there's no agent yet
-    const stakingProgramId: StakingProgramId =
-      activeStakingProgramId ?? DEFAULT_STAKING_PROGRAM_ID;
+    const stakingProgramId: StakingProgramId = activeStakingProgramId;
 
     // Create master safe if it doesn't exist
     try {
@@ -118,7 +115,7 @@ export const AgentNotRunningButton = () => {
     // Then create / deploy the service
     try {
       await ServicesService.createService({
-        stakingProgramId,
+        activeStakingProgramId,
         serviceTemplate,
         deploy: true,
         useMechMarketplace: false,
@@ -153,10 +150,10 @@ export const AgentNotRunningButton = () => {
     await delayInSeconds(5);
 
     // update provider states sequentially
-    // service id is required before activeStakingContractInfo & balances can be updated
+    // service id is required before activeStakingContractDetails & balances can be updated
     try {
       await updateServicesState?.(); // reload the available services
-      await updateActiveStakingContractInfo(); // reload active staking contract with new service
+      await refetchActiveStakingContractDetails(); // reload active staking contract with new service
       await updateBalances(); // reload the balances
     } catch (error) {
       console.error(error);
@@ -177,12 +174,12 @@ export const AgentNotRunningButton = () => {
     activeStakingProgramId,
     serviceTemplate,
     updateServicesState,
-    updateActiveStakingContractInfo,
+    refetchActiveStakingContractDetails,
     updateBalances,
   ]);
 
   const isDeployable = useMemo(() => {
-    if (!isStakingContractInfoRecordLoaded) return false;
+    if (!isAllStakingContractDetailsRecordLoaded) return false;
 
     // if the agent is NOT running and the balance is too low,
     // user should not be able to start the agent
@@ -217,7 +214,7 @@ export const AgentNotRunningButton = () => {
 
     return hasEnoughOlas && hasEnoughEth;
   }, [
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     deploymentStatus,
     isLowBalance,
     requiredOlas,

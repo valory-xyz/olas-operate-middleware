@@ -1,46 +1,49 @@
 import { isNil } from 'lodash';
 import { useContext } from 'react';
 
-import { StakingContractInfoContext } from '@/context/StakingContractInfoProvider';
+import { StakingContractDetailsContext } from '@/context/StakingContractDetailsProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
+
+import { useServices } from './useServices';
 
 export const useStakingContractContext = () => {
   const {
-    activeStakingContractInfo,
+    activeStakingContractDetails,
     isPaused,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
-    updateActiveStakingContractInfo,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
+    refetchActiveStakingContractDetails,
     setIsPaused,
-    isActiveStakingContractInfoLoaded,
-  } = useContext(StakingContractInfoContext);
+    isActiveStakingContractDetailsLoaded,
+  } = useContext(StakingContractDetailsContext);
   return {
-    isActiveStakingContractInfoLoaded,
-    activeStakingContractInfo,
+    isActiveStakingContractDetailsLoaded,
+    activeStakingContractDetails,
     isPaused,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
-    updateActiveStakingContractInfo,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
+    refetchActiveStakingContractDetails,
     setIsPaused,
   };
 };
 
 export const useActiveStakingContractInfo = () => {
   const {
-    activeStakingContractInfo,
-    isActiveStakingContractInfoLoaded: isActiveStakingContractInfoLoaded,
+    activeStakingContractDetails,
+    isActiveStakingContractDetailsLoaded: isActiveStakingContractDetailsLoaded,
   } = useStakingContractContext();
 
   const { selectedService } = useServices();
 
   // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
-  if (!selectedService || !activeStakingContractInfo)
+  if (!selectedService || !activeStakingContractDetails) {
     return {
-      stakingContractInfoRecord,
-      updateActiveStakingContractInfo,
+      allStakingContractDetailsRecord,
+      refetchActiveStakingContractDetails,
       setIsPaused,
       isPaused,
     };
+  }
 
   const {
     serviceStakingState,
@@ -49,7 +52,7 @@ export const useActiveStakingContractInfo = () => {
     availableRewards,
     serviceIds,
     maxNumServices,
-  } = activeStakingContractInfo ?? {};
+  } = activeStakingContractDetails ?? {};
 
   const isAgentEvicted = serviceStakingState === 2;
 
@@ -97,15 +100,17 @@ export const useActiveStakingContractInfo = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isActiveStakingContractInfoLoaded,
-    activeStakingContractInfo,
+    isActiveStakingContractDetailsLoaded,
+    activeStakingContractDetails,
   };
 };
 
-export const useStakingContractInfo = (stakingProgramId: StakingProgramId) => {
-  const { stakingContractInfoRecord } = useStakingContractContext();
-
-  const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+export const useStakingContractDetails = (
+  stakingProgramId: StakingProgramId,
+) => {
+  const { allStakingContractDetailsRecord } = useStakingContractContext();
+  const stakingContractInfo =
+    allStakingContractDetailsRecord?.[stakingProgramId];
 
   const { serviceIds, maxNumServices, availableRewards } =
     stakingContractInfo ?? {};

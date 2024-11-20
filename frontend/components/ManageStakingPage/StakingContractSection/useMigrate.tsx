@@ -10,8 +10,8 @@ import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 export enum CantMigrateReason {
@@ -51,14 +51,16 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     useStakingProgram();
   const { needsInitialFunding } = useNeedsFunds();
 
-  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
-    useStakingContractContext();
+  const {
+    allStakingContractDetailsRecord,
+    isAllStakingContractDetailsRecordLoaded,
+  } = useStakingContractContext();
 
   const { isServiceStaked, isServiceStakedForMinimumDuration } =
     useActiveStakingContractInfo();
 
   const { stakingContractInfo, hasEnoughServiceSlots } =
-    useStakingContractInfo(stakingProgramId);
+    useStakingContractDetails(stakingProgramId);
 
   const { isFetched: isServicesLoaded } = useServices();
 
@@ -116,7 +118,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (!isStakingContractInfoRecordLoaded) {
+    if (!isAllStakingContractDetailsRecordLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
@@ -196,7 +198,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   }, [
     isServicesLoaded,
     isBalanceLoaded,
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     stakingContractInfo,
     activeStakingProgramId,
     stakingProgramId,
@@ -236,14 +238,15 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
 
     // staking contract requirements
 
-    if (!isStakingContractInfoRecordLoaded) {
+    if (!isAllStakingContractDetailsRecordLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
       };
     }
 
-    const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+    const stakingContractInfo =
+      allStakingContractDetailsRecord?.[stakingProgramId];
 
     if (!stakingContractInfo) {
       return {
@@ -295,8 +298,8 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     isServicesLoaded,
     isBalanceLoaded,
     hasEnoughEthForInitialFunding,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
     stakingProgramId,
     hasEnoughOlasForFirstRun,
     serviceStatus,

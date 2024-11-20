@@ -6,7 +6,8 @@ import { PROVIDERS } from '@/constants/providers';
 import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
-import { StakingContractInfo, StakingRewardsInfo } from '@/types/Autonolas';
+import { StakingContractDetails, StakingRewardsInfo } from '@/types/Autonolas';
+import { Maybe } from '@/types/Util';
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
@@ -140,12 +141,12 @@ export abstract class PredictTraderService extends StakedAgentService {
     );
   };
 
-  static getStakingContractInfoByServiceIdStakingProgram = async (
+  static getStakingContractDetailsByServiceIdStakingProgram = async (
     serviceId: number,
     stakingProgramId: StakingProgramId,
     chainId: ChainId = ChainId.Gnosis,
-  ): Promise<Partial<StakingContractInfo> | undefined> => {
-    if (!serviceId) return;
+  ): Promise<Partial<Maybe<StakingContractDetails>>> => {
+    if (!serviceId) return null;
 
     const { multicallProvider } = PROVIDERS[chainId];
 
@@ -197,10 +198,10 @@ export abstract class PredictTraderService extends StakedAgentService {
    * Get staking contract info by staking program name
    * eg. Alpha, Beta, Beta2
    */
-  static getStakingContractInfoByStakingProgram = async (
+  static getStakingContractDetailsByName = async (
     stakingProgramId: StakingProgramId,
     chainId: ChainId,
-  ): Promise<Partial<StakingContractInfo>> => {
+  ): Promise<Partial<StakingContractDetails>> => {
     const provider = PROVIDERS[chainId].multicallProvider;
 
     const { contract: stakingTokenProxy } =

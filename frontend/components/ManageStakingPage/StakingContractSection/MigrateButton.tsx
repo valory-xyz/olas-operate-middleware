@@ -13,9 +13,8 @@ import { useServices } from '@/hooks/useServices';
 import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
   useActiveStakingContractInfo,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
-import { useStakingProgram } from '@/hooks/useStakingProgram';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { ServicesService } from '@/service/Services';
 
 import { CountdownUntilMigration } from './CountdownUntilMigration';
@@ -43,21 +42,20 @@ export const MigrateButton = ({
   });
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalance();
-  const { updateActiveStakingProgramId } = useStakingProgram();
 
-  const { activeStakingContractInfo, isActiveStakingContractInfoLoaded } =
+  const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();
   const { stakingContractInfo: defaultStakingContractInfo } =
-    useStakingContractInfo(defaultStakingProgramId);
+    useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
-    if (!isActiveStakingContractInfoLoaded) return;
-    if (activeStakingContractInfo) return activeStakingContractInfo;
+    if (!isActiveStakingContractDetailsLoaded) return;
+    if (activeStakingContractDetails) return activeStakingContractDetails;
     return defaultStakingContractInfo;
   }, [
-    activeStakingContractInfo,
+    activeStakingContractDetails,
     defaultStakingContractInfo,
-    isActiveStakingContractInfoLoaded,
+    isActiveStakingContractDetailsLoaded,
   ]);
 
   const { setMigrationModalOpen } = useModals();
@@ -102,7 +100,10 @@ export const MigrateButton = ({
         onClick={async () => {
           setIsServicePollingPaused(true);
           setIsBalancePollingPaused(true);
-          setDefaultStakingProgramId(stakingProgramId);
+
+          // TODO: we should not get the default staking program id
+          // from the context, we should get it from the service
+          // setDefaultStakingProgramId(stakingProgramId);
 
           try {
             setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);

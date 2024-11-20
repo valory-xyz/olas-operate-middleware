@@ -1,62 +1,74 @@
 import { useContext, useMemo } from 'react';
 
-import { MiddlewareChain } from '@/client';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/config/olasContracts';
-import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import {
-  DEFAULT_STAKING_PROGRAM_ID,
-  StakingProgramContext,
-} from '@/context/StakingProgramProvider';
+  STAKING_PROGRAM_ADDRESS,
+  STAKING_PROGRAMS,
+  StakingProgramConfig,
+} from '@/config/stakingPrograms';
+import { StakingProgramContext } from '@/context/StakingProgramProvider';
+import { StakingProgramId } from '@/enums/StakingProgram';
+
+import { useServices } from './useServices';
 
 /**
- * Hook to get the active staking program and its metadata, and the default staking program.
- * @returns {Object} The active staking program and its metadata.
+ * Hook to get the active staking program and its metadata.
  */
 export const useStakingProgram = () => {
-  const {
-    activeStakingProgramId,
-    defaultStakingProgramId,
-    updateActiveStakingProgramId,
-    setDefaultStakingProgramId,
-  } = useContext(StakingProgramContext);
+  const { isActiveStakingProgramLoaded, activeStakingProgramId } = useContext(
+    StakingProgramContext,
+  );
+  const { selectedAgentConfig } = useServices();
+  const { homeChainId } = selectedAgentConfig;
 
-  const isActiveStakingProgramLoaded = activeStakingProgramId !== undefined;
+  const allStakingProgramsKeys = Object.keys(STAKING_PROGRAMS[homeChainId]);
+  const allStakingProgramNameAddressPair = STAKING_PROGRAM_ADDRESS[homeChainId];
 
-  /**
-   * TODO: implement enums
-   * returns `StakingProgramMeta` if defined
-   * returns `undefined` if not loaded
-   * returns `null` if not actively staked
-   */
   const activeStakingProgramMeta = useMemo(() => {
-    if (activeStakingProgramId === undefined) return;
-    if (activeStakingProgramId === null) return null;
-    return STAKING_PROGRAM_META[activeStakingProgramId];
-  }, [activeStakingProgramId]);
+    if (!isActiveStakingProgramLoaded) return null;
+    if (!activeStakingProgramId) return null;
+    if (activeStakingProgramId.length === 0) return null;
 
-  const defaultStakingProgramMeta =
-    STAKING_PROGRAM_META[DEFAULT_STAKING_PROGRAM_ID];
+    return (allStakingProgramsKeys as StakingProgramId[]).reduce(
+      (acc, programId) => {
+        if (activeStakingProgramId.includes(programId)) {
+          acc[programId] = STAKING_PROGRAMS[homeChainId][programId];
+        }
+        return acc;
+      },
+      {} as Record<StakingProgramId, StakingProgramConfig>,
+    );
+  }, [
+    homeChainId,
+    isActiveStakingProgramLoaded,
+    allStakingProgramsKeys,
+    activeStakingProgramId,
+  ]);
 
   const activeStakingProgramAddress = useMemo(() => {
-    if (!activeStakingProgramId) return;
-    return SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
-      MiddlewareChain.OPTIMISM
-    ][activeStakingProgramId];
-  }, [activeStakingProgramId]);
+    if (!activeStakingProgramId) return null;
+    if (activeStakingProgramId.length === 0) return null;
 
-  const defaultStakingProgramAddress =
-    SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[
-      MiddlewareChain.OPTIMISM
-    ][DEFAULT_STAKING_PROGRAM_ID];
+    return (
+      Object.keys(allStakingProgramNameAddressPair) as StakingProgramId[]
+    ).reduce(
+      (acc, programId) => {
+        if (activeStakingProgramId.includes(programId)) {
+          acc[programId] = allStakingProgramNameAddressPair[programId];
+        }
+        return acc;
+      },
+      {} as Record<StakingProgramId, string>,
+    );
+  }, [allStakingProgramNameAddressPair, activeStakingProgramId]);
 
   return {
-    activeStakingProgramAddress,
-    activeStakingProgramId,
-    activeStakingProgramMeta,
-    defaultStakingProgramAddress,
-    defaultStakingProgramMeta,
     isActiveStakingProgramLoaded,
-    updateActiveStakingProgramId,
-    setDefaultStakingProgramId,
+    activeStakingProgramId,
+    activeStakingProgramAddress,
+    activeStakingProgramMeta,
+
+    // all staking programs
+    allStakingProgramIds: Object.keys(allStakingProgramNameAddressPair),
+    allStakingProgramAddress: Object.values(allStakingProgramNameAddressPair),
   };
 };

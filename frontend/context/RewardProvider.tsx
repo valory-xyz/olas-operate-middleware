@@ -50,7 +50,7 @@ const useStakingRewardsDetails = () => {
   const { isOnline } = useContext(OnlineStatusContext);
   const { activeStakingProgramId } = useContext(StakingProgramContext);
 
-  const { selectedService, isLoaded } = useServices();
+  const { selectedService, isFetched: isLoaded } = useServices();
   const serviceConfigId =
     isLoaded && selectedService ? selectedService?.service_config_id : '';
   const { service } = useService({ serviceConfigId });
@@ -90,10 +90,9 @@ const useStakingRewardsDetails = () => {
  */
 const useAvailableRewardsForEpoch = () => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { activeStakingProgramId, defaultStakingProgramId } = useContext(
-    StakingProgramContext,
-  );
-  const { selectedService, isLoaded } = useServices();
+  const { activeStakingProgramId } = useContext(StakingProgramContext);
+
+  const { selectedService, isFetched: isLoaded } = useServices();
   const serviceConfigId =
     isLoaded && selectedService ? selectedService?.service_config_id : '';
 
@@ -106,12 +105,11 @@ const useAvailableRewardsForEpoch = () => {
     ),
     queryFn: async () => {
       return await currentAgent.serviceApi.getAvailableRewardsForEpoch(
-        activeStakingProgramId ?? defaultStakingProgramId,
+        activeStakingProgramId!,
         currentChainId,
       );
     },
-    enabled:
-      !!isOnline && !!activeStakingProgramId && !!defaultStakingProgramId,
+    enabled: !!isOnline && !!activeStakingProgramId,
     refetchInterval: isOnline ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
