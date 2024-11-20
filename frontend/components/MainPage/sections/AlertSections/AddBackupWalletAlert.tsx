@@ -1,5 +1,5 @@
 import { Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
+import { isArray } from 'lodash';
 
 import { Pages } from '@/enums/Pages';
 import { MasterSafe } from '@/enums/Wallet';
@@ -12,10 +12,13 @@ const { Text } = Typography;
 
 export const AddBackupWalletAlert = (masterSafe: MasterSafe) => {
   const { goto } = usePageState();
-  const { data: masterSafeOwners } = useMultisig(masterSafe);
+  const { owners, ownersIsPending, ownersIsFetched } = useMultisig(masterSafe);
 
-  if (isNil(masterSafeOwners)) return null;
-  if (masterSafeOwners) return null;
+  if (ownersIsPending) return null;
+  if (!ownersIsFetched) return null;
+
+  // all safes have min 1 owner, more than 1 owner, there is a backup
+  if (isArray(owners) && owners.length > 1) return null;
 
   return (
     <CustomAlert
