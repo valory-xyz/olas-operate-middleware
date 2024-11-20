@@ -12,7 +12,7 @@ const Notifications = {
 
 export const SystemNotificationTriggers = ({ children }: PropsWithChildren) => {
   const electronApi = useElectronApi();
-  const { serviceStatus } = useServices();
+  const { selectedService } = useServices();
   const { isEligibleForRewards } = useReward();
 
   const prevIsEligibleForRewards = useRef<boolean>();
@@ -22,7 +22,10 @@ export const SystemNotificationTriggers = ({ children }: PropsWithChildren) => {
     if (!electronApi.showNotification) return;
 
     // ignore if agent is not running
-    if (serviceStatus !== MiddlewareDeploymentStatus.DEPLOYED) return;
+    if (
+      selectedService?.deploymentStatus !== MiddlewareDeploymentStatus.DEPLOYED
+    )
+      return;
     // ignore if eligibility is not yet defined
     if (isEligibleForRewards === undefined) return;
     // ignore if agent was previously eligible and is still eligible
@@ -37,13 +40,13 @@ export const SystemNotificationTriggers = ({ children }: PropsWithChildren) => {
     }
 
     prevIsEligibleForRewards.current = isEligibleForRewards;
-  }, [electronApi, isEligibleForRewards, serviceStatus]);
+  }, [electronApi, isEligibleForRewards, selectedService?.deploymentStatus]);
 
   useEffect(() => {
     if (!electronApi.showNotification) return;
     // Show notification when agent earns rewards
     handleAgentEarned();
-  }, [electronApi, handleAgentEarned, isEligibleForRewards, serviceStatus]);
+  }, [electronApi, handleAgentEarned, isEligibleForRewards]);
 
   return children;
 };
