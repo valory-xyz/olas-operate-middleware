@@ -38,6 +38,7 @@ type CrossChainStakedBalances = Array<{
   chainId: number;
   olasBondBalance: number;
   olasDepositBalance: number;
+  walletAddress: Address;
 }>;
 
 export const BalanceContext = createContext<{
@@ -250,7 +251,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-type WalletBalanceResult = {
+export type WalletBalanceResult = {
   walletAddress: Address;
   chainId: ChainId;
   symbol: TokenSymbol;
@@ -369,6 +370,8 @@ const getCrossChainStakedBalances = async (
           olasDepositBalance: depositValue,
           serviceState,
         }),
+        walletAddress:
+          services[idx].chain_configs[chainId].chain_data.multisig!, // multisig must exist if registry info is fetched
       });
     } else {
       console.error(

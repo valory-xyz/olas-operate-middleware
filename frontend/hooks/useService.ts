@@ -58,6 +58,14 @@ export const useService = ({
     return addressesByChainId;
   }, [service]);
 
+  const flatAddresses = useMemo(() => {
+    return Object.values(addresses).reduce((acc, { agentSafe, agentEoas }) => {
+      if (agentSafe) acc.push(agentSafe);
+      if (agentEoas) acc.push(...agentEoas);
+      return acc;
+    }, [] as Address[]);
+  }, [addresses]);
+
   /**
    * Overrides the deployment status of the service in the cache.
    * @note Overwrite is only temporary if ServicesContext is polling
@@ -75,6 +83,7 @@ export const useService = ({
   return {
     service,
     addresses,
+    flatAddresses,
     isLoaded,
     deploymentStatus,
     setDeploymentStatus,

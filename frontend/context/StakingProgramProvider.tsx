@@ -1,5 +1,4 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Maybe } from 'graphql/jsutils/Maybe';
 import { createContext, PropsWithChildren, useCallback } from 'react';
 
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
@@ -13,10 +12,10 @@ const INITIAL_DEFAULT_STAKING_PROGRAM_ID = StakingProgramId.PearlBeta;
 
 export const StakingProgramContext = createContext<{
   isActiveStakingProgramLoaded: boolean;
-  activeStakingProgramId: Maybe<StakingProgramId>;
+  activeStakingProgramId: StakingProgramId;
 }>({
   isActiveStakingProgramLoaded: false,
-  activeStakingProgramId: null,
+  activeStakingProgramId: INITIAL_DEFAULT_STAKING_PROGRAM_ID,
 });
 
 /**
@@ -73,7 +72,8 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
       value={{
         isActiveStakingProgramLoaded:
           !isStakingProgramsLoading && !!activeStakingProgramId,
-        activeStakingProgramId,
+        activeStakingProgramId:
+          activeStakingProgramId || INITIAL_DEFAULT_STAKING_PROGRAM_ID,
       }}
     >
       {children}
