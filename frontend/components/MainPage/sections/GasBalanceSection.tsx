@@ -7,7 +7,7 @@ import styled from 'styled-components';
 import { MiddlewareChain } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { EXPLORER_URL } from '@/constants/urls';
-import { useBalance } from '@/hooks/useBalance';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useStore } from '@/hooks/useStore';
 import { useWallet } from '@/hooks/useWallet';
@@ -36,7 +36,7 @@ const FineDot = styled(Dot)`
 `;
 
 const BalanceStatus = () => {
-  const { isBalanceLoaded, isLowBalance } = useBalance();
+  const { isBalanceLoaded, isLowBalance } = useBalanceContext();
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
@@ -98,7 +98,7 @@ const TooltipContent = styled.div`
 
 export const GasBalanceSection = () => {
   const { masterSafeAddress } = useWallet();
-  const { isBalanceLoaded } = useBalance();
+  const { isBalanceLoaded } = useBalanceContext();
 
   return (
     <CardSection

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 
 import { Pages } from '@/enums/Pages';
 // import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalance } from '@/hooks/useBalance';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
 // import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
@@ -33,7 +33,7 @@ export const Main = () => {
     updateBalances,
     isLoaded: isBalanceLoaded,
     setIsLoaded: setIsBalanceLoaded,
-  } = useBalance();
+  } = useBalanceContext();
   const { activeStakingProgramId, defaultStakingProgramId } =
     useStakingProgram();
 
@@ -60,7 +60,7 @@ export const Main = () => {
   ]);
 
   const hideMainOlasBalanceTopBorder = [
-    !backupSafeAddress,
+    !backupSafeAddress, // TODO: update this condition to check backup safe relative to selectedService
     activeStakingProgramId === StakingProgramId.Alpha,
     isAllStakingContractDetailsRecordLoaded && !hasEnoughServiceSlots,
   ].some((condition) => !!condition);

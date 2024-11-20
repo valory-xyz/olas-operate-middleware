@@ -5,7 +5,7 @@ import { MiddlewareChain, MiddlewareDeploymentStatus } from '@/client';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalance } from '@/hooks/useBalance';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
@@ -47,7 +47,8 @@ export const AgentNotRunningButton = () => {
     totalOlasStakedBalance,
     totalEthBalance,
     updateBalances,
-  } = useBalance();
+  } = useBalanceContext();
+
   const { storeState } = useStore();
 
   const {
