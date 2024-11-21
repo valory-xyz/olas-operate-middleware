@@ -92,7 +92,7 @@ export const useMasterBalances = () => {
     () => masterLowBalances?.length > 0,
     [masterLowBalances],
   );
-
+// use flatAddresses for consistency
   const masterSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
