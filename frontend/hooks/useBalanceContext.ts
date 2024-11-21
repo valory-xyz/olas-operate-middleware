@@ -13,7 +13,7 @@ export const useBalanceContext = () => useContext(BalanceContext);
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string) => {
-  const { flatAddresses, serviceSafes: masterSafes } = useService({
+  const { flatAddresses, serviceSafes } = useService({
     serviceConfigId,
   });
   const { walletBalances, lowBalances, stakedBalances } = useBalanceContext();
@@ -47,9 +47,9 @@ export const useServiceBalances = (serviceConfigId: string) => {
   const serviceSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
-        masterSafes.find(({ address }) => balance.walletAddress === address),
+        serviceSafes.find(({ address }) => balance.walletAddress === address),
       ),
-    [masterSafes, walletBalances],
+    [serviceSafes, walletBalances],
   );
 
   return {
