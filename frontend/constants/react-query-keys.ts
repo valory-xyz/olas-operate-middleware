@@ -65,4 +65,10 @@ export const REACT_QUERY_KEYS = {
   // multisigs
   MULTISIG_GET_OWNERS_KEY: (multisig: Safe) =>
     ['multisig', 'getOwners', multisig.chainId, multisig.address] as const,
+  MULTISIGS_GET_OWNERS_KEY: (multisigs: Safe[]) =>
+    [
+      'multisigs',
+      'getOwners',
+      multisigs.map((multisig) => multisig.address),
+    ] as const,
 } as const;
