@@ -94,24 +94,18 @@ export const useMasterBalances = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { walletBalances, lowBalances, stakedBalances } = useBalanceContext();
 
-  const masterWalletBalances = useMemo(
-    () =>
-      walletBalances?.filter(
-        (balance) =>
-          masterSafes?.find((safe) => safe.address === balance.walletAddress) ||
-          masterEoa?.address === balance.walletAddress,
-      ),
-    [masterEoa?.address, masterSafes, walletBalances],
-  );
+  // TODO: unused, check only services stake?
+  // const masterStakedBalances = useMemo(
+  //   () =>
+  //     stakedBalances?.filter((balance) =>
+  //       masterSafes?.find((safe) => safe.address === balance.walletAddress),
+  //     ),
+  //   [masterSafes, stakedBalances],
+  // );
 
-  const masterStakedBalances = useMemo(
-    () =>
-      stakedBalances?.filter((balance) =>
-        masterSafes?.find((safe) => safe.address === balance.walletAddress),
-      ),
-    [masterSafes, stakedBalances],
-  );
-
+  /**
+   * Array of low balances relevant to the master wallets (safes and eoa)
+   */
   const masterLowBalances = useMemo(
     () => lowBalances?.filter((balance) => balance.walletAddress),
     [lowBalances],
@@ -121,7 +115,8 @@ export const useMasterBalances = () => {
     () => masterLowBalances?.length > 0,
     [masterLowBalances],
   );
-  // use flatAddresses for consistency
+
+  // TODO: use flatAddresses for consistency
   const masterSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
@@ -130,10 +125,26 @@ export const useMasterBalances = () => {
     [masterSafes, walletBalances],
   );
 
+  const masterEoaBalances = useMemo<WalletBalanceResult[]>(
+    () =>
+      walletBalances?.filter(
+        (balance) => balance.walletAddress === masterEoa?.address,
+      ),
+    [masterEoa?.address, walletBalances],
+  );
+
+  /**
+   * Unstaked balances across master safes and eoas
+   */
+  const masterWalletBalances = useMemo(
+    () => [...masterSafeBalances, ...masterEoaBalances],
+    [masterEoaBalances, masterSafeBalances],
+  );
+
   return {
     masterWalletBalances,
-    masterStakedBalances,
     masterSafeBalances,
+    masterEoaBalances,
     masterLowBalances,
     isLowBalance,
   };
