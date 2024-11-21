@@ -18,7 +18,10 @@ import { getNativeTokenSymbol } from '@/config/tokens';
 import { ChainId } from '@/enums/Chain';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import {
+  useBalanceContext,
+  useMasterBalances,
+} from '@/hooks/useBalanceContext';
 import { usePageState } from '@/hooks/usePageState';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { type Address } from '@/types/Address';
@@ -105,25 +108,25 @@ const OlasBalance = () => {
 
 const MasterSafeNativeBalance = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
-  const { walletBalances } = useBalanceContext();
+  const { masterWalletBalances } = useMasterBalances();
 
   const masterSafeNativeBalance: Optional<number> = useMemo(() => {
     if (isNil(masterSafes)) return;
-    if (isNil(walletBalances)) return;
+    if (isNil(masterWalletBalances)) return;
 
     if (isEmpty(masterSafes)) return 0;
-    if (isEmpty(walletBalances)) return 0;
+    if (isEmpty(masterWalletBalances)) return 0;
 
     const masterSafe = masterSafes[0]; // TODO: handle multiple safes in future
 
-    return walletBalances
+    return masterWalletBalances
       .filter(
         ({ walletAddress }) =>
           walletAddress === masterSafe.address || // TODO: handle multiple safes in future
           walletAddress === masterEoa?.address,
       )
       .reduce((acc, balance) => acc + balance.balance, 0);
-  }, [masterEoa?.address, masterSafes, walletBalances]);
+  }, [masterEoa?.address, masterSafes, masterWalletBalances]);
 
   const nativeTokenSymbol = getNativeTokenSymbol(ChainId.Gnosis);
 
@@ -145,20 +148,20 @@ const MasterSafeNativeBalance = () => {
 
 const MasterEoaSignerNativeBalance = () => {
   const { masterEoa } = useMasterWalletContext();
-  const { walletBalances } = useBalanceContext();
+  const { masterWalletBalances } = useMasterBalances();
 
   const masterEoaBalance: Optional<number> = useMemo(() => {
     if (isNil(masterEoa)) return;
-    if (isNil(walletBalances)) return;
+    if (isNil(masterWalletBalances)) return;
 
-    return walletBalances
+    return masterWalletBalances
       .filter(
         (
           { walletAddress, isNative }, // TODO: support chainId grouping, for multi-agent
         ) => walletAddress === masterEoa.address && isNative,
       )
       .reduce((acc, balance) => acc + balance.balance, 0);
-  }, [masterEoa, walletBalances]);
+  }, [masterEoa, masterWalletBalances]);
 
   const nativeTokenSymbol = useMemo(
     () => getNativeTokenSymbol(ChainId.Gnosis),
