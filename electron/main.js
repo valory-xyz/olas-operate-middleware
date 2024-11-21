@@ -96,12 +96,25 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function beforeQuit() {
+let isBeforeQuitting = false;
+let appRealClose = false;
+
+async function beforeQuit(event) {
+  if ((typeof event.preventDefault === 'function') && !appRealClose) {
+    event.preventDefault();
+    logger.electron('onquit event.preventDefault');
+  }
+
+
+  if (isBeforeQuitting) return;
+  isBeforeQuitting = true;
+
+
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
-  logger.electron('BEFORE QUIT!!!!!!!!!!!!!!');
+
 
   logger.electron("Stop backend gracefully:");
   try {
@@ -111,11 +124,11 @@ async function beforeQuit() {
       'Killed backend server by shutdown endpoint!'
     );
     logger.electron(
-      'Killed backend server by shutdown endpoint! result' , JSON.stringify(result)
+      'Killed backend server by shutdown endpoint! result:' + JSON.stringify(result)
     );
   } catch (err) {
     logger.electron('Backend stopped with error!');
-    logger.electron('Backend stopped with error, result: ', JSON.stringify(err));
+    logger.electron('Backend stopped with error, result: ' + JSON.stringify(err));
   }
 
 
@@ -169,6 +182,8 @@ async function beforeQuit() {
     });
     // electron will kill next service on exit
   }
+  appRealClose = true;
+  app.quit()
 }
 
 const APP_WIDTH = 460;
@@ -553,8 +568,8 @@ app.once('ready', async () => {
     app.quit();
   });
 
-  app.on('before-quit', async () => {
-    await beforeQuit();
+  app.on('before-quit', async (event) => {
+    await beforeQuit(event);
   });
 
   if (platform === 'darwin') {
@@ -569,7 +584,7 @@ app.once('ready', async () => {
 process.on('uncaughtException', (error) => {
   logger.electron('Uncaught Exception:', error);
   // Clean up your child processes here
-  beforeQuit().then(() => {
+  beforeQuit({}).then(() => {
     process.exit(1); // Exit with a failure code
   });
 });
@@ -577,7 +592,7 @@ process.on('uncaughtException', (error) => {
 ['SIGINT', 'SIGTERM'].forEach((signal) => {
   process.on(signal, () => {
     logger.electron(`Received ${signal}. Cleaning up...`);
-    beforeQuit().then(() => {
+    beforeQuit({}).then(() => {
       process.exit(0);
     });
   });
