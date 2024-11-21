@@ -1,4 +1,4 @@
-import { MiddlewareChain } from '@/client';
+import { ChainId } from '@/enums/Chain';
 
 /**
  * @warning must be updated to be dynamic
@@ -8,15 +8,15 @@ export const MIN_ETH_BALANCE_THRESHOLDS = {
   //   safeCreation: 1.5,
   //   safeAddSigner: 0.1,
   // },
-  [MiddlewareChain.OPTIMISM]: {
+  [ChainId.Optimism]: {
     safeCreation: 0.005,
     safeAddSigner: 0.005,
   },
-  [MiddlewareChain.ETHEREUM]: {
+  [ChainId.Ethereum]: {
     safeCreation: 0.02,
     safeAddSigner: 0.02,
   },
-  [MiddlewareChain.BASE]: {
+  [ChainId.Base]: {
     safeCreation: 0.005,
     safeAddSigner: 0.005,
   },

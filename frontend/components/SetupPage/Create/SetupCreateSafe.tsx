@@ -7,10 +7,10 @@ import { CardSection } from '@/components/styled/CardSection';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 import { useSetup } from '@/hooks/useSetup';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
 
@@ -28,8 +28,8 @@ export const SetupCreateSafe = () => {
     updateWallets,
     masterSafeAddressKeyExistsForChain,
     masterSafeAddress,
-  } = useWallet();
-  const { updateMasterSafeOwners } = useMasterSafe();
+  } = useMasterWalletContext();
+  const { updateMasterSafeOwners } = useMultisig();
   const { backupSigner } = useSetup();
 
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);

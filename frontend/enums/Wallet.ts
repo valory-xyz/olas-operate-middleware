@@ -11,35 +11,38 @@ export enum WalletOwnerType {
   Agent = 'agent',
 }
 
-export type MasterEoa = {
+export type Eoa = {
   address: Address;
   type: WalletType.EOA;
+};
+
+export type Safe = {
+  address: Address;
+  type: WalletType.Safe;
+  chainId: ChainId;
+};
+
+export type MasterEoa = Eoa & {
   owner: WalletOwnerType.Master;
 };
 
-export type MasterSafe = Omit<MasterEoa, 'type'> & {
-  type: WalletType.Safe;
-  chainId: ChainId;
-};
-
-export type MasterWallet = MasterEoa | MasterSafe;
-
-export type AgentEoa = {
-  address: Address;
-  type: WalletType.EOA;
+export type AgentEoa = Eoa & {
   owner: WalletOwnerType.Agent;
 };
 
-export type AgentSafe = Omit<AgentEoa, 'type'> & {
-  type: WalletType.Safe;
-  chainId: ChainId;
+export type MasterSafe = Safe & {
+  owner: WalletOwnerType.Master;
 };
 
-export type AgentWallet = AgentEoa | AgentSafe;
+export type AgentSafe = Safe & {
+  owner: WalletOwnerType.Agent;
+};
 
-export type Wallet = MasterWallet | AgentWallet;
+export type MasterWallet = MasterEoa | MasterSafe;
+export type AgentWallet = AgentEoa | AgentSafe;
 
 export type MasterWallets = MasterWallet[];
 export type AgentWallets = AgentWallet[];
 
+export type Wallet = MasterWallet | AgentWallet;
 export type Wallets = Wallet[];

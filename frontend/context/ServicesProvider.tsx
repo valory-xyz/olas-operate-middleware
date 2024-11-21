@@ -16,7 +16,13 @@ import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { AgentType } from '@/enums/Agent';
 import { ChainId } from '@/enums/Chain';
-import { AgentWallets, WalletOwnerType, WalletType } from '@/enums/Wallet';
+import {
+  AgentEoa,
+  AgentSafe,
+  AgentWallets,
+  WalletOwnerType,
+  WalletType,
+} from '@/enums/Wallet';
 import { UsePause, usePause } from '@/hooks/usePause';
 import { ServicesService } from '@/service/Services';
 import { AgentConfig } from '@/types/Agent';
@@ -137,11 +143,14 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
               if (instances) {
                 acc.push(
-                  ...instances.map((instance: string) => ({
-                    address: instance,
-                    type: WalletType.EOA,
-                    owner: WalletOwnerType.Agent,
-                  })),
+                  ...instances.map(
+                    (instance: string) =>
+                      ({
+                        address: instance,
+                        type: WalletType.EOA,
+                        owner: WalletOwnerType.Agent,
+                      }) as AgentEoa,
+                  ),
                 );
               }
 
@@ -151,7 +160,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
                   type: WalletType.Safe,
                   owner: WalletOwnerType.Agent,
                   chainId,
-                });
+                } as AgentSafe);
               }
 
               return acc;

@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { Layout } from '@/components/Layout';
 import { BalanceProvider } from '@/context/BalanceProvider';
 import { ElectronApiProvider } from '@/context/ElectronApiProvider';
-import { MasterSafeProvider } from '@/context/MasterSafeProvider';
+import { MasterWalletProvider } from '@/context/MasterWalletProvider';
 import { ModalProvider } from '@/context/ModalProvider';
 import { OnlineStatusProvider } from '@/context/OnlineStatusProvider';
 import { PageStateProvider } from '@/context/PageStateProvider';
@@ -20,7 +20,6 @@ import { StakingContractDetailsProvider } from '@/context/StakingContractDetails
 import { StakingProgramProvider } from '@/context/StakingProgramProvider';
 import { StoreProvider } from '@/context/StoreProvider';
 import { SystemNotificationTriggers } from '@/context/SystemNotificationTriggers';
-import { WalletProvider } from '@/context/WalletProvider';
 import { mainTheme } from '@/theme';
 import { setupMulticallAddresses } from '@/utils/setupMulticall';
 
@@ -41,35 +40,33 @@ export default function App({ Component, pageProps }: AppProps) {
         <StoreProvider>
           <PageStateProvider>
             <ServicesProvider>
-              <WalletProvider>
-                <MasterSafeProvider>
-                  <StakingProgramProvider>
-                    <StakingContractDetailsProvider>
-                      <RewardProvider>
-                        <BalanceProvider>
-                          <SetupProvider>
-                            <SettingsProvider>
-                              <ConfigProvider theme={mainTheme}>
-                                <ModalProvider>
-                                  {isMounted ? (
-                                    <QueryClientProvider client={queryClient}>
-                                      <SystemNotificationTriggers>
-                                        <Layout>
-                                          <Component {...pageProps} />
-                                        </Layout>
-                                      </SystemNotificationTriggers>
-                                    </QueryClientProvider>
-                                  ) : null}
-                                </ModalProvider>
-                              </ConfigProvider>
-                            </SettingsProvider>
-                          </SetupProvider>
-                        </BalanceProvider>
-                      </RewardProvider>
-                    </StakingContractDetailsProvider>
-                  </StakingProgramProvider>
-                </MasterSafeProvider>
-              </WalletProvider>
+              <MasterWalletProvider>
+                <StakingProgramProvider>
+                  <StakingContractDetailsProvider>
+                    <RewardProvider>
+                      <BalanceProvider>
+                        <SetupProvider>
+                          <SettingsProvider>
+                            <ConfigProvider theme={mainTheme}>
+                              <ModalProvider>
+                                {isMounted ? (
+                                  <QueryClientProvider client={queryClient}>
+                                    <SystemNotificationTriggers>
+                                      <Layout>
+                                        <Component {...pageProps} />
+                                      </Layout>
+                                    </SystemNotificationTriggers>
+                                  </QueryClientProvider>
+                                ) : null}
+                              </ModalProvider>
+                            </ConfigProvider>
+                          </SettingsProvider>
+                        </SetupProvider>
+                      </BalanceProvider>
+                    </RewardProvider>
+                  </StakingContractDetailsProvider>
+                </StakingProgramProvider>
+              </MasterWalletProvider>
             </ServicesProvider>
           </PageStateProvider>
         </StoreProvider>

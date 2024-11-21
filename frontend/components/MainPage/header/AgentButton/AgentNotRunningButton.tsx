@@ -20,14 +20,14 @@ import {
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
 
 /** Button used to start / deploy the agent */
 export const AgentNotRunningButton = (serviceConfigId: string) => {
-  const { wallets } = useWallet();
+  const { wallets } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,

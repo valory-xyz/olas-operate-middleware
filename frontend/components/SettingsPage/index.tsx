@@ -8,9 +8,10 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { SettingsScreen } from '@/enums/SettingsScreen';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 import { useSettings } from '@/hooks/useSettings';
+import { useWalletContext } from '@/hooks/useWallet';
 import { truncateAddress } from '@/utils/truncate';
 
 import { CustomAlert } from '../Alert';
@@ -82,7 +83,8 @@ export const Settings = () => {
 };
 
 const SettingsMain = () => {
-  const { backupSafeAddress } = useMasterSafe();
+  const { wallets } = useWalletContext();
+  const { backupSafeAddress } = useMultisig();
   const { goto } = usePageState();
 
   const truncatedBackupSafeAddress: string | undefined = useMemo(() => {

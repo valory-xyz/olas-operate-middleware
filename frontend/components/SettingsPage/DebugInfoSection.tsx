@@ -17,13 +17,15 @@ import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL } from '@/constants/urls';
 import { MODAL_WIDTH } from '@/constants/width';
+import { WalletBalanceResult } from '@/context/BalanceProvider';
+import { ChainId, ChainName } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
+import { WalletType } from '@/enums/Wallet';
 import { useAddress } from '@/hooks/useAddress';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
-import { useWallet } from '@/hooks/useWallet';
-import { WalletAddressNumberRecord } from '@/types/Records';
+import { useMasterWalletContext } from '@/hooks/useWallet';
+import { Address } from '@/types/Address';
 import { copyToClipboard } from '@/utils/copyToClipboard';
-import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
 import { CardSection } from '../styled/CardSection';
@@ -38,29 +40,31 @@ const Card = styled.div`
 
 const ICON_STYLE = { color: '#606F85' };
 
-const getItemData = (
-  walletBalances: WalletAddressNumberRecord,
-  address: `0x${string}`,
-) => ({
-  balance: {
-    OLAS: balanceFormat(walletBalances[address]?.OLAS, 2),
-    ETH: balanceFormat(walletBalances[address]?.ETH, 2),
-  },
-  address: address,
-  truncatedAddress: address ? truncateAddress(address) : '',
-});
+const getBalanceData = (walletBalances: WalletBalanceResult[]) => {
+  const result: { [chainId: number]: { [tokenSymbol: string]: number } } = {};
+
+  for (const walletBalanceResult of walletBalances) {
+    const { chainId, symbol } = walletBalanceResult;
+    if (!result[chainId]) result[chainId] = {};
+    if (!result[chainId][symbol]) result[chainId][symbol] = 0;
+    result[chainId][symbol] += walletBalanceResult.balance;
+  }
+
+  return { balance: result };
+};
 
 const DebugItem = ({
   item,
 }: {
   item: {
     title: string;
-    balance: Record<TokenSymbol.ETH | TokenSymbol.OLAS, string>;
+    balance: Record<number | ChainId, Record<string | TokenSymbol, number>>;
     address: `0x${string}`;
-    truncatedAddress: string;
     link?: { title: string; href: string };
   };
 }) => {
+  const truncatedAddress = truncateAddress(item.address);
+
   const onCopyToClipboard = useCallback(
     () =>
       copyToClipboard(item.address).then(() =>
@@ -80,9 +84,23 @@ const DebugItem = ({
             <Text type="secondary" className="text-sm">
               Balance
             </Text>
-            <Text>{item.balance.OLAS} OLAS</Text>
-            <Text>{item.balance.ETH} ETH</Text>
-            {/* <Text>{item.balance.USDC} USDC</Text> */}
+            {Object.entries(item.balance).map(([chainId, balance]) => {
+              return (
+                <Flex key={chainId} vertical gap={4}>
+                  <Text type="secondary" className="text-sm">
+                    {ChainName[+chainId as keyof typeof ChainName]}
+                  </Text>
+                  {Object.entries(balance).map(([tokenSymbol, balance]) => {
+                    return (
+                      <Flex key={tokenSymbol} gap={12}>
+                        <Text>{balance}</Text>
+                        <Text type="secondary">{tokenSymbol}</Text>
+                      </Flex>
+                    );
+                  })}
+                </Flex>
+              );
+            })}
           </Flex>
         </Col>
 
@@ -92,12 +110,12 @@ const DebugItem = ({
               Address
             </Text>
             <Flex gap={12}>
-              <a
+              {/* <a
                 target="_blank"
                 href={`${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/address/${item.address}`}
-              >
-                {item.truncatedAddress}
-              </a>
+              > */}
+              {truncatedAddress}
+              {/* </a> */}
               <Tooltip title="Copy to clipboard">
                 <CopyOutlined style={ICON_STYLE} onClick={onCopyToClipboard} />
               </Tooltip>
@@ -117,7 +135,7 @@ const DebugItem = ({
 };
 
 export const DebugInfoSection = () => {
-  const { wallets, masterEoaAddress, masterSafeAddress } = useWallet();
+  const { wallets } = useMasterWalletContext();
   const { instanceAddress, multisigAddress } = useAddress();
   const { walletBalances } = useBalanceContext();
 
@@ -125,44 +143,73 @@ export const DebugInfoSection = () => {
   const showModal = useCallback(() => setIsModalOpen(true), []);
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
 
+  const masterEoas = wallets?.filter(
+    (wallet) => wallet.type === WalletType.EOA,
+  );
+
+  const masterSafes = wallets?.filter(
+    (wallet) => wallet.type === WalletType.Safe,
+  );
+
   const data = useMemo(() => {
     if (!wallets?.length) return null;
 
-    const result = [];
+    const result: {
+      title: string;
+      balance: Record<number | ChainId, Record<string | TokenSymbol, number>>;
+      address: Address;
+      link?: { title: string; href: string };
+    }[] = [];
 
-    if (masterEoaAddress) {
+    masterEoas?.forEach((wallet) => {
       result.push({
         title: 'Master EOA',
-        ...getItemData(walletBalances, masterEoaAddress),
+        ...getBalanceData(
+          walletBalances.filter((walletBalanceResult) => {
+            return walletBalanceResult.walletAddress === wallet.address;
+          }),
+        ),
+        address: wallet.address,
       });
-    }
+    });
 
-    if (masterSafeAddress) {
+    masterSafes?.forEach((wallet) => {
       result.push({
         title: 'Master Safe',
-        ...getItemData(walletBalances, masterSafeAddress),
+        ...getBalanceData(
+          walletBalances.filter((walletBalanceResult) => {
+            return walletBalanceResult.walletAddress === wallet.address;
+          }),
+        ),
+        address: wallet.address,
+        link: {
+          title: 'Go to Safe',
+          href: `${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/address/${wallet.address}`,
+        },
       });
-    }
+    });
 
     if (instanceAddress) {
       result.push({
         title: 'Agent Instance EOA',
-        ...getItemData(walletBalances, instanceAddress!),
+        ...getBalanceData(walletBalances!),
+        address: instanceAddress,
       });
     }
 
     if (multisigAddress) {
       result.push({
         title: 'Agent Safe',
-        ...getItemData(walletBalances, multisigAddress),
+        ...getBalanceData(walletBalances),
+        address: multisigAddress,
       });
     }
 
     return result;
   }, [
-    masterEoaAddress,
-    masterSafeAddress,
     instanceAddress,
+    masterEoas,
+    masterSafes,
     multisigAddress,
     walletBalances,
     wallets?.length,
