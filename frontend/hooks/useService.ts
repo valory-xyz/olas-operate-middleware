@@ -40,6 +40,7 @@ export const useService = ({
     );
   }, [serviceConfigId, services]);
 
+  // TODO: quick hack to fix for refactor (only predict), will make it dynamic later
   const serviceWallets: AgentWallets = useMemo(() => {
     if (!service?.chain_configs[ChainId.Gnosis]) return [];
 
