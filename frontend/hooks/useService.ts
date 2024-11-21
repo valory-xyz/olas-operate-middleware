@@ -146,8 +146,8 @@ export const useService = ({
     isLoaded,
     deploymentStatus,
     setDeploymentStatus,
-    masterSafes: serviceSafes,
-    masterEoa: serviceEoa,
+    serviceSafes,
+    serviceEoa,
   };
 };
 

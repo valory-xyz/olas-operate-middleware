@@ -13,7 +13,9 @@ export const useBalanceContext = () => useContext(BalanceContext);
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string) => {
-  const { flatAddresses, masterSafes } = useService({ serviceConfigId });
+  const { flatAddresses, serviceSafes: masterSafes } = useService({
+    serviceConfigId,
+  });
   const { walletBalances, lowBalances, stakedBalances } = useBalanceContext();
 
   const serviceWalletBalances = useMemo(

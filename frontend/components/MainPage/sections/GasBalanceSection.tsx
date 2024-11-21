@@ -106,7 +106,7 @@ export const GasBalanceSection = ({
   serviceConfigId: string;
 }) => {
   const { isLoaded } = useBalanceContext();
-  const { masterSafes } = useService({ serviceConfigId });
+  const { serviceSafes: masterSafes } = useService({ serviceConfigId });
 
   return (
     <CardSection
