@@ -516,7 +516,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         safes = t.cast(t.Dict[Chain, str], wallet.safes)
         wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
-            backup_owner=data.get("backup_owner"), 
+            backup_owner=data.get("backup_owner"),
         )
         wallet.transfer(
             to=t.cast(str, safes.get(chain)),
@@ -552,7 +552,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager = operate.wallet_manager
             if not manager.exists(ledger_type=ledger_type):
                 return JSONResponse(
-                    content={"error": f"Wallet does not exist for chain {chain}"}
+                    content={
+                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
+                    }
                 )
 
         # mint the safes
@@ -568,7 +570,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             safes = t.cast(t.Dict[Chain, str], wallet.safes)
             wallet.create_safe(  # pylint: disable=no-member
                 chain=chain,
-                owner=data.get("owner"),
+                owner=data.get("backup_owner"),
             )
             wallet.transfer(
                 to=t.cast(str, safes.get(chain)),
@@ -577,7 +579,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 from_safe=False,
             )
 
-        return JSONResponse(content={"safes": safes, "message": "Safes created!"})
+        return JSONResponse(content={"safes": safes, "message": "Safes created."})
 
     @app.put("/api/wallet/safe")
     @with_retries
@@ -586,29 +588,63 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         # TODO: Extract login check as decorator
         if operate.user_account is None:
             return JSONResponse(
-                content={"error": "Cannot create safe; User account does not exist!"},
+                content={"error": "Cannot update safe; User account does not exist!"},
                 status_code=400,
             )
 
         if operate.password is None:
             return JSONResponse(
-                content={"error": "You need to login before updating a safe"},
+                content={"error": "You need to login before updating a safe."},
                 status_code=401,
             )
 
-        data = await request.json()
-        chain = Chain(data["chain"])
-        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
-        if not manager.exists(ledger_type=ledger_type):
-            return JSONResponse(content={"error": "Wallet does not exist"})
+        data = await request.json()
 
-        wallet = manager.load(ledger_type=ledger_type)
-        wallet.update_backup_owner(
-            chain=chain,
-            backup_owner=data.get("backup_owner"),
+        chains = []
+        if "chain" in data:
+            if "chains" in data:
+                return JSONResponse(
+                    content={
+                        "error": "You cannot specify 'chain' and 'chains' in the same request."
+                    },
+                    status_code=401,
+                )
+            chains = [Chain[data["chain"]]]
+        elif "chains" in data:
+            chains = [Chain(chain_str) for chain_str in data["chains"]]
+
+        # check that all chains are supported
+        for chain in chains:
+            ledger_type = chain.ledger_type
+            if not manager.exists(ledger_type=ledger_type):
+                return JSONResponse(
+                    content={
+                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
+                    }
+                )
+
+        # update backup owners
+        updated_safes = {}
+        for chain in chains:
+            ledger_type = chain.ledger_type
+            wallet = manager.load(ledger_type=ledger_type)
+            updated = wallet.update_backup_owner(
+                chain=chain,
+                backup_owner=data.get("backup_owner"),
+            )
+            if updated:
+                updated_safes[chain.value] = wallet.safes[chain]
+
+        if not updated_safes:
+            return JSONResponse(content={"message": "No safes were updated."})
+
+        return JSONResponse(
+            content={
+                "updated_safes": updated_safes,
+                "message": "Safe backup owners updated.",
+            }
         )
-        return JSONResponse(content=wallet.json)
 
     @app.get("/api/v2/services")
     @with_retries
