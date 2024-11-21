@@ -87,7 +87,7 @@ export const Main = () => {
       <Flex vertical>
         <AlertSections />
         <MainOlasBalance isBorderTopVisible={false} />
-        <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
+        {/* <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} /> */}
         <RewardsSection />
         <KeepAgentRunningSection />
         <StakingContractUpdate />
