@@ -1,101 +1,103 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+// TODO: reintroduce, low prio for refactor
 
-import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+// import { useQueryClient } from '@tanstack/react-query';
+// import { useMemo } from 'react';
 
-import { useBalanceContext } from './useBalanceContext';
-import { useMultisig } from './useMultisig';
-import { useServices } from './useServices';
-import { useStore } from './useStore';
-import { useMasterWalletContext } from './useWallet';
+// import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 
-const useAddressesLogs = () => {
-  const { wallets, masterEoaAddress, masterSafeAddress } = useMasterWalletContext();
+// import { useBalanceContext } from './useBalanceContext';
+// import { useMultisig } from './useMultisig';
+// import { useServices } from './useServices';
+// import { useStore } from './useStore';
+// import { useMasterWalletContext } from './useWallet';
 
-  const { backupSafeAddress, masterSafeOwners } = useMultisig();
+// const useAddressesLogs = () => {
+//   const { wallets, masterEoaAddress, masterSafeAddress } = useMasterWalletContext();
 
-  return {
-    isLoaded: wallets?.length !== 0 && !!masterSafeOwners,
-    data: [
-      { backupSafeAddress: backupSafeAddress ?? 'undefined' },
-      { masterSafeAddress: masterSafeAddress ?? 'undefined' },
-      { masterEoaAddress: masterEoaAddress ?? 'undefined' },
-      { masterSafeOwners: masterSafeOwners ?? 'undefined' },
-    ],
-  };
-};
+//   const { backupSafeAddress, masterSafeOwners } = useMultisig();
 
-const useBalancesLogs = () => {
-  const {
-    isBalanceLoaded,
-    totalEthBalance,
-    totalOlasBalance,
-    wallets,
-    walletBalances,
-    totalOlasStakedBalance,
-  } = useBalanceContext();
+//   return {
+//     isLoaded: wallets?.length !== 0 && !!masterSafeOwners,
+//     data: [
+//       { backupSafeAddress: backupSafeAddress ?? 'undefined' },
+//       { masterSafeAddress: masterSafeAddress ?? 'undefined' },
+//       { masterEoaAddress: masterEoaAddress ?? 'undefined' },
+//       { masterSafeOwners: masterSafeOwners ?? 'undefined' },
+//     ],
+//   };
+// };
 
-  return {
-    isLoaded: isBalanceLoaded,
-    data: [
-      { wallets: wallets ?? 'undefined' },
-      { walletBalances: walletBalances ?? 'undefined' },
-      { totalOlasStakedBalance: totalOlasStakedBalance ?? 'undefined' },
-      { totalEthBalance: totalEthBalance ?? 'undefined' },
-      { totalOlasBalance: totalOlasBalance ?? 'undefined' },
-    ],
-  };
-};
+// const useBalancesLogs = () => {
+//   const {
+//     isBalanceLoaded,
+//     totalEthBalance,
+//     totalOlasBalance,
+//     wallets,
+//     walletBalances,
+//     totalOlasStakedBalance,
+//   } = useBalanceContext();
 
-const useServicesLogs = () => {
-  const { services, isFetched: isLoaded } = useServices();
-  const { getQueryData } = useQueryClient();
+//   return {
+//     isLoaded: isBalanceLoaded,
+//     data: [
+//       { wallets: wallets ?? 'undefined' },
+//       { walletBalances: walletBalances ?? 'undefined' },
+//       { totalOlasStakedBalance: totalOlasStakedBalance ?? 'undefined' },
+//       { totalEthBalance: totalEthBalance ?? 'undefined' },
+//       { totalOlasBalance: totalOlasBalance ?? 'undefined' },
+//     ],
+//   };
+// };
 
-  return {
-    isLoaded: isLoaded,
-    data: {
-      services:
-        services?.map((item) => ({
-          ...item,
-          keys: item.keys.map((key) => key.address),
-          deploymentStatus: getQueryData<string>([
-            REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
-              item.service_config_id,
-            ),
-            item.service_config_id,
-          ]),
-        })) ?? 'undefined',
-    },
-  };
-};
+// const useServicesLogs = () => {
+//   const { services, isFetched: isLoaded } = useServices();
+//   const { getQueryData } = useQueryClient();
 
-export const useLogs = () => {
-  const { storeState } = useStore();
+//   return {
+//     isLoaded: isLoaded,
+//     data: {
+//       services:
+//         services?.map((item) => ({
+//           ...item,
+//           keys: item.keys.map((key) => key.address),
+//           deploymentStatus: getQueryData<string>([
+//             REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
+//               item.service_config_id,
+//             ),
+//             item.service_config_id,
+//           ]),
+//         })) ?? 'undefined',
+//     },
+//   };
+// };
 
-  const { isLoaded: isServicesLoaded, data: services } = useServicesLogs();
-  const { isLoaded: isBalancesLoaded, data: balances } = useBalancesLogs();
-  const { isLoaded: isAddressesLoaded, data: addresses } = useAddressesLogs();
+// export const useLogs = () => {
+//   const { storeState } = useStore();
 
-  const logs = useMemo(() => {
-    if (isServicesLoaded && isBalancesLoaded && isAddressesLoaded) {
-      return {
-        store: storeState,
-        debugData: {
-          services,
-          addresses,
-          balances,
-        },
-      };
-    }
-  }, [
-    addresses,
-    balances,
-    isAddressesLoaded,
-    isBalancesLoaded,
-    isServicesLoaded,
-    services,
-    storeState,
-  ]);
+//   const { isLoaded: isServicesLoaded, data: services } = useServicesLogs();
+//   const { isLoaded: isBalancesLoaded, data: balances } = useBalancesLogs();
+//   const { isLoaded: isAddressesLoaded, data: addresses } = useAddressesLogs();
 
-  return logs;
-};
+//   const logs = useMemo(() => {
+//     if (isServicesLoaded && isBalancesLoaded && isAddressesLoaded) {
+//       return {
+//         store: storeState,
+//         debugData: {
+//           services,
+//           addresses,
+//           balances,
+//         },
+//       };
+//     }
+//   }, [
+//     addresses,
+//     balances,
+//     isAddressesLoaded,
+//     isBalancesLoaded,
+//     isServicesLoaded,
+//     services,
+//     storeState,
+//   ]);
+
+//   return logs;
+// };
