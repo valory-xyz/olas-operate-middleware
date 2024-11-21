@@ -103,19 +103,6 @@ export const useMasterBalances = () => {
   //   [masterSafes, stakedBalances],
   // );
 
-  /**
-   * Array of low balances relevant to the master wallets (safes and eoa)
-   */
-  const masterLowBalances = useMemo(
-    () => lowBalances?.filter((balance) => balance.walletAddress),
-    [lowBalances],
-  );
-
-  const isLowBalance = useMemo(
-    () => masterLowBalances?.length > 0,
-    [masterLowBalances],
-  );
-
   // TODO: use flatAddresses for consistency
   const masterSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
@@ -139,6 +126,22 @@ export const useMasterBalances = () => {
   const masterWalletBalances = useMemo(
     () => [...masterSafeBalances, ...masterEoaBalances],
     [masterEoaBalances, masterSafeBalances],
+  );
+
+  /**
+   * Array of low balances relevant to the master wallets (safes and eoa)
+   */
+  const masterLowBalances = useMemo(
+    () => lowBalances?.filter((balance) => balance.walletAddress),
+    [lowBalances],
+  );
+
+  /**
+   * Boolean indicating if any master wallets have low balances
+   */
+  const isLowBalance = useMemo(
+    () => masterLowBalances?.length > 0,
+    [masterLowBalances],
   );
 
   return {
