@@ -3,16 +3,17 @@ import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { ChainId } from '@/enums/Chain';
 import {
-  MasterEoa,
-  MasterSafe,
+  AgentEoa,
+  AgentSafe,
+  AgentWallets,
   WalletOwnerType,
   WalletType,
 } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 
 import { useServices } from './useServices';
-import { useMasterWalletContext } from './useWallet';
 
 type ServiceChainIdAddressRecord = {
   [chainId: number]: {
@@ -31,13 +32,40 @@ export const useService = ({
 }) => {
   const { services, isFetched: isLoaded } = useServices();
   const queryClient = useQueryClient();
-  const { wallets } = useMasterWalletContext();
+  // const { wallets } = useMasterWalletContext();
 
   const service = useMemo(() => {
     return services?.find(
       (service) => service.service_config_id === serviceConfigId,
     );
   }, [serviceConfigId, services]);
+
+  const serviceWallets: AgentWallets = useMemo(() => {
+    if (!service?.chain_configs[ChainId.Gnosis]) return [];
+
+    const chainConfig = service?.chain_configs[ChainId.Gnosis];
+
+    return [
+      ...(chainConfig.chain_data.instances ?? []).map(
+        (address) =>
+          ({
+            address,
+            owner: WalletOwnerType.Agent,
+            type: WalletType.EOA,
+          }) as AgentEoa,
+      ),
+      ...(chainConfig.chain_data.multisig
+        ? [
+            {
+              address: chainConfig.chain_data.multisig,
+              owner: WalletOwnerType.Agent,
+              type: WalletType.Safe,
+              chainId: ChainId.Gnosis,
+            } as AgentSafe,
+          ]
+        : []),
+    ];
+  }, [service]);
 
   const addresses: ServiceChainIdAddressRecord = useMemo(() => {
     if (!service) return {};
@@ -74,27 +102,27 @@ export const useService = ({
     }, [] as Address[]);
   }, [addresses]);
 
-  const masterSafes = useMemo(() => {
+  const serviceSafes = useMemo(() => {
     return (
-      wallets?.filter(
-        (wallet): wallet is MasterSafe =>
+      serviceWallets?.filter(
+        (wallet): wallet is AgentSafe =>
           flatAddresses.includes(wallet.address) &&
-          wallet.owner === WalletOwnerType.Master &&
+          wallet.owner === WalletOwnerType.Agent &&
           wallet.type === WalletType.Safe,
       ) ?? []
     );
-  }, [flatAddresses, wallets]);
+  }, [flatAddresses, serviceWallets]);
 
-  const masterEoa = useMemo(() => {
+  const serviceEoa = useMemo(() => {
     return (
-      wallets?.find(
-        (wallet): wallet is MasterEoa =>
+      serviceWallets?.find(
+        (wallet): wallet is AgentEoa =>
           flatAddresses.includes(wallet.address) &&
-          wallet.owner === WalletOwnerType.Master &&
+          wallet.owner === WalletOwnerType.Agent &&
           wallet.type === WalletType.EOA,
       ) ?? null
     );
-  }, [flatAddresses, wallets]);
+  }, [flatAddresses, serviceWallets]);
 
   /**
    * Overrides the deployment status of the service in the cache.
@@ -117,8 +145,8 @@ export const useService = ({
     isLoaded,
     deploymentStatus,
     setDeploymentStatus,
-    masterSafes,
-    masterEoa,
+    masterSafes: serviceSafes,
+    masterEoa: serviceEoa,
   };
 };
 
