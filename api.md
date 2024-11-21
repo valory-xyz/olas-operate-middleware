@@ -278,6 +278,64 @@ Creates a Gnosis safe for given chain type.
 
 ---
 
+### `PUT /api/wallet/safe`
+
+Updtes a Gnosis safe for given chain type.
+
+<details>
+  <summary>Request</summary>
+
+```js
+{
+  "chain": Chain,
+  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"
+}
+```
+
+or
+
+```js
+{
+  "chains": ["chain1", "chain2", ...],
+  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"
+}
+```
+
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+- If Gnosis safe creation is successful:
+
+  ```json
+  {
+    "address": "0xaaFd5cb31A611C5e5aa65ea8c6226EB4328175E3",
+    "safe_chains": [
+      2
+    ],
+    "ledger_type": 0,
+    "safes": {
+      "2": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22"
+    },
+    "safe_nonce": 110558881674480320952254000342160989674913430251157716140571305138121962898821
+  }
+  ```
+
+- If Gnosis safe creation is not successful:
+
+  ```json
+  {
+    "error": "Error message",
+    "traceback": "Traceback message"
+  }
+  ```
+
+</details>
+
+---
+
 ## Services
 
 ### `GET /api/v2/services`
