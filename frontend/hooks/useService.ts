@@ -3,7 +3,12 @@ import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
+import {
+  MasterEoa,
+  MasterSafe,
+  WalletOwnerType,
+  WalletType,
+} from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 
 import { useServices } from './useServices';
@@ -72,11 +77,22 @@ export const useService = ({
   const masterSafes = useMemo(() => {
     return (
       wallets?.filter(
-        (wallet) =>
+        (wallet): wallet is MasterSafe =>
           flatAddresses.includes(wallet.address) &&
           wallet.owner === WalletOwnerType.Master &&
           wallet.type === WalletType.Safe,
       ) ?? []
+    );
+  }, [flatAddresses, wallets]);
+
+  const masterEoa = useMemo(() => {
+    return (
+      wallets?.find(
+        (wallet): wallet is MasterEoa =>
+          flatAddresses.includes(wallet.address) &&
+          wallet.owner === WalletOwnerType.Master &&
+          wallet.type === WalletType.EOA,
+      ) ?? null
     );
   }, [flatAddresses, wallets]);
 
@@ -102,6 +118,7 @@ export const useService = ({
     deploymentStatus,
     setDeploymentStatus,
     masterSafes,
+    masterEoa,
   };
 };
 
