@@ -61,8 +61,9 @@ export const useServiceBalances = (serviceConfigId: string) => {
 
 /**
  * Balances relevant to the master wallets, eoa, and safes
+ * @note master wallets are *shared* wallets across all services
+ * @note master safe addresses are deterministic, and should be the same
  */
-// TODO: complete this hook
 export const useMasterBalances = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { walletBalances, lowBalances, stakedBalances } = useBalanceContext();
