@@ -21,7 +21,7 @@ import { WalletBalanceResult } from '@/context/BalanceProvider';
 import { ChainId, ChainName } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletType } from '@/enums/Wallet';
-import { useAddress } from '@/hooks/useAddress';
+import { useAddress } from '@/hooks/backup/useAddress';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { Address } from '@/types/Address';
