@@ -917,10 +917,7 @@ class ServiceManager:
         # Unstake the service if applies
         if is_staked and (can_unstake or is_withdrawing):
             self.unstake_service_on_chain_from_safe(
-                hash=hash,
-                chain_id=chain_id,
-                staking_program_id=current_staking_program,
-                force=is_withdrawing,
+                hash=hash, chain_id=chain_id, staking_program_id=current_staking_program
             )
 
         if self._get_on_chain_state(service=service, chain_id=chain_id) in (
