@@ -121,14 +121,13 @@ async function beforeQuit() {
     );
     logger.electron('Killed backend server by shutdown endpoint!');
     logger.electron(
-      'Killed backend server by shutdown endpoint! result',
-      JSON.stringify(result),
+      'Killed backend server by shutdown endpoint! result: ' +
+        JSON.stringify(result),
     );
   } catch (err) {
     logger.electron('Backend stopped with error!');
     logger.electron(
-      'Backend stopped with error, result: ',
-      JSON.stringify(err),
+      'Backend stopped with error, result: ' + JSON.stringify(err),
     );
   }
 
@@ -290,7 +289,7 @@ const createMainWindow = async () => {
     logger.electron('Setting up store IPC');
     await setupStoreIpc(ipcMain, mainWindow);
   } catch (e) {
-    logger.electron('Store IPC failed:', JSON.stringify(e));
+    logger.electron('Store IPC failed:' + JSON.stringify(e));
   }
 
   if (isDev) {
@@ -323,7 +322,7 @@ async function launchDaemon() {
       },
     );
   } catch (err) {
-    logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
+    logger.electron('Backend not running!' + JSON.stringify(err));
   }
 
   try {
@@ -334,13 +333,9 @@ async function launchDaemon() {
         timeout: 5000,
       },
     );
-    logger.electron(
-      'Backend stopped with result: ' + JSON.stringify(result, null, 2),
-    );
+    logger.electron('Backend stopped with result: ' + JSON.stringify(result));
   } catch (err) {
-    logger.electron(
-      'Backend stopped with error: ' + JSON.stringify(err, null, 2),
-    );
+    logger.electron('Backend stopped with error: ' + JSON.stringify(err));
   }
 
   const check = new Promise(function (resolve, _reject) {
@@ -592,7 +587,7 @@ app.once('ready', async () => {
 
 // PROCESS SPECIFIC EVENTS (HANDLES NON-GRACEFUL TERMINATION)
 process.on('uncaughtException', (error) => {
-  logger.electron('Uncaught Exception:', error);
+  logger.electron('Uncaught Exception:' + JSON.stringify(error));
   // Clean up your child processes here
   beforeQuit().then(() => {
     process.exit(1); // Exit with a failure code
@@ -680,14 +675,14 @@ ipcMain.handle('save-logs', async (_, data) => {
   if (data.store)
     sanitizeLogs({
       name: 'store.txt',
-      data: JSON.stringify(data.store, null, 2),
+      data: JSON.stringify(data.store),
     });
 
   // Other debug data: balances, addresses, etc.
   if (data.debugData)
     sanitizeLogs({
       name: 'debug_data.txt',
-      data: JSON.stringify(data.debugData, null, 2),
+      data: JSON.stringify(data.debugData),
     });
 
   // Agent logs

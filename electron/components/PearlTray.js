@@ -92,7 +92,8 @@ class PearlTray extends Electron.Tray {
   #bindIpcListener = () => {
     isDev && logger.electron('binding ipc listener for tray icon status');
     Electron.ipcMain.on('tray', (_event, status) => {
-      isDev && logger.electron('received tray icon status:', status);
+      isDev &&
+        logger.electron('received tray icon status:' + JSON.stringify(status));
       switch (status) {
         case TrayIconStatus.LoggedOut: {
           this.setImage(trayIcons[TrayIconStatus.LoggedOut]);
@@ -111,7 +112,9 @@ class PearlTray extends Electron.Tray {
           break;
         }
         default: {
-          logger.electron('Unknown tray icon status:', status);
+          logger.electron(
+            'Unknown tray icon status: ' + JSON.stringify(status),
+          );
         }
       }
     });
