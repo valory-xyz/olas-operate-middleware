@@ -372,7 +372,7 @@ class EthereumMasterWallet(MasterWallet):
                 crypto=self.crypto,
             )
             return True
-        elif old_backup_owner and not backup_owner:
+        if old_backup_owner and not backup_owner:
             remove_owner(
                 ledger_api=ledger_api,
                 safe=safe,
@@ -381,7 +381,7 @@ class EthereumMasterWallet(MasterWallet):
                 threshold=1,
             )
             return True
-        elif old_backup_owner and backup_owner:
+        if old_backup_owner and backup_owner:
             swap_owner(
                 ledger_api=ledger_api,
                 safe=safe,
