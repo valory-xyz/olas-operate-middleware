@@ -75,7 +75,7 @@ export const BalanceContext = createContext<{
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { wallets } = useContext(MasterWalletContext);
+  const { masterWallets: wallets } = useContext(MasterWalletContext);
   const { services } = useServices();
 
   const [isLoaded, setIsLoaded] = useState<boolean>(false);

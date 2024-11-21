@@ -105,7 +105,7 @@ export const GasBalanceSection = ({
   serviceConfigId,
 }: GasBalanceSectionProps) => {
   const { isLoaded } = useBalanceContext();
-  const { masterSafes } = useService({ serviceConfigId });
+  const { serviceSafes } = useService({ serviceConfigId });
 
   return (
     <CardSection
@@ -116,7 +116,7 @@ export const GasBalanceSection = ({
     >
       <Text type="secondary">
         Trading balance&nbsp;
-        {masterSafes.length > 0 && (
+        {serviceSafes.length > 0 && (
           <Tooltip
             title={
               <TooltipContent>
