@@ -92,7 +92,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
  */
 export const useMasterBalances = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
-  const { walletBalances, lowBalances, stakedBalances } = useBalanceContext();
+  const { walletBalances, lowBalances } = useBalanceContext();
 
   // TODO: unused, check only services stake?
   // const masterStakedBalances = useMemo(
