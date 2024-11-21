@@ -92,38 +92,43 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 function showNotification(title, body) {
   new Notification({ title, body }).show();
 }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function beforeQuit() {
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
+  logger.electron('BEFORE QUIT!!!!!!!!!!!!!!');
+
+  logger.electron("Stop backend gracefully:");
+  try {
+    logger.electron(`Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+    logger.electron(
+      'Killed backend server by shutdown endpoint!'
+    );
+    logger.electron(
+      'Killed backend server by shutdown endpoint! result' , JSON.stringify(result)
+    );
+  } catch (err) {
+    logger.electron('Backend stopped with error!');
+    logger.electron('Backend stopped with error, result: ', JSON.stringify(err));
+  }
+
+
 
   if (operateDaemon || operateDaemonPid) {
-    // gracefully stop running services
-    try {
-      await fetch(
-        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
-      );
-    } catch (e) {
-      logger.electron("Couldn't stop_all_services gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
-    }
-
-    try {
-      logger.electron('Killing backend server by shutdown endpoint!');
-      await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    } catch (err) {
-      logger.electron('Backend stopped: ' + JSON.stringify(err, null, 2));
-    }
 
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
+      logger.electron('Killing backend server kill process');
       operateDaemonPid && (await killProcesses(operateDaemonPid));
     } catch (e) {
       logger.electron("Couldn't kill daemon processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
 
     // attempt to kill the daemon process via kill
@@ -135,7 +140,6 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill operate daemon process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
   }
 
@@ -148,7 +152,6 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill devNextApp process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
 
     // attempt to kill the dev next app process via pid
@@ -156,7 +159,6 @@ async function beforeQuit() {
       devNextAppPid && (await killProcesses(devNextAppPid));
     } catch (e) {
       logger.electron("Couldn't kill devNextApp processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
   }
 
@@ -164,7 +166,6 @@ async function beforeQuit() {
     // attempt graceful close of prod next app
     await nextApp.close().catch((e) => {
       logger.electron("Couldn't close NextApp gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
     });
     // electron will kill next service on exit
   }
@@ -310,9 +311,11 @@ async function launchDaemon() {
 
   try {
     logger.electron('Killing backend server by shutdown endpoint!');
-    await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
+    logger.electron('Backend stopped with result: ' + JSON.stringify(result, null, 2));
+
   } catch (err) {
-    logger.electron('Backend stopped: ' + JSON.stringify(err, null, 2));
+    logger.electron('Backend stopped with error: ' + JSON.stringify(err, null, 2));
   }
 
   const check = new Promise(function (resolve, _reject) {

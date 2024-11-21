@@ -291,7 +291,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on demand...")
         pause_all_services()
         logger.info("Stopping services on demand done.")
-        my_pid = os.getpid() - my_pid
+        """
+        my_pid = os.getpid()
         cur_proc = psutil.Process(pid=my_pid)
         logger.warning(f"Cur proc pid: {my_pid}")
         child_pids = set(cur_proc.children(recursive=True)) - set([])
@@ -302,7 +303,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 psutil.Process(pid=pid).kill()
             except:
                 logger.exception("on kill")
-
+        """
+        app._server.should_exit = True
+        await asyncio.sleep(0.3)
+        return {"stopped": True}
         try:
             logger.warning(f"Kill Cur proc pid: {my_pid}")
             cur_proc.kill()
@@ -789,11 +793,23 @@ def _daemon(
     ] = None,
 ) -> None:
     """Launch operate daemon."""
-    uvicorn(
-        app=create_app(home=home),
-        host=host,
-        port=port,
+
+    from uvicorn.config import Config
+    from uvicorn.server import Server
+
+    app = create_app(home=home)
+
+    server = Server(
+        Config(
+            app=app,
+            host=host,
+            port=port,
+        )
     )
+    app._server = server
+    server.run()
+
+    return
 
 
 def main() -> None:
