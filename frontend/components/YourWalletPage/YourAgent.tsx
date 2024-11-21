@@ -149,7 +149,8 @@ const ServiceAndNftDetails = () => {
 };
 
 export const YourAgentWallet = () => {
-  const { isBalanceLoaded, agentSafeBalance, agentEoaBalance } = useBalanceContext();
+  const { isBalanceLoaded, agentSafeBalance, agentEoaBalance } =
+    useBalanceContext();
   const {
     availableRewardsForEpochEth,
     isEligibleForRewards,

@@ -129,7 +129,8 @@ export const SetupWelcomeLogin = () => {
   const { goto } = useSetup();
   const { goto: gotoPage } = usePageState();
 
-  const { masterSafeAddress, masterWallets: wallets } = useMasterWalletContext();
+  const { masterSafeAddress, masterWallets: wallets } =
+    useMasterWalletContext();
   const { isBalanceLoaded, masterEoaBalance: eoaBalance } = useBalanceContext();
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
