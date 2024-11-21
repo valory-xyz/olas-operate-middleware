@@ -130,3 +130,9 @@ export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
     [tokenSymbol: string]: NativeTokenConfig;
   };
 };
+
+export const getNativeTokenSymbol = (chainId: ChainId): TokenSymbol =>
+  Object.keys(NATIVE_TOKEN_CONFIG[chainId])[0] as TokenSymbol;
+
+export const getErc20s = (chainId: ChainId): Erc20TokenConfig[] =>
+  Object.values(ERC20_TOKEN_CONFIG[chainId]);
