@@ -699,13 +699,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             # drain OLAS from the master safe
             chain_config = service.chain_configs[service.home_chain_id]
+            ledger_config = chain_config.ledger_config
             master_wallet: EthereumMasterWallet = service_manager.wallet_manager.load(
-                ledger_type=chain_config.ledger_config.type
+                ledger_type=ledger_config.type
             )
-            ocm = service_manager.get_on_chain_manager(ledger_config=chain_config.ledger_config)
+            ledger_api = master_wallet.ledger_api(
+                chain_type=ledger_config.chain, rpc=ledger_config.rpc
+            )
             token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ocm.ledger_api,
-                contract_address=OLAS[chain_config.ledger_config.chain],
+                ledger_api=ledger_api,
+                contract_address=OLAS[ledger_config.chain],
             )
             balance = token_instance.functions.balanceOf(master_wallet.safe).call()
             if balance == 0:
@@ -713,16 +716,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             else:
                 logger.info(f"Draining {balance} OLAS out of master safe: {master_wallet.safe}")
                 transfer_erc20_from_safe(
-                    ledger_api=ocm.ledger_api,
+                    ledger_api=ledger_api,
                     crypto=master_wallet.crypto,
                     safe=master_wallet.safe,
-                    token=OLAS[chain_config.ledger_config.chain],
+                    token=OLAS[ledger_config.chain],
                     to=withdrawal_address,
                     amount=balance,
                 )
 
             # drain xDAI from the master safe
-            balance = ocm.ledger_api.get_balance(master_wallet.safe)
+            balance = ledger_api.get_balance(master_wallet.safe)
             if balance == 0:
                 logger.info(f"No xDAI to drain from master safe: {master_wallet.safe}")
             else:
@@ -730,15 +733,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 master_wallet.transfer(
                     to=withdrawal_address,
                     amount=balance,
-                    chain_type=chain_config.ledger_config.chain,
+                    chain_type=ledger_config.chain,
                 )
 
             # drain xDAI from the master signer
             drain_signer(
-                ledger_api=ocm.ledger_api,
+                ledger_api=ledger_api,
                 crypto=master_wallet.crypto,
                 withdrawal_address=withdrawal_address,
-                chain_id=chain_config.ledger_config.chain.id,
+                chain_id=ledger_config.chain.id,
             )
         except Exception as e:
             logger.error(traceback.format_exc())

@@ -1350,7 +1350,6 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet_manager = self.wallet_manager.load(ledger_config.type)
-        ocm = self.get_on_chain_manager(ledger_config=ledger_config)
         ledger_api = wallet_manager.ledger_api(
             chain_type=ledger_config.chain, rpc=ledger_config.rpc
         )
@@ -1364,7 +1363,7 @@ class ServiceManager:
             ("wxDAI", WXDAI[ledger_config.chain])
         ):
             token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ocm.ledger_api,
+                ledger_api=ledger_api,
                 contract_address=token_address,
             )
             balance = token_instance.functions.balanceOf(chain_data.multisig).call()
@@ -1374,7 +1373,7 @@ class ServiceManager:
 
             self.logger.info(f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}")
             transfer_erc20_from_safe(
-                ledger_api=ocm.ledger_api,
+                ledger_api=ledger_api,
                 crypto=ethereum_crypto,
                 safe=chain_data.multisig,
                 token=token_address,
