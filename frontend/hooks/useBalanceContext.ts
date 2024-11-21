@@ -69,18 +69,20 @@ export const useMasterBalances = () => {
 
   const masterWalletBalances = useMemo(
     () =>
-      walletBalances?.filter((balance) =>
-        flatAddresses.includes(balance.walletAddress),
+      walletBalances?.filter(
+        (balance) =>
+          masterSafes?.find((safe) => safe.address === balance.walletAddress) ||
+          masterEoa?.address === balance.walletAddress,
       ),
-    [walletBalances],
+    [masterEoa?.address, masterSafes, walletBalances],
   );
 
   const masterStakedBalances = useMemo(
     () =>
       stakedBalances?.filter((balance) =>
-        flatAddresses.includes(balance.walletAddress),
+        masterSafes?.find((safe) => safe.address === balance.walletAddress),
       ),
-    [stakedBalances],
+    [masterSafes, stakedBalances],
   );
 
   const masterLowBalances = useMemo(
@@ -96,9 +98,9 @@ export const useMasterBalances = () => {
   const masterSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
-        masterSafes.find(({ address }) => balance.walletAddress === address),
+        masterSafes?.find(({ address }) => balance.walletAddress === address),
       ),
-    [flatAddresses, walletBalances],
+    [masterSafes, walletBalances],
   );
 
   return {
