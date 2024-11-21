@@ -24,6 +24,7 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+const axios = require('axios');
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -92,36 +93,46 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 function showNotification(title, body) {
   new Notification({ title, body }).show();
 }
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+// function sleep(ms) {
+//   return new Promise((resolve) => setTimeout(resolve, ms));
+// }
 
+// NOTE: beforeQuit is called multiple times, so we need to ensure it only runs once
+let isBeforeQuitting = false;
 async function beforeQuit() {
+  if (isBeforeQuitting) return;
+  isBeforeQuitting = true;
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
   logger.electron('BEFORE QUIT!!!!!!!!!!!!!!');
 
-  logger.electron("Stop backend gracefully:");
+  logger.electron('Stop backend gracefully:');
   try {
-    logger.electron(`Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
     logger.electron(
-      'Killed backend server by shutdown endpoint!'
+      `Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`,
     );
+    let result = await axios.get(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+      {
+        timeout: 5000,
+      },
+    );
+    logger.electron('Killed backend server by shutdown endpoint!');
     logger.electron(
-      'Killed backend server by shutdown endpoint! result' , JSON.stringify(result)
+      'Killed backend server by shutdown endpoint! result',
+      JSON.stringify(result),
     );
   } catch (err) {
     logger.electron('Backend stopped with error!');
-    logger.electron('Backend stopped with error, result: ', JSON.stringify(err));
+    logger.electron(
+      'Backend stopped with error, result: ',
+      JSON.stringify(err),
+    );
   }
 
-
-
   if (operateDaemon || operateDaemonPid) {
-
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
@@ -204,7 +215,7 @@ const HEIGHT = 700;
 const createMainWindow = async () => {
   const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
-    title: 'Pearl',
+    title: `Pearl${isDev ? ' (Dev)' : ''}`,
     resizable: false,
     draggable: true,
     frame: false,
@@ -296,26 +307,40 @@ const createMainWindow = async () => {
 async function launchDaemon() {
   // Free up backend port if already occupied
   try {
-    await fetch(`http://localhost:${appConfig.ports.prod.operate}/api`);
+    await axios.get(`http://localhost:${appConfig.ports.prod.operate}/api`, {
+      timeout: 5000,
+    });
     logger.electron('Killing backend server!');
     let endpoint = fs
       .readFileSync(`${paths.dotOperateDirectory}/operate.kill`)
       .toString()
       .trim();
 
-    await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
+    await axios.get(
+      `http://localhost:${appConfig.ports.prod.operate}/${endpoint}`,
+      {
+        timeout: 5000,
+      },
+    );
   } catch (err) {
     logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
   }
 
-
   try {
     logger.electron('Killing backend server by shutdown endpoint!');
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    logger.electron('Backend stopped with result: ' + JSON.stringify(result, null, 2));
-
+    let result = await axios.get(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+      {
+        timeout: 5000,
+      },
+    );
+    logger.electron(
+      'Backend stopped with result: ' + JSON.stringify(result, null, 2),
+    );
   } catch (err) {
-    logger.electron('Backend stopped with error: ' + JSON.stringify(err, null, 2));
+    logger.electron(
+      'Backend stopped with error: ' + JSON.stringify(err, null, 2),
+    );
   }
 
   const check = new Promise(function (resolve, _reject) {
