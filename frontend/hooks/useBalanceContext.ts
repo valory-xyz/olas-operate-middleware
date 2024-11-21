@@ -9,8 +9,8 @@ export const useBalanceContext = () => useContext(BalanceContext);
 
 /**
  * Balances relevant to a specific service (agent)
- * @param serviceConfigId 
- * @returns 
+ * @param serviceConfigId
+ * @returns
  */
 export const useServiceBalances = (serviceConfigId: string) => {
   const { flatAddresses, masterSafes } = useService({ serviceConfigId });
@@ -45,9 +45,9 @@ export const useServiceBalances = (serviceConfigId: string) => {
   const serviceSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
-        masterSafes.find(({address}) => balance.walletAddress === address),
+        masterSafes.find(({ address }) => balance.walletAddress === address),
       ),
-    [flatAddresses, walletBalances],
+    [masterSafes, walletBalances],
   );
 
   return {
@@ -72,7 +72,7 @@ export const useMasterBalances = () => {
       walletBalances?.filter((balance) =>
         flatAddresses.includes(balance.walletAddress),
       ),
-    [flatAddresses, walletBalances],
+    [walletBalances],
   );
 
   const masterStakedBalances = useMemo(
@@ -80,7 +80,7 @@ export const useMasterBalances = () => {
       stakedBalances?.filter((balance) =>
         flatAddresses.includes(balance.walletAddress),
       ),
-    [flatAddresses, stakedBalances],
+    [stakedBalances],
   );
 
   const masterLowBalances = useMemo(
@@ -92,11 +92,11 @@ export const useMasterBalances = () => {
     () => masterLowBalances?.length > 0,
     [masterLowBalances],
   );
-// use flatAddresses for consistency
+  // use flatAddresses for consistency
   const masterSafeBalances = useMemo<WalletBalanceResult[]>(
     () =>
       walletBalances?.filter((balance) =>
-        masterSafes.find(({address}) => balance.walletAddress === address),
+        masterSafes.find(({ address }) => balance.walletAddress === address),
       ),
     [flatAddresses, walletBalances],
   );

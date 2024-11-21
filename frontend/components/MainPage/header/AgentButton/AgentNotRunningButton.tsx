@@ -27,7 +27,7 @@ import { delayInSeconds } from '@/utils/delay';
 
 /** Button used to start / deploy the agent */
 export const AgentNotRunningButton = (serviceConfigId: string) => {
-  const { wallets } = useMasterWalletContext();
+  const { masterWallets: wallets } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,

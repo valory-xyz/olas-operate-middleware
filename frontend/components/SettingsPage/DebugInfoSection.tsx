@@ -135,7 +135,7 @@ const DebugItem = ({
 };
 
 export const DebugInfoSection = () => {
-  const { wallets } = useMasterWalletContext();
+  const { masterWallets: wallets } = useMasterWalletContext();
   const { instanceAddress, multisigAddress } = useAddress();
   const { walletBalances } = useBalanceContext();
 

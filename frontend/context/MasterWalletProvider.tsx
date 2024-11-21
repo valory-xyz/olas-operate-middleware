@@ -20,14 +20,14 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 type MasterWalletContext = {
   masterEoa?: MasterEoa;
   masterSafes?: MasterSafe[];
-  wallets?: (MasterEoa | MasterSafe)[];
+  masterWallets?: (MasterEoa | MasterSafe)[];
 } & Partial<QueryObserverBaseResult<(MasterEoa | MasterSafe)[]>> &
   UsePause;
 
 export const MasterWalletContext = createContext<MasterWalletContext>({
   masterEoa: undefined,
   masterSafes: undefined,
-  wallets: undefined,
+  masterWallets: undefined,
   paused: false,
   setPaused: () => {},
   togglePaused: () => {},
@@ -59,19 +59,19 @@ export const MasterWalletProvider = ({ children }: PropsWithChildren) => {
 
   const [paused, setPaused] = useState(false);
 
-  const { data: wallets, refetch } = useQuery({
+  const { data: masterWallets, refetch } = useQuery({
     queryKey: REACT_QUERY_KEYS.WALLETS_KEY,
     queryFn: WalletService.getWallets,
     refetchInterval: isOnline && !paused ? FIVE_SECONDS_INTERVAL : false,
     select: (data) => transformMiddlewareWalletResponse(data),
   });
 
-  const masterEoa = wallets?.find(
+  const masterEoa = masterWallets?.find(
     (wallet): wallet is MasterEoa =>
       wallet.type === WalletType.EOA && wallet.owner === WalletOwnerType.Master,
   );
 
-  const masterSafes = wallets?.filter(
+  const masterSafes = masterWallets?.filter(
     (wallet): wallet is MasterSafe =>
       wallet.type === WalletType.Safe &&
       wallet.owner === WalletOwnerType.Master,
@@ -80,7 +80,7 @@ export const MasterWalletProvider = ({ children }: PropsWithChildren) => {
   return (
     <MasterWalletContext.Provider
       value={{
-        wallets,
+        masterWallets,
         masterEoa,
         masterSafes,
         setPaused,
