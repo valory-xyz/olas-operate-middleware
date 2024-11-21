@@ -16,7 +16,7 @@ type EpochStatusNotification = {
  */
 export const useNotifyOnNewEpoch = () => {
   const { showNotification } = useElectronApi();
-  const { isServiceNotRunning } = useServices();
+  const { isServiceNotRunning } = useServices(); //TODO: refactor to use single service hook
 
   const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();

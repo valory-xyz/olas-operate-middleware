@@ -1,6 +1,4 @@
-/**
- * @note Access address via wallet or service, relative to current chain, service id
- */
+// TODO: remove this file, uneccessary
 
 // const useAddress = () => {
 //   const { service } = useServices();
