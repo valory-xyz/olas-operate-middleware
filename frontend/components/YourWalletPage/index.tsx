@@ -147,7 +147,7 @@ const MasterEoaSignerNativeBalance = () => {
   const { masterEoa } = useMasterWalletContext();
   const { walletBalances } = useBalanceContext();
 
-  const masterEoaBalance = useMemo(() => {
+  const masterEoaBalance: Optional<number> = useMemo(() => {
     if (isNil(masterEoa)) return;
     if (isNil(walletBalances)) return;
 
