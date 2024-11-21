@@ -14,9 +14,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MiddlewareAccountIsSetup } from '@/client';
 import { Pages } from '@/enums/Pages';
 import { SetupScreen } from '@/enums/SetupScreen';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import {
+  useBalanceContext,
+  useMasterBalances,
+} from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
@@ -129,9 +133,22 @@ export const SetupWelcomeLogin = () => {
   const { goto } = useSetup();
   const { goto: gotoPage } = usePageState();
 
-  const { masterSafeAddress, masterWallets: wallets } =
-    useMasterWalletContext();
-  const { isBalanceLoaded, masterEoaBalance: eoaBalance } = useBalanceContext();
+  const { selectedService } = useServices();
+  const {
+    masterSafes,
+    masterWallets: wallets,
+    masterEoa,
+  } = useMasterWalletContext();
+  const { isLoaded } = useBalanceContext();
+  const { masterWalletBalances } = useMasterBalances();
+
+  const masterSafe =
+    masterSafes?.find(
+      (safe) => safe.chainId === selectedService?.home_chain_id,
+    ) ?? null;
+  const eoaBalanceEth = masterWalletBalances?.find(
+    (balance) => balance.walletAddress === masterEoa?.address,
+  );
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [canNavigate, setCanNavigate] = useState(false);
@@ -157,11 +174,11 @@ export const SetupWelcomeLogin = () => {
   useEffect(() => {
     // Navigate only when wallets and balances are loaded
     // To check if some setup steps were missed
-    if (canNavigate && wallets?.length && isBalanceLoaded) {
+    if (canNavigate && wallets?.length && isLoaded) {
       setIsLoggingIn(false);
-      if (!eoaBalance?.ETH) {
+      if (!eoaBalanceEth) {
         goto(SetupScreen.SetupEoaFundingIncomplete);
-      } else if (!masterSafeAddress) {
+      } else if (!masterSafe?.address) {
         goto(SetupScreen.SetupCreateSafe);
       } else {
         gotoPage(Pages.Main);
@@ -169,11 +186,11 @@ export const SetupWelcomeLogin = () => {
     }
   }, [
     canNavigate,
-    eoaBalance?.ETH,
+    eoaBalanceEth,
     goto,
     gotoPage,
-    isBalanceLoaded,
-    masterSafeAddress,
+    isLoaded,
+    masterSafe?.address,
     wallets?.length,
   ]);
 

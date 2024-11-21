@@ -10,10 +10,10 @@ import {
   GNOSIS_STAKING_PROGRAMS,
   GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
 } from './gnosis';
-import {
-  OPTIMISM_STAKING_PROGRAMS,
-  OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
-} from './optimism';
+// import {
+//   OPTIMISM_STAKING_PROGRAMS,
+//   OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
+// } from './optimism';
 
 /**
  * Single non-chain specific staking program configuration
@@ -40,19 +40,19 @@ export const STAKING_PROGRAMS: {
   [chainId: number | ChainId]: StakingProgramMap;
 } = {
   [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS,
-  [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS,
+  // [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS,
 };
 
 export const STAKING_PROGRAM_ADDRESS: {
   [chainId: number | ChainId]: Record<string, Address>;
 } = {
   [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
-  [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
+  // [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
 };
 
 export const INITIAL_DEFAULT_STAKING_PROGRAM_IDS: {
   [chainId: number | ChainId]: StakingProgramId;
 } = {
   [ChainId.Gnosis]: StakingProgramId.PearlBeta,
-  [ChainId.Optimism]: StakingProgramId.OptimusAlpha,
+  // [ChainId.Optimism]: StakingProgramId.OptimusAlpha,
 };
