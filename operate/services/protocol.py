@@ -490,7 +490,9 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
-    def get_forced_unstake_tx_data(self, service_id: int, staking_contract: str) -> bytes:
+    def get_forced_unstake_tx_data(
+        self, service_id: int, staking_contract: str
+    ) -> bytes:
         """Forced unstake the service"""
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -1356,12 +1358,16 @@ class EthSafeTxBuilder(_ChainUtil):
             password=self.wallet.password,
             chain_type=self.chain_type,
         )
-        txd = staking_manager.get_forced_unstake_tx_data(
-            service_id=service_id,
-            staking_contract=staking_contract,
-        ) if force else staking_manager.get_unstake_tx_data(
-            service_id=service_id,
-            staking_contract=staking_contract,
+        txd = (
+            staking_manager.get_forced_unstake_tx_data(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
+            if force
+            else staking_manager.get_unstake_tx_data(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
         )
         return {
             "to": staking_contract,

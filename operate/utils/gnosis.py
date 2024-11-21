@@ -20,7 +20,6 @@
 """Safe helpers."""
 
 import binascii
-from contextlib import suppress
 import secrets
 import typing as t
 from enum import Enum
@@ -173,9 +172,11 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=[crypto.address]
-            if backup_owner is None
-            else [crypto.address, backup_owner],
+            owners=(
+                [crypto.address]
+                if backup_owner is None
+                else [crypto.address, backup_owner]
+            ),
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -486,12 +487,14 @@ def drain_signer(
             transaction=tx,
             raise_on_try=True,
         )
-        tx['value'] = ledger_api.get_balance(crypto.address) - tx['gas'] * tx['maxFeePerGas']
-        if tx['value'] <= 0:
+        tx["value"] = (
+            ledger_api.get_balance(crypto.address) - tx["gas"] * tx["maxFeePerGas"]
+        )
+        if tx["value"] <= 0:
             logger.warning(f"No balance to drain from signer key: {crypto.address}")
             raise ChainInteractionError("Insufficient balance")
-        else:
-            logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
+
+        logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
 
         return tx
 

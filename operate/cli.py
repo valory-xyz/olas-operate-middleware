@@ -48,7 +48,7 @@ from operate.ledger.profiles import OLAS
 from operate.operate_types import ChainType, DeploymentStatus
 from operate.services.health_checker import HealthChecker
 from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
-from operate.wallet.master import EthereumMasterWallet, MasterWalletManager
+from operate.wallet.master import MasterWalletManager
 
 
 DEFAULT_HARDHAT_KEY = (
@@ -674,7 +674,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service=request.path_params["service"])
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
-        
+
         withdrawal_address = (await request.json()).get("withdrawal_address")
         if withdrawal_address is None:
             return JSONResponse(
@@ -684,7 +684,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             service_manager = operate.service_manager()
-            service = service_manager.load_or_create(hash=request.path_params["service"])
+            service = service_manager.load_or_create(
+                hash=request.path_params["service"]
+            )
 
             service_manager.terminate_service_on_chain_from_safe(
                 hash=request.path_params["service"],
@@ -694,13 +696,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             service_manager.drain_service(
                 hash=request.path_params["service"],
-                withdrawal_address=withdrawal_address
+                withdrawal_address=withdrawal_address,
             )
 
             # drain OLAS from the master safe
             chain_config = service.chain_configs[service.home_chain_id]
             ledger_config = chain_config.ledger_config
-            master_wallet: EthereumMasterWallet = service_manager.wallet_manager.load(
+            master_wallet = service_manager.wallet_manager.load(
                 ledger_type=ledger_config.type
             )
             ledger_api = master_wallet.ledger_api(
@@ -714,11 +716,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if balance == 0:
                 logger.info(f"No OLAS to drain from master safe: {master_wallet.safe}")
             else:
-                logger.info(f"Draining {balance} OLAS out of master safe: {master_wallet.safe}")
+                logger.info(
+                    f"Draining {balance} OLAS out of master safe: {master_wallet.safe}"
+                )
                 transfer_erc20_from_safe(
                     ledger_api=ledger_api,
                     crypto=master_wallet.crypto,
-                    safe=master_wallet.safe,
+                    safe=t.cast(str, master_wallet.safe),
                     token=OLAS[ledger_config.chain],
                     to=withdrawal_address,
                     amount=balance,
@@ -729,7 +733,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if balance == 0:
                 logger.info(f"No xDAI to drain from master safe: {master_wallet.safe}")
             else:
-                logger.info(f"Draining {balance} xDAI out of master safe: {master_wallet.safe}")
+                logger.info(
+                    f"Draining {balance} xDAI out of master safe: {master_wallet.safe}"
+                )
                 master_wallet.transfer(
                     to=withdrawal_address,
                     amount=balance,
@@ -743,7 +749,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 withdrawal_address=withdrawal_address,
                 chain_id=ledger_config.chain.id,
             )
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             logger.error(traceback.format_exc())
             return JSONResponse(
                 status_code=500,

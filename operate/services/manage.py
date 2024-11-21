@@ -30,17 +30,17 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from aea_ledger_ethereum import EthereumCrypto
 import requests
 from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
 from operate.operate_types import LedgerConfig, ServiceTemplate
-from operate.services.protocol import EthSafeTxBuilder, GnosisSafeTransaction, OnChainManager, StakingState
+from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
     DELETE_PREFIX,
@@ -51,7 +51,9 @@ from operate.services.service import (
     OnChainUserParams,
     Service,
 )
-from operate.utils.gnosis import NULL_ADDRESS, drain_signer, transfer as transfer_from_safe, transfer_erc20_from_safe
+from operate.utils.gnosis import NULL_ADDRESS, drain_signer
+from operate.utils.gnosis import transfer as transfer_from_safe
+from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -873,7 +875,10 @@ class ServiceManager:
         service.store()
 
     def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
-        self, hash: str, chain_id: str, is_withdrawing: bool = False,
+        self,
+        hash: str,
+        chain_id: str,
+        is_withdrawing: bool = False,
     ) -> None:
         """
         Terminate service on-chain
@@ -968,9 +973,9 @@ class ServiceManager:
                         key=current_safe_owners[0]
                     ).private_key  # TODO allow multiple owners
                 ),  # noqa: E800
-                new_owner_address=wallet.safe
-                if wallet.safe
-                else wallet.crypto.address,  # TODO it should always be safe address
+                new_owner_address=(
+                    wallet.safe if wallet.safe else wallet.crypto.address
+                ),  # TODO it should always be safe address
             )  # noqa: E800
 
     @staticmethod
@@ -1210,7 +1215,9 @@ class ServiceManager:
             self.logger.info("Cannot unstake service, `use_staking` is set to false")
             return
 
-        staking_contract = STAKING[ledger_config.chain][chain_data.user_params.staking_program_id]
+        staking_contract = STAKING[ledger_config.chain][
+            chain_data.user_params.staking_program_id
+        ]
         state = ocm.staking_status(
             service_id=chain_data.token,
             staking_contract=staking_contract,
@@ -1234,7 +1241,7 @@ class ServiceManager:
         self,
         hash: str,
         chain_id: str,
-        staking_program_id: str,
+        staking_program_id: t.Optional[str] = None,
         force: bool = False,
     ) -> None:
         """
@@ -1248,6 +1255,12 @@ class ServiceManager:
         chain_config = service.chain_configs[chain_id]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
+
+        if staking_program_id is None:
+            self.logger.info(
+                "Cannot unstake service, `staking_program_id` is set to None"
+            )
+            return
 
         if not chain_data.user_params.use_staking:
             self.logger.info("Cannot unstake service, `use_staking` is set to false")
@@ -1336,9 +1349,9 @@ class ServiceManager:
             )
 
     def drain_service(
-            self,
-            hash: str,
-            withdrawal_address: str,
+        self,
+        hash: str,
+        withdrawal_address: str,
     ) -> None:
         """Drain the funds out of service safe and wallet."""
         self.logger.info(f"Draining service: {hash}")
@@ -1351,13 +1364,13 @@ class ServiceManager:
             chain_type=ledger_config.chain, rpc=ledger_config.rpc
         )
         ethereum_crypto = EthereumCrypto(
-            private_key_path=service.path / 'deployment' / f"ethereum_private_key.txt",
+            private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
         )
 
         # drain OLAS and wxDAI from service safe
         for token_name, token_address in (
             ("OLAS", OLAS[ledger_config.chain]),
-            ("wxDAI", WXDAI[ledger_config.chain])
+            ("wxDAI", WXDAI[ledger_config.chain]),
         ):
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -1365,10 +1378,14 @@ class ServiceManager:
             )
             balance = token_instance.functions.balanceOf(chain_data.multisig).call()
             if balance == 0:
-                self.logger.info(f"No {token_name} to drain from service safe: {chain_data.multisig}")
+                self.logger.info(
+                    f"No {token_name} to drain from service safe: {chain_data.multisig}"
+                )
                 continue
 
-            self.logger.info(f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}")
+            self.logger.info(
+                f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}"
+            )
             transfer_erc20_from_safe(
                 ledger_api=ledger_api,
                 crypto=ethereum_crypto,
@@ -1381,9 +1398,13 @@ class ServiceManager:
         # drain xDAI from service safe
         balance = ledger_api.get_balance(chain_data.multisig)
         if balance == 0:
-            self.logger.info(f"No xDAI to drain from service safe: {chain_data.multisig}")
+            self.logger.info(
+                f"No xDAI to drain from service safe: {chain_data.multisig}"
+            )
         else:
-            self.logger.info(f"Draining {balance} xDAI out of service safe: {chain_data.multisig}")
+            self.logger.info(
+                f"Draining {balance} xDAI out of service safe: {chain_data.multisig}"
+            )
             transfer_from_safe(
                 ledger_api=ledger_api,
                 crypto=ethereum_crypto,
