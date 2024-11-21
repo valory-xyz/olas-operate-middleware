@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { Contract } from 'ethers';
 import { Contract as MulticallContract, ContractCall } from 'ethers-multicall';
+import { isEmpty } from 'lodash';
 
 import { GNOSIS_SAFE_ABI } from '@/abis/gnosisSafe';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
@@ -42,13 +43,13 @@ export const useMultisig = (safe?: Safe) => {
 /**
  * Hook to fetch from an array of multisigs
  */
-export const useMultisigs = (safes: Safe[]) => {
+export const useMultisigs = (safes?: Safe[]) => {
   const {
     data: owners,
     isFetched: ownersIsFetched,
     isPending: ownersIsPending,
   } = useQuery<{ safeAddress: string; chainId: number; owners: string[] }[]>({
-    queryKey: REACT_QUERY_KEYS.MULTISIGS_GET_OWNERS_KEY(safes),
+    queryKey: safes ? REACT_QUERY_KEYS.MULTISIGS_GET_OWNERS_KEY(safes) : [],
     queryFn: async (): Promise<
       {
         safeAddress: string;
@@ -56,6 +57,7 @@ export const useMultisigs = (safes: Safe[]) => {
         owners: string[];
       }[]
     > => {
+      if (!safes || isEmpty(safes)) return [];
       const results: {
         [chainId: number]: {
           safeAddress: string;
