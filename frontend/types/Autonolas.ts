@@ -14,10 +14,10 @@ export const StakingRewardsInfoSchema = z.object({
 
 export type StakingRewardsInfo = z.infer<typeof StakingRewardsInfoSchema>;
 
-export enum ServiceStakingState {
+export enum StakingState {
   NotStaked = 0,
   Staked = 1,
-  EvictedOrUnstaked = 2,
+  Evicted = 2,
 }
 
 export type StakingContractDetails = {
@@ -29,8 +29,8 @@ export type StakingContractDetails = {
   minimumStakingDuration: number;
   /** time when service was staked (in seconds) - 0 = never staked */
   serviceStakingStartTime: number;
-  /** 0: not staked, 1: staked, 2: unstaked - current state of the service */
-  serviceStakingState: ServiceStakingState;
+  /** 0: not staked, 1: staked, 2: evicted */
+  serviceStakingState: StakingState;
   /** OLAS cost of staking */
   minStakingDeposit: number;
   /** estimated annual percentage yield */

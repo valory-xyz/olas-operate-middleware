@@ -3,7 +3,7 @@ import { useContext } from 'react';
 
 import { StakingContractDetailsContext } from '@/context/StakingContractDetailsProvider';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { ServiceStakingState } from '@/types/Autonolas';
+import { StakingState } from '@/types/Autonolas';
 
 import { useServices } from './useServices';
 
@@ -65,12 +65,10 @@ export const useActiveStakingContractInfo = () => {
     maxNumServices,
   } = activeStakingContractDetails ?? {};
 
-  const isAgentEvicted =
-    serviceStakingState === ServiceStakingState.EvictedOrUnstaked;
+  const isAgentEvicted = serviceStakingState === StakingState.Evicted;
 
   const isServiceStaked =
-    !!serviceStakingStartTime &&
-    serviceStakingState === ServiceStakingState.Staked;
+    !!serviceStakingStartTime && serviceStakingState === StakingState.Staked;
 
   const isRewardsAvailable = availableRewards ?? 0 > 0;
 
