@@ -122,16 +122,13 @@ export const CannotStartAgentPopover = () => {
   const { isAllStakingContractDetailsRecordLoaded } =
     useStakingContractContext();
 
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
   const { isAgentEvicted, isEligibleForStaking } =
     useActiveStakingContractInfo();
 
   const { hasEnoughServiceSlots, isRewardsAvailable } =
-    useStakingContractDetails(
-      activeStakingProgramId ?? defaultStakingProgramId,
-    );
+    useStakingContractDetails(activeStakingProgramId);
 
   if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isEligibleForStaking) return null;
