@@ -200,7 +200,7 @@ Returns a list of available wallets
 
 ### `GET /api/enriched/wallet`
 
-Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes `all_safe_backup_owners_match` and `single_backup_owner_per_safe`.
+Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes `all_chains_same_safe_address`, `all_safe_backup_owners_match` and `single_backup_owner_per_safe`.
 
 <details>
   <summary>Response</summary>
@@ -209,6 +209,7 @@ Returns a list of available wallets with enriched information. It executes on-ch
 [
   {
     "address":"0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
+    "all_chains_same_safe_address":true,
     "all_safe_backup_owners_match":false,
     "ledger_type":"ethereum",
     "safe_chains":[

@@ -418,6 +418,7 @@ class EthereumMasterWallet(MasterWallet):
             }
             owner_sets.add(frozenset(owners))
 
+        wallet_json["all_chains_same_safe_address"] = len(set(self.safes.values())) == 1
         wallet_json["all_safe_backup_owners_match"] = len(owner_sets) == 1
         wallet_json["single_backup_owner_per_safe"] = all(
             len(owner) == 1 for owner in owner_sets
