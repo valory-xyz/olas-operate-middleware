@@ -23,6 +23,7 @@ import {
   useMasterBalances,
 } from '@/hooks/useBalanceContext';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { type Address } from '@/types/Address';
 import { Optional } from '@/types/Util';
@@ -164,9 +165,9 @@ const MasterEoaSignerNativeBalance = () => {
   }, [masterEoa, masterWalletBalances]);
 
   const nativeTokenSymbol = useMemo(
-    () => getNativeTokenSymbol(ChainId.Gnosis),
+    () => getNativeTokenSymbol(ChainId.Gnosis), // TODO: support multi chain
     [],
-  ); // TODO: support multi chain
+  );
 
   return (
     <Flex vertical gap={8}>
@@ -192,6 +193,8 @@ const MasterEoaSignerNativeBalance = () => {
 export const YourWalletPage = () => {
   const { goto } = usePageState();
 
+  const { services } = useServices();
+
   return (
     <ConfigProvider theme={yourWalletTheme}>
       <CardFlex
@@ -210,7 +213,13 @@ export const YourWalletPage = () => {
           <OlasBalance />
           <MasterSafeNativeBalance />
           <MasterEoaSignerNativeBalance />
-          <YourAgentWallet />
+          {services?.map(({ service_config_id }) => (
+            // TODO: bit dirty, but should be fine for now
+            <YourAgentWallet
+              key={service_config_id}
+              serviceConfigId={service_config_id}
+            />
+          ))}
         </Container>
       </CardFlex>
     </ConfigProvider>
