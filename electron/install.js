@@ -29,7 +29,7 @@ const Env = {
 };
 
 const SudoOptions = {
-  name: 'Pearl (Optimus)',
+  name: 'Pearl',
   env: Env,
 };
 
@@ -231,7 +231,7 @@ async function setupDarwin(ipcChannel) {
 
   logger.electron('Checking tendermint installation');
   if (!isTendermintInstalledUnix()) {
-    ipcChannel.send('response', 'Installing Pearl (Optimus) Daemon');
+    ipcChannel.send('response', 'Installing Pearl Daemon');
     logger.electron('Installing tendermint');
     await installTendermintUnix();
   }
@@ -245,7 +245,7 @@ async function setupUbuntu(ipcChannel) {
 
   logger.electron('Checking tendermint installation');
   if (!isTendermintInstalledUnix()) {
-    ipcChannel.send('response', 'Installing Pearl (Optimus) Daemon');
+    ipcChannel.send('response', 'Installing Pearl Daemon');
     logger.electron('Installing tendermint');
     await installTendermintUnix();
   }

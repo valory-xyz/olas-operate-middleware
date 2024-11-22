@@ -22,7 +22,7 @@ const main = async () => {
     config: {
       appId: 'xyz.valory.olas-pearl-optimus',
       artifactName: artifactName(),
-      productName: 'Pearl (Optimus)',
+      productName: 'Pearl',
       files: ['electron/**/*', 'package.json'],
       directories: {
         output: 'dist',
