@@ -9,10 +9,10 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
+import { isEmpty, isNil } from 'lodash';
 import { useCallback, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
-import { MiddlewareChain } from '@/client';
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL } from '@/constants/urls';
@@ -21,8 +21,11 @@ import { WalletBalanceResult } from '@/context/BalanceProvider';
 import { ChainId, ChainName } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletType } from '@/enums/Wallet';
-import { useAddress } from '@/hooks/backup/useAddress';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import {
+  useBalanceContext,
+  useMasterBalances,
+} from '@/hooks/useBalanceContext';
+import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { Address } from '@/types/Address';
 import { copyToClipboard } from '@/utils/copyToClipboard';
@@ -73,6 +76,8 @@ const DebugItem = ({
     [item.address],
   );
 
+  const chainIds = Object.keys(item.balance);
+
   return (
     <Card>
       <Title level={5} className="m-0 mb-8 text-base">
@@ -105,22 +110,29 @@ const DebugItem = ({
         </Col>
 
         <Col span={12}>
-          <Flex vertical gap={4} align="flex-start">
-            <Text type="secondary" className="text-sm">
-              Address
-            </Text>
-            <Flex gap={12}>
-              {/* <a
-                target="_blank"
-                href={`${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/address/${item.address}`}
-              > */}
-              {truncatedAddress}
-              {/* </a> */}
-              <Tooltip title="Copy to clipboard">
-                <CopyOutlined style={ICON_STYLE} onClick={onCopyToClipboard} />
-              </Tooltip>
+          {chainIds.map((chainId) => (
+            <Flex vertical gap={4} align="flex-start" key={chainId}>
+              <Text type="secondary" className="text-sm">
+                Address{' '}
+                {chainIds.length > 1 &&
+                  `on ${ChainName[+chainId as keyof typeof ChainName]}`}
+              </Text>
+              <Flex gap={12}>
+                <a
+                  target="_blank"
+                  href={`${EXPLORER_URL[+chainId as keyof typeof EXPLORER_URL]}/address/${item.address}`}
+                >
+                  {truncatedAddress}
+                </a>
+                <Tooltip title="Copy to clipboard">
+                  <CopyOutlined
+                    style={ICON_STYLE}
+                    onClick={onCopyToClipboard}
+                  />
+                </Tooltip>
+              </Flex>
             </Flex>
-          </Flex>
+          ))}
         </Col>
       </Row>
       {item.link ? (
@@ -135,24 +147,19 @@ const DebugItem = ({
 };
 
 export const DebugInfoSection = () => {
-  const { masterWallets: wallets } = useMasterWalletContext();
-  const { instanceAddress, multisigAddress } = useAddress();
+  const { masterEoa, masterSafes } = useMasterWalletContext();
+  const { serviceAddresses } = useServices();
   const { walletBalances } = useBalanceContext();
+  const { masterEoaBalances, masterSafeBalances } = useMasterBalances();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const showModal = useCallback(() => setIsModalOpen(true), []);
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
 
-  const masterEoas = wallets?.filter(
-    (wallet) => wallet.type === WalletType.EOA,
-  );
-
-  const masterSafes = wallets?.filter(
-    (wallet) => wallet.type === WalletType.Safe,
-  );
-
   const data = useMemo(() => {
-    if (!wallets?.length) return null;
+    if (isNil(masterEoa)) return null;
+    if (isNil(masterSafes) || isEmpty(masterSafes)) return null;
+    if (isNil(walletBalances) || isEmpty(walletBalances)) return null;
 
     const result: {
       title: string;
@@ -161,58 +168,50 @@ export const DebugInfoSection = () => {
       link?: { title: string; href: string };
     }[] = [];
 
-    masterEoas?.forEach((wallet) => {
-      result.push({
-        title: 'Master EOA',
-        ...getBalanceData(
-          walletBalances.filter((walletBalanceResult) => {
-            return walletBalanceResult.walletAddress === wallet.address;
-          }),
-        ),
-        address: wallet.address,
-      });
+    result.push({
+      title: 'Master EOA',
+      ...getBalanceData(masterEoaBalances),
+      address: masterEoa.address,
     });
 
-    masterSafes?.forEach((wallet) => {
+    masterSafes.forEach((wallet) => {
       result.push({
         title: 'Master Safe',
-        ...getBalanceData(
-          walletBalances.filter((walletBalanceResult) => {
-            return walletBalanceResult.walletAddress === wallet.address;
-          }),
-        ),
+        ...getBalanceData(masterSafeBalances),
         address: wallet.address,
-        link: {
-          title: 'Go to Safe',
-          href: `${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/address/${wallet.address}`,
-        },
       });
     });
 
-    if (instanceAddress) {
-      result.push({
-        title: 'Agent Instance EOA',
-        ...getBalanceData(walletBalances!),
-        address: instanceAddress,
-      });
-    }
+    serviceAddresses?.forEach((wallet) => {
+      if (wallet.type === WalletType.EOA) {
+        result.push({
+          title: 'Agent Instance EOA',
+          ...getBalanceData(
+            walletBalances.filter(
+              (balance) => balance.walletAddress === wallet.address,
+            ),
+          ),
+          address: wallet.address,
+        });
+      }
 
-    if (multisigAddress) {
-      result.push({
-        title: 'Agent Safe',
-        ...getBalanceData(walletBalances),
-        address: multisigAddress,
-      });
-    }
+      if (wallet.type === WalletType.Safe) {
+        result.push({
+          title: 'Agent Safe',
+          ...getBalanceData(walletBalances),
+          address: wallet.address,
+        });
+      }
+    });
 
     return result;
   }, [
-    instanceAddress,
-    masterEoas,
+    masterEoa,
+    masterEoaBalances,
+    masterSafeBalances,
     masterSafes,
-    multisigAddress,
+    serviceAddresses,
     walletBalances,
-    wallets?.length,
   ]);
 
   return (
