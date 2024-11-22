@@ -282,7 +282,7 @@ Creates a Gnosis safe for given chain type.
 
 ### `PUT /api/wallet/safe`
 
-Updtes a Gnosis safe for given chain type.
+Upadtes a Gnosis safe for given chain type.
 
 <details>
   <summary>Request</summary>
