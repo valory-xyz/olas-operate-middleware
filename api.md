@@ -222,7 +222,7 @@ Returns a list of available wallets with enriched information. It executes on-ch
       "base":{
         "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
           "owners":[
-            
+            // No owners for this safe
           ]
         }
       },
