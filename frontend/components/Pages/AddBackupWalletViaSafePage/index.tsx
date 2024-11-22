@@ -5,6 +5,7 @@ import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { DISCORD_TICKET_URL } from '@/constants/urls';
 import { ChainId } from '@/enums/Chain';
+import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
 import { GoToMainPageButton } from '../GoToMainPageButton';
@@ -22,9 +23,14 @@ const safeChainPrefix = {
 };
 
 export const AddBackupWalletViaSafePage = () => {
+  const {
+    selectedAgentConfig: { homeChainId },
+  } = useServices();
   const { masterSafes } = useMasterWalletContext();
 
-  const masterSafe = masterSafes?.[0]; // TODO: handle multiple safes better, currently only supporting a single safe for now
+  const masterSafe = masterSafes?.find(
+    ({ chainId }) => homeChainId === chainId,
+  );
 
   const safePrefix =
     masterSafe?.chainId && safeChainPrefix[masterSafe?.chainId];
