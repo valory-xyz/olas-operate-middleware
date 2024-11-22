@@ -45,7 +45,7 @@
   },
   "main": "electron/main.js",
   "name": "olas-operate-app",
-  "productName": "Pearl (Optimus)",
+  "productName": "Pearl",
   "description": "An all-in-one application designed to streamline your entry into the world of autonomous agents and earning OLAS through staking.",
   "scripts": {
     "build:frontend": "cd frontend && yarn build && rm -rf ../electron/.next && cp -r .next ../electron/.next && rm -rf ../electron/public && cp -r public ../electron/public",

@@ -182,7 +182,7 @@ const createSplashWindow = () => {
     height: APP_WIDTH,
     resizable: false,
     show: true,
-    title: 'Pearl (Optimus)',
+    title: 'Pearl',
     frame: false,
     webPreferences: {
       nodeIntegration: true,
@@ -203,7 +203,7 @@ const HEIGHT = 700;
 const createMainWindow = async () => {
   const width = isDev ? 840 : APP_WIDTH;
   mainWindow = new BrowserWindow({
-    title: 'Pearl (Optimus)',
+    title: 'Pearl',
     resizable: false,
     draggable: true,
     frame: false,
@@ -458,7 +458,7 @@ ipcMain.on('check', async function (event, _argument) {
     if (isDev) {
       event.sender.send(
         'response',
-        'Starting Pearl (Optimus) Daemon In Development Mode',
+        'Starting Pearl Daemon In Development Mode',
       );
 
       const daemonDevPortAvailable = await isPortAvailable(

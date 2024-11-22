@@ -110,7 +110,7 @@ jobs:
     
 
       # Download the appropriate architecture artifact
-      - name: Download Pearl (Optimus) binary for architecture
+      - name: Download Pearl binary for architecture
         uses: actions/download-artifact@v4
         with:
           name: pearl_${{ matrix.arch }}
