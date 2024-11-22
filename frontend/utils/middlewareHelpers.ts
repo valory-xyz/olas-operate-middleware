@@ -22,3 +22,17 @@ export const convertMiddlewareChainToChainId = (
   }
   throw new Error(`Invalid middleware chain enum: ${chain}`);
 };
+
+export const convertChainIdToMiddlewareChain = (chainId: ChainId | number) => {
+  switch (chainId) {
+    case ChainId.Ethereum:
+      return MiddlewareChain.ETHEREUM;
+    case ChainId.Optimism:
+      return MiddlewareChain.OPTIMISM;
+    case ChainId.Gnosis:
+      return MiddlewareChain.GNOSIS;
+    case ChainId.Base:
+      return MiddlewareChain.BASE;
+  }
+  throw new Error(`Invalid chain id: ${chainId}`);
+};
