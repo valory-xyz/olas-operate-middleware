@@ -618,7 +618,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         wallet = manager.load(ledger_type=ledger_type)
         backup_owner_updated = wallet.update_backup_owner(
             chain=chain,
-            backup_owner=data.get("backup_owner"),  # Optional value, it's fine to return None
+            backup_owner=data.get(
+                "backup_owner"
+            ),  # Optional value, it's fine to provide 'None' (set no backup owner/remove backup owner)
         )
         message = (
             "Backup owner updated."
