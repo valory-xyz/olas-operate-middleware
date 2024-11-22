@@ -145,6 +145,12 @@ class MasterWallet(LocalResource):
         """Update backup owner."""
         raise NotImplementedError()
 
+    # TODO move to resource.py ?
+    @property
+    def enriched_json(self) -> t.Dict:
+        """Get JSON representation with extended information (e.g., safe owners)."""
+        raise NotImplementedError
+
     @classmethod
     def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
@@ -392,6 +398,31 @@ class EthereumMasterWallet(MasterWallet):
             return True
 
         return False
+
+    @property
+    def enriched_json(self) -> t.Dict:
+        """Get JSON representation with extended information (e.g., safe owners)."""
+        rpc = None
+        wallet_json = self.json
+
+        if not self.safes:
+            return wallet_json
+
+        owner_sets = set()
+        for chain, safe in self.safes.items():
+            ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+            owners = get_owners(ledger_api=ledger_api, safe=safe)
+            owners.remove(self.address)
+            wallet_json["safes"][chain.value] = {
+                wallet_json["safes"][chain.value]: {"owners": owners}
+            }
+            owner_sets.add(frozenset(owners))
+
+        wallet_json["all_safe_backup_owners_match"] = len(owner_sets) == 1
+        wallet_json["single_safe_backup_owner_per_chain"] = all(
+            len(owner) == 1 for owner in owner_sets
+        )
+        return wallet_json
 
     @classmethod
     def load(cls, path: Path) -> "EthereumMasterWallet":

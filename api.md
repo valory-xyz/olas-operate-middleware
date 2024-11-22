@@ -198,6 +198,65 @@ Returns a list of available wallets
 
 ---
 
+### `GET /api/enriched/wallet`
+
+Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes `all_safe_backup_owners_match` and `single_safe_backup_owner_per_chain`.
+
+<details>
+  <summary>Response</summary>
+
+```json
+[
+  {
+    "address":"0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
+    "all_safe_backup_owners_match":false,
+    "ledger_type":"ethereum",
+    "safe_chains":[
+      "gnosis",
+      "ethereum",
+      "base",
+      "optimistic"
+    ],
+    "safe_nonce":110558881674480320952254000342160989674913430251257716940579305238321962891821,
+    "safes":{
+      "base":{
+        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
+          "owners":[
+            
+          ]
+        }
+      },
+      "ethereum":{
+        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
+          "owners":[
+            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+          ]
+        }
+      },
+      "gnosis":{
+        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
+          "owners":[
+            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+          ]
+        }
+      },
+      "optimistic":{
+        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
+          "owners":[
+            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+          ]
+        }
+      }
+    },
+    "single_safe_backup_owner_per_chain":false
+  }
+]
+```
+
+</details>
+
+---
+
 ### `POST /api/wallet`
 
 Creates a master wallet for given chain type. If a wallet already exists for a given chain type, it returns the already existing wallet without creating an additional one.
