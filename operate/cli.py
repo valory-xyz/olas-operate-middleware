@@ -702,11 +702,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service_manager.terminate_service_on_chain_from_safe(
                 hash=request.path_params["service"],
                 chain_id=service.home_chain_id,
-                is_withdrawing=True,
-            )
-
-            service_manager.drain_service(
-                hash=request.path_params["service"],
                 withdrawal_address=withdrawal_address,
             )
 

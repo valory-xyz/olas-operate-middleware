@@ -878,7 +878,7 @@ class ServiceManager:
         self,
         hash: str,
         chain_id: str,
-        is_withdrawing: bool = False,
+        withdrawal_address: str = None,
     ) -> None:
         """
         Terminate service on-chain
@@ -915,12 +915,12 @@ class ServiceManager:
             )
 
         # Cannot unstake, terminate flow.
-        if is_staked and not can_unstake and not is_withdrawing:
+        if is_staked and not can_unstake and withdrawal_address is None:
             self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
             return
 
         # Unstake the service if applies
-        if is_staked and (can_unstake or is_withdrawing):
+        if is_staked and (can_unstake or withdrawal_address is not None):
             self.unstake_service_on_chain_from_safe(
                 hash=hash, chain_id=chain_id, staking_program_id=current_staking_program
             )
@@ -953,16 +953,21 @@ class ServiceManager:
         counter_current_safe_owners = Counter(s.lower() for s in current_safe_owners)
         counter_instances = Counter(s.lower() for s in instances)
 
-        if (counter_current_safe_owners == counter_instances) and not is_withdrawing:
-            self.logger.info("Service funded for safe swap")
-            self.fund_service(
-                hash=hash,
-                rpc=ledger_config.rpc,
-                agent_topup=chain_data.user_params.fund_requirements.agent,
-                agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
-                safe_topup=0,
-                safe_fund_treshold=0,
-            )
+        if withdrawal_address is not None:
+            # we don't drain signer yet, because the owner swapping tx may need to happen
+            self.drain_service_safe(hash=hash, withdrawal_address=withdrawal_address)
+
+        if counter_current_safe_owners == counter_instances:
+            if withdrawal_address is None:
+                self.logger.info("Service funded for safe swap")
+                self.fund_service(
+                    hash=hash,
+                    rpc=ledger_config.rpc,
+                    agent_topup=chain_data.user_params.fund_requirements.agent,
+                    agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
+                    safe_topup=0,
+                    safe_fund_treshold=0,
+                )
 
             self.logger.info("Swapping Safe owners")
             sftxb.swap(  # noqa: E800
@@ -977,6 +982,20 @@ class ServiceManager:
                     wallet.safe if wallet.safe else wallet.crypto.address
                 ),  # TODO it should always be safe address
             )  # noqa: E800
+
+        if withdrawal_address is not None:
+            # drain xDAI from service signer key
+            drain_signer(
+                ledger_api=self.wallet_manager.load(ledger_config.type).ledger_api(
+                    chain_type=ledger_config.chain, rpc=ledger_config.rpc
+                ),
+                crypto=EthereumCrypto(
+                    private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
+                ),
+                withdrawal_address=withdrawal_address,
+                chain_id=ledger_config.chain.id,
+            )
+            self.logger.info(f"{service.name} signer drained")
 
     @staticmethod
     def _get_current_staking_program(
@@ -1348,13 +1367,13 @@ class ServiceManager:
                 chain_type=ledger_config.chain,
             )
 
-    def drain_service(
+    def drain_service_safe(
         self,
         hash: str,
         withdrawal_address: str,
     ) -> None:
-        """Drain the funds out of service safe and wallet."""
-        self.logger.info(f"Draining service: {hash}")
+        """Drain the funds out of the service safe."""
+        self.logger.info(f"Draining the safe of service: {hash}")
         service = self.load_or_create(hash=hash)
         chain_config = service.chain_configs[service.home_chain_id]
         ledger_config = chain_config.ledger_config
@@ -1413,14 +1432,7 @@ class ServiceManager:
                 amount=balance,
             )
 
-        # drain xDAI from service signer key
-        drain_signer(
-            ledger_api=ledger_api,
-            crypto=ethereum_crypto,
-            withdrawal_address=withdrawal_address,
-            chain_id=ledger_config.chain.id,
-        )
-        self.logger.info(f"{service.name} drained")
+        self.logger.info(f"{service.name} safe drained")
 
     async def funding_job(
         self,
