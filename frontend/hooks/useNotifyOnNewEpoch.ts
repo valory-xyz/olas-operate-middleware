@@ -17,7 +17,7 @@ type EpochStatusNotification = {
  */
 export const useNotifyOnNewEpoch = () => {
   const { showNotification } = useElectronApi();
-  const { selectedService } = useServices(); //TODO: refactor to use single service hook
+  const { selectedService } = useServices();
   const { isServiceRunning } = useService({
     serviceConfigId: selectedService?.service_config_id,
   });
