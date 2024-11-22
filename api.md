@@ -282,7 +282,7 @@ Creates a Gnosis safe for given chain type.
 
 ### `PUT /api/wallet/safe`
 
-Upadtes a Gnosis safe for given chain type.
+Upadtes a Gnosis safe for given chain type. If no `backup_owner` is provided, it will assume a null value, that is, it will remove the backup owner from the safe.
 
 <details>
   <summary>Request</summary>
@@ -290,7 +290,7 @@ Upadtes a Gnosis safe for given chain type.
 ```js
 {
   "chain": Chain,
-  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"
+  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"  // Optional.
 }
 ```
 
