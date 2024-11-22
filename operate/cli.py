@@ -598,51 +598,39 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=401,
             )
 
-        manager = operate.wallet_manager
         data = await request.json()
 
-        chains = []
-        if "chain" in data:
-            if "chains" in data:
-                return JSONResponse(
-                    content={
-                        "error": "You cannot specify 'chain' and 'chains' in the same request."
-                    },
-                    status_code=401,
-                )
-            chains = [Chain[data["chain"]]]
-        elif "chains" in data:
-            chains = [Chain(chain_str) for chain_str in data["chains"]]
-
-        # check that all chains are supported
-        for chain in chains:
-            ledger_type = chain.ledger_type
-            if not manager.exists(ledger_type=ledger_type):
-                return JSONResponse(
-                    content={
-                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
-                    }
-                )
-
-        # update backup owners
-        updated_safes = {}
-        for chain in chains:
-            ledger_type = chain.ledger_type
-            wallet = manager.load(ledger_type=ledger_type)
-            updated = wallet.update_backup_owner(
-                chain=chain,
-                backup_owner=data.get("backup_owner"),
+        if "chain" not in data:
+            return JSONResponse(
+                content={"error": "You need to specify a chain to updae a safe."},
+                status_code=401,
             )
-            if updated:
-                updated_safes[chain.value] = wallet.safes[chain]
 
-        if not updated_safes:
-            return JSONResponse(content={"message": "No safes were updated."})
+        chain = Chain(data["chain"])
+        ledger_type = chain.ledger_type
+        manager = operate.wallet_manager
+        if not manager.exists(ledger_type=ledger_type):
+            return JSONResponse(
+                content={"error": "Wallet does not exist"},
+                status_code=401,
+            )
 
+        wallet = manager.load(ledger_type=ledger_type)
+        backup_owner_updated = wallet.update_backup_owner(
+            chain=chain,
+            backup_owner=data.get("backup_owner"),
+        )
+        message = (
+            "Backup owner updated."
+            if backup_owner_updated
+            else "No changes on backup owner. The backup owner provided matches the current one."
+        )
         return JSONResponse(
             content={
-                "updated_safes": updated_safes,
-                "message": "Safe backup owners updated.",
+                "wallet": wallet.json,
+                "chain": chain.value,
+                "backup_owner_updated": backup_owner_updated,
+                "message": message,
             }
         )
 
