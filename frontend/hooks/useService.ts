@@ -1,7 +1,11 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { MiddlewareDeploymentStatus } from '@/client';
+import {
+  MiddlewareDeploymentStatus,
+  MiddlewareRunningStatuses,
+  MiddlewareTransitioningStatuses,
+} from '@/client';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { ChainId } from '@/enums/Chain';
 import {
@@ -139,6 +143,21 @@ export const useService = ({
     MiddlewareDeploymentStatus | undefined
   >(REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId));
 
+  /** @note deployment is transitioning from stopped to deployed (and vice versa) */
+  const isServiceTransitioning = deploymentStatus
+    ? MiddlewareTransitioningStatuses.includes(deploymentStatus)
+    : false;
+
+  /** @note deployment is running, or transitioning, both assume the deployment is active */
+  const isServiceRunning = deploymentStatus
+    ? MiddlewareRunningStatuses.includes(deploymentStatus)
+    : false;
+
+  /** @note new deployment being created/built */
+  const isServiceBuilding = deploymentStatus
+    ? MiddlewareBuildingStatuses.includes(deploymentStatus)
+    : false;
+
   return {
     service,
     addresses,
@@ -148,6 +167,9 @@ export const useService = ({
     setDeploymentStatus,
     serviceSafes,
     serviceEoa,
+    isServiceTransitioning,
+    isServiceRunning,
+    isServiceBuilding,
   };
 };
 
