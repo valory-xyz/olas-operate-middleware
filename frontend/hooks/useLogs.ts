@@ -28,13 +28,14 @@ const useAddressesLogs = () => {
     if (!allMasterSafeOwners) return;
 
     const result = allMasterSafeOwners
-      .map(({ owners }) =>
+      .map((masterSafeOwners) =>
+        masterSafeOwners.owners
           .filter((owner): owner is Address => owner !== masterEoa.address)
           .map<Eoa>((owner) => ({
             address: owner,
             type: WalletType.EOA,
-            safeAddress: owners.safeAddress,
-            chainId: owners.chainId,
+            safeAddress: masterSafeOwners.safeAddress,
+            chainId: masterSafeOwners.chainId,
           })),
       )
       .flat();

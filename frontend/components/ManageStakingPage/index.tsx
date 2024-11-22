@@ -1,11 +1,11 @@
 import { CloseOutlined } from '@ant-design/icons';
 import { Button, Card } from 'antd';
 
-import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
-import { DEFAULT_STAKING_PROGRAM_ID } from '@/context/StakingProgramProvider';
+import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CardTitle } from '../Card/CardTitle';
@@ -15,6 +15,7 @@ import { WhatAreStakingContractsSection } from './WhatAreStakingContracts';
 
 export const ManageStakingPage = () => {
   const { goto } = usePageState();
+  const { selectedAgentConfig } = useServices();
   const { activeStakingProgramId } = useStakingProgram();
 
   const orderedStakingProgramIds: StakingProgramId[] = Object.values(
@@ -26,14 +27,13 @@ export const ManageStakingPage = () => {
     }
 
     // put default at the top if no activeStakingProgram
-    if (
-      activeStakingProgramId === null &&
-      stakingProgramId === DEFAULT_STAKING_PROGRAM_ID
-    )
-      return [stakingProgramId, ...acc];
+    if (activeStakingProgramId) return [stakingProgramId, ...acc];
 
     // if the program is deprecated, ignore it
-    if (STAKING_PROGRAM_META[stakingProgramId]?.deprecated) {
+    if (
+      STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId]
+        .deprecated
+    ) {
       return acc;
     }
 
@@ -43,7 +43,8 @@ export const ManageStakingPage = () => {
 
   const otherStakingProgramIds = orderedStakingProgramIds.filter(
     (stakingProgramId) => {
-      const info = STAKING_PROGRAM_META[stakingProgramId];
+      const info =
+        STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId];
       if (!info) return false;
       if (activeStakingProgramId === stakingProgramId) return false;
       if (info.deprecated) return false;
