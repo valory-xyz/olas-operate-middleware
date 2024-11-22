@@ -23,7 +23,7 @@ const main = async () => {
   await build({
     publish: 'onTag',
     config: {
-      appId: 'xyz.valory.olas-pearl-optimus',
+      appId: 'xyz.valory.olas-operate-app',
       artifactName: artifactName(),
       productName: 'Pearl',
       files: ['electron/**/*', 'package.json'],
