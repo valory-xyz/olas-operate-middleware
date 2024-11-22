@@ -98,50 +98,6 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
     [masterSafeAddress],
   );
 
-  // const [ethEth, setethEth] = useState(0);
-  // const [ethUsdc, setethUsdc] = useState(0);
-
-  // const [opEth, setopEth] = useState(0);
-  // const [opOlas, setopOlas] = useState(0);
-
-  // const [baseEth, setbaseEth] = useState(0);
-  // useInterval(async () => {
-  //   if (!masterSafeAddress) return;
-  //   await Promise.allSettled([
-  //     ETHEREUM_PROVIDER.getBalance(masterSafeAddress)
-  //       .then(ethers.utils.formatEther)
-  //       .then(Number)
-  //       .then(setethEth),
-  //     //USDC balance
-  //     new Contract(
-  //       TOKEN_CONFIG[CHAIN_CONFIG.ETHEREUM.chainId]['USDC'].address,
-  //       ERC20_BALANCE_OF_STRING_FRAGMENT,
-  //       ETHEREUM_PROVIDER,
-  //     )
-  //       .balanceOf(masterSafeAddress)
-  //       .then((wei: BigNumber) => ethers.utils.formatUnits(wei, 6))
-  //       .then(Number)
-  //       .then(setethUsdc),
-  //     OPTIMISM_PROVIDER.getBalance(masterSafeAddress)
-  //       .then(ethers.utils.formatEther)
-  //       .then(Number)
-  //       .then(setopEth),
-  //     new Contract(
-  //       TOKEN_CONFIG[CHAIN_CONFIG.OPTIMISM.chainId]['OLAS'].address,
-  //       ERC20_BALANCE_OF_STRING_FRAGMENT,
-  //       OPTIMISM_PROVIDER,
-  //     )
-  //       .balanceOf(masterSafeAddress)
-  //       .then(ethers.utils.formatEther)
-  //       .then(Number)
-  //       .then(setopOlas),
-  //     BASE_PROVIDER.getBalance(masterSafeAddress)
-  //       .then(ethers.utils.formatEther)
-  //       .then(Number)
-  //       .then(setbaseEth),
-  //   ]);
-  // }, 2000);
-
   return (
     <Flex vertical ref={ref}>
       <AddFundsWarningAlertSection />
@@ -222,7 +178,13 @@ const AddFundsGetTokensSection = () => {
 
   return (
     <CardSection justify="center" bordertop="true" padding="16px 24px">
-      <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
+      <Link
+        target="_blank"
+        href={
+          // TODO: update this url based on homeChainId for optimism
+          COW_SWAP_GNOSIS_XDAI_OLAS_URL
+        }
+      >
         Get OLAS + {CHAIN_CONFIG[homeChainId].currency} on{' '}
         {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
       </Link>
