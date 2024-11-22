@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
 
+import { useService } from './useService';
 import { useActiveStakingContractInfo } from './useStakingContractDetails';
 
 type EpochStatusNotification = {
@@ -16,7 +17,10 @@ type EpochStatusNotification = {
  */
 export const useNotifyOnNewEpoch = () => {
   const { showNotification } = useElectronApi();
-  const { isServiceNotRunning } = useServices(); //TODO: refactor to use single service hook
+  const { selectedService } = useServices(); //TODO: refactor to use single service hook
+  const { isServiceRunning } = useService({
+    serviceConfigId: selectedService?.service_config_id,
+  });
 
   const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();
@@ -30,7 +34,7 @@ export const useNotifyOnNewEpoch = () => {
     if (!isActiveStakingContractDetailsLoaded) return;
 
     // if agent is running, no need to show notification
-    if (!isServiceNotRunning) return;
+    if (isServiceRunning) return;
 
     // latest epoch is not loaded yet
     if (!epoch) return;
@@ -53,10 +57,10 @@ export const useNotifyOnNewEpoch = () => {
       setEpochStatusNotification({ lastEpoch: epoch, isNotified: true });
     }
   }, [
-    isServiceNotRunning,
     epochStatusNotification,
     epoch,
     isActiveStakingContractDetailsLoaded,
     showNotification,
+    isServiceRunning,
   ]);
 };
