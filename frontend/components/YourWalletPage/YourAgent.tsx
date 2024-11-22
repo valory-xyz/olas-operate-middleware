@@ -181,6 +181,25 @@ export const YourAgentWallet = ({
     [serviceSafeBalances],
   );
 
+  // TODO: refactor for multichain/agent
+  const serviceSafeRewards = useMemo(
+    () => [
+      {
+        title: 'Claimed rewards',
+        value: `${balanceFormat(serviceSafeOlasBalances?.[0].balance ?? 0, 2)} OLAS`,
+      },
+      {
+        title: 'Unclaimed rewards',
+        value: `${balanceFormat(accruedServiceStakingRewards, 2)} OLAS`,
+      },
+      {
+        title: 'Current epoch rewards',
+        value: reward,
+      },
+    ],
+    [accruedServiceStakingRewards, reward, serviceSafeOlasBalances],
+  );
+
   const serviceSafeNativeBalances = useMemo(
     () => serviceSafeBalances?.filter((balance) => balance.isNative),
     [serviceSafeBalances],
@@ -201,14 +220,14 @@ export const YourAgentWallet = ({
       <Container>
         <SafeAddress />
 
-        {!isEmpty(serviceSafeOlasBalances) && (
+        {!isEmpty(serviceSafeRewards) && (
           <Flex vertical gap={8}>
             <OlasTitle />
             <InfoBreakdownList
-              list={serviceSafeOlasBalances.map((item) => ({
-                left: item.symbol,
+              list={serviceSafeRewards.map((item) => ({
+                left: item.title,
                 leftClassName: 'text-light text-sm',
-                right: item.balance,
+                right: item.value,
               }))}
               parentStyle={infoBreakdownParentStyle}
             />
