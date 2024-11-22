@@ -163,10 +163,9 @@ export const YourAgentWallet = ({
   const {
     availableRewardsForEpochEth,
     isEligibleForRewards,
-    accruedServiceStakingRewards, // TODO: determine where this is used
+    accruedServiceStakingRewards,
   } = useReward();
 
-  // TODO: determine where this is used
   const reward = useMemo(() => {
     if (!isLoaded) return <Skeleton.Input size="small" active />;
     if (!isEligibleForRewards) return 'Not yet earned';
