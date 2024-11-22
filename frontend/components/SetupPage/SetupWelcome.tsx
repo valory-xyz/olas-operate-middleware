@@ -24,6 +24,7 @@ import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
+import { convertMiddlewareChainToChainId } from '@/utils/middlewareHelpers';
 
 import { FormFlex } from '../styled/FormFlex';
 
@@ -144,7 +145,10 @@ export const SetupWelcomeLogin = () => {
 
   const masterSafe =
     masterSafes?.find(
-      (safe) => safe.chainId === selectedService?.home_chain_id,
+      (safe) =>
+        selectedService?.home_chain &&
+        safe.chainId ===
+          convertMiddlewareChainToChainId(selectedService?.home_chain),
     ) ?? null;
   const eoaBalanceEth = masterWalletBalances?.find(
     (balance) => balance.walletAddress === masterEoa?.address,
@@ -176,6 +180,7 @@ export const SetupWelcomeLogin = () => {
     // To check if some setup steps were missed
     // if (canNavigate && wallets?.length && isBalanceLoaded) {
 
+    // TODO: fix wallet and balance loads
     if (canNavigate) {
       setIsLoggingIn(false);
       if (!eoaBalanceEth) {

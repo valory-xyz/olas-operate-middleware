@@ -45,7 +45,7 @@ const transformMiddlewareWalletResponse = (
   const masterSafes: MasterSafe[] = Object.entries(data.safes).map(
     ([middlewareChain, address]) => ({
       address,
-      chainId: convertMiddlewareChainToChainId(+middlewareChain),
+      chainId: convertMiddlewareChainToChainId(middlewareChain),
       owner: WalletOwnerType.Master,
       type: WalletType.Safe,
     }),

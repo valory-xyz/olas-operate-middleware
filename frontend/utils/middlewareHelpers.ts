@@ -8,7 +8,7 @@ import { ChainId } from '@/enums/Chain';
  * @throws Error
  */
 export const convertMiddlewareChainToChainId = (
-  chain: MiddlewareChain,
+  chain: MiddlewareChain | string,
 ): ChainId => {
   switch (chain) {
     case MiddlewareChain.ETHEREUM:
