@@ -9,7 +9,7 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { ChainId } from '@/enums/Chain';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
-import { AgentSafe } from '@/enums/Wallet';
+import { AgentSafe, Safe } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useServiceBalances,
@@ -37,8 +37,8 @@ const NftCard = styled(Card)`
   }
 `;
 
-const SafeAddress = () => {
-  const { multisigAddress } = useAddress();
+const SafeAddress = ({ serviceSafe }: { serviceSafe: Safe }) => {
+  const multisigAddress = serviceSafe.address;
 
   return (
     <Flex vertical gap={8}>
@@ -214,10 +214,12 @@ export const YourAgentWallet = ({
     return serviceSafes[0];
   }, [serviceSafes]);
 
+  if (isNil(serviceSafe)) return null;
+
   return (
-    <Card title={serviceSafe && <AgentTitle serviceSafe={serviceSafe} />}>
+    <Card title={<AgentTitle serviceSafe={serviceSafe} />}>
       <Container>
-        <SafeAddress />
+        <SafeAddress serviceSafe={serviceSafe} />
 
         {!isEmpty(serviceSafeRewards) && (
           <Flex vertical gap={8}>

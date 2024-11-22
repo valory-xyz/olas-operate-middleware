@@ -68,10 +68,10 @@ const createService = async ({
         ...serviceTemplate.configurations,
         // overwrite defaults with chain-specific configurations
         ...Object.entries(serviceTemplate.configurations).reduce(
-          (acc, [chainId, config]) => {
-            acc[+chainId] = {
+          (acc, [middlewareChainKey, config]) => {
+            acc[middlewareChainKey] = {
               ...config,
-              rpc: CHAIN_CONFIG[+chainId].rpc,
+              rpc: CHAIN_CONFIG[middlewareChainKey].rpc,
               staking_program_id: stakingProgramId,
               use_mech_marketplace: useMechMarketplace,
             };
@@ -114,8 +114,8 @@ const updateService = async ({
       ...serviceTemplate,
       deploy,
       configurations: {
-        [chainId]: {
-          ...serviceTemplate.configurations[ChainId.Optimism],
+        [CHAIN_CONFIG[chainId].middlewareChain]: {
+          ...serviceTemplate.configurations[CHAIN_CONFIG[chainId].middlewareChain],
           staking_program_id: stakingProgramId,
           rpc: CHAIN_CONFIG[chainId].rpc,
           use_mech_marketplace: useMechMarketplace,

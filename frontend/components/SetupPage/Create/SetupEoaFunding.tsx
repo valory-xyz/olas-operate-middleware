@@ -182,11 +182,11 @@ export const SetupEoaFunding = () => {
   const masterEoaAddress = masterEoa?.address;
 
   const [currentChain, setCurrentChain] = useState<MiddlewareChain>(
-    +Object.keys(eoaFundingMap)[0] as MiddlewareChain,
+    Object.keys(eoaFundingMap)[0] as MiddlewareChain,
   );
 
   const currentFundingMapObject =
-    eoaFundingMap[+currentChain as keyof typeof eoaFundingMap];
+    eoaFundingMap[currentChain as keyof typeof eoaFundingMap];
 
   const getIsCurrentChainFunded = useCallback(
     async (
@@ -227,7 +227,7 @@ export const SetupEoaFunding = () => {
     if (nextChainExists) {
       // goto next chain
       setCurrentChain(
-        +Object.keys(eoaFundingMap)[indexOfCurrentChain + 1] as MiddlewareChain,
+        Object.keys(eoaFundingMap)[indexOfCurrentChain + 1] as MiddlewareChain,
       );
       return;
     }

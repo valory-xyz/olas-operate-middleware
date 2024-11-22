@@ -15,10 +15,14 @@ import { delayInSeconds } from '@/utils/delay';
 
 const { Text } = Typography;
 
-const capitalizedMiddlewareChainNames = {
-  [+MiddlewareChain.ETHEREUM]: 'Ethereum',
-  [+MiddlewareChain.BASE]: 'Base',
-  [+MiddlewareChain.OPTIMISM]: 'Optimism',
+const capitalizedMiddlewareChainNames: { [key in MiddlewareChain]: string } = {
+  [MiddlewareChain.ETHEREUM]: 'Ethereum',
+  [MiddlewareChain.BASE]: 'Base',
+  [MiddlewareChain.OPTIMISM]: 'Optimism',
+  [MiddlewareChain.GOERLI]: 'Goerli',
+  [MiddlewareChain.GNOSIS]: 'Gnosis',
+  [MiddlewareChain.SOLANA]: 'Solana',
+  [MiddlewareChain.MODE]: 'Mode',
 };
 
 const YouWillBeRedirected = ({ text }: { text: string }) => (
@@ -181,7 +185,7 @@ export const SetupCreateSafe = () => {
 
     const safeCreationsRequired = Object.entries(chainsToCreateSafesFor).reduce(
       (acc, [chain, safeAddressAlreadyExists]) => {
-        const middlewareChain = +chain as MiddlewareChain;
+        const middlewareChain = chain as MiddlewareChain;
         if (safeAddressAlreadyExists) {
           // switch (middlewareChain) {
           //   case MiddlewareChain.OPTIMISM:

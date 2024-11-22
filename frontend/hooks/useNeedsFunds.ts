@@ -1,7 +1,7 @@
 import { formatEther, formatUnits } from 'ethers/lib/utils';
 import { useMemo } from 'react';
 
-import { ServiceTemplate } from '@/client';
+import { MiddlewareChain, ServiceTemplate } from '@/client';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { getServiceTemplate } from '@/constants/serviceTemplates';
@@ -38,28 +38,28 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
     } = {};
 
     Object.entries(serviceTemplate.configurations).forEach(
-      ([chainId, config]) => {
+      ([middlewareChainId, config]) => {
         const templateStakingProgramId =
-          serviceTemplate.configurations[+chainId].staking_program_id;
+          serviceTemplate.configurations[middlewareChainId].staking_program_id;
         const serviceStakingProgramId =
-          service?.chain_configs[+chainId]?.chain_data?.user_params
-            ?.staking_program_id;
+          service?.chain_configs[middlewareChainId as MiddlewareChain]
+            ?.chain_data?.user_params?.staking_program_id;
         const stakingProgramId =
           serviceStakingProgramId ?? templateStakingProgramId;
 
         if (!stakingProgramId) return;
-        if (!service?.chain_configs[+chainId]) return;
+        if (!service?.chain_configs[middlewareChainId as MiddlewareChain])
+          return;
 
         const gasEstimate = config.monthly_gas_estimate;
         const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
         const minimumStakedAmountRequired =
-          STAKING_PROGRAMS[+chainId]?.[stakingProgramId]?.stakingRequirements?.[
-            TokenSymbol.OLAS
-          ] || 0;
+          STAKING_PROGRAMS[+middlewareChainId]?.[stakingProgramId]
+            ?.stakingRequirements?.[TokenSymbol.OLAS] || 0;
 
-        const nativeTokenSymbol = getNativeTokenSymbol(+chainId);
+        const nativeTokenSymbol = getNativeTokenSymbol(+middlewareChainId);
 
-        results[+chainId] = {
+        results[+middlewareChainId] = {
           [TokenSymbol.OLAS]: +formatEther(minimumStakedAmountRequired),
           [nativeTokenSymbol]: +formatEther(monthlyGasEstimate),
           // TODO: extend with any further erc20s..

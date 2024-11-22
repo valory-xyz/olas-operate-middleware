@@ -139,7 +139,7 @@ export const SetupWelcomeLogin = () => {
     masterWallets: wallets,
     masterEoa,
   } = useMasterWalletContext();
-  const { isLoaded } = useBalanceContext();
+  const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
 
   const masterSafe =
@@ -174,7 +174,9 @@ export const SetupWelcomeLogin = () => {
   useEffect(() => {
     // Navigate only when wallets and balances are loaded
     // To check if some setup steps were missed
-    if (canNavigate && wallets?.length && isLoaded) {
+    // if (canNavigate && wallets?.length && isBalanceLoaded) {
+
+    if (canNavigate) {
       setIsLoggingIn(false);
       if (!eoaBalanceEth) {
         goto(SetupScreen.SetupEoaFundingIncomplete);
@@ -189,7 +191,7 @@ export const SetupWelcomeLogin = () => {
     eoaBalanceEth,
     goto,
     gotoPage,
-    isLoaded,
+    isBalanceLoaded,
     masterSafe?.address,
     wallets?.length,
   ]);
