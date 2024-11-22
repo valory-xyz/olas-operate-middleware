@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import {
+  MiddlewareBuildingStatuses,
   MiddlewareDeploymentStatus,
   MiddlewareRunningStatuses,
   MiddlewareTransitioningStatuses,

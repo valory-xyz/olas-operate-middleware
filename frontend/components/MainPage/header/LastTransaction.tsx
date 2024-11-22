@@ -9,6 +9,7 @@ import { EXPLORER_URL } from '@/constants/urls';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { getLatestTransaction } from '@/service/Ethers';
 import { TransactionInfo } from '@/types/TransactionInfo';
 import { Optional } from '@/types/Util';
@@ -35,8 +36,8 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { activeStakingProgramMeta } = useStakingProgram();
   const { service } = useService({ serviceConfigId });
-  const multisigAddress =
-    service?.chain_configs[service?.home_chain_id].chain_data.multisig;
+  const { masterSafes } = useMasterWalletContext();
+  const multisigAddress = masterSafe;
   const chainId = activeStakingProgramMeta?.chainId;
 
   const [isFetching, setIsFetching] = useState(true);
