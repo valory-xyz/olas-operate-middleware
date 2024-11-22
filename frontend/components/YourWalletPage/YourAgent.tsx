@@ -163,7 +163,7 @@ export const YourAgentWallet = ({
   const {
     availableRewardsForEpochEth,
     isEligibleForRewards,
-    accruedServiceStakingRewards, //TODO: determine where this is used
+    accruedServiceStakingRewards, // TODO: determine where this is used
   } = useReward();
 
   // TODO: determine where this is used
