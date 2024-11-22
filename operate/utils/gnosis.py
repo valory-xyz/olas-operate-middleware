@@ -20,15 +20,14 @@
 """Safe helpers."""
 
 import binascii
-from datetime import datetime
 import secrets
 import time
 import typing as t
+from datetime import datetime
 from enum import Enum
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
-from aea_ledger_cosmos import JSONLike, Optional
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
@@ -64,11 +63,10 @@ class MultiSendOperation(Enum):
 
 
 def settle_raw_transaction(
-        ledger_api: LedgerApi,
-        build_and_send_tx: t.Callable[[], Optional[str]]
+    ledger_api: LedgerApi, build_and_send_tx: t.Callable[[], t.Optional[str]]
 ) -> t.Dict:
     """Settle the transaction.
-    
+
     Args:
         ledger_api: The ledger api.
         send_tx: The function to send the transaction and return tx digest or receipt.
@@ -78,10 +76,7 @@ def settle_raw_transaction(
     """
     retries = 0
     deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-    while (
-        retries < ON_CHAIN_INTERACT_RETRIES
-        and datetime.now().timestamp() < deadline
-    ):
+    while retries < ON_CHAIN_INTERACT_RETRIES and datetime.now().timestamp() < deadline:
         try:
             digest_or_receipt = build_and_send_tx()
         except Exception as e:  # pylint: disable=broad-except
@@ -90,9 +85,7 @@ def settle_raw_transaction(
 
         if isinstance(digest_or_receipt, str):  # it's a digest
             logger.info(f"Transaction hash: {digest_or_receipt}")
-            receipt = ledger_api.api.eth.wait_for_transaction_receipt(
-                digest_or_receipt
-            )
+            receipt = ledger_api.api.eth.wait_for_transaction_receipt(digest_or_receipt)
         else:
             receipt = digest_or_receipt
 
@@ -272,7 +265,7 @@ def send_safe_txs(
     )
     to_address = to or safe
 
-    def _build_and_send_tx() -> Optional[str]:
+    def _build_and_send_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -430,7 +423,7 @@ def transfer(
         crypto.address,
     )
 
-    def _build_and_send_tx() -> Optional[str]:
+    def _build_and_send_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,

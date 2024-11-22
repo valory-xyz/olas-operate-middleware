@@ -878,7 +878,7 @@ class ServiceManager:
         self,
         hash: str,
         chain_id: str,
-        withdrawal_address: str = None,
+        withdrawal_address: t.Optional[str] = None,
     ) -> None:
         """
         Terminate service on-chain
@@ -990,7 +990,9 @@ class ServiceManager:
                     chain_type=ledger_config.chain, rpc=ledger_config.rpc
                 ),
                 crypto=EthereumCrypto(
-                    private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
+                    private_key_path=service.path
+                    / "deployment"
+                    / "ethereum_private_key.txt",
                 ),
                 withdrawal_address=withdrawal_address,
                 chain_id=ledger_config.chain.id,

@@ -27,7 +27,6 @@ import logging
 import tempfile
 import time
 import typing as t
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
@@ -169,7 +168,9 @@ class GnosisSafeTransaction:
         """Settle the transaction."""
         return settle_raw_transaction(
             ledger_api=self.ledger_api,
-            build_and_send_tx=lambda : self.ledger_api.send_signed_transaction(self.build()),
+            build_and_send_tx=lambda: self.ledger_api.send_signed_transaction(
+                self.build()
+            ),
         )
 
 
