@@ -28,8 +28,7 @@ const useAddressesLogs = () => {
     if (!allMasterSafeOwners) return;
 
     const result = allMasterSafeOwners
-      .map((owners) =>
-        owners.owners
+      .map(({ owners }) =>
           .filter((owner): owner is Address => owner !== masterEoa.address)
           .map<Eoa>((owner) => ({
             address: owner,
