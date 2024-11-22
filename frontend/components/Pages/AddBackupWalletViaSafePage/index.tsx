@@ -1,10 +1,11 @@
 import { Card, Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 
 import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { DISCORD_TICKET_URL } from '@/constants/urls';
 import { ChainId } from '@/enums/Chain';
-import { MasterSafe } from '@/enums/Wallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 
 import { GoToMainPageButton } from '../GoToMainPageButton';
 
@@ -20,10 +21,17 @@ const safeChainPrefix = {
   [ChainId.Gnosis]: 'gno',
 };
 
-export const AddBackupWalletViaSafePage = (masterSafe: MasterSafe) => {
-  const { chainId, address } = masterSafe;
+export const AddBackupWalletViaSafePage = () => {
+  const { masterSafes } = useMasterWalletContext();
 
-  const safePrefix = safeChainPrefix[chainId];
+  const masterSafe = masterSafes?.[0]; // TODO: handle multiple safes better, currently only supporting a single safe for now
+
+  const safePrefix =
+    masterSafe?.chainId && safeChainPrefix[masterSafe?.chainId];
+
+  if (isNil(masterSafe)) {
+    return null;
+  }
 
   return (
     <Card
@@ -36,7 +44,7 @@ export const AddBackupWalletViaSafePage = (masterSafe: MasterSafe) => {
           <Text>Manually add backup wallet via Safe interface:</Text>
           <a
             target="_blank"
-            href={`https://app.safe.global/settings/setup?safe=${safePrefix}:${address}`}
+            href={`https://app.safe.global/settings/setup?safe=${safePrefix}:${masterSafe.address}`}
           >
             Add backup wallet {UNICODE_SYMBOLS.EXTERNAL_LINK}
           </a>
