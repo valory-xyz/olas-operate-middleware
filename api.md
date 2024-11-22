@@ -200,7 +200,11 @@ Returns a list of available wallets
 
 ### `GET /api/enriched/wallet`
 
-Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes `all_chains_same_safe_address`, `all_safe_backup_owners_match` and `single_backup_owner_per_safe`.
+Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes
+
+- `consistent_backup_owner`: This flag is `true` when all safes across the chains have exactly the same set of backup owner addresses. It ensures that ownership is identical across all safes, regardless of the number of owners.
+- `consistent_backup_owner_count`: This flag is `true` when all safes have the same number of owners, and that number is either 0 (no owners) or 1 (exactly one owner). It checks for uniformity in the count of owners and restricts the count to these two cases.
+- `consistent_safe_address`: This flag is `true` when all chains have the same safe address. It ensures there is a single safe address consistently used across all chains.
 
 <details>
   <summary>Response</summary>
@@ -209,8 +213,9 @@ Returns a list of available wallets with enriched information. It executes on-ch
 [
   {
     "address":"0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "all_chains_same_safe_address":true,
-    "all_safe_backup_owners_match":false,
+    "consistent_backup_owner": false,
+    "consistent_backup_owner_count": false,
+    "consistent_safe_address": true,
     "ledger_type":"ethereum",
     "safe_chains":[
       "gnosis",
