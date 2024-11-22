@@ -59,7 +59,6 @@ const useAddressesLogs = () => {
 
 const useBalancesLogs = () => {
   const { masterWallets } = useMasterWalletContext();
-
   const {
     isLoaded: isBalanceLoaded,
     totalEthBalance,
