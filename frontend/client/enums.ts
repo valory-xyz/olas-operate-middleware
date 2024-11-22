@@ -36,7 +36,7 @@ export const MiddlewareTransitioningStatuses = [
   MiddlewareDeploymentStatus.STOPPING,
 ];
 
-/** @node statuses where middleware deployment is running */
+/** @note statuses where middleware deployment is running */
 export const MiddlewareRunningStatuses = [
   MiddlewareDeploymentStatus.DEPLOYED,
   ...MiddlewareTransitioningStatuses,
