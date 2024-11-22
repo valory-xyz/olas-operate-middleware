@@ -364,7 +364,7 @@ class MasterWalletManager:
             self.path / ledger_type.key_file
         ).exists()
 
-    def load(self, ledger_type: LedgerType) -> MasterWallet:
+    def load(self, ledger_type: LedgerType) -> EthereumMasterWallet:
         """
         Load master wallet
 
