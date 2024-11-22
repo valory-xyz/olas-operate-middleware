@@ -12,8 +12,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14]
-        arch: [arm64, x64]
+        os: [macos-14, macos-14-large]
 
     steps:
       - uses: actions/checkout@v3
@@ -36,8 +35,12 @@ jobs:
 
       # Set OS_ARCH env
       - name: Set architecture environment variable
-        run: 
-            echo "OS_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV; 
+        run: |
+          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
+            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
+          else 
+            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
+          fi
 
       # Cache Poetry dependencies with unique key for each environment and architecture
       - name: Cache Poetry dependencies
@@ -47,9 +50,9 @@ jobs:
             ~/.cache/pypoetry
             ~/.cache/pip
             ~/.venv
-          key: poetry-${{ matrix.arch }}-${{ hashFiles('**/poetry.lock') }}
+          key: poetry-${{ env.OS_ARCH }}-${{ hashFiles('**/poetry.lock') }}
           restore-keys: |
-            poetry-${{ matrix.arch }}-
+            poetry-${{ env.OS_ARCH }}-
 
       - name: Install dependencies
         run: poetry install
@@ -76,8 +79,8 @@ jobs:
       - name: Upload Release Assets
         uses: actions/upload-artifact@v4
         with:
-          name: pearl_${{ matrix.arch }}
-          path: dist/pearl_${{ matrix.arch }}
+          name: pearl_${{ env.OS_ARCH }}
+          path: dist/pearl_${{ env.OS_ARCH }}
 
   # Jobs for production and development, running separately for x64 and arm64
   build-release:
