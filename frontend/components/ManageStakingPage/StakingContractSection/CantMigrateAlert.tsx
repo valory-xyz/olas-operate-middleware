@@ -54,7 +54,6 @@ const AlertInsufficientMigrationFunds = ({
   const chainIdToMigrateTo = ChainId.Gnosis;
 
   const requiredStakedOlas =
-    service &&
     STAKING_PROGRAMS[chainIdToMigrateTo][stakingProgramIdToMigrateTo]
       ?.stakingRequirements[TokenSymbol.OLAS];
 
