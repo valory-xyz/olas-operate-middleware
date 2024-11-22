@@ -203,7 +203,7 @@ Returns a list of available wallets
 Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes
 
 - `consistent_backup_owner`: This flag is `true` when all safes across the chains have exactly the same set of backup owner addresses. It ensures that ownership is identical across all safes, regardless of the number of owners.
-- `consistent_backup_owner_count`: This flag is `true` when all safes have the same number of owners, and that number is either 0 (no owners) or 1 (exactly one owner). It checks for uniformity in the count of owners and restricts the count to these two cases.
+- `consistent_backup_owner_count`: This flag is `true` when all safes have the same number of owners, and that number is either 0 (no backup owners) or 1 (exactly one backup owner). It checks for uniformity in the count of owners and restricts the count to these two cases.
 - `consistent_safe_address`: This flag is `true` when all chains have the same safe address. It ensures there is a single safe address consistently used across all chains.
 
 <details>
