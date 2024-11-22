@@ -516,7 +516,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         safes = t.cast(t.Dict[Chain, str], wallet.safes)
         wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
-            owner=data.get("owner"),
+            backup_owner=data.get("backup_owner"),
         )
         wallet.transfer(
             to=t.cast(str, safes.get(chain)),
@@ -552,7 +552,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager = operate.wallet_manager
             if not manager.exists(ledger_type=ledger_type):
                 return JSONResponse(
-                    content={"error": f"Wallet does not exist for chain {chain}"}
+                    content={
+                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
+                    }
                 )
 
         # mint the safes
@@ -568,7 +570,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             safes = t.cast(t.Dict[Chain, str], wallet.safes)
             wallet.create_safe(  # pylint: disable=no-member
                 chain=chain,
-                owner=data.get("owner"),
+                owner=data.get("backup_owner"),
             )
             wallet.transfer(
                 to=t.cast(str, safes.get(chain)),
@@ -577,38 +579,62 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 from_safe=False,
             )
 
-        return JSONResponse(content={"safes": safes, "message": "Safes created!"})
+        return JSONResponse(content={"safes": safes, "message": "Safes created."})
 
     @app.put("/api/wallet/safe")
     @with_retries
     async def _update_safe(request: Request) -> t.List[t.Dict]:
-        """Create wallet safe"""
+        """Update wallet safe"""
         # TODO: Extract login check as decorator
         if operate.user_account is None:
             return JSONResponse(
-                content={"error": "Cannot create safe; User account does not exist!"},
+                content={"error": "Cannot update safe; User account does not exist!"},
                 status_code=400,
             )
 
         if operate.password is None:
             return JSONResponse(
-                content={"error": "You need to login before creating a safe"},
+                content={"error": "You need to login before updating a safe."},
                 status_code=401,
             )
 
         data = await request.json()
+
+        if "chain" not in data:
+            return JSONResponse(
+                content={"error": "You need to specify a chain to updae a safe."},
+                status_code=401,
+            )
+
         chain = Chain(data["chain"])
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
-            return JSONResponse(content={"error": "Wallet does not exist"})
+            return JSONResponse(
+                content={"error": "Wallet does not exist"},
+                status_code=401,
+            )
 
         wallet = manager.load(ledger_type=ledger_type)
-        wallet.add_or_swap_owner(
+        backup_owner_updated = wallet.update_backup_owner(
             chain=chain,
-            owner=data.get("owner"),
+            backup_owner=data.get(
+                "backup_owner"
+            ),  # Optional value, it's fine to provide 'None' (set no backup owner/remove backup owner)
         )
-        return JSONResponse(content=wallet.json)
+        message = (
+            "Backup owner updated."
+            if backup_owner_updated
+            else "No changes on backup owner. The backup owner provided matches the current one."
+        )
+        return JSONResponse(
+            content={
+                "wallet": wallet.json,
+                "chain": chain.value,
+                "backup_owner_updated": backup_owner_updated,
+                "message": message,
+            }
+        )
 
     @app.get("/api/v2/services")
     @with_retries

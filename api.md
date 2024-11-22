@@ -183,10 +183,12 @@ Returns a list of available wallets
   {
     "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
     "safe_chains": [
-      2
+      "gnosis"
     ],
     "ledger_type": 0,
-    "safe": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23",
+    "safes": {
+      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
+    },
     "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
   }
 ]
@@ -253,15 +255,89 @@ Creates a Gnosis safe for given chain type.
 
   ```json
   {
-    "address": "0xaaFd5cb31A611C5e5aa65ea8c6226EB4328175E3",
+    "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
     "safe_chains": [
-      2
+      "gnosis"
     ],
     "ledger_type": 0,
     "safes": {
-      "2": "0xe56fb574ce2C66008d5c4C09980c4f36Ab81ff22"
+      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
     },
-    "safe_nonce": 110558881674480320952254000342160989674913430251157716140571305138121962898821
+    "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+  }
+  ```
+
+- If Gnosis safe creation is not successful:
+
+  ```json
+  {
+    "error": "Error message",
+    "traceback": "Traceback message"
+  }
+  ```
+
+</details>
+
+---
+
+### `PUT /api/wallet/safe`
+
+Upadtes a Gnosis safe for given chain type. If no `backup_owner` is provided, it will assume a null value, that is, it will remove the backup owner from the safe.
+
+<details>
+  <summary>Request</summary>
+
+```js
+{
+  "chain": Chain,
+  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"  // Optional.
+}
+```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+- If Gnosis safe update is successful:
+
+  ```json
+  {
+    "backup_owner_updated": true,
+    "chain": "gnosis",
+    "message": "Backup owner updated.",
+    "wallet": {
+      "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
+      "safe_chains": [
+        "gnosis"
+      ],
+      "ledger_type": 0,
+      "safes": {
+        "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
+      },
+      "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+    }
+  }
+  ```
+
+- If Gnosis safe update is successful, but no changes required in the safe:
+
+  ```json
+  {
+    "backup_owner_updated": false,
+    "chain": "gnosis",
+    "message": "No changes on backup owner. The backup owner provided matches the current one.",
+    "wallet": {
+      "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
+      "safe_chains": [
+        "gnosis"
+      ],
+      "ledger_type": 0,
+      "safes": {
+        "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
+      },
+      "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+    }
   }
   ```
 
