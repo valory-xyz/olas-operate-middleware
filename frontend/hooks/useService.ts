@@ -155,7 +155,7 @@ export const useService = ({
 
   /** @note new deployment being created/built */
   const isServiceBuilding = deploymentStatus
-    ? MiddlewareTransitioningStatuses.includes(deploymentStatus)
+    ? MiddlewareBuildingStatuses.includes(deploymentStatus)
     : false;
 
   return {
