@@ -50,11 +50,9 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     selectedService,
     selectedAgentType,
   } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId = selectedService?.service_config_id;
-  const { deploymentStatus: serviceStatus } = useService({
-    serviceConfigId,
-  });
+  const { deploymentStatus: serviceStatus } = useService(serviceConfigId);
 
   const {
     isLoaded: isBalanceLoaded,
@@ -87,9 +85,9 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
 
   const minimumOlasRequiredToMigrate = useMemo(
     () =>
-      STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId]
+      STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId]
         .stakingRequirements[TokenSymbol.OLAS],
-    [selectedAgentConfig.homeChainId, stakingProgramId],
+    [selectedAgentConfig.evmHomeChainId, stakingProgramId],
   );
   const hasEnoughOlasToMigrate = useMemo(() => {
     if (!isBalanceLoaded) return false;

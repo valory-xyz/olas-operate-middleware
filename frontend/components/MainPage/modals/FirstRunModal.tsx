@@ -14,7 +14,7 @@ type FirstRunModalProps = { open: boolean; onClose: () => void };
 
 export const FirstRunModal: FC<FirstRunModalProps> = ({ open, onClose }) => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const { activeStakingProgramId } = useStakingProgram();
 
   if (!open) return null;

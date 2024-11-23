@@ -1,4 +1,4 @@
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { Address } from '@/types/Address';
 
@@ -89,10 +89,10 @@ export const BASE_TOKEN_CONFIG: ChainTokenConfig = {
 };
 
 export const TOKEN_CONFIG = {
-  [ChainId.Gnosis]: GNOSIS_TOKEN_CONFIG,
-  [ChainId.Optimism]: OPTIMISM_TOKEN_CONFIG,
-  [ChainId.Ethereum]: ETHEREUM_TOKEN_CONFIG,
-  [ChainId.Base]: BASE_TOKEN_CONFIG,
+  [EvmChainId.Gnosis]: GNOSIS_TOKEN_CONFIG,
+  [EvmChainId.Optimism]: OPTIMISM_TOKEN_CONFIG,
+  [EvmChainId.Ethereum]: ETHEREUM_TOKEN_CONFIG,
+  [EvmChainId.Base]: BASE_TOKEN_CONFIG,
 } as const;
 
 /**
@@ -100,7 +100,7 @@ export const TOKEN_CONFIG = {
  */
 export const ERC20_TOKEN_CONFIG = Object.fromEntries(
   Object.entries(TOKEN_CONFIG).map(([chainId, chainTokenConfig]) => [
-    +chainId as ChainId,
+    +chainId as EvmChainId,
     Object.fromEntries(
       Object.entries(chainTokenConfig).filter(
         ([, tokenConfig]) => tokenConfig.tokenType === TokenType.Erc20,
@@ -118,7 +118,7 @@ export const ERC20_TOKEN_CONFIG = Object.fromEntries(
  */
 export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
   Object.entries(TOKEN_CONFIG).map(([chainId, chainTokenConfig]) => [
-    +chainId as ChainId,
+    +chainId as EvmChainId,
     Object.fromEntries(
       Object.entries(chainTokenConfig).filter(
         ([, tokenConfig]) => tokenConfig.tokenType === TokenType.NativeGas,
@@ -131,8 +131,8 @@ export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
   };
 };
 
-export const getNativeTokenSymbol = (chainId: ChainId): TokenSymbol =>
+export const getNativeTokenSymbol = (chainId: EvmChainId): TokenSymbol =>
   Object.keys(NATIVE_TOKEN_CONFIG[chainId])[0] as TokenSymbol;
 
-export const getErc20s = (chainId: ChainId): Erc20TokenConfig[] =>
+export const getErc20s = (chainId: EvmChainId): Erc20TokenConfig[] =>
   Object.values(ERC20_TOKEN_CONFIG[chainId]);

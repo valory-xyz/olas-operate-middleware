@@ -13,7 +13,7 @@ import {
 } from '@/enums/Wallet';
 import { UsePause } from '@/hooks/usePause';
 import { WalletService } from '@/service/Wallet';
-import { convertMiddlewareChainToChainId } from '@/utils/middlewareHelpers';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
@@ -45,7 +45,7 @@ const transformMiddlewareWalletResponse = (
   const masterSafes: MasterSafe[] = Object.entries(data.safes).map(
     ([middlewareChain, address]) => ({
       address,
-      chainId: convertMiddlewareChainToChainId(middlewareChain),
+      evmChainId: asEvmChainId(middlewareChain),
       owner: WalletOwnerType.Master,
       type: WalletType.Safe,
     }),

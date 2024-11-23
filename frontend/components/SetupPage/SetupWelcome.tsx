@@ -24,7 +24,7 @@ import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
-import { convertMiddlewareChainToChainId } from '@/utils/middlewareHelpers';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { FormFlex } from '../styled/FormFlex';
 
@@ -147,8 +147,7 @@ export const SetupWelcomeLogin = () => {
     masterSafes?.find(
       (safe) =>
         selectedService?.home_chain &&
-        safe.chainId ===
-          convertMiddlewareChainToChainId(selectedService?.home_chain),
+        safe.evmChainId === asEvmChainId(selectedService?.home_chain),
     ) ?? null;
   const eoaBalanceEth = masterWalletBalances?.find(
     (balance) => balance.walletAddress === masterEoa?.address,

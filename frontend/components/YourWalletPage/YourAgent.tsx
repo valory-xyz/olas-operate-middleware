@@ -6,7 +6,7 @@ import styled from 'styled-components';
 
 import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
 import { AgentSafe, Safe } from '@/enums/Wallet';
@@ -24,7 +24,7 @@ import { truncateAddress } from '@/utils/truncate';
 import { AddressLink } from '../AddressLink';
 import { InfoBreakdownList } from '../InfoBreakdown';
 import { Container, infoBreakdownParentStyle } from './styles';
-import { OlasTitle, OwnershipNftTitle, ServiceIdTitle } from './Titles';
+import { OlasTitle, OwnershipNftTitle, ServiceNftIdTitle } from './Titles';
 
 const { Text, Paragraph } = Typography;
 
@@ -110,7 +110,7 @@ const ServiceAndNftDetails = ({
   serviceConfigId: string;
 }) => {
   const serviceRegistryL2ContractAddress =
-    OLAS_CONTRACTS[ChainId.Gnosis][ContractType.ServiceRegistryL2].address;
+    OLAS_CONTRACTS[EvmChainId.Gnosis][ContractType.ServiceRegistryL2].address;
 
   return (
     <NftCard>
@@ -136,7 +136,7 @@ const ServiceAndNftDetails = ({
           </Flex>
 
           <Flex vertical>
-            <ServiceIdTitle />
+            <ServiceNftIdTitle />
             <a
               href={`https://registry.olas.network/gnosis/services/${serviceConfigId}`}
               target="_blank"
@@ -156,8 +156,8 @@ export const YourAgentWallet = ({
   serviceConfigId: string;
 }) => {
   const { isLoaded } = useBalanceContext();
-  const { serviceEoa, serviceSafes } = useService({ serviceConfigId });
-  const { serviceSafeBalances, serviceEoaBalances, serviceStakedBalances } =
+  const { serviceSafes } = useService(serviceConfigId);
+  const { serviceSafeBalances, serviceEoaBalances } =
     useServiceBalances(serviceConfigId);
 
   const {
@@ -235,7 +235,7 @@ export const YourAgentWallet = ({
           </Flex>
         )}
 
-        {!isEmpty(serviceStakedBalances) && (
+        {!isNil(serviceSafeNativeBalances) && (
           <Flex vertical gap={8}>
             <InfoBreakdownList
               list={serviceSafeNativeBalances.map((balance) => ({
@@ -248,7 +248,7 @@ export const YourAgentWallet = ({
           </Flex>
         )}
 
-        {serviceEoa?.address && !isEmpty(serviceEoaNativeBalances) && (
+        {!isNil(serviceEoaNativeBalances) && (
           <Flex vertical gap={8}>
             <InfoBreakdownList
               list={

@@ -2,7 +2,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { STAKING_TOKEN_PROXY_ABI } from '@/abis/stakingTokenProxy';
 import { AgentType } from '@/enums/Agent';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 import { Address } from '@/types/Address';
@@ -29,104 +29,104 @@ export const GNOSIS_STAKING_PROGRAMS: StakingProgramMap = {
   [StakingProgramId.PearlAlpha]: {
     deprecated: true,
     name: 'Pearl Alpha',
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 20,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlAlpha],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBeta]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 40,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlBeta],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBeta2]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta 2',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlBeta2],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBeta3]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta 3',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlBeta3],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBeta4]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta 4',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlBeta4],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBeta5]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta 5',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 10,
     },
     mechType: MechType.Agent,
-    mech: MECHS[ChainId.Gnosis][MechType.Agent].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Agent],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Agent],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.PearlBeta5],
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
   [StakingProgramId.PearlBetaMechMarketplace]: {
-    chainId: ChainId.Gnosis,
+    chainId: EvmChainId.Gnosis,
     name: 'Pearl Beta Mech Marketplace',
     agentsSupported: [AgentType.PredictTrader],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 40,
     },
     mechType: MechType.Marketplace,
-    mech: MECHS[ChainId.Gnosis][MechType.Marketplace].contract,
-    activityChecker: ACTIVITY_CHECKERS[ChainId.Gnosis][MechType.Marketplace],
+    mech: MECHS[EvmChainId.Gnosis][MechType.Marketplace].contract,
+    activityChecker: ACTIVITY_CHECKERS[EvmChainId.Gnosis][MechType.Marketplace],
     contract: new MulticallContract(
       GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[
         StakingProgramId.PearlBetaMechMarketplace

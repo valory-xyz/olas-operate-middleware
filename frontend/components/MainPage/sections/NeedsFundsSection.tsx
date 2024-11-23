@@ -30,7 +30,7 @@ export const MainNeedsFunds = () => {
   } = useNeedsFunds();
 
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
 
   const electronApi = useElectronApi();
 

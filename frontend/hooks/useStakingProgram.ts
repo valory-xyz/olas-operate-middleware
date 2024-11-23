@@ -21,8 +21,9 @@ export const useStakingProgram = () => {
     activeStakingProgramId,
     initialDefaultStakingProgramId,
   } = useContext(StakingProgramContext);
+
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
 
   const allStakingProgramsKeys = Object.keys(STAKING_PROGRAMS[homeChainId]);
   const allStakingProgramNameAddressPair = STAKING_PROGRAM_ADDRESS[homeChainId];

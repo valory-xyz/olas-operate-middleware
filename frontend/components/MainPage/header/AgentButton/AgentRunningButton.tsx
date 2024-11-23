@@ -38,7 +38,7 @@ export const AgentRunningButton = () => {
     isLoaded && selectedService?.service_config_id
       ? selectedService.service_config_id
       : '';
-  const { service, setDeploymentStatus } = useService({ serviceConfigId });
+  const { service, setDeploymentStatus } = useService(serviceConfigId);
 
   const handlePause = useCallback(async () => {
     if (!service) return;

@@ -1,5 +1,6 @@
 import { RightOutlined } from '@ant-design/icons';
 import { Flex, Skeleton, Typography } from 'antd';
+import { sum } from 'lodash';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
@@ -67,10 +68,11 @@ export const MainOlasBalance = ({
       0,
     );
 
-    const totalOlasBalance =
-      masterWalletOlasBalance +
-      serviceWalletOlasBalance +
-      serviceStakedOlasBalance;
+    const totalOlasBalance = sum([
+      masterWalletOlasBalance,
+      serviceWalletOlasBalance,
+      serviceStakedOlasBalance,
+    ]);
 
     return balanceFormat(totalOlasBalance, 2);
   }, [masterWalletBalances, serviceStakedBalances, serviceWalletBalances]);

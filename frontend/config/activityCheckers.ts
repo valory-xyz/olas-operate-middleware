@@ -2,7 +2,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { MECH_ACTIVITY_CHECKER_ABI } from '@/abis/mechActivityChecker';
 import { REQUESTER_ACTIVITY_CHECKER_ABI } from '@/abis/requesterActivityChecker';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 
 import { MechType } from './mechs';
 
@@ -34,6 +34,6 @@ export const ACTIVITY_CHECKERS: {
     [activityCheckerType: string]: MulticallContract;
   };
 } = {
-  [ChainId.Gnosis]: GNOSIS_ACTIVITY_CHECKERS,
-  [ChainId.Optimism]: OPTIMISM_ACTIVITY_CHECKERS,
+  [EvmChainId.Gnosis]: GNOSIS_ACTIVITY_CHECKERS,
+  [EvmChainId.Optimism]: OPTIMISM_ACTIVITY_CHECKERS,
 } as const;

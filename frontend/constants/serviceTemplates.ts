@@ -1,7 +1,5 @@
-import { EnvProvisionType, ServiceTemplate } from '@/client';
+import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { AgentType } from '@/enums/Agent';
-import { CHAIN_CONFIG } from '@/config/chains';
-import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
@@ -13,9 +11,9 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     image:
       'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
     service_version: 'v0.18.4',
-    home_chain: CHAIN_CONFIG[ChainId.Gnosis].middlewareChain,
+    home_chain: MiddlewareChain.GNOSIS,
     configurations: {
-      [CHAIN_CONFIG[ChainId.Optimism].middlewareChain]: {
+      [MiddlewareChain.GNOSIS]: {
         staking_program_id: StakingProgramId.PearlBeta, // default, may be overwritten
         nft: 'bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq',
         rpc: 'http://localhost:8545', // overwritten

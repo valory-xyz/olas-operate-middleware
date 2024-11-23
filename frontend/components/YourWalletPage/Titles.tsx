@@ -84,7 +84,7 @@ export const OwnershipNftTitle = () => (
   </Text>
 );
 
-export const ServiceIdTitle = () => (
+export const ServiceNftIdTitle = () => (
   <Text className="text-sm text-light">
     ID&nbsp;
     <InfoTooltip placement="topRight">

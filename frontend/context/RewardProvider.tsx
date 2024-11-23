@@ -18,6 +18,7 @@ import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 import { StakingRewardsInfoSchema } from '@/types/Autonolas';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { StakingProgramContext } from './StakingProgramProvider';
@@ -41,7 +42,7 @@ export const RewardContext = createContext<{
 });
 
 const currentAgent = AGENT_CONFIG.trader; // TODO: replace with dynamic agent selection
-const currentChainId = GNOSIS_CHAIN_CONFIG.chainId; // TODO: replace with dynamic chain selection
+const currentChainId = GNOSIS_CHAIN_CONFIG.chainId; // TODO: replace with selectedAgentConfig.chainId
 
 /**
  * hook to fetch staking rewards details
@@ -51,11 +52,13 @@ const useStakingRewardsDetails = () => {
   const { activeStakingProgramId } = useContext(StakingProgramContext);
 
   const { selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
+
   const serviceConfigId = selectedService?.service_config_id;
-  const { service } = useService({ serviceConfigId });
 
   // fetch chain data from the selected service
-  const chainData = service?.chain_configs[currentChainId].chain_data;
+  const chainData =
+    service?.chain_configs[asMiddlewareChain(currentChainId)].chain_data;
   const multisig = chainData?.multisig;
   const token = chainData?.token;
 

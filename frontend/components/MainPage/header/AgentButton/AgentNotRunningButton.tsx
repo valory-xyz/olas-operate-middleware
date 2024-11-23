@@ -24,48 +24,55 @@ import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /** Button used to start / deploy the agent */
 export const AgentNotRunningButton = () => {
-  const { masterWallets: wallets } = useMasterWalletContext();
+  const { storeState } = useStore();
+  const { showNotification } = useElectronApi();
+
+  const { masterWallets } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
-    isFetched: isLoaded,
     refetch: updateServicesState,
   } = useServices();
-  const { service, deploymentStatus, setDeploymentStatus } = useService({
-    serviceConfigId:
-      isLoaded && selectedService ? selectedService?.service_config_id : '',
-  });
-  const { showNotification } = useElectronApi();
+
+  const { service, deploymentStatus, setDeploymentStatus } = useService(
+    selectedService?.service_config_id,
+  );
+
   const {
     setIsPaused: setIsBalancePollingPaused,
     totalStakedOlasBalance,
     totalEthBalance,
     updateBalances,
   } = useBalanceContext();
-  const { serviceSafeBalances, isLowBalance } = useServiceBalances(
+
+  const { serviceSafeBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
-  const { storeState } = useStore();
+
   const {
     isAllStakingContractDetailsRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
     refetchActiveStakingContractDetails,
   } = useStakingContractContext();
+
   const { activeStakingProgramId } = useStakingProgram();
+
   const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
     useActiveStakingContractInfo();
+
   const { hasEnoughServiceSlots } = useActiveStakingContractInfo();
 
   const requiredStakedOlas =
     service &&
     activeStakingProgramId &&
-    STAKING_PROGRAMS[service.home_chain_id][activeStakingProgramId]
+    STAKING_PROGRAMS[asEvmChainId(service.home_chain)][activeStakingProgramId]
       ?.stakingRequirements[TokenSymbol.OLAS];
 
-  const safeOlasBalance = serviceSafeBalances.find(
+  const safeOlasBalance = serviceSafeBalances?.find(
     (walletBalanceResult) => walletBalanceResult.symbol === TokenSymbol.OLAS,
   )?.balance;
 
@@ -95,7 +102,7 @@ export const AgentNotRunningButton = () => {
   ]);
 
   const createSafeIfNeeded = useCallback(async () => {
-    if (!service?.chain_configs[service.home_chain_id]?.chain_data?.multisig) {
+    if (!service?.chain_configs[service.home_chain]?.chain_data?.multisig) {
       await WalletService.createSafe(MiddlewareChain.OPTIMISM);
     }
   }, [service]);
@@ -108,7 +115,7 @@ export const AgentNotRunningButton = () => {
       serviceTemplate: SERVICE_TEMPLATES[0], // TODO: support multi-agent, during optimus week
       deploy: true,
       useMechMarketplace:
-        STAKING_PROGRAMS[+SERVICE_TEMPLATES[0].home_chain_id][ // TODO: support multi-agent, during optimus week
+        STAKING_PROGRAMS[asEvmChainId(SERVICE_TEMPLATES[0].home_chain)][ // TODO: support multi-agent, during optimus week
           activeStakingProgramId
         ].mechType === MechType.Marketplace,
     });
@@ -129,7 +136,7 @@ export const AgentNotRunningButton = () => {
   ]);
 
   const handleStart = useCallback(async () => {
-    if (!wallets?.[0]) return;
+    if (!masterWallets?.[0]) return;
 
     pauseAllPolling();
     setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
@@ -149,7 +156,7 @@ export const AgentNotRunningButton = () => {
       resumeAllPolling();
     }
   }, [
-    wallets,
+    masterWallets,
     pauseAllPolling,
     resumeAllPolling,
     setDeploymentStatus,
@@ -165,7 +172,8 @@ export const AgentNotRunningButton = () => {
     const isServiceInactive =
       deploymentStatus === MiddlewareDeploymentStatus.BUILT ||
       deploymentStatus === MiddlewareDeploymentStatus.STOPPED;
-    if (isServiceInactive && isLowBalance) return false;
+
+    if (isServiceInactive) return false; // TOOD: check if master safe is low balance relative to service's active staking program id
 
     if (
       [
@@ -192,7 +200,6 @@ export const AgentNotRunningButton = () => {
   }, [
     isAllStakingContractDetailsRecordLoaded,
     deploymentStatus,
-    isLowBalance,
     requiredStakedOlas,
     hasEnoughServiceSlots,
     isServiceStaked,

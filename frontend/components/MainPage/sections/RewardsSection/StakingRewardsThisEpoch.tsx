@@ -14,7 +14,7 @@ const { Text } = Typography;
 
 const useEpochEndTime = () => {
   const { selectedAgentConfig } = useServices();
-  const chainId = selectedAgentConfig.homeChainId;
+  const chainId = selectedAgentConfig.evmHomeChainId;
 
   const { activeStakingProgramAddress } = useStakingProgram();
 

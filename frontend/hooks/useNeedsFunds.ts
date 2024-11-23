@@ -13,7 +13,7 @@ import { useStore } from './useStore';
 
 export const useNeedsFunds = (serviceConfigId?: string) => {
   const { storeState } = useStore();
-  const { service } = useService({ serviceConfigId });
+  const { service } = useService(serviceConfigId);
   const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
 

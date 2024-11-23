@@ -13,25 +13,22 @@ import {
 import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
-import { MiddlewareServiceResponse } from '@/client';
+import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
-import {
-  LOW_AGENT_SAFE_BALANCE,
-  LOW_MASTER_SAFE_BALANCE,
-} from '@/constants/thresholds';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletOwnerType, Wallets, WalletType } from '@/enums/Wallet';
-import { useServices } from '@/hooks/useServices';
+import { Wallets, WalletType } from '@/enums/Wallet';
 import { StakedAgentService } from '@/service/agents/StakedAgentService';
 import { Address } from '@/types/Address';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { formatEther } from '@/utils/numberFormatters';
 
 import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
+import { ServicesContext } from './ServicesProvider';
 
 type CrossChainStakedBalances = Array<{
   serviceId: string;
@@ -46,19 +43,19 @@ export const BalanceContext = createContext<{
   setIsLoaded: Dispatch<SetStateAction<boolean>>;
   updateBalances: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
-  walletBalances: WalletBalanceResult[];
-  stakedBalances: CrossChainStakedBalances;
-  totalOlasBalance: number;
-  totalEthBalance: number;
-  totalStakedOlasBalance: number;
-  lowBalances: {
+  walletBalances?: WalletBalanceResult[];
+  stakedBalances?: CrossChainStakedBalances;
+  totalOlasBalance?: number;
+  totalEthBalance?: number;
+  totalStakedOlasBalance?: number;
+  lowBalances?: {
     serviceConfigId: string;
-    chainId: ChainId;
+    chainId: EvmChainId;
     walletAddress: Address;
     balance: number;
     expectedBalance: number;
   }[];
-  isLowBalance: boolean;
+  isLowBalance?: boolean;
   isPaused: boolean;
 }>({
   isLoaded: false,
@@ -66,19 +63,12 @@ export const BalanceContext = createContext<{
   updateBalances: async () => {},
   isPaused: false,
   setIsPaused: () => {},
-  walletBalances: [],
-  stakedBalances: [],
-  totalOlasBalance: 0,
-  totalEthBalance: 0,
-  totalStakedOlasBalance: 0,
-  lowBalances: [],
-  isLowBalance: false,
 });
 
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { masterWallets: wallets } = useContext(MasterWalletContext);
-  const { services } = useServices();
+  const { masterWallets } = useContext(MasterWalletContext);
+  const { services } = useContext(ServicesContext);
 
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -118,95 +108,13 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     }, 0);
   }, [stakedBalances]);
 
-  /**
-   * An array of wallet addresses that have low native token balances
-   */
-  const lowBalances = useMemo(() => {
-    const result: {
-      serviceConfigId: string;
-      chainId: ChainId;
-      walletAddress: Address;
-      balance: number;
-      expectedBalance: number;
-    }[] = [];
-
-    if (!services || !wallets || !walletBalances) return result;
-
-    for (const service of services) {
-      const serviceId = service.service_config_id;
-      const serviceHomeChainId = service.home_chain_id;
-
-      const stakedBalancesForService = stakedBalances.filter(
-        (balance) =>
-          balance.serviceId === serviceId &&
-          balance.chainId === serviceHomeChainId,
-      );
-
-      if (stakedBalancesForService.length === 0) continue;
-
-      // Get addresses for master safe and agent home chain safe
-      const masterSafeWallet = wallets.find(
-        (wallet) =>
-          wallet.owner === WalletOwnerType.Master &&
-          wallet.type === WalletType.Safe &&
-          wallet.chainId === serviceHomeChainId,
-      );
-
-      const masterSafeAddress = masterSafeWallet?.address;
-      const stakedAgentSafeAddress =
-        service.chain_configs[serviceHomeChainId]?.chain_data.multisig;
-
-      if (!masterSafeAddress && !stakedAgentSafeAddress) continue;
-
-      const masterSafeBalanceResult = walletBalances.find(
-        (balance) =>
-          balance.walletAddress === masterSafeAddress && balance.isNative,
-      );
-
-      const stakedAgentSafeBalanceResult = walletBalances.find(
-        (balance) =>
-          balance.walletAddress === stakedAgentSafeAddress && balance.isNative,
-      );
-
-      if (
-        masterSafeBalanceResult &&
-        masterSafeBalanceResult.balance < LOW_MASTER_SAFE_BALANCE
-      ) {
-        result.push({
-          serviceConfigId: service.service_config_id,
-          chainId: serviceHomeChainId,
-          walletAddress: masterSafeBalanceResult.walletAddress,
-          balance: masterSafeBalanceResult.balance,
-          expectedBalance: LOW_MASTER_SAFE_BALANCE,
-        });
-      }
-
-      if (
-        stakedAgentSafeBalanceResult &&
-        stakedAgentSafeBalanceResult.balance < LOW_AGENT_SAFE_BALANCE
-      ) {
-        result.push({
-          serviceConfigId: service.service_config_id,
-          chainId: serviceHomeChainId,
-          walletAddress: stakedAgentSafeBalanceResult.walletAddress,
-          balance: stakedAgentSafeBalanceResult.balance,
-          expectedBalance: LOW_AGENT_SAFE_BALANCE,
-        });
-      }
-    }
-
-    return result;
-  }, [services, stakedBalances, wallets, walletBalances]);
-
-  const isLowBalance = useMemo(() => lowBalances?.length > 0, [lowBalances]);
-
   const updateBalances = useCallback(async () => {
-    if (wallets && services) {
+    if (masterWallets && services) {
       setIsUpdatingBalances(true);
 
       try {
         const [walletBalancesResult, stakedBalancesResult] = await Promise.all([
-          getCrossChainWalletBalances(wallets),
+          getCrossChainWalletBalances(masterWallets),
           getCrossChainStakedBalances(services),
         ]);
 
@@ -219,7 +127,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         setIsUpdatingBalances(false);
       }
     }
-  }, [services, wallets]);
+  }, [services, masterWallets]);
 
   useEffect(() => {
     // Update balances once on load, then use interval
@@ -247,8 +155,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         totalOlasBalance,
         totalEthBalance,
         totalStakedOlasBalance,
-        lowBalances,
-        isLowBalance,
       }}
     >
       {children}
@@ -258,7 +164,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
 export type WalletBalanceResult = {
   walletAddress: Address;
-  chainId: ChainId;
+  chainId: EvmChainId;
   symbol: TokenSymbol;
   isNative: boolean;
   balance: number;
@@ -270,7 +176,7 @@ const getCrossChainWalletBalances = async (
   const balanceResults: WalletBalanceResult[] = [];
 
   for (const [chainIdKey, { multicallProvider }] of Object.entries(PROVIDERS)) {
-    const chainId = Number(chainIdKey) as ChainId;
+    const chainId = Number(chainIdKey) as EvmChainId;
 
     const tokens = TOKEN_CONFIG[chainId];
     if (!tokens) continue;
@@ -278,7 +184,7 @@ const getCrossChainWalletBalances = async (
     const relevantWallets = wallets.filter((wallet) => {
       const isEoa = wallet.type === WalletType.EOA;
       const isSafe = wallet.type === WalletType.Safe;
-      const isOnSameChain = isEoa || wallet.chainId === chainId;
+      const isOnSameChain = isEoa || wallet.evmChainId === chainId;
       return isEoa || (isSafe && isOnSameChain);
     });
 
@@ -338,8 +244,8 @@ const getCrossChainStakedBalances = async (
   const result: CrossChainStakedBalances = [];
 
   const registryInfoPromises = services.map(async (service) => {
-    const serviceId = service.service_config_id;
-    const homeChainId = service.home_chain_id;
+    const serviceConfigId = service.service_config_id;
+    const homeChainId: MiddlewareChain = service.home_chain;
     const homeChainConfig = service.chain_configs[homeChainId];
     const { multisig, token } = homeChainConfig.chain_data;
 
@@ -350,11 +256,11 @@ const getCrossChainStakedBalances = async (
     const registryInfo = await StakedAgentService.getServiceRegistryInfo(
       multisig,
       token,
-      homeChainId,
+      asEvmChainId(homeChainId),
     );
 
     return {
-      serviceId,
+      serviceId: serviceConfigId,
       chainId: homeChainId,
       ...registryInfo,
     };
@@ -369,7 +275,7 @@ const getCrossChainStakedBalances = async (
 
       result.push({
         serviceId,
-        chainId,
+        chainId: asEvmChainId(chainId),
         ...correctBondDepositByServiceState({
           olasBondBalance: bondValue,
           olasDepositBalance: depositValue,
@@ -415,24 +321,24 @@ const correctBondDepositByServiceState = ({
     case ServiceRegistryL2ServiceState.ActiveRegistration:
       return {
         olasBondBalance: 0,
-        olasDepositBalance: olasDepositBalance,
+        olasDepositBalance,
       };
     case ServiceRegistryL2ServiceState.FinishedRegistration:
     case ServiceRegistryL2ServiceState.Deployed:
       return {
-        olasBondBalance: olasBondBalance,
-        olasDepositBalance: olasDepositBalance,
+        olasBondBalance,
+        olasDepositBalance,
       };
     case ServiceRegistryL2ServiceState.TerminatedBonded:
       return {
-        olasBondBalance: olasBondBalance,
+        olasBondBalance,
         olasDepositBalance: 0,
       };
     default:
       console.error('Invalid service state');
       return {
-        olasBondBalance: olasBondBalance,
-        olasDepositBalance: olasDepositBalance,
+        olasBondBalance,
+        olasDepositBalance,
       };
   }
 };

@@ -3,12 +3,12 @@ import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { StakingProgramStatus } from '@/enums/StakingProgramStatus';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { Maybe } from '@/types/Util';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { CantMigrateAlert } from './CantMigrateAlert';
 import { MigrateButton } from './MigrateButton';
@@ -86,8 +86,7 @@ export const StakingContractSection = ({
     );
   }, [migrateValidation]);
 
-  const chainId: Maybe<keyof typeof EXPLORER_URL> =
-    selectedService?.home_chain_id;
+  const evmChainId = asEvmChainId(selectedService?.home_chain);
 
   return (
     <>
@@ -109,9 +108,9 @@ export const StakingContractSection = ({
 
         <StakingContractDetails stakingProgramId={stakingProgramId} />
 
-        {chainId && (
+        {evmChainId && (
           <a
-            href={`${EXPLORER_URL[chainId]}/address/${activeStakingProgramAddress}`}
+            href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${activeStakingProgramAddress}`}
             target="_blank"
           >
             View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}

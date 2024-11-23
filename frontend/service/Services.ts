@@ -1,14 +1,17 @@
 import {
   Deployment,
+  MiddlewareChain,
   MiddlewareServiceResponse,
+  ServiceConfigId,
   ServiceHash,
   ServiceTemplate,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL_V2 } from '@/constants/urls';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /**
  * Get a single service from the backend
@@ -71,12 +74,13 @@ const createService = async ({
           (acc, [middlewareChainKey, config]) => {
             acc[middlewareChainKey] = {
               ...config,
-              rpc: CHAIN_CONFIG[middlewareChainKey].rpc,
+              rpc: CHAIN_CONFIG[asEvmChainId(MiddlewareChain.GNOSIS)].rpc,
               staking_program_id: stakingProgramId,
               use_mech_marketplace: useMechMarketplace,
             };
             return acc;
           },
+          {} as (typeof serviceTemplate)['configurations'],
         ),
       },
     }),
@@ -96,26 +100,28 @@ const createService = async ({
 const updateService = async ({
   deploy,
   serviceTemplate,
-  serviceUuid,
+  serviceConfigId,
   stakingProgramId,
   useMechMarketplace = false,
   chainId,
 }: {
   deploy: boolean;
   serviceTemplate: ServiceTemplate;
-  serviceUuid: ServiceHash;
+  serviceConfigId: ServiceConfigId;
   stakingProgramId: StakingProgramId;
   useMechMarketplace?: boolean;
-  chainId: ChainId;
+  chainId: EvmChainId;
 }): Promise<MiddlewareServiceResponse> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceUuid}`, {
+  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'PUT',
     body: JSON.stringify({
       ...serviceTemplate,
       deploy,
       configurations: {
         [CHAIN_CONFIG[chainId].middlewareChain]: {
-          ...serviceTemplate.configurations[CHAIN_CONFIG[chainId].middlewareChain],
+          ...serviceTemplate.configurations[
+            CHAIN_CONFIG[chainId].middlewareChain
+          ],
           staking_program_id: stakingProgramId,
           rpc: CHAIN_CONFIG[chainId].rpc,
           use_mech_marketplace: useMechMarketplace,

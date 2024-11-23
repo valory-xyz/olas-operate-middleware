@@ -31,7 +31,7 @@ export const ManageStakingPage = () => {
 
     // if the program is deprecated, ignore it
     if (
-      STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId]
+      STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId]
         .deprecated
     ) {
       return acc;
@@ -44,7 +44,7 @@ export const ManageStakingPage = () => {
   const otherStakingProgramIds = orderedStakingProgramIds.filter(
     (stakingProgramId) => {
       const info =
-        STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId];
+        STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId];
       if (!info) return false;
       if (activeStakingProgramId === stakingProgramId) return false;
       if (info.deprecated) return false;

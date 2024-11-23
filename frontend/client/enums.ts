@@ -6,13 +6,13 @@ export enum MiddlewareAction {
 }
 
 export enum MiddlewareChain {
-  ETHEREUM = "ethereum",
-  GOERLI = "goerli",
-  GNOSIS = "gnosis",
-  SOLANA = "solana",
-  OPTIMISM = "optimism",
-  BASE = "base",
-  MODE = "mode",
+  ETHEREUM = 'ethereum',
+  GOERLI = 'goerli',
+  GNOSIS = 'gnosis',
+  SOLANA = 'solana',
+  OPTIMISM = 'optimism',
+  BASE = 'base',
+  MODE = 'mode',
 }
 
 export enum MiddlewareLedger {

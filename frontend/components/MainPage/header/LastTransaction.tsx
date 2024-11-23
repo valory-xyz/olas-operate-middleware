@@ -5,11 +5,10 @@ import { useInterval } from 'usehooks-ts';
 
 import { MiddlewareChain } from '@/client';
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { useMasterWalletContext } from '@/hooks/useWallet';
 import { getLatestTransaction } from '@/service/Ethers';
 import { TransactionInfo } from '@/types/TransactionInfo';
 import { Optional } from '@/types/Util';
@@ -35,25 +34,26 @@ type LastTransactionProps = { serviceConfigId: Optional<string> };
 export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { activeStakingProgramMeta } = useStakingProgram();
-  const { service } = useService({ serviceConfigId });
-  const { masterSafes } = useMasterWalletContext();
-  const multisigAddress = masterSafe;
+  const { serviceSafes } = useService(serviceConfigId);
+
+  const serviceSafe = serviceSafes?.[0];
+
   const chainId = activeStakingProgramMeta?.chainId;
 
   const [isFetching, setIsFetching] = useState(true);
   const [transaction, setTransaction] = useState<TransactionInfo | null>(null);
 
   const fetchTransaction = useCallback(async () => {
-    if (!multisigAddress) return;
+    if (!serviceSafe?.address) return;
     if (!chainId) return;
 
-    getLatestTransaction(multisigAddress, chainId)
+    getLatestTransaction(serviceSafe.address, chainId)
       .then((tx) => setTransaction(tx))
       .catch((error) =>
         console.error('Failed to get latest transaction', error),
       )
       .finally(() => setIsFetching(false));
-  }, [multisigAddress, chainId]);
+  }, [serviceSafe, chainId]);
 
   // Poll for the latest transaction
   useInterval(() => fetchTransaction(), ONE_MINUTE_INTERVAL);
@@ -86,7 +86,7 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
         className="text-xs pointer hover-underline"
         onClick={() =>
           window.open(
-            `${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/tx/${transaction.hash}`,
+            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.OPTIMISM]}/tx/${transaction.hash}`,
           )
         }
       >

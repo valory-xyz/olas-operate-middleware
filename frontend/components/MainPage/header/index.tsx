@@ -15,9 +15,7 @@ import { AgentHead } from './AgentHead';
 const useSetupTrayIcon = () => {
   const { isLowBalance } = useBalanceContext();
   const { selectedService } = useServices();
-  const { deploymentStatus } = useService({
-    serviceConfigId: selectedService?.service_config_id,
-  });
+  const { deploymentStatus } = useService(selectedService?.service_config_id);
   const { setTrayIcon } = useElectronApi();
 
   useEffect(() => {
@@ -40,10 +38,9 @@ export const MainHeader = () => {
   const handleModalClose = useCallback(() => setIsFirstRunModalOpen(false), []);
 
   const { selectedService } = useServices();
-  const configId = selectedService?.service_config_id;
-  const { isLoaded: isServiceLoaded } = useService({
-    serviceConfigId: configId,
-  });
+  const { isLoaded: isServiceLoaded } = useService(
+    selectedService?.service_config_id,
+  );
   const { isActiveStakingProgramLoaded } = useStakingProgram();
 
   useSetupTrayIcon();

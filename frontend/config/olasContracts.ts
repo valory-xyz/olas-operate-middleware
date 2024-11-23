@@ -3,7 +3,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 import { SERVICE_REGISTRY_L2_ABI } from '@/abis/serviceRegistryL2';
 import { SERVICE_REGISTRY_TOKEN_UTILITY_ABI } from '@/abis/serviceRegistryTokenUtility';
 import { STAKING_TOKEN_PROXY_ABI } from '@/abis/stakingTokenProxy';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { ContractType } from '@/enums/Contract';
 
 export type ContractsByType = {
@@ -43,6 +43,6 @@ export const GNOSIS_OLAS_CONTRACTS: ContractsByType = {
 export const OLAS_CONTRACTS: {
   [chainId: number]: ContractsByType;
 } = {
-  [ChainId.Gnosis]: GNOSIS_OLAS_CONTRACTS,
-  [ChainId.Optimism]: OPTIMISM_OLAS_CONTRACTS,
+  [EvmChainId.Gnosis]: GNOSIS_OLAS_CONTRACTS,
+  [EvmChainId.Optimism]: OPTIMISM_OLAS_CONTRACTS,
 };

@@ -76,11 +76,11 @@ export const AddFundsSection = () => {
 
 export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const { masterSafes } = useMasterWalletContext();
   const masterSafeAddress = useMemo(
     () =>
-      masterSafes?.find((wallet) => wallet.chainId === homeChainId)?.address,
+      masterSafes?.find((wallet) => wallet.evmChainId === homeChainId)?.address,
     [homeChainId, masterSafes],
   );
 
@@ -114,7 +114,7 @@ OpenAddFundsSection.displayName = 'OpenAddFundsSection';
 
 const AddFundsWarningAlertSection = () => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   return (
     <CardSection>
       <CustomAlert
@@ -174,7 +174,7 @@ const AddFundsAddressSection = ({
 
 const AddFundsGetTokensSection = () => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
 
   return (
     <CardSection justify="center" bordertop="true" padding="16px 24px">

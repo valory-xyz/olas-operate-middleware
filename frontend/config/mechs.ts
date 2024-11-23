@@ -3,7 +3,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { AGENT_MECH_ABI } from '@/abis/agentMech';
 import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 
 export enum MechType {
   Agent = 'mech-agent',
@@ -20,7 +20,7 @@ type Mechs = {
 };
 
 export const MECHS: Mechs = {
-  [ChainId.Gnosis]: {
+  [EvmChainId.Gnosis]: {
     [MechType.Agent]: {
       name: 'Agent Mech',
       contract: new MulticallContract(

@@ -1,19 +1,19 @@
 import { setMulticallAddress } from 'ethers-multicall';
 
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
 
 const DEFAULT_MULTICALL_ADDRESS = '0xcA11bde05977b3631167028862bE2a173976CA11';
 
 type AddressesForAllChainIds = {
-  [chainId in ChainId]: Address;
+  [chainId in EvmChainId]: Address;
 };
 
 const addresses: AddressesForAllChainIds = {
-  [ChainId.Ethereum]: DEFAULT_MULTICALL_ADDRESS,
-  [ChainId.Base]: DEFAULT_MULTICALL_ADDRESS,
-  [ChainId.Gnosis]: DEFAULT_MULTICALL_ADDRESS,
-  [ChainId.Optimism]: DEFAULT_MULTICALL_ADDRESS,
+  [EvmChainId.Ethereum]: DEFAULT_MULTICALL_ADDRESS,
+  [EvmChainId.Base]: DEFAULT_MULTICALL_ADDRESS,
+  [EvmChainId.Gnosis]: DEFAULT_MULTICALL_ADDRESS,
+  [EvmChainId.Optimism]: DEFAULT_MULTICALL_ADDRESS,
 };
 
 /**
@@ -25,6 +25,6 @@ export const setupMulticallAddresses = async () => {
     if (!address) {
       throw new Error(`Multicall address not set for chainId: ${chainId}`);
     }
-    setMulticallAddress(+chainId as ChainId, address);
+    setMulticallAddress(+chainId as EvmChainId, address);
   });
 };

@@ -1,6 +1,6 @@
 import { Address } from '@/types/Address';
 
-import { ChainId } from './Chain';
+import { EvmChainId } from './Chain';
 
 export enum WalletType {
   Safe = 'multisig',
@@ -11,6 +11,7 @@ export enum WalletOwnerType {
   Agent = 'agent',
 }
 
+// types of wallet
 export type Eoa = {
   address: Address;
   type: WalletType.EOA;
@@ -19,9 +20,10 @@ export type Eoa = {
 export type Safe = {
   address: Address;
   type: WalletType.Safe;
-  chainId: ChainId;
+  evmChainId: EvmChainId;
 };
 
+// owned eoas
 export type MasterEoa = Eoa & {
   owner: WalletOwnerType.Master;
 };
@@ -30,6 +32,7 @@ export type AgentEoa = Eoa & {
   owner: WalletOwnerType.Agent;
 };
 
+// owned safes
 export type MasterSafe = Safe & {
   owner: WalletOwnerType.Master;
 };
@@ -38,11 +41,12 @@ export type AgentSafe = Safe & {
   owner: WalletOwnerType.Agent;
 };
 
+// generic wallets
 export type MasterWallet = MasterEoa | MasterSafe;
 export type AgentWallet = AgentEoa | AgentSafe;
+export type Wallet = MasterWallet | AgentWallet;
 
+// collections of wallets // TODO: probably not needed
 export type MasterWallets = MasterWallet[];
 export type AgentWallets = AgentWallet[];
-
-export type Wallet = MasterWallet | AgentWallet;
 export type Wallets = Wallet[];

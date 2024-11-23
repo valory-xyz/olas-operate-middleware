@@ -13,7 +13,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { PROVIDERS } from '@/constants/providers';
 import { NA } from '@/constants/symbols';
 import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useSetup } from '@/hooks/useSetup';
@@ -169,9 +169,9 @@ const eoaFundingMap = {
   //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation,
   //   },
   [MiddlewareChain.GNOSIS]: {
-    provider: PROVIDERS[ChainId.Gnosis].provider,
-    chainConfig: CHAIN_CONFIG[ChainId.Gnosis],
-    requiredEth: MIN_ETH_BALANCE_THRESHOLDS[ChainId.Gnosis].safeCreation,
+    provider: PROVIDERS[EvmChainId.Gnosis].provider,
+    chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
+    requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Gnosis].safeCreation,
   },
 };
 
@@ -238,9 +238,9 @@ export const SetupEoaFunding = () => {
     (balance) => balance.walletAddress === masterEoaAddress,
   );
   const isFunded =
-    eoaBalance?.chainId === ChainId.Gnosis &&
+    eoaBalance?.chainId === EvmChainId.Gnosis &&
     eoaBalance.balance >=
-      MIN_ETH_BALANCE_THRESHOLDS[ChainId.Gnosis].safeCreation;
+      MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Gnosis].safeCreation;
 
   return (
     <CardFlex>

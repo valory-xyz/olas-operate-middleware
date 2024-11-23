@@ -15,7 +15,7 @@ import { CardTitle } from '@/components/Card/CardTitle';
 import { InfoBreakdownList } from '@/components/InfoBreakdown';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { getNativeTokenSymbol } from '@/config/tokens';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -69,11 +69,11 @@ const Address = () => {
 };
 
 const OlasBalance = () => {
-  const { masterSafes } = useMasterWalletContext();
-  const { walletBalances, totalStakedOlasBalance } = useBalanceContext();
+  const { totalStakedOlasBalance } = useBalanceContext();
+  const { masterWalletBalances } = useMasterBalances();
 
-  const masterSafeOlasBalance: number = walletBalances
-    ?.filter((balance) => balance.symbol === TokenSymbol.OLAS)
+  const masterSafeOlasBalance = masterWalletBalances
+    ?.filter((walletBalance) => walletBalance.symbol === TokenSymbol.OLAS)
     .reduce((acc, balance) => acc + balance.balance, 0);
 
   const olasBalances = useMemo(() => {
@@ -89,8 +89,7 @@ const OlasBalance = () => {
     ];
   }, [masterSafeOlasBalance, totalStakedOlasBalance]);
 
-  if (!masterSafes) return <Skeleton />;
-  if (isEmpty(masterSafes)) return null;
+  if (isNil(masterSafeOlasBalance)) return <Skeleton />;
 
   return (
     <Flex vertical gap={8}>
@@ -129,14 +128,14 @@ const MasterSafeNativeBalance = () => {
       .reduce((acc, balance) => acc + balance.balance, 0);
   }, [masterEoa?.address, masterSafes, masterWalletBalances]);
 
-  const nativeTokenSymbol = getNativeTokenSymbol(ChainId.Gnosis);
+  const nativeTokenSymbol = getNativeTokenSymbol(EvmChainId.Gnosis);
 
   return (
     <Flex vertical gap={8}>
       <InfoBreakdownList
         list={[
           {
-            left: <Text strong>{getNativeTokenSymbol(ChainId.Gnosis)}</Text>,
+            left: <Text strong>{getNativeTokenSymbol(EvmChainId.Gnosis)}</Text>,
             leftClassName: 'text-light',
             right: `${balanceFormat(masterSafeNativeBalance, 2)} ${nativeTokenSymbol}`,
           },
@@ -165,7 +164,7 @@ const MasterEoaSignerNativeBalance = () => {
   }, [masterEoa, masterWalletBalances]);
 
   const nativeTokenSymbol = useMemo(
-    () => getNativeTokenSymbol(ChainId.Gnosis), // TODO: support multi chain
+    () => getNativeTokenSymbol(EvmChainId.Gnosis), // TODO: support multi chain
     [],
   );
 

@@ -10,12 +10,12 @@ import {
   useState,
 } from 'react';
 
-import { MiddlewareServiceResponse } from '@/client';
+import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
 import { AGENT_CONFIG } from '@/config/agents';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { AgentType } from '@/enums/Agent';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import {
   AgentEoa,
   AgentSafe,
@@ -28,13 +28,21 @@ import { ServicesService } from '@/service/Services';
 import { AgentConfig } from '@/types/Agent';
 import { Service } from '@/types/Service';
 import { Maybe } from '@/types/Util';
+import { asEvmChainId, asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
-  serviceAddresses?: AgentWallets;
-  servicesByChain?: Record<number, MiddlewareServiceResponse[]>;
+  serviceWallets?: AgentWallets;
+  servicesByMiddlewareChain?: Record<
+    string | MiddlewareChain,
+    MiddlewareServiceResponse[]
+  >;
+  servicesByEvmChainId?: Record<
+    number | EvmChainId,
+    MiddlewareServiceResponse[]
+  >;
   selectService: (serviceUuid: string) => void;
   selectedService?: Service;
   selectedAgentConfig: AgentConfig;
@@ -107,23 +115,38 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     return config;
   }, [selectedAgentType]);
 
-  const servicesByChain = useMemo(() => {
+  const servicesByMiddlewareChain = useMemo(() => {
     if (!isFetched) return;
     if (!services) return;
-    return Object.keys(ChainId).reduce(
-      (
-        acc: Record<number, MiddlewareServiceResponse[]>,
-        chainIdKey: string,
-      ) => {
-        const chainIdNumber = +chainIdKey;
-        acc[chainIdNumber] = services.filter(
-          (service: MiddlewareServiceResponse) =>
-            service.chain_configs[chainIdNumber],
-        );
-        return acc;
-      },
-      {},
-    );
+    return Object.keys(EvmChainId).reduce<
+      Record<string | MiddlewareChain, MiddlewareServiceResponse[]>
+    >((acc, evmChainIdKey) => {
+      const middlewareChain = asMiddlewareChain(
+        EvmChainId[evmChainIdKey as keyof typeof EvmChainId],
+      );
+
+      acc[middlewareChain] = services.filter(
+        (service: MiddlewareServiceResponse) =>
+          service.chain_configs[middlewareChain],
+      );
+      return acc;
+    }, {});
+  }, [isFetched, services]);
+
+  const servicesByEvmChainId = useMemo(() => {
+    if (!isFetched) return;
+    if (!services) return;
+    return Object.keys(EvmChainId).reduce<
+      Record<number, MiddlewareServiceResponse[]>
+    >((acc, evmChainIdKey) => {
+      const evmChainId = EvmChainId[evmChainIdKey as keyof typeof EvmChainId];
+
+      acc[evmChainId] = services.filter(
+        (service: MiddlewareServiceResponse) =>
+          service.chain_configs[asMiddlewareChain(evmChainId)],
+      );
+      return acc;
+    }, {});
   }, [isFetched, services]);
 
   const serviceAddresses = useMemo(() => {
@@ -135,9 +158,14 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         return [
           ...acc,
           ...Object.keys(service.chain_configs).reduce(
-            (acc: AgentWallets, chainIdKey: string) => {
-              const chainId = +chainIdKey;
-              const chainConfig = service.chain_configs[chainId];
+            (acc: AgentWallets, middlewareChainKey: string) => {
+              const middlewareChain =
+                MiddlewareChain[
+                  middlewareChainKey as keyof typeof MiddlewareChain
+                ];
+
+              const chainConfig = service.chain_configs[middlewareChain];
+
               if (!chainConfig) return acc;
 
               const instances = chainConfig.chain_data.instances;
@@ -161,7 +189,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
                   address: multisig,
                   type: WalletType.Safe,
                   owner: WalletOwnerType.Agent,
-                  chainId,
+                  evmChainId: asEvmChainId(middlewareChainKey),
                 } as AgentSafe);
               }
 
@@ -196,8 +224,9 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     <ServicesContext.Provider
       value={{
         services,
-        serviceAddresses,
-        servicesByChain,
+        serviceWallets: serviceAddresses,
+        servicesByMiddlewareChain,
+        servicesByEvmChainId,
         isError,
         isFetched,
         isLoading,

@@ -25,12 +25,13 @@ import { CardFlex } from '@/components/styled/CardFlex';
 import { STAKING_PROGRAM_ADDRESS } from '@/config/stakingPrograms';
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
@@ -129,7 +130,7 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
               {timePeriod}
             </Text>
             <a
-              href={`${EXPLORER_URL[MiddlewareChain.OPTIMISM]}/tx/${epoch.transactionHash}`}
+              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.OPTIMISM]}/tx/${epoch.transactionHash}`}
               target="_blank"
             >
               End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
@@ -180,16 +181,24 @@ const ContractRewards = ({ checkpoints }: ContractRewardsProps) => {
   );
 };
 
+/**
+ * TODO: Refactor, only supports a single service for now
+ * */
 export const RewardsHistory = () => {
   const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
     useRewardsHistory();
   const { goto } = usePageState();
   const { selectedService } = useServices();
-  const serviceId = selectedService?.service_config_id;
-  const chainId = selectedService?.home_chain_id;
+
+  const serviceConfigId = selectedService?.service_config_id;
+  const serviceNftTokenId =
+    selectedService?.chain_configs[selectedService?.home_chain]?.chain_data
+      .token;
+
+  const evmChainId = asEvmChainId(selectedService?.home_chain);
 
   const history = useMemo(() => {
-    if (isLoading || isFetching || !serviceId) return <Loading />;
+    if (isLoading || isFetching || !serviceConfigId) return <Loading />;
     if (isError) return <ErrorLoadingHistory refetch={refetch} />;
     if (!contractCheckpoints) return <NoRewardsHistory />;
     if (Object.keys(contractCheckpoints).length === 0) {
@@ -201,7 +210,7 @@ export const RewardsHistory = () => {
       .flat()
       .sort((a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp)
       .find((checkpoint) =>
-        checkpoint.serviceIds.includes(`${serviceId}`),
+        checkpoint.serviceIds.includes(`${serviceNftTokenId}`),
       )?.contractAddress;
 
     // most recent transaction staking contract at the top of the list
@@ -213,14 +222,14 @@ export const RewardsHistory = () => {
       },
     );
 
-    if (!chainId) return null;
+    if (!evmChainId) return null;
 
     return (
       <Flex vertical gap={16}>
         {latestContractAddresses.map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
-            STAKING_PROGRAM_ADDRESS[chainId],
+            STAKING_PROGRAM_ADDRESS[evmChainId],
           ).find((entry) => {
             const [, stakingProxyAddress] = entry;
             return (
@@ -244,11 +253,12 @@ export const RewardsHistory = () => {
   }, [
     isLoading,
     isFetching,
+    serviceConfigId,
     isError,
-    serviceId,
-    chainId,
-    contractCheckpoints,
     refetch,
+    contractCheckpoints,
+    evmChainId,
+    serviceNftTokenId,
   ]);
 
   return (

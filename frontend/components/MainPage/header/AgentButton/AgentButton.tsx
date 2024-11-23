@@ -27,7 +27,7 @@ export const AgentButton = () => {
     service,
     deploymentStatus: serviceStatus,
     isLoaded,
-  } = useService({ serviceConfigId });
+  } = useService(serviceConfigId);
 
   assertRequired(
     // TODO: review whether this causes agent button to not render

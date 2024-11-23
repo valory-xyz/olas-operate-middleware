@@ -1,29 +1,31 @@
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 
-// TODO
-
-/**
- * @warning must be updated to be dynamic
- */
-export const MIN_ETH_BALANCE_THRESHOLDS = {
-  [ChainId.Gnosis]: {
+// TODO: confirm eth requirements, very flaky, eth requirements will fluctuate
+export const MIN_ETH_BALANCE_THRESHOLDS: Record<
+  EvmChainId,
+  {
+    safeCreation: number;
+    safeAddSigner: number;
+  }
+> = {
+  [EvmChainId.Gnosis]: {
     safeCreation: 1.5,
     safeAddSigner: 0.1,
   },
-  [ChainId.Optimism]: {
+  [EvmChainId.Optimism]: {
     safeCreation: 0.005,
     safeAddSigner: 0.005,
   },
-  [ChainId.Ethereum]: {
+  [EvmChainId.Ethereum]: {
     safeCreation: 0.02,
     safeAddSigner: 0.02,
   },
-  [ChainId.Base]: {
+  [EvmChainId.Base]: {
     safeCreation: 0.005,
     safeAddSigner: 0.005,
   },
 };
 
+// TODO: update to support multi-chain, very poor implementation
 export const LOW_AGENT_SAFE_BALANCE = 0.5;
-
 export const LOW_MASTER_SAFE_BALANCE = 2;

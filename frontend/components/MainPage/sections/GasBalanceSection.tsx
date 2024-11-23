@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
@@ -98,14 +98,14 @@ const TooltipContent = styled.div`
 
 export const GasBalanceSection = () => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const { masterSafes } = useMasterWalletContext();
   const { isLoaded: isBalancesLoaded } = useBalanceContext();
 
   const masterSafe = useMemo(() => {
     if (isNil(masterSafes)) return;
 
-    return masterSafes.find((wallet) => wallet.chainId === homeChainId);
+    return masterSafes.find((wallet) => wallet.evmChainId === homeChainId);
   }, [homeChainId, masterSafes]);
 
   return (
@@ -126,9 +126,9 @@ export const GasBalanceSection = () => {
                 <a
                   href={
                     `${
-                      EXPLORER_URL[
+                      EXPLORER_URL_BY_MIDDLEWARE_CHAIN[
                         // TODO: fix unknown
-                        homeChainId as unknown as keyof typeof EXPLORER_URL
+                        homeChainId as unknown as keyof typeof EXPLORER_URL_BY_MIDDLEWARE_CHAIN
                       ]
                     }/address/` + masterSafe.address
                   }

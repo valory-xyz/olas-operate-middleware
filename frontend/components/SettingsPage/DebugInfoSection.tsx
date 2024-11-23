@@ -15,10 +15,10 @@ import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
 import { MODAL_WIDTH } from '@/constants/width';
 import { WalletBalanceResult } from '@/context/BalanceProvider';
-import { ChainId, ChainName } from '@/enums/Chain';
+import { EvmChainId, EvmChainName } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletType } from '@/enums/Wallet';
 import {
@@ -61,7 +61,7 @@ const DebugItem = ({
 }: {
   item: {
     title: string;
-    balance: Record<number | ChainId, Record<string | TokenSymbol, number>>;
+    balance: Record<number | EvmChainId, Record<string | TokenSymbol, number>>;
     address: `0x${string}`;
     link?: { title: string; href: string };
   };
@@ -76,7 +76,11 @@ const DebugItem = ({
     [item.address],
   );
 
-  const chainIds = Object.keys(item.balance);
+  const evmChainIds = useMemo<EvmChainId[]>(() => {
+    return Object.keys(item.balance).map((chainId: string) => {
+      return +chainId as EvmChainId;
+    });
+  }, [item.balance]);
 
   return (
     <Card>
@@ -93,7 +97,7 @@ const DebugItem = ({
               return (
                 <Flex key={chainId} vertical gap={4}>
                   <Text type="secondary" className="text-sm">
-                    {ChainName[+chainId as keyof typeof ChainName]}
+                    {EvmChainName[+chainId as keyof typeof EvmChainName]}
                   </Text>
                   {Object.entries(balance).map(([tokenSymbol, balance]) => {
                     return (
@@ -110,17 +114,16 @@ const DebugItem = ({
         </Col>
 
         <Col span={12}>
-          {chainIds.map((chainId) => (
+          {evmChainIds.map((chainId) => (
             <Flex vertical gap={4} align="flex-start" key={chainId}>
               <Text type="secondary" className="text-sm">
                 Address{' '}
-                {chainIds.length > 1 &&
-                  `on ${ChainName[+chainId as keyof typeof ChainName]}`}
+                {evmChainIds.length > 1 && `on ${EvmChainName[chainId]}`}
               </Text>
               <Flex gap={12}>
                 <a
                   target="_blank"
-                  href={`${EXPLORER_URL[+chainId as keyof typeof EXPLORER_URL]}/address/${item.address}`}
+                  href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[chainId]}/address/${item.address}`}
                 >
                   {truncatedAddress}
                 </a>
@@ -148,7 +151,7 @@ const DebugItem = ({
 
 export const DebugInfoSection = () => {
   const { masterEoa, masterSafes } = useMasterWalletContext();
-  const { serviceAddresses } = useServices();
+  const { serviceWallets: serviceAddresses } = useServices();
   const { walletBalances } = useBalanceContext();
   const { masterEoaBalances, masterSafeBalances } = useMasterBalances();
 
@@ -163,46 +166,61 @@ export const DebugInfoSection = () => {
 
     const result: {
       title: string;
-      balance: Record<number | ChainId, Record<string | TokenSymbol, number>>;
+      balance: Record<
+        number | EvmChainId,
+        Record<string | TokenSymbol, number>
+      >;
       address: Address;
       link?: { title: string; href: string };
     }[] = [];
 
-    result.push({
-      title: 'Master EOA',
-      ...getBalanceData(masterEoaBalances),
-      address: masterEoa.address,
-    });
-
-    masterSafes.forEach((wallet) => {
+    if (!isNil(masterEoaBalances)) {
       result.push({
-        title: 'Master Safe',
-        ...getBalanceData(masterSafeBalances),
-        address: wallet.address,
+        title: 'Master EOA',
+        ...getBalanceData(masterEoaBalances),
+        address: masterEoa.address,
       });
-    });
+    }
 
-    serviceAddresses?.forEach((wallet) => {
-      if (wallet.type === WalletType.EOA) {
+    if (!isNil(masterSafeBalances)) {
+      masterSafes.forEach((wallet) => {
         result.push({
-          title: 'Agent Instance EOA',
-          ...getBalanceData(
-            walletBalances.filter(
-              (balance) => balance.walletAddress === wallet.address,
+          title: 'Master Safe',
+          ...getBalanceData(masterSafeBalances),
+          address: wallet.address,
+        });
+      });
+    }
+
+    if (!isNil(serviceAddresses)) {
+      serviceAddresses?.forEach((serviceWallet) => {
+        if (serviceWallet.type === WalletType.EOA) {
+          result.push({
+            title: 'Agent Instance EOA',
+            ...getBalanceData(
+              walletBalances.filter(
+                (balance) => balance.walletAddress === serviceWallet.address,
+              ),
             ),
-          ),
-          address: wallet.address,
-        });
-      }
+            address: serviceWallet.address,
+          });
+        }
 
-      if (wallet.type === WalletType.Safe) {
-        result.push({
-          title: 'Agent Safe',
-          ...getBalanceData(walletBalances),
-          address: wallet.address,
-        });
-      }
-    });
+        if (serviceWallet.type === WalletType.Safe) {
+          result.push({
+            title: 'Agent Safe',
+            ...getBalanceData(
+              walletBalances.filter(
+                (walletBalance) =>
+                  walletBalance.walletAddress === serviceWallet.address &&
+                  walletBalance.chainId === serviceWallet.evmChainId,
+              ),
+            ),
+            address: serviceWallet.address,
+          });
+        }
+      });
+    }
 
     return result;
   }, [

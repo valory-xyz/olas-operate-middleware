@@ -34,14 +34,12 @@ export const MigrateButton = ({
     selectedService,
     selectedAgentConfig,
   } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
       : '';
-  const { service, setDeploymentStatus } = useService({
-    serviceConfigId,
-  });
+  const { service, setDeploymentStatus } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () => (service ? getServiceTemplate(service.hash) : undefined),
     [service],
@@ -122,7 +120,7 @@ export const MigrateButton = ({
             await ServicesService.updateService({
               stakingProgramId: stakingProgramIdToMigrateTo,
               serviceTemplate,
-              serviceUuid: serviceConfigId,
+              serviceConfigId,
               deploy: true,
               useMechMarketplace:
                 stakingProgramIdToMigrateTo ===

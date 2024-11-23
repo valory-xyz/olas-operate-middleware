@@ -10,6 +10,7 @@ import {
 } from './enums';
 
 export type ServiceHash = string;
+export type ServiceConfigId = string;
 
 export type ServiceKeys = {
   address: Address;
@@ -55,7 +56,7 @@ export type MiddlewareServiceResponse = {
   service_path?: string;
   version: string;
   chain_configs: {
-    [chain in MiddlewareChain]: {
+    [middlewareChain in MiddlewareChain]: {
       ledger_config: LedgerConfig;
       chain_data: ChainData;
     };

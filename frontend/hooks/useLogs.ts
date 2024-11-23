@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Eoa, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { Optional } from '@/types/Util';
@@ -20,36 +20,39 @@ const useAddressesLogs = () => {
     isFetching: masterWalletsIsFetching,
   } = useMasterWalletContext();
 
-  const { owners: allMasterSafeOwners, ownersIsPending } =
-    useMultisigs(masterSafes);
+  const {
+    masterSafesOwners: masterSafesOwners,
+    masterSafesOwnersIsPending: masterSafesOwnersIsPending,
+  } = useMultisigs(masterSafes);
 
   const backupEoas = useMemo<Optional<Eoa[]>>(() => {
     if (!masterEoa) return;
-    if (!allMasterSafeOwners) return;
+    if (!masterSafesOwners) return;
 
-    const result = allMasterSafeOwners
-      .map((masterSafeOwners) =>
-        masterSafeOwners.owners
+    const result = masterSafesOwners
+      .map((masterSafeOwners) => {
+        const { owners, safeAddress, evmChainId } = masterSafeOwners;
+        return owners
           .filter((owner): owner is Address => owner !== masterEoa.address)
-          .map<Eoa>((owner) => ({
-            address: owner,
+          .map<Eoa>((address) => ({
+            address,
             type: WalletType.EOA,
-            safeAddress: masterSafeOwners.safeAddress,
-            chainId: masterSafeOwners.chainId,
-          })),
-      )
+            safeAddress,
+            evmChainId,
+          }));
+      })
       .flat();
 
     return result;
-  }, [allMasterSafeOwners, masterEoa]);
+  }, [masterSafesOwners, masterEoa]);
 
   return {
-    isLoaded: masterWalletsIsFetching && ownersIsPending,
+    isLoaded: masterWalletsIsFetching && masterSafesOwnersIsPending,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
       {
         masterSafes:
-          masterSafes?.find((safe) => safe.chainId === ChainId.Gnosis) ??
+          masterSafes?.find((safe) => safe.evmChainId === EvmChainId.Gnosis) ??
           'undefined',
       },
       { masterSafeBackups: backupEoas ?? 'undefined' },
@@ -84,7 +87,7 @@ const useServicesLogs = () => {
   const { getQueryData } = useQueryClient();
 
   return {
-    isLoaded: isLoaded,
+    isLoaded,
     data: {
       services:
         services?.map((item) => ({

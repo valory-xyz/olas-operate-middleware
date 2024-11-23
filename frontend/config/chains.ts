@@ -3,7 +3,7 @@
  * - add new chains to the CHAIN_CONFIGS object
  */
 import { MiddlewareChain as MiddlewareChainId } from '@/client';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 
 type HttpUrl = `http${'s' | ''}://${string}`;
@@ -17,7 +17,7 @@ type ChainConfig = {
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
-  chainId: ChainId.Gnosis,
+  chainId: EvmChainId.Gnosis,
   name: 'Gnosis',
   currency: TokenSymbol.XDAI,
   middlewareChain: MiddlewareChainId.GNOSIS,
@@ -25,7 +25,7 @@ export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
-  chainId: ChainId.Optimism,
+  chainId: EvmChainId.Optimism,
   name: 'Optimism',
   currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChainId.OPTIMISM,
@@ -33,7 +33,7 @@ export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
 };
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
-  chainId: ChainId.Base,
+  chainId: EvmChainId.Base,
   name: 'Base',
   currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChainId.BASE,
@@ -41,7 +41,7 @@ export const BASE_CHAIN_CONFIG: ChainConfig = {
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
-  chainId: ChainId.Ethereum,
+  chainId: EvmChainId.Ethereum,
   name: 'Ethereum',
   currency: TokenSymbol.ETH,
   middlewareChain: MiddlewareChainId.ETHEREUM,
@@ -51,8 +51,8 @@ export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
 export const CHAIN_CONFIG: {
   [chainId: number]: ChainConfig;
 } = {
-  [ChainId.Base]: BASE_CHAIN_CONFIG,
-  [ChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,
-  [ChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
-  [ChainId.Optimism]: OPTIMISM_CHAIN_CONFIG,
+  [EvmChainId.Base]: BASE_CHAIN_CONFIG,
+  [EvmChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,
+  [EvmChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
+  [EvmChainId.Optimism]: OPTIMISM_CHAIN_CONFIG,
 } as const;

@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 
 import { MiddlewareChain } from '@/client';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { SettingsScreen } from '@/enums/SettingsScreen';
 import { useMultisig } from '@/hooks/useMultisig';
@@ -158,7 +158,7 @@ const SettingsMain = () => {
           <Link
             type="link"
             target="_blank"
-            href={`${EXPLORER_URL[MiddlewareChain.GNOSIS]}/address/${masterSafeBackupAddress}`} // TODO: dynamic by selected agent type's home_chain_id
+            href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/address/${masterSafeBackupAddress}`} // TODO: dynamic by selected agent type's home_chain_id
           >
             {truncatedBackupSafeAddress} {UNICODE_SYMBOLS.EXTERNAL_LINK}
           </Link>
