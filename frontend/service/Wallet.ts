@@ -11,7 +11,7 @@ const getWallets = async () =>
     throw new Error('Failed to get wallets');
   }) as Promise<MiddlewareWalletResponse>;
 
-const createEoa = async (chain: MiddlewareChain) =>
+const createEoa = async () =>
   fetch(`${BACKEND_URL}/wallet`, {
     method: 'POST',
     headers: {
