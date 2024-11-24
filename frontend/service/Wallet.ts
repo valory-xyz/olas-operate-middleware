@@ -17,7 +17,7 @@ const createEoa = async (chain: MiddlewareChain) =>
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain }),
+    body: JSON.stringify({ ledger_type: 'ethereum' }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create EOA');
