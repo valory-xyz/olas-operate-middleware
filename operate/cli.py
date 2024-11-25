@@ -494,9 +494,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         ledger_api = wallet.ledger_api(chain_type=chain_type)
         wallet.create_safe(  # pylint: disable=no-member
             chain_type=chain_type,
-            backup_owner=ledger_api.api.to_checksum_address(data.get(
-                "backup_owner", data.get("owner")
-            )),  # TODO: 'owner' kept for backwards compatibility
+            backup_owner=ledger_api.api.to_checksum_address(
+                data.get("backup_owner", data.get("owner"))
+            ),  # TODO: 'owner' kept for backwards compatibility
         )
         wallet.transfer(
             to=t.cast(str, wallet.safe),
@@ -534,9 +534,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         ledger_api = wallet.ledger_api(chain_type=chain_type)
         wallet.update_backup_owner(
             chain_type=chain_type,
-            backup_owner=ledger_api.api.to_checksum_address(data.get(
-                "backup_owner", data.get("owner")
-            )),  # TODO: 'owner' kept for backwards compatibility
+            backup_owner=ledger_api.api.to_checksum_address(
+                data.get("backup_owner", data.get("owner"))
+            ),  # TODO: 'owner' kept for backwards compatibility
         )
         return JSONResponse(content=wallet.json)
 
