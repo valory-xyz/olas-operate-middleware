@@ -34,16 +34,10 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
   serviceWallets?: AgentWallets;
-  // servicesByMiddlewareChain?: Record<
-  //   string | MiddlewareChain,
-  //   MiddlewareServiceResponse[]
-  // >;
-  // servicesByEvmChainId?: Record<
-  //   number | EvmChainId,
-  //   MiddlewareServiceResponse[]
-  // >;
   selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
+  isSelectedServiceStatusFetched: boolean;
+  refetchSelectedServiceStatus: () => void;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
   updateAgentType: (agentType: AgentType) => void;
@@ -55,6 +49,8 @@ export const ServicesContext = createContext<ServicesContextType>({
   setPaused: noop,
   togglePaused: noop,
   selectService: noop,
+  isSelectedServiceStatusFetched: false,
+  refetchSelectedServiceStatus: noop,
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
   selectedAgentType: AgentType.PredictTrader,
   updateAgentType: noop,
@@ -90,15 +86,41 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
+  const {
+    data: selectedServiceStatus,
+    isFetched: isSelectedServiceStatusFetched,
+    refetch: refetchSelectedServiceStatus,
+  } = useQuery({
+    queryKey: REACT_QUERY_KEYS.SERVICE_STATUS_KEY(selectedServiceConfigId),
+    queryFn: () =>
+      ServicesService.getDeployment(selectedServiceConfigId as string),
+    enabled: !!selectedServiceConfigId,
+    refetchInterval: FIVE_SECONDS_INTERVAL,
+  });
+
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
-    return services.find(
+
+    const selectedService = services.find(
       (service) => service.service_config_id === selectedServiceConfigId,
     );
-  }, [selectedServiceConfigId, services]);
 
-  const selectService = useCallback((serviceUuid: string) => {
-    setSelectedServiceConfigId(serviceUuid);
+    return {
+      ...selectedService,
+      deploymentStatus: selectedServiceStatus?.status,
+    } as Service;
+  }, [selectedServiceConfigId, selectedServiceStatus?.status, services]);
+
+  const selectedServiceWithStatus = useMemo<Service | undefined>(() => {
+    if (!selectedService) return;
+    return {
+      ...selectedService,
+      deploymentStatus: selectedServiceStatus?.status,
+    };
+  }, [selectedService, selectedServiceStatus?.status]);
+
+  const selectService = useCallback((serviceConfigId: string) => {
+    setSelectedServiceConfigId(serviceConfigId);
   }, []);
 
   const updateAgentType = useCallback((agentType: AgentType) => {
@@ -113,38 +135,6 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     }
     return config;
   }, [selectedAgentType]);
-
-  // const servicesByHomeMiddlewareChain = useMemo(() => {
-  //   if (!isFetched) return;
-  //   if (!services) return;
-  //   return services.reduce<
-  //     Record<string | MiddlewareChain, MiddlewareServiceResponse[]>
-  //   >((acc, service) => {
-  //     if (!acc[service.home_chain]) {
-  //       acc[service.home_chain] = [service.chain_configs[]];
-  //       return acc;
-  //     }
-
-  //     acc[service.home_chain].push(service);
-  //     return acc;
-  //   }, {});
-  // }, [isFetched, services]);
-
-  // const servicesByHomeEvmChainId = useMemo(() => {
-  //   if (!isFetched) return;
-  //   if (!services) return;
-  //   return Object.keys(EvmChainId).reduce<
-  //     Record<number, MiddlewareServiceResponse[]>
-  //   >((acc, evmChainIdKey) => {
-  //     const evmChainId = EvmChainId[evmChainIdKey as keyof typeof EvmChainId];
-
-  //     acc[evmChainId] = services.filter(
-  //       (service: MiddlewareServiceResponse) =>
-  //         service.chain_configs[asMiddlewareChain(evmChainId)],
-  //     );
-  //     return acc;
-  //   }, {});
-  // }, [isFetched, services]);
 
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
     if (!isFetched) return;
@@ -207,19 +197,11 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       setSelectedServiceConfigId(services[0].service_config_id);
   }, [isFetched, selectedServiceConfigId, services]);
 
-  // const updateServiceStatus = useCallback(async () => {
-  //   if (!services?.[0]) return;
-  //   const serviceStatus = await ServicesService.getDeployment(services[0].service_config_id);
-  //   setServiceStatuses(serviceStatus.status);
-  // }, [services]);
-
   return (
     <ServicesContext.Provider
       value={{
         services,
         serviceWallets,
-        // servicesByMiddlewareChain: servicesByHomeMiddlewareChain,
-        // servicesByEvmChainId: servicesByHomeEvmChainId,
         isError,
         isFetched,
         isLoading,
@@ -229,7 +211,9 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         setPaused,
         togglePaused,
         selectService,
-        selectedService,
+        selectedService: selectedServiceWithStatus,
+        refetchSelectedServiceStatus,
+        isSelectedServiceStatusFetched,
         selectedAgentConfig,
         selectedAgentType,
         updateAgentType,
