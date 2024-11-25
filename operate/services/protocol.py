@@ -27,7 +27,6 @@ import logging
 import tempfile
 import time
 import typing as t
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
@@ -74,6 +73,7 @@ from operate.utils.gnosis import (
     NULL_ADDRESS,
     SafeOperation,
     hash_payload_to_hex,
+    settle_raw_transaction,
     skill_input_hex_to_payload,
 )
 from operate.wallet.master import MasterWallet
@@ -166,27 +166,12 @@ class GnosisSafeTransaction:
 
     def settle(self) -> t.Dict:
         """Settle the transaction."""
-        retries = 0
-        deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-        while (
-            retries < ON_CHAIN_INTERACT_RETRIES
-            and datetime.now().timestamp() < deadline
-        ):
-            try:
+        return settle_raw_transaction(
+            ledger_api=self.ledger_api,
+            build_and_send_tx=lambda: self.ledger_api.send_signed_transaction(
                 self.build()
-                tx_digest = self.ledger_api.send_signed_transaction(self.tx)
-            except Exception as e:  # pylint: disable=broad-except
-                print(f"Error sending the safe tx: {e}")
-                tx_digest = None
-
-            if tx_digest is not None:
-                receipt = self.ledger_api.api.eth.wait_for_transaction_receipt(
-                    tx_digest
-                )
-                if receipt["status"] != 0:
-                    return receipt
-            time.sleep(ON_CHAIN_INTERACT_SLEEP)
-        raise RuntimeError("Timeout while waiting for safe transaction to go through")
+            ),
+        )
 
 
 class StakingManager(OnChainHelper):
