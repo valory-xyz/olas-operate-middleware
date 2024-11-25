@@ -491,11 +491,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"safe": wallet.safe, "message": "Safe already exists!"}
             )
 
+        ledger_api = wallet.ledger_api(chain_type=chain_type)
         wallet.create_safe(  # pylint: disable=no-member
             chain_type=chain_type,
-            backup_owner=data.get(
+            backup_owner=ledger_api.api.to_checksum_address(data.get(
                 "backup_owner", data.get("owner")
-            ),  # TODO: 'owner' kept for backwards compatibility
+            )),  # TODO: 'owner' kept for backwards compatibility
         )
         wallet.transfer(
             to=t.cast(str, wallet.safe),
@@ -530,11 +531,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(content={"error": "Wallet does not exist"})
 
         wallet = manager.load(ledger_type=ledger_type)
+        ledger_api = wallet.ledger_api(chain_type=chain_type)
         wallet.update_backup_owner(
             chain_type=chain_type,
-            backup_owner=data.get(
+            backup_owner=ledger_api.api.to_checksum_address(data.get(
                 "backup_owner", data.get("owner")
-            ),  # TODO: 'owner' kept for backwards compatibility
+            )),  # TODO: 'owner' kept for backwards compatibility
         )
         return JSONResponse(content=wallet.json)
 
@@ -699,13 +701,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 hash=request.path_params["service"]
             )
 
-            service_manager.terminate_service_on_chain_from_safe(
-                hash=request.path_params["service"],
-                chain_id=service.home_chain_id,
-                withdrawal_address=withdrawal_address,
-            )
-
-            # drain OLAS from the master safe
             chain_config = service.chain_configs[service.home_chain_id]
             ledger_config = chain_config.ledger_config
             master_wallet = service_manager.wallet_manager.load(
@@ -714,6 +709,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             ledger_api = master_wallet.ledger_api(
                 chain_type=ledger_config.chain, rpc=ledger_config.rpc
             )
+            withdrawal_address = ledger_api.api.to_checksum_address(withdrawal_address)
+
+            service_manager.terminate_service_on_chain_from_safe(
+                hash=request.path_params["service"],
+                chain_id=service.home_chain_id,
+                withdrawal_address=withdrawal_address,
+            )
+
+            # drain OLAS from the master safe
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
                 contract_address=OLAS[ledger_config.chain],
