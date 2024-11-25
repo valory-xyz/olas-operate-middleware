@@ -26,7 +26,7 @@ import { UsePause, usePause } from '@/hooks/usePause';
 import { ServicesService } from '@/service/Services';
 import { AgentConfig } from '@/types/Agent';
 import { Service } from '@/types/Service';
-import { Maybe } from '@/types/Util';
+import { Maybe, Optional } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
@@ -42,7 +42,7 @@ type ServicesContextType = {
   //   number | EvmChainId,
   //   MiddlewareServiceResponse[]
   // >;
-  selectService: (serviceUuid: string) => void;
+  selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
@@ -146,7 +146,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   //   }, {});
   // }, [isFetched, services]);
 
-  const serviceAddresses = useMemo(() => {
+  const serviceWallets: Optional<AgentWallets> = useMemo(() => {
     if (!isFetched) return;
     if (isEmpty(services)) return [];
 
@@ -217,7 +217,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     <ServicesContext.Provider
       value={{
         services,
-        serviceWallets: serviceAddresses,
+        serviceWallets,
         // servicesByMiddlewareChain: servicesByHomeMiddlewareChain,
         // servicesByEvmChainId: servicesByHomeEvmChainId,
         isError,

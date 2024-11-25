@@ -1,26 +1,29 @@
 import { ethers } from 'ethers';
 import { Provider as MulticallProvider } from 'ethers-multicall';
 
+import { EvmChainId } from '@/enums/Chain';
+
 import { CHAIN_CONFIG } from '../config/chains';
 
 type Providers = {
-  [chainIdKey in keyof typeof CHAIN_CONFIG]: {
+  [evmChainId in EvmChainId]: {
     provider: ethers.providers.JsonRpcProvider;
     multicallProvider: MulticallProvider;
   };
 };
 
-export const PROVIDERS = Object.entries(CHAIN_CONFIG).reduce(
-  (acc, [chainConfigKey, { rpc, name, chainId }]) => {
-    const provider = new ethers.providers.JsonRpcProvider(rpc, {
+export const PROVIDERS: Providers = Object.entries(CHAIN_CONFIG).reduce(
+  (acc, [, { rpc, name, evmChainId }]) => {
+    const provider = new ethers.providers.StaticJsonRpcProvider(rpc, {
       name,
-      chainId,
+      chainId: evmChainId,
     });
-    const multicallProvider = new MulticallProvider(provider, chainId);
+
+    const multicallProvider = new MulticallProvider(provider, evmChainId);
 
     return {
       ...acc,
-      [chainConfigKey]: {
+      [evmChainId]: {
         provider,
         multicallProvider,
       },

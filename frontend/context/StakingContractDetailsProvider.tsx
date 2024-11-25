@@ -113,7 +113,7 @@ type StakingContractDetailsContextProps = {
     Partial<StakingContractDetails>
   >;
   isAllStakingContractDetailsRecordLoaded: boolean;
-  refetchActiveStakingContractDetails: () => Promise<void>;
+  refetchSelectedStakingContractDetails: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -126,8 +126,7 @@ export const StakingContractDetailsContext =
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
     isActiveStakingContractDetailsLoaded: false,
-    allStakingContractDetailsRecord: undefined,
-    refetchActiveStakingContractDetails: async () => {},
+    refetchSelectedStakingContractDetails: async () => {},
     setIsPaused: () => {},
   });
 
@@ -141,39 +140,40 @@ export const StakingContractDetailsProvider = ({
   const { selectedService, selectedAgentConfig } = useServices();
   const { service } = useService(selectedService?.service_config_id);
 
-  const { activeStakingProgramId } = useContext(StakingProgramContext);
+  const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const {
-    data: activeStakingContractDetails,
+    data: selectedStakingContractDetails,
     isLoading: isActiveStakingContractDetailsLoading,
-    refetch: refetchActiveStakingContract,
+    refetch,
   } = useStakingContractDetailsByStakingProgram({
     serviceNftTokenId:
-      service?.chain_configs[asMiddlewareChain(selectedAgentConfig.evmHomeChainId)]
-        .chain_data.token,
-    stakingProgramId: activeStakingProgramId,
+      service?.chain_configs[
+        asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
+      ].chain_data.token,
+    stakingProgramId: selectedStakingProgramId,
   });
 
   const { allStakingContractDetailsRecord, isAllStakingContractDetailsLoaded } =
     useAllStakingContractDetails();
 
-  const refetchActiveStakingContractDetails = useCallback(async () => {
-    await refetchActiveStakingContract();
-  }, [refetchActiveStakingContract]);
+  const refetchSelectedStakingContractDetails = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return (
     <StakingContractDetailsContext.Provider
       value={{
-        activeStakingContractDetails,
+        activeStakingContractDetails: selectedStakingContractDetails,
         isActiveStakingContractDetailsLoaded:
           !isActiveStakingContractDetailsLoading &&
-          !!activeStakingContractDetails,
+          !!selectedStakingContractDetails,
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,
         isPaused,
         setIsPaused,
-        refetchActiveStakingContractDetails,
+        refetchSelectedStakingContractDetails,
       }}
     >
       {children}

@@ -21,7 +21,7 @@ export const useMultisig = (safe?: Safe) => {
   const {
     data: owners,
     isFetched: ownersIsFetched,
-    isPending: ownersIsPending,
+    // isPending: ownersIsPending,
   } = useQuery<Address[] | null>({
     enabled: !isNil(safe),
     queryKey: safe ? REACT_QUERY_KEYS.MULTISIG_GET_OWNERS_KEY(safe) : [],
@@ -39,7 +39,7 @@ export const useMultisig = (safe?: Safe) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
-  return { owners, ownersIsFetched, ownersIsPending };
+  return { owners, ownersIsFetched };
 };
 
 type MultisigOwners = {

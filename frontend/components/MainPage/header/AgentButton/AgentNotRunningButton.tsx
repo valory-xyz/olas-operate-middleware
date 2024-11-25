@@ -56,7 +56,7 @@ export const AgentNotRunningButton = () => {
   const {
     isAllStakingContractDetailsRecordLoaded,
     setIsPaused: setIsStakingContractInfoPollingPaused,
-    refetchActiveStakingContractDetails,
+    refetchSelectedStakingContractDetails: refetchActiveStakingContractDetails,
   } = useStakingContractContext();
 
   const { activeStakingProgramId } = useStakingProgram();

@@ -106,7 +106,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         fundingAddress={masterSafeAddress}
         handleCopy={handleCopyAddress}
       />
-      <AddFundsGetTokensSection />
+      {/* <AddFundsGetTokensSection /> */}
     </Flex>
   );
 });
@@ -172,6 +172,8 @@ const AddFundsAddressSection = ({
   </CardSection>
 );
 
+// TODO: readd when important to
+// eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
 const AddFundsGetTokensSection = () => {
   const { selectedAgentConfig } = useServices();
   const { evmHomeChainId: homeChainId } = selectedAgentConfig;
@@ -185,7 +187,7 @@ const AddFundsGetTokensSection = () => {
           COW_SWAP_GNOSIS_XDAI_OLAS_URL
         }
       >
-        Get OLAS + {CHAIN_CONFIG[homeChainId].currency} on{' '}
+        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
         {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
       </Link>
     </CardSection>

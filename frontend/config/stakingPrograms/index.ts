@@ -50,7 +50,7 @@ export const STAKING_PROGRAM_ADDRESS: {
   // [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
 };
 
-export const INITIAL_DEFAULT_STAKING_PROGRAM_IDS: {
+export const DEFAULT_STAKING_PROGRAM_IDS: {
   [chainId: number | EvmChainId]: StakingProgramId;
 } = {
   [EvmChainId.Gnosis]: StakingProgramId.PearlBeta,

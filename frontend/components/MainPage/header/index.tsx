@@ -6,7 +6,6 @@ import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { FirstRunModal } from '../modals/FirstRunModal';
 import { AgentButton } from './AgentButton/AgentButton';
@@ -37,19 +36,13 @@ export const MainHeader = () => {
   const [isFirstRunModalOpen, setIsFirstRunModalOpen] = useState(false);
   const handleModalClose = useCallback(() => setIsFirstRunModalOpen(false), []);
 
-  const { selectedService } = useServices();
-  const { isLoaded: isServiceLoaded } = useService(
-    selectedService?.service_config_id,
-  );
-  const { isActiveStakingProgramLoaded } = useStakingProgram();
-
   useSetupTrayIcon();
   // TODO: support loading state
 
   return (
     <Flex justify="start" align="center" gap={10}>
       <AgentHead />
-      {isServiceLoaded && isActiveStakingProgramLoaded && <AgentButton />}
+      <AgentButton />
       <FirstRunModal open={isFirstRunModalOpen} onClose={handleModalClose} />
     </Flex>
   );

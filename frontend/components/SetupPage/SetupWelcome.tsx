@@ -140,7 +140,7 @@ export const SetupWelcomeLogin = () => {
     masterWallets: wallets,
     masterEoa,
   } = useMasterWalletContext();
-  const { isLoaded: isBalanceLoaded } = useBalanceContext();
+  const { isLoaded: isBalanceLoaded, updateBalances } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
 
   const masterSafe =
@@ -149,6 +149,7 @@ export const SetupWelcomeLogin = () => {
         selectedService?.home_chain &&
         safe.evmChainId === asEvmChainId(selectedService?.home_chain),
     ) ?? null;
+
   const eoaBalanceEth = masterWalletBalances?.find(
     (balance) => balance.walletAddress === masterEoa?.address,
   );
@@ -162,7 +163,8 @@ export const SetupWelcomeLogin = () => {
     async ({ password }: { password: string }) => {
       setIsLoggingIn(true);
       AccountService.loginAccount(password)
-        .then(() => {
+        .then(async () => {
+          await updateBalances();
           setCanNavigate(true);
         })
         .catch((e) => {
@@ -171,7 +173,7 @@ export const SetupWelcomeLogin = () => {
           message.error('Invalid password');
         });
     },
-    [],
+    [updateBalances],
   );
 
   useEffect(() => {

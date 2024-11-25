@@ -6,6 +6,7 @@ import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { getServiceTemplate } from '@/constants/serviceTemplates';
 import { TokenSymbol } from '@/enums/Token';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useBalanceContext, useMasterBalances } from './useBalanceContext';
 import { useService } from './useService';
@@ -14,7 +15,9 @@ import { useStore } from './useStore';
 export const useNeedsFunds = (serviceConfigId?: string) => {
   const { storeState } = useStore();
   const { service } = useService(serviceConfigId);
+
   const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
+
   const { masterSafeBalances } = useMasterBalances();
 
   const isInitialFunded = storeState?.isInitialFunded;
@@ -38,28 +41,29 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
     } = {};
 
     Object.entries(serviceTemplate.configurations).forEach(
-      ([middlewareChainId, config]) => {
+      ([middlewareChain, config]) => {
+        const evmChainId = asEvmChainId(middlewareChain);
+
         const templateStakingProgramId =
-          serviceTemplate.configurations[middlewareChainId].staking_program_id;
+          serviceTemplate.configurations[middlewareChain].staking_program_id;
         const serviceStakingProgramId =
-          service?.chain_configs[middlewareChainId as MiddlewareChain]
-            ?.chain_data?.user_params?.staking_program_id;
+          service?.chain_configs[middlewareChain as MiddlewareChain]?.chain_data
+            ?.user_params?.staking_program_id;
         const stakingProgramId =
           serviceStakingProgramId ?? templateStakingProgramId;
 
         if (!stakingProgramId) return;
-        if (!service?.chain_configs[middlewareChainId as MiddlewareChain])
-          return;
+        if (!service?.chain_configs[middlewareChain as MiddlewareChain]) return;
 
         const gasEstimate = config.monthly_gas_estimate;
         const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
         const minimumStakedAmountRequired =
-          STAKING_PROGRAMS[+middlewareChainId]?.[stakingProgramId]
+          STAKING_PROGRAMS[evmChainId]?.[stakingProgramId]
             ?.stakingRequirements?.[TokenSymbol.OLAS] || 0;
 
-        const nativeTokenSymbol = getNativeTokenSymbol(+middlewareChainId);
+        const nativeTokenSymbol = getNativeTokenSymbol(evmChainId);
 
-        results[+middlewareChainId] = {
+        results[evmChainId] = {
           [TokenSymbol.OLAS]: +formatEther(minimumStakedAmountRequired),
           [nativeTokenSymbol]: +formatEther(monthlyGasEstimate),
           // TODO: extend with any further erc20s..
@@ -76,11 +80,11 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
 
     const nativeBalancesByChain = walletBalances.reduce<{
       [chainId: number]: number;
-    }>((acc, { symbol, balance, chainId }) => {
-      if (getNativeTokenSymbol(chainId) !== symbol) return acc;
+    }>((acc, { symbol, balance, evmChainId }) => {
+      if (getNativeTokenSymbol(evmChainId) !== symbol) return acc;
 
-      if (!acc[chainId]) acc[chainId] = 0;
-      acc[chainId] += balance;
+      if (!acc[evmChainId]) acc[evmChainId] = 0;
+      acc[evmChainId] += balance;
 
       return acc;
     }, {});
@@ -103,11 +107,11 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
 
     const olasBalancesByChain = masterSafeBalances.reduce<{
       [chainId: number]: number;
-    }>((acc, { symbol, balance, chainId }) => {
+    }>((acc, { symbol, balance, evmChainId }) => {
       if (TokenSymbol.OLAS !== symbol) return acc;
 
-      if (!acc[chainId]) acc[chainId] = 0;
-      acc[chainId] += balance;
+      if (!acc[evmChainId]) acc[evmChainId] = 0;
+      acc[evmChainId] += balance;
 
       return acc;
     }, {});

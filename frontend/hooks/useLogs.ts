@@ -20,10 +20,8 @@ const useAddressesLogs = () => {
     isFetching: masterWalletsIsFetching,
   } = useMasterWalletContext();
 
-  const {
-    masterSafesOwners: masterSafesOwners,
-    masterSafesOwnersIsPending: masterSafesOwnersIsPending,
-  } = useMultisigs(masterSafes);
+  const { masterSafesOwners, masterSafesOwnersIsFetched } =
+    useMultisigs(masterSafes);
 
   const backupEoas = useMemo<Optional<Eoa[]>>(() => {
     if (!masterEoa) return;
@@ -47,7 +45,7 @@ const useAddressesLogs = () => {
   }, [masterSafesOwners, masterEoa]);
 
   return {
-    isLoaded: masterWalletsIsFetching && masterSafesOwnersIsPending,
+    isLoaded: masterWalletsIsFetching && masterSafesOwnersIsFetched,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
       {

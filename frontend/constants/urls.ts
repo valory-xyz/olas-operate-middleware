@@ -31,14 +31,14 @@ export const GITHUB_API_LATEST_RELEASE: Url =
   'https://api.github.com/repos/valory-xyz/olas-operate-app/releases/latest';
 
 // explorers @note DO NOT END WITH `/`
-export const OPTIMISM_EXPLORER_URL: Url = 'https://optimistic.etherscan.io';
+// export const OPTIMISM_EXPLORER_URL: Url = 'https://optimistic.etherscan.io';
 export const GNOSIS_EXPLORER_URL: Url = 'https://gnosisscan.io';
 
 export const EXPLORER_URL_BY_MIDDLEWARE_CHAIN: Record<
   string | MiddlewareChain,
   Url
 > = {
-  [MiddlewareChain.OPTIMISM]: OPTIMISM_EXPLORER_URL,
+  // [MiddlewareChain.OPTIMISM]: OPTIMISM_EXPLORER_URL,
   [MiddlewareChain.GNOSIS]: GNOSIS_EXPLORER_URL,
 };
 

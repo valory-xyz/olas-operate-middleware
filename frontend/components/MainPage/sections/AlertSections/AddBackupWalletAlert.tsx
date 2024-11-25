@@ -15,11 +15,9 @@ export const AddBackupWalletAlert = () => {
   const { masterSafes } = useMasterWalletContext();
   const {
     masterSafesOwners: owners,
-    masterSafesOwnersIsPending: ownersIsPending,
     masterSafesOwnersIsFetched: ownersIsFetched,
   } = useMultisigs(masterSafes);
 
-  if (ownersIsPending) return null;
   if (!ownersIsFetched) return null;
 
   // all safes have min 1 owner, more than 1 owner, there is a backup

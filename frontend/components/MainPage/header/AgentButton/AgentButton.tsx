@@ -1,12 +1,12 @@
 import { Button } from 'antd';
+import { ErrorBoundary } from 'next/dist/client/components/error-boundary';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { ErrorComponent } from '@/components/errors/ErrorComponent';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useActiveStakingContractInfo } from '@/hooks/useStakingContractDetails';
-import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { assertRequired } from '@/types/Util';
 
 import {
   CannotStartAgentDueToUnexpectedError,
@@ -18,29 +18,25 @@ import { AgentStartingButton } from './AgentStartingButton';
 import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
-  const { selectedService } = useServices();
-  const { activeStakingProgramId } = useStakingProgram();
+  const { selectedService, isFetched: isServicesLoaded } = useServices();
 
-  const serviceConfigId = selectedService?.service_config_id;
-
-  const {
-    service,
-    deploymentStatus: serviceStatus,
-    isLoaded,
-  } = useService(serviceConfigId);
-
-  assertRequired(
-    // TODO: review whether this causes agent button to not render
-    activeStakingProgramId,
-    'Active staking program ID is required',
+  const { service, deploymentStatus: serviceStatus } = useService(
+    selectedService?.service_config_id,
   );
 
-  const { isEligibleForStaking, isAgentEvicted } =
-    useActiveStakingContractInfo();
+  const {
+    isEligibleForStaking,
+    isAgentEvicted,
+    isActiveStakingContractDetailsLoaded,
+  } = useActiveStakingContractInfo();
 
-  return useMemo(() => {
-    if (!isLoaded) {
-      return <Button type="primary" size="large" disabled loading />;
+  const button = useMemo(() => {
+    if (!isServicesLoaded || !isActiveStakingContractDetailsLoaded) {
+      return (
+        <Button type="primary" size="large" disabled loading>
+          Loading...
+        </Button>
+      );
     }
 
     if (serviceStatus === MiddlewareDeploymentStatus.STOPPING) {
@@ -69,5 +65,15 @@ export const AgentButton = () => {
     }
 
     return <CannotStartAgentDueToUnexpectedError />;
-  }, [isLoaded, serviceStatus, isEligibleForStaking, isAgentEvicted, service]);
+  }, [
+    isServicesLoaded,
+    serviceStatus,
+    isEligibleForStaking,
+    isAgentEvicted,
+    service,
+  ]);
+
+  return (
+    <ErrorBoundary errorComponent={ErrorComponent}>{button}</ErrorBoundary>
+  );
 };

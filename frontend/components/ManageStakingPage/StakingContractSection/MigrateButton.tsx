@@ -47,11 +47,11 @@ export const MigrateButton = ({
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
 
-  const { initialDefaultStakingProgramId } = useStakingProgram();
+  const { defaultStakingProgramId } = useStakingProgram();
   const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();
   const { stakingContractInfo: defaultStakingContractInfo } =
-    useStakingContractDetails(initialDefaultStakingProgramId);
+    useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
     if (!isActiveStakingContractDetailsLoaded) return;

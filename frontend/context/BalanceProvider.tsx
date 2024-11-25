@@ -1,3 +1,5 @@
+import { BigNumberish } from 'ethers';
+import { getAddress } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
 import {
   createContext,
@@ -113,13 +115,30 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       setIsUpdatingBalances(true);
 
       try {
-        const [walletBalancesResult, stakedBalancesResult] = await Promise.all([
-          getCrossChainWalletBalances(masterWallets),
-          getCrossChainStakedBalances(services),
-        ]);
+        const [walletBalancesResult, stakedBalancesResult] =
+          await Promise.allSettled([
+            getCrossChainWalletBalances(masterWallets),
+            getCrossChainStakedBalances(services),
+          ]);
 
-        setWalletBalances(walletBalancesResult);
-        setStakedBalances(stakedBalancesResult);
+        console.log({
+          walletBalancesResult,
+          stakedBalancesResult,
+        });
+
+        // parse the results
+        const walletBalances =
+          walletBalancesResult.status === 'fulfilled'
+            ? walletBalancesResult.value
+            : [];
+
+        const stakedBalances =
+          stakedBalancesResult.status === 'fulfilled'
+            ? stakedBalancesResult.value
+            : [];
+
+        setWalletBalances(walletBalances || []);
+        setStakedBalances(stakedBalances || []);
         setIsLoaded(true);
       } catch (error) {
         console.error('Error updating balances:', error);
@@ -164,7 +183,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
 export type WalletBalanceResult = {
   walletAddress: Address;
-  chainId: EvmChainId;
+  evmChainId: EvmChainId;
   symbol: TokenSymbol;
   isNative: boolean;
   balance: number;
@@ -175,63 +194,97 @@ const getCrossChainWalletBalances = async (
 ): Promise<WalletBalanceResult[]> => {
   const balanceResults: WalletBalanceResult[] = [];
 
-  for (const [chainIdKey, { multicallProvider }] of Object.entries(PROVIDERS)) {
-    const chainId = Number(chainIdKey) as EvmChainId;
+  const providerEntries = Object.entries(PROVIDERS);
 
-    const tokens = TOKEN_CONFIG[chainId];
-    if (!tokens) continue;
+  for (const [
+    evmChainIdKey,
+    { multicallProvider, provider },
+  ] of providerEntries) {
+    try {
+      const providerEvmChainId = +evmChainIdKey as EvmChainId;
 
-    const relevantWallets = wallets.filter((wallet) => {
-      const isEoa = wallet.type === WalletType.EOA;
-      const isSafe = wallet.type === WalletType.Safe;
-      const isOnSameChain = isEoa || wallet.evmChainId === chainId;
-      return isEoa || (isSafe && isOnSameChain);
-    });
+      const tokensOnChain = TOKEN_CONFIG[providerEvmChainId];
+      // if (!tokensOnChain) continue;
 
-    for (const [symbolKey, tokenConfig] of Object.entries(tokens)) {
-      const symbol = symbolKey as TokenSymbol;
+      const relevantWallets = wallets.filter((wallet) => {
+        const isEoa = wallet.type === WalletType.EOA;
+        const isSafe = wallet.type === WalletType.Safe;
+        const isOnProviderChain =
+          isEoa || (isSafe && wallet.evmChainId === providerEvmChainId);
 
-      const isNative = tokenConfig.tokenType === TokenType.NativeGas;
-      const isErc20 = tokenConfig.tokenType === TokenType.Erc20;
+        return isOnProviderChain;
+      });
 
-      if (isNative) {
-        const nativeBalancePromises = relevantWallets.map(async (wallet) => {
-          const balance = await multicallProvider.getEthBalance(wallet.address);
-          return {
-            walletAddress: wallet.address,
-            chainId,
-            symbol,
-            isNative: true,
-            balance: Number(formatEther(balance)),
-          } as WalletBalanceResult;
-        });
+      for (const {
+        tokenType,
+        symbol: tokenSymbol,
+        address: tokenAddress,
+      } of Object.values(tokensOnChain)) {
+        const isNative = tokenType === TokenType.NativeGas;
+        const isErc20 = tokenType === TokenType.Erc20;
 
-        const nativeBalances = await Promise.all(nativeBalancePromises);
-        balanceResults.push(...nativeBalances);
+        if (isNative) {
+          // get native balances for all relevant wallets
+          const nativeBalancePromises = relevantWallets.map<
+            Promise<BigNumberish>
+          >(({ address: walletAddress }) =>
+            provider.getBalance(getAddress(walletAddress)),
+          );
+
+          const nativeBalances = await Promise.all(nativeBalancePromises).catch(
+            (e) => {
+              console.error('Error fetching native balances:', e);
+              return [];
+            },
+          );
+
+          // add the results to the balance results
+          nativeBalances.forEach((balance, index) =>
+            balanceResults.push({
+              walletAddress: relevantWallets[index].address,
+              evmChainId: providerEvmChainId,
+              symbol: tokenSymbol,
+              isNative: true,
+              balance: Number(formatEther(balance)),
+            }),
+          );
+        }
+
+        if (isErc20) {
+          const erc20Contract = new MulticallContract(
+            tokenAddress,
+            ERC20_BALANCE_OF_STRING_FRAGMENT,
+          );
+
+          const erc20Calls = relevantWallets.map((wallet) =>
+            erc20Contract.balanceOf(wallet.address),
+          );
+
+          if (providerEvmChainId === EvmChainId.Gnosis) {
+            console.log({ erc20Calls });
+          }
+
+          const erc20Balances = await multicallProvider.all(erc20Calls);
+
+          if (providerEvmChainId === EvmChainId.Gnosis) {
+            console.log({ erc20Calls });
+          }
+
+          const erc20Results = relevantWallets.map(
+            ({ address: walletAddress }, index) => ({
+              walletAddress,
+              evmChainId: providerEvmChainId,
+              symbol: tokenSymbol,
+              isNative: false,
+              balance: Number(formatEther(erc20Balances[index])),
+            }),
+          ) as WalletBalanceResult[];
+
+          balanceResults.push(...erc20Results);
+        }
       }
-
-      if (isErc20) {
-        const erc20Contract = new MulticallContract(
-          tokenConfig.address,
-          ERC20_BALANCE_OF_STRING_FRAGMENT,
-        );
-
-        const erc20Calls = relevantWallets.map((wallet) =>
-          erc20Contract.balanceOf(wallet.address),
-        );
-
-        const erc20Balances = await multicallProvider.all(erc20Calls);
-
-        const erc20Results = relevantWallets.map((wallet, index) => ({
-          walletAddress: wallet.address,
-          chainId,
-          symbol,
-          isNative: false,
-          balance: Number(formatEther(erc20Balances[index])),
-        })) as WalletBalanceResult[];
-
-        balanceResults.push(...erc20Results);
-      }
+    } catch (error) {
+      console.error('Error fetching balances for chain:', evmChainIdKey, error);
     }
   }
 

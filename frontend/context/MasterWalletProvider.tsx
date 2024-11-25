@@ -25,33 +25,34 @@ type MasterWalletContext = {
   UsePause;
 
 export const MasterWalletContext = createContext<MasterWalletContext>({
-  masterEoa: undefined,
-  masterSafes: undefined,
-  masterWallets: undefined,
   paused: false,
   setPaused: () => {},
   togglePaused: () => {},
 });
 
 const transformMiddlewareWalletResponse = (
-  data: MiddlewareWalletResponse,
+  data: MiddlewareWalletResponse[],
 ): MasterWallets => {
-  const masterEoa: MasterEoa = {
-    address: data.address,
-    owner: WalletOwnerType.Master,
-    type: WalletType.EOA,
-  };
+  const result: MasterWallets = [];
 
-  const masterSafes: MasterSafe[] = Object.entries(data.safes).map(
-    ([middlewareChain, address]) => ({
-      address,
-      evmChainId: asEvmChainId(middlewareChain),
+  data.forEach((response) => {
+    result.push({
+      address: response.address,
       owner: WalletOwnerType.Master,
-      type: WalletType.Safe,
-    }),
-  );
+      type: WalletType.EOA,
+    });
 
-  return [masterEoa, ...masterSafes];
+    Object.entries(response.safes).forEach(([middlewareChain, safeAddress]) => {
+      result.push({
+        address: safeAddress,
+        evmChainId: asEvmChainId(middlewareChain),
+        owner: WalletOwnerType.Master,
+        type: WalletType.Safe,
+      });
+    });
+  }, []);
+
+  return result;
 };
 
 export const MasterWalletProvider = ({ children }: PropsWithChildren) => {

@@ -47,7 +47,7 @@ const getBalanceData = (walletBalances: WalletBalanceResult[]) => {
   const result: { [chainId: number]: { [tokenSymbol: string]: number } } = {};
 
   for (const walletBalanceResult of walletBalances) {
-    const { chainId, symbol } = walletBalanceResult;
+    const { evmChainId: chainId, symbol } = walletBalanceResult;
     if (!result[chainId]) result[chainId] = {};
     if (!result[chainId][symbol]) result[chainId][symbol] = 0;
     result[chainId][symbol] += walletBalanceResult.balance;
@@ -213,7 +213,7 @@ export const DebugInfoSection = () => {
               walletBalances.filter(
                 (walletBalance) =>
                   walletBalance.walletAddress === serviceWallet.address &&
-                  walletBalance.chainId === serviceWallet.evmChainId,
+                  walletBalance.evmChainId === serviceWallet.evmChainId,
               ),
             ),
             address: serviceWallet.address,
