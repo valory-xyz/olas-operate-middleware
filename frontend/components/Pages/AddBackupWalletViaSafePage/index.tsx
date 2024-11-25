@@ -35,7 +35,7 @@ export const AddBackupWalletViaSafePage = () => {
   const safePrefix =
     masterSafe?.evmChainId && safeChainPrefix[masterSafe?.evmChainId];
 
-  if (!isFetched) return null
+  if (!isFetched) return null;
   if (isNil(masterSafe)) return null;
 
   return (
