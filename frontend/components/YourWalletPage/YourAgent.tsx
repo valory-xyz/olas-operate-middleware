@@ -105,9 +105,9 @@ const AgentTitle = ({ serviceSafe }: { serviceSafe: AgentSafe }) => {
 };
 
 const ServiceAndNftDetails = ({
-  serviceConfigId,
+  serviceNftTokenId,
 }: {
-  serviceConfigId: string;
+  serviceNftTokenId: number;
 }) => {
   const serviceRegistryL2ContractAddress =
     OLAS_CONTRACTS[EvmChainId.Gnosis][ContractType.ServiceRegistryL2].address;
@@ -127,7 +127,7 @@ const ServiceAndNftDetails = ({
           <Flex vertical>
             <OwnershipNftTitle />
             <a
-              href={`https://gnosis.blockscout.com/token/${serviceRegistryL2ContractAddress}/instance/${serviceConfigId}`}
+              href={`https://gnosis.blockscout.com/token/${serviceRegistryL2ContractAddress}/instance/${serviceNftTokenId}`}
               target="_blank"
             >
               {truncateAddress(serviceRegistryL2ContractAddress as Address)}{' '}
@@ -138,10 +138,10 @@ const ServiceAndNftDetails = ({
           <Flex vertical>
             <ServiceNftIdTitle />
             <a
-              href={`https://registry.olas.network/gnosis/services/${serviceConfigId}`}
+              href={`https://registry.olas.network/gnosis/services/${serviceNftTokenId}`}
               target="_blank"
             >
-              {serviceConfigId} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              {serviceNftTokenId} {UNICODE_SYMBOLS.EXTERNAL_LINK}
             </a>
           </Flex>
         </Flex>
@@ -156,7 +156,7 @@ export const YourAgentWallet = ({
   serviceConfigId: string;
 }) => {
   const { isLoaded } = useBalanceContext();
-  const { serviceSafes } = useService(serviceConfigId);
+  const { serviceSafes, serviceNftTokenId } = useService(serviceConfigId);
   const { serviceSafeBalances, serviceEoaBalances } =
     useServiceBalances(serviceConfigId);
 
@@ -180,12 +180,11 @@ export const YourAgentWallet = ({
     [serviceSafeBalances],
   );
 
-  // TODO: refactor for multichain/agent
   const serviceSafeRewards = useMemo(
     () => [
       {
         title: 'Claimed rewards',
-        value: `${balanceFormat(serviceSafeOlasBalances?.[0].balance ?? 0, 2)} OLAS`,
+        value: `${balanceFormat(serviceSafeOlasBalances?.[0]?.balance ?? 0, 2)} OLAS`,
       },
       {
         title: 'Unclaimed rewards',
@@ -263,7 +262,9 @@ export const YourAgentWallet = ({
           </Flex>
         )}
 
-        <ServiceAndNftDetails serviceConfigId={serviceConfigId} />
+        {!isNil(serviceNftTokenId) && (
+          <ServiceAndNftDetails serviceNftTokenId={serviceNftTokenId} />
+        )}
       </Container>
     </Card>
   );
