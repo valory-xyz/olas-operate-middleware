@@ -53,8 +53,8 @@ export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
 export const CHAIN_CONFIG: {
   [evmChainId: number]: ChainConfig;
 } = {
-  [EvmChainId.Base]: BASE_CHAIN_CONFIG,
-  [EvmChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,
+  // [EvmChainId.Base]: BASE_CHAIN_CONFIG,
+  // [EvmChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,
   [EvmChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
-  [EvmChainId.Optimism]: OPTIMISM_CHAIN_CONFIG,
+  // [EvmChainId.Optimism]: OPTIMISM_CHAIN_CONFIG,
 } as const;

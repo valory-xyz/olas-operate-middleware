@@ -10,6 +10,7 @@ import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { EvmChainId } from '@/enums/Chain';
 import { Safe } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
+import { extractFunctionsFromAbi } from '@/utils/abi';
 
 /**
  * Hook to fetch multisig owners
@@ -83,7 +84,7 @@ export const useMultisigs = (safes?: Safe[]) => {
             safeAddress: safe.address,
             contractCall: new MulticallContract(
               safe.address,
-              GNOSIS_SAFE_ABI,
+              extractFunctionsFromAbi(GNOSIS_SAFE_ABI),
             ).getOwners(),
           }),
         );

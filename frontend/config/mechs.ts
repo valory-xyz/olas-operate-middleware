@@ -4,6 +4,7 @@ import { Contract as MulticallContract } from 'ethers-multicall';
 import { AGENT_MECH_ABI } from '@/abis/agentMech';
 import { MECH_MARKETPLACE_ABI } from '@/abis/mechMarketplace';
 import { EvmChainId } from '@/enums/Chain';
+import { extractFunctionsFromAbi } from '@/utils/abi';
 
 export enum MechType {
   Agent = 'mech-agent',
@@ -25,9 +26,7 @@ export const MECHS: Mechs = {
       name: 'Agent Mech',
       contract: new MulticallContract(
         '0x77af31De935740567Cf4fF1986D04B2c964A786a',
-        AGENT_MECH_ABI.filter(
-          (abi) => (abi as JsonFragment).type === 'function',
-        ) as JsonFragment[],
+        extractFunctionsFromAbi(AGENT_MECH_ABI),
       ),
     },
     [MechType.Marketplace]: {
