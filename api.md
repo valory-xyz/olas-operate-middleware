@@ -227,30 +227,35 @@ Returns a list of available wallets with enriched information. It executes on-ch
     "safes":{
       "base":{
         "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "owners":[
-            // No owners for this safe
-          ]
+          "backup_owners": [],  // Empty = no backup owners
+          "balances": {...}
         }
       },
       "ethereum":{
         "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "owners":[
+          "backup_owners":[
             "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ]
+          ],
+          "balances": {...}
         }
       },
       "gnosis":{
         "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "owners":[
+          "backup_owners":[
             "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ]
+          ],
+          "balances": {
+            "0x0000000000000000000000000000000000000000": 995899999999999999998, // xDAI
+            "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 0,                     // USDC
+            "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 960000000000000000000  // OLAS
         }
       },
       "optimistic":{
         "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "owners":[
+          "backup_owners":[
             "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ]
+          ],
+          "balances": {...}
         }
       }
     },
