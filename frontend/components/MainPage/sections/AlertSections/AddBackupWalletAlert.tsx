@@ -1,27 +1,32 @@
 import { Flex, Typography } from 'antd';
-import { isArray } from 'lodash';
+import { isArray, isEmpty, isNil } from 'lodash';
 
 import { Pages } from '@/enums/Pages';
-import { useMultisigs } from '@/hooks/useMultisig';
+import { useMultisig, useMultisigs } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
 import { CustomAlert } from '../../../Alert';
+import { useServices } from '@/hooks/useServices';
 
 const { Text } = Typography;
 
 export const AddBackupWalletAlert = () => {
   const { goto } = usePageState();
-  const { masterSafes } = useMasterWalletContext();
+  const { selectedAgentConfig } = useServices();
+  const { masterSafes, masterEoa,  } = useMasterWalletContext();
   const {
-    masterSafesOwners: owners,
-    masterSafesOwnersIsFetched: ownersIsFetched,
-  } = useMultisigs(masterSafes);
+    owners,
+    ownersIsFetched: masterSafeOwnersIsFetched,
+    backupOwners,
+  } = useMultisig(masterSafes?.find(masterSafe => {
+    return masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId;
+  }));
 
-  if (!ownersIsFetched) return null;
-
-  // all safes have min 1 owner, more than 1 owner, there is a backup
-  if (isArray(owners) && owners.length > 1) return null;
+  if (!masterSafeOwnersIsFetched) return null;
+  
+  if (isNil(backupOwners)) return null;
+  if (isArray(backupOwners) && backupOwners.length > 0) return null;
 
   return (
     <CustomAlert

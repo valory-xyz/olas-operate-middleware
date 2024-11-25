@@ -26,7 +26,7 @@ export const AddBackupWalletViaSafePage = () => {
   const {
     selectedAgentConfig: { evmHomeChainId: homeChainId },
   } = useServices();
-  const { masterSafes } = useMasterWalletContext();
+  const { masterSafes, isFetched } = useMasterWalletContext();
 
   const masterSafe = masterSafes?.find(
     ({ evmChainId: chainId }) => homeChainId === chainId,
@@ -35,9 +35,8 @@ export const AddBackupWalletViaSafePage = () => {
   const safePrefix =
     masterSafe?.evmChainId && safeChainPrefix[masterSafe?.evmChainId];
 
-  if (isNil(masterSafe)) {
-    return null;
-  }
+  if (!isFetched) return null
+  if (isNil(masterSafe)) return null;
 
   return (
     <Card
