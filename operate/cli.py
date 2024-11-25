@@ -447,13 +447,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         wallet, mnemonic = manager.create(ledger_type=ledger_type)
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
 
-    @app.get("/api/enriched/wallet")
+    @app.get("/api/extended/wallet")
     @with_retries
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
         for wallet in operate.wallet_manager:
-            wallets.append(wallet.enriched_json)
+            wallets.append(wallet.extended_json)
         return JSONResponse(content=wallets)
 
     @app.get("/api/wallet/safe")

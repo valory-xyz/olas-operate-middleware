@@ -198,7 +198,7 @@ Returns a list of available wallets
 
 ---
 
-### `GET /api/enriched/wallet`
+### `GET /api/extended/wallet`
 
 Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes
 
