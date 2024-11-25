@@ -249,6 +249,8 @@ const getCrossChainWalletBalances = async (
         }
 
         if (isErc20) {
+          if (!tokenAddress) continue;
+
           const erc20Contract = new MulticallContract(
             tokenAddress,
             ERC20_BALANCE_OF_STRING_FRAGMENT,

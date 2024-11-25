@@ -24,7 +24,8 @@ export const AddBackupWalletPage = () => {
     if (isNil(masterEoaBalances) || isEmpty(masterEoaBalances)) return false;
 
     const masterEoaNativeBalance = masterEoaBalances.find(
-      ({ isNative, evmChainId: chainId }) => isNative && chainId === homeChainId,
+      ({ isNative, evmChainId: chainId }) =>
+        isNative && chainId === homeChainId,
     )?.balance;
 
     if (isNil(masterEoaNativeBalance)) return false;

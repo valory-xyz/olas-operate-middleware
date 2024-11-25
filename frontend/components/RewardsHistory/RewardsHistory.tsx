@@ -185,7 +185,7 @@ const ContractRewards = ({ checkpoints }: ContractRewardsProps) => {
  * TODO: Refactor, only supports a single service for now
  * */
 export const RewardsHistory = () => {
-  const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
+  const { contractCheckpoints, isError, isFetched, refetch } =
     useRewardsHistory();
   const { goto } = usePageState();
   const { selectedService } = useServices();
@@ -198,8 +198,8 @@ export const RewardsHistory = () => {
   const evmChainId = asEvmChainId(selectedService?.home_chain);
 
   const history = useMemo(() => {
-    if (isLoading || isFetching || !serviceConfigId) return <Loading />;
-    if (isError) return <ErrorLoadingHistory refetch={refetch} />;
+    if (!isFetched || !serviceConfigId) return <Loading />;
+    if (isError) return <ErrorLoadingHistory refetch={refetch} />; // TODO: don't do this
     if (!contractCheckpoints) return <NoRewardsHistory />;
     if (Object.keys(contractCheckpoints).length === 0) {
       return <NoRewardsHistory />;
@@ -251,8 +251,7 @@ export const RewardsHistory = () => {
       </Flex>
     );
   }, [
-    isLoading,
-    isFetching,
+    isFetched,
     serviceConfigId,
     isError,
     refetch,
