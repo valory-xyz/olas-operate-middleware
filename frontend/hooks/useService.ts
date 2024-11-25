@@ -132,8 +132,8 @@ export const useService = (serviceConfigId?: string) => {
   const setDeploymentStatus = (
     deploymentStatus?: MiddlewareDeploymentStatus,
   ) => {
-    if (!serviceConfigId) throw new Error('Service config ID is required');
-    if (!deploymentStatus) throw new Error('Deployment status is required');
+    // if (!serviceConfigId) throw new Error('Service config ID is required');
+    // if (!deploymentStatus) throw new Error('Deployment status is required');
 
     queryClient.setQueryData(
       REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),

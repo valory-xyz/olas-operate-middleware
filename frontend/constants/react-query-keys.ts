@@ -3,7 +3,7 @@ import { Safe } from '@/enums/Wallet';
 export const REACT_QUERY_KEYS = {
   // services
   SERVICES_KEY: ['services'] as const,
-  SERVICE_DEPLOYMENT_STATUS_KEY: (serviceConfigId: string) =>
+  SERVICE_DEPLOYMENT_STATUS_KEY: (serviceConfigId?: string) =>
     ['serviceStatus', serviceConfigId] as const,
 
   // staking programs

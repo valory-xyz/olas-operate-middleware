@@ -1,6 +1,7 @@
 import { BigNumberish } from 'ethers';
 import { getAddress } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
+import { sum } from 'lodash';
 import {
   createContext,
   Dispatch,
@@ -34,7 +35,7 @@ import { ServicesContext } from './ServicesProvider';
 
 type CrossChainStakedBalances = Array<{
   serviceId: string;
-  chainId: number;
+  evmChainId: number;
   olasBondBalance: number;
   olasDepositBalance: number;
   walletAddress: Address;
@@ -70,7 +71,7 @@ export const BalanceContext = createContext<{
 export const BalanceProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
   const { masterWallets } = useContext(MasterWalletContext);
-  const { services } = useContext(ServicesContext);
+  const { services, selectedAgentConfig } = useContext(ServicesContext);
 
   const [isLoaded, setIsLoaded] = useState<boolean>(false);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -103,12 +104,14 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   }, [isLoaded, walletBalances]);
 
   const totalStakedOlasBalance = useMemo(() => {
-    return stakedBalances.reduce((acc, balance) => {
-      return (
-        acc + (balance.olasBondBalance || 0) + (balance.olasDepositBalance || 0)
-      );
-    }, 0);
-  }, [stakedBalances]);
+    return stakedBalances
+      .filter((walletBalance) => {
+        walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId;
+      })
+      .reduce((acc, balance) => {
+        return sum([acc, balance.olasBondBalance, balance.olasDepositBalance]);
+      }, 0);
+  }, [selectedAgentConfig.evmHomeChainId, stakedBalances]);
 
   const updateBalances = useCallback(async () => {
     if (masterWallets && services) {
@@ -120,11 +123,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
             getCrossChainWalletBalances(masterWallets),
             getCrossChainStakedBalances(services),
           ]);
-
-        console.log({
-          walletBalancesResult,
-          stakedBalancesResult,
-        });
 
         // parse the results
         const walletBalances =
@@ -260,15 +258,7 @@ const getCrossChainWalletBalances = async (
             erc20Contract.balanceOf(wallet.address),
           );
 
-          if (providerEvmChainId === EvmChainId.Gnosis) {
-            console.log({ erc20Calls });
-          }
-
           const erc20Balances = await multicallProvider.all(erc20Calls);
-
-          if (providerEvmChainId === EvmChainId.Gnosis) {
-            console.log({ erc20Calls });
-          }
 
           const erc20Results = relevantWallets.map(
             ({ address: walletAddress }, index) => ({
@@ -328,7 +318,7 @@ const getCrossChainStakedBalances = async (
 
       result.push({
         serviceId,
-        chainId: asEvmChainId(chainId),
+        evmChainId: asEvmChainId(chainId),
         ...correctBondDepositByServiceState({
           olasBondBalance: bondValue,
           olasDepositBalance: depositValue,

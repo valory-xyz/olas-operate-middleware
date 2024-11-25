@@ -22,7 +22,7 @@ export const NoAvailableSlotsOnTheContract = () => {
     selectedStakingProgramMeta,
   } = useStakingProgram();
 
-  const { isServiceStaked, isActiveStakingContractDetailsLoaded } =
+  const { isServiceStaked, isSelectedStakingContractDetailsLoaded: isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();
 
   const { hasEnoughServiceSlots } = useStakingContractDetails(

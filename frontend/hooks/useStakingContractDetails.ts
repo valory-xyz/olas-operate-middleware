@@ -17,8 +17,8 @@ export const useStakingContractContext = () =>
  */
 export const useActiveStakingContractInfo = () => {
   const {
-    activeStakingContractDetails,
-    isActiveStakingContractDetailsLoaded,
+    selectedStakingContractDetails,
+    isSelectedStakingContractDetailsLoaded,
     // allStakingContractDetailsRecord,
     // refetchActiveStakingContractDetails,
     // isPaused,
@@ -45,7 +45,7 @@ export const useActiveStakingContractInfo = () => {
     availableRewards,
     serviceIds,
     maxNumServices,
-  } = activeStakingContractDetails ?? {};
+  } = selectedStakingContractDetails ?? {};
 
   const isAgentEvicted = serviceStakingState === StakingState.Evicted;
 
@@ -93,8 +93,8 @@ export const useActiveStakingContractInfo = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isActiveStakingContractDetailsLoaded,
-    activeStakingContractDetails,
+    isSelectedStakingContractDetailsLoaded,
+    selectedStakingContractDetails,
     hasEnoughRewardsAndSlots,
     hasEnoughServiceSlots,
     isRewardsAvailable,

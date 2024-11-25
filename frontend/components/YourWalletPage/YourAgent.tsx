@@ -175,7 +175,7 @@ export const YourAgentWallet = ({
   const serviceSafeOlasBalances = useMemo(
     () =>
       serviceSafeBalances?.filter(
-        (balance) => balance.symbol === TokenSymbol.OLAS,
+        (walletBalance) => walletBalance.symbol === TokenSymbol.OLAS,
       ),
     [serviceSafeBalances],
   );

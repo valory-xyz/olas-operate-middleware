@@ -27,11 +27,11 @@ export const AgentButton = () => {
   const {
     isEligibleForStaking,
     isAgentEvicted,
-    isActiveStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoaded,
   } = useActiveStakingContractInfo();
 
   const button = useMemo(() => {
-    if (!isServicesLoaded || !isActiveStakingContractDetailsLoaded) {
+    if (!isServicesLoaded || !isSelectedStakingContractDetailsLoaded) {
       return (
         <Button type="primary" size="large" disabled loading>
           Loading...
@@ -67,6 +67,7 @@ export const AgentButton = () => {
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
     isServicesLoaded,
+    isSelectedStakingContractDetailsLoaded,
     serviceStatus,
     isEligibleForStaking,
     isAgentEvicted,

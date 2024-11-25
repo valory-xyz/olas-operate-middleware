@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Maybe } from 'graphql/jsutils/Maybe';
+import { isNil } from 'lodash';
 import {
   createContext,
   Dispatch,
@@ -36,7 +37,7 @@ const useAllStakingContractDetails = () => {
         programId,
       ),
       queryFn: async () =>
-        await serviceApi.getStakingContractDetailsByName(
+        await serviceApi.getStakingContractDetailsByStakingProgramId(
           programId as StakingProgramId,
           homeChainId,
         ),
@@ -83,30 +84,34 @@ const useStakingContractDetailsByStakingProgram = ({
   isPaused?: boolean;
 }) => {
   const { selectedAgentConfig } = useServices();
-  const { serviceApi, evmHomeChainId: chainId } = selectedAgentConfig;
+  const { serviceApi, evmHomeChainId } = selectedAgentConfig;
   return useQuery({
     queryKey: REACT_QUERY_KEYS.STAKING_CONTRACT_DETAILS_BY_STAKING_PROGRAM_KEY(
-      chainId,
+      evmHomeChainId,
       serviceNftTokenId!,
       stakingProgramId!,
     ),
     queryFn: async () => {
-      return await serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
+      if (isNil(serviceNftTokenId))
+        return serviceApi.getStakingContractDetailsByStakingProgramId(
+          stakingProgramId!,
+          evmHomeChainId,
+        );
+      return serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
         serviceNftTokenId!,
         stakingProgramId!,
-        chainId,
+        evmHomeChainId,
       );
     },
-    enabled:
-      !!serviceNftTokenId && !!stakingProgramId && !!chainId && !isPaused,
-    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : () => false,
+    enabled: !isPaused,
+    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
 };
 
 type StakingContractDetailsContextProps = {
-  activeStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
-  isActiveStakingContractDetailsLoaded: boolean;
+  selectedStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
+  isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
@@ -122,10 +127,10 @@ type StakingContractDetailsContextProps = {
  */
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
-    activeStakingContractDetails: null,
+    selectedStakingContractDetails: null,
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
-    isActiveStakingContractDetailsLoaded: false,
+    isSelectedStakingContractDetailsLoaded: false,
     refetchSelectedStakingContractDetails: async () => {},
     setIsPaused: () => {},
   });
@@ -144,7 +149,7 @@ export const StakingContractDetailsProvider = ({
 
   const {
     data: selectedStakingContractDetails,
-    isLoading: isActiveStakingContractDetailsLoading,
+    isFetched,
     refetch,
   } = useStakingContractDetailsByStakingProgram({
     serviceNftTokenId:
@@ -164,10 +169,8 @@ export const StakingContractDetailsProvider = ({
   return (
     <StakingContractDetailsContext.Provider
       value={{
-        activeStakingContractDetails: selectedStakingContractDetails,
-        isActiveStakingContractDetailsLoaded:
-          !isActiveStakingContractDetailsLoading &&
-          !!selectedStakingContractDetails,
+        selectedStakingContractDetails,
+        isSelectedStakingContractDetailsLoaded: isFetched,
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,
