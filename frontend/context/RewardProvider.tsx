@@ -32,24 +32,18 @@ export const RewardContext = createContext<{
   minimumStakedAmountRequired?: number;
   updateRewards: () => Promise<void>;
 }>({
-  accruedServiceStakingRewards: undefined,
-  availableRewardsForEpoch: undefined,
-  availableRewardsForEpochEth: undefined,
-  isEligibleForRewards: undefined,
-  optimisticRewardsEarnedForEpoch: undefined,
-  minimumStakedAmountRequired: undefined,
   updateRewards: async () => {},
 });
 
 const currentAgent = AGENT_CONFIG.trader; // TODO: replace with dynamic agent selection
-const currentChainId = GNOSIS_CHAIN_CONFIG.chainId; // TODO: replace with selectedAgentConfig.chainId
+const currentChainId = GNOSIS_CHAIN_CONFIG.evmChainId; // TODO: replace with selectedAgentConfig.chainId
 
 /**
  * hook to fetch staking rewards details
  */
 const useStakingRewardsDetails = () => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { activeStakingProgramId } = useContext(StakingProgramContext);
+  const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const { selectedService } = useServices();
   const { service } = useService(selectedService?.service_config_id);
@@ -66,7 +60,7 @@ const useStakingRewardsDetails = () => {
     queryKey: REACT_QUERY_KEYS.REWARDS_KEY(
       currentChainId,
       serviceConfigId!,
-      activeStakingProgramId!,
+      selectedStakingProgramId!,
       multisig!,
       token!,
     ),
@@ -75,7 +69,7 @@ const useStakingRewardsDetails = () => {
         {
           agentMultisigAddress: multisig!,
           serviceId: token!,
-          stakingProgramId: activeStakingProgramId!,
+          stakingProgramId: selectedStakingProgramId!,
           chainId: currentChainId,
         },
       );
@@ -84,7 +78,7 @@ const useStakingRewardsDetails = () => {
     enabled:
       !!isOnline &&
       !!serviceConfigId &&
-      !!activeStakingProgramId &&
+      !!selectedStakingProgramId &&
       !!multisig &&
       !!token,
     refetchInterval: isOnline ? FIVE_SECONDS_INTERVAL : false,

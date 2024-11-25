@@ -29,9 +29,9 @@ import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
@@ -130,7 +130,7 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
               {timePeriod}
             </Text>
             <a
-              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.OPTIMISM]}/tx/${epoch.transactionHash}`}
+              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/tx/${epoch.transactionHash}`}
               target="_blank"
             >
               End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
@@ -185,21 +185,15 @@ const ContractRewards = ({ checkpoints }: ContractRewardsProps) => {
  * TODO: Refactor, only supports a single service for now
  * */
 export const RewardsHistory = () => {
-  const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
+  const { contractCheckpoints, isError, isFetched, refetch } =
     useRewardsHistory();
   const { goto } = usePageState();
-  const { selectedService } = useServices();
-
-  const serviceConfigId = selectedService?.service_config_id;
-  const serviceNftTokenId =
-    selectedService?.chain_configs[selectedService?.home_chain]?.chain_data
-      .token;
-
-  const evmChainId = asEvmChainId(selectedService?.home_chain);
+  const { selectedService, selectedAgentConfig } = useServices();
+  const { serviceNftTokenId } = useService(selectedService?.service_config_id);
 
   const history = useMemo(() => {
-    if (isLoading || isFetching || !serviceConfigId) return <Loading />;
-    if (isError) return <ErrorLoadingHistory refetch={refetch} />;
+    if (!isFetched || !selectedService?.service_config_id) return <Loading />;
+    if (isError) return <ErrorLoadingHistory refetch={refetch} />; // TODO: don't do this
     if (!contractCheckpoints) return <NoRewardsHistory />;
     if (Object.keys(contractCheckpoints).length === 0) {
       return <NoRewardsHistory />;
@@ -222,14 +216,14 @@ export const RewardsHistory = () => {
       },
     );
 
-    if (!evmChainId) return null;
+    if (!selectedAgentConfig.evmHomeChainId) return null;
 
     return (
       <Flex vertical gap={16}>
         {latestContractAddresses.map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
-            STAKING_PROGRAM_ADDRESS[evmChainId],
+            STAKING_PROGRAM_ADDRESS[selectedAgentConfig.evmHomeChainId],
           ).find((entry) => {
             const [, stakingProxyAddress] = entry;
             return (
@@ -251,13 +245,12 @@ export const RewardsHistory = () => {
       </Flex>
     );
   }, [
-    isLoading,
-    isFetching,
-    serviceConfigId,
+    isFetched,
+    selectedService?.service_config_id,
     isError,
     refetch,
     contractCheckpoints,
-    evmChainId,
+    selectedAgentConfig.evmHomeChainId,
     serviceNftTokenId,
   ]);
 

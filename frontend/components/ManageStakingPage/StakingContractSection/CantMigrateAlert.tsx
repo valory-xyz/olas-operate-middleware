@@ -45,7 +45,7 @@ const AlertInsufficientMigrationFunds = ({
     if (!isBalanceLoaded) return;
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
     masterSafeBalances.reduce(
-      (acc, { chainId, symbol, balance }) => {
+      (acc, { evmChainId: chainId, symbol, balance }) => {
         if (chainId === selectedAgentConfig.evmHomeChainId) {
           acc[symbol] = balance;
         }

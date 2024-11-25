@@ -24,7 +24,7 @@ const getFormattedReward = (reward: number | undefined) =>
 
 const DisplayRewards = () => {
   const { availableRewardsForEpochEth, isEligibleForRewards } = useReward();
-  const { isLoaded } = useBalanceContext();
+  const { isLoaded: isBalancesLoaded } = useBalanceContext();
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   return (
@@ -36,7 +36,7 @@ const DisplayRewards = () => {
       borderbottom="true"
     >
       <StakingRewardsThisEpoch />
-      {isLoaded ? (
+      {isBalancesLoaded ? (
         <Flex align="center" gap={12}>
           <Text className="text-xl font-weight-600">{reward} OLAS&nbsp;</Text>
           {isEligibleForRewards ? (

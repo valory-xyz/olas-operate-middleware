@@ -86,7 +86,7 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
         className="text-xs pointer hover-underline"
         onClick={() =>
           window.open(
-            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.OPTIMISM]}/tx/${transaction.hash}`,
+            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/tx/${transaction.hash}`,
           )
         }
       >

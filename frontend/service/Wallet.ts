@@ -9,15 +9,15 @@ const getWallets = async () =>
   fetch(`${BACKEND_URL}/wallet`).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to get wallets');
-  }) as Promise<MiddlewareWalletResponse>;
+  }) as Promise<MiddlewareWalletResponse[]>;
 
-const createEoa = async (chain: MiddlewareChain) =>
+const createEoa = async () =>
   fetch(`${BACKEND_URL}/wallet`, {
     method: 'POST',
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain }),
+    body: JSON.stringify({ ledger_type: 'ethereum' }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create EOA');

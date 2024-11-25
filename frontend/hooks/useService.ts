@@ -18,6 +18,7 @@ import {
   WalletType,
 } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
+import { Optional } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useServices } from './useServices';
@@ -42,6 +43,10 @@ export const useService = (serviceConfigId?: string) => {
       (service) => service.service_config_id === serviceConfigId,
     );
   }, [serviceConfigId, services]);
+
+  const serviceNftTokenId = useMemo<Optional<number>>(() => {
+    return service?.chain_configs[service?.home_chain]?.chain_data.token;
+  }, [service?.chain_configs, service?.home_chain]);
 
   // TODO: quick hack to fix for refactor (only predict), will make it dynamic later
   const serviceWallets: AgentWallets = useMemo(() => {
@@ -132,8 +137,8 @@ export const useService = (serviceConfigId?: string) => {
   const setDeploymentStatus = (
     deploymentStatus?: MiddlewareDeploymentStatus,
   ) => {
-    if (!serviceConfigId) throw new Error('Service config ID is required');
-    if (!deploymentStatus) throw new Error('Deployment status is required');
+    // if (!serviceConfigId) throw new Error('Service config ID is required');
+    // if (!deploymentStatus) throw new Error('Deployment status is required');
 
     queryClient.setQueryData(
       REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
@@ -164,6 +169,7 @@ export const useService = (serviceConfigId?: string) => {
 
   return {
     service,
+    serviceNftTokenId,
     addresses,
     flatAddresses,
     isLoaded,

@@ -15,7 +15,7 @@ export const AddressLink = ({
   return (
     <a
       target="_blank"
-      href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.OPTIMISM]}/address/${address}`}
+      href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/address/${address}`}
     >
       {truncateAddress(address)}
 

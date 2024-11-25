@@ -71,8 +71,8 @@ const createService = async ({
         ...serviceTemplate.configurations,
         // overwrite defaults with chain-specific configurations
         ...Object.entries(serviceTemplate.configurations).reduce(
-          (acc, [middlewareChainKey, config]) => {
-            acc[middlewareChainKey] = {
+          (acc, [middlewareChain, config]) => {
+            acc[middlewareChain] = {
               ...config,
               rpc: CHAIN_CONFIG[asEvmChainId(MiddlewareChain.GNOSIS)].rpc,
               staking_program_id: stakingProgramId,
@@ -80,7 +80,7 @@ const createService = async ({
             };
             return acc;
           },
-          {} as (typeof serviceTemplate)['configurations'],
+          {} as typeof serviceTemplate.configurations,
         ),
       },
     }),

@@ -1,9 +1,11 @@
 import { useContext, useMemo } from 'react';
 
+import { CHAIN_CONFIG } from '@/config/chains';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { Optional } from '@/types/Util';
 
 import { useService } from './useService';
+import { useServices } from './useServices';
 import { useMasterWalletContext } from './useWallet';
 
 export const useBalanceContext = () => useContext(BalanceContext);
@@ -78,6 +80,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
  * @note master safe addresses are deterministic, and should be the same
  */
 export const useMasterBalances = () => {
+  const { selectedAgentConfig } = useServices();
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { walletBalances } = useBalanceContext();
 
@@ -92,8 +95,11 @@ export const useMasterBalances = () => {
 
   const masterSafeBalances = useMemo<Optional<WalletBalanceResult[]>>(
     () =>
-      walletBalances?.filter((balance) =>
-        masterSafes?.find(({ address }) => balance.walletAddress === address),
+      walletBalances?.filter(({ walletAddress }) =>
+        masterSafes?.find(
+          ({ address: masterSafeAddress }) =>
+            walletAddress === masterSafeAddress,
+        ),
       ),
     [masterSafes, walletBalances],
   );
@@ -101,7 +107,7 @@ export const useMasterBalances = () => {
   const masterEoaBalances = useMemo<Optional<WalletBalanceResult[]>>(
     () =>
       walletBalances?.filter(
-        (balance) => balance.walletAddress === masterEoa?.address,
+        ({ walletAddress }) => walletAddress === masterEoa?.address,
       ),
     [masterEoa?.address, walletBalances],
   );
@@ -117,9 +123,38 @@ export const useMasterBalances = () => {
     return result;
   }, [masterEoaBalances, masterSafeBalances]);
 
+  const isMasterSafeLowOnNativeGas = useMemo(() => {
+    if (!masterSafeBalances) return;
+    if (!selectedAgentConfig?.evmHomeChainId) return;
+
+    const homeChainNativeToken =
+      CHAIN_CONFIG[selectedAgentConfig?.evmHomeChainId].nativeToken;
+
+    const nativeGasBalance = masterSafeBalances.find(
+      (walletBalance) =>
+        walletBalance.isNative &&
+        walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId &&
+        walletBalance.symbol === homeChainNativeToken.symbol,
+    );
+
+    if (!nativeGasBalance) return;
+
+    const agentNativeGasRequirement =
+      selectedAgentConfig.agentSafeFundingRequirements?.[
+        homeChainNativeToken.symbol
+      ];
+
+    return nativeGasBalance.balance < agentNativeGasRequirement;
+  }, [
+    masterSafeBalances,
+    selectedAgentConfig.agentSafeFundingRequirements,
+    selectedAgentConfig.evmHomeChainId,
+  ]);
+
   return {
     masterWalletBalances,
     masterSafeBalances,
     masterEoaBalances,
+    isMasterSafeLowOnNativeGas,
   };
 };

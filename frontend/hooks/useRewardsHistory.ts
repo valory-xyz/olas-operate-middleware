@@ -248,7 +248,7 @@ export const useRewardsHistory = () => {
   const {
     isError,
     isLoading,
-    isFetching,
+    isFetched,
     refetch,
     data: contractCheckpoints,
   } = useContractCheckpoints(homeChainId, serviceNftTokenId);
@@ -262,7 +262,7 @@ export const useRewardsHistory = () => {
   );
 
   const latestRewardStreak = useMemo<number>(() => {
-    if (isLoading || isFetching) return 0;
+    if (isLoading || !isFetched) return 0;
     if (!contractCheckpoints) return 0;
 
     // remove all histories that are not earned
@@ -305,7 +305,7 @@ export const useRewardsHistory = () => {
       isStreakBroken = true;
       return streakCount;
     }, 0);
-  }, [isLoading, isFetching, epochSortedCheckpoints, contractCheckpoints]);
+  }, [isLoading, isFetched, contractCheckpoints, epochSortedCheckpoints]);
 
   useEffect(() => {
     serviceNftTokenId && refetch();
@@ -313,7 +313,7 @@ export const useRewardsHistory = () => {
 
   return {
     isError,
-    isFetching,
+    isFetched,
     isLoading,
     latestRewardStreak,
     refetch,

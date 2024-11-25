@@ -6,50 +6,52 @@ import { MiddlewareChain as MiddlewareChainId } from '@/client';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 
+import { TOKEN_CONFIG, TokenConfig } from './tokens';
+
 type HttpUrl = `http${'s' | ''}://${string}`;
 
 type ChainConfig = {
   name: string;
-  currency: string;
-  chainId: number;
+  nativeToken: TokenConfig;
+  evmChainId: number;
   middlewareChain: MiddlewareChainId;
   rpc: HttpUrl;
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
-  chainId: EvmChainId.Gnosis,
+  evmChainId: EvmChainId.Gnosis,
   name: 'Gnosis',
-  currency: TokenSymbol.XDAI,
+  nativeToken: TOKEN_CONFIG[EvmChainId.Gnosis][TokenSymbol.XDAI],
   middlewareChain: MiddlewareChainId.GNOSIS,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
-  chainId: EvmChainId.Optimism,
+  evmChainId: EvmChainId.Optimism,
   name: 'Optimism',
-  currency: TokenSymbol.ETH,
+  nativeToken: TOKEN_CONFIG[EvmChainId.Optimism][TokenSymbol.ETH],
   middlewareChain: MiddlewareChainId.OPTIMISM,
   rpc: process.env.OPTIMISM_RPC as HttpUrl,
 };
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
-  chainId: EvmChainId.Base,
+  evmChainId: EvmChainId.Base,
   name: 'Base',
-  currency: TokenSymbol.ETH,
+  nativeToken: TOKEN_CONFIG[EvmChainId.Base][TokenSymbol.ETH],
   middlewareChain: MiddlewareChainId.BASE,
   rpc: process.env.BASE_RPC as HttpUrl,
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
-  chainId: EvmChainId.Ethereum,
+  evmChainId: EvmChainId.Ethereum,
   name: 'Ethereum',
-  currency: TokenSymbol.ETH,
+  nativeToken: TOKEN_CONFIG[EvmChainId.Ethereum][TokenSymbol.ETH],
   middlewareChain: MiddlewareChainId.ETHEREUM,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
 };
 
 export const CHAIN_CONFIG: {
-  [chainId: number]: ChainConfig;
+  [evmChainId: number]: ChainConfig;
 } = {
   [EvmChainId.Base]: BASE_CHAIN_CONFIG,
   [EvmChainId.Ethereum]: ETHEREUM_CHAIN_CONFIG,

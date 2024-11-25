@@ -20,7 +20,7 @@ export const useNotifyOnNewEpoch = () => {
   const { selectedService } = useServices();
   const { isServiceRunning } = useService(selectedService?.service_config_id);
 
-  const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
+  const { selectedStakingContractDetails: activeStakingContractDetails, isSelectedStakingContractDetailsLoaded: isActiveStakingContractDetailsLoaded } =
     useActiveStakingContractInfo();
   const epoch = activeStakingContractDetails?.epochCounter;
 

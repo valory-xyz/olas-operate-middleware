@@ -1,7 +1,7 @@
 export enum EvmChainId {
   Ethereum = 1,
-  Optimism = 100,
-  Gnosis = 10,
+  Optimism = 10,
+  Gnosis = 100,
   Base = 8453,
 }
 
