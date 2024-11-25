@@ -60,8 +60,9 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
     isLowBalance,
   } = useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
-  const { needsInitialFunding, hasEnoughEthForInitialFunding } =
-    useNeedsFunds(serviceConfigId);
+  const { needsInitialFunding, hasEnoughEthForInitialFunding } = useNeedsFunds(
+    migrateToStakingProgramId,
+  );
 
   const { activeStakingProgramId } = useStakingProgram();
   const {
@@ -76,7 +77,7 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
   const safeOlasBalance = useMemo(() => {
     if (!isBalanceLoaded) return 0;
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return 0;
-    masterSafeBalances.reduce(
+    return masterSafeBalances.reduce(
       (acc, { evmChainId: chainId, symbol, balance }) => {
         if (chainId === homeChainId && symbol === TokenSymbol.OLAS)
           return acc + balance;

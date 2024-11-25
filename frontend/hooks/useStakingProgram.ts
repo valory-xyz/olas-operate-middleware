@@ -19,6 +19,7 @@ export const useStakingProgram = () => {
     activeStakingProgramId,
     defaultStakingProgramId,
     selectedStakingProgramId,
+    setDefaultStakingProgramId,
   } = useContext(StakingProgramContext);
   const { selectedAgentConfig } = useServices();
 
@@ -70,6 +71,7 @@ export const useStakingProgram = () => {
     // default staking program
     defaultStakingProgramId,
     defaultStakingProgramMeta,
+    setDefaultStakingProgramId,
 
     // selected staking program id
     selectedStakingProgramId,

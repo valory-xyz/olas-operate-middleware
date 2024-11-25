@@ -3,7 +3,10 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus, ServiceTemplate } from '@/client';
-import { getServiceTemplate } from '@/constants/serviceTemplates';
+import {
+  getServiceTemplate,
+  SERVICE_TEMPLATES,
+} from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
@@ -33,6 +36,7 @@ export const MigrateButton = ({
     isFetched: isServicesLoaded,
     selectedService,
     selectedAgentConfig,
+    selectedAgentType,
   } = useServices();
   const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
@@ -41,13 +45,19 @@ export const MigrateButton = ({
       : '';
   const { service, setDeploymentStatus } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
-    () => (service ? getServiceTemplate(service.hash) : undefined),
-    [service],
+    () =>
+      service
+        ? getServiceTemplate(service.hash)
+        : SERVICE_TEMPLATES.find(
+            (template) => template.agentType === selectedAgentType,
+          ),
+    [selectedAgentType, service],
   );
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
 
-  const { defaultStakingProgramId } = useStakingProgram();
+  const { defaultStakingProgramId, setDefaultStakingProgramId } =
+    useStakingProgram();
   const {
     selectedStakingContractDetails,
     isSelectedStakingContractDetailsLoaded,
@@ -109,6 +119,7 @@ export const MigrateButton = ({
 
           setIsServicePollingPaused(true);
           setIsBalancePollingPaused(true);
+          setDefaultStakingProgramId(stakingProgramIdToMigrateTo);
 
           // TODO: we should not get the default staking program id
           // from the context, we should get it from the service

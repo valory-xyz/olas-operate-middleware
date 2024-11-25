@@ -3,7 +3,7 @@ import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
-import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
+import { getNativeTokenSymbol } from '@/config/tokens';
 import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
@@ -34,17 +34,19 @@ const AlertInsufficientMigrationFunds = ({
   const { isLoaded: isBalanceLoaded, totalStakedOlasBalance } =
     useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
-  const { serviceFundRequirements, isInitialFunded } = useNeedsFunds();
+  const { serviceFundRequirements, isInitialFunded } = useNeedsFunds(
+    stakingProgramIdToMigrateTo,
+  );
 
   const requiredStakedOlas =
-    STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
-      stakingProgramIdToMigrateTo
-    ]?.stakingRequirements[TokenSymbol.OLAS];
+    serviceFundRequirements[selectedAgentConfig.evmHomeChainId][
+      TokenSymbol.OLAS
+    ];
 
   const safeBalance = useMemo(() => {
     if (!isBalanceLoaded) return;
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
-    masterSafeBalances.reduce(
+    return masterSafeBalances.reduce(
       (acc, { evmChainId: chainId, symbol, balance }) => {
         if (chainId === selectedAgentConfig.evmHomeChainId) {
           acc[symbol] = balance;
@@ -58,6 +60,7 @@ const AlertInsufficientMigrationFunds = ({
   if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isNil(requiredStakedOlas)) return null;
   if (isNil(safeBalance?.[TokenSymbol.OLAS])) return null;
+
   if (isNil(totalStakedOlasBalance)) return null;
 
   const requiredOlasDeposit = isServiceStaked
@@ -65,11 +68,12 @@ const AlertInsufficientMigrationFunds = ({
       (totalStakedOlasBalance + safeBalance[TokenSymbol.OLAS]) // when staked
     : requiredStakedOlas - safeBalance[TokenSymbol.OLAS]; // when not staked
 
-  const requiredXdaiDeposit = isInitialFunded
-    ? LOW_MASTER_SAFE_BALANCE - (safeBalance[TokenSymbol.ETH] || 0) // is already funded allow minimal maintenance
-    : (serviceFundRequirements[selectedAgentConfig.evmHomeChainId]?.[
-        TokenSymbol.ETH
-      ] || 0) - (safeBalance[TokenSymbol.ETH] || 0); // otherwise require full initial funding requirements
+  const homeChainId = selectedAgentConfig.evmHomeChainId;
+  const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
+  const requiredNativeTokenDeposit = isInitialFunded
+    ? LOW_MASTER_SAFE_BALANCE - (safeBalance[nativeTokenSymbol] || 0) // is already funded allow minimal maintenance
+    : (serviceFundRequirements[homeChainId]?.[nativeTokenSymbol] || 0) -
+      (safeBalance[nativeTokenSymbol] || 0); // otherwise require full initial funding requirements
 
   return (
     <CustomAlert
@@ -80,8 +84,16 @@ const AlertInsufficientMigrationFunds = ({
           <Text className="font-weight-600">Additional funds required</Text>
           <Text>
             <ul style={{ marginTop: 0, marginBottom: 4 }}>
-              {requiredOlasDeposit > 0 && <li>{requiredOlasDeposit} OLAS</li>}
-              {requiredXdaiDeposit > 0 && <li>{requiredXdaiDeposit} XDAI</li>}
+              {requiredOlasDeposit > 0 && (
+                <li>
+                  {requiredOlasDeposit} {TokenSymbol.OLAS}
+                </li>
+              )}
+              {requiredNativeTokenDeposit > 0 && (
+                <li>
+                  {requiredNativeTokenDeposit} {nativeTokenSymbol}
+                </li>
+              )}
             </ul>
             Add the required funds to your account to meet the staking
             requirements.
