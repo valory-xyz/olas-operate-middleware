@@ -3,7 +3,7 @@ import { Safe } from '@/enums/Wallet';
 export const REACT_QUERY_KEYS = {
   // services
   SERVICES_KEY: ['services'] as const,
-  SERVICE_DEPLOYMENT_STATUS_KEY: (serviceConfigId: string) =>
+  SERVICE_DEPLOYMENT_STATUS_KEY: (serviceConfigId?: string) =>
     ['serviceStatus', serviceConfigId] as const,
 
   // staking programs
@@ -20,7 +20,7 @@ export const REACT_QUERY_KEYS = {
     ] as const,
   ALL_STAKING_CONTRACT_DETAILS: (chainId: number, stakingProgramId: string) =>
     ['allStakingContractDetails', chainId, stakingProgramId] as const,
-  STAKING_PROGRAM_KEY: (chainId: number, serviceConfigId: number) =>
+  STAKING_PROGRAM_KEY: (chainId: number, serviceConfigId: number = 0) =>
     ['stakingProgram', chainId, serviceConfigId] as const,
 
   // wallets
@@ -64,7 +64,7 @@ export const REACT_QUERY_KEYS = {
 
   // multisigs
   MULTISIG_GET_OWNERS_KEY: (multisig: Safe) =>
-    ['multisig', 'getOwners', multisig.chainId, multisig.address] as const,
+    ['multisig', 'getOwners', multisig.evmChainId, multisig.address] as const,
   MULTISIGS_GET_OWNERS_KEY: (multisigs: Safe[]) =>
     [
       'multisigs',

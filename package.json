@@ -27,6 +27,7 @@
     "semver": "^7.6.3",
     "styled-components": "^6.1.8",
     "sudo-prompt": "9.2.1",
+    "typescript": "5.3.x",
     "usehooks-ts": "^2.14.0",
     "winston": "^3.13.0",
     "zod": "^3.23.8"
@@ -63,5 +64,11 @@
     "download-binaries": "sh download_binaries.sh",
     "build:pearl": "sh build_pearl.sh"
   },
-  "version": "0.1.0-rc196"
+  "version": "0.1.0-rc196",
+  "engines": {
+    "node": ">=20",
+    "yarn": ">=1.22.0",
+    "npm": "please-use-yarn"
+  },
+  "engineStrict": true
 }

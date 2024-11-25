@@ -43,18 +43,16 @@ type MigrateValidation =
       reason: CantMigrateReason;
     };
 
-export const useMigrate = (stakingProgramId: StakingProgramId) => {
+export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
   const {
     isFetched: isServicesLoaded,
     selectedAgentConfig,
     selectedService,
     selectedAgentType,
   } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId = selectedService?.service_config_id;
-  const { deploymentStatus: serviceStatus } = useService({
-    serviceConfigId,
-  });
+  const { deploymentStatus: serviceStatus } = useService(serviceConfigId);
 
   const {
     isLoaded: isBalanceLoaded,
@@ -73,24 +71,29 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   const { isServiceStaked, isServiceStakedForMinimumDuration } =
     useActiveStakingContractInfo();
   const { stakingContractInfo, hasEnoughServiceSlots } =
-    useStakingContractDetails(stakingProgramId);
+    useStakingContractDetails(migrateToStakingProgramId);
 
   const safeOlasBalance = useMemo(() => {
     if (!isBalanceLoaded) return 0;
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return 0;
-    masterSafeBalances.reduce((acc, { chainId, symbol, balance }) => {
-      if (chainId === homeChainId && symbol === TokenSymbol.OLAS)
-        return acc + balance;
-      return acc;
-    }, 0);
+    masterSafeBalances.reduce(
+      (acc, { evmChainId: chainId, symbol, balance }) => {
+        if (chainId === homeChainId && symbol === TokenSymbol.OLAS)
+          return acc + balance;
+        return acc;
+      },
+      0,
+    );
   }, [homeChainId, isBalanceLoaded, masterSafeBalances]);
 
   const minimumOlasRequiredToMigrate = useMemo(
     () =>
-      STAKING_PROGRAMS[selectedAgentConfig.homeChainId][stakingProgramId]
-        .stakingRequirements[TokenSymbol.OLAS],
-    [selectedAgentConfig.homeChainId, stakingProgramId],
+      STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
+        migrateToStakingProgramId
+      ]?.stakingRequirements[TokenSymbol.OLAS],
+    [selectedAgentConfig.evmHomeChainId, migrateToStakingProgramId],
   );
+
   const hasEnoughOlasToMigrate = useMemo(() => {
     if (!isBalanceLoaded) return false;
     if (isNil(safeOlasBalance)) return false;
@@ -152,7 +155,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     }
 
     // general requirements
-    if (activeStakingProgramId === stakingProgramId) {
+    if (activeStakingProgramId === migrateToStakingProgramId) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.ContractAlreadySelected,
@@ -200,10 +203,10 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     // user must be staked from hereon
 
     if (
-      !STAKING_PROGRAMS[homeChainId][stakingProgramId].deprecated ||
-      !STAKING_PROGRAMS[homeChainId][stakingProgramId].agentsSupported.includes(
-        selectedAgentType,
-      )
+      !STAKING_PROGRAMS[homeChainId][migrateToStakingProgramId].deprecated ||
+      !STAKING_PROGRAMS[homeChainId][
+        migrateToStakingProgramId
+      ].agentsSupported.includes(selectedAgentType)
     ) {
       return {
         canMigrate: false,
@@ -225,7 +228,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     isAllStakingContractDetailsRecordLoaded,
     stakingContractInfo,
     activeStakingProgramId,
-    stakingProgramId,
+    migrateToStakingProgramId,
     hasEnoughOlasToMigrate,
     isServiceStaked,
     homeChainId,
@@ -271,7 +274,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     }
 
     const stakingContractInfo =
-      allStakingContractDetailsRecord?.[stakingProgramId];
+      allStakingContractDetailsRecord?.[migrateToStakingProgramId];
 
     if (!stakingContractInfo) {
       return {
@@ -325,7 +328,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     hasEnoughEthForInitialFunding,
     isAllStakingContractDetailsRecordLoaded,
     allStakingContractDetailsRecord,
-    stakingProgramId,
+    migrateToStakingProgramId,
     hasEnoughOlasForFirstRun,
     serviceStatus,
   ]);

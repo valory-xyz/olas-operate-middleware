@@ -76,11 +76,11 @@ export const AddFundsSection = () => {
 
 export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const { masterSafes } = useMasterWalletContext();
   const masterSafeAddress = useMemo(
     () =>
-      masterSafes?.find((wallet) => wallet.chainId === homeChainId)?.address,
+      masterSafes?.find((wallet) => wallet.evmChainId === homeChainId)?.address,
     [homeChainId, masterSafes],
   );
 
@@ -106,7 +106,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
         fundingAddress={masterSafeAddress}
         handleCopy={handleCopyAddress}
       />
-      <AddFundsGetTokensSection />
+      {/* <AddFundsGetTokensSection /> */}
     </Flex>
   );
 });
@@ -114,7 +114,7 @@ OpenAddFundsSection.displayName = 'OpenAddFundsSection';
 
 const AddFundsWarningAlertSection = () => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   return (
     <CardSection>
       <CustomAlert
@@ -172,9 +172,11 @@ const AddFundsAddressSection = ({
   </CardSection>
 );
 
+// TODO: readd when important to
+// eslint-disable-next-line no-unused-vars, @typescript-eslint/no-unused-vars
 const AddFundsGetTokensSection = () => {
   const { selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
 
   return (
     <CardSection justify="center" bordertop="true" padding="16px 24px">
@@ -185,7 +187,7 @@ const AddFundsGetTokensSection = () => {
           COW_SWAP_GNOSIS_XDAI_OLAS_URL
         }
       >
-        Get OLAS + {CHAIN_CONFIG[homeChainId].currency} on{' '}
+        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
         {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
       </Link>
     </CardSection>

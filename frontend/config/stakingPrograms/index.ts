@@ -1,7 +1,7 @@
 import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { AgentType } from '@/enums/Agent';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 
@@ -19,7 +19,7 @@ import {
  * Single non-chain specific staking program configuration
  */
 export type StakingProgramConfig = {
-  chainId: ChainId;
+  chainId: EvmChainId;
   deprecated?: boolean; // hides program from UI unless user is already staked in this program
   name: string;
   agentsSupported: AgentType[];
@@ -37,22 +37,22 @@ export type StakingProgramMap = {
 };
 
 export const STAKING_PROGRAMS: {
-  [chainId: number | ChainId]: StakingProgramMap;
+  [chainId: number | EvmChainId]: StakingProgramMap;
 } = {
-  [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS,
+  [EvmChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS,
   // [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS,
 };
 
 export const STAKING_PROGRAM_ADDRESS: {
-  [chainId: number | ChainId]: Record<string, Address>;
+  [chainId: number | EvmChainId]: Record<string, Address>;
 } = {
-  [ChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
+  [EvmChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
   // [ChainId.Optimism]: OPTIMISM_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
 };
 
-export const INITIAL_DEFAULT_STAKING_PROGRAM_IDS: {
-  [chainId: number | ChainId]: StakingProgramId;
+export const DEFAULT_STAKING_PROGRAM_IDS: {
+  [chainId: number | EvmChainId]: StakingProgramId;
 } = {
-  [ChainId.Gnosis]: StakingProgramId.PearlBeta,
+  [EvmChainId.Gnosis]: StakingProgramId.PearlBeta,
   // [ChainId.Optimism]: StakingProgramId.OptimusAlpha,
 };

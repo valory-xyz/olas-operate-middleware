@@ -1,5 +1,5 @@
 import { MiddlewareChain } from '@/client';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 
 /**
  * Converts middleware chain enums to chain ids
@@ -7,18 +7,30 @@ import { ChainId } from '@/enums/Chain';
  * @returns ChainId
  * @throws Error
  */
-export const convertMiddlewareChainToChainId = (
-  chain: MiddlewareChain,
-): ChainId => {
+export const asEvmChainId = (chain?: MiddlewareChain | string): EvmChainId => {
   switch (chain) {
     case MiddlewareChain.ETHEREUM:
-      return ChainId.Ethereum;
+      return EvmChainId.Ethereum;
     case MiddlewareChain.OPTIMISM:
-      return ChainId.Optimism;
+      return EvmChainId.Optimism;
     case MiddlewareChain.GNOSIS:
-      return ChainId.Gnosis;
+      return EvmChainId.Gnosis;
     case MiddlewareChain.BASE:
-      return ChainId.Base;
+      return EvmChainId.Base;
   }
   throw new Error(`Invalid middleware chain enum: ${chain}`);
+};
+
+export const asMiddlewareChain = (chainId?: EvmChainId | number) => {
+  switch (chainId) {
+    case EvmChainId.Ethereum:
+      return MiddlewareChain.ETHEREUM;
+    case EvmChainId.Optimism:
+      return MiddlewareChain.OPTIMISM;
+    case EvmChainId.Gnosis:
+      return MiddlewareChain.GNOSIS;
+    case EvmChainId.Base:
+      return MiddlewareChain.BASE;
+  }
+  throw new Error(`Invalid chain id: ${chainId}`);
 };

@@ -2,7 +2,7 @@ import { providers, utils } from 'ethers';
 import { Contract as MulticallContract } from 'ethers-multicall';
 
 import { PROVIDERS } from '@/constants/providers';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
 import { TransactionInfo } from '@/types/TransactionInfo';
 
@@ -14,7 +14,7 @@ import { TransactionInfo } from '@/types/TransactionInfo';
  */
 const getEthBalance = async (
   address: Address,
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<number> => {
   try {
     const provider = PROVIDERS[chainId].multicallProvider;
@@ -38,7 +38,7 @@ const getEthBalance = async (
 const getErc20Balance = async (
   address: Address,
   contractAddress: Address,
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<number> => {
   try {
     if (!contractAddress) {
@@ -72,7 +72,7 @@ const getErc20Balance = async (
  * @param rpc string
  * @returns Promise<boolean>
  */
-const checkRpc = async (chainId: ChainId): Promise<boolean> => {
+const checkRpc = async (chainId: EvmChainId): Promise<boolean> => {
   const provider = PROVIDERS[chainId].provider;
   try {
     if (!provider) throw new Error('Provider is required');
@@ -96,7 +96,7 @@ const getLogsList = async (
   fromBlock: number,
   toBlock: number,
   roundsLeft: number,
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<providers.Log[]> => {
   const provider = PROVIDERS[chainId].provider;
 
@@ -127,7 +127,7 @@ const getLogsList = async (
  */
 export const getLatestTransaction = async (
   address: Address,
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<TransactionInfo | null> => {
   const provider = PROVIDERS[chainId].provider;
 

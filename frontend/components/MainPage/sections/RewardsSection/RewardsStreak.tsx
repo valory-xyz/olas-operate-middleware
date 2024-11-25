@@ -26,12 +26,11 @@ const Streak = () => {
   const { isEligibleForRewards } = useReward();
   const {
     latestRewardStreak: streak,
-    isLoading,
-    isFetching,
+    isFetched,
     isError,
   } = useRewardsHistory();
 
-  if (isLoading || isFetching || !isBalanceLoaded) {
+  if (!isFetched || !isBalanceLoaded) {
     return <Skeleton.Input active size="small" />;
   }
 

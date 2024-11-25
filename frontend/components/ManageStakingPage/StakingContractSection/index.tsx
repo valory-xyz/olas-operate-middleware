@@ -3,12 +3,11 @@ import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL } from '@/constants/urls';
+import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { StakingProgramStatus } from '@/enums/StakingProgramStatus';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { Maybe } from '@/types/Util';
 
 import { CantMigrateAlert } from './CantMigrateAlert';
 import { MigrateButton } from './MigrateButton';
@@ -37,12 +36,13 @@ export const StakingContractSection = ({
   const { token } = useToken();
   const { migrateValidation } = useMigrate(stakingProgramId);
   const {
-    initialDefaultStakingProgramId,
+    defaultStakingProgramId,
     activeStakingProgramId,
-    activeStakingProgramMeta,
+    allStakingProgramsMeta,
     activeStakingProgramAddress,
+    isActiveStakingProgramLoaded,
   } = useStakingProgram();
-  const { selectedService } = useServices();
+  const { selectedAgentConfig } = useServices();
 
   // /**
   //  * Returns `true` if this stakingProgram is active,
@@ -55,6 +55,8 @@ export const StakingContractSection = ({
   // }, [activeStakingProgramId, defaultStakingProgramId, stakingProgramId]);
 
   const contractTagStatus = useMemo(() => {
+    if (!isActiveStakingProgramLoaded) return null;
+
     if (activeStakingProgramId === stakingProgramId) {
       return StakingProgramStatus.Active;
     }
@@ -62,7 +64,7 @@ export const StakingContractSection = ({
     // Pearl is not staked, set as Selected if default
     if (
       !activeStakingProgramId &&
-      stakingProgramId === initialDefaultStakingProgramId
+      stakingProgramId === defaultStakingProgramId
     ) {
       return StakingProgramStatus.Default;
     }
@@ -71,65 +73,66 @@ export const StakingContractSection = ({
     return null;
   }, [
     activeStakingProgramId,
-    initialDefaultStakingProgramId,
+    defaultStakingProgramId,
+    isActiveStakingProgramLoaded,
     stakingProgramId,
   ]);
 
-  const showMigrateButton = stakingProgramId !== activeStakingProgramId;
+  const showMigrateButton =
+    !isActiveStakingProgramLoaded &&
+    stakingProgramId !== activeStakingProgramId;
 
   const showFundingButton = useMemo(() => {
+    if (!isActiveStakingProgramLoaded) return false;
     if (migrateValidation.canMigrate) return false;
     return (
       migrateValidation.reason ===
         CantMigrateReason.InsufficientOlasToMigrate ||
       migrateValidation.reason === CantMigrateReason.InsufficientGasToMigrate
     );
-  }, [migrateValidation]);
+  }, [isActiveStakingProgramLoaded, migrateValidation]);
 
-  const chainId: Maybe<keyof typeof EXPLORER_URL> =
-    selectedService?.home_chain_id;
+  const evmChainId = selectedAgentConfig.evmHomeChainId;
 
   return (
-    <>
-      <CardSection
-        style={{
-          padding: '16px 24px',
-          backgroundColor: contractTagStatus ? token.colorPrimaryBg : undefined,
-        }}
-        borderbottom="true"
-        vertical
-        gap={16}
-      >
-        <Flex gap={12}>
-          <Title level={5} className="m-0">
-            {`${activeStakingProgramMeta?.name} contract`}
-          </Title>
-          <StakingContractTag status={contractTagStatus} />
-        </Flex>
+    <CardSection
+      style={{
+        padding: '16px 24px',
+        backgroundColor: contractTagStatus ? token.colorPrimaryBg : undefined,
+      }}
+      borderbottom="true"
+      vertical
+      gap={16}
+    >
+      <Flex gap={12}>
+        <Title level={5} className="m-0">
+          {allStakingProgramsMeta[stakingProgramId]?.name || 'Unknown'}
+        </Title>
+        <StakingContractTag status={contractTagStatus} />
+      </Flex>
 
-        <StakingContractDetails stakingProgramId={stakingProgramId} />
+      <StakingContractDetails stakingProgramId={stakingProgramId} />
 
-        {chainId && (
-          <a
-            href={`${EXPLORER_URL[chainId]}/address/${activeStakingProgramAddress}`}
-            target="_blank"
-          >
-            View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </a>
-        )}
+      {evmChainId && (
+        <a
+          href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${activeStakingProgramAddress}`}
+          target="_blank"
+        >
+          View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
+        </a>
+      )}
 
-        {!migrateValidation.canMigrate && (
-          <CantMigrateAlert
-            stakingProgramId={stakingProgramId}
-            cantMigrateReason={migrateValidation.reason}
-          />
-        )}
+      {!migrateValidation.canMigrate && (
+        <CantMigrateAlert
+          stakingProgramId={stakingProgramId}
+          cantMigrateReason={migrateValidation.reason}
+        />
+      )}
 
-        {showMigrateButton && (
-          <MigrateButton stakingProgramId={stakingProgramId} />
-        )}
-        {showFundingButton && <StakingContractFundingButton />}
-      </CardSection>
-    </>
+      {showMigrateButton && (
+        <MigrateButton stakingProgramId={stakingProgramId} />
+      )}
+      {showFundingButton && <StakingContractFundingButton />}
+    </CardSection>
   );
 };

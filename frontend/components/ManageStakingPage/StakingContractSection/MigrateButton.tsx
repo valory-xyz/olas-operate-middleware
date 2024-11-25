@@ -34,14 +34,12 @@ export const MigrateButton = ({
     selectedService,
     selectedAgentConfig,
   } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
       : '';
-  const { service, setDeploymentStatus } = useService({
-    serviceConfigId,
-  });
+  const { service, setDeploymentStatus } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () => (service ? getServiceTemplate(service.hash) : undefined),
     [service],
@@ -49,20 +47,22 @@ export const MigrateButton = ({
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
 
-  const { initialDefaultStakingProgramId } = useStakingProgram();
-  const { activeStakingContractDetails, isActiveStakingContractDetailsLoaded } =
-    useActiveStakingContractInfo();
+  const { defaultStakingProgramId } = useStakingProgram();
+  const {
+    selectedStakingContractDetails,
+    isSelectedStakingContractDetailsLoaded,
+  } = useActiveStakingContractInfo();
   const { stakingContractInfo: defaultStakingContractInfo } =
-    useStakingContractDetails(initialDefaultStakingProgramId);
+    useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
-    if (!isActiveStakingContractDetailsLoaded) return;
-    if (activeStakingContractDetails) return activeStakingContractDetails;
+    if (!isSelectedStakingContractDetailsLoaded) return;
+    if (selectedStakingContractDetails) return selectedStakingContractDetails;
     return defaultStakingContractInfo;
   }, [
-    activeStakingContractDetails,
+    selectedStakingContractDetails,
     defaultStakingContractInfo,
-    isActiveStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoaded,
   ]);
 
   const { setMigrationModalOpen } = useModals();
@@ -122,7 +122,7 @@ export const MigrateButton = ({
             await ServicesService.updateService({
               stakingProgramId: stakingProgramIdToMigrateTo,
               serviceTemplate,
-              serviceUuid: serviceConfigId,
+              serviceConfigId,
               deploy: true,
               useMechMarketplace:
                 stakingProgramIdToMigrateTo ===

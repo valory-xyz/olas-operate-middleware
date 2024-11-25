@@ -1,5 +1,6 @@
+import { MiddlewareChain } from '@/client';
 import { AgentType } from '@/enums/Agent';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
@@ -12,12 +13,13 @@ export const AGENT_CONFIG: {
 } = {
   [AgentType.PredictTrader]: {
     name: 'Predict Trader',
-    homeChainId: ChainId.Gnosis,
-    requiresAgentSafesOn: [ChainId.Gnosis],
+    evmHomeChainId: EvmChainId.Gnosis,
+    middlewareHomeChainId: MiddlewareChain.GNOSIS,
+    requiresAgentSafesOn: [EvmChainId.Gnosis],
     agentSafeFundingRequirements: {
-      [ChainId.Gnosis]: 100000000000000000,
+      [EvmChainId.Gnosis]: 100000000000000000,
     },
-    requiresMasterSafesOn: [ChainId.Gnosis],
+    requiresMasterSafesOn: [EvmChainId.Gnosis],
     serviceApi: PredictTraderService,
   },
   // TODO: check optimus config

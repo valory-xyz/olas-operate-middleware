@@ -6,28 +6,8 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { StakingState } from '@/types/Autonolas';
 import { Maybe } from '@/types/Util';
 
-import { useServices } from './useServices';
-
-export const useStakingContractContext = () => {
-  const {
-    activeStakingContractDetails,
-    isPaused,
-    isAllStakingContractDetailsRecordLoaded,
-    allStakingContractDetailsRecord,
-    refetchActiveStakingContractDetails,
-    setIsPaused,
-    isActiveStakingContractDetailsLoaded,
-  } = useContext(StakingContractDetailsContext);
-  return {
-    isActiveStakingContractDetailsLoaded,
-    activeStakingContractDetails,
-    isPaused,
-    isAllStakingContractDetailsRecordLoaded,
-    allStakingContractDetailsRecord,
-    refetchActiveStakingContractDetails,
-    setIsPaused,
-  };
-};
+export const useStakingContractContext = () =>
+  useContext(StakingContractDetailsContext);
 
 /**
  * Returns ACTIVE staking contract details
@@ -37,25 +17,26 @@ export const useStakingContractContext = () => {
  */
 export const useActiveStakingContractInfo = () => {
   const {
-    activeStakingContractDetails,
-    isActiveStakingContractDetailsLoaded: isActiveStakingContractDetailsLoaded,
-    allStakingContractDetailsRecord,
-    refetchActiveStakingContractDetails,
-    isPaused,
-    setIsPaused,
+    selectedStakingContractDetails,
+    isSelectedStakingContractDetailsLoaded,
+    // allStakingContractDetailsRecord,
+    // refetchActiveStakingContractDetails,
+    // isPaused,
+    // setIsPaused,
   } = useStakingContractContext();
 
-  const { selectedService } = useServices();
+  // const { selectedService } = useServices();
 
-  // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
-  if (!selectedService || !activeStakingContractDetails) {
-    return {
-      allStakingContractDetailsRecord,
-      refetchActiveStakingContractDetails,
-      isPaused,
-      setIsPaused,
-    };
-  }
+  // // TODO: find a better way to handle this, currently stops react lifecycle hooks being implemented below it
+  // if (!selectedService || !activeStakingContractDetails) {
+  //   return {
+  //     allStakingContractDetailsRecord,
+  //     refetchActiveStakingContractDetails,
+  //     isPaused,
+  //     setIsPaused,
+  //     isActiveStakingContractDetailsLoaded,
+  //   };
+  // }
 
   const {
     serviceStakingState,
@@ -64,7 +45,7 @@ export const useActiveStakingContractInfo = () => {
     availableRewards,
     serviceIds,
     maxNumServices,
-  } = activeStakingContractDetails ?? {};
+  } = selectedStakingContractDetails ?? {};
 
   const isAgentEvicted = serviceStakingState === StakingState.Evicted;
 
@@ -112,8 +93,8 @@ export const useActiveStakingContractInfo = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isActiveStakingContractDetailsLoaded,
-    activeStakingContractDetails,
+    isSelectedStakingContractDetailsLoaded,
+    selectedStakingContractDetails,
     hasEnoughRewardsAndSlots,
     hasEnoughServiceSlots,
     isRewardsAvailable,

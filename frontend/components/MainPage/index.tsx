@@ -21,7 +21,7 @@ import { KeepAgentRunningSection } from './sections/KeepAgentRunningSection';
 import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { RewardsSection } from './sections/RewardsSection';
-import { StakingContractUpdate } from './sections/StakingContractUpdate';
+import { StakingContractSection } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
@@ -96,7 +96,7 @@ export const Main = () => {
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <RewardsSection />
         <KeepAgentRunningSection />
-        <StakingContractUpdate />
+        <StakingContractSection />
         <GasBalanceSection />
         <MainNeedsFunds />
         <AddFundsSection />

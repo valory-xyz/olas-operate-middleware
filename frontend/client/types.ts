@@ -10,6 +10,7 @@ import {
 } from './enums';
 
 export type ServiceHash = string;
+export type ServiceConfigId = string;
 
 export type ServiceKeys = {
   address: Address;
@@ -19,7 +20,6 @@ export type ServiceKeys = {
 
 export type LedgerConfig = {
   rpc: string;
-  type: MiddlewareLedger;
   chain: MiddlewareChain;
 };
 
@@ -51,12 +51,12 @@ export type MiddlewareServiceResponse = {
   hash_history: {
     [block: string]: string;
   };
-  home_chain_id: number;
+  home_chain: MiddlewareChain;
   keys: ServiceKeys[];
   service_path?: string;
   version: string;
   chain_configs: {
-    [chainId: number]: {
+    [middlewareChain in MiddlewareChain]: {
       ledger_config: LedgerConfig;
       chain_data: ChainData;
     };
@@ -77,7 +77,7 @@ export type ServiceTemplate = {
   description: string;
   image: string;
   service_version: string;
-  home_chain_id: string;
+  home_chain: string;
   configurations: { [key: string]: ConfigurationTemplate };
   env_variables: { [key: string]: EnvVariableAttributes };
   deploy?: boolean;

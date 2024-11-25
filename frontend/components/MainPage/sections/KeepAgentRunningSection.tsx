@@ -16,9 +16,9 @@ export const KeepAgentRunningSection = () => {
   const { storeState } = useStore();
 
   const { selectedService } = useServices();
-  const { deploymentStatus: serviceStatus } = useService({
-    serviceConfigId: selectedService?.service_config_id,
-  });
+  const { deploymentStatus: serviceStatus } = useService(
+    selectedService?.service_config_id,
+  );
 
   if (storeState?.firstStakingRewardAchieved) return null;
   if (serviceStatus !== MiddlewareDeploymentStatus.DEPLOYED) return null;

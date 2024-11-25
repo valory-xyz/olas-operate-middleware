@@ -9,9 +9,10 @@ import { z } from 'zod';
 import { STAKING_PROGRAM_ADDRESS } from '@/config/stakingPrograms';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
 import { Nullable } from '@/types/Util';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { useService } from './useService';
 import { useServices } from './useServices';
@@ -92,7 +93,7 @@ export type Checkpoint = {
 
 const useTransformCheckpoints = () => {
   const { selectedAgentConfig } = useServices();
-  const { serviceApi: agent, homeChainId: chainId } = selectedAgentConfig;
+  const { serviceApi: agent, evmHomeChainId: chainId } = selectedAgentConfig;
 
   return useCallback(
     (
@@ -163,7 +164,10 @@ type CheckpointsResponse = { checkpoints: CheckpointResponse[] };
 /**
  * hook to fetch rewards history for all contracts
  */
-const useContractCheckpoints = (chainId: ChainId, serviceId: Maybe<number>) => {
+const useContractCheckpoints = (
+  chainId: EvmChainId,
+  serviceId: Maybe<number>,
+) => {
   const transformCheckpoints = useTransformCheckpoints();
 
   return useQuery({
@@ -234,18 +238,20 @@ const useContractCheckpoints = (chainId: ChainId, serviceId: Maybe<number>) => {
 
 export const useRewardsHistory = () => {
   const { selectedService, selectedAgentConfig } = useServices();
-  const { homeChainId } = selectedAgentConfig;
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId = selectedService?.service_config_id;
-  const { service } = useService({ serviceConfigId });
-  const serviceId = service?.chain_configs[homeChainId].chain_data?.token;
+  const { service } = useService(serviceConfigId);
+
+  const serviceNftTokenId =
+    service?.chain_configs[asMiddlewareChain(homeChainId)].chain_data?.token;
 
   const {
     isError,
     isLoading,
-    isFetching,
+    isFetched,
     refetch,
     data: contractCheckpoints,
-  } = useContractCheckpoints(homeChainId, serviceId);
+  } = useContractCheckpoints(homeChainId, serviceNftTokenId);
 
   const epochSortedCheckpoints = useMemo<Checkpoint[]>(
     () =>
@@ -256,7 +262,7 @@ export const useRewardsHistory = () => {
   );
 
   const latestRewardStreak = useMemo<number>(() => {
-    if (isLoading || isFetching) return 0;
+    if (isLoading || !isFetched) return 0;
     if (!contractCheckpoints) return 0;
 
     // remove all histories that are not earned
@@ -299,15 +305,15 @@ export const useRewardsHistory = () => {
       isStreakBroken = true;
       return streakCount;
     }, 0);
-  }, [isLoading, isFetching, epochSortedCheckpoints, contractCheckpoints]);
+  }, [isLoading, isFetched, contractCheckpoints, epochSortedCheckpoints]);
 
   useEffect(() => {
-    serviceId && refetch();
-  }, [refetch, serviceId]);
+    serviceNftTokenId && refetch();
+  }, [refetch, serviceNftTokenId]);
 
   return {
     isError,
-    isFetching,
+    isFetched,
     isLoading,
     latestRewardStreak,
     refetch,

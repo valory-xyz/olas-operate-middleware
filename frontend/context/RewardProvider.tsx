@@ -18,6 +18,7 @@ import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 import { StakingRewardsInfoSchema } from '@/types/Autonolas';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { StakingProgramContext } from './StakingProgramProvider';
@@ -31,31 +32,27 @@ export const RewardContext = createContext<{
   minimumStakedAmountRequired?: number;
   updateRewards: () => Promise<void>;
 }>({
-  accruedServiceStakingRewards: undefined,
-  availableRewardsForEpoch: undefined,
-  availableRewardsForEpochEth: undefined,
-  isEligibleForRewards: undefined,
-  optimisticRewardsEarnedForEpoch: undefined,
-  minimumStakedAmountRequired: undefined,
   updateRewards: async () => {},
 });
 
 const currentAgent = AGENT_CONFIG.trader; // TODO: replace with dynamic agent selection
-const currentChainId = GNOSIS_CHAIN_CONFIG.chainId; // TODO: replace with dynamic chain selection
+const currentChainId = GNOSIS_CHAIN_CONFIG.evmChainId; // TODO: replace with selectedAgentConfig.chainId
 
 /**
  * hook to fetch staking rewards details
  */
 const useStakingRewardsDetails = () => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { activeStakingProgramId } = useContext(StakingProgramContext);
+  const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const { selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
+
   const serviceConfigId = selectedService?.service_config_id;
-  const { service } = useService({ serviceConfigId });
 
   // fetch chain data from the selected service
-  const chainData = service?.chain_configs[currentChainId].chain_data;
+  const chainData =
+    service?.chain_configs[asMiddlewareChain(currentChainId)].chain_data;
   const multisig = chainData?.multisig;
   const token = chainData?.token;
 
@@ -63,7 +60,7 @@ const useStakingRewardsDetails = () => {
     queryKey: REACT_QUERY_KEYS.REWARDS_KEY(
       currentChainId,
       serviceConfigId!,
-      activeStakingProgramId!,
+      selectedStakingProgramId!,
       multisig!,
       token!,
     ),
@@ -72,7 +69,7 @@ const useStakingRewardsDetails = () => {
         {
           agentMultisigAddress: multisig!,
           serviceId: token!,
-          stakingProgramId: activeStakingProgramId!,
+          stakingProgramId: selectedStakingProgramId!,
           chainId: currentChainId,
         },
       );
@@ -81,7 +78,7 @@ const useStakingRewardsDetails = () => {
     enabled:
       !!isOnline &&
       !!serviceConfigId &&
-      !!activeStakingProgramId &&
+      !!selectedStakingProgramId &&
       !!multisig &&
       !!token,
     refetchInterval: isOnline ? FIVE_SECONDS_INTERVAL : false,

@@ -4,7 +4,7 @@ import { Contract as MulticallContract, ContractCall } from 'ethers-multicall';
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { Erc20TokenConfig } from '@/config/tokens';
 import { PROVIDERS } from '@/constants/providers';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
 import { AddressNumberRecord } from '@/types/Records';
 
@@ -16,7 +16,7 @@ import { AddressNumberRecord } from '@/types/Records';
  */
 const getEthBalances = async (
   addresses: Address[],
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<AddressNumberRecord | undefined> => {
   const provider = PROVIDERS[chainId].multicallProvider;
 
@@ -49,7 +49,7 @@ const getEthBalances = async (
 const getErc20Balances = async (
   addresses: Address[],
   erc20TokenConfig: Erc20TokenConfig,
-  chainId: ChainId,
+  chainId: EvmChainId,
 ): Promise<AddressNumberRecord> => {
   if (!erc20TokenConfig) return {};
   if (!addresses.length) return {};

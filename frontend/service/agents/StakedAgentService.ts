@@ -16,7 +16,7 @@ import {
   STAKING_PROGRAMS,
 } from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { ContractType } from '@/enums/Contract';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -44,26 +44,26 @@ export abstract class StakedAgentService {
     agentMultisigAddress: Address,
     serviceId: number,
     stakingProgramId: StakingProgramId,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<unknown>;
   abstract getAvailableRewardsForEpoch(
     stakingProgramId: StakingProgramId,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<unknown>;
   abstract getStakingContractDetailsByServiceIdStakingProgram(
     serviceId: number,
     stakingProgramId: StakingProgramId,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<unknown>;
   abstract getStakingContractDetailsByName(
     stakingProgramId: StakingProgramId,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<unknown>;
   abstract getInstance(): StakedAgentService;
 
   static getCurrentStakingProgramByServiceId = async (
     serviceId: number,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<Maybe<StakingProgramId>> => {
     try {
       const { multicallProvider } = PROVIDERS[chainId];
@@ -114,7 +114,7 @@ export abstract class StakedAgentService {
   static getServiceRegistryInfo = async (
     address: Address, // generally masterSafeAddress
     serviceId: number,
-    chainId: ChainId,
+    chainId: EvmChainId,
   ): Promise<GetServiceRegistryInfoResponse> => {
     if (!OLAS_CONTRACTS[chainId]) {
       throw new Error('Chain not supported');
@@ -160,7 +160,7 @@ export abstract class StakedAgentService {
    * @example getStakingProgramIdByAddress('0x3052451e1eAee78e62E169AfdF6288F8791F2918') // StakingProgramId.Beta4
    */
   static getStakingProgramIdByAddress = (
-    chainId: number | ChainId,
+    chainId: number | EvmChainId,
     contractAddress: Address,
   ): Nullable<StakingProgramId> => {
     const addresses = STAKING_PROGRAM_ADDRESS[chainId];

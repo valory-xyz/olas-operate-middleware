@@ -13,7 +13,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { PROVIDERS } from '@/constants/providers';
 import { NA } from '@/constants/symbols';
 import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useSetup } from '@/hooks/useSetup';
@@ -169,9 +169,9 @@ const eoaFundingMap = {
   //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[MiddlewareChain.BASE].safeCreation,
   //   },
   [MiddlewareChain.GNOSIS]: {
-    provider: PROVIDERS[ChainId.Gnosis].provider,
-    chainConfig: CHAIN_CONFIG[ChainId.Gnosis],
-    requiredEth: MIN_ETH_BALANCE_THRESHOLDS[ChainId.Gnosis].safeCreation,
+    provider: PROVIDERS[EvmChainId.Gnosis].provider,
+    chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
+    requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Gnosis].safeCreation,
   },
 };
 
@@ -182,11 +182,10 @@ export const SetupEoaFunding = () => {
   const masterEoaAddress = masterEoa?.address;
 
   const [currentChain, setCurrentChain] = useState<MiddlewareChain>(
-    +Object.keys(eoaFundingMap)[0] as MiddlewareChain,
+    MiddlewareChain.GNOSIS,
   );
 
-  const currentFundingMapObject =
-    eoaFundingMap[+currentChain as keyof typeof eoaFundingMap];
+  const currentFundingMapObject = eoaFundingMap[MiddlewareChain.GNOSIS];
 
   const getIsCurrentChainFunded = useCallback(
     async (
@@ -227,7 +226,7 @@ export const SetupEoaFunding = () => {
     if (nextChainExists) {
       // goto next chain
       setCurrentChain(
-        +Object.keys(eoaFundingMap)[indexOfCurrentChain + 1] as MiddlewareChain,
+        Object.keys(eoaFundingMap)[indexOfCurrentChain + 1] as MiddlewareChain,
       );
       return;
     }
@@ -238,15 +237,15 @@ export const SetupEoaFunding = () => {
     (balance) => balance.walletAddress === masterEoaAddress,
   );
   const isFunded =
-    eoaBalance?.chainId === ChainId.Gnosis &&
+    eoaBalance?.evmChainId === EvmChainId.Gnosis &&
     eoaBalance.balance >=
-      MIN_ETH_BALANCE_THRESHOLDS[ChainId.Gnosis].safeCreation;
+      MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Gnosis].safeCreation;
 
   return (
     <CardFlex>
       <SetupCreateHeader prev={SetupScreen.SetupBackupSigner} disabled />
       <Title level={3}>
-        {`Deposit ${currentFundingMapObject.requiredEth} ${currentFundingMapObject.chainConfig.currency} on ${currentFundingMapObject.chainConfig.name}`}
+        {`Deposit ${currentFundingMapObject.requiredEth} ${currentFundingMapObject.chainConfig.nativeToken.symbol} on ${currentFundingMapObject.chainConfig.name}`}
       </Title>
       <Paragraph style={{ marginBottom: 0 }}>
         The app needs these funds to create your account on-chain.

@@ -1,5 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { Maybe } from 'graphql/jsutils/Maybe';
+import { isNil } from 'lodash';
 import {
   createContext,
   Dispatch,
@@ -17,6 +18,7 @@ import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { StakingContractDetails } from '@/types/Autonolas';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { StakingProgramContext } from './StakingProgramProvider';
 
@@ -26,7 +28,7 @@ import { StakingProgramContext } from './StakingProgramProvider';
 const useAllStakingContractDetails = () => {
   const { allStakingProgramIds } = useStakingProgram();
   const { selectedAgentConfig } = useServices();
-  const { serviceApi, homeChainId } = selectedAgentConfig;
+  const { serviceApi, evmHomeChainId: homeChainId } = selectedAgentConfig;
 
   const queryResults = useQueries({
     queries: allStakingProgramIds.map((programId) => ({
@@ -35,7 +37,7 @@ const useAllStakingContractDetails = () => {
         programId,
       ),
       queryFn: async () =>
-        await serviceApi.getStakingContractDetailsByName(
+        await serviceApi.getStakingContractDetailsByStakingProgramId(
           programId as StakingProgramId,
           homeChainId,
         ),
@@ -72,42 +74,51 @@ const useAllStakingContractDetails = () => {
 /**
  * hook to get staking contract details by staking program
  */
-const useStakingContractDetailsByStakingProgram = (
-  serviceId: Maybe<number>,
-  stakingProgramId: Maybe<StakingProgramId>,
-  isPaused?: boolean,
-) => {
+const useStakingContractDetailsByStakingProgram = ({
+  serviceNftTokenId,
+  stakingProgramId,
+  isPaused,
+}: {
+  serviceNftTokenId: Maybe<number>;
+  stakingProgramId: Maybe<StakingProgramId>;
+  isPaused?: boolean;
+}) => {
   const { selectedAgentConfig } = useServices();
-  const { serviceApi, homeChainId: chainId } = selectedAgentConfig;
+  const { serviceApi, evmHomeChainId } = selectedAgentConfig;
   return useQuery({
     queryKey: REACT_QUERY_KEYS.STAKING_CONTRACT_DETAILS_BY_STAKING_PROGRAM_KEY(
-      chainId,
-      serviceId!,
+      evmHomeChainId,
+      serviceNftTokenId!,
       stakingProgramId!,
     ),
     queryFn: async () => {
-      return await serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
-        serviceId!,
+      if (isNil(serviceNftTokenId))
+        return serviceApi.getStakingContractDetailsByStakingProgramId(
+          stakingProgramId!,
+          evmHomeChainId,
+        );
+      return serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
+        serviceNftTokenId!,
         stakingProgramId!,
-        chainId,
+        evmHomeChainId,
       );
     },
-    enabled: !!serviceId && !!stakingProgramId && !!chainId && !isPaused,
-    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : () => false,
+    enabled: !isPaused,
+    refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
 };
 
 type StakingContractDetailsContextProps = {
-  activeStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
-  isActiveStakingContractDetailsLoaded: boolean;
+  selectedStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
+  isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
     Partial<StakingContractDetails>
   >;
   isAllStakingContractDetailsRecordLoaded: boolean;
-  refetchActiveStakingContractDetails: () => Promise<void>;
+  refetchSelectedStakingContractDetails: () => Promise<void>;
   setIsPaused: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -116,12 +127,11 @@ type StakingContractDetailsContextProps = {
  */
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
-    activeStakingContractDetails: null,
+    selectedStakingContractDetails: null,
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
-    isActiveStakingContractDetailsLoaded: false,
-    allStakingContractDetailsRecord: undefined,
-    refetchActiveStakingContractDetails: async () => {},
+    isSelectedStakingContractDetailsLoaded: false,
+    refetchSelectedStakingContractDetails: async () => {},
     setIsPaused: () => {},
   });
 
@@ -132,49 +142,41 @@ export const StakingContractDetailsProvider = ({
   children,
 }: PropsWithChildren) => {
   const [isPaused, setIsPaused] = useState(false);
-  const {
-    selectedService,
-    selectedAgentConfig,
-    isFetched: isLoaded,
-  } = useServices();
-  const serviceConfigId =
-    selectedService?.service_config_id;
-  const { service } = useService({ serviceConfigId });
-  const serviceId =
-    service?.chain_configs?.[selectedAgentConfig?.homeChainId]?.chain_data
-      ?.token;
+  const { selectedService, selectedAgentConfig } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
 
-  const { activeStakingProgramId } = useContext(StakingProgramContext);
+  const { selectedStakingProgramId } = useContext(StakingProgramContext);
+
   const {
-    data: activeStakingContractDetails,
-    isLoading: isActiveStakingContractDetailsLoading,
-    refetch: refetchActiveStakingContract,
-  } = useStakingContractDetailsByStakingProgram(
-    serviceId,
-    activeStakingProgramId,
-    isPaused,
-  );
+    data: selectedStakingContractDetails,
+    isFetched,
+    refetch,
+  } = useStakingContractDetailsByStakingProgram({
+    serviceNftTokenId:
+      service?.chain_configs[
+        asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
+      ].chain_data.token,
+    stakingProgramId: selectedStakingProgramId,
+  });
 
   const { allStakingContractDetailsRecord, isAllStakingContractDetailsLoaded } =
     useAllStakingContractDetails();
 
-  const refetchActiveStakingContractDetails = useCallback(async () => {
-    await refetchActiveStakingContract();
-  }, [refetchActiveStakingContract]);
+  const refetchSelectedStakingContractDetails = useCallback(async () => {
+    await refetch();
+  }, [refetch]);
 
   return (
     <StakingContractDetailsContext.Provider
       value={{
-        activeStakingContractDetails,
-        isActiveStakingContractDetailsLoaded:
-          !isActiveStakingContractDetailsLoading &&
-          !!activeStakingContractDetails,
+        selectedStakingContractDetails,
+        isSelectedStakingContractDetailsLoaded: isFetched,
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,
         isPaused,
         setIsPaused,
-        refetchActiveStakingContractDetails,
+        refetchSelectedStakingContractDetails,
       }}
     >
       {children}

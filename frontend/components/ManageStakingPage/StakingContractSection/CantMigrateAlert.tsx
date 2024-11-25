@@ -5,7 +5,6 @@ import { useMemo } from 'react';
 import { CustomAlert } from '@/components/Alert';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
-import { ChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -13,7 +12,6 @@ import {
   useMasterBalances,
 } from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
   useActiveStakingContractInfo,
@@ -29,19 +27,7 @@ type CantMigrateAlertProps = { stakingProgramId: StakingProgramId };
 const AlertInsufficientMigrationFunds = ({
   stakingProgramId: stakingProgramIdToMigrateTo,
 }: CantMigrateAlertProps) => {
-  const {
-    isFetched: isServicesLoaded,
-    selectedService,
-    selectedAgentConfig,
-  } = useServices();
-  const { homeChainId } = selectedAgentConfig;
-  const serviceConfigId =
-    isServicesLoaded && selectedService
-      ? selectedService.service_config_id
-      : '';
-  const { service } = useService({
-    serviceConfigId,
-  });
+  const { selectedAgentConfig } = useServices();
   const { isAllStakingContractDetailsRecordLoaded } =
     useStakingContractContext();
   const { isServiceStaked } = useActiveStakingContractInfo();
@@ -50,26 +36,24 @@ const AlertInsufficientMigrationFunds = ({
   const { masterSafeBalances } = useMasterBalances();
   const { serviceFundRequirements, isInitialFunded } = useNeedsFunds();
 
-  // should find in STAKING_PROGRAMS based on stakingProgramIdToMigrateTo?
-  const chainIdToMigrateTo = ChainId.Gnosis;
-
   const requiredStakedOlas =
-    STAKING_PROGRAMS[chainIdToMigrateTo][stakingProgramIdToMigrateTo]
-      ?.stakingRequirements[TokenSymbol.OLAS];
+    STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
+      stakingProgramIdToMigrateTo
+    ]?.stakingRequirements[TokenSymbol.OLAS];
 
   const safeBalance = useMemo(() => {
     if (!isBalanceLoaded) return;
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
     masterSafeBalances.reduce(
-      (acc, { chainId, symbol, balance }) => {
-        if (chainId === homeChainId) {
+      (acc, { evmChainId: chainId, symbol, balance }) => {
+        if (chainId === selectedAgentConfig.evmHomeChainId) {
           acc[symbol] = balance;
         }
         return acc;
       },
       {} as Record<TokenSymbol, number>,
     );
-  }, [homeChainId, isBalanceLoaded, masterSafeBalances]);
+  }, [isBalanceLoaded, masterSafeBalances, selectedAgentConfig.evmHomeChainId]);
 
   if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isNil(requiredStakedOlas)) return null;
@@ -83,8 +67,9 @@ const AlertInsufficientMigrationFunds = ({
 
   const requiredXdaiDeposit = isInitialFunded
     ? LOW_MASTER_SAFE_BALANCE - (safeBalance[TokenSymbol.ETH] || 0) // is already funded allow minimal maintenance
-    : (serviceFundRequirements[homeChainId]?.[TokenSymbol.ETH] || 0) -
-      (safeBalance[TokenSymbol.ETH] || 0); // otherwise require full initial funding requirements
+    : (serviceFundRequirements[selectedAgentConfig.evmHomeChainId]?.[
+        TokenSymbol.ETH
+      ] || 0) - (safeBalance[TokenSymbol.ETH] || 0); // otherwise require full initial funding requirements
 
   return (
     <CustomAlert

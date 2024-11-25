@@ -2,12 +2,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
 import {
+  MiddlewareBuildingStatuses,
+  MiddlewareChain,
   MiddlewareDeploymentStatus,
   MiddlewareRunningStatuses,
   MiddlewareTransitioningStatuses,
 } from '@/client';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import {
   AgentEoa,
   AgentSafe,
@@ -16,11 +18,13 @@ import {
   WalletType,
 } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
+import { Optional } from '@/types/Util';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useServices } from './useServices';
 
 type ServiceChainIdAddressRecord = {
-  [chainId: number]: {
+  [evmChainId: number]: {
     agentSafe?: Address;
     agentEoas?: Address[];
   };
@@ -29,14 +33,10 @@ type ServiceChainIdAddressRecord = {
 /**
  * Hook for interacting with a single service.
  */
-export const useService = ({
-  serviceConfigId = '',
-}: {
-  serviceConfigId?: string;
-}) => {
+export const useService = (serviceConfigId?: string) => {
   const { services, isFetched: isLoaded } = useServices();
   const queryClient = useQueryClient();
-  // const { wallets } = useMasterWalletContext();
+  // const { wallets } = useMasterWalletContext(); // TODO: implement
 
   const service = useMemo(() => {
     return services?.find(
@@ -44,11 +44,14 @@ export const useService = ({
     );
   }, [serviceConfigId, services]);
 
+  const serviceNftTokenId = useMemo<Optional<number>>(() => {
+    return service?.chain_configs[service?.home_chain]?.chain_data.token;
+  }, [service?.chain_configs, service?.home_chain]);
+
   // TODO: quick hack to fix for refactor (only predict), will make it dynamic later
   const serviceWallets: AgentWallets = useMemo(() => {
-    if (!service?.chain_configs[ChainId.Gnosis]) return [];
-
-    const chainConfig = service?.chain_configs[ChainId.Gnosis];
+    const chainConfig = service?.chain_configs[MiddlewareChain.GNOSIS];
+    if (!chainConfig) return [];
 
     return [
       ...(chainConfig.chain_data.instances ?? []).map(
@@ -65,7 +68,7 @@ export const useService = ({
               address: chainConfig.chain_data.multisig,
               owner: WalletOwnerType.Agent,
               type: WalletType.Safe,
-              chainId: ChainId.Gnosis,
+              evmChainId: EvmChainId.Gnosis,
             } as AgentSafe,
           ]
         : []),
@@ -79,17 +82,15 @@ export const useService = ({
     // group multisigs by chainId
     const addressesByChainId: ServiceChainIdAddressRecord = Object.keys(
       chainData,
-    ).reduce((acc, chainIdKey) => {
-      const chainId = +chainIdKey;
+    ).reduce((acc, middlewareChain) => {
+      const { multisig, instances } =
+        chainData[middlewareChain as keyof typeof chainData].chain_data;
 
-      const chain = chainData[chainId];
-      if (!chain) return acc;
-
-      const { multisig, instances } = chain.chain_data;
+      const evmChainId = asEvmChainId(middlewareChain);
 
       return {
         ...acc,
-        [chainId]: {
+        [evmChainId]: {
           agentSafe: multisig,
           agentEoas: instances,
         },
@@ -133,15 +134,23 @@ export const useService = ({
    * Overrides the deployment status of the service in the cache.
    * @note Overwrite is only temporary if ServicesContext is polling
    */
-  const setDeploymentStatus = (deploymentStatus?: MiddlewareDeploymentStatus) =>
+  const setDeploymentStatus = (
+    deploymentStatus?: MiddlewareDeploymentStatus,
+  ) => {
+    // if (!serviceConfigId) throw new Error('Service config ID is required');
+    // if (!deploymentStatus) throw new Error('Deployment status is required');
+
     queryClient.setQueryData(
       REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
       deploymentStatus,
     );
+  };
 
-  const deploymentStatus = queryClient.getQueryData<
-    MiddlewareDeploymentStatus | undefined
-  >(REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId));
+  const deploymentStatus = serviceConfigId
+    ? queryClient.getQueryData<MiddlewareDeploymentStatus | undefined>(
+        REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
+      )
+    : undefined;
 
   /** @note deployment is transitioning from stopped to deployed (and vice versa) */
   const isServiceTransitioning = deploymentStatus
@@ -160,6 +169,7 @@ export const useService = ({
 
   return {
     service,
+    serviceNftTokenId,
     addresses,
     flatAddresses,
     isLoaded,

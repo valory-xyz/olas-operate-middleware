@@ -4,7 +4,7 @@ import { isNil } from 'lodash';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { DISCORD_TICKET_URL } from '@/constants/urls';
-import { ChainId } from '@/enums/Chain';
+import { EvmChainId } from '@/enums/Chain';
 import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
@@ -16,24 +16,24 @@ const { Text } = Typography;
  * update as needed; check https://app.safe.global/new-safe/create for prefixes
  */
 const safeChainPrefix = {
-  [ChainId.Ethereum]: 'eth',
-  [ChainId.Base]: 'base',
-  [ChainId.Optimism]: 'oeth',
-  [ChainId.Gnosis]: 'gno',
+  [EvmChainId.Ethereum]: 'eth',
+  [EvmChainId.Base]: 'base',
+  [EvmChainId.Optimism]: 'oeth',
+  [EvmChainId.Gnosis]: 'gno',
 };
 
 export const AddBackupWalletViaSafePage = () => {
   const {
-    selectedAgentConfig: { homeChainId },
+    selectedAgentConfig: { evmHomeChainId: homeChainId },
   } = useServices();
   const { masterSafes } = useMasterWalletContext();
 
   const masterSafe = masterSafes?.find(
-    ({ chainId }) => homeChainId === chainId,
+    ({ evmChainId: chainId }) => homeChainId === chainId,
   );
 
   const safePrefix =
-    masterSafe?.chainId && safeChainPrefix[masterSafe?.chainId];
+    masterSafe?.evmChainId && safeChainPrefix[masterSafe?.evmChainId];
 
   if (isNil(masterSafe)) {
     return null;

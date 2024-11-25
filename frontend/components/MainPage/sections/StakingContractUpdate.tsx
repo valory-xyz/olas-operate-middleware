@@ -2,10 +2,10 @@ import { RightOutlined } from '@ant-design/icons';
 import { Button, Flex, Skeleton, Typography } from 'antd';
 import { useMemo } from 'react';
 
-import { MiddlewareDeploymentStatus } from '@/client';
 import { NA } from '@/constants/symbols';
 import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -14,44 +14,41 @@ import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
 
-export const StakingContractUpdate = () => {
+export const StakingContractSection = () => {
   const { goto } = usePageState();
-  const { isActiveStakingProgramLoaded, activeStakingProgramMeta } =
+  const { isActiveStakingProgramLoaded, selectedStakingProgramMeta } =
     useStakingProgram();
 
   const { isAllStakingContractDetailsRecordLoaded } =
     useStakingContractContext();
   const { selectedService } = useServices();
-  const serviceStatus = selectedService?.deploymentStatus;
 
-  const serviceIsTransitioning = useMemo(
-    () =>
-      serviceStatus === MiddlewareDeploymentStatus.DEPLOYING ||
-      serviceStatus === MiddlewareDeploymentStatus.STOPPING,
-    [serviceStatus],
+  const { isServiceTransitioning } = useService(
+    selectedService?.service_config_id,
   );
 
   const gotoManageStakingButton = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return <Skeleton.Input />;
+
     return (
       <Button
         type="link"
         className="p-0"
         onClick={() => goto(Pages.ManageStaking)}
         disabled={
-          !isAllStakingContractDetailsRecordLoaded || serviceIsTransitioning
+          !isAllStakingContractDetailsRecordLoaded || isServiceTransitioning
         }
       >
-        {activeStakingProgramMeta?.name || NA}
+        {selectedStakingProgramMeta?.name || NA}
         <RightOutlined />
       </Button>
     );
   }, [
-    goto,
     isActiveStakingProgramLoaded,
     isAllStakingContractDetailsRecordLoaded,
-    serviceIsTransitioning,
-    activeStakingProgramMeta?.name,
+    isServiceTransitioning,
+    selectedStakingProgramMeta?.name,
+    goto,
   ]);
 
   return (

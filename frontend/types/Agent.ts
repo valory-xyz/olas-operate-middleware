@@ -1,12 +1,14 @@
-import { ChainId } from '@/enums/Chain';
+import { MiddlewareChain } from '@/client';
+import { EvmChainId } from '@/enums/Chain';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
 export type StakedAgentServiceInstance = PredictTraderService;
 export type AgentConfig = {
   name: string;
-  homeChainId: ChainId;
-  requiresAgentSafesOn: ChainId[];
+  evmHomeChainId: EvmChainId;
+  middlewareHomeChainId: MiddlewareChain;
+  requiresAgentSafesOn: EvmChainId[];
   agentSafeFundingRequirements: Record<string, number>;
-  requiresMasterSafesOn: ChainId[];
+  requiresMasterSafesOn: EvmChainId[];
   serviceApi: typeof PredictTraderService;
 };

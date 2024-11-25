@@ -7,6 +7,7 @@ import { GNOSIS_SAFE_ABI } from '@/abis/gnosisSafe';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { EvmChainId } from '@/enums/Chain';
 import { Safe } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 
@@ -20,25 +21,31 @@ export const useMultisig = (safe?: Safe) => {
   const {
     data: owners,
     isFetched: ownersIsFetched,
-    isPending: ownersIsPending,
+    // isPending: ownersIsPending,
   } = useQuery<Address[] | null>({
     enabled: !isNil(safe),
     queryKey: safe ? REACT_QUERY_KEYS.MULTISIG_GET_OWNERS_KEY(safe) : [],
     queryFn: async () => {
       if (!safe) {
-        return null;
+        return [];
       }
       const contract = new Contract(
         safe.address,
         GNOSIS_SAFE_ABI,
-        PROVIDERS[safe.chainId].provider,
+        PROVIDERS[safe.evmChainId].provider,
       );
-      return contract.functions.getOwners() as Promise<Address[]>;
+      return contract.getOwners() as Promise<Address[]>;
     },
-    refetchInterval: FIVE_SECONDS_INTERVAL,
+    refetchInterval: isNil(safe) ? 0 : FIVE_SECONDS_INTERVAL,
   });
 
-  return { owners, ownersIsFetched, ownersIsPending };
+  return { owners, ownersIsFetched };
+};
+
+type MultisigOwners = {
+  safeAddress: Address;
+  evmChainId: EvmChainId;
+  owners: Address[];
 };
 
 /**
@@ -46,21 +53,16 @@ export const useMultisig = (safe?: Safe) => {
  */
 export const useMultisigs = (safes?: Safe[]) => {
   const {
-    data: owners,
-    isFetched: ownersIsFetched,
-    isPending: ownersIsPending,
-  } = useQuery<{ safeAddress: string; chainId: number; owners: string[] }[]>({
+    data: masterSafesOwners,
+    isFetched: masterSafesOwnersIsFetched,
+    isPending: masterSafesOwnersIsPending,
+  } = useQuery<MultisigOwners[]>({
     enabled: !isNil(safes) && !isEmpty(safes),
     queryKey: safes ? REACT_QUERY_KEYS.MULTISIGS_GET_OWNERS_KEY(safes) : [],
-    queryFn: async (): Promise<
-      {
-        safeAddress: string;
-        chainId: number;
-        owners: string[];
-      }[]
-    > => {
+    queryFn: async (): Promise<MultisigOwners[]> => {
       if (!safes || isEmpty(safes)) return [];
-      const results: {
+
+      const contractCallsByChainId: {
         [chainId: number]: {
           safeAddress: string;
           contractCall: ContractCall;
@@ -68,35 +70,37 @@ export const useMultisigs = (safes?: Safe[]) => {
       } = {};
 
       // Step 1: Group safes by chainId and prepare contract calls
-      for (const [chainId] of Object.entries(PROVIDERS)) {
+      for (const [evmChainIdKey] of Object.entries(PROVIDERS)) {
         const safesOnChainId = safes.filter(
-          (safe) => safe.chainId === +chainId,
+          (safe) => safe.evmChainId === <EvmChainId>+evmChainIdKey,
         );
         if (safesOnChainId.length === 0) {
           continue;
         }
 
-        results[+chainId] = safesOnChainId.map((safe) => ({
-          safeAddress: safe.address,
-          contractCall: new MulticallContract(
-            safe.address,
-            GNOSIS_SAFE_ABI,
-          ).getOwners(),
-        }));
+        contractCallsByChainId[<EvmChainId>+evmChainIdKey] = safesOnChainId.map(
+          (safe) => ({
+            safeAddress: safe.address,
+            contractCall: new MulticallContract(
+              safe.address,
+              GNOSIS_SAFE_ABI,
+            ).getOwners(),
+          }),
+        );
       }
 
       // Step 2: Execute multicall and gather results
-      const output: {
-        safeAddress: string;
-        chainId: number;
-        owners: string[];
-      }[] = [];
+      const output: MultisigOwners[] = [];
 
-      for (const [chainId, calls] of Object.entries(results)) {
-        const provider = PROVIDERS[+chainId]?.multicallProvider;
+      for (const [evmChainIdKey, calls] of Object.entries(
+        contractCallsByChainId,
+      )) {
+        const evmChainId = <EvmChainId>+evmChainIdKey;
+
+        const provider = PROVIDERS[evmChainId]?.multicallProvider;
 
         if (!provider) {
-          console.error(`No provider found for chainId ${chainId}`);
+          console.error(`No provider found for chainId ${evmChainId}`);
           continue;
         }
 
@@ -107,9 +111,10 @@ export const useMultisigs = (safes?: Safe[]) => {
 
         // Combine results into the output
         ownersArray.forEach((owners, index) => {
+          const safeAddress = <Address>calls[index].safeAddress;
           output.push({
-            safeAddress: calls[index].safeAddress,
-            chainId: +chainId,
+            safeAddress,
+            evmChainId,
             owners,
           });
         });
@@ -120,5 +125,9 @@ export const useMultisigs = (safes?: Safe[]) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
-  return { owners, ownersIsFetched, ownersIsPending };
+  return {
+    masterSafesOwners,
+    masterSafesOwnersIsFetched,
+    masterSafesOwnersIsPending,
+  };
 };
