@@ -1,30 +1,29 @@
 import { Flex, Typography } from 'antd';
-import { isArray, isEmpty, isNil } from 'lodash';
+import { isArray, isNil } from 'lodash';
 
 import { Pages } from '@/enums/Pages';
-import { useMultisig, useMultisigs } from '@/hooks/useMultisig';
+import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
 import { CustomAlert } from '../../../Alert';
-import { useServices } from '@/hooks/useServices';
 
 const { Text } = Typography;
 
 export const AddBackupWalletAlert = () => {
   const { goto } = usePageState();
   const { selectedAgentConfig } = useServices();
-  const { masterSafes, masterEoa,  } = useMasterWalletContext();
-  const {
-    owners,
-    ownersIsFetched: masterSafeOwnersIsFetched,
-    backupOwners,
-  } = useMultisig(masterSafes?.find(masterSafe => {
-    return masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId;
-  }));
+  const { masterSafes } = useMasterWalletContext();
+  const { ownersIsFetched: masterSafeOwnersIsFetched, backupOwners } =
+    useMultisig(
+      masterSafes?.find((masterSafe) => {
+        return masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId;
+      }),
+    );
 
   if (!masterSafeOwnersIsFetched) return null;
-  
+
   if (isNil(backupOwners)) return null;
   if (isArray(backupOwners) && backupOwners.length > 0) return null;
 
