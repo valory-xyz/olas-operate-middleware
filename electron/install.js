@@ -17,15 +17,15 @@ const { app } = require('electron');
 require('dotenv').config({
   path: app.isPackaged
     ? path.join(process.resourcesPath, '.env')
-    : path.resolve(process.cwd(), '.env'),
+    : path.resolve(process.cwd(), '../.env'),
 });
 
 const Env = {
-  ...process.env,
   PATH: `${process.env.PATH}:/opt/homebrew/bin:/usr/local/bin`,
   HOMEBREW_NO_AUTO_UPDATE: '1',
   PYTHONUTF8: '1',
-  PYTHONIOENCODING: 'utf-8'
+  PYTHONIOENCODING: 'utf-8',
+  ...process.env,
 };
 
 const SudoOptions = {
