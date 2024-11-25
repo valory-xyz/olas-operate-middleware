@@ -27,16 +27,16 @@ export const useMultisig = (safe?: Safe) => {
     queryKey: safe ? REACT_QUERY_KEYS.MULTISIG_GET_OWNERS_KEY(safe) : [],
     queryFn: async () => {
       if (!safe) {
-        return null;
+        return [];
       }
       const contract = new Contract(
         safe.address,
         GNOSIS_SAFE_ABI,
         PROVIDERS[safe.evmChainId].provider,
       );
-      return contract.functions.getOwners() as Promise<Address[]>;
+      return contract.getOwners() as Promise<Address[]>;
     },
-    refetchInterval: FIVE_SECONDS_INTERVAL,
+    refetchInterval: isNil(safe) ? 0 : FIVE_SECONDS_INTERVAL,
   });
 
   return { owners, ownersIsFetched };

@@ -182,11 +182,10 @@ export const SetupEoaFunding = () => {
   const masterEoaAddress = masterEoa?.address;
 
   const [currentChain, setCurrentChain] = useState<MiddlewareChain>(
-    Object.keys(eoaFundingMap)[0] as MiddlewareChain,
+    MiddlewareChain.GNOSIS,
   );
 
-  const currentFundingMapObject =
-    eoaFundingMap[currentChain as keyof typeof eoaFundingMap];
+  const currentFundingMapObject = eoaFundingMap[MiddlewareChain.GNOSIS];
 
   const getIsCurrentChainFunded = useCallback(
     async (
@@ -246,7 +245,7 @@ export const SetupEoaFunding = () => {
     <CardFlex>
       <SetupCreateHeader prev={SetupScreen.SetupBackupSigner} disabled />
       <Title level={3}>
-        {`Deposit ${currentFundingMapObject.requiredEth} ${currentFundingMapObject.chainConfig.nativeToken} on ${currentFundingMapObject.chainConfig.name}`}
+        {`Deposit ${currentFundingMapObject.requiredEth} ${currentFundingMapObject.chainConfig.nativeToken.symbol} on ${currentFundingMapObject.chainConfig.name}`}
       </Title>
       <Paragraph style={{ marginBottom: 0 }}>
         The app needs these funds to create your account on-chain.

@@ -1,6 +1,6 @@
 import { CloseOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Card, Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
+import { Button, Card, Flex, Skeleton, Typography } from 'antd';
+import { isEmpty, isNil } from 'lodash';
 import Link from 'next/link';
 import { useMemo } from 'react';
 
@@ -88,23 +88,25 @@ export const Settings = () => {
 const SettingsMain = () => {
   const { masterEoa, masterSafes } = useMasterWalletContext();
 
-  const { owners } = useMultisig(
+  const { owners, ownersIsFetched } = useMultisig(
     masterSafes?.[0], // TODO: all master safes should have the same address, but dirty implementation
   );
 
   const { goto } = usePageState();
 
   const masterSafeBackupAddresses = useMemo<Optional<Address[]>>(() => {
-    if (!owners) return;
+    if (!ownersIsFetched) return;
     if (!masterEoa) return;
+    if (isNil(owners) || isEmpty(owners)) return [];
 
     // TODO: handle edge cases where there are multiple owners due to middleware failure, or user interaction via safe.global
-    return owners.filter((owner) => owner !== masterEoa.address);
-  }, [owners, masterEoa]);
+    return owners.filter(
+      (owner) => owner.toLowerCase() !== masterEoa.address.toLowerCase(),
+    );
+  }, [ownersIsFetched, owners, masterEoa]);
 
   const masterSafeBackupAddress = useMemo<Optional<Address>>(() => {
     if (isNil(masterSafeBackupAddresses)) return;
-    if (!masterSafeBackupAddresses?.[0]) return;
 
     return masterSafeBackupAddresses[0];
   }, [masterSafeBackupAddresses]);
@@ -154,7 +156,10 @@ const SettingsMain = () => {
         gap={8}
       >
         <Text strong>Backup wallet</Text>
-        {masterSafeBackupAddress ? (
+
+        {!ownersIsFetched ? (
+          <Skeleton />
+        ) : masterSafeBackupAddress ? (
           <Link
             type="link"
             target="_blank"
