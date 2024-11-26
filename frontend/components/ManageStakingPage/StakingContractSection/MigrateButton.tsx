@@ -129,22 +129,29 @@ export const MigrateButton = ({
             setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            // update service
-            await ServicesService.updateService({
+            const serviceConfigParams = {
               stakingProgramId: stakingProgramIdToMigrateTo,
               serviceTemplate,
-              serviceConfigId,
               deploy: true,
               useMechMarketplace:
                 stakingProgramIdToMigrateTo ===
                 StakingProgramId.PearlBetaMechMarketplace,
               chainId: homeChainId,
-            });
+            };
 
-            // start service after updating
-            await ServicesService.startService(serviceConfigId);
+            if (selectedService) {
+              // update service
+              await ServicesService.updateService({
+                ...serviceConfigParams,
+                serviceConfigId,
+              });
 
-            // await updateStakingProgram(); // TODO: refactor to support single staking program & multi staking programs, this on longer works
+              // start service after updating
+              await ServicesService.startService(serviceConfigId);
+            } else {
+              // create service if it doesn't exist
+              await ServicesService.createService(serviceConfigParams);
+            }
 
             setMigrationModalOpen(true);
           } catch (error) {
@@ -152,7 +159,6 @@ export const MigrateButton = ({
           } finally {
             setIsServicePollingPaused(false);
             setIsBalancePollingPaused(false);
-            // updateServiceStatus(); // TODO: update service status
           }
         }}
       >
