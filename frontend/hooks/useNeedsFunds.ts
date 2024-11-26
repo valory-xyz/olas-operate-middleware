@@ -1,20 +1,28 @@
-import { formatEther, formatUnits } from 'ethers/lib/utils';
+import { formatUnits } from 'ethers/lib/utils';
+import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
-import { MiddlewareChain, ServiceTemplate } from '@/client';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { getNativeTokenSymbol } from '@/config/tokens';
-import { getServiceTemplate } from '@/constants/serviceTemplates';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
+import { Maybe } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useBalanceContext, useMasterBalances } from './useBalanceContext';
-import { useService } from './useService';
+import { useServices } from './useServices';
+import { useStakingProgram } from './useStakingProgram';
 import { useStore } from './useStore';
 
-export const useNeedsFunds = (serviceConfigId?: string) => {
+export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { storeState } = useStore();
-  const { service } = useService(serviceConfigId);
+
+  const { selectedAgentType } = useServices();
+  const serviceTemplate = SERVICE_TEMPLATES.find(
+    (template) => template.agentType === selectedAgentType,
+  );
+  const { selectedStakingProgramId } = useStakingProgram();
 
   const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
 
@@ -22,17 +30,12 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
 
   const isInitialFunded = storeState?.isInitialFunded;
 
-  const serviceTemplate = useMemo<ServiceTemplate | undefined>(
-    () => (service ? getServiceTemplate(service.hash) : undefined),
-    [service],
-  );
-
   const serviceFundRequirements = useMemo<{
     [chainId: number]: {
       [tokenSymbol: string]: number;
     };
   }>(() => {
-    if (!serviceTemplate) return {};
+    if (isNil(serviceTemplate)) return {};
 
     const results: {
       [chainId: number]: {
@@ -44,39 +47,34 @@ export const useNeedsFunds = (serviceConfigId?: string) => {
       ([middlewareChain, config]) => {
         const evmChainId = asEvmChainId(middlewareChain);
 
-        const templateStakingProgramId =
-          serviceTemplate.configurations[middlewareChain].staking_program_id;
-        const serviceStakingProgramId =
-          service?.chain_configs[middlewareChain as MiddlewareChain]?.chain_data
-            ?.user_params?.staking_program_id;
-        const stakingProgramId =
-          serviceStakingProgramId ?? templateStakingProgramId;
+        // if stakingProgramId not provided, use the selected one
+        const resolvedStakingProgramId =
+          stakingProgramId ?? selectedStakingProgramId;
 
-        if (!stakingProgramId) return;
-        if (!service?.chain_configs[middlewareChain as MiddlewareChain]) return;
+        if (!resolvedStakingProgramId) return;
 
         const gasEstimate = config.monthly_gas_estimate;
         const monthlyGasEstimate = Number(formatUnits(`${gasEstimate}`, 18));
         const minimumStakedAmountRequired =
-          STAKING_PROGRAMS[evmChainId]?.[stakingProgramId]
+          STAKING_PROGRAMS[evmChainId]?.[resolvedStakingProgramId]
             ?.stakingRequirements?.[TokenSymbol.OLAS] || 0;
 
         const nativeTokenSymbol = getNativeTokenSymbol(evmChainId);
 
         results[evmChainId] = {
-          [TokenSymbol.OLAS]: +formatEther(minimumStakedAmountRequired),
-          [nativeTokenSymbol]: +formatEther(monthlyGasEstimate),
+          [TokenSymbol.OLAS]: minimumStakedAmountRequired,
+          [nativeTokenSymbol]: monthlyGasEstimate,
           // TODO: extend with any further erc20s..
         };
       },
     );
 
     return results;
-  }, [service?.chain_configs, serviceTemplate]);
+  }, [defaultStakingProgramId, serviceTemplate, stakingProgramId]);
 
   const hasEnoughEthForInitialFunding = useMemo(() => {
-    if (!serviceFundRequirements) return;
-    if (!walletBalances) return;
+    if (isNil(serviceFundRequirements)) return;
+    if (isNil(walletBalances)) return;
 
     const nativeBalancesByChain = walletBalances.reduce<{
       [chainId: number]: number;

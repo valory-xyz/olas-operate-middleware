@@ -1,7 +1,7 @@
 import { BigNumberish } from 'ethers';
 import { getAddress } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
-import { sum } from 'lodash';
+import { isEmpty, isNil, sum } from 'lodash';
 import {
   createContext,
   Dispatch,
@@ -114,7 +114,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   }, [selectedAgentConfig.evmHomeChainId, stakedBalances]);
 
   const updateBalances = useCallback(async () => {
-    if (masterWallets && services) {
+    if (!isNil(masterWallets) && !isEmpty(masterWallets) && !isNil(services)) {
       setIsUpdatingBalances(true);
 
       try {

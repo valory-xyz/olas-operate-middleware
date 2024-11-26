@@ -2,6 +2,7 @@ import { Flex, Tag, theme, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
+import { GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES } from '@/config/stakingPrograms/gnosis';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -38,8 +39,8 @@ export const StakingContractSection = ({
   const {
     defaultStakingProgramId,
     activeStakingProgramId,
+    selectedStakingProgramId,
     allStakingProgramsMeta,
-    activeStakingProgramAddress,
     isActiveStakingProgramLoaded,
   } = useStakingProgram();
   const { selectedAgentConfig } = useServices();
@@ -79,8 +80,8 @@ export const StakingContractSection = ({
   ]);
 
   const showMigrateButton =
-    !isActiveStakingProgramLoaded &&
-    stakingProgramId !== activeStakingProgramId;
+    isActiveStakingProgramLoaded &&
+    stakingProgramId !== selectedStakingProgramId;
 
   const showFundingButton = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return false;
@@ -115,7 +116,10 @@ export const StakingContractSection = ({
 
       {evmChainId && (
         <a
-          href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${activeStakingProgramAddress}`}
+          href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${
+            // TODO: make chain independent
+            GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[stakingProgramId]
+          }`}
           target="_blank"
         >
           View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
