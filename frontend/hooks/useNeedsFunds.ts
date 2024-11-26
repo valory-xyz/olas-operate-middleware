@@ -70,7 +70,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     );
 
     return results;
-  }, [defaultStakingProgramId, serviceTemplate, stakingProgramId]);
+  }, [selectedStakingProgramId, serviceTemplate, stakingProgramId]);
 
   const hasEnoughEthForInitialFunding = useMemo(() => {
     if (isNil(serviceFundRequirements)) return;
