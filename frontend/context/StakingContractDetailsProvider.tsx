@@ -14,7 +14,6 @@ import {
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { StakingContractDetails } from '@/types/Autonolas';
@@ -143,7 +142,6 @@ export const StakingContractDetailsProvider = ({
 }: PropsWithChildren) => {
   const [isPaused, setIsPaused] = useState(false);
   const { selectedService, selectedAgentConfig } = useServices();
-  const { service } = useService(selectedService?.service_config_id);
 
   const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
@@ -152,10 +150,11 @@ export const StakingContractDetailsProvider = ({
     isFetched,
     refetch,
   } = useStakingContractDetailsByStakingProgram({
-    serviceNftTokenId:
-      service?.chain_configs[
-        asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
-      ].chain_data.token,
+    serviceNftTokenId: !isNil(selectedService?.service_config_id)
+      ? selectedService?.chain_configs[
+          asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
+        ].chain_data.token
+      : null,
     stakingProgramId: selectedStakingProgramId,
   });
 

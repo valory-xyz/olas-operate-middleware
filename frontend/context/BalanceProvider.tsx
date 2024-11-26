@@ -290,9 +290,9 @@ const getCrossChainStakedBalances = async (
 
   const registryInfoPromises = services.map(async (service) => {
     const serviceConfigId = service.service_config_id;
-    const homeChainId: MiddlewareChain = service.home_chain;
-    const homeChainConfig = service.chain_configs[homeChainId];
-    const { multisig, token } = homeChainConfig.chain_data;
+    const middlewareChain: MiddlewareChain = service.home_chain;
+    const chainConfig = service.chain_configs[middlewareChain];
+    const { multisig, token } = chainConfig.chain_data;
 
     if (!multisig || !token) {
       return null;
@@ -301,12 +301,12 @@ const getCrossChainStakedBalances = async (
     const registryInfo = await StakedAgentService.getServiceRegistryInfo(
       multisig,
       token,
-      asEvmChainId(homeChainId),
+      asEvmChainId(middlewareChain),
     );
 
     return {
       serviceId: serviceConfigId,
-      chainId: homeChainId,
+      chainId: middlewareChain,
       ...registryInfo,
     };
   });

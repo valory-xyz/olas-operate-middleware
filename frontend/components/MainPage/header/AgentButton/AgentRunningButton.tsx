@@ -32,13 +32,18 @@ export const AgentRunningButton = () => {
   const { showNotification } = useElectronApi();
   const { isEligibleForRewards } = useReward();
 
-  const { selectedService, isFetched: isLoaded, setPaused } = useServices();
+  const {
+    selectedService,
+    isFetched: isLoaded,
+    setPaused,
+    overrideSelectedServiceStatus,
+  } = useServices();
 
   const serviceConfigId =
     isLoaded && selectedService?.service_config_id
       ? selectedService.service_config_id
       : '';
-  const { service, setDeploymentStatus } = useService(serviceConfigId);
+  const { service } = useService(serviceConfigId);
 
   const handlePause = useCallback(async () => {
     if (!service) return;
@@ -46,7 +51,7 @@ export const AgentRunningButton = () => {
     // setPaused(true);
 
     // Optimistically update service status
-    setDeploymentStatus(MiddlewareDeploymentStatus.STOPPING);
+    overrideSelectedServiceStatus(MiddlewareDeploymentStatus.STOPPING);
     try {
       await ServicesService.stopDeployment(service.service_config_id);
     } catch (error) {
@@ -55,8 +60,9 @@ export const AgentRunningButton = () => {
     } finally {
       // Resume polling, will update to correct status regardless of success
       setPaused(false);
+      overrideSelectedServiceStatus(null); // remove override
     }
-  }, [service, setDeploymentStatus, setPaused, showNotification]);
+  }, [overrideSelectedServiceStatus, service, setPaused, showNotification]);
 
   return (
     <Flex gap={10} align="center">

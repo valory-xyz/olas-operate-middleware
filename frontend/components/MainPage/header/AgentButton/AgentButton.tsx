@@ -17,7 +17,11 @@ import { AgentStartingButton } from './AgentStartingButton';
 import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
-  const { selectedService, isFetched: isServicesLoaded } = useServices();
+  const {
+    selectedService,
+    isFetched: isServicesLoaded,
+    selectedServiceStatusOverride,
+  } = useServices();
 
   const {
     isEligibleForStaking,
@@ -34,21 +38,18 @@ export const AgentButton = () => {
       );
     }
 
-    if (
-      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.STOPPING
-    ) {
+    const selectedServiceStatus =
+      selectedServiceStatusOverride ?? selectedService?.deploymentStatus;
+
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.STOPPING) {
       return <AgentStoppingButton />;
     }
 
-    if (
-      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DEPLOYING
-    ) {
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.DEPLOYING) {
       return <AgentStartingButton />;
     }
 
-    if (
-      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DEPLOYED
-    ) {
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.DEPLOYED) {
       return <AgentRunningButton />;
     }
 
@@ -57,12 +58,10 @@ export const AgentButton = () => {
 
     if (
       !selectedService ||
-      selectedService?.deploymentStatus ===
-        MiddlewareDeploymentStatus.STOPPED ||
-      selectedService?.deploymentStatus ===
-        MiddlewareDeploymentStatus.CREATED ||
-      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.BUILT ||
-      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DELETED
+      selectedServiceStatus === MiddlewareDeploymentStatus.STOPPED ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.CREATED ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.BUILT ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.DELETED
     ) {
       return <AgentNotRunningButton />;
     }
@@ -71,6 +70,7 @@ export const AgentButton = () => {
   }, [
     isServicesLoaded,
     isSelectedStakingContractDetailsLoaded,
+    selectedServiceStatusOverride,
     selectedService,
     isEligibleForStaking,
     isAgentEvicted,

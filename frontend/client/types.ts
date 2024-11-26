@@ -56,7 +56,7 @@ export type MiddlewareServiceResponse = {
   service_path?: string;
   version: string;
   chain_configs: {
-    [middlewareChain in MiddlewareChain]: {
+    [middlewareChain: string]: {
       ledger_config: LedgerConfig;
       chain_data: ChainData;
     };

@@ -10,7 +10,11 @@ import {
   useState,
 } from 'react';
 
-import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
+import {
+  MiddlewareChain,
+  MiddlewareDeploymentStatus,
+  MiddlewareServiceResponse,
+} from '@/client';
 import { AGENT_CONFIG } from '@/config/agents';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
@@ -36,11 +40,15 @@ type ServicesContextType = {
   serviceWallets?: AgentWallets;
   selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
+  selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
   isSelectedServiceStatusFetched: boolean;
   refetchSelectedServiceStatus: () => void;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
   updateAgentType: (agentType: AgentType) => void;
+  overrideSelectedServiceStatus: (
+    status?: Maybe<MiddlewareDeploymentStatus>,
+  ) => void;
 } & Partial<QueryObserverBaseResult<MiddlewareServiceResponse[]>> &
   UsePause;
 
@@ -54,6 +62,7 @@ export const ServicesContext = createContext<ServicesContextType>({
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
   selectedAgentType: AgentType.PredictTrader,
   updateAgentType: noop,
+  overrideSelectedServiceStatus: noop,
 });
 
 /**
@@ -100,6 +109,9 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
+  const [selectedServiceStatusOverride, setSelectedServiceStatusOverride] =
+    useState<Maybe<MiddlewareDeploymentStatus>>();
+
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
 
@@ -109,9 +121,15 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
     return {
       ...selectedService,
-      deploymentStatus: selectedServiceStatus?.status,
+      deploymentStatus:
+        selectedServiceStatusOverride ?? selectedServiceStatus?.status,
     } as Service;
-  }, [selectedServiceConfigId, selectedServiceStatus?.status, services]);
+  }, [
+    selectedServiceConfigId,
+    selectedServiceStatus?.status,
+    selectedServiceStatusOverride,
+    services,
+  ]);
 
   const selectedServiceWithStatus = useMemo<Service | undefined>(() => {
     if (!selectedService) return;
@@ -216,11 +234,17 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         togglePaused,
         selectService,
         selectedService: selectedServiceWithStatus,
+        selectedServiceStatusOverride,
         refetchSelectedServiceStatus,
         isSelectedServiceStatusFetched,
         selectedAgentConfig,
         selectedAgentType,
         updateAgentType,
+        overrideSelectedServiceStatus: (
+          status: Maybe<MiddlewareDeploymentStatus>,
+        ) => {
+          setSelectedServiceStatusOverride(status);
+        },
       }}
     >
       {children}

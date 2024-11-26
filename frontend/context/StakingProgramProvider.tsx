@@ -12,9 +12,8 @@ import { DEFAULT_STAKING_PROGRAM_IDS } from '@/config/stakingPrograms';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { Maybe, Nullable, Optional } from '@/types/Util';
+import { Maybe, Nullable } from '@/types/Util';
 
 export const StakingProgramContext = createContext<{
   isActiveStakingProgramLoaded: boolean;
@@ -31,7 +30,7 @@ export const StakingProgramContext = createContext<{
 /**
  * hook to get the active staking program id
  */
-const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
+const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
   const queryClient = useQueryClient();
   const { selectedAgentConfig, isFetched: isServicesLoaded } = useServices();
 
@@ -95,8 +94,6 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
 export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
   const { selectedService, selectedAgentConfig } = useServices();
 
-  const { service } = useService(selectedService?.service_config_id);
-
   const [defaultStakingProgramId, setDefaultStakingProgramId] = useState(
     DEFAULT_STAKING_PROGRAM_IDS[selectedAgentConfig.evmHomeChainId],
   );
@@ -107,8 +104,10 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
     );
   }, [selectedAgentConfig]);
 
-  const serviceNftTokenId =
-    service?.chain_configs[service?.home_chain]?.chain_data?.token;
+  const serviceNftTokenId = !isNil(selectedService?.chain_configs)
+    ? selectedService?.chain_configs[selectedService?.home_chain]?.chain_data
+        ?.token
+    : null;
 
   const {
     isFetched,

@@ -40,9 +40,10 @@ export const AgentNotRunningButton = () => {
     isLoading: isServicesLoading,
     selectedAgentConfig,
     selectedAgentType,
+    overrideSelectedServiceStatus,
   } = useServices();
 
-  const { service, setDeploymentStatus, isServiceRunning } = useService(
+  const { service, isServiceRunning } = useService(
     selectedService?.service_config_id,
   );
 
@@ -256,7 +257,7 @@ export const AgentNotRunningButton = () => {
     if (!masterWallets?.[0]) return;
 
     pauseAllPolling();
-    setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
+    overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
     try {
       await createSafeIfNeeded();
@@ -264,7 +265,7 @@ export const AgentNotRunningButton = () => {
     } catch (error) {
       console.error('Error while starting the agent:', error);
       showNotification?.('An error occurred. Please try again.');
-      setDeploymentStatus(); // wipe status
+      overrideSelectedServiceStatus(null); // wipe status
       throw error;
     }
 
@@ -275,14 +276,17 @@ export const AgentNotRunningButton = () => {
       showNotification?.('Failed to update app state.');
     }
 
+    overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYED);
+
     resumeAllPolling();
     await delayInSeconds(5);
-    setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYED);
+
+    overrideSelectedServiceStatus(null);
   }, [
     masterWallets,
     pauseAllPolling,
     resumeAllPolling,
-    setDeploymentStatus,
+    overrideSelectedServiceStatus,
     createSafeIfNeeded,
     deployAndStartService,
     showNotification,
