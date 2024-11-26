@@ -1,5 +1,5 @@
 import { Flex, Typography } from 'antd';
-import { isArray, isNil } from 'lodash';
+import { isEmpty, isNil } from 'lodash';
 
 import { Pages } from '@/enums/Pages';
 import { useMultisig } from '@/hooks/useMultisig';
