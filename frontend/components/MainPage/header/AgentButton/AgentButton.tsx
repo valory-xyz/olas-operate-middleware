@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
 import { ErrorComponent } from '@/components/errors/ErrorComponent';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useActiveStakingContractInfo } from '@/hooks/useStakingContractDetails';
 
@@ -19,8 +18,6 @@ import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
   const { selectedService, isFetched: isServicesLoaded } = useServices();
-
-  const { service } = useService(selectedService?.service_config_id);
 
   const {
     isEligibleForStaking,
