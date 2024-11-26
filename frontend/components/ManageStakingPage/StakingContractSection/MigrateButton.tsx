@@ -145,13 +145,13 @@ export const MigrateButton = ({
                 ...serviceConfigParams,
                 serviceConfigId,
               });
-
-              // start service after updating
-              await ServicesService.startService(serviceConfigId);
             } else {
               // create service if it doesn't exist
               await ServicesService.createService(serviceConfigParams);
             }
+
+            // start service after updating or creating
+            await ServicesService.startService(serviceConfigId);
 
             setMigrationModalOpen(true);
           } catch (error) {

@@ -12,6 +12,7 @@ import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useBalanceContext, useMasterBalances } from './useBalanceContext';
 import { useServices } from './useServices';
+import { useStakingProgram } from './useStakingProgram';
 import { useStore } from './useStore';
 
 export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
@@ -21,6 +22,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const serviceTemplate = SERVICE_TEMPLATES.find(
     (template) => template.agentType === selectedAgentType,
   );
+  const { selectedStakingProgramId } = useStakingProgram();
 
   const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
 
@@ -45,12 +47,9 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
       ([middlewareChain, config]) => {
         const evmChainId = asEvmChainId(middlewareChain);
 
-        const templateStakingProgramId =
-          serviceTemplate.configurations[middlewareChain].staking_program_id;
-
-        // if stakingProgramId not provided, use the one from the template
+        // if stakingProgramId not provided, use the selected one
         const resolvedStakingProgramId =
-          stakingProgramId ?? templateStakingProgramId;
+          stakingProgramId ?? selectedStakingProgramId;
 
         if (!resolvedStakingProgramId) return;
 
@@ -71,7 +70,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     );
 
     return results;
-  }, [serviceTemplate, stakingProgramId]);
+  }, [defaultStakingProgramId, serviceTemplate, stakingProgramId]);
 
   const hasEnoughEthForInitialFunding = useMemo(() => {
     if (isNil(serviceFundRequirements)) return;
