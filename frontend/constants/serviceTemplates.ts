@@ -22,8 +22,8 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         use_staking: true,
         use_mech_marketplace: false,
         // TODO: pull fund requirements from staking program config
-        cost_of_bond: 1000,
-        monthly_gas_estimate: 1000,
+        cost_of_bond: 10000000000000000,
+        monthly_gas_estimate: 10000000000000000000,
         fund_requirements: {
           agent: 100000000000000000,
           safe: 5000000000000000000,

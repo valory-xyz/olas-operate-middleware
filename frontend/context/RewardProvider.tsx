@@ -91,7 +91,7 @@ const useStakingRewardsDetails = () => {
  */
 const useAvailableRewardsForEpoch = () => {
   const { isOnline } = useContext(OnlineStatusContext);
-  const { activeStakingProgramId } = useContext(StakingProgramContext);
+  const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const { selectedService, isFetched: isLoaded } = useServices();
   const serviceConfigId =
@@ -101,16 +101,16 @@ const useAvailableRewardsForEpoch = () => {
     queryKey: REACT_QUERY_KEYS.AVAILABLE_REWARDS_FOR_EPOCH_KEY(
       currentChainId,
       serviceConfigId,
-      activeStakingProgramId!,
+      selectedStakingProgramId!,
       currentChainId,
     ),
     queryFn: async () => {
       return await currentAgent.serviceApi.getAvailableRewardsForEpoch(
-        activeStakingProgramId!,
+        selectedStakingProgramId!,
         currentChainId,
       );
     },
-    enabled: !!isOnline && !!activeStakingProgramId,
+    enabled: !!isOnline && !!selectedStakingProgramId,
     refetchInterval: isOnline ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
