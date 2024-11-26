@@ -26,7 +26,6 @@ import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /** Button used to start / deploy the agent */
 export const AgentNotRunningButton = () => {
@@ -53,9 +52,19 @@ export const AgentNotRunningButton = () => {
     updateBalances,
   } = useBalanceContext();
 
-  const { serviceSafeBalances } = useServiceBalances(
+  const { serviceStakedBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
+
+  const serviceStakedOlasBalanceOnHomeChain = serviceStakedBalances?.find(
+    (stakedBalance) =>
+      stakedBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
+  );
+
+  const serviceTotalStakedOlas = sum([
+    serviceStakedOlasBalanceOnHomeChain?.olasBondBalance,
+    serviceStakedOlasBalanceOnHomeChain?.olasDepositBalance,
+  ]);
 
   const { masterSafeBalances } = useMasterBalances();
 
@@ -84,16 +93,7 @@ export const AgentNotRunningButton = () => {
       selectedStakingProgramId
     ]?.stakingRequirements[TokenSymbol.OLAS];
 
-  const serviceSafeOlasBalance = serviceSafeBalances?.find(
-    (walletBalanceResult) =>
-      walletBalanceResult.symbol === TokenSymbol.OLAS &&
-      walletBalanceResult.evmChainId === asEvmChainId(service?.home_chain),
-  )?.balance;
-
-  const serviceSafeOlasWithStaked = sum([
-    serviceSafeOlasBalance,
-    totalStakedOlasBalance,
-  ]);
+  const serviceSafeOlasWithStaked = sum([totalStakedOlasBalance]);
 
   const isDeployable = useMemo(() => {
     if (isServicesLoading) return false;
@@ -103,10 +103,21 @@ export const AgentNotRunningButton = () => {
 
     if (isNil(requiredStakedOlas)) return false;
 
-    if (!hasEnoughServiceSlots && !isServiceStaked) return false;
+    if (
+      !isNil(hasEnoughServiceSlots) &&
+      !hasEnoughServiceSlots &&
+      !isServiceStaked
+    )
+      return false;
 
-    if (service && storeState?.isInitialFunded) {
-      return (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
+    const masterSafeOlasBalance = masterSafeBalances?.find(
+      (walletBalanceResult) =>
+        walletBalanceResult.symbol === TokenSymbol.OLAS &&
+        walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
+    )?.balance;
+
+    if (service && storeState?.isInitialFunded && isServiceStaked) {
+      return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
     if (isEligibleForStaking && isAgentEvicted) return true;
@@ -118,12 +129,6 @@ export const AgentNotRunningButton = () => {
         (masterSafeNativeGasBalance ?? 0) > LOW_MASTER_SAFE_BALANCE;
       return hasEnoughOlas && hasEnoughNativeGas;
     }
-
-    const masterSafeOlasBalance = masterSafeBalances?.find(
-      (walletBalanceResult) =>
-        walletBalanceResult.symbol === TokenSymbol.OLAS &&
-        walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
-    )?.balance;
 
     const hasEnoughForInitialDeployment =
       (masterSafeOlasBalance ?? 0) > requiredStakedOlas &&
@@ -137,14 +142,15 @@ export const AgentNotRunningButton = () => {
     requiredStakedOlas,
     hasEnoughServiceSlots,
     isServiceStaked,
+    masterSafeBalances,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,
     isAgentEvicted,
-    masterSafeBalances,
     masterSafeNativeGasBalance,
-    serviceSafeOlasWithStaked,
     selectedAgentConfig.evmHomeChainId,
+    serviceTotalStakedOlas,
+    serviceSafeOlasWithStaked,
   ]);
 
   const pauseAllPolling = useCallback(() => {

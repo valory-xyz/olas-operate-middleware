@@ -43,7 +43,7 @@ export const AgentRunningButton = () => {
   const handlePause = useCallback(async () => {
     if (!service) return;
     // Paused to stop overlapping service poll while waiting for response
-    setPaused(true);
+    // setPaused(true);
 
     // Optimistically update service status
     setDeploymentStatus(MiddlewareDeploymentStatus.STOPPING);

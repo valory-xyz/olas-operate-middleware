@@ -59,7 +59,7 @@ export const AgentButton = () => {
       return <CannotStartAgentPopover />;
 
     if (
-      !service ||
+      !selectedService ||
       selectedService?.deploymentStatus ===
         MiddlewareDeploymentStatus.STOPPED ||
       selectedService?.deploymentStatus ===
@@ -74,10 +74,9 @@ export const AgentButton = () => {
   }, [
     isServicesLoaded,
     isSelectedStakingContractDetailsLoaded,
-    selectedService?.deploymentStatus,
+    selectedService,
     isEligibleForStaking,
     isAgentEvicted,
-    service,
   ]);
 
   return (
