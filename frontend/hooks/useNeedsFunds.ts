@@ -5,14 +5,16 @@ import { useMemo } from 'react';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
+import { Maybe } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useBalanceContext, useMasterBalances } from './useBalanceContext';
 import { useServices } from './useServices';
 import { useStore } from './useStore';
 
-export const useNeedsFunds = (stakingProgramId?: string) => {
+export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { storeState } = useStore();
 
   const { selectedAgentType } = useServices();

@@ -40,7 +40,7 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
   const response = useQuery({
     queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(evmHomeChainId),
     queryFn: async () => {
-      if (!serviceNftTokenId) return null;
+      if (isNil(serviceNftTokenId)) return null;
 
       const currentStakingProgramId =
         await serviceApi.getCurrentStakingProgramByServiceId(
@@ -53,7 +53,8 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
         DEFAULT_STAKING_PROGRAM_IDS[selectedAgentConfig.evmHomeChainId]
       );
     },
-    enabled: !isNil(evmHomeChainId) && isServicesLoaded,
+    enabled:
+      !isNil(evmHomeChainId) && isServicesLoaded && !isNil(serviceNftTokenId),
     refetchInterval: isServicesLoaded ? FIVE_SECONDS_INTERVAL : 0,
   });
 
@@ -81,9 +82,13 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
 };
 
 /**
- * context provider responsible for determining the current active staking programs.
+ * context provider responsible for determining the current active staking program based on the service.
  * It does so by checking if the current service is staked, and if so, which staking program it is staked in.
  * It also provides a method to update the active staking program id in state.
+ *
+ * When the service is not yet deployed, a default staking program state is used to allow switching
+ * between staking programs before deployment is complete, ensuring the relevant staking program is displayed,
+ * even if deployment is still in progress
  */
 export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
   const { selectedService, selectedAgentConfig } = useServices();
