@@ -1,4 +1,4 @@
-import { formatEther, formatUnits } from 'ethers/lib/utils';
+import { formatUnits } from 'ethers/lib/utils';
 import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
@@ -63,8 +63,8 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
         const nativeTokenSymbol = getNativeTokenSymbol(evmChainId);
 
         results[evmChainId] = {
-          [TokenSymbol.OLAS]: +formatEther(minimumStakedAmountRequired),
-          [nativeTokenSymbol]: +formatEther(monthlyGasEstimate),
+          [TokenSymbol.OLAS]: minimumStakedAmountRequired,
+          [nativeTokenSymbol]: monthlyGasEstimate,
           // TODO: extend with any further erc20s..
         };
       },
