@@ -151,10 +151,13 @@ jobs:
         if: matrix.env == 'production'
         run: yarn build:frontend
         env:
-          NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          NODE_ENV: ${{ matrix.env }}          
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+
 
       # Build frontend for development
       - name: Build frontend for development
@@ -162,9 +165,11 @@ jobs:
         run: yarn build:frontend
         env:
           NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
 
       # Run the build and notarization process for production
       - name: Build, notarize, and publish (Production)
@@ -178,8 +183,10 @@ jobs:
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ matrix.arch }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
         run: node build.js
 
       # Run the build and notarization process for development
@@ -194,9 +201,13 @@ jobs:
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ matrix.arch }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
         run: |
-          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
-          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
+          echo "OPTIMISM_RPC=https://rpc-gate.autonolas.tech/optimism-rpc/" >> .env
+          echo "BASE_RPC=https://rpc-gate.autonolas.tech/base-rpc/" >> .env
+          echo "GNOSIS_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
+          echo "ETHEREUM_RPC=https://rpc-gate.autonolas.tech/ethereum-rpc/" >> .env
           node build.js

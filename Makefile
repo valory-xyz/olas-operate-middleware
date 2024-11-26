@@ -46,20 +46,14 @@ endef
 .PHONY: build
 build: ./dist/pearl_win.exe ./electron/bins/tendermint.exe
 	$(call setup_env, prod)
-	echo ${DEV_RPC}
 	cp -f dist/pearl_win.exe ./electron/bins/pearl_win.exe
-	echo ${NODE_ENV}
-	NODE_ENV=${NODE_ENV} DEV_RPC=${DEV_RPC} FORK_URL=${FORK_URL} yarn build:frontend
-	NODE_ENV=${NODE_ENV} DEV_RPC=${DEV_RPC} FORK_URL=${FORK_URL} GH_TOKEN=${GH_TOKEN} node build-win.js
-
-
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} yarn build:frontend
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} GH_TOKEN=${GH_TOKEN} node build-win.js
 
 
 .PHONY: build-tenderly
 build-tenderly:  ./dist/pearl_win.exe
 	$(call setup_env, dev-tenderly)
-	echo ${DEV_RPC}
 	cp -f dist/pearl_win.exe ./electron/bins/pearl_win.exe
-	echo ${NODE_ENV}
-	NODE_ENV=${NODE_ENV} DEV_RPC=${DEV_RPC} FORK_URL=${FORK_URL} yarn build:frontend
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} yarn build:frontend
 	GH_TOKEN=${GH_TOKEN} node build-win-tenderly.js
