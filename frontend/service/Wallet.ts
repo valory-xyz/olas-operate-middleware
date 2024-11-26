@@ -23,25 +23,25 @@ const createEoa = async () =>
     throw new Error('Failed to create EOA');
   });
 
-const createSafe = async (chain: MiddlewareChain, owner?: string) =>
+const createSafe = async (chain: MiddlewareChain, backup_owner?: string) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'POST',
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain, owner }),
+    body: JSON.stringify({ chain, backup_owner }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create safe');
   });
 
-const addBackupOwner = async (chain: MiddlewareChain, owner: string) =>
+const addBackupOwner = async (chain: MiddlewareChain, backup_owner: string) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'PUT',
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain, owner }),
+    body: JSON.stringify({ chain, backup_owner }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to add backup owner');

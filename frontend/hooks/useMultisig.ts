@@ -11,6 +11,7 @@ import { EvmChainId } from '@/enums/Chain';
 import { Safe } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { extractFunctionsFromAbi } from '@/utils/abi';
+import { useMasterWalletContext } from './useWallet';
 
 /**
  * Hook to fetch multisig owners
@@ -19,6 +20,7 @@ import { extractFunctionsFromAbi } from '@/utils/abi';
  * @note extend with further multisig functions as needed
  */
 export const useMultisig = (safe?: Safe) => {
+  const { masterEoa } = useMasterWalletContext();
   const {
     data: owners,
     isFetched: ownersIsFetched,
@@ -40,7 +42,11 @@ export const useMultisig = (safe?: Safe) => {
     refetchInterval: isNil(safe) ? 0 : FIVE_SECONDS_INTERVAL,
   });
 
-  return { owners, ownersIsFetched };
+  const backupOwners = owners?.filter(
+    (owner) => owner.toLowerCase() !== masterEoa?.address.toLowerCase(),
+  );
+
+  return { owners, ownersIsFetched, backupOwners };
 };
 
 type MultisigOwners = {
