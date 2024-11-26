@@ -182,6 +182,9 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig.middlewareHomeChainId,
   ]);
 
+  /**
+   * @note only create a service if `service` does not exist
+   */
   const deployAndStartService = useCallback(async () => {
     if (!selectedStakingProgramId) return;
 
@@ -193,25 +196,33 @@ export const AgentNotRunningButton = () => {
       throw new Error(`Service template not found for ${selectedAgentType}`);
     }
 
+    // Create a new service if it does not exist
     let middlewareServiceResponse;
-    try {
-      middlewareServiceResponse = await ServicesService.createService({
-        stakingProgramId: selectedStakingProgramId,
-        serviceTemplate,
-        deploy: true,
-        useMechMarketplace:
-          STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][ // TODO: support multi-agent, during optimus week
-            selectedStakingProgramId
-          ].mechType === MechType.Marketplace,
-      });
-    } catch (error) {
-      console.error('Error while creating the service:', error);
-      showNotification?.('Failed to create service.');
-      throw error;
+    if (!service) {
+      try {
+        middlewareServiceResponse = await ServicesService.createService({
+          stakingProgramId: selectedStakingProgramId,
+          serviceTemplate,
+          deploy: true,
+          useMechMarketplace:
+            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][ // TODO: support multi-agent, during optimus week
+              selectedStakingProgramId
+            ].mechType === MechType.Marketplace,
+        });
+      } catch (error) {
+        console.error('Error while creating the service:', error);
+        showNotification?.('Failed to create service.');
+        throw new Error('Failed to create service');
+      }
     }
 
+    if (isNil(service) && isNil(middlewareServiceResponse))
+      throw new Error('Service not found');
+
+    //  Start the service
     try {
-      ServicesService.startService(middlewareServiceResponse.service_config_id);
+      const serviceToStart = service ?? middlewareServiceResponse;
+      await ServicesService.startService(serviceToStart!.service_config_id);
     } catch (error) {
       console.error('Error while starting the service:', error);
       showNotification?.('Failed to start service.');
@@ -221,6 +232,7 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig.evmHomeChainId,
     selectedAgentType,
     selectedStakingProgramId,
+    service,
     showNotification,
   ]);
 
@@ -243,18 +255,23 @@ export const AgentNotRunningButton = () => {
     try {
       await createSafeIfNeeded();
       await deployAndStartService();
-      showNotification?.(`Your agent is running!`);
-      setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYED);
-
-      await delayInSeconds(5);
-
-      await updateStatesSequentially();
     } catch (error) {
       console.error('Error while starting the agent:', error);
-      showNotification?.('Some error occurred. Please try again.');
-    } finally {
-      resumeAllPolling();
+      showNotification?.('An error occurred. Please try again.');
+      setDeploymentStatus(); // wipe status
+      throw error;
     }
+
+    try {
+      await updateStatesSequentially();
+    } catch (error) {
+      console.error('Error while updating states sequentially:', error);
+      showNotification?.('Failed to update app state.');
+    }
+
+    resumeAllPolling();
+    await delayInSeconds(5);
+    setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYED);
   }, [
     masterWallets,
     pauseAllPolling,
