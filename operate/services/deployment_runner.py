@@ -280,6 +280,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         if platform.system() == "Windows":
             # to look up for bundled in tendermint.exe
             env["PATH"] = os.environ["PATH"] + ";" + os.path.dirname(sys.executable)
+        else:
+            env["PATH"] = os.environ["PATH"] + ":" + os.path.dirname(sys.executable)
 
         tendermint_com = self._tendermint_bin  # type: ignore  # pylint: disable=protected-access
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
@@ -300,6 +302,11 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
+
+    @property
+    def _tendermint_bin(self) -> str:
+        """Return tendermint path."""
+        return str(Path(sys._MEIPASS) / "tendermint_mac")  # type: ignore # pylint: disable=protected-access
 
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
@@ -423,7 +430,7 @@ def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # pyinstaller inside!
         if platform.system() == "Darwin":
-            deployment_runner = PyInstallerHostDeploymentRunner(build_dir)
+            deployment_runner = PyInstallerHostDeploymentRunnerMac(build_dir)
         elif platform.system() == "Windows":
             deployment_runner = PyInstallerHostDeploymentRunnerWindows(build_dir)
         else:
