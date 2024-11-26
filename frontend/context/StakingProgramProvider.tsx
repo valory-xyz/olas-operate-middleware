@@ -86,7 +86,7 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Optional<number>) => {
  * It does so by checking if the current service is staked, and if so, which staking program it is staked in.
  * It also provides a method to update the active staking program id in state.
  *
- * When the service is not yet deployed, a default staking program state is used to allow switching
+ * @note When the service is not yet deployed, a default staking program state is used to allow switching
  * between staking programs before deployment is complete, ensuring the relevant staking program is displayed,
  * even if deployment is still in progress
  */
