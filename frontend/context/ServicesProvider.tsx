@@ -70,12 +70,12 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   // user selected service identifier
   const [selectedServiceConfigId, setSelectedServiceConfigId] =
-    useState<string>();
+    useState<Maybe<string>>();
 
   const {
     data: services,
     isError,
-    isFetched,
+    isFetched: isServicesFetched,
     isLoading,
     isFetching,
     refetch,
@@ -91,7 +91,9 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     isFetched: isSelectedServiceStatusFetched,
     refetch: refetchSelectedServiceStatus,
   } = useQuery({
-    queryKey: REACT_QUERY_KEYS.SERVICE_STATUS_KEY(selectedServiceConfigId),
+    queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
+      selectedServiceConfigId,
+    ),
     queryFn: () =>
       ServicesService.getDeployment(selectedServiceConfigId as string),
     enabled: !!selectedServiceConfigId,
@@ -137,7 +139,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   }, [selectedAgentType]);
 
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
-    if (!isFetched) return;
+    if (!isServicesFetched) return;
     if (isEmpty(services)) return [];
 
     return services?.reduce<AgentWallets>(
@@ -184,18 +186,20 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       },
       [],
     );
-  }, [isFetched, services]);
+  }, [isServicesFetched, services]);
 
   /**
    * Select the first service by default
    */
   useEffect(() => {
-    if (!services) return;
-    if (selectedServiceConfigId) return;
-    // only select a service by default if services are fetched, but there has been no selection yet
-    if (isFetched && services.length > 0 && !selectedServiceConfigId)
+    if (!isServicesFetched) return;
+
+    if (isEmpty(services)) setSelectedServiceConfigId(null);
+
+    if (!selectedServiceConfigId && services && services.length > 0) {
       setSelectedServiceConfigId(services[0].service_config_id);
-  }, [isFetched, selectedServiceConfigId, services]);
+    }
+  }, [isServicesFetched, selectedServiceConfigId, services]);
 
   return (
     <ServicesContext.Provider
@@ -203,7 +207,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         services,
         serviceWallets,
         isError,
-        isFetched,
+        isFetched: isServicesFetched,
         isLoading,
         isFetching,
         refetch,

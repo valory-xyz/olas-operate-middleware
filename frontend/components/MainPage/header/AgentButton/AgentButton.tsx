@@ -20,9 +20,7 @@ import { AgentStoppingButton } from './AgentStoppingButton';
 export const AgentButton = () => {
   const { selectedService, isFetched: isServicesLoaded } = useServices();
 
-  const { service, deploymentStatus: serviceStatus } = useService(
-    selectedService?.service_config_id,
-  );
+  const { service } = useService(selectedService?.service_config_id);
 
   const {
     isEligibleForStaking,
@@ -39,15 +37,21 @@ export const AgentButton = () => {
       );
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.STOPPING) {
+    if (
+      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.STOPPING
+    ) {
       return <AgentStoppingButton />;
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.DEPLOYING) {
+    if (
+      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DEPLOYING
+    ) {
       return <AgentStartingButton />;
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.DEPLOYED) {
+    if (
+      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DEPLOYED
+    ) {
       return <AgentRunningButton />;
     }
 
@@ -56,10 +60,12 @@ export const AgentButton = () => {
 
     if (
       !service ||
-      serviceStatus === MiddlewareDeploymentStatus.STOPPED ||
-      serviceStatus === MiddlewareDeploymentStatus.CREATED ||
-      serviceStatus === MiddlewareDeploymentStatus.BUILT ||
-      serviceStatus === MiddlewareDeploymentStatus.DELETED
+      selectedService?.deploymentStatus ===
+        MiddlewareDeploymentStatus.STOPPED ||
+      selectedService?.deploymentStatus ===
+        MiddlewareDeploymentStatus.CREATED ||
+      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.BUILT ||
+      selectedService?.deploymentStatus === MiddlewareDeploymentStatus.DELETED
     ) {
       return <AgentNotRunningButton />;
     }
@@ -68,7 +74,7 @@ export const AgentButton = () => {
   }, [
     isServicesLoaded,
     isSelectedStakingContractDetailsLoaded,
-    serviceStatus,
+    selectedService?.deploymentStatus,
     isEligibleForStaking,
     isAgentEvicted,
     service,
