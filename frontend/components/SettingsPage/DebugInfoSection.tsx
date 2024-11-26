@@ -10,7 +10,7 @@ import {
   Typography,
 } from 'antd';
 import { isEmpty, isNil } from 'lodash';
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
@@ -29,6 +29,7 @@ import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { Address } from '@/types/Address';
 import { copyToClipboard } from '@/utils/copyToClipboard';
+import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
 
 import { CardSection } from '../styled/CardSection';
@@ -76,68 +77,68 @@ const DebugItem = ({
     [item.address],
   );
 
-  const evmChainIds = useMemo<EvmChainId[]>(() => {
-    return Object.keys(item.balance).map((chainId: string) => {
-      return +chainId as EvmChainId;
-    });
-  }, [item.balance]);
+  const balances = Object.entries(item.balance);
 
   return (
     <Card>
       <Title level={5} className="m-0 mb-8 text-base">
         {item.title}
       </Title>
-      <Row>
-        <Col span={12}>
-          <Flex vertical gap={4} align="flex-start">
-            <Text type="secondary" className="text-sm">
-              Balance
-            </Text>
-            {Object.entries(item.balance).map(([chainId, balance]) => {
-              return (
-                <Flex key={chainId} vertical gap={4}>
+      {balances.map(([chainId, balance]) => {
+        const evmChainId = +chainId as keyof typeof EvmChainName;
+        return (
+          <Fragment key={chainId}>
+            {balances.length > 1 && (
+              <Row>
+                <Text className="font-weight-600 mb-4">
+                  {EvmChainName[evmChainId]}:
+                </Text>
+              </Row>
+            )}
+            <Row className={balances.length > 1 ? 'mb-16' : undefined}>
+              <Col span={12}>
+                <Flex vertical gap={4} align="flex-start">
                   <Text type="secondary" className="text-sm">
-                    {EvmChainName[+chainId as keyof typeof EvmChainName]}
+                    Balance{' '}
                   </Text>
-                  {Object.entries(balance).map(([tokenSymbol, balance]) => {
-                    return (
-                      <Flex key={tokenSymbol} gap={12}>
-                        <Text>{balance}</Text>
-                        <Text type="secondary">{tokenSymbol}</Text>
-                      </Flex>
-                    );
-                  })}
+                  <Flex vertical gap={4}>
+                    {Object.entries(balance).map(([tokenSymbol, balance]) => {
+                      return (
+                        <Flex key={tokenSymbol} gap={12}>
+                          <Text>{balanceFormat(balance, 2)}</Text>
+                          <Text type="secondary">{tokenSymbol}</Text>
+                        </Flex>
+                      );
+                    })}
+                  </Flex>
                 </Flex>
-              );
-            })}
-          </Flex>
-        </Col>
+              </Col>
 
-        <Col span={12}>
-          {evmChainIds.map((chainId) => (
-            <Flex vertical gap={4} align="flex-start" key={chainId}>
-              <Text type="secondary" className="text-sm">
-                Address{' '}
-                {evmChainIds.length > 1 && `on ${EvmChainName[chainId]}`}
-              </Text>
-              <Flex gap={12}>
-                <a
-                  target="_blank"
-                  href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[chainId]}/address/${item.address}`}
-                >
-                  {truncatedAddress}
-                </a>
-                <Tooltip title="Copy to clipboard">
-                  <CopyOutlined
-                    style={ICON_STYLE}
-                    onClick={onCopyToClipboard}
-                  />
-                </Tooltip>
-              </Flex>
-            </Flex>
-          ))}
-        </Col>
-      </Row>
+              <Col span={12}>
+                <Flex vertical gap={4} align="flex-start">
+                  <Text type="secondary" className="text-sm">
+                    Address
+                  </Text>
+                  <Flex gap={12}>
+                    <a
+                      target="_blank"
+                      href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${item.address}`}
+                    >
+                      {truncatedAddress}
+                    </a>
+                    <Tooltip title="Copy to clipboard">
+                      <CopyOutlined
+                        style={ICON_STYLE}
+                        onClick={onCopyToClipboard}
+                      />
+                    </Tooltip>
+                  </Flex>
+                </Flex>
+              </Col>
+            </Row>
+          </Fragment>
+        );
+      })}
       {item.link ? (
         <Row className="mt-8">
           <a target="_blank" href={item.link.href}>
