@@ -205,9 +205,4 @@ jobs:
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
           GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
-        run: |
-          echo "OPTIMISM_RPC=https://rpc-gate.autonolas.tech/optimism-rpc/" >> .env
-          echo "BASE_RPC=https://rpc-gate.autonolas.tech/base-rpc/" >> .env
-          echo "GNOSIS_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
-          echo "ETHEREUM_RPC=https://rpc-gate.autonolas.tech/ethereum-rpc/" >> .env
-          node build.js
+        run: node build.js
