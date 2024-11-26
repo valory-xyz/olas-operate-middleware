@@ -25,7 +25,7 @@ export const AddBackupWalletAlert = () => {
   if (!masterSafeOwnersIsFetched) return null;
 
   if (isNil(backupOwners)) return null;
-  if (isArray(backupOwners) && backupOwners.length > 0) return null;
+  if (isEmpty(backupOwners)) return null;
 
   return (
     <CustomAlert
