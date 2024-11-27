@@ -84,70 +84,55 @@ export const SetupCreateSafe = () => {
     async (middlewareChain: MiddlewareChain, retries: number) => {
       setIsCreatingSafe(true);
 
-      // If we have retried too many times, set failed
-      if (retries <= 0) {
-        // if (middlewareChain === MiddlewareChain.OPTIMISM) {
-        //   setOptimismFailed(true);
-        //   setIsOptimismSuccess(false);
-        //   throw new Error('Failed to create safe on Ethereum');
-        // }
-        // if (middlewareChain === MiddlewareChain.ETHEREUM) {
-        //   setEthereumFailed(true);
-        //   setIsEthereumSuccess(false);
-        //   throw new Error('Failed to create safe on Ethereum');
-        // }
-        // if (middlewareChain === MiddlewareChain.BASE) {
-        //   setBaseFailed(true);
-        //   setIsBaseSuccess(false);
-        //   throw new Error('Failed to create safe on Base');
-        // }
+      for (let attempt = retries; attempt > 0; attempt--) {
+        try {
+          // Attempt to create the safe
+          await WalletService.createSafe(middlewareChain, backupSigner);
 
-        if (middlewareChain === MiddlewareChain.GNOSIS) {
-          setGnosisFailed(true);
-          setIsGnosisSuccess(false);
-          throw new Error('Failed to create safe on Base');
-        }
-
-        throw new Error('Failed to create safe as chain is not supported');
-      }
-
-      // Try to create the safe
-      WalletService.createSafe(middlewareChain, backupSigner)
-        .then(async () => {
-          // Attempt wallet and master safe updates before proceeding
-          try {
-            await updateWallets?.();
-            // await updateMasterSafeOwners();
-          } catch (e) {
-            console.error(e);
-          }
-
-          // Set states for successful creation
+          // Update wallets and handle successful creation
+          await updateWallets?.();
           setIsCreatingSafe(false);
-          // setOptimismFailed(false);
           setGnosisFailed(false);
-        })
-        .catch(async (e) => {
+          return; // Exit once successful
+        } catch (e) {
           console.error(e);
+          if (attempt === 1) {
+            // Final failure case after all retries
+            // If we have retried too many times, set failed
+            // if (middlewareChain === MiddlewareChain.OPTIMISM) {
+            //   setOptimismFailed(true);
+            //   setIsOptimismSuccess(false);
+            //   throw new Error('Failed to create safe on Optimism');
+            // }
+            // if (middlewareChain === MiddlewareChain.ETHEREUM) {
+            //   setEthereumFailed(true);
+            //   setIsEthereumSuccess(false);
+            //   throw new Error('Failed to create safe on Ethereum');
+            // }
+            // if (middlewareChain === MiddlewareChain.BASE) {
+            //   setBaseFailed(true);
+            //   setIsBaseSuccess(false);
+            //   throw new Error('Failed to create safe on Base');
+            // }
 
-          // Wait for 5 seconds before retrying
-          await delayInSeconds(5);
+            if (middlewareChain === MiddlewareChain.GNOSIS) {
+              setGnosisFailed(true);
+              setIsGnosisSuccess(false);
+              throw new Error('Failed to create safe on Gnosis');
+            }
 
-          // Retry
-          const newRetries = retries - 1;
-          if (newRetries <= 0) {
-            message.error('Failed to create account');
+            throw new Error('Failed to create safe as chain is not supported');
           } else {
-            message.error('Failed to create account, retrying in 5 seconds');
+            // Retry delay
+            message.error(
+              `Failed to create account, retrying in 5 seconds... (${attempt - 1} retries left)`,
+            );
+            await delayInSeconds(5);
           }
-          createSafeWithRetries(middlewareChain, newRetries);
-        });
+        }
+      }
     },
-    [
-      backupSigner,
-      //  updateMasterSafeOwners,
-      updateWallets,
-    ],
+    [backupSigner, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {

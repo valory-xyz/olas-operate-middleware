@@ -119,6 +119,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       (service) => service.service_config_id === selectedServiceConfigId,
     );
 
+    if (!selectedService) return;
+
     return {
       ...selectedService,
       deploymentStatus:
