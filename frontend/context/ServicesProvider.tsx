@@ -115,31 +115,23 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
 
-    const selectedService = services.find(
+    return services.find(
       (service) => service.service_config_id === selectedServiceConfigId,
     );
-
-    if (!selectedService) return;
-
-    return {
-      ...selectedService,
-      deploymentStatus:
-        selectedServiceStatusOverride ?? selectedServiceStatus?.status,
-    } as Service;
-  }, [
-    selectedServiceConfigId,
-    selectedServiceStatus?.status,
-    selectedServiceStatusOverride,
-    services,
-  ]);
+  }, [selectedServiceConfigId, services]);
 
   const selectedServiceWithStatus = useMemo<Service | undefined>(() => {
     if (!selectedService) return;
     return {
       ...selectedService,
-      deploymentStatus: selectedServiceStatus?.status,
+      deploymentStatus:
+        selectedServiceStatusOverride ?? selectedServiceStatus?.status,
     };
-  }, [selectedService, selectedServiceStatus?.status]);
+  }, [
+    selectedService,
+    selectedServiceStatus?.status,
+    selectedServiceStatusOverride,
+  ]);
 
   const selectService = useCallback((serviceConfigId: string) => {
     setSelectedServiceConfigId(serviceConfigId);

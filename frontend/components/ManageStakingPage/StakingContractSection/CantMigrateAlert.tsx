@@ -86,12 +86,13 @@ const AlertInsufficientMigrationFunds = ({
             <ul style={{ marginTop: 0, marginBottom: 4 }}>
               {requiredOlasDeposit > 0 && (
                 <li>
-                  {requiredOlasDeposit} {TokenSymbol.OLAS}
+                  {requiredOlasDeposit.toLocaleString()} {TokenSymbol.OLAS}
                 </li>
               )}
               {requiredNativeTokenDeposit > 0 && (
                 <li>
-                  {requiredNativeTokenDeposit} {nativeTokenSymbol}
+                  {requiredNativeTokenDeposit.toLocaleString()}{' '}
+                  {nativeTokenSymbol}
                 </li>
               )}
             </ul>
