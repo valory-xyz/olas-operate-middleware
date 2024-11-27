@@ -151,7 +151,7 @@ export const StakingContractDetailsProvider = ({
     refetch,
   } = useStakingContractDetailsByStakingProgram({
     serviceNftTokenId: !isNil(selectedService?.service_config_id)
-      ? selectedService?.chain_configs[
+      ? selectedService?.chain_configs?.[
           asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
         ].chain_data.token
       : null,

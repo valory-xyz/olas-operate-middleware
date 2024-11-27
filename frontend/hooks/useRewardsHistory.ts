@@ -243,7 +243,7 @@ export const useRewardsHistory = () => {
   const { service } = useService(serviceConfigId);
 
   const serviceNftTokenId =
-    service?.chain_configs[asMiddlewareChain(homeChainId)].chain_data?.token;
+    service?.chain_configs?.[asMiddlewareChain(homeChainId)].chain_data?.token;
 
   const {
     isError,

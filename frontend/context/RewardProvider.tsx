@@ -52,7 +52,7 @@ const useStakingRewardsDetails = () => {
 
   // fetch chain data from the selected service
   const chainData = !isNil(selectedService?.chain_configs)
-    ? selectedService?.chain_configs[asMiddlewareChain(currentChainId)]
+    ? selectedService?.chain_configs?.[asMiddlewareChain(currentChainId)]
         .chain_data
     : null;
   const multisig = chainData?.multisig;

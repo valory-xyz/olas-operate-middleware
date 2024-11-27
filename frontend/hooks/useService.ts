@@ -59,7 +59,7 @@ export const useService = (serviceConfigId?: string) => {
     if (!service) return [];
     if (!service.chain_configs?.[MiddlewareChain.GNOSIS]) return [];
 
-    const chainConfig = service?.chain_configs[MiddlewareChain.GNOSIS];
+    const chainConfig = service.chain_configs[MiddlewareChain.GNOSIS];
     if (!chainConfig) return [];
 
     return [
