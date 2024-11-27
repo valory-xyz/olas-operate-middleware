@@ -93,7 +93,7 @@ export const SetupCreateSafe = () => {
           await updateWallets?.();
           setIsCreatingSafe(false);
           setGnosisFailed(false);
-          return; // Exit once successful
+          break; // Exit the loop once successful
         } catch (e) {
           console.error(e);
           if (attempt === 1) {

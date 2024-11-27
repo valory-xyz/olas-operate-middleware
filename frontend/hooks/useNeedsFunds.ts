@@ -14,6 +14,7 @@ import { useBalanceContext, useMasterBalances } from './useBalanceContext';
 import { useServices } from './useServices';
 import { useStakingProgram } from './useStakingProgram';
 import { useStore } from './useStore';
+import { useMasterWalletContext } from './useWallet';
 
 export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { storeState } = useStore();
@@ -26,6 +27,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
 
   const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
 
+  const { masterEoa } = useMasterWalletContext();
   const { masterSafeBalances } = useMasterBalances();
 
   const isInitialFunded = storeState?.isInitialFunded;
@@ -75,17 +77,20 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const hasEnoughEthForInitialFunding = useMemo(() => {
     if (isNil(serviceFundRequirements)) return;
     if (isNil(walletBalances)) return;
+    if (isNil(masterEoa)) return;
 
-    const nativeBalancesByChain = walletBalances.reduce<{
-      [chainId: number]: number;
-    }>((acc, { symbol, balance, evmChainId }) => {
-      if (getNativeTokenSymbol(evmChainId) !== symbol) return acc;
+    const nativeBalancesByChain = walletBalances
+      .filter((data) => data.walletAddress !== masterEoa.address)
+      .reduce<{
+        [chainId: number]: number;
+      }>((acc, { symbol, balance, evmChainId }) => {
+        if (getNativeTokenSymbol(evmChainId) !== symbol) return acc;
 
-      if (!acc[evmChainId]) acc[evmChainId] = 0;
-      acc[evmChainId] += balance;
+        if (!acc[evmChainId]) acc[evmChainId] = 0;
+        acc[evmChainId] += balance;
 
-      return acc;
-    }, {});
+        return acc;
+      }, {});
 
     const chainIds = Object.keys(serviceFundRequirements).map(Number);
 
@@ -97,7 +102,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
 
       return nativeTokenBalance >= nativeTokenRequired;
     });
-  }, [serviceFundRequirements, walletBalances]);
+  }, [masterEoa, serviceFundRequirements, walletBalances]);
 
   const hasEnoughOlasForInitialFunding = useMemo(() => {
     if (!serviceFundRequirements) return;
