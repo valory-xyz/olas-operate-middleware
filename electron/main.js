@@ -96,6 +96,29 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function setAppAutostart(is_set) {
+  logger.electron("Set app autostart: " + is_set);
+  app.setLoginItemSettings({ openAtLogin: is_set });
+}
+
+function handleAppSettings() {
+  logger.electron('Handle app settings');
+  let app_settings_file = `${paths.dotOperateDirectory}/app_settings.json`;
+  try {
+    if (!fs.existsSync(app_settings_file)) {
+      logger.electron('Create app settings file');
+      let obj = { "app_auto_start": true };
+      fs.writeFileSync(app_settings_file, JSON.stringify(obj));
+    }
+    let data = JSON.parse(fs.readFileSync(app_settings_file));
+    logger.electron('Loaded app settings file ' + JSON.stringify(data));
+    setAppAutostart(data.app_auto_start);
+  } catch {
+    logger.electron('Error loading settings');
+  }
+}
+
+
 let isBeforeQuitting = false;
 let appRealClose = false;
 
@@ -471,6 +494,7 @@ ipcMain.on('check', async function (event, _argument) {
 
   // Setup
   try {
+    handleAppSettings();
     event.sender.send('response', 'Checking installation');
 
     if (platform === 'darwin') {
