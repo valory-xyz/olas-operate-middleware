@@ -60,7 +60,11 @@ export const MasterWalletProvider = ({ children }: PropsWithChildren) => {
 
   const [paused, setPaused] = useState(false);
 
-  const { data: masterWallets, refetch } = useQuery({
+  const {
+    data: masterWallets,
+    refetch,
+    isFetched,
+  } = useQuery({
     queryKey: REACT_QUERY_KEYS.WALLETS_KEY,
     queryFn: WalletService.getWallets,
     refetchInterval: isOnline && !paused ? FIVE_SECONDS_INTERVAL : false,
@@ -88,6 +92,7 @@ export const MasterWalletProvider = ({ children }: PropsWithChildren) => {
         paused,
         togglePaused: () => setPaused((prev) => !prev),
         refetch,
+        isFetched,
       }}
     >
       {children}
