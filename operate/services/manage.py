@@ -20,6 +20,7 @@
 """Service manager."""
 
 import asyncio
+from contextlib import suppress
 import logging
 import os
 import shutil
@@ -1363,11 +1364,16 @@ class ServiceManager:
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )
-            wallet.transfer(
-                to=t.cast(str, chain_data.multisig),
-                amount=int(to_transfer),
-                chain_type=ledger_config.chain,
-            )
+            # TODO: This is a temporary fix
+            # we avoid the error here because there is a seperate prompt on the UI
+            # when not enough funds are present, and the FE doesn't let the user to start the agent.
+            # Ideally this error should be allowed, and then the FE should ask the user for more funds.
+            with suppress(RuntimeError):
+                wallet.transfer(
+                    to=t.cast(str, chain_data.multisig),
+                    amount=int(to_transfer),
+                    chain_type=ledger_config.chain,
+                )
 
     def drain_service_safe(
         self,
