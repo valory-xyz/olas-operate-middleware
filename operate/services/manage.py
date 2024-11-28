@@ -20,7 +20,6 @@
 """Service manager."""
 
 import asyncio
-from contextlib import suppress
 import logging
 import os
 import shutil
@@ -29,6 +28,7 @@ import traceback
 import typing as t
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 
 import requests
