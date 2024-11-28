@@ -109,22 +109,17 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
         ?.token
     : null;
 
-  const {
-    isFetched,
-    isEnabled,
-    data: activeStakingProgramId,
-  } = useGetActiveStakingProgramId(serviceNftTokenId);
+  const { isLoading, data: activeStakingProgramId } =
+    useGetActiveStakingProgramId(serviceNftTokenId);
 
-  const isActiveStakingProgramLoaded = isEnabled ? isFetched : true;
-
-  const selectedStakingProgramId = isEnabled
-    ? activeStakingProgramId || null
-    : defaultStakingProgramId;
+  const selectedStakingProgramId = isLoading
+    ? null
+    : activeStakingProgramId || defaultStakingProgramId;
 
   return (
     <StakingProgramContext.Provider
       value={{
-        isActiveStakingProgramLoaded,
+        isActiveStakingProgramLoaded: !isLoading,
         activeStakingProgramId,
         defaultStakingProgramId,
         selectedStakingProgramId,

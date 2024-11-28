@@ -172,9 +172,7 @@ const useContractCheckpoints = (
 
   return useQuery({
     queryKey: REACT_QUERY_KEYS.REWARDS_HISTORY_KEY(chainId, serviceId!),
-    async queryFn() {
-      if (!serviceId) return [];
-
+    queryFn: async () => {
       const checkpointsResponse = await request<CheckpointsResponse>(
         GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
         fetchRewardsQuery(chainId),
@@ -230,7 +228,8 @@ const useContractCheckpoints = (
         return { ...acc, [stakingContractAddress]: transformedCheckpoints };
       }, {});
     },
-    refetchInterval: serviceId ? ONE_DAY_IN_MS : false,
+    enabled: !!serviceId,
+    refetchInterval: ONE_DAY_IN_MS,
     refetchOnWindowFocus: false,
   });
 };
