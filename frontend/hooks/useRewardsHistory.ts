@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { Maybe } from 'graphql/jsutils/Maybe';
 import { gql, request } from 'graphql-request';
-import { groupBy } from 'lodash';
+import { groupBy, isEmpty, isNil } from 'lodash';
 import { useCallback, useEffect, useMemo } from 'react';
 import { z } from 'zod';
 
@@ -172,9 +172,7 @@ const useContractCheckpoints = (
 
   return useQuery({
     queryKey: REACT_QUERY_KEYS.REWARDS_HISTORY_KEY(chainId, serviceId!),
-    async queryFn() {
-      if (!serviceId) return [];
-
+    queryFn: async () => {
       const checkpointsResponse = await request<CheckpointsResponse>(
         GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
         fetchRewardsQuery(chainId),
@@ -193,7 +191,7 @@ const useContractCheckpoints = (
     },
     select: (checkpoints): { [contractAddress: string]: Checkpoint[] } => {
       if (!serviceId) return {};
-      if (!checkpoints) return {};
+      if (isNil(checkpoints) || isEmpty(checkpoints)) return {};
 
       // group checkpoints by contract address (staking program)
       const checkpointsByContractAddress = groupBy(
@@ -230,7 +228,7 @@ const useContractCheckpoints = (
         return { ...acc, [stakingContractAddress]: transformedCheckpoints };
       }, {});
     },
-    enabled: !!chainId && !!serviceId,
+    enabled: !!serviceId,
     refetchInterval: ONE_DAY_IN_MS,
     refetchOnWindowFocus: false,
   });

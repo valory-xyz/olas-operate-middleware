@@ -16,7 +16,7 @@ const useAddressesLogs = () => {
   const {
     masterSafes,
     masterEoa,
-    isFetching: masterWalletsIsFetching,
+    isFetched: masterWalletsIsFetched,
   } = useMasterWalletContext();
 
   const { masterSafesOwners, masterSafesOwnersIsFetched } =
@@ -44,7 +44,7 @@ const useAddressesLogs = () => {
   }, [masterSafesOwners, masterEoa]);
 
   return {
-    isLoaded: masterWalletsIsFetching && masterSafesOwnersIsFetched,
+    isLoaded: masterWalletsIsFetched && masterSafesOwnersIsFetched,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
       {

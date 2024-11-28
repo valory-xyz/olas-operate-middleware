@@ -132,8 +132,8 @@ export const AgentNotRunningButton = () => {
     }
 
     const hasEnoughForInitialDeployment =
-      (masterSafeOlasBalance ?? 0) > requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) > LOW_MASTER_SAFE_BALANCE;
+      (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
+      (masterSafeNativeGasBalance ?? 0) >= LOW_MASTER_SAFE_BALANCE;
 
     return hasEnoughForInitialDeployment;
   }, [
@@ -226,7 +226,7 @@ export const AgentNotRunningButton = () => {
     if (isNil(service) && isNil(middlewareServiceResponse))
       throw new Error('Service not found');
 
-    //  Start the service
+    // Start the service
     try {
       const serviceToStart = service ?? middlewareServiceResponse;
       await ServicesService.startService(serviceToStart!.service_config_id);

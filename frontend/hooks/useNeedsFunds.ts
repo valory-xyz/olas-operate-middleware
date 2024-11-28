@@ -24,8 +24,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   );
   const { selectedStakingProgramId } = useStakingProgram();
 
-  const { isLoaded: isBalanceLoaded, walletBalances } = useBalanceContext();
-
+  const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
 
   const isInitialFunded = storeState?.isInitialFunded;
@@ -74,9 +73,9 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
 
   const hasEnoughEthForInitialFunding = useMemo(() => {
     if (isNil(serviceFundRequirements)) return;
-    if (isNil(walletBalances)) return;
+    if (isNil(masterSafeBalances)) return;
 
-    const nativeBalancesByChain = walletBalances.reduce<{
+    const nativeBalancesByChain = masterSafeBalances.reduce<{
       [chainId: number]: number;
     }>((acc, { symbol, balance, evmChainId }) => {
       if (getNativeTokenSymbol(evmChainId) !== symbol) return acc;
@@ -97,7 +96,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
 
       return nativeTokenBalance >= nativeTokenRequired;
     });
-  }, [serviceFundRequirements, walletBalances]);
+  }, [serviceFundRequirements, masterSafeBalances]);
 
   const hasEnoughOlasForInitialFunding = useMemo(() => {
     if (!serviceFundRequirements) return;
