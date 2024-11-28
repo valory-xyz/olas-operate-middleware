@@ -502,7 +502,7 @@ class EthereumMasterWallet(MasterWallet):
 
         safes = {}
         for chain, address in data["safes"].items():
-            if chain.isnumeric():
+            if str(chain).isnumeric():
                 safes[old_to_new_chains[int(chain)]] = address
                 migrated = True
             else:
