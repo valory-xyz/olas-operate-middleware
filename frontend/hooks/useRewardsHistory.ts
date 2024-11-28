@@ -2,7 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
 import { Maybe } from 'graphql/jsutils/Maybe';
 import { gql, request } from 'graphql-request';
-import { groupBy } from 'lodash';
+import { groupBy, isEmpty, isNil } from 'lodash';
 import { useCallback, useEffect, useMemo } from 'react';
 import { z } from 'zod';
 
@@ -193,7 +193,7 @@ const useContractCheckpoints = (
     },
     select: (checkpoints): { [contractAddress: string]: Checkpoint[] } => {
       if (!serviceId) return {};
-      if (!checkpoints) return {};
+      if (isNil(checkpoints) || isEmpty(checkpoints)) return {};
 
       // group checkpoints by contract address (staking program)
       const checkpointsByContractAddress = groupBy(
@@ -230,7 +230,6 @@ const useContractCheckpoints = (
         return { ...acc, [stakingContractAddress]: transformedCheckpoints };
       }, {});
     },
-    enabled: !!chainId && !!serviceId,
     refetchInterval: ONE_DAY_IN_MS,
     refetchOnWindowFocus: false,
   });

@@ -11,6 +11,7 @@ import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useRewardsHistory } from '@/hooks/useRewardsHistory';
+import { useServices } from '@/hooks/useServices';
 
 const { Text } = Typography;
 
@@ -22,15 +23,18 @@ const RewardsStreakFlex = styled(Flex)`
 `;
 
 const Streak = () => {
+  const { isLoading: isServicesLoading } = useServices();
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { isEligibleForRewards } = useReward();
   const {
     latestRewardStreak: streak,
-    isFetched,
+    isFetched: isRewardsHistoryFetched,
     isError,
   } = useRewardsHistory();
 
-  if (!isFetched || !isBalanceLoaded) {
+  // If services are loading for the first time (e.g. right after opening the app)
+  // or rewards history or balances are not fetched yet - show loading state
+  if (isServicesLoading || !isRewardsHistoryFetched || !isBalanceLoaded) {
     return <Skeleton.Input active size="small" />;
   }
 
