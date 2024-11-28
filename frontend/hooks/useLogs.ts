@@ -1,10 +1,9 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useMemo } from 'react';
 
-import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { EvmChainId } from '@/enums/Chain';
 import { Eoa, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
+import { Service } from '@/types/Service';
 import { Optional } from '@/types/Util';
 
 import { useBalanceContext } from './useBalanceContext';
@@ -17,7 +16,7 @@ const useAddressesLogs = () => {
   const {
     masterSafes,
     masterEoa,
-    isFetching: masterWalletsIsFetching,
+    isFetched: masterWalletsIsFetched,
   } = useMasterWalletContext();
 
   const { masterSafesOwners, masterSafesOwnersIsFetched } =
@@ -45,7 +44,7 @@ const useAddressesLogs = () => {
   }, [masterSafesOwners, masterEoa]);
 
   return {
-    isLoaded: masterWalletsIsFetching && masterSafesOwnersIsFetched,
+    isLoaded: masterWalletsIsFetched && masterSafesOwnersIsFetched,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
       {
@@ -81,22 +80,20 @@ const useBalancesLogs = () => {
 };
 
 const useServicesLogs = () => {
-  const { services, isFetched: isLoaded } = useServices();
-  const { getQueryData } = useQueryClient();
+  const { services, isFetched: isLoaded, selectedService } = useServices();
+  // const { getQueryData } = useQueryClient();
 
   return {
     isLoaded,
     data: {
       services:
-        services?.map((item) => ({
+        services?.map((item: Service) => ({
           ...item,
           keys: item.keys.map((key) => key.address),
-          deploymentStatus: getQueryData<string>([
-            REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
-              item.service_config_id,
-            ),
-            item.service_config_id,
-          ]),
+          deploymentStatus:
+            selectedService?.service_config_id === item.service_config_id
+              ? selectedService.deploymentStatus
+              : item.deploymentStatus,
         })) ?? 'undefined',
     },
   };

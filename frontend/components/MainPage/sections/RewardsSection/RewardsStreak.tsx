@@ -26,11 +26,13 @@ const Streak = () => {
   const { isEligibleForRewards } = useReward();
   const {
     latestRewardStreak: streak,
-    isFetched,
+    isLoading: isRewardsHistoryLoading,
     isError,
   } = useRewardsHistory();
 
-  if (!isFetched || !isBalanceLoaded) {
+  // If rewards history is loading for the first time
+  // or balances are not fetched yet - show loading state
+  if (isRewardsHistoryLoading || !isBalanceLoaded) {
     return <Skeleton.Input active size="small" />;
   }
 

@@ -17,6 +17,7 @@ import {
   useActiveStakingContractInfo,
   useStakingContractContext,
 } from '@/hooks/useStakingContractDetails';
+import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CantMigrateReason } from './useMigrate';
 
@@ -86,12 +87,12 @@ const AlertInsufficientMigrationFunds = ({
             <ul style={{ marginTop: 0, marginBottom: 4 }}>
               {requiredOlasDeposit > 0 && (
                 <li>
-                  {requiredOlasDeposit} {TokenSymbol.OLAS}
+                  {`${balanceFormat(requiredOlasDeposit, 2)} ${TokenSymbol.OLAS}`}
                 </li>
               )}
               {requiredNativeTokenDeposit > 0 && (
                 <li>
-                  {requiredNativeTokenDeposit} {nativeTokenSymbol}
+                  {`${balanceFormat(requiredNativeTokenDeposit, 2)} ${nativeTokenSymbol}`}
                 </li>
               )}
             </ul>

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { formatUnits } from 'ethers/lib/utils';
+import { isNil } from 'lodash';
 import {
   createContext,
   PropsWithChildren,
@@ -14,7 +15,6 @@ import { GNOSIS_CHAIN_CONFIG } from '@/config/chains';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 import { StakingRewardsInfoSchema } from '@/types/Autonolas';
@@ -46,13 +46,15 @@ const useStakingRewardsDetails = () => {
   const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const { selectedService } = useServices();
-  const { service } = useService(selectedService?.service_config_id);
+  // const { service } = useService(selectedService?.service_config_id);
 
   const serviceConfigId = selectedService?.service_config_id;
 
   // fetch chain data from the selected service
-  const chainData =
-    service?.chain_configs[asMiddlewareChain(currentChainId)].chain_data;
+  const chainData = !isNil(selectedService?.chain_configs)
+    ? selectedService?.chain_configs?.[asMiddlewareChain(currentChainId)]
+        .chain_data
+    : null;
   const multisig = chainData?.multisig;
   const token = chainData?.token;
 

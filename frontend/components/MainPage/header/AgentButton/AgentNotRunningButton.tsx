@@ -26,7 +26,6 @@ import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /** Button used to start / deploy the agent */
 export const AgentNotRunningButton = () => {
@@ -41,9 +40,10 @@ export const AgentNotRunningButton = () => {
     isLoading: isServicesLoading,
     selectedAgentConfig,
     selectedAgentType,
+    overrideSelectedServiceStatus,
   } = useServices();
 
-  const { service, setDeploymentStatus, isServiceRunning } = useService(
+  const { service, isServiceRunning } = useService(
     selectedService?.service_config_id,
   );
 
@@ -53,9 +53,19 @@ export const AgentNotRunningButton = () => {
     updateBalances,
   } = useBalanceContext();
 
-  const { serviceSafeBalances } = useServiceBalances(
+  const { serviceStakedBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
+
+  const serviceStakedOlasBalanceOnHomeChain = serviceStakedBalances?.find(
+    (stakedBalance) =>
+      stakedBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
+  );
+
+  const serviceTotalStakedOlas = sum([
+    serviceStakedOlasBalanceOnHomeChain?.olasBondBalance,
+    serviceStakedOlasBalanceOnHomeChain?.olasDepositBalance,
+  ]);
 
   const { masterSafeBalances } = useMasterBalances();
 
@@ -84,16 +94,7 @@ export const AgentNotRunningButton = () => {
       selectedStakingProgramId
     ]?.stakingRequirements[TokenSymbol.OLAS];
 
-  const serviceSafeOlasBalance = serviceSafeBalances?.find(
-    (walletBalanceResult) =>
-      walletBalanceResult.symbol === TokenSymbol.OLAS &&
-      walletBalanceResult.evmChainId === asEvmChainId(service?.home_chain),
-  )?.balance;
-
-  const serviceSafeOlasWithStaked = sum([
-    serviceSafeOlasBalance,
-    totalStakedOlasBalance,
-  ]);
+  const serviceSafeOlasWithStaked = sum([totalStakedOlasBalance]);
 
   const isDeployable = useMemo(() => {
     if (isServicesLoading) return false;
@@ -103,10 +104,21 @@ export const AgentNotRunningButton = () => {
 
     if (isNil(requiredStakedOlas)) return false;
 
-    if (!hasEnoughServiceSlots && !isServiceStaked) return false;
+    if (
+      !isNil(hasEnoughServiceSlots) &&
+      !hasEnoughServiceSlots &&
+      !isServiceStaked
+    )
+      return false;
 
-    if (service && storeState?.isInitialFunded) {
-      return (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
+    const masterSafeOlasBalance = masterSafeBalances?.find(
+      (walletBalanceResult) =>
+        walletBalanceResult.symbol === TokenSymbol.OLAS &&
+        walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
+    )?.balance;
+
+    if (service && storeState?.isInitialFunded && isServiceStaked) {
+      return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
     if (isEligibleForStaking && isAgentEvicted) return true;
@@ -119,15 +131,9 @@ export const AgentNotRunningButton = () => {
       return hasEnoughOlas && hasEnoughNativeGas;
     }
 
-    const masterSafeOlasBalance = masterSafeBalances?.find(
-      (walletBalanceResult) =>
-        walletBalanceResult.symbol === TokenSymbol.OLAS &&
-        walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
-    )?.balance;
-
     const hasEnoughForInitialDeployment =
-      (masterSafeOlasBalance ?? 0) > requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) > LOW_MASTER_SAFE_BALANCE;
+      (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
+      (masterSafeNativeGasBalance ?? 0) >= LOW_MASTER_SAFE_BALANCE;
 
     return hasEnoughForInitialDeployment;
   }, [
@@ -137,14 +143,15 @@ export const AgentNotRunningButton = () => {
     requiredStakedOlas,
     hasEnoughServiceSlots,
     isServiceStaked,
+    masterSafeBalances,
     service,
     storeState?.isInitialFunded,
     isEligibleForStaking,
     isAgentEvicted,
-    masterSafeBalances,
     masterSafeNativeGasBalance,
-    serviceSafeOlasWithStaked,
     selectedAgentConfig.evmHomeChainId,
+    serviceTotalStakedOlas,
+    serviceSafeOlasWithStaked,
   ]);
 
   const pauseAllPolling = useCallback(() => {
@@ -182,6 +189,9 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig.middlewareHomeChainId,
   ]);
 
+  /**
+   * @note only create a service if `service` does not exist
+   */
   const deployAndStartService = useCallback(async () => {
     if (!selectedStakingProgramId) return;
 
@@ -193,25 +203,33 @@ export const AgentNotRunningButton = () => {
       throw new Error(`Service template not found for ${selectedAgentType}`);
     }
 
+    // Create a new service if it does not exist
     let middlewareServiceResponse;
-    try {
-      middlewareServiceResponse = await ServicesService.createService({
-        stakingProgramId: selectedStakingProgramId,
-        serviceTemplate,
-        deploy: true,
-        useMechMarketplace:
-          STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][ // TODO: support multi-agent, during optimus week
-            selectedStakingProgramId
-          ].mechType === MechType.Marketplace,
-      });
-    } catch (error) {
-      console.error('Error while creating the service:', error);
-      showNotification?.('Failed to create service.');
-      throw error;
+    if (!service) {
+      try {
+        middlewareServiceResponse = await ServicesService.createService({
+          stakingProgramId: selectedStakingProgramId,
+          serviceTemplate,
+          deploy: true,
+          useMechMarketplace:
+            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][ // TODO: support multi-agent, during optimus week
+              selectedStakingProgramId
+            ].mechType === MechType.Marketplace,
+        });
+      } catch (error) {
+        console.error('Error while creating the service:', error);
+        showNotification?.('Failed to create service.');
+        throw new Error('Failed to create service');
+      }
     }
 
+    if (isNil(service) && isNil(middlewareServiceResponse))
+      throw new Error('Service not found');
+
+    // Start the service
     try {
-      ServicesService.startService(middlewareServiceResponse.service_config_id);
+      const serviceToStart = service ?? middlewareServiceResponse;
+      await ServicesService.startService(serviceToStart!.service_config_id);
     } catch (error) {
       console.error('Error while starting the service:', error);
       showNotification?.('Failed to start service.');
@@ -221,6 +239,7 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig.evmHomeChainId,
     selectedAgentType,
     selectedStakingProgramId,
+    service,
     showNotification,
   ]);
 
@@ -238,28 +257,36 @@ export const AgentNotRunningButton = () => {
     if (!masterWallets?.[0]) return;
 
     pauseAllPolling();
-    setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
+    overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
     try {
       await createSafeIfNeeded();
       await deployAndStartService();
-      showNotification?.(`Your agent is running!`);
-      setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYED);
-
-      await delayInSeconds(5);
-
-      await updateStatesSequentially();
     } catch (error) {
       console.error('Error while starting the agent:', error);
-      showNotification?.('Some error occurred. Please try again.');
-    } finally {
-      resumeAllPolling();
+      showNotification?.('An error occurred. Please try again.');
+      overrideSelectedServiceStatus(null); // wipe status
+      throw error;
     }
+
+    try {
+      await updateStatesSequentially();
+    } catch (error) {
+      console.error('Error while updating states sequentially:', error);
+      showNotification?.('Failed to update app state.');
+    }
+
+    overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYED);
+
+    resumeAllPolling();
+    await delayInSeconds(5);
+
+    overrideSelectedServiceStatus(null);
   }, [
     masterWallets,
     pauseAllPolling,
     resumeAllPolling,
-    setDeploymentStatus,
+    overrideSelectedServiceStatus,
     createSafeIfNeeded,
     deployAndStartService,
     showNotification,

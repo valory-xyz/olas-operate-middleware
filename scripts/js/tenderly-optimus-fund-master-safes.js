@@ -31,13 +31,13 @@ const setErc20Balance = async (erc20Address, address, rpc) => fetch(rpc, {
     method: 'POST',
     body: JSON.stringify({
         jsonrpc: '2.0',
-        method: 'tenderly_setERC20Balance',
+        method: 'tenderly_setErc20Balance',
         params: [
             erc20Address,
             address,
-            "0x3635C9ADC5DEA00000"
+            "0x56BC75E2D63100000"
         ],
-        id: "1234"
+        id: "3640"
     }),
 }).then((e) => console.log(`Successfully set ERC20 balance for ${address} on ${rpc}\n ${JSON.stringify(e)}`))
 
@@ -84,7 +84,8 @@ const main = async () => {
     ));
 
     // ERC20s
-    await Promise.all(Object.entries(erc20Addresses.olas).map(([chain, address]) => setErc20Balance(address, masterSafeAddress, rpcs[chain])));
+    // await Promise.all(Object.entries(erc20Addresses.olas).map(([chain, address]) => (chain==="gnosis") && setErc20Balance(address, masterSafeAddress, rpcs[chain])));
+    await setErc20Balance(erc20Addresses.olas.gnosis, masterSafeAddress, rpcs.gnosis);
 
     // check erc20s
     await Promise.all(Object.entries(erc20Addresses.olas).map(([chain, address]) =>

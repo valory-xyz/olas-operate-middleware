@@ -10,7 +10,11 @@ import {
   useState,
 } from 'react';
 
-import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
+import {
+  MiddlewareChain,
+  MiddlewareDeploymentStatus,
+  MiddlewareServiceResponse,
+} from '@/client';
 import { AGENT_CONFIG } from '@/config/agents';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
@@ -34,19 +38,17 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
   serviceWallets?: AgentWallets;
-  // servicesByMiddlewareChain?: Record<
-  //   string | MiddlewareChain,
-  //   MiddlewareServiceResponse[]
-  // >;
-  // servicesByEvmChainId?: Record<
-  //   number | EvmChainId,
-  //   MiddlewareServiceResponse[]
-  // >;
   selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
+  selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
+  isSelectedServiceStatusFetched: boolean;
+  refetchSelectedServiceStatus: () => void;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
   updateAgentType: (agentType: AgentType) => void;
+  overrideSelectedServiceStatus: (
+    status?: Maybe<MiddlewareDeploymentStatus>,
+  ) => void;
 } & Partial<QueryObserverBaseResult<MiddlewareServiceResponse[]>> &
   UsePause;
 
@@ -55,9 +57,12 @@ export const ServicesContext = createContext<ServicesContextType>({
   setPaused: noop,
   togglePaused: noop,
   selectService: noop,
+  isSelectedServiceStatusFetched: false,
+  refetchSelectedServiceStatus: noop,
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
   selectedAgentType: AgentType.PredictTrader,
   updateAgentType: noop,
+  overrideSelectedServiceStatus: noop,
 });
 
 /**
@@ -74,12 +79,12 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   // user selected service identifier
   const [selectedServiceConfigId, setSelectedServiceConfigId] =
-    useState<string>();
+    useState<Maybe<string>>();
 
   const {
     data: services,
     isError,
-    isFetched,
+    isFetched: isServicesFetched,
     isLoading,
     isFetching,
     refetch,
@@ -90,15 +95,46 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
+  const {
+    data: selectedServiceStatus,
+    isFetched: isSelectedServiceStatusFetched,
+    refetch: refetchSelectedServiceStatus,
+  } = useQuery({
+    queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
+      selectedServiceConfigId,
+    ),
+    queryFn: () =>
+      ServicesService.getDeployment(selectedServiceConfigId as string),
+    enabled: !!selectedServiceConfigId,
+    refetchInterval: FIVE_SECONDS_INTERVAL,
+  });
+
+  const [selectedServiceStatusOverride, setSelectedServiceStatusOverride] =
+    useState<Maybe<MiddlewareDeploymentStatus>>();
+
   const selectedService = useMemo<Service | undefined>(() => {
     if (!services) return;
+
     return services.find(
       (service) => service.service_config_id === selectedServiceConfigId,
     );
   }, [selectedServiceConfigId, services]);
 
-  const selectService = useCallback((serviceUuid: string) => {
-    setSelectedServiceConfigId(serviceUuid);
+  const selectedServiceWithStatus = useMemo<Service | undefined>(() => {
+    if (!selectedService) return;
+    return {
+      ...selectedService,
+      deploymentStatus:
+        selectedServiceStatusOverride ?? selectedServiceStatus?.status,
+    };
+  }, [
+    selectedService,
+    selectedServiceStatus?.status,
+    selectedServiceStatusOverride,
+  ]);
+
+  const selectService = useCallback((serviceConfigId: string) => {
+    setSelectedServiceConfigId(serviceConfigId);
   }, []);
 
   const updateAgentType = useCallback((agentType: AgentType) => {
@@ -114,40 +150,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     return config;
   }, [selectedAgentType]);
 
-  // const servicesByHomeMiddlewareChain = useMemo(() => {
-  //   if (!isFetched) return;
-  //   if (!services) return;
-  //   return services.reduce<
-  //     Record<string | MiddlewareChain, MiddlewareServiceResponse[]>
-  //   >((acc, service) => {
-  //     if (!acc[service.home_chain]) {
-  //       acc[service.home_chain] = [service.chain_configs[]];
-  //       return acc;
-  //     }
-
-  //     acc[service.home_chain].push(service);
-  //     return acc;
-  //   }, {});
-  // }, [isFetched, services]);
-
-  // const servicesByHomeEvmChainId = useMemo(() => {
-  //   if (!isFetched) return;
-  //   if (!services) return;
-  //   return Object.keys(EvmChainId).reduce<
-  //     Record<number, MiddlewareServiceResponse[]>
-  //   >((acc, evmChainIdKey) => {
-  //     const evmChainId = EvmChainId[evmChainIdKey as keyof typeof EvmChainId];
-
-  //     acc[evmChainId] = services.filter(
-  //       (service: MiddlewareServiceResponse) =>
-  //         service.chain_configs[asMiddlewareChain(evmChainId)],
-  //     );
-  //     return acc;
-  //   }, {});
-  // }, [isFetched, services]);
-
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
-    if (!isFetched) return;
+    if (!isServicesFetched) return;
     if (isEmpty(services)) return [];
 
     return services?.reduce<AgentWallets>(
@@ -194,34 +198,28 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       },
       [],
     );
-  }, [isFetched, services]);
+  }, [isServicesFetched, services]);
 
   /**
    * Select the first service by default
    */
   useEffect(() => {
-    if (!services) return;
-    if (selectedServiceConfigId) return;
-    // only select a service by default if services are fetched, but there has been no selection yet
-    if (isFetched && services.length > 0 && !selectedServiceConfigId)
-      setSelectedServiceConfigId(services[0].service_config_id);
-  }, [isFetched, selectedServiceConfigId, services]);
+    if (!isServicesFetched) return;
 
-  // const updateServiceStatus = useCallback(async () => {
-  //   if (!services?.[0]) return;
-  //   const serviceStatus = await ServicesService.getDeployment(services[0].service_config_id);
-  //   setServiceStatuses(serviceStatus.status);
-  // }, [services]);
+    if (isEmpty(services)) setSelectedServiceConfigId(null);
+
+    if (!selectedServiceConfigId && services && services.length > 0) {
+      setSelectedServiceConfigId(services[0].service_config_id);
+    }
+  }, [isServicesFetched, selectedServiceConfigId, services]);
 
   return (
     <ServicesContext.Provider
       value={{
         services,
         serviceWallets,
-        // servicesByMiddlewareChain: servicesByHomeMiddlewareChain,
-        // servicesByEvmChainId: servicesByHomeEvmChainId,
         isError,
-        isFetched,
+        isFetched: isServicesFetched,
         isLoading,
         isFetching,
         refetch,
@@ -229,10 +227,18 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         setPaused,
         togglePaused,
         selectService,
-        selectedService,
+        selectedService: selectedServiceWithStatus,
+        selectedServiceStatusOverride,
+        refetchSelectedServiceStatus,
+        isSelectedServiceStatusFetched,
         selectedAgentConfig,
         selectedAgentType,
         updateAgentType,
+        overrideSelectedServiceStatus: (
+          status: Maybe<MiddlewareDeploymentStatus>,
+        ) => {
+          setSelectedServiceStatusOverride(status);
+        },
       }}
     >
       {children}

@@ -14,7 +14,7 @@ const { Text } = Typography;
 export const AddBackupWalletAlert = () => {
   const { goto } = usePageState();
   const { selectedAgentConfig } = useServices();
-  const { masterSafes } = useMasterWalletContext();
+  const { masterSafes, masterEoa } = useMasterWalletContext();
   const { ownersIsFetched: masterSafeOwnersIsFetched, backupOwners } =
     useMultisig(
       masterSafes?.find((masterSafe) => {
@@ -25,7 +25,14 @@ export const AddBackupWalletAlert = () => {
   if (!masterSafeOwnersIsFetched) return null;
 
   if (isNil(backupOwners)) return null;
-  if (isEmpty(backupOwners)) return null;
+  if (
+    isEmpty(
+      backupOwners.filter(
+        (owner) => !isNil(masterEoa) && owner === masterEoa.address,
+      ),
+    )
+  )
+    return null;
 
   return (
     <CustomAlert

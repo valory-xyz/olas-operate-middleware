@@ -55,9 +55,9 @@ export const useActiveStakingContractInfo = () => {
   const isRewardsAvailable = availableRewards ?? 0 > 0;
 
   const hasEnoughServiceSlots =
-    !isNil(serviceIds) &&
-    !isNil(maxNumServices) &&
-    serviceIds.length < maxNumServices;
+    isNil(serviceIds) || isNil(maxNumServices)
+      ? null
+      : serviceIds.length < maxNumServices;
 
   const hasEnoughRewardsAndSlots = isRewardsAvailable && hasEnoughServiceSlots;
 

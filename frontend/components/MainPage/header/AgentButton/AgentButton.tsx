@@ -4,7 +4,6 @@ import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
 import { ErrorComponent } from '@/components/errors/ErrorComponent';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useActiveStakingContractInfo } from '@/hooks/useStakingContractDetails';
 
@@ -18,11 +17,11 @@ import { AgentStartingButton } from './AgentStartingButton';
 import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
-  const { selectedService, isFetched: isServicesLoaded } = useServices();
-
-  const { service, deploymentStatus: serviceStatus } = useService(
-    selectedService?.service_config_id,
-  );
+  const {
+    selectedService,
+    isFetched: isServicesLoaded,
+    selectedServiceStatusOverride,
+  } = useServices();
 
   const {
     isEligibleForStaking,
@@ -39,15 +38,18 @@ export const AgentButton = () => {
       );
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.STOPPING) {
+    const selectedServiceStatus =
+      selectedServiceStatusOverride ?? selectedService?.deploymentStatus;
+
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.STOPPING) {
       return <AgentStoppingButton />;
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.DEPLOYING) {
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.DEPLOYING) {
       return <AgentStartingButton />;
     }
 
-    if (serviceStatus === MiddlewareDeploymentStatus.DEPLOYED) {
+    if (selectedServiceStatus === MiddlewareDeploymentStatus.DEPLOYED) {
       return <AgentRunningButton />;
     }
 
@@ -55,11 +57,11 @@ export const AgentButton = () => {
       return <CannotStartAgentPopover />;
 
     if (
-      !service ||
-      serviceStatus === MiddlewareDeploymentStatus.STOPPED ||
-      serviceStatus === MiddlewareDeploymentStatus.CREATED ||
-      serviceStatus === MiddlewareDeploymentStatus.BUILT ||
-      serviceStatus === MiddlewareDeploymentStatus.DELETED
+      !selectedService ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.STOPPED ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.CREATED ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.BUILT ||
+      selectedServiceStatus === MiddlewareDeploymentStatus.DELETED
     ) {
       return <AgentNotRunningButton />;
     }
@@ -68,10 +70,10 @@ export const AgentButton = () => {
   }, [
     isServicesLoaded,
     isSelectedStakingContractDetailsLoaded,
-    serviceStatus,
+    selectedServiceStatusOverride,
+    selectedService,
     isEligibleForStaking,
     isAgentEvicted,
-    service,
   ]);
 
   return (

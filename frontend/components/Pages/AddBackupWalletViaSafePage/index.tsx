@@ -1,5 +1,4 @@
-import { Card, Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
+import { Card, Flex, Skeleton, Typography } from 'antd';
 
 import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
@@ -24,19 +23,17 @@ const safeChainPrefix = {
 
 export const AddBackupWalletViaSafePage = () => {
   const {
-    selectedAgentConfig: { evmHomeChainId: homeChainId },
+    selectedAgentConfig: { evmHomeChainId },
   } = useServices();
-  const { masterSafes, isFetched } = useMasterWalletContext();
+
+  const { masterSafes } = useMasterWalletContext();
 
   const masterSafe = masterSafes?.find(
-    ({ evmChainId: chainId }) => homeChainId === chainId,
+    ({ evmChainId: chainId }) => evmHomeChainId === chainId,
   );
 
   const safePrefix =
     masterSafe?.evmChainId && safeChainPrefix[masterSafe?.evmChainId];
-
-  if (!isFetched) return null;
-  if (isNil(masterSafe)) return null;
 
   return (
     <Card
@@ -47,12 +44,15 @@ export const AddBackupWalletViaSafePage = () => {
       <Flex vertical gap={16}>
         <Flex vertical gap={4}>
           <Text>Manually add backup wallet via Safe interface:</Text>
-          <a
-            target="_blank"
-            href={`https://app.safe.global/settings/setup?safe=${safePrefix}:${masterSafe.address}`}
-          >
-            Add backup wallet {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </a>
+          {!masterSafe?.address && <Skeleton.Input style={{ width: 200 }} />}
+          {masterSafe?.address && (
+            <a
+              target="_blank"
+              href={`https://app.safe.global/safes/${safePrefix}/${masterSafe.address}/settings`}
+            >
+              Open Safe interface {UNICODE_SYMBOLS.EXTERNAL_LINK}
+            </a>
+          )}
         </Flex>
 
         <Flex vertical gap={4}>

@@ -28,13 +28,7 @@ const DisplayRewards = () => {
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   return (
-    <CardSection
-      vertical
-      gap={8}
-      padding="16px 24px"
-      align="start"
-      borderbottom="true"
-    >
+    <CardSection vertical gap={8} padding="16px 24px" align="start">
       <StakingRewardsThisEpoch />
       {isBalancesLoaded ? (
         <Flex align="center" gap={12}>

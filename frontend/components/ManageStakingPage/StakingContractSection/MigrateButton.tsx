@@ -37,13 +37,14 @@ export const MigrateButton = ({
     selectedService,
     selectedAgentConfig,
     selectedAgentType,
+    overrideSelectedServiceStatus,
   } = useServices();
   const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
       : '';
-  const { service, setDeploymentStatus } = useService(serviceConfigId);
+  const { service } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () =>
       service
@@ -126,7 +127,7 @@ export const MigrateButton = ({
           // setDefaultStakingProgramId(stakingProgramId);
 
           try {
-            setDeploymentStatus(MiddlewareDeploymentStatus.DEPLOYING);
+            overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
             const serviceConfigParams = {

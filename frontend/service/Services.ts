@@ -2,8 +2,6 @@ import {
   Deployment,
   MiddlewareChain,
   MiddlewareServiceResponse,
-  ServiceConfigId,
-  ServiceHash,
   ServiceTemplate,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
@@ -19,16 +17,16 @@ import { asEvmChainId } from '@/utils/middlewareHelpers';
  * @returns
  */
 const getService = async (
-  serviceUuid: ServiceHash,
+  serviceConfigId: string,
 ): Promise<MiddlewareServiceResponse> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceUuid}`, {
+  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'GET',
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
     if (response.ok) {
       return response.json();
     }
-    throw new Error(`Failed to fetch service ${serviceUuid}`);
+    throw new Error(`Failed to fetch service ${serviceConfigId}`);
   });
 
 /**
@@ -107,7 +105,7 @@ const updateService = async ({
 }: {
   deploy: boolean;
   serviceTemplate: ServiceTemplate;
-  serviceConfigId: ServiceConfigId;
+  serviceConfigId: string;
   stakingProgramId: StakingProgramId;
   useMechMarketplace?: boolean;
   chainId: EvmChainId;
@@ -142,9 +140,9 @@ const updateService = async ({
  * @returns Promise<Service>
  */
 const startService = async (
-  serviceUuid: ServiceHash,
+  serviceConfigId: string,
 ): Promise<MiddlewareServiceResponse> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceUuid}`, {
+  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'POST',
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
@@ -154,8 +152,8 @@ const startService = async (
     throw new Error('Failed to start the service');
   });
 
-const stopDeployment = async (serviceUuid: ServiceHash): Promise<Deployment> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceUuid}/deployment/stop`, {
+const stopDeployment = async (serviceConfigId: string): Promise<Deployment> =>
+  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}/deployment/stop`, {
     method: 'POST',
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
@@ -165,8 +163,8 @@ const stopDeployment = async (serviceUuid: ServiceHash): Promise<Deployment> =>
     throw new Error('Failed to stop deployment');
   });
 
-const getDeployment = async (serviceUuid: ServiceHash): Promise<Deployment> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceUuid}/deployment`, {
+const getDeployment = async (serviceConfigId: string): Promise<Deployment> =>
+  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}/deployment`, {
     method: 'GET',
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
