@@ -153,6 +153,8 @@ export abstract class PredictTraderService extends StakedAgentService {
     const { contract: stakingTokenProxy } =
       STAKING_PROGRAMS[chainId][stakingProgramId].contract;
 
+    if (!stakingTokenProxy) return null;
+
     const contractCalls = [
       stakingTokenProxy.availableRewards(),
       stakingTokenProxy.maxNumServices(),
