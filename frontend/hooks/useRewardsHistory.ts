@@ -230,7 +230,7 @@ const useContractCheckpoints = (
         return { ...acc, [stakingContractAddress]: transformedCheckpoints };
       }, {});
     },
-    refetchInterval: ONE_DAY_IN_MS,
+    refetchInterval: serviceId ? ONE_DAY_IN_MS : false,
     refetchOnWindowFocus: false,
   });
 };
