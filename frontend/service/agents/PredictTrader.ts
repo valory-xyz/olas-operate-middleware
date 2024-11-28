@@ -1,13 +1,17 @@
 import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
+import { MECHS } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
-import { StakingContractDetails, StakingRewardsInfo } from '@/types/Autonolas';
-import { Maybe } from '@/types/Util';
+import {
+  StakingContactServiceInfo,
+  StakingContractDetails,
+  StakingRewardsInfo,
+} from '@/types/Autonolas';
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
@@ -38,8 +42,11 @@ export abstract class PredictTraderService extends StakedAgentService {
 
     const provider = PROVIDERS[chainId].multicallProvider;
 
+    const mechContract =
+      MECHS[chainId][stakingProgramConfig.mechType!].contract;
+
     const contractCalls = [
-      // mechContract.getRequestsCount(agentMultisigAddress),
+      mechContract.getRequestsCount(agentMultisigAddress),
       stakingTokenProxyContract.getServiceInfo(serviceId),
       stakingTokenProxyContract.livenessPeriod(),
       activityChecker.livenessRatio(),
@@ -48,7 +55,6 @@ export abstract class PredictTraderService extends StakedAgentService {
       stakingTokenProxyContract.minStakingDeposit(),
       stakingTokenProxyContract.tsCheckpoint(),
     ];
-
     const multicallResponse = await provider.all(contractCalls);
 
     const [
@@ -141,58 +147,31 @@ export abstract class PredictTraderService extends StakedAgentService {
     );
   };
 
-  static getStakingContractDetailsByServiceIdStakingProgram = async (
+  /**
+   * Get service info by it's NftTokenId on a provided staking contract
+   */
+
+  static getServiceInfo = async (
     serviceNftTokenId: number,
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId = EvmChainId.Gnosis,
-  ): Promise<Partial<Maybe<StakingContractDetails>>> => {
-    if (!serviceNftTokenId) return null;
-
+  ): Promise<StakingContactServiceInfo> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
     const { contract: stakingTokenProxy } =
-      STAKING_PROGRAMS[chainId][stakingProgramId].contract;
-
-    if (!stakingTokenProxy) return null;
+      STAKING_PROGRAMS[chainId][stakingProgramId];
 
     const contractCalls = [
-      stakingTokenProxy.availableRewards(),
-      stakingTokenProxy.maxNumServices(),
-      stakingTokenProxy.getServiceIds(),
-      stakingTokenProxy.minStakingDuration(),
       stakingTokenProxy.getServiceInfo(serviceNftTokenId),
       stakingTokenProxy.getStakingState(serviceNftTokenId),
-      stakingTokenProxy.minStakingDeposit(),
     ];
 
     const multicallResponse = await multicallProvider.all(contractCalls);
-    const [
-      availableRewardsInBN,
-      maxNumServicesInBN,
-      getServiceIdsInBN,
-      minStakingDurationInBN,
-      serviceInfo,
-      serviceStakingState,
-      minStakingDeposit,
-    ] = multicallResponse;
-
-    const availableRewards = parseFloat(
-      ethers.utils.formatUnits(availableRewardsInBN, 18),
-    );
-    const serviceIds = getServiceIdsInBN.map(Number);
-
-    const maxNumServices = maxNumServicesInBN.toNumber();
+    const [serviceInfo, serviceStakingState] = multicallResponse;
 
     return {
-      availableRewards,
-      maxNumServices,
-      serviceIds,
-      minimumStakingDuration: minStakingDurationInBN.toNumber(),
       serviceStakingStartTime: serviceInfo.tsStart.toNumber(),
       serviceStakingState,
-      minStakingDeposit: parseFloat(
-        ethers.utils.formatEther(minStakingDeposit),
-      ),
     };
   };
 
@@ -200,11 +179,11 @@ export abstract class PredictTraderService extends StakedAgentService {
    * Get staking contract info by staking program name
    * eg. Alpha, Beta, Beta2
    */
-  static getStakingContractDetailsByStakingProgramId = async (
+  static getStakingContractDetails = async (
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,
-  ): Promise<Partial<StakingContractDetails>> => {
-    const provider = PROVIDERS[chainId].multicallProvider;
+  ): Promise<StakingContractDetails> => {
+    const { multicallProvider } = PROVIDERS[chainId];
 
     const { contract: stakingTokenProxy } =
       STAKING_PROGRAMS[chainId][stakingProgramId];
@@ -218,9 +197,10 @@ export abstract class PredictTraderService extends StakedAgentService {
       stakingTokenProxy.rewardsPerSecond(),
       stakingTokenProxy.numAgentInstances(),
       stakingTokenProxy.livenessPeriod(),
+      stakingTokenProxy.epochCounter(),
     ];
 
-    const multicallResponse = await provider.all(contractCalls);
+    const multicallResponse = await multicallProvider.all(contractCalls);
 
     const [
       availableRewardsInBN,
@@ -231,6 +211,7 @@ export abstract class PredictTraderService extends StakedAgentService {
       rewardsPerSecond,
       numAgentInstances,
       livenessPeriod,
+      epochCounter,
     ] = multicallResponse;
 
     const availableRewards = parseFloat(
@@ -274,6 +255,7 @@ export abstract class PredictTraderService extends StakedAgentService {
       apy,
       olasStakeRequired,
       rewardsPerWorkPeriod,
+      epochCounter: epochCounter.toNumber(),
     };
   };
 }
