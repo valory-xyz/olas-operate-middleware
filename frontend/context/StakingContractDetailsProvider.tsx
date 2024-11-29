@@ -16,7 +16,10 @@ import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { StakingContractDetails } from '@/types/Autonolas';
+import {
+  ServiceStakingDetails,
+  StakingContractDetails,
+} from '@/types/Autonolas';
 import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { StakingProgramContext } from './StakingProgramProvider';
@@ -36,7 +39,7 @@ const useAllStakingContractDetails = () => {
         programId,
       ),
       queryFn: async () =>
-        await serviceApi.getStakingContractDetailsByStakingProgramId(
+        await serviceApi.getStakingContractDetails(
           programId as StakingProgramId,
           homeChainId,
         ),
@@ -91,25 +94,48 @@ const useStakingContractDetailsByStakingProgram = ({
       stakingProgramId!,
     ),
     queryFn: async () => {
-      if (isNil(serviceNftTokenId))
-        return serviceApi.getStakingContractDetailsByStakingProgramId(
-          stakingProgramId!,
-          evmHomeChainId,
+      /**
+       * Request staking contract details
+       * if service is present, request it's info and states on the staking contract
+       */
+      const promises: Promise<
+        StakingContractDetails | ServiceStakingDetails
+      >[] = [
+        serviceApi.getStakingContractDetails(stakingProgramId!, evmHomeChainId),
+      ];
+
+      if (!isNil(serviceNftTokenId)) {
+        promises.push(
+          serviceApi.getServiceStakingDetails(
+            serviceNftTokenId,
+            stakingProgramId!,
+            evmHomeChainId,
+          ),
         );
-      return serviceApi.getStakingContractDetailsByServiceIdStakingProgram(
-        serviceNftTokenId!,
-        stakingProgramId!,
-        evmHomeChainId,
-      );
+      }
+
+      return Promise.allSettled(promises).then((results) => {
+        const [stakingContractDetails, serviceStakingDetails] = results;
+        return {
+          ...(stakingContractDetails.status === 'fulfilled'
+            ? (stakingContractDetails.value as StakingContractDetails)
+            : {}),
+          ...(serviceStakingDetails.status === 'fulfilled'
+            ? (serviceStakingDetails.value as ServiceStakingDetails)
+            : {}),
+        };
+      });
     },
-    enabled: !isPaused && !!serviceNftTokenId && !!stakingProgramId,
+    enabled: !isPaused && !!stakingProgramId,
     refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
 };
 
 type StakingContractDetailsContextProps = {
-  selectedStakingContractDetails: Partial<Maybe<StakingContractDetails>>;
+  selectedStakingContractDetails: Maybe<
+    Partial<StakingContractDetails & ServiceStakingDetails>
+  >;
   isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<

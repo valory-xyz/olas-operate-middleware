@@ -27,10 +27,6 @@ export type StakingContractDetails = {
   serviceIds: number[];
   /** minimum staking duration (in seconds) */
   minimumStakingDuration: number;
-  /** time when service was staked (in seconds) - 0 = never staked */
-  serviceStakingStartTime: number;
-  /** 0: not staked, 1: staked, 2: evicted */
-  serviceStakingState: StakingState;
   /** OLAS cost of staking */
   minStakingDeposit: number;
   /** estimated annual percentage yield */
@@ -41,4 +37,11 @@ export type StakingContractDetails = {
   rewardsPerWorkPeriod: number;
   /** current epoch */
   epochCounter: number;
+};
+
+export type ServiceStakingDetails = {
+  /** time when service was staked (in seconds) - 0 = never staked */
+  serviceStakingStartTime: number;
+  /** 0: not staked, 1: staked, 2: evicted */
+  serviceStakingState: StakingState;
 };

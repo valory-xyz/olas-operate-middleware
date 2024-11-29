@@ -26,6 +26,7 @@ import { TokenSymbol } from '@/enums/Token';
 import { Wallets, WalletType } from '@/enums/Wallet';
 import { StakedAgentService } from '@/service/agents/StakedAgentService';
 import { Address } from '@/types/Address';
+import { Maybe } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { formatEther } from '@/utils/numberFormatters';
 
@@ -105,9 +106,10 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const totalStakedOlasBalance = useMemo(() => {
     return stakedBalances
-      .filter((walletBalance) => {
-        walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId;
-      })
+      .filter(
+        (walletBalance) =>
+          walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
+      )
       .reduce((acc, balance) => {
         return sum([acc, balance.olasBondBalance, balance.olasDepositBalance]);
       }, 0);
@@ -118,10 +120,16 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       setIsUpdatingBalances(true);
 
       try {
+        const masterSafe = masterWallets.find(
+          (masterWallet) =>
+            masterWallet.type === WalletType.Safe &&
+            masterWallet.evmChainId === selectedAgentConfig.evmHomeChainId,
+        );
+
         const [walletBalancesResult, stakedBalancesResult] =
           await Promise.allSettled([
             getCrossChainWalletBalances(masterWallets),
-            getCrossChainStakedBalances(services),
+            getCrossChainStakedBalances(services, masterSafe?.address),
           ]);
 
         // parse the results
@@ -144,7 +152,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
         setIsUpdatingBalances(false);
       }
     }
-  }, [services, masterWallets]);
+  }, [masterWallets, services, selectedAgentConfig.evmHomeChainId]);
 
   useEffect(() => {
     // Update balances once on load, then use interval
@@ -285,6 +293,7 @@ const getCrossChainWalletBalances = async (
 
 const getCrossChainStakedBalances = async (
   services: MiddlewareServiceResponse[],
+  masterSafeAddress: Maybe<Address>,
 ): Promise<CrossChainStakedBalances> => {
   const result: CrossChainStakedBalances = [];
 
@@ -292,15 +301,15 @@ const getCrossChainStakedBalances = async (
     const serviceConfigId = service.service_config_id;
     const middlewareChain: MiddlewareChain = service.home_chain;
     const chainConfig = service.chain_configs[middlewareChain];
-    const { multisig, token } = chainConfig.chain_data;
+    const { token: serviceNftTokenId } = chainConfig.chain_data;
 
-    if (!multisig || !token) {
+    if (!masterSafeAddress || !serviceNftTokenId) {
       return null;
     }
 
     const registryInfo = await StakedAgentService.getServiceRegistryInfo(
-      multisig,
-      token,
+      masterSafeAddress,
+      serviceNftTokenId,
       asEvmChainId(middlewareChain),
     );
 
