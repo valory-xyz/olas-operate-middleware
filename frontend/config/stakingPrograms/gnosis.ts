@@ -16,8 +16,8 @@ export const GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES: Record<
   Address
 > = {
   [StakingProgramId.PearlAlpha]: '0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A',
-  [StakingProgramId.PearlBeta]: '0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d',
-  [StakingProgramId.PearlBeta2]: '0x1c2F82413666d2a3fD8bC337b0268e62dDF67434',
+  [StakingProgramId.PearlBeta]: '0xEF44Fb0842DDeF59D37f85D61A1eF492bbA6135d',
+  [StakingProgramId.PearlBeta2]: '0x1C2F82413666d2a3fD8bC337b0268e62dDF67434',
   [StakingProgramId.PearlBeta3]: '0xBd59Ff0522aA773cB6074ce83cD1e4a05A457bc1',
   [StakingProgramId.PearlBeta4]: '0x3052451e1eAee78e62E169AfdF6288F8791F2918',
   [StakingProgramId.PearlBeta5]: '0x4Abe376Fda28c2F43b84884E5f822eA775DeA9F4',
