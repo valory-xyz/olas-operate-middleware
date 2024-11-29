@@ -411,6 +411,7 @@ class ServiceManager:
                     token=(
                         OLAS[ledger_config.chain] if user_params.use_staking else None
                     ),
+                    metadata_description=service.description,
                 ).get("token"),
             )
             chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
@@ -665,6 +666,7 @@ class ServiceManager:
                                 if user_params.use_staking
                                 else None
                             ),
+                            metadata_description=service.description,
                         )
                     )
                     .settle()
@@ -714,6 +716,7 @@ class ServiceManager:
                             if user_params.use_staking
                             else None
                         ),
+                        metadata_description=service.description,
                     )
                 )
                 .settle()
