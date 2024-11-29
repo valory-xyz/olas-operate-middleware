@@ -1,4 +1,5 @@
 import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
+import { getAddress } from 'ethers/lib/utils';
 import { createContext, PropsWithChildren, useContext, useState } from 'react';
 
 import { MiddlewareWalletResponse } from '@/client';
@@ -36,19 +37,23 @@ const transformMiddlewareWalletResponse = (
   const result: MasterWallets = [];
 
   data.forEach((response) => {
-    result.push({
-      address: response.address,
-      owner: WalletOwnerType.Master,
-      type: WalletType.EOA,
-    });
+    if (getAddress(response.address)) {
+      result.push({
+        address: response.address,
+        owner: WalletOwnerType.Master,
+        type: WalletType.EOA,
+      });
+    }
 
     Object.entries(response.safes).forEach(([middlewareChain, safeAddress]) => {
-      result.push({
-        address: safeAddress,
-        evmChainId: asEvmChainId(middlewareChain),
-        owner: WalletOwnerType.Master,
-        type: WalletType.Safe,
-      });
+      if (getAddress(safeAddress)) {
+        result.push({
+          address: safeAddress,
+          evmChainId: asEvmChainId(middlewareChain),
+          owner: WalletOwnerType.Master,
+          type: WalletType.Safe,
+        });
+      }
     });
   }, []);
 
