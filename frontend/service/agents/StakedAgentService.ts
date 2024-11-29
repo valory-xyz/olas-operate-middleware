@@ -50,7 +50,7 @@ export abstract class StakedAgentService {
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,
   ): Promise<unknown>;
-  abstract getServiceInfo(
+  abstract getServiceStakingDetails(
     serviceId: number,
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,

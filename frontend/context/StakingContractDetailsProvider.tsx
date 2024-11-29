@@ -17,7 +17,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import {
-  StakingContactServiceInfo,
+  ServiceStakingDetails,
   StakingContractDetails,
 } from '@/types/Autonolas';
 import { asMiddlewareChain } from '@/utils/middlewareHelpers';
@@ -99,14 +99,14 @@ const useStakingContractDetailsByStakingProgram = ({
        * if service is present, request it's info and states on the staking contract
        */
       const promises: Promise<
-        StakingContractDetails | StakingContactServiceInfo
+        StakingContractDetails | ServiceStakingDetails
       >[] = [
         serviceApi.getStakingContractDetails(stakingProgramId!, evmHomeChainId),
       ];
 
       if (!isNil(serviceNftTokenId)) {
         promises.push(
-          serviceApi.getServiceInfo(
+          serviceApi.getServiceStakingDetails(
             serviceNftTokenId,
             stakingProgramId!,
             evmHomeChainId,
@@ -115,13 +115,13 @@ const useStakingContractDetailsByStakingProgram = ({
       }
 
       return Promise.allSettled(promises).then((results) => {
-        const [stakingDetails, serviceInfo] = results;
+        const [stakingContractDetails, serviceStakingDetails] = results;
         return {
-          ...(stakingDetails.status === 'fulfilled'
-            ? (stakingDetails.value as StakingContractDetails)
+          ...(stakingContractDetails.status === 'fulfilled'
+            ? (stakingContractDetails.value as StakingContractDetails)
             : {}),
-          ...(serviceInfo.status === 'fulfilled'
-            ? (serviceInfo.value as StakingContactServiceInfo)
+          ...(serviceStakingDetails.status === 'fulfilled'
+            ? (serviceStakingDetails.value as ServiceStakingDetails)
             : {}),
         };
       });
@@ -134,7 +134,7 @@ const useStakingContractDetailsByStakingProgram = ({
 
 type StakingContractDetailsContextProps = {
   selectedStakingContractDetails: Maybe<
-    Partial<StakingContractDetails & StakingContactServiceInfo>
+    Partial<StakingContractDetails & ServiceStakingDetails>
   >;
   isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;

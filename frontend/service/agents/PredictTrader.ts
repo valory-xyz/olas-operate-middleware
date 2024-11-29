@@ -8,7 +8,7 @@ import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
 import {
-  StakingContactServiceInfo,
+  ServiceStakingDetails,
   StakingContractDetails,
   StakingRewardsInfo,
 } from '@/types/Autonolas';
@@ -148,14 +148,14 @@ export abstract class PredictTraderService extends StakedAgentService {
   };
 
   /**
-   * Get service info by it's NftTokenId on a provided staking contract
+   * Get service details by it's NftTokenId on a provided staking contract
    */
 
-  static getServiceInfo = async (
+  static getServiceStakingDetails = async (
     serviceNftTokenId: number,
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId = EvmChainId.Gnosis,
-  ): Promise<StakingContactServiceInfo> => {
+  ): Promise<ServiceStakingDetails> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
     const { contract: stakingTokenProxy } =

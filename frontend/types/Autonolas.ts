@@ -39,7 +39,7 @@ export type StakingContractDetails = {
   epochCounter: number;
 };
 
-export type StakingContactServiceInfo = {
+export type ServiceStakingDetails = {
   /** time when service was staked (in seconds) - 0 = never staked */
   serviceStakingStartTime: number;
   /** 0: not staked, 1: staked, 2: evicted */
