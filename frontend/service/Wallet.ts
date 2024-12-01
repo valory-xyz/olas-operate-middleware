@@ -8,6 +8,7 @@ import { BACKEND_URL } from '@/constants/urls';
 const getWallets = async () =>
   fetch(`${BACKEND_URL}/wallet`).then((res) => {
     if (!res.ok) throw new Error('Failed to get wallets');
+    return res.json();
   }) as Promise<MiddlewareWalletResponse[]>;
 
 const createEoa = async () =>
