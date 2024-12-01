@@ -608,6 +608,12 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         )
+
+        # TODO Determine if the mint metadata hash changed - if so, it requires
+        # an on-chain update.
+        # This has to be implemented. Temporarily added as a placeholder (ignored).
+        has_metadata_changed = False
+
         is_update = (
             (not is_first_mint)
             and (on_chain_hash is not None)
@@ -616,8 +622,9 @@ class ServiceManager:
                 # on_chain_hash != service.hash or  # noqa
                 current_agent_id
                 != staking_params["agent_ids"][0]
-                # TODO Temporary removed for Optimus. Needs to be put back!
-                # or current_agent_bond != staking_params["min_staking_deposit"]
+                # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
+                or current_agent_bond != staking_params["min_staking_deposit"]
+                or has_metadata_changed
             )
         )
         current_staking_program = self._get_current_staking_program(
