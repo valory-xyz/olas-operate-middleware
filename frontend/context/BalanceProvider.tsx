@@ -1,5 +1,5 @@
 import { BigNumberish } from 'ethers';
-import { getAddress } from 'ethers/lib/utils';
+import { getAddress, isAddress } from 'ethers/lib/utils';
 import { Contract as MulticallContract } from 'ethers-multicall';
 import { isEmpty, isNil, sum } from 'lodash';
 import {
@@ -240,11 +240,13 @@ const getCrossChainWalletBalances = async (
 
         if (isNative) {
           // get native balances for all relevant wallets
-          const nativeBalancePromises = relevantWallets.map<
-            Promise<BigNumberish>
-          >(({ address: walletAddress }) =>
-            provider.getBalance(getAddress(walletAddress)),
-          );
+          const nativeBalancePromises =
+            relevantWallets.map<Promise<BigNumberish> | null>(
+              ({ address: walletAddress }) =>
+                isAddress(walletAddress)
+                  ? provider.getBalance(getAddress(walletAddress))
+                  : null,
+            );
 
           const nativeBalances = await Promise.all(nativeBalancePromises).catch(
             (e) => {
@@ -254,14 +256,16 @@ const getCrossChainWalletBalances = async (
           );
 
           // add the results to the balance results
-          nativeBalances.forEach((balance, index) =>
-            balanceResults.push({
-              walletAddress: relevantWallets[index].address,
-              evmChainId: providerEvmChainId,
-              symbol: tokenSymbol,
-              isNative: true,
-              balance: Number(formatEther(balance)),
-            }),
+          nativeBalances.forEach(
+            (balance, index) =>
+              !isNil(balance) &&
+              balanceResults.push({
+                walletAddress: relevantWallets[index].address,
+                evmChainId: providerEvmChainId,
+                symbol: tokenSymbol,
+                isNative: true,
+                balance: Number(formatEther(balance)),
+              }),
           );
         }
 
@@ -311,8 +315,12 @@ const getCrossChainStakedBalances = async (
     const middlewareChain: MiddlewareChain = service.home_chain;
     const chainConfig = service.chain_configs[middlewareChain];
     const { token: serviceNftTokenId } = chainConfig.chain_data;
-
-    if (!masterSafeAddress || !serviceNftTokenId) {
+    if (
+      isNil(serviceNftTokenId) ||
+      serviceNftTokenId <= 0 ||
+      isNil(masterSafeAddress) ||
+      !isAddress(masterSafeAddress)
+    ) {
       return null;
     }
 

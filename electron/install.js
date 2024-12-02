@@ -21,11 +21,11 @@ require('dotenv').config({
 });
 
 const Env = {
+  ...process.env,
   PATH: `${process.env.PATH}:/opt/homebrew/bin:/usr/local/bin`,
   HOMEBREW_NO_AUTO_UPDATE: '1',
   PYTHONUTF8: '1',
   PYTHONIOENCODING: 'utf-8',
-  ...process.env,
 };
 
 const SudoOptions = {
@@ -123,9 +123,9 @@ function isTendermintInstalledUnix() {
 }
 
 function isTendermintInstalledWindows() {
+  // tendermint is bundled during release
   return true;
-  //always installed cause bundled in
-  return execSyncExitCode('tendermint --help') === 0;
+  // return execSyncExitCode('tendermint --help') === 0;
 }
 
 async function downloadFile(url, dest) {
@@ -148,37 +148,38 @@ async function downloadFile(url, dest) {
 }
 
 async function installTendermintWindows() {
+  // windows tendermint is bundled during release
   return;
-  // bundled in
-  logger.electron(`Installing tendermint for ${os.platform()}-${process.arch}`);
-  const cwd = process.cwd();
-  process.chdir(paths.tempDir);
 
-  const url = TendermintUrls[os.platform()][process.arch];
+  // logger.electron(`Installing tendermint for ${os.platform()}-${process.arch}`);
+  // const cwd = process.cwd();
+  // process.chdir(paths.tempDir);
 
-  logger.electron(
-    `Downloading ${url} to ${paths.tempDir}. This might take a while...`,
-  );
-  await downloadFile(url, `${paths.tempDir}/tendermint.tar.gz`);
+  // const url = TendermintUrls[os.platform()][process.arch];
 
-  logger.electron(`Installing tendermint binary`);
-  try {
-    execSync('tar -xvf tendermint.tar.gz');
-  } catch (error) {
-    logger.electron(error.status); // Might be 127 in your example.
-    logger.electron(error.message); // Holds the message you typically want.
-    logger.electron(error.stderr.toString()); // Holds the stderr output. Use `.toString()`.
-    logger.electron(error.stdout.toString()); // Holds the stdout output. Use `.toString()`.
-  }
+  // logger.electron(
+  //   `Downloading ${url} to ${paths.tempDir}. This might take a while...`,
+  // );
+  // await downloadFile(url, `${paths.tempDir}/tendermint.tar.gz`);
 
-  const bin_dir = homedir + '//AppData//Local//Microsoft//WindowsApps//';
-  if (!Env.CI) {
-    if (!fs.existsSync(bin_dir)) {
-      fs.mkdirSync(bin_dir, { recursive: true });
-    }
-    fs.copyFileSync('tendermint.exe', bin_dir + 'tendermint.exe');
-  }
-  process.chdir(cwd);
+  // logger.electron(`Installing tendermint binary`);
+  // try {
+  //   execSync('tar -xvf tendermint.tar.gz');
+  // } catch (error) {
+  //   logger.electron(error.status); // Might be 127 in your example.
+  //   logger.electron(error.message); // Holds the message you typically want.
+  //   logger.electron(error.stderr.toString()); // Holds the stderr output. Use `.toString()`.
+  //   logger.electron(error.stdout.toString()); // Holds the stdout output. Use `.toString()`.
+  // }
+
+  // const bin_dir = homedir + '//AppData//Local//Microsoft//WindowsApps//';
+  // if (!Env.CI) {
+  //   if (!fs.existsSync(bin_dir)) {
+  //     fs.mkdirSync(bin_dir, { recursive: true });
+  //   }
+  //   fs.copyFileSync('tendermint.exe', bin_dir + 'tendermint.exe');
+  // }
+  // process.chdir(cwd);
 }
 
 async function installTendermintUnix() {

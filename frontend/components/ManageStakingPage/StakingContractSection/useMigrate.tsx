@@ -201,21 +201,19 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
       return { canMigrate: true };
     }
 
-    // user must be staked from hereon
+    // user is staked from hereon
 
-    if (
-      !STAKING_PROGRAMS[homeChainId][migrateToStakingProgramId].deprecated ||
-      !STAKING_PROGRAMS[homeChainId][
-        migrateToStakingProgramId
-      ].agentsSupported.includes(selectedAgentType)
-    ) {
+    const { deprecated: isDeprecated, agentsSupported } =
+      STAKING_PROGRAMS[homeChainId][migrateToStakingProgramId];
+
+    if (isDeprecated || agentsSupported.includes(selectedAgentType)) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.MigrationNotSupported,
       };
     }
 
-    if (stakingContractInfo && !isServiceStakedForMinimumDuration) {
+    if (!isServiceStakedForMinimumDuration) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.NotStakedForMinimumDuration,
