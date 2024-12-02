@@ -128,7 +128,7 @@ const MasterSafeNativeBalance = () => {
     return masterSafeBalances
       .filter(({ walletAddress, evmChainId, isNative }) => {
         return (
-          evmChainId === selectedAgentConfig?.evmHomeChainId &&
+          evmChainId === selectedAgentConfig?.evmHomeChainId && // TODO: address multi chain, need to refactor as per product requirement
           isNative &&
           walletAddress === selectedMasterSafe.address
         );
@@ -172,7 +172,7 @@ const MasterEoaSignerNativeBalance = () => {
         ({ walletAddress, isNative, evmChainId }) =>
           walletAddress === masterEoa.address &&
           isNative &&
-          selectedAgentConfig?.evmHomeChainId === evmChainId,
+          selectedAgentConfig?.evmHomeChainId === evmChainId, // TODO: address multi chain, need to refactor as per product requirement
       )
       .reduce((acc, { balance }) => acc + balance, 0);
   }, [masterEoa, masterWalletBalances, selectedAgentConfig?.evmHomeChainId]);
