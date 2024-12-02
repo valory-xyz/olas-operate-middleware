@@ -1,11 +1,8 @@
-import { QuestionCircleOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Card, Flex } from 'antd';
+import { Card, Flex } from 'antd';
 
-import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 // import { StakingProgramId } from '@/enums/StakingProgram';
 // import { useMasterSafe } from '@/hooks/useMasterSafe';
-import { usePageState } from '@/hooks/usePageState';
 import {
   useStakingContractContext,
   useStakingContractDetails,
@@ -22,9 +19,9 @@ import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { RewardsSection } from './sections/RewardsSection';
 import { StakingContractSection } from './sections/StakingContractUpdate';
+import { SwitchAgentSection } from './sections/SwitchAgentSection';
 
 export const Main = () => {
-  const { goto } = usePageState();
   // const { backupSafeAddress } = useMasterWalletContext();
   // const { refetch: updateServicesState } = useServices();
   // const {
@@ -66,32 +63,12 @@ export const Main = () => {
 
   return (
     <Card
-      title={<MainHeader />}
-      styles={{
-        body: {
-          paddingTop: 0,
-          paddingBottom: 0,
-        },
-      }}
-      extra={
-        <Flex gap={8}>
-          <Button
-            type="default"
-            size="large"
-            icon={<QuestionCircleOutlined />}
-            onClick={() => goto(Pages.HelpAndSupport)}
-          />
-          <Button
-            type="default"
-            size="large"
-            icon={<SettingOutlined />}
-            onClick={() => goto(Pages.Settings)}
-          />
-        </Flex>
-      }
+      styles={{ body: { paddingTop: 0, paddingBottom: 0 } }}
       style={{ borderTopColor: 'transparent' }}
     >
       <Flex vertical>
+        <SwitchAgentSection />
+        <MainHeader />
         <AlertSections />
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <RewardsSection />
