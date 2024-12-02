@@ -235,13 +235,13 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     @property
     def _aea_bin(self) -> str:
         """Return aea_bin path."""
-        abin = str(Path(sys._MEIPASS) / "aea_bin")  # type: ignore # pylint: disable=protected-access
+        abin = str(Path(os.path.dirname(sys.executable)) / "aea_bin")  # type: ignore # pylint: disable=protected-access
         return abin
 
     @property
     def _tendermint_bin(self) -> str:
         """Return tendermint path."""
-        return str(Path(sys._MEIPASS) / "tendermint")  # type: ignore # pylint: disable=protected-access
+        return str(Path(os.path.dirname(sys.executable)) / "tendermint_bin")  # type: ignore # pylint: disable=protected-access
 
     def _start_agent(self) -> None:
         """Start agent process."""
@@ -303,11 +303,6 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
 
-    @property
-    def _tendermint_bin(self) -> str:
-        """Return tendermint path."""
-        return str(Path(sys._MEIPASS) / "tendermint_mac")  # type: ignore # pylint: disable=protected-access
-
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
@@ -315,13 +310,13 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     @property
     def _aea_bin(self) -> str:
         """Return aea_bin path."""
-        abin = str(Path(sys._MEIPASS) / "aea_win.exe")  # type: ignore # pylint: disable=protected-access
+        abin = str(Path(os.path.dirname(sys.executable)) / "aea_win.exe")  # type: ignore # pylint: disable=protected-access
         return abin
 
     @property
     def _tendermint_bin(self) -> str:
         """Return tendermint path."""
-        return str(Path(sys._MEIPASS) / "tendermint_win.exe")  # type: ignore # pylint: disable=protected-access
+        return str(Path(os.path.dirname(sys.executable)) / "tendermint_win.exe")  # type: ignore # pylint: disable=protected-access
 
 
 class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
