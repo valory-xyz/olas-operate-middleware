@@ -57,7 +57,7 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
       );
     },
     // enabled: isQueryEnabled,
-    refetchInterval: isQueryEnabled ? FIVE_SECONDS_INTERVAL : 0,
+    refetchInterval: isQueryEnabled ? FIVE_SECONDS_INTERVAL : false,
   });
 
   const setActiveStakingProgramId = useCallback(
