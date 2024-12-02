@@ -14,14 +14,12 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
-const MECH_REQUESTS_SAFETY_MARGIN = 1;
-
-export abstract class PredictTraderService extends StakedAgentService {
+export abstract class MemeooorBaseService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
     serviceId,
     stakingProgramId,
-    chainId = EvmChainId.Gnosis,
+    chainId = EvmChainId.Base,
   }: {
     agentMultisigAddress: Address;
     serviceId: number;
@@ -35,18 +33,17 @@ export abstract class PredictTraderService extends StakedAgentService {
 
     if (!stakingProgramConfig) throw new Error('Staking program not found');
 
-    const {
-      activityChecker,
-      contract: stakingTokenProxyContract,
-      mech: mechContract,
-    } = stakingProgramConfig;
-
-    if (!mechContract) throw new Error('Mech contract is not defined');
+    const { activityChecker, contract: stakingTokenProxyContract } =
+      stakingProgramConfig;
 
     const provider = PROVIDERS[chainId].multicallProvider;
 
+    // TODO: discuss how to calculate the activity
+    // const mechContract =
+    // MECHS[chainId][stakingProgramConfig.mechType!].contract;
+
     const contractCalls = [
-      mechContract.getRequestsCount(agentMultisigAddress),
+      // mechContract.getRequestsCount(agentMultisigAddress),
       stakingTokenProxyContract.getServiceInfo(serviceId),
       stakingTokenProxyContract.livenessPeriod(),
       activityChecker.livenessRatio(),
@@ -58,7 +55,7 @@ export abstract class PredictTraderService extends StakedAgentService {
     const multicallResponse = await provider.all(contractCalls);
 
     const [
-      mechRequestCount,
+      // mechRequestCount,
       serviceInfo,
       livenessPeriod,
       livenessRatio,
@@ -86,17 +83,17 @@ export abstract class PredictTraderService extends StakedAgentService {
 
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
-    const requiredMechRequests =
-      (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
-        livenessRatio) /
-        1e18 +
-      MECH_REQUESTS_SAFETY_MARGIN;
+    // const requiredMechRequests =
+    //   (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
+    //     livenessRatio) /
+    //     1e18 +
+    //   MECH_REQUESTS_SAFETY_MARGIN;
 
-    const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
-    const eligibleRequests =
-      mechRequestCount - mechRequestCountOnLastCheckpoint;
+    // const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
+    // const eligibleRequests =
+    //   mechRequestCount - mechRequestCountOnLastCheckpoint;
 
-    const isEligibleForRewards = eligibleRequests >= requiredMechRequests;
+    // const isEligibleForRewards = eligibleRequests >= requiredMechRequests;
 
     const availableRewardsForEpoch = Math.max(
       rewardsPerSecond * livenessPeriod, // expected rewards for the epoch
@@ -109,12 +106,11 @@ export abstract class PredictTraderService extends StakedAgentService {
       parseFloat(ethers.utils.formatEther(`${minStakingDeposit}`)) * 2;
 
     return {
-      // mechRequestCount,
       serviceInfo,
       livenessPeriod,
       livenessRatio,
       rewardsPerSecond,
-      isEligibleForRewards,
+      isEligibleForRewards: false,
       availableRewardsForEpoch,
       accruedServiceStakingRewards: parseFloat(
         ethers.utils.formatEther(`${accruedStakingReward}`),
@@ -125,7 +121,7 @@ export abstract class PredictTraderService extends StakedAgentService {
 
   static getAvailableRewardsForEpoch = async (
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Gnosis,
+    chainId: EvmChainId = EvmChainId.Base,
   ): Promise<number | undefined> => {
     const { contract: stakingTokenProxy } =
       STAKING_PROGRAMS[chainId][stakingProgramId];
@@ -154,7 +150,7 @@ export abstract class PredictTraderService extends StakedAgentService {
   static getServiceStakingDetails = async (
     serviceNftTokenId: number,
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Gnosis,
+    chainId: EvmChainId = EvmChainId.Base,
   ): Promise<ServiceStakingDetails> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
