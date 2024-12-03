@@ -48,6 +48,7 @@ export const Setup = () => {
       case SetupScreen.AgentSelection:
         return (
           <AgentSelection
+            showSelected={false}
             onPrev={() => goto(SetupScreen.SetupBackupSigner)}
             onNext={() => goto(SetupScreen.SetupEoaFunding)}
           />
