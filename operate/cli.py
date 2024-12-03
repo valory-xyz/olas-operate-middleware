@@ -30,6 +30,7 @@ from pathlib import Path
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
+from autonomy.chain.base import registry_contracts
 from clea import group, params, run
 from compose.project import ProjectError
 from docker.errors import APIError
@@ -37,14 +38,17 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
-from uvicorn.main import run as uvicorn
+from uvicorn.config import Config
+from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
+from operate.ledger.profiles import OLAS
+from operate.operate_types import ChainType, DeploymentStatus
 from operate.services.health_checker import HealthChecker
-from operate.types import ChainType, DeploymentStatus
+from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -283,6 +287,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
 
+    @app.get("/shutdown")
+    async def _shutdown(request: Request) -> JSONResponse:
+        """Kill backend server from inside."""
+        logger.info("Stopping services on demand...")
+        pause_all_services()
+        logger.info("Stopping services on demand done.")
+        app._server.should_exit = True  # pylint: disable=protected-access
+        await asyncio.sleep(0.3)
+        return {"stopped": True}
+
     @app.get("/stop_all_services")
     async def _stop_all_services(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
@@ -477,9 +491,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"safe": wallet.safe, "message": "Safe already exists!"}
             )
 
+        ledger_api = wallet.ledger_api(chain_type=chain_type)
         wallet.create_safe(  # pylint: disable=no-member
             chain_type=chain_type,
-            owner=data.get("owner"),
+            backup_owner=ledger_api.api.to_checksum_address(
+                data.get("backup_owner", data.get("owner"))
+            ),  # TODO: 'owner' kept for backwards compatibility
         )
         wallet.transfer(
             to=t.cast(str, wallet.safe),
@@ -514,9 +531,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(content={"error": "Wallet does not exist"})
 
         wallet = manager.load(ledger_type=ledger_type)
-        wallet.add_or_swap_owner(
+        ledger_api = wallet.ledger_api(chain_type=chain_type)
+        wallet.update_backup_owner(
             chain_type=chain_type,
-            owner=data.get("owner"),
+            backup_owner=ledger_api.api.to_checksum_address(
+                data.get("backup_owner", data.get("owner"))
+            ),  # TODO: 'owner' kept for backwards compatibility
         )
         return JSONResponse(content=wallet.json)
 
@@ -659,6 +679,95 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         )
 
+    @app.post("/api/services/{service}/onchain/withdraw")
+    @with_retries
+    async def _withdraw_onchain(request: Request) -> JSONResponse:
+        """Withdraw all the funds from a service."""
+        if not operate.service_manager().exists(service=request.path_params["service"]):
+            return service_not_found_error(service=request.path_params["service"])
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        withdrawal_address = (await request.json()).get("withdrawal_address")
+        if withdrawal_address is None:
+            return JSONResponse(
+                content={"error": "withdrawal_address is required"},
+                status_code=400,
+            )
+
+        try:
+            service_manager = operate.service_manager()
+            service = service_manager.load_or_create(
+                hash=request.path_params["service"]
+            )
+
+            chain_config = service.chain_configs[service.home_chain_id]
+            ledger_config = chain_config.ledger_config
+            master_wallet = service_manager.wallet_manager.load(
+                ledger_type=ledger_config.type
+            )
+            ledger_api = master_wallet.ledger_api(
+                chain_type=ledger_config.chain, rpc=ledger_config.rpc
+            )
+            withdrawal_address = ledger_api.api.to_checksum_address(withdrawal_address)
+
+            service_manager.terminate_service_on_chain_from_safe(
+                hash=request.path_params["service"],
+                chain_id=service.home_chain_id,
+                withdrawal_address=withdrawal_address,
+            )
+
+            # drain OLAS from the master safe
+            token_instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=OLAS[ledger_config.chain],
+            )
+            balance = token_instance.functions.balanceOf(master_wallet.safe).call()
+            if balance == 0:
+                logger.info(f"No OLAS to drain from master safe: {master_wallet.safe}")
+            else:
+                logger.info(
+                    f"Draining {balance} OLAS out of master safe: {master_wallet.safe}"
+                )
+                transfer_erc20_from_safe(
+                    ledger_api=ledger_api,
+                    crypto=master_wallet.crypto,
+                    safe=t.cast(str, master_wallet.safe),
+                    token=OLAS[ledger_config.chain],
+                    to=withdrawal_address,
+                    amount=balance,
+                )
+
+            # drain xDAI from the master safe
+            balance = ledger_api.get_balance(master_wallet.safe)
+            if balance == 0:
+                logger.info(f"No xDAI to drain from master safe: {master_wallet.safe}")
+            else:
+                logger.info(
+                    f"Draining {balance} xDAI out of master safe: {master_wallet.safe}"
+                )
+                master_wallet.transfer(
+                    to=withdrawal_address,
+                    amount=balance,
+                    chain_type=ledger_config.chain,
+                )
+
+            # drain xDAI from the master signer
+            drain_signer(
+                ledger_api=ledger_api,
+                crypto=master_wallet.crypto,
+                withdrawal_address=withdrawal_address,
+                chain_id=ledger_config.chain.id,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e), "traceback": traceback.format_exc()},
+            )
+
+        return JSONResponse(content={"error": None})
+
     @app.get("/api/services/{service}/deployment")
     @with_retries
     async def _get_service_deployment(request: Request) -> JSONResponse:
@@ -763,11 +872,18 @@ def _daemon(
     ] = None,
 ) -> None:
     """Launch operate daemon."""
-    uvicorn(
-        app=create_app(home=home),
-        host=host,
-        port=port,
+
+    app = create_app(home=home)
+
+    server = Server(
+        Config(
+            app=app,
+            host=host,
+            port=port,
+        )
     )
+    app._server = server  # pylint: disable=protected-access
+    server.run()
 
 
 def main() -> None:

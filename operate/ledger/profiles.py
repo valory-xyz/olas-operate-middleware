@@ -19,7 +19,7 @@
 
 """Chain profiles."""
 
-from operate.types import ChainType, ContractAddresses
+from operate.operate_types import ChainType, ContractAddresses
 
 
 CONTRACTS = {
@@ -49,4 +49,8 @@ STAKING = {
 
 OLAS = {
     ChainType.GNOSIS: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+}
+
+WXDAI = {
+    ChainType.GNOSIS: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
 }

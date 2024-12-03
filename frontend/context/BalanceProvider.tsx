@@ -230,13 +230,18 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 
   const isLowBalance = useMemo(() => {
-    if (!safeBalance || !agentSafeBalance) return false;
+    if (!safeBalance || !agentSafeBalance) {
+      return false;
+    }
+
+    // @note: If the agentSafeBalance is low, it's auto-funded from the safeBalance
     if (
       safeBalance.ETH < LOW_MASTER_SAFE_BALANCE &&
-      // Need to check agentSafe balance as well, because it's auto-funded from safeBalance
       agentSafeBalance.ETH < LOW_AGENT_SAFE_BALANCE
-    )
+    ) {
       return true;
+    }
+
     return false;
   }, [safeBalance, agentSafeBalance]);
 

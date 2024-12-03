@@ -27,7 +27,6 @@ import logging
 import tempfile
 import time
 import typing as t
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Union
@@ -57,7 +56,7 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 
-import operate.types
+import operate.operate_types
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -68,12 +67,13 @@ from operate.data.contracts.service_staking_token.contract import (
     ServiceStakingTokenContract,
 )
 from operate.ledger.profiles import STAKING
-from operate.types import ContractAddresses
+from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
     NULL_ADDRESS,
     SafeOperation,
     hash_payload_to_hex,
+    settle_raw_transaction,
     skill_input_hex_to_payload,
 )
 from operate.wallet.master import MasterWallet
@@ -166,27 +166,12 @@ class GnosisSafeTransaction:
 
     def settle(self) -> t.Dict:
         """Settle the transaction."""
-        retries = 0
-        deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-        while (
-            retries < ON_CHAIN_INTERACT_RETRIES
-            and datetime.now().timestamp() < deadline
-        ):
-            try:
+        return settle_raw_transaction(
+            ledger_api=self.ledger_api,
+            build_and_send_tx=lambda: self.ledger_api.send_signed_transaction(
                 self.build()
-                tx_digest = self.ledger_api.send_signed_transaction(self.tx)
-            except Exception as e:  # pylint: disable=broad-except
-                print(f"Error sending the safe tx: {e}")
-                tx_digest = None
-
-            if tx_digest is not None:
-                receipt = self.ledger_api.api.eth.wait_for_transaction_receipt(
-                    tx_digest
-                )
-                if receipt["status"] != 0:
-                    return receipt
-            time.sleep(ON_CHAIN_INTERACT_SLEEP)
-        raise RuntimeError("Timeout while waiting for safe transaction to go through")
+            ),
+        )
 
 
 class StakingManager(OnChainHelper):
@@ -490,6 +475,18 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
+    def get_forced_unstake_tx_data(
+        self, service_id: int, staking_contract: str
+    ) -> bytes:
+        """Forced unstake the service"""
+        return self.staking_ctr.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=staking_contract,
+        ).encodeABI(
+            fn_name="forcedUnstake",
+            args=[service_id],
+        )
+
 
 class _ChainUtil:
     """On chain service management."""
@@ -773,7 +770,9 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.types.ChainType.GNOSIS]["pearl_beta_mech_marketplace"]
+            == STAKING[operate.operate_types.ChainType.GNOSIS][
+                "pearl_beta_mech_marketplace"
+            ]
         ):
             agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
         else:
@@ -1335,16 +1334,25 @@ class EthSafeTxBuilder(_ChainUtil):
         self,
         service_id: int,
         staking_contract: str,
+        force: bool = False,
     ) -> t.Dict:
         """Get unstaking tx data"""
         self._patch()
-        txd = StakingManager(
+        staking_manager = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
             chain_type=self.chain_type,
-        ).get_unstake_tx_data(
-            service_id=service_id,
-            staking_contract=staking_contract,
+        )
+        txd = (
+            staking_manager.get_forced_unstake_tx_data(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
+            if force
+            else staking_manager.get_unstake_tx_data(
+                service_id=service_id,
+                staking_contract=staking_contract,
+            )
         )
         return {
             "to": staking_contract,
