@@ -63,7 +63,7 @@ const DebugItem = ({
   item: {
     title: string;
     balance: Record<number | EvmChainId, Record<string | TokenSymbol, number>>;
-    address: `0x${string}`;
+    address: Address;
     link?: { title: string; href: string };
   };
 }) => {

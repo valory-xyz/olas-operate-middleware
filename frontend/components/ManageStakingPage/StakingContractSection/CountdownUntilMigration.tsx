@@ -4,25 +4,36 @@ import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
 import { POPOVER_WIDTH_LARGE } from '@/constants/width';
-import { StakingContractDetails } from '@/types/Autonolas';
+import {
+  ServiceStakingDetails,
+  StakingContractDetails,
+} from '@/types/Autonolas';
 
 const { Text } = Typography;
 
 export const CountdownUntilMigration = ({
   currentStakingContractInfo,
 }: {
-  currentStakingContractInfo: Partial<StakingContractDetails>;
+  currentStakingContractInfo:
+    | Partial<StakingContractDetails>
+    | Partial<StakingContractDetails & ServiceStakingDetails>;
 }) => {
   const [secondsUntilReady, setSecondsUntilMigration] = useState<number>();
 
   useInterval(() => {
     if (!currentStakingContractInfo) return;
 
+    if (
+      !('serviceStakingStartTime' in currentStakingContractInfo) ||
+      !('minimumStakingDuration' in currentStakingContractInfo)
+    ) {
+      return;
+    }
+
     const { serviceStakingStartTime, minimumStakingDuration } =
       currentStakingContractInfo;
 
-    if (isNil(minimumStakingDuration)) return;
-    if (isNil(serviceStakingStartTime)) return;
+    if (isNil(minimumStakingDuration) || isNil(serviceStakingStartTime)) return;
 
     const now = Math.round(Date.now() / 1000);
     const timeSinceLastStaked = now - serviceStakingStartTime;
