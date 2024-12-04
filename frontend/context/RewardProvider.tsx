@@ -31,6 +31,7 @@ export const RewardContext = createContext<{
   optimisticRewardsEarnedForEpoch?: number;
   minimumStakedAmountRequired?: number;
   updateRewards: () => Promise<void>;
+  isStakingRewardsDetailsFetched?: boolean;
 }>({
   updateRewards: async () => {},
 });
@@ -95,9 +96,11 @@ const useAvailableRewardsForEpoch = () => {
   const { isOnline } = useContext(OnlineStatusContext);
   const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
-  const { selectedService, isFetched: isLoaded } = useServices();
+  const { selectedService, isFetched: isServicesFetched } = useServices();
   const serviceConfigId =
-    isLoaded && selectedService ? selectedService?.service_config_id : '';
+    isServicesFetched && selectedService
+      ? selectedService?.service_config_id
+      : '';
 
   return useQuery({
     queryKey: REACT_QUERY_KEYS.AVAILABLE_REWARDS_FOR_EPOCH_KEY(
@@ -125,8 +128,11 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
   const { storeState } = useStore();
   const electronApi = useElectronApi();
 
-  const { data: stakingRewardsDetails, refetch: refetchStakingRewardsDetails } =
-    useStakingRewardsDetails();
+  const {
+    data: stakingRewardsDetails,
+    refetch: refetchStakingRewardsDetails,
+    isFetched: isStakingRewardsDetailsFetched,
+  } = useStakingRewardsDetails();
   const {
     data: availableRewardsForEpoch,
     refetch: refetchAvailableRewardsForEpoch,
@@ -175,6 +181,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
         isEligibleForRewards,
         optimisticRewardsEarnedForEpoch,
         updateRewards,
+        isStakingRewardsDetailsFetched,
       }}
     >
       {children}
