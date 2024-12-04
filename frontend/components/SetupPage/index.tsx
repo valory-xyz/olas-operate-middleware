@@ -50,7 +50,6 @@ export const Setup = () => {
           <AgentSelection
             showSelected={false}
             onPrev={() => goto(SetupScreen.SetupBackupSigner)}
-            onNext={() => goto(SetupScreen.SetupEoaFunding)}
           />
         );
       case SetupScreen.SetupYourAgent:
