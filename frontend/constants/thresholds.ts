@@ -2,27 +2,33 @@ import { EvmChainId } from '@/enums/Chain';
 
 // TODO: confirm eth requirements, very flaky, eth requirements will fluctuate
 export const MIN_ETH_BALANCE_THRESHOLDS: Record<
-  EvmChainId,
+  EvmChainId | number,
   {
     safeCreation: number;
     safeAddSigner: number;
+    agentSafeGas: number;
+    masterSafeGas: number;
   }
 > = {
   [EvmChainId.Gnosis]: {
     safeCreation: 1.5,
     safeAddSigner: 0.1,
+    agentSafeGas: 0.5,
+    masterSafeGas: 2,
   },
-  [EvmChainId.Optimism]: {
-    safeCreation: 0.005,
-    safeAddSigner: 0.005,
-  },
-  [EvmChainId.Ethereum]: {
-    safeCreation: 0.02,
-    safeAddSigner: 0.02,
-  },
+  // [EvmChainId.Optimism]: {
+  //   safeCreation: 0.005,
+  //   safeAddSigner: 0.005,
+  // },
+  // [EvmChainId.Ethereum]: {
+  //   safeCreation: 0.02,
+  //   safeAddSigner: 0.02,
+  // },
   [EvmChainId.Base]: {
     safeCreation: 0.005,
     safeAddSigner: 0.005,
+    agentSafeGas: 0.5,
+    masterSafeGas: 2,
   },
 };
 
