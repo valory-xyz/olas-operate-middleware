@@ -9,12 +9,13 @@ import {
   message,
   Typography,
 } from 'antd';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useUnmount } from 'usehooks-ts';
 
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { SetupScreen } from '@/enums/SetupScreen';
+import { useElectronApi } from '@/hooks/useElectronApi';
 import { useSetup } from '@/hooks/useSetup';
 
 import { SetupCreateHeader } from '../Create/SetupCreateHeader';
@@ -93,42 +94,52 @@ const SetupYourAgentForm = () => {
     setTwitterCredentialsValidationStatus,
   ] = useState<ValidationStatus>('unknown');
 
-  const onFinish = async (values: Record<string, string>) => {
-    try {
-      setIsSubmitting(true);
+  const electronApi = useElectronApi();
 
-      // validate the gemini API
-      setSubmitButtonText('Validating API key...');
-      const isGeminiApiValid = await validateGeminiApiKey(values.geminiApiKey);
-      setGeminiApiKeyValidationStatus(isGeminiApiValid ? 'valid' : 'invalid');
-      if (!isGeminiApiValid) return;
+  const onFinish = useCallback(
+    async (values: Record<string, string>) => {
+      try {
+        setIsSubmitting(true);
 
-      // validate the twitter credentials
-      setSubmitButtonText('Validating Twitter credentials...');
-      const isTwitterCredentialsValid = await validateTwitterCredentials(
-        values.xEmail,
-        values.xUsername,
-        values.xPassword,
-      );
-      setTwitterCredentialsValidationStatus(
-        isTwitterCredentialsValid ? 'valid' : 'invalid',
-      );
-      if (!isTwitterCredentialsValid) return;
+        // validate the gemini API
+        setSubmitButtonText('Validating Gemini API key...');
+        const isGeminiApiValid = await validateGeminiApiKey(
+          values.geminiApiKey,
+        );
+        setGeminiApiKeyValidationStatus(isGeminiApiValid ? 'valid' : 'invalid');
+        if (!isGeminiApiValid) return;
 
-      // wait for agent setup to complete
-      setSubmitButtonText('Setting up agent...');
-      await onAgentSetupComplete();
+        // validate the twitter credentials
+        setSubmitButtonText('Validating Twitter credentials...');
+        const isTwitterCredentialsValid = electronApi?.validateTwitterLogin
+          ? await validateTwitterCredentials(
+              values.xEmail,
+              values.xUsername,
+              values.xPassword,
+              electronApi.validateTwitterLogin,
+            )
+          : false;
+        setTwitterCredentialsValidationStatus(
+          isTwitterCredentialsValid ? 'valid' : 'invalid',
+        );
+        if (!isTwitterCredentialsValid) return;
 
-      // move to next page
-      goto(SetupScreen.SetupEoaFunding);
-    } catch (error) {
-      message.error('Something went wrong. Please try again.');
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-      setSubmitButtonText('Continue');
-    }
-  };
+        // wait for agent setup to complete
+        setSubmitButtonText('Setting up agent...');
+        await onAgentSetupComplete();
+
+        // move to next page
+        goto(SetupScreen.SetupEoaFunding);
+      } catch (error) {
+        message.error('Something went wrong. Please try again.');
+        console.error(error);
+      } finally {
+        setIsSubmitting(false);
+        setSubmitButtonText('Continue');
+      }
+    },
+    [electronApi, goto],
+  );
 
   // Clean up
   useUnmount(async () => {
