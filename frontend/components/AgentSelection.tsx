@@ -108,6 +108,7 @@ const EachAgent = ({
 
 type AgentSelectionProps = {
   showSelected?: boolean;
+  canGoBack?: boolean;
   onPrev: () => void;
 };
 
@@ -116,10 +117,11 @@ type AgentSelectionProps = {
  */
 export const AgentSelection = ({
   showSelected = true,
+  canGoBack = true,
   onPrev,
 }: AgentSelectionProps) => (
   <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }}>
-    <SetupCreateHeader prev={onPrev} />
+    <SetupCreateHeader prev={onPrev} disabled={canGoBack} />
     <Title level={3}>Select your agent</Title>
 
     {entries(AGENT_CONFIG).map(([agentType, agentConfig]) => {
