@@ -44,7 +44,6 @@ export const Main = () => {
   );
 
   // TODO: reintroduce later,  non critical
-
   // useEffect(() => {
   //   if (!isBalanceLoaded) {
   //     updateServicesState?.().then(() => updateBalances());

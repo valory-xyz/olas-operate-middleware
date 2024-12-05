@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
+import { BASE_STAKING_PROGRAMS } from '@/config/stakingPrograms/base';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -28,6 +29,7 @@ export abstract class MemeooorBaseService extends StakedAgentService {
   }): Promise<StakingRewardsInfo | undefined> => {
     if (!agentMultisigAddress) return;
     if (!serviceId) return;
+    if (serviceId === -1) return;
 
     const stakingProgramConfig = STAKING_PROGRAMS[chainId][stakingProgramId];
 
@@ -123,8 +125,10 @@ export abstract class MemeooorBaseService extends StakedAgentService {
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId = EvmChainId.Base,
   ): Promise<number | undefined> => {
-    const { contract: stakingTokenProxy } =
-      STAKING_PROGRAMS[chainId][stakingProgramId];
+    const stakingTokenProxy =
+      STAKING_PROGRAMS[chainId][stakingProgramId]?.contract;
+    if (!stakingTokenProxy) return;
+
     const { multicallProvider } = PROVIDERS[chainId];
 
     const contractCalls = [
@@ -178,11 +182,11 @@ export abstract class MemeooorBaseService extends StakedAgentService {
   static getStakingContractDetails = async (
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,
-  ): Promise<StakingContractDetails> => {
+  ): Promise<StakingContractDetails | undefined> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
-    const { contract: stakingTokenProxy } =
-      STAKING_PROGRAMS[chainId][stakingProgramId];
+    const stakingTokenProxy = BASE_STAKING_PROGRAMS[stakingProgramId]?.contract;
+    if (!stakingTokenProxy) return;
 
     const contractCalls = [
       stakingTokenProxy.availableRewards(),

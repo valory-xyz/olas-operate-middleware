@@ -26,11 +26,13 @@ import {
   WalletOwnerType,
   WalletType,
 } from '@/enums/Wallet';
+import { useElectronApi } from '@/hooks/useElectronApi';
 import { UsePause, usePause } from '@/hooks/usePause';
+import { useStore } from '@/hooks/useStore';
 import { ServicesService } from '@/service/Services';
 import { AgentConfig } from '@/types/Agent';
 import { Service } from '@/types/Service';
-import { Maybe, Optional } from '@/types/Util';
+import { Maybe, Nullable, Optional } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
@@ -59,8 +61,8 @@ export const ServicesContext = createContext<ServicesContextType>({
   selectService: noop,
   isSelectedServiceStatusFetched: false,
   refetchSelectedServiceStatus: noop,
-  selectedAgentConfig: AGENT_CONFIG[AgentType.Memeooorr], // TODO: from storage
-  selectedAgentType: AgentType.Memeooorr, // TODO: from storage
+  selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
+  selectedAgentType: AgentType.PredictTrader,
   updateAgentType: noop,
   overrideSelectedServiceStatus: noop,
 });
@@ -70,16 +72,21 @@ export const ServicesContext = createContext<ServicesContextType>({
  */
 export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
+  const { store } = useElectronApi();
   const { paused, setPaused, togglePaused } = usePause();
+  const { storeState } = useStore();
 
-  // selected agent type
-  const [selectedAgentType, setAgentType] = useState<AgentType>(
-    AgentType.Memeooorr, // TODO: from storage
-  );
+  const agentTypeFromStore = storeState?.lastSelectedAgentType;
+
+  // set the agent type from the store on load
+  const selectedAgentType = useMemo(() => {
+    if (!agentTypeFromStore) return AgentType.PredictTrader;
+    return agentTypeFromStore;
+  }, [agentTypeFromStore]);
 
   // user selected service identifier
   const [selectedServiceConfigId, setSelectedServiceConfigId] =
-    useState<Maybe<string>>();
+    useState<Nullable<string>>(null);
 
   const {
     data: services,
@@ -137,9 +144,12 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     setSelectedServiceConfigId(serviceConfigId);
   }, []);
 
-  const updateAgentType = useCallback((agentType: AgentType) => {
-    setAgentType(agentType);
-  }, []);
+  const updateAgentType = useCallback(
+    (agentType: AgentType) => {
+      store?.set?.('lastSelectedAgentType', agentType);
+    },
+    [store],
+  );
 
   const selectedAgentConfig = useMemo(() => {
     const config: Maybe<AgentConfig> = AGENT_CONFIG[selectedAgentType];
@@ -204,14 +214,24 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
    * Select the first service by default
    */
   useEffect(() => {
+    if (!selectedAgentConfig) return;
     if (!isServicesFetched) return;
+    if (!services) return;
+    if (isEmpty(services)) return;
 
-    if (isEmpty(services)) setSelectedServiceConfigId(null);
+    const currentService = services.find(
+      ({ home_chain }) =>
+        home_chain === selectedAgentConfig.middlewareHomeChainId,
+    );
+    if (!currentService) return;
 
-    if (!selectedServiceConfigId && services && services.length > 0) {
-      setSelectedServiceConfigId(services[0].service_config_id);
-    }
-  }, [isServicesFetched, selectedServiceConfigId, services]);
+    setSelectedServiceConfigId(currentService.service_config_id);
+  }, [
+    isServicesFetched,
+    selectedServiceConfigId,
+    services,
+    selectedAgentConfig,
+  ]);
 
   return (
     <ServicesContext.Provider
