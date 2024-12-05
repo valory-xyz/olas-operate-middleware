@@ -40,14 +40,14 @@ const EachAgent = ({
   const handleSelectAgent = useCallback(() => {
     updateAgentType(agentType);
 
-    // If a safe was not created for the selected agent type
-    // Need to navigate to onboarding page
-    if (
-      !masterSafes?.find(
-        (masterSafe) =>
-          masterSafe.evmChainId === AGENT_CONFIG[agentType].evmHomeChainId,
-      )
-    ) {
+    const isSafeCreated = masterSafes?.find(
+      (masterSafe) =>
+        masterSafe.evmChainId === AGENT_CONFIG[agentType].evmHomeChainId,
+    );
+
+    if (isSafeCreated) {
+      gotoPage(Pages.Main);
+    } else {
       if (agentType === AgentType.Memeooorr) {
         // if the selected type is Memeooorr - should set up the agent first
         gotoPage(Pages.Setup);
@@ -55,9 +55,6 @@ const EachAgent = ({
       } else {
         gotoSetup(SetupScreen.SetupEoaFunding);
       }
-    } else {
-      // If the safe is created for the selected agent, navigate to main page
-      gotoPage(Pages.Main);
     }
   }, [agentType, gotoPage, gotoSetup, masterSafes, updateAgentType]);
 

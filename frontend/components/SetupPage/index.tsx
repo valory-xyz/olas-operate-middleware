@@ -44,13 +44,7 @@ export const Setup = () => {
       case SetupScreen.SetupCreateSafe:
         return <SetupCreateSafe />;
       case SetupScreen.AgentSelection:
-        return (
-          <AgentSelection
-            showSelected={false}
-            onPrev={() => {}}
-            canGoBack={false}
-          />
-        );
+        return <AgentSelection showSelected={false} />;
       case SetupScreen.SetupYourAgent:
         return <SetupYourAgent />;
 
