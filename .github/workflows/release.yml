@@ -67,20 +67,33 @@ jobs:
 
       - name: Build with PyInstaller
         run: |
-          poetry run pyinstaller operate/services/utils/tendermint.py --onefile --name tendermint_mac
+          poetry run pyinstaller operate/services/utils/tendermint.py --onefile
+          cp dist/tendermint dist/tendermint_bin
 
           # patch open aea in place
           rm -fr ./open-aea
           git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding
           poetry run pip install ./open-aea/
 
-          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_bin:. --add-binary dist/tendermint_mac:. --onefile --name pearl_${{ env.OS_ARCH }}
+          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py  --onefile --name pearl_${{ env.OS_ARCH }}
 
       - name: Upload Release Assets
         uses: actions/upload-artifact@v4
         with:
           name: pearl_${{ env.OS_ARCH }}
           path: dist/pearl_${{ env.OS_ARCH }}
+
+      - name: Upload Tendermint
+        uses: actions/upload-artifact@v4
+        with:
+          name: tendermint_${{ env.OS_ARCH }}
+          path: dist/tendermint_bin
+
+      - name: Upload aea
+        uses: actions/upload-artifact@v4
+        with:
+          name: aea_bin_${{ env.OS_ARCH }}
+          path: ./dist/aea_bin
 
   # Jobs for production and development, running separately for x64 and arm64
   build-release:
@@ -121,6 +134,23 @@ jobs:
         with:
           name: pearl_${{ env.OS_ARCH }}
           path: electron/bins/
+      
+      - name: Download aea binary for architecture
+        uses: actions/download-artifact@v4
+        with:
+          name: aea_bin_${{ env.OS_ARCH }}
+          path: electron/bins/
+
+      - name: Download tendermint binary for architecture
+        uses: actions/download-artifact@v4
+        with:
+          name: tendermint_${{ env.OS_ARCH }}
+          path: electron/bins/
+      
+      # Configure Yarn network settings for timeout, retries, and reduced concurrency
+      - name: Configure Yarn network settings
+        run: |
+            ls electron/bins/
 
       # download TM
       - name: Set architecture environment variable
@@ -138,7 +168,7 @@ jobs:
 
       # Add execution permissions to the binaries
       - name: Add exec permissions
-        run: chmod +x electron/bins/pearl_${{ env.OS_ARCH }}
+        run: chmod +x electron/bins/*
 
       # Cache electron node_modules with unique key for each environment and architecture
       - name: Restore electron node_modules cache
