@@ -344,29 +344,28 @@ const getCrossChainStakedBalances = async (
   const registryInfos = await Promise.allSettled(registryInfoPromises);
 
   registryInfos.forEach((res, idx) => {
-    if (res.status === 'fulfilled') {
-      if (res.value) {
-        const { serviceId, chainId, depositValue, bondValue, serviceState } =
-          res.value;
-
-        result.push({
-          serviceId,
-          evmChainId: asEvmChainId(chainId),
-          ...correctBondDepositByServiceState({
-            olasBondBalance: bondValue,
-            olasDepositBalance: depositValue,
-            serviceState,
-          }),
-          walletAddress:
-            services[idx].chain_configs[chainId].chain_data.multisig!, // multisig must exist if registry info is fetched
-        });
-      }
-    } else {
+    if (res.status !== 'fulfilled') {
       console.error(
         'Error fetching registry info for',
         services[idx].service_config_id,
       );
+      return;
     }
+
+    const value = res.value;
+    if (!value) return;
+
+    const { serviceId, chainId, depositValue, bondValue, serviceState } = value;
+    result.push({
+      serviceId,
+      evmChainId: asEvmChainId(chainId),
+      ...correctBondDepositByServiceState({
+        olasBondBalance: bondValue,
+        olasDepositBalance: depositValue,
+        serviceState,
+      }),
+      walletAddress: services[idx].chain_configs[chainId].chain_data.multisig!, // Multisig must exist if registry info is fetched
+    });
   });
 
   return result;
