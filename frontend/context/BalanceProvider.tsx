@@ -277,13 +277,17 @@ const getCrossChainWalletBalances = async (
             ERC20_BALANCE_OF_STRING_FRAGMENT,
           );
 
-          const erc20Calls = relevantWallets.map((wallet) =>
+          const relevantWalletsFiltered = relevantWallets.filter((wallet) =>
+            isAddress(wallet.address),
+          );
+
+          const erc20Calls = relevantWalletsFiltered.map((wallet) =>
             erc20Contract.balanceOf(wallet.address),
           );
 
           const erc20Balances = await multicallProvider.all(erc20Calls);
 
-          const erc20Results = relevantWallets.map(
+          const erc20Results = relevantWalletsFiltered.map(
             ({ address: walletAddress }, index) => ({
               walletAddress,
               evmChainId: providerEvmChainId,
@@ -340,21 +344,23 @@ const getCrossChainStakedBalances = async (
   const registryInfos = await Promise.allSettled(registryInfoPromises);
 
   registryInfos.forEach((res, idx) => {
-    if (res.status === 'fulfilled' && res.value) {
-      const { serviceId, chainId, depositValue, bondValue, serviceState } =
-        res.value;
+    if (res.status === 'fulfilled') {
+      if (res.value) {
+        const { serviceId, chainId, depositValue, bondValue, serviceState } =
+          res.value;
 
-      result.push({
-        serviceId,
-        evmChainId: asEvmChainId(chainId),
-        ...correctBondDepositByServiceState({
-          olasBondBalance: bondValue,
-          olasDepositBalance: depositValue,
-          serviceState,
-        }),
-        walletAddress:
-          services[idx].chain_configs[chainId].chain_data.multisig!, // multisig must exist if registry info is fetched
-      });
+        result.push({
+          serviceId,
+          evmChainId: asEvmChainId(chainId),
+          ...correctBondDepositByServiceState({
+            olasBondBalance: bondValue,
+            olasDepositBalance: depositValue,
+            serviceState,
+          }),
+          walletAddress:
+            services[idx].chain_configs[chainId].chain_data.multisig!, // multisig must exist if registry info is fetched
+        });
+      }
     } else {
       console.error(
         'Error fetching registry info for',
