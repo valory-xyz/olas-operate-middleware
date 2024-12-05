@@ -584,7 +584,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             wallet.transfer(
                 to=t.cast(str, safes.get(chain)),
-                amount=int(data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])),
+                amount=int(
+                    data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
+                ),
                 chain=chain,
                 from_safe=False,
             )

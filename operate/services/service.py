@@ -194,7 +194,7 @@ class ServiceBuilder(BaseServiceBuilder):
                 )
                 if service_id is not None:
                     if has_multiple_overrides:
-                        os.environ['ON_CHAIN_SERVICE_ID'] = str(service_id)
+                        os.environ["ON_CHAIN_SERVICE_ID"] = str(service_id)
                     else:
                         override["models"]["params"]["args"][
                             "on_chain_service_id"
