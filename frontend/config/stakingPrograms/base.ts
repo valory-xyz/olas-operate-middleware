@@ -24,8 +24,6 @@ export const BASE_STAKING_PROGRAMS: StakingProgramMap = {
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
     },
-    // TODO: find out how the activity is tracked and provide mech if through it
-    // mech: MECHS[EvmChainId.Base][??].contract,
     activityChecker:
       ACTIVITY_CHECKERS[EvmChainId.Base][
         ActivityCheckerType.MemeActivityChecker
