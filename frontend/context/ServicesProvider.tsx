@@ -91,8 +91,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const {
     data: services,
     isError,
-    isFetched: isServicesFetched,
-    isLoading,
+    isLoading: isServicesLoading,
     isFetching,
     refetch,
   } = useQuery<MiddlewareServiceResponse[]>({
@@ -104,7 +103,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const {
     data: selectedServiceStatus,
-    isFetched: isSelectedServiceStatusFetched,
+    isLoading: isSelectedServiceStatusLoading,
     refetch: refetchSelectedServiceStatus,
   } = useQuery({
     queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
@@ -161,7 +160,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   }, [selectedAgentType]);
 
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
-    if (!isServicesFetched) return;
+    if (isServicesLoading) return;
     if (isEmpty(services)) return [];
 
     return services?.reduce<AgentWallets>(
@@ -208,14 +207,14 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       },
       [],
     );
-  }, [isServicesFetched, services]);
+  }, [isServicesLoading, services]);
 
   /**
    * Select the first service by default
    */
   useEffect(() => {
     if (!selectedAgentConfig) return;
-    if (!isServicesFetched) return;
+    if (isSelectedServiceStatusLoading) return;
     if (!services) return;
     if (isEmpty(services)) return;
 
@@ -227,7 +226,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
     setSelectedServiceConfigId(currentService.service_config_id);
   }, [
-    isServicesFetched,
+    isSelectedServiceStatusLoading,
     selectedServiceConfigId,
     services,
     selectedAgentConfig,
@@ -239,8 +238,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         services,
         serviceWallets,
         isError,
-        isFetched: isServicesFetched,
-        isLoading,
+        isFetched: !isServicesLoading,
+        isLoading: isServicesLoading,
         isFetching,
         refetch,
         paused,
@@ -250,7 +249,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         selectedService: selectedServiceWithStatus,
         selectedServiceStatusOverride,
         refetchSelectedServiceStatus,
-        isSelectedServiceStatusFetched,
+        isSelectedServiceStatusFetched: !isSelectedServiceStatusLoading,
         selectedAgentConfig,
         selectedAgentType,
         updateAgentType,
