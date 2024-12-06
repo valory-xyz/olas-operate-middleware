@@ -40,31 +40,27 @@ export abstract class MemeooorBaseService extends StakedAgentService {
 
     const provider = PROVIDERS[chainId].multicallProvider;
 
-    // TODO: discuss how to calculate the activity
-    // const mechContract =
-    // MECHS[chainId][stakingProgramConfig.mechType!].contract;
-
     const contractCalls = [
-      // mechContract.getRequestsCount(agentMultisigAddress),
       stakingTokenProxyContract.getServiceInfo(serviceId),
       stakingTokenProxyContract.livenessPeriod(),
-      activityChecker.livenessRatio(),
       stakingTokenProxyContract.rewardsPerSecond(),
       stakingTokenProxyContract.calculateStakingReward(serviceId),
       stakingTokenProxyContract.minStakingDeposit(),
       stakingTokenProxyContract.tsCheckpoint(),
+      activityChecker.livenessRatio(),
+      activityChecker.getMultisigNonces(),
     ];
     const multicallResponse = await provider.all(contractCalls);
 
     const [
-      // mechRequestCount,
       serviceInfo,
       livenessPeriod,
-      livenessRatio,
       rewardsPerSecond,
       accruedStakingReward,
       minStakingDeposit,
       tsCheckpoint,
+      livenessRatio,
+      currentMultisigNonces,
     ] = multicallResponse;
 
     /**
@@ -83,19 +79,16 @@ export abstract class MemeooorBaseService extends StakedAgentService {
       uint256 inactivity;}
      */
 
+    const lastMultisigNonces = serviceInfo[2];
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
-    // const requiredMechRequests =
-    //   (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
-    //     livenessRatio) /
-    //     1e18 +
-    //   MECH_REQUESTS_SAFETY_MARGIN;
-
-    // const mechRequestCountOnLastCheckpoint = serviceInfo[2][1];
-    // const eligibleRequests =
-    //   mechRequestCount - mechRequestCountOnLastCheckpoint;
-
-    // const isEligibleForRewards = eligibleRequests >= requiredMechRequests;
+    const [isEligibleForRewards] = await provider.all([
+      activityChecker.isRatioPass(
+        currentMultisigNonces,
+        lastMultisigNonces,
+        Math.ceil(nowInSeconds - tsCheckpoint),
+      ),
+    ]);
 
     const availableRewardsForEpoch = Math.max(
       rewardsPerSecond * livenessPeriod, // expected rewards for the epoch
@@ -112,7 +105,7 @@ export abstract class MemeooorBaseService extends StakedAgentService {
       livenessPeriod,
       livenessRatio,
       rewardsPerSecond,
-      isEligibleForRewards: false,
+      isEligibleForRewards,
       availableRewardsForEpoch,
       accruedServiceStakingRewards: parseFloat(
         ethers.utils.formatEther(`${accruedStakingReward}`),

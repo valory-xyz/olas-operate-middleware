@@ -127,7 +127,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
   const {
     data: stakingRewardsDetails,
     refetch: refetchStakingRewardsDetails,
-    isFetched: isStakingRewardsDetailsFetched,
+    isLoading: isStakingRewardsDetailsLoading,
   } = useStakingRewardsDetails();
   const {
     data: availableRewardsForEpoch,
@@ -177,7 +177,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
         isEligibleForRewards,
         optimisticRewardsEarnedForEpoch,
         updateRewards,
-        isStakingRewardsDetailsFetched,
+        isStakingRewardsDetailsFetched: !isStakingRewardsDetailsLoading,
       }}
     >
       {children}
