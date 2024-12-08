@@ -71,6 +71,8 @@ def _kill_process(pid: int) -> None:
             process.kill()
         except OSError:
             return
+        except psutil.AccessDenied:
+            return
         time.sleep(1)
 
 
@@ -279,9 +281,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
         if platform.system() == "Windows":
             # to look up for bundled in tendermint.exe
-            env["PATH"] = os.environ["PATH"] + ";" + os.path.dirname(sys.executable)
+            env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
         else:
-            env["PATH"] = os.environ["PATH"] + ":" + os.path.dirname(sys.executable)
+            env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
 
         tendermint_com = self._tendermint_bin  # type: ignore  # pylint: disable=protected-access
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
