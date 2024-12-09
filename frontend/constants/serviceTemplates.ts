@@ -239,7 +239,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
       TWIKIT_COOKIES_PATH: {
         name: 'Twitter cookies path',
         description: '',
-        value: 'twikit_cookies.json',
+        value: 'logs/twikit_cookies.json',
         provision_type: EnvProvisionType.COMPUTED,
       },
     },
