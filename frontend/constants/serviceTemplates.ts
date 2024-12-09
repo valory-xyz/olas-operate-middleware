@@ -211,6 +211,37 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         value: '',
         provision_type: EnvProvisionType.USER,
       },
+      // These are fixed, but may become user provided in the future
+      FEEDBACK_PERIOD_HOURS: {
+        name: 'Feedback period',
+        description: '',
+        value: '1',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      MIN_FEEDBACK_REPLIES: {
+        name: 'Minimum feedback replies',
+        description: '',
+        value: '10',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      RESET_PAUSE_DURATION: {
+        name: 'Reset pause duration',
+        description: '',
+        value: '1800',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      DB_PATH: {
+        name: 'DB path',
+        description: '',
+        value: 'logs/memeooorr.db',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      TWIKIT_COOKIES_PATH: {
+        name: 'Twitter cookies path',
+        description: '',
+        value: 'twikit_cookies.json',
+        provision_type: EnvProvisionType.COMPUTED,
+      },
     },
   },
 ] as const;
