@@ -203,7 +203,7 @@ export const AgentNotRunningButton = () => {
       throw new Error(`Service template not found for ${selectedAgentType}`);
     }
 
-    // Create a new service if it does not exist
+    // Create and deploy a new service if it does not exist
     let createServiceResponse;
     if (!service) {
       try {
@@ -223,7 +223,7 @@ export const AgentNotRunningButton = () => {
       }
     }
 
-    // Update if service already exists and the template has changed
+    // Update if service already exists and template hash has changed
     if (!createServiceResponse && service) {
       try {
         if (service.hash !== serviceTemplate.hash) {
@@ -232,7 +232,7 @@ export const AgentNotRunningButton = () => {
             stakingProgramId: selectedStakingProgramId,
             chainId: selectedAgentConfig.evmHomeChainId,
             serviceTemplate,
-            deploy: false,
+            deploy: true,
             useMechMarketplace:
               STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
                 selectedStakingProgramId
@@ -246,12 +246,11 @@ export const AgentNotRunningButton = () => {
       }
     }
 
-    // Prioritize the newly created service if it exists
-    const serviceToStart = createServiceResponse ?? service;
-
-    // Start the service
+    // Start service if hasn't just been created
     try {
-      await ServicesService.startService(serviceToStart!.service_config_id);
+      if (service && !createServiceResponse) {
+        await ServicesService.startService(service.service_config_id);
+      }
     } catch (error) {
       console.error('Error while starting the service:', error);
       showNotification?.('Failed to start service.');
