@@ -204,10 +204,10 @@ export const AgentNotRunningButton = () => {
     }
 
     // Create a new service if it does not exist
-    let middlewareServiceResponse;
+    let createServiceResponse;
     if (!service) {
       try {
-        middlewareServiceResponse = await ServicesService.createService({
+        createServiceResponse = await ServicesService.createService({
           stakingProgramId: selectedStakingProgramId,
           serviceTemplate,
           deploy: true,
@@ -223,12 +223,34 @@ export const AgentNotRunningButton = () => {
       }
     }
 
-    if (isNil(service) && isNil(middlewareServiceResponse))
-      throw new Error('Service not found');
+    // Update if service already exists and the template has changed
+    if (!createServiceResponse && service) {
+      try {
+        if (service.hash !== serviceTemplate.hash) {
+          await ServicesService.updateService({
+            serviceConfigId: service.service_config_id,
+            stakingProgramId: selectedStakingProgramId,
+            chainId: selectedAgentConfig.evmHomeChainId,
+            serviceTemplate,
+            deploy: false,
+            useMechMarketplace:
+              STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
+                selectedStakingProgramId
+              ].mechType === MechType.Marketplace,
+          });
+        }
+      } catch (error) {
+        console.error('Error while updating the service:', error);
+        showNotification?.('Failed to update service.');
+        throw new Error('Failed to update service');
+      }
+    }
+
+    // Prioritize the newly created service if it exists
+    const serviceToStart = createServiceResponse ?? service;
 
     // Start the service
     try {
-      const serviceToStart = service ?? middlewareServiceResponse;
       await ServicesService.startService(serviceToStart!.service_config_id);
     } catch (error) {
       console.error('Error while starting the service:', error);
