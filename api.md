@@ -270,14 +270,14 @@ Returns a list of available wallets with enriched information. It executes on-ch
 
 ### `POST /api/wallet`
 
-Creates a master wallet for given chain type. If a wallet already exists for a given chain type, it returns the already existing wallet without creating an additional one.
+Creates a master wallet for a given ledger type. If a wallet already exists for a given ledger type, it returns the already existing wallet without creating an additional one.
 
 <details>
   <summary>Request</summary>
 
 ```json
 {
-  "chain": Chain,
+  "ledger_type": LedgerType,
 }
 ```
 
@@ -305,7 +305,7 @@ Creates a master wallet for given chain type. If a wallet already exists for a g
 
 ### `POST /api/wallet/safe`
 
-Creates a Gnosis safe for given chain type.
+Creates a Gnosis safe for given chain.
 
 <details>
   <summary>Request</summary>
@@ -352,7 +352,7 @@ Creates a Gnosis safe for given chain type.
 
 ### `PUT /api/wallet/safe`
 
-Upadtes a Gnosis safe for given chain type. If no `backup_owner` is provided, it will assume a null value, that is, it will remove the backup owner from the safe.
+Upadtes a Gnosis safe for given chain. If no `backup_owner` is provided, it will assume a null value, that is, it will remove the backup owner from the safe.
 
 <details>
   <summary>Request</summary>
