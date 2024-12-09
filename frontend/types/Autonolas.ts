@@ -1,11 +1,16 @@
 import { z } from 'zod';
 
+const zodBigNumber = z.object({
+  _isBigNumber: z.boolean(),
+  _hex: z.string().startsWith('0x'),
+});
+
 export const StakingRewardsInfoSchema = z.object({
   // mechRequestCount: z.number(),
   serviceInfo: z.array(z.unknown()),
-  livenessPeriod: z.number(),
-  livenessRatio: z.number(),
-  rewardsPerSecond: z.number(),
+  livenessPeriod: zodBigNumber,
+  livenessRatio: zodBigNumber,
+  rewardsPerSecond: zodBigNumber,
   isEligibleForRewards: z.boolean(),
   availableRewardsForEpoch: z.number(),
   accruedServiceStakingRewards: z.number(),
