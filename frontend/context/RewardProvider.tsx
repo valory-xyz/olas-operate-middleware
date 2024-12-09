@@ -68,15 +68,24 @@ const useStakingRewardsDetails = () => {
       token!,
     ),
     queryFn: async () => {
+      if (!multisig || !token || !selectedStakingProgramId) return;
       const response = await currentAgent.serviceApi.getAgentStakingRewardsInfo(
         {
-          agentMultisigAddress: multisig!,
-          serviceId: token!,
-          stakingProgramId: selectedStakingProgramId!,
+          agentMultisigAddress: multisig,
+          serviceId: token,
+          stakingProgramId: selectedStakingProgramId,
           chainId: currentChainId,
         },
       );
-      return StakingRewardsInfoSchema.parse(response);
+
+      if (!response) return;
+
+      try {
+        const parsed = StakingRewardsInfoSchema.parse(response);
+        return parsed;
+      } catch (e) {
+        console.error('Error parsing staking rewards info', e);
+      }
     },
     enabled:
       !!isOnline &&
@@ -133,6 +142,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
     refetch: refetchStakingRewardsDetails,
     isFetched: isStakingRewardsDetailsFetched,
   } = useStakingRewardsDetails();
+
   const {
     data: availableRewardsForEpoch,
     refetch: refetchAvailableRewardsForEpoch,
