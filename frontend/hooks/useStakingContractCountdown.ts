@@ -2,7 +2,11 @@ import { isNil } from 'lodash';
 import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { StakingContractInfo } from '@/types/Autonolas';
+import { POPOVER_WIDTH_LARGE } from '@/constants/width';
+import {
+  ServiceStakingDetails,
+  StakingContractDetails,
+} from '@/types/Autonolas';
 
 const countdownDisplayFormat = (totalSeconds: number) => {
   const days = Math.floor(totalSeconds / (24 * 3600));
@@ -26,19 +30,31 @@ const countdownDisplayFormat = (totalSeconds: number) => {
   return `${daysInWords} ${hoursInWords} ${minutesInWords} ${secondsInWords}`.trim();
 };
 
-export const useStakingContractCountdown = (
-  currentStakingContractInfo?: Partial<StakingContractInfo>,
-) => {
+const { Text } = Typography;
+
+export const useStakingContractCountdown = ({
+  currentStakingContractInfo,
+}: {
+  currentStakingContractInfo:
+    | Partial<StakingContractDetails>
+    | Partial<StakingContractDetails & ServiceStakingDetails>;
+}) => {
   const [secondsUntilReady, setSecondsUntilMigration] = useState<number>();
 
   useInterval(() => {
     if (!currentStakingContractInfo) return;
 
+    if (
+      !('serviceStakingStartTime' in currentStakingContractInfo) ||
+      !('minimumStakingDuration' in currentStakingContractInfo)
+    ) {
+      return;
+    }
+
     const { serviceStakingStartTime, minimumStakingDuration } =
       currentStakingContractInfo;
 
-    if (isNil(minimumStakingDuration)) return;
-    if (isNil(serviceStakingStartTime)) return;
+    if (isNil(minimumStakingDuration) || isNil(serviceStakingStartTime)) return;
 
     const now = Math.round(Date.now() / 1000);
     const timeSinceLastStaked = now - serviceStakingStartTime;

@@ -6,8 +6,8 @@ import { FireNoStreak } from '@/components/custom-icons/FireNoStreak';
 import { FireStreak } from '@/components/custom-icons/FireStreak';
 import { COLOR } from '@/constants/colors';
 import { NA } from '@/constants/symbols';
-import { Pages } from '@/enums/PageState';
-import { useBalance } from '@/hooks/useBalance';
+import { Pages } from '@/enums/Pages';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { usePageState } from '@/hooks/usePageState';
 import { useReward } from '@/hooks/useReward';
 import { useRewardsHistory } from '@/hooks/useRewardsHistory';
@@ -22,16 +22,17 @@ const RewardsStreakFlex = styled(Flex)`
 `;
 
 const Streak = () => {
-  const { isBalanceLoaded } = useBalance();
+  const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { isEligibleForRewards } = useReward();
   const {
     latestRewardStreak: streak,
-    isLoading,
-    isFetching,
+    isLoading: isRewardsHistoryLoading,
     isError,
   } = useRewardsHistory();
 
-  if (isLoading || isFetching || !isBalanceLoaded) {
+  // If rewards history is loading for the first time
+  // or balances are not fetched yet - show loading state
+  if (isRewardsHistoryLoading || !isBalanceLoaded) {
     return <Skeleton.Input active size="small" />;
   }
 

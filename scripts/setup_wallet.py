@@ -21,7 +21,11 @@
 
 import requests
 
+<<<<<<< HEAD
 from operate.operate_types import ChainType
+=======
+from operate.operate_types import Chain
+>>>>>>> origin/refactor/multi-chain-support-frontend
 from scripts.fund import fund
 
 
@@ -48,7 +52,7 @@ print(
 wallet = requests.post(
     "http://localhost:8000/api/wallet",
     json={
-        "chain_type": ChainType.GNOSIS,
+        "chain": Chain.GNOSIS,
     },
 ).json()
 print("Setting up wallet")
@@ -61,7 +65,7 @@ print(
     requests.post(
         "http://localhost:8000/api/wallet/safe",
         json={
-            "chain_type": ChainType.GNOSIS,
+            "chain": Chain.GNOSIS,
             "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",  # Backup owner
         },
     ).json()

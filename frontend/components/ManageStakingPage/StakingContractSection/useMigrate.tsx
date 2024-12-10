@@ -1,19 +1,23 @@
-import { isNil } from 'lodash';
+import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { MiddlewareDeploymentStatus } from '@/client';
+import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalance } from '@/hooks/useBalance';
+import { TokenSymbol } from '@/enums/Token';
+import {
+  useBalanceContext,
+  useMasterBalances,
+} from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { useServiceTemplates } from '@/hooks/useServiceTemplates';
 import {
   useActiveStakingContractInfo,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { getMinimumStakedAmountRequired } from '@/utils/service';
 
 export enum CantMigrateReason {
   ContractAlreadySelected = 'This staking program is already selected',
@@ -39,60 +43,80 @@ type MigrateValidation =
       reason: CantMigrateReason;
     };
 
-export const useMigrate = (stakingProgramId: StakingProgramId) => {
-  const { serviceStatus } = useServices();
-  const { serviceTemplate } = useServiceTemplates();
+export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
   const {
-    isBalanceLoaded,
-    masterSafeBalance: safeBalance,
-    totalOlasStakedBalance,
+    isFetched: isServicesLoaded,
+    selectedAgentConfig,
+    selectedService,
+    selectedAgentType,
+  } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const serviceConfigId = selectedService?.service_config_id;
+  const { deploymentStatus: serviceStatus } = useService(serviceConfigId);
+
+  const {
+    isLoaded: isBalanceLoaded,
+    totalStakedOlasBalance,
     isLowBalance,
-  } = useBalance();
-  const { activeStakingProgramId, activeStakingProgramMeta } =
-    useStakingProgram();
-  const { needsInitialFunding } = useNeedsFunds();
+  } = useBalanceContext();
+  const { masterSafeBalances } = useMasterBalances();
+  const { needsInitialFunding, hasEnoughEthForInitialFunding } = useNeedsFunds(
+    migrateToStakingProgramId,
+  );
 
-  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
-    useStakingContractContext();
-
+  const { activeStakingProgramId } = useStakingProgram();
+  const {
+    allStakingContractDetailsRecord,
+    isAllStakingContractDetailsRecordLoaded,
+  } = useStakingContractContext();
   const { isServiceStaked, isServiceStakedForMinimumDuration } =
     useActiveStakingContractInfo();
-
   const { stakingContractInfo, hasEnoughServiceSlots } =
-    useStakingContractInfo(stakingProgramId);
+    useStakingContractDetails(migrateToStakingProgramId);
 
-  const { hasInitialLoaded: isServicesLoaded } = useServices();
-
-  const { hasEnoughEthForInitialFunding } = useNeedsFunds();
+  const safeOlasBalance = useMemo(() => {
+    if (!isBalanceLoaded) return 0;
+    if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return 0;
+    return masterSafeBalances.reduce(
+      (acc, { evmChainId: chainId, symbol, balance }) => {
+        if (chainId === homeChainId && symbol === TokenSymbol.OLAS)
+          return acc + balance;
+        return acc;
+      },
+      0,
+    );
+  }, [homeChainId, isBalanceLoaded, masterSafeBalances]);
 
   const minimumOlasRequiredToMigrate = useMemo(
-    () => getMinimumStakedAmountRequired(serviceTemplate, stakingProgramId),
-    [serviceTemplate, stakingProgramId],
+    () =>
+      STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
+        migrateToStakingProgramId
+      ]?.stakingRequirements[TokenSymbol.OLAS],
+    [selectedAgentConfig.evmHomeChainId, migrateToStakingProgramId],
   );
 
   const hasEnoughOlasToMigrate = useMemo(() => {
     if (!isBalanceLoaded) return false;
-    if (isNil(safeBalance?.OLAS)) return false;
-    if (isNil(totalOlasStakedBalance)) return false;
+    if (isNil(safeOlasBalance)) return false;
+    if (isNil(totalStakedOlasBalance)) return false;
     if (isNil(minimumOlasRequiredToMigrate)) return false;
 
-    const balanceForMigration = safeBalance.OLAS + totalOlasStakedBalance;
-
+    const balanceForMigration = safeOlasBalance + totalStakedOlasBalance;
     return balanceForMigration >= minimumOlasRequiredToMigrate;
   }, [
     isBalanceLoaded,
     minimumOlasRequiredToMigrate,
-    safeBalance,
-    totalOlasStakedBalance,
+    safeOlasBalance,
+    totalStakedOlasBalance,
   ]);
 
   const hasEnoughOlasForFirstRun = useMemo(() => {
     if (!isBalanceLoaded) return false;
-    if (isNil(safeBalance?.OLAS)) return false;
+    if (isNil(safeOlasBalance)) return false;
     if (isNil(minimumOlasRequiredToMigrate)) return false;
 
-    return safeBalance.OLAS >= minimumOlasRequiredToMigrate;
-  }, [isBalanceLoaded, minimumOlasRequiredToMigrate, safeBalance]);
+    return safeOlasBalance >= minimumOlasRequiredToMigrate;
+  }, [isBalanceLoaded, minimumOlasRequiredToMigrate, safeOlasBalance]);
 
   const migrateValidation = useMemo<MigrateValidation>(() => {
     if (!isServicesLoaded) {
@@ -102,9 +126,9 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     // Services must be not be running or in a transitional state
     if (
       [
-        DeploymentStatus.DEPLOYED,
-        DeploymentStatus.DEPLOYING,
-        DeploymentStatus.STOPPING,
+        MiddlewareDeploymentStatus.DEPLOYED,
+        MiddlewareDeploymentStatus.DEPLOYING,
+        MiddlewareDeploymentStatus.STOPPING,
       ].some((status) => status === serviceStatus)
     ) {
       return {
@@ -117,7 +141,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: false, reason: CantMigrateReason.LoadingBalance };
     }
 
-    if (!isStakingContractInfoRecordLoaded) {
+    if (!isAllStakingContractDetailsRecordLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
@@ -132,7 +156,7 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     }
 
     // general requirements
-    if (activeStakingProgramId === stakingProgramId) {
+    if (activeStakingProgramId === migrateToStakingProgramId) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.ContractAlreadySelected,
@@ -177,16 +201,19 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
       return { canMigrate: true };
     }
 
-    // user must be staked from hereon
+    // user is staked from hereon
 
-    if (!activeStakingProgramMeta?.canMigrateTo.includes(stakingProgramId)) {
+    const { deprecated: isDeprecated, agentsSupported } =
+      STAKING_PROGRAMS[homeChainId][migrateToStakingProgramId];
+
+    if (isDeprecated || !agentsSupported.includes(selectedAgentType)) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.MigrationNotSupported,
       };
     }
 
-    if (stakingContractInfo && !isServiceStakedForMinimumDuration) {
+    if (!isServiceStakedForMinimumDuration) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.NotStakedForMinimumDuration,
@@ -197,13 +224,14 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
   }, [
     isServicesLoaded,
     isBalanceLoaded,
-    isStakingContractInfoRecordLoaded,
+    isAllStakingContractDetailsRecordLoaded,
     stakingContractInfo,
     activeStakingProgramId,
-    stakingProgramId,
+    migrateToStakingProgramId,
     hasEnoughOlasToMigrate,
     isServiceStaked,
-    activeStakingProgramMeta?.canMigrateTo,
+    homeChainId,
+    selectedAgentType,
     isServiceStakedForMinimumDuration,
     serviceStatus,
   ]);
@@ -220,9 +248,9 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     // Services must be not be running or in a transitional state
     if (
       [
-        DeploymentStatus.DEPLOYED,
-        DeploymentStatus.DEPLOYING,
-        DeploymentStatus.STOPPING,
+        MiddlewareDeploymentStatus.DEPLOYED,
+        MiddlewareDeploymentStatus.DEPLOYING,
+        MiddlewareDeploymentStatus.STOPPING,
       ].some((status) => status === serviceStatus)
     ) {
       return {
@@ -237,14 +265,15 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
 
     // staking contract requirements
 
-    if (!isStakingContractInfoRecordLoaded) {
+    if (!isAllStakingContractDetailsRecordLoaded) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.LoadingStakingContractInfo,
       };
     }
 
-    const stakingContractInfo = stakingContractInfoRecord?.[stakingProgramId];
+    const stakingContractInfo =
+      allStakingContractDetailsRecord?.[migrateToStakingProgramId];
 
     if (!stakingContractInfo) {
       return {
@@ -296,9 +325,9 @@ export const useMigrate = (stakingProgramId: StakingProgramId) => {
     isServicesLoaded,
     isBalanceLoaded,
     hasEnoughEthForInitialFunding,
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
-    stakingProgramId,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
+    migrateToStakingProgramId,
     hasEnoughOlasForFirstRun,
     serviceStatus,
   ]);

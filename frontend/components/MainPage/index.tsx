@@ -1,19 +1,18 @@
 import { QuestionCircleOutlined, SettingOutlined } from '@ant-design/icons';
 import { Button, Card, Flex } from 'antd';
-import { useEffect } from 'react';
 
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalance } from '@/hooks/useBalance';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+// import { StakingProgramId } from '@/enums/StakingProgram';
+// import { useMasterSafe } from '@/hooks/useMasterSafe';
 import { usePageState } from '@/hooks/usePageState';
-import { useServices } from '@/hooks/useServices';
 import {
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
+// import { useMasterWalletContext } from '@/hooks/useWallet';
 import { MainHeader } from './header';
 import { AddFundsSection } from './sections/AddFundsSection';
 import { AlertSections } from './sections/AlertSections';
@@ -22,49 +21,47 @@ import { KeepAgentRunningSection } from './sections/KeepAgentRunningSection';
 import { MainNeedsFunds } from './sections/NeedsFundsSection';
 import { MainOlasBalance } from './sections/OlasBalanceSection';
 import { RewardsSection } from './sections/RewardsSection';
-import { StakingContractUpdate } from './sections/StakingContractUpdate';
+import { StakingContractSection } from './sections/StakingContractUpdate';
 
 export const Main = () => {
   const { goto } = usePageState();
-  const { backupSafeAddress } = useMasterSafe();
-  const { updateServicesState } = useServices();
-  const {
-    updateBalances,
-    isLoaded: isBalanceLoaded,
-    setIsLoaded: setIsBalanceLoaded,
-  } = useBalance();
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  // const { backupSafeAddress } = useMasterWalletContext();
+  // const { refetch: updateServicesState } = useServices();
+  // const {
+  //   updateBalances,
+  //   isLoaded: isBalanceLoaded,
+  //   setIsLoaded: setIsBalanceLoaded,
+  // } = useBalanceContext();
+  const { activeStakingProgramId } = useStakingProgram();
 
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  // TODO: reintroduce later,  non critical
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
-  const { hasEnoughServiceSlots } = useStakingContractInfo(
-    activeStakingProgramId ?? defaultStakingProgramId,
+  const { hasEnoughServiceSlots } = useStakingContractDetails(
+    activeStakingProgramId,
   );
 
-  /**
-   * @todo fix this isLoaded logic
-   */
-  useEffect(() => {
-    if (!isBalanceLoaded) {
-      updateServicesState().then(() => updateBalances());
-      setIsBalanceLoaded(true);
-    }
-  }, [
-    isBalanceLoaded,
-    setIsBalanceLoaded,
-    updateBalances,
-    updateServicesState,
-  ]);
+  // TODO: reintroduce later,  non critical
 
-  /**
-   * @todo rename, unclear why this is needed
-   * assuming only relevant when alerts not visible
-   */
+  // useEffect(() => {
+  //   if (!isBalanceLoaded) {
+  //     updateServicesState?.().then(() => updateBalances());
+  //     setIsBalanceLoaded(true);
+  //   }
+  // }, [
+  //   isBalanceLoaded,
+  //   setIsBalanceLoaded,
+  //   updateBalances,
+  //   updateServicesState,
+  // ]);
+
+  // TODO: reintroduce later,  non critical
+
   const hideMainOlasBalanceTopBorder = [
-    !backupSafeAddress,
-    activeStakingProgramId === StakingProgramId.Alpha,
-    isStakingContractInfoRecordLoaded && !hasEnoughServiceSlots,
+    // !backupSafeAddress, // TODO: update this condition to check backup safe relative to selectedService
+    activeStakingProgramId === StakingProgramId.PearlAlpha,
+    isAllStakingContractDetailsRecordLoaded && !hasEnoughServiceSlots,
   ].some((condition) => !!condition);
 
   return (
@@ -99,7 +96,7 @@ export const Main = () => {
         <MainOlasBalance isBorderTopVisible={!hideMainOlasBalanceTopBorder} />
         <RewardsSection />
         <KeepAgentRunningSection />
-        <StakingContractUpdate />
+        <StakingContractSection />
         <GasBalanceSection />
         <MainNeedsFunds />
         <AddFundsSection />

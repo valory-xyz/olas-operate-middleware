@@ -41,6 +41,10 @@ const main = async () => {
           to: 'bins',
           filter: ['**/*'],
         },
+        {
+          from: '.env',
+          to: '.env'
+        },
       ],
 
     },

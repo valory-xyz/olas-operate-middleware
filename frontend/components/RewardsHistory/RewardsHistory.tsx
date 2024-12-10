@@ -19,17 +19,22 @@ import {
 import { CSSProperties, ReactNode, useMemo } from 'react';
 import styled from 'styled-components';
 
-import { Chain } from '@/client';
+import { MiddlewareChain } from '@/client';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { CardFlex } from '@/components/styled/CardFlex';
+import {
+  STAKING_PROGRAM_ADDRESS,
+  STAKING_PROGRAMS,
+} from '@/config/stakingPrograms';
 import { COLOR } from '@/constants/colors';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
-import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { Pages } from '@/enums/PageState';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
+import { AgentConfig } from '@/types/Agent';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
 
@@ -128,7 +133,7 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
               {timePeriod}
             </Text>
             <a
-              href={`https://gnosisscan.io/tx/${epoch.transactionHash}`}
+              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/tx/${epoch.transactionHash}`}
               target="_blank"
             >
               End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
@@ -145,48 +150,59 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
 type ContractRewardsProps = {
   stakingProgramId: StakingProgramId;
   checkpoints: Checkpoint[];
+  selectedAgentConfig: AgentConfig;
 };
 
 const ContractRewards = ({
-  stakingProgramId,
   checkpoints,
-}: ContractRewardsProps) => (
-  <Flex vertical>
-    <ContractName>
-      <Text strong>{STAKING_PROGRAM_META[stakingProgramId].name}</Text>
-    </ContractName>
+  stakingProgramId,
+  selectedAgentConfig,
+}: ContractRewardsProps) => {
+  const stakingProgramMeta =
+    STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId];
 
-    {checkpoints.map((checkpoint) => {
-      const currentEpochReward = checkpoint.reward
-        ? `~${balanceFormat(checkpoint.reward ?? 0, 2)} OLAS`
-        : '0 OLAS';
+  return (
+    <Flex vertical>
+      <ContractName>
+        <Text strong>{stakingProgramMeta.name}</Text>
+      </ContractName>
 
-      return (
-        <EpochRow key={checkpoint.epochEndTimeStamp}>
-          <Col span={6}>
-            <EpochTime epoch={checkpoint} />
-          </Col>
-          <Col span={11} className="text-right pr-16">
-            <Text type="secondary">{currentEpochReward}</Text>
-          </Col>
-          <Col span={7} className="text-center pl-16">
-            {checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
-          </Col>
-        </EpochRow>
-      );
-    })}
-  </Flex>
-);
+      {checkpoints.map((checkpoint) => {
+        const currentEpochReward = checkpoint.reward
+          ? `~${balanceFormat(checkpoint.reward ?? 0, 2)} OLAS`
+          : '0 OLAS';
 
+        return (
+          <EpochRow key={checkpoint.epochEndTimeStamp}>
+            <Col span={6}>
+              <EpochTime epoch={checkpoint} />
+            </Col>
+            <Col span={11} className="text-right pr-16">
+              <Text type="secondary">{currentEpochReward}</Text>
+            </Col>
+            <Col span={7} className="text-center pl-16">
+              {checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
+            </Col>
+          </EpochRow>
+        );
+      })}
+    </Flex>
+  );
+};
+
+/**
+ * TODO: Refactor, only supports a single service for now
+ * */
 export const RewardsHistory = () => {
-  const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
+  const { contractCheckpoints, isError, isFetched, refetch } =
     useRewardsHistory();
   const { goto } = usePageState();
-  const { serviceId } = useServices();
+  const { selectedService, selectedAgentConfig } = useServices();
+  const { serviceNftTokenId } = useService(selectedService?.service_config_id);
 
   const history = useMemo(() => {
-    if (isLoading || isFetching || !serviceId) return <Loading />;
-    if (isError) return <ErrorLoadingHistory refetch={refetch} />;
+    if (!isFetched || !selectedService?.service_config_id) return <Loading />;
+    if (isError) return <ErrorLoadingHistory refetch={refetch} />; // TODO: don't do this
     if (!contractCheckpoints) return <NoRewardsHistory />;
     if (Object.keys(contractCheckpoints).length === 0) {
       return <NoRewardsHistory />;
@@ -197,7 +213,7 @@ export const RewardsHistory = () => {
       .flat()
       .sort((a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp)
       .find((checkpoint) =>
-        checkpoint.serviceIds.includes(`${serviceId}`),
+        checkpoint.serviceIds.includes(`${serviceNftTokenId}`),
       )?.contractAddress;
 
     // most recent transaction staking contract at the top of the list
@@ -209,12 +225,14 @@ export const RewardsHistory = () => {
       },
     );
 
+    if (!selectedAgentConfig.evmHomeChainId) return null;
+
     return (
       <Flex vertical gap={16}>
         {latestContractAddresses.map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
-            SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
+            STAKING_PROGRAM_ADDRESS[selectedAgentConfig.evmHomeChainId],
           ).find((entry) => {
             const [, stakingProxyAddress] = entry;
             return (
@@ -230,12 +248,21 @@ export const RewardsHistory = () => {
               key={contractAddress}
               stakingProgramId={stakingProgramId as StakingProgramId}
               checkpoints={checkpoints}
+              selectedAgentConfig={selectedAgentConfig}
             />
           );
         })}
       </Flex>
     );
-  }, [isLoading, isFetching, isError, serviceId, contractCheckpoints, refetch]);
+  }, [
+    isFetched,
+    selectedService?.service_config_id,
+    isError,
+    refetch,
+    contractCheckpoints,
+    selectedAgentConfig,
+    serviceNftTokenId,
+  ]);
 
   return (
     <ConfigProvider theme={yourWalletTheme}>

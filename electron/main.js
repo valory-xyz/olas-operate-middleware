@@ -1,3 +1,4 @@
+require('dotenv').config();
 const {
   app,
   BrowserWindow,
@@ -13,6 +14,7 @@ const os = require('os');
 const next = require('next/dist/server/next');
 const http = require('http');
 const AdmZip = require('adm-zip');
+const { validateEnv } = require('./utils/env-validation');
 
 const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
@@ -24,6 +26,12 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+
+// Validates environment variables required for Pearl
+// kills the app/process if required environment variables are unavailable
+// mostly RPC URLs and NODE_ENV
+// TODO: only reintroduce once refactor completed
+// validateEnv();
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();

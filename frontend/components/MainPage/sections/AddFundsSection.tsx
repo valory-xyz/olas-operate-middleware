@@ -12,18 +12,41 @@ import {
 } from 'antd';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
+import styled from 'styled-components';
 
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
-import { useWallet } from '@/hooks/useWallet';
+import { CustomAlert } from '@/components/Alert';
+import { CHAIN_CONFIG } from '@/config/chains';
+import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
+import { SWAP_URL_BY_EVM_CHAIN } from '@/constants/urls';
+import { useServices } from '@/hooks/useServices';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 import { truncateAddress } from '@/utils/truncate';
 
-import { CustomAlert } from '../../Alert';
 import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
+
+const CustomizedCardSection = styled(CardSection)<{ border?: boolean }>`
+  > .ant-btn {
+    width: 50%;
+  }
+`;
+
+const AddFundsGetTokensSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+
+  return (
+    <CardSection justify="center" bordertop="true" padding="16px 24px">
+      <Link target="_blank" href={SWAP_URL_BY_EVM_CHAIN[homeChainId]}>
+        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
+        {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      </Link>
+    </CardSection>
+  );
+};
 
 export const AddFundsSection = () => {
   const fundSectionRef = useRef<HTMLDivElement>(null);
@@ -31,10 +54,10 @@ export const AddFundsSection = () => {
 
   const addFunds = useCallback(async () => {
     setIsAddFundsVisible(true);
-
     await delayInSeconds(0.1);
     fundSectionRef?.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
+
   const closeAddFunds = useCallback(() => setIsAddFundsVisible(false), []);
 
   return (
@@ -56,10 +79,17 @@ export const AddFundsSection = () => {
 };
 
 export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
-  const { masterSafeAddress } = useWallet();
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const { masterSafes } = useMasterWalletContext();
+  const masterSafeAddress = useMemo(
+    () =>
+      masterSafes?.find((wallet) => wallet.evmChainId === homeChainId)?.address,
+    [homeChainId, masterSafes],
+  );
 
   const truncatedFundingAddress: string | undefined = useMemo(
-    () => masterSafeAddress && truncateAddress(masterSafeAddress),
+    () => masterSafeAddress && truncateAddress(masterSafeAddress, 4),
     [masterSafeAddress],
   );
 
@@ -71,6 +101,7 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
       ),
     [masterSafeAddress],
   );
+
   return (
     <Flex vertical ref={ref}>
       <AddFundsWarningAlertSection />
@@ -85,25 +116,29 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
 });
 OpenAddFundsSection.displayName = 'OpenAddFundsSection';
 
-const AddFundsWarningAlertSection = () => (
-  <CardSection>
-    <CustomAlert
-      type="warning"
-      fullWidth
-      showIcon
-      message={
-        <Flex vertical gap={2.5}>
-          <Text className="text-base" strong>
-            Only send funds on Gnosis Chain!
-          </Text>
-          <Text className="text-base">
-            You will lose any assets you send on other chains.
-          </Text>
-        </Flex>
-      }
-    />
-  </CardSection>
-);
+const AddFundsWarningAlertSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  return (
+    <CardSection>
+      <CustomAlert
+        type="warning"
+        fullWidth
+        showIcon
+        message={
+          <Flex vertical gap={2.5}>
+            <Text className="text-base" strong>
+              Only send funds on {CHAIN_CONFIG[homeChainId].name} Chain!
+            </Text>
+            <Text className="text-base">
+              You will lose any assets you send on other chains.
+            </Text>
+          </Flex>
+        }
+      />
+    </CardSection>
+  );
+};
 
 const AddFundsAddressSection = ({
   fundingAddress,
@@ -122,7 +157,7 @@ const AddFundsAddressSection = ({
         </span>
       }
     >
-      <Text title={fundingAddress}>GNO: {truncatedFundingAddress ?? '--'}</Text>
+      <Text title={fundingAddress}>{truncatedFundingAddress ?? NA}</Text>
     </Tooltip>
 
     <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
@@ -138,13 +173,5 @@ const AddFundsAddressSection = ({
     >
       <Button icon={<QrcodeOutlined />} size="large" />
     </Popover> */}
-  </CardSection>
-);
-
-const AddFundsGetTokensSection = () => (
-  <CardSection justify="center" bordertop="true" padding="16px 24px">
-    <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-      Get OLAS + XDAI on Gnosis Chain {UNICODE_SYMBOLS.EXTERNAL_LINK}
-    </Link>
   </CardSection>
 );
