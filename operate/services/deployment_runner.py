@@ -34,6 +34,7 @@ from venv import main as venv_cli
 
 import psutil
 import requests
+import requests
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
 
@@ -304,6 +305,11 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
+
+    @property
+    def _tendermint_bin(self) -> str:
+        """Return tendermint path."""
+        return str(Path(sys._MEIPASS) / "tendermint_mac")  # type: ignore # pylint: disable=protected-access
 
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
