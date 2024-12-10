@@ -14,13 +14,12 @@ import { InlineBanner } from './InlineBanner';
 const { Text, Title } = Typography;
 
 export const LowOperatingBalanceAlert = () => {
+  const { storeState } = useStore();
   const { selectedAgentConfig } = useServices();
-  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
-
   const { masterSafes } = useMasterWalletContext();
   const { isLoaded: isBalanceLoaded, isLowBalance } = useBalanceContext();
-  const { storeState } = useStore();
 
+  const homeChainId = selectedAgentConfig.evmHomeChainId;
   const { name, symbol } = useChainDetails(homeChainId);
 
   const selectedMasterSafe = useMemo(() => {
@@ -32,9 +31,9 @@ export const LowOperatingBalanceAlert = () => {
     );
   }, [masterSafes, homeChainId]);
 
-  // if (!isBalanceLoaded) return null;
-  // if (!storeState?.isInitialFunded) return;
-  // if (!isLowBalance) return null;
+  if (!isBalanceLoaded) return null;
+  if (!storeState?.isInitialFunded) return;
+  if (!isLowBalance) return null;
 
   return (
     <CustomAlert
