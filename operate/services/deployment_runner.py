@@ -305,11 +305,6 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
 
-    @property
-    def _tendermint_bin(self) -> str:
-        """Return tendermint path."""
-        return str(Path(sys._MEIPASS) / "tendermint_mac")  # type: ignore # pylint: disable=protected-access
-
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
