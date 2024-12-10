@@ -4,11 +4,12 @@ import { isAddress } from 'ethers/lib/utils';
 import React, { useCallback, useMemo, useState } from 'react';
 
 import { COLOR } from '@/constants/colors';
-import { useBalance } from '@/hooks/useBalance';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingContractCountdown } from '@/hooks/useStakingContractCountdown';
-import { useActiveStakingContractInfo } from '@/hooks/useStakingContractInfo';
-import { useWallet } from '@/hooks/useWallet';
+import { useActiveStakingContractDetails } from '@/hooks/useStakingContractDetails';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { Address } from '@/types/Address';
 
@@ -51,21 +52,26 @@ const CompatibleMessage = () => (
 );
 
 export const WithdrawFunds = () => {
-  const { updateWallets } = useWallet();
-  const { updateBalances } = useBalance();
-  const { service, updateServicesState, isServiceNotRunning } = useServices();
+  const { selectedService, refetch: refetchServices } = useServices();
+  const { refetch: refetchMasterWallets } = useMasterWalletContext();
+
+  const { updateBalances } = useBalanceContext();
+
+  const { service, isServiceRunning } = useService(
+    selectedService?.service_config_id,
+  );
   const serviceHash = service?.hash;
 
-  const { isServiceStakedForMinimumDuration, activeStakingContractInfo } =
-    useActiveStakingContractInfo();
+  const { isServiceStakedForMinimumDuration, selectedStakingContractDetails } =
+    useActiveStakingContractDetails();
 
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [isWithdrawalLoading, setIsWithdrawalLoading] = useState(false);
 
-  const countdownDisplay = useStakingContractCountdown(
-    activeStakingContractInfo,
-  );
+  const countdownDisplay = useStakingContractCountdown({
+    currentStakingContractInfo: selectedStakingContractDetails,
+  });
 
   const showModal = useCallback(() => {
     setIsModalVisible(true);
@@ -78,13 +84,13 @@ export const WithdrawFunds = () => {
 
   const refetchDetails = useCallback(async () => {
     try {
-      await updateServicesState();
-      await updateWallets();
+      await refetchServices?.();
+      await refetchMasterWallets?.();
       await updateBalances();
     } catch (error) {
       console.error('Failed to refetch details after withdrawal', error);
     }
-  }, [updateServicesState, updateWallets, updateBalances]);
+  }, [refetchServices, refetchMasterWallets, updateBalances]);
 
   const handleProceed = useCallback(async () => {
     if (!withdrawAddress) return;
@@ -102,7 +108,7 @@ export const WithdrawFunds = () => {
     try {
       const response = await ServicesService.withdrawBalance({
         withdrawAddress: withdrawAddress as Address,
-        serviceHash: serviceHash,
+        serviceHash,
       });
 
       if (response.error) {
@@ -154,7 +160,7 @@ export const WithdrawFunds = () => {
         </Tooltip>
       )}
 
-      {!isServiceNotRunning && <ServiceNotRunning />}
+      {!isServiceRunning && <ServiceNotRunning />}
 
       <Modal
         title="Withdraw Funds"

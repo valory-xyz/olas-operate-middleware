@@ -2,11 +2,11 @@ import { isNil } from 'lodash';
 import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
-import { POPOVER_WIDTH_LARGE } from '@/constants/width';
 import {
   ServiceStakingDetails,
   StakingContractDetails,
 } from '@/types/Autonolas';
+import { Maybe } from '@/types/Util';
 
 const countdownDisplayFormat = (totalSeconds: number) => {
   const days = Math.floor(totalSeconds / (24 * 3600));
@@ -30,14 +30,12 @@ const countdownDisplayFormat = (totalSeconds: number) => {
   return `${daysInWords} ${hoursInWords} ${minutesInWords} ${secondsInWords}`.trim();
 };
 
-const { Text } = Typography;
-
 export const useStakingContractCountdown = ({
   currentStakingContractInfo,
 }: {
-  currentStakingContractInfo:
-    | Partial<StakingContractDetails>
-    | Partial<StakingContractDetails & ServiceStakingDetails>;
+  currentStakingContractInfo: Maybe<
+    Partial<StakingContractDetails & ServiceStakingDetails>
+  >;
 }) => {
   const [secondsUntilReady, setSecondsUntilMigration] = useState<number>();
 

@@ -206,8 +206,6 @@ const MasterEoaSignerNativeBalance = () => {
 export const YourWalletPage = () => {
   const { goto } = usePageState();
 
-  const { services } = useServices();
-
   return (
     <ConfigProvider theme={yourWalletTheme}>
       <CardFlex
@@ -226,13 +224,7 @@ export const YourWalletPage = () => {
           <OlasBalance />
           <MasterSafeNativeBalance />
           <MasterEoaSignerNativeBalance />
-          {services?.map(({ service_config_id }) => (
-            // TODO: bit dirty, but should be fine for now
-            <YourAgentWalletBreakdown
-              key={service_config_id}
-              serviceConfigId={service_config_id}
-            />
-          ))}
+          <YourAgentWalletBreakdown />
         </Container>
       </CardFlex>
     </ConfigProvider>
