@@ -1,4 +1,4 @@
-import { Button, Flex, Popover, Typography } from 'antd';
+import { Button, Popover } from 'antd';
 import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
@@ -7,7 +7,6 @@ import {
   getServiceTemplate,
   SERVICE_TEMPLATES,
 } from '@/constants/serviceTemplates';
-import { POPOVER_WIDTH_LARGE } from '@/constants/width';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
@@ -15,38 +14,15 @@ import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractCountdown } from '@/hooks/useStakingContractCountdown';
 import {
   useActiveStakingContractInfo,
   useStakingContractDetails,
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
-import { StakingContractInfo } from '@/types/Autonolas';
 
+import { CountdownUntilMigration } from './CountdownUntilMigration';
 import { CantMigrateReason, useMigrate } from './useMigrate';
-
-const { Text } = Typography;
-
-export const CountdownUntilMigration = ({
-  currentStakingContractInfo,
-}: {
-  currentStakingContractInfo: Partial<StakingContractInfo>;
-}) => {
-  const countdownDisplay = useStakingContractCountdown(
-    currentStakingContractInfo,
-  );
-
-  return (
-    <Flex vertical gap={1} style={{ maxWidth: POPOVER_WIDTH_LARGE }}>
-      <Text strong>Can&apos;t switch because you unstaked too recently.</Text>
-      <Text>This may be because your agent was suspended.</Text>
-      <Text>Keep running your agent and you&apos;ll be able to switch in</Text>
-      <Text>{countdownDisplay}</Text>
-    </Flex>
-  );
-};
 
 type MigrateButtonProps = {
   stakingProgramId: StakingProgramId;

@@ -2,15 +2,16 @@ import {
   Deployment,
   MiddlewareChain,
   MiddlewareServiceResponse,
+  ServiceHash,
   ServiceTemplate,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
-import { BACKEND_URL_V2 } from '@/constants/urls';
+import { BACKEND_URL, BACKEND_URL_V2 } from '@/constants/urls';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { Address } from '@/types/Address';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /**
  * Get a single service from the backend

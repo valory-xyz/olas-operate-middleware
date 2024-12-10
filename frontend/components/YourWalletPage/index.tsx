@@ -31,7 +31,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 
 import { Container, infoBreakdownParentStyle } from './styles';
 import { SignerTitle } from './Titles';
-import { YourAgentWallet } from './YourAgent';
+import { YourAgentWalletBreakdown } from './YourAgent';
 
 const { Text } = Typography;
 
@@ -228,7 +228,7 @@ export const YourWalletPage = () => {
           <MasterEoaSignerNativeBalance />
           {services?.map(({ service_config_id }) => (
             // TODO: bit dirty, but should be fine for now
-            <YourAgentWallet
+            <YourAgentWalletBreakdown
               key={service_config_id}
               serviceConfigId={service_config_id}
             />

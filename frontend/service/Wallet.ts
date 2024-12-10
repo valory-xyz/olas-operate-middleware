@@ -35,7 +35,10 @@ const createSafe = async (chain: MiddlewareChain, backup_owner?: string) =>
     throw new Error('Failed to create safe');
   });
 
-const addBackupOwner = async (chain: MiddlewareChain, backup_owner: string) =>
+const updateSafeBackupOwner = async (
+  chain: MiddlewareChain,
+  backup_owner: string,
+) =>
   fetch(`${BACKEND_URL}/wallet/safe`, {
     method: 'PUT',
     headers: {
@@ -44,7 +47,7 @@ const addBackupOwner = async (chain: MiddlewareChain, backup_owner: string) =>
     body: JSON.stringify({ chain, backup_owner }),
   }).then((res) => {
     if (res.ok) return res.json();
-    throw new Error('Failed to update safe backup owner');
+    throw new Error('Failed to add backup owner');
   });
 
 export const WalletService = {

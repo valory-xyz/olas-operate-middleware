@@ -6,6 +6,7 @@ import {
   Button,
   Flex,
   message,
+  Popover,
   // QRCode,
   Tooltip,
   Typography,
@@ -62,16 +63,25 @@ export const AddFundsSection = () => {
 
   return (
     <>
-      <CardSection gap={12} padding="24px">
+      <CustomizedCardSection gap={12} padding="24px">
         <Button
           type="default"
           size="large"
-          block
           onClick={isAddFundsVisible ? closeAddFunds : addFunds}
         >
           {isAddFundsVisible ? 'Close instructions' : 'Add funds'}
         </Button>
-      </CardSection>
+
+        <Popover
+          placement="topRight"
+          trigger={['hover', 'click']}
+          content={<Text>Ability to withdraw is coming soon</Text>}
+        >
+          <Button type="default" size="large" disabled>
+            Withdraw
+          </Button>
+        </Popover>
+      </CustomizedCardSection>
 
       {isAddFundsVisible && <OpenAddFundsSection ref={fundSectionRef} />}
     </>

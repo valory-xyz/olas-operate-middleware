@@ -16,6 +16,7 @@ import {
 } from '@/hooks/useBalanceContext';
 import { useReward } from '@/hooks/useReward';
 import { useService } from '@/hooks/useService';
+import { useServices } from '@/hooks/useServices';
 import { Address } from '@/types/Address';
 import { generateName } from '@/utils/agentName';
 import { balanceFormat } from '@/utils/numberFormatters';
@@ -151,16 +152,15 @@ const ServiceAndNftDetails = ({
   );
 };
 
-export const YourAgentWallet = ({
-  serviceConfigId,
-}: {
-  serviceConfigId: string;
-}) => {
+export const YourAgentWalletBreakdown = () => {
   const { isLoaded } = useBalanceContext();
-  const { serviceSafes, serviceNftTokenId, serviceEoa } =
-    useService(serviceConfigId);
-  const { serviceSafeBalances, serviceEoaBalances } =
-    useServiceBalances(serviceConfigId);
+  const { selectedService } = useServices();
+  const { serviceSafes, serviceNftTokenId, serviceEoa } = useService(
+    selectedService?.service_config_id,
+  );
+  const { serviceSafeBalances, serviceEoaBalances } = useServiceBalances(
+    selectedService?.service_config_id,
+  );
 
   const {
     availableRewardsForEpochEth,

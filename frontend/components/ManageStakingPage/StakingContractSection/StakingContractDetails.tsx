@@ -63,6 +63,6 @@ export const StakingContractDetails = ({
   }
 
   return (
-    <InfoBreakdownList list={list} parentStyle={{ gap: 12 }} color="primary" />
+    <InfoBreakdownList list={list!} parentStyle={{ gap: 12 }} color="primary" />
   );
 };
