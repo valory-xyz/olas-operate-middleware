@@ -158,7 +158,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     agentType: AgentType.Memeooorr,
     name: 'Memeooorr',
-    hash: 'bafybeidvfwl7mrrxh7rjq2ytjihr6xc4ac4hniszawsrc4oc7p6ubklloy',
+    hash: 'bafybeidbgqxeh2yhzrxl3tib5s23hp4ihqjjw6melv7ks47afxc5gil5em',
     description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
     image:
       'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
@@ -181,6 +181,18 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
       },
     },
     env_variables: {
+      BASE_LEDGER_RPC: {
+        name: "Base ledger RPC",
+        description: "",
+        value: "",
+        provision_type: EnvProvisionType.COMPUTED
+      },
+      CELO_LEDGER_RPC: {
+        name: "Base ledger RPC",
+        description: "",
+        value: "",
+        provision_type: EnvProvisionType.COMPUTED
+      },
       TWIKIT_USERNAME: {
         name: 'Twitter username',
         description: '',
@@ -233,13 +245,13 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
       DB_PATH: {
         name: 'DB path',
         description: '',
-        value: 'logs/memeooorr.db',
-        provision_type: EnvProvisionType.FIXED,
+        value: 'persistent_data/memeooorr.db',
+        provision_type: EnvProvisionType.COMPUTED,
       },
       TWIKIT_COOKIES_PATH: {
         name: 'Twitter cookies path',
         description: '',
-        value: 'logs/twikit_cookies.json',
+        value: 'persistent_data/twikit_cookies.json',
         provision_type: EnvProvisionType.COMPUTED,
       },
     },
