@@ -24,20 +24,6 @@ const CustomizedCardSection = styled(CardSection)<{ border?: boolean }>`
   }
 `;
 
-const AddFundsGetTokensSection = () => {
-  const { selectedAgentConfig } = useServices();
-  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
-
-  return (
-    <CardSection justify="center" bordertop="true" padding="16px 24px">
-      <Link target="_blank" href={SWAP_URL_BY_EVM_CHAIN[homeChainId]}>
-        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
-        {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
-      </Link>
-    </CardSection>
-  );
-};
-
 export const AddFundsSection = () => {
   const fundSectionRef = useRef<HTMLDivElement>(null);
   const [isAddFundsVisible, setIsAddFundsVisible] = useState(false);
@@ -74,6 +60,68 @@ export const AddFundsSection = () => {
 
       {isAddFundsVisible && <OpenAddFundsSection ref={fundSectionRef} />}
     </>
+  );
+};
+
+const AddFundsWarningAlertSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  return (
+    <CardSection>
+      <CustomAlert
+        type="warning"
+        fullWidth
+        showIcon
+        message={
+          <Flex vertical gap={2.5}>
+            <Text className="text-base" strong>
+              Only send funds on {CHAIN_CONFIG[homeChainId].name} Chain!
+            </Text>
+            <Text className="text-base">
+              You will lose any assets you send on other chains.
+            </Text>
+          </Flex>
+        }
+      />
+    </CardSection>
+  );
+};
+
+const AddFundsAddressSection = ({
+  fundingAddress,
+  truncatedFundingAddress,
+  handleCopy,
+}: {
+  fundingAddress?: string;
+  truncatedFundingAddress?: string;
+  handleCopy: () => void;
+}) => (
+  <CardSection gap={10} justify="center" align="center" padding="16px 24px">
+    <Tooltip
+      title={
+        <span className="can-select-text flex">
+          {fundingAddress ?? 'Unable to load address'}
+        </span>
+      }
+    >
+      <Text title={fundingAddress}>{truncatedFundingAddress ?? NA}</Text>
+    </Tooltip>
+
+    <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
+  </CardSection>
+);
+
+const AddFundsGetTokensSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+
+  return (
+    <CardSection justify="center" bordertop="true" padding="16px 24px">
+      <Link target="_blank" href={SWAP_URL_BY_EVM_CHAIN[homeChainId]}>
+        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
+        {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      </Link>
+    </CardSection>
   );
 };
 
@@ -117,51 +165,3 @@ export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
   );
 });
 OpenAddFundsSection.displayName = 'OpenAddFundsSection';
-
-const AddFundsWarningAlertSection = () => {
-  const { selectedAgentConfig } = useServices();
-  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
-  return (
-    <CardSection>
-      <CustomAlert
-        type="warning"
-        fullWidth
-        showIcon
-        message={
-          <Flex vertical gap={2.5}>
-            <Text className="text-base" strong>
-              Only send funds on {CHAIN_CONFIG[homeChainId].name} Chain!
-            </Text>
-            <Text className="text-base">
-              You will lose any assets you send on other chains.
-            </Text>
-          </Flex>
-        }
-      />
-    </CardSection>
-  );
-};
-
-const AddFundsAddressSection = ({
-  fundingAddress,
-  truncatedFundingAddress,
-  handleCopy,
-}: {
-  fundingAddress?: string;
-  truncatedFundingAddress?: string;
-  handleCopy: () => void;
-}) => (
-  <CardSection gap={10} justify="center" align="center" padding="16px 24px">
-    <Tooltip
-      title={
-        <span className="can-select-text flex">
-          {fundingAddress ?? 'Error loading address'}
-        </span>
-      }
-    >
-      <Text title={fundingAddress}>{truncatedFundingAddress ?? NA}</Text>
-    </Tooltip>
-
-    <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
-  </CardSection>
-);
