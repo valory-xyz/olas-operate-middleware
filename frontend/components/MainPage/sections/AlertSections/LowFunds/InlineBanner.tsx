@@ -28,17 +28,13 @@ type InlineBannerProps = { text: string; address: Address };
 export const InlineBanner = ({ text, address }: InlineBannerProps) => {
   return (
     <InlineBannerContainer justify="space-between" align="center">
-      <div>{text}</div>
-      <div>
+      <Text>{text}</Text>
+      <Flex gap={12}>
         <Text>{truncateAddress(address)}</Text>
-        <Button
-          size="small"
-          onClick={() => copyToClipboard(address)}
-          className="ml-12"
-        >
+        <Button size="small" onClick={() => copyToClipboard(address)}>
           <CopyOutlined />
         </Button>
-      </div>
+      </Flex>
     </InlineBannerContainer>
   );
 };
