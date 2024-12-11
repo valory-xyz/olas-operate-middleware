@@ -535,45 +535,64 @@ class ServiceManager:
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
-            env_var_to_value.update({
-                "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
-                "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
-                "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
-                "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
-                "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-                "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-                "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
-                    "activity_checker"
-                ),
-                "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
-                "MECH_REQUEST_PRICE": "10000000000000000",
-                "USE_MECH_MARKETPLACE": str(
-                    "mech_marketplace"
-                    in service.chain_configs[
-                        service.home_chain
-                    ].chain_data.user_params.staking_program_id
-                ),
-                "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
-                    "staking_contract"
-                ),
-                "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
-            })
+            env_var_to_value.update(
+                {
+                    "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
+                    "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
+                    "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
+                    "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
+                    "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                    "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+                    "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
+                        "staking_contract"
+                    ),
+                    "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
+                        "activity_checker"
+                    ),
+                    "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+                    "MECH_REQUEST_PRICE": "10000000000000000",
+                    "USE_MECH_MARKETPLACE": str(
+                        "mech_marketplace"
+                        in service.chain_configs[
+                            service.home_chain
+                        ].chain_data.user_params.staking_program_id
+                    ),
+                    "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                        "staking_contract"
+                    ),
+                    "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+                }
+            )
 
         # TODO: yet another agent specific logic for memeooorr, which should be abstracted
         if all(
             var in service.env_variables
-            for var in ["TWIKIT_USERNAME", "TWIKIT_EMAIL", "TWIKIT_PASSWORD", "TWIKIT_COOKIES_PATH"]
+            for var in [
+                "TWIKIT_USERNAME",
+                "TWIKIT_EMAIL",
+                "TWIKIT_PASSWORD",
+                "TWIKIT_COOKIES_PATH",
+            ]
         ):
-            cookies_path = service.path / service.env_variables['TWIKIT_COOKIES_PATH']['value']
-            env_var_to_value.update({
-                "TWIKIT_COOKIES": get_twitter_cookies(
-                    username=service.env_variables["TWIKIT_USERNAME"]["value"],
-                    email=service.env_variables["TWIKIT_EMAIL"]["value"],
-                    password=service.env_variables["TWIKIT_PASSWORD"]["value"],
-                    cookies_path=cookies_path,
-                ),
-                "TWIKIT_COOKIES_PATH": str(cookies_path),
-            })
+            # TODO: This is possibly not a good idea: we are setting up a computed variable based on
+            # the value passed in the template.
+            db_path = service.path / service.env_variables["DB_PATH"]["value"]
+            cookies_path = (
+                service.path / service.env_variables["TWIKIT_COOKIES_PATH"]["value"]
+            )
+
+            env_var_to_value.update(
+                {
+                    "TWIKIT_COOKIES": get_twitter_cookies(
+                        username=service.env_variables["TWIKIT_USERNAME"]["value"],
+                        email=service.env_variables["TWIKIT_EMAIL"]["value"],
+                        password=service.env_variables["TWIKIT_PASSWORD"]["value"],
+                        cookies_path=cookies_path,
+                    ),
+                    "TWIKIT_COOKIES_PATH": str(cookies_path),
+                    "DB_PATH": str(db_path),
+                }
+            )
 
         service.update_env_variables_values(env_var_to_value)
 
