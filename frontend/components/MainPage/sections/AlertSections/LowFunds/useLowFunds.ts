@@ -4,11 +4,16 @@ import { useChainDetails } from '@/hooks/useChainDetails';
 import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
+/**
+ * helper hook specific to get low funds details such as
+ * - chain information
+ * - master/eoa safe addresses
+ */
 export const useLowFundsDetails = () => {
   const { selectedAgentConfig } = useServices();
   const homeChainId = selectedAgentConfig.evmHomeChainId;
 
-  const { masterSafes } = useMasterWalletContext();
+  const { masterEoa, masterSafes } = useMasterWalletContext();
 
   // master safe details
   const selectedMasterSafe = useMemo(() => {
@@ -27,5 +32,6 @@ export const useLowFundsDetails = () => {
     chainName,
     tokenSymbol,
     masterSafeAddress: selectedMasterSafe?.address,
+    masterEoaAddress: masterEoa?.address,
   };
 };
