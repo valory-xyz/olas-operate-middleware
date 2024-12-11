@@ -27,9 +27,10 @@ import logging
 import tempfile
 import time
 import typing as t
+from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
@@ -42,6 +43,7 @@ from autonomy.chain.constants import (
     GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
 )
+from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
     get_delployment_payload,
@@ -50,11 +52,11 @@ from autonomy.chain.service import (
     get_token_deposit_amount,
 )
 from autonomy.chain.tx import TxSettler
-from autonomy.cli.helpers.chain import MintHelper as MintManager
-from autonomy.cli.helpers.chain import OnChainHelper
+from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
+from web3.contract import Contract
 
 import operate.operate_types
 from operate.constants import (
@@ -63,17 +65,15 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
 )
 from operate.data import DATA_DIR
-from operate.data.contracts.service_staking_token.contract import (
-    ServiceStakingTokenContract,
-)
+from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING
+from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
     NULL_ADDRESS,
     SafeOperation,
     hash_payload_to_hex,
-    settle_raw_transaction,
     skill_input_hex_to_payload,
 )
 from operate.wallet.master import MasterWallet
@@ -166,12 +166,27 @@ class GnosisSafeTransaction:
 
     def settle(self) -> t.Dict:
         """Settle the transaction."""
-        return settle_raw_transaction(
-            ledger_api=self.ledger_api,
-            build_and_send_tx=lambda: self.ledger_api.send_signed_transaction(
+        retries = 0
+        deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
+        while (
+            retries < ON_CHAIN_INTERACT_RETRIES
+            and datetime.now().timestamp() < deadline
+        ):
+            try:
                 self.build()
-            ),
-        )
+                tx_digest = self.ledger_api.send_signed_transaction(self.tx)
+            except Exception as e:  # pylint: disable=broad-except
+                print(f"Error sending the safe tx: {e}")
+                tx_digest = None
+
+            if tx_digest is not None:
+                receipt = self.ledger_api.api.eth.wait_for_transaction_receipt(
+                    tx_digest
+                )
+                if receipt["status"] != 0:
+                    return receipt
+            time.sleep(ON_CHAIN_INTERACT_SLEEP)
+        raise RuntimeError("Timeout while waiting for safe transaction to go through")
 
 
 class StakingManager(OnChainHelper):
@@ -186,9 +201,9 @@ class StakingManager(OnChainHelper):
         """Initialize object."""
         super().__init__(key=key, chain_type=chain_type, password=password)
         self.staking_ctr = t.cast(
-            ServiceStakingTokenContract,
-            ServiceStakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "service_staking_token")
+            StakingTokenContract,
+            StakingTokenContract.from_dir(
+                directory=str(DATA_DIR / "contracts" / "staking_token")
             ),
         )
 
@@ -232,7 +247,7 @@ class StakingManager(OnChainHelper):
         ).get("data")
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
-        """Get the agent IDs for the specified staking contract"""
+        """Get a list of agent IDs for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -240,7 +255,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.getAgentIds().call()
 
     def service_registry(self, staking_contract: str) -> str:
-        """Get the service registry address for the specified staking contract"""
+        """Retrieve the service registry address for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -248,7 +263,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistry().call()
 
     def staking_token(self, staking_contract: str) -> str:
-        """Get the staking token address for the specified staking contract"""
+        """Get the staking token address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -256,7 +271,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.stakingToken().call()
 
     def service_registry_token_utility(self, staking_contract: str) -> str:
-        """Get the service registry token utility address for the specified staking contract"""
+        """Get the service registry token utility address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -264,7 +279,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.serviceRegistryTokenUtility().call()
 
     def min_staking_deposit(self, staking_contract: str) -> str:
-        """Get the minimum staking deposit for the specified staking contract"""
+        """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -272,7 +287,7 @@ class StakingManager(OnChainHelper):
         return instance.functions.minStakingDeposit().call()
 
     def activity_checker(self, staking_contract: str) -> str:
-        """Get the activity checker address for the specified staking contract"""
+        """Retrieve the activity checker address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
@@ -475,17 +490,50 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
-    def get_forced_unstake_tx_data(
-        self, service_id: int, staking_contract: str
-    ) -> bytes:
-        """Forced unstake the service"""
-        return self.staking_ctr.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="forcedUnstake",
-            args=[service_id],
+
+# TODO Backport this to Open Autonomy MintHelper class
+# MintHelper should support passing custom 'description', 'name' and 'attributes'.
+# If some of these fields are not defined, then it can take the current default values.
+# (Version is included as an attribute.)
+# The current code here is a workaround and just addresses the description,
+# because modifying the name and attributes requires touching lower-level code.
+# A proper refactor of this should be done in Open Autonomy.
+class MintManager(MintHelper):
+    """MintManager"""
+
+    metadata_description: t.Optional[str] = None
+    metadata_name: t.Optional[str] = None
+    metadata_attributes: t.Optional[t.Dict[str, str]] = None
+
+    def set_metadata_fields(
+        self,
+        name: t.Optional[str] = None,
+        description: t.Optional[str] = None,
+        attributes: t.Optional[t.Dict[str, str]] = None,
+    ) -> "MintManager":
+        """Set metadata fields."""
+        self.metadata_name = (
+            name  # Not used currently, just an indication for the OA refactor
         )
+        self.metadata_description = description
+        self.metadata_attributes = (
+            attributes  # Not used currently, just an indication for the OA refactor
+        )
+        return self
+
+    def publish_metadata(self) -> "MintManager":
+        """Publish metadata."""
+        self.metadata_hash, self.metadata_string = publish_metadata(
+            package_id=self.package_configuration.package_id,
+            package_path=self.package_path,
+            nft=cast(str, self.nft),
+            description=self.metadata_description
+            or self.package_configuration.description,
+        )
+        return self
+
+
+# End Backport
 
 
 class _ChainUtil:
@@ -514,6 +562,17 @@ class _ChainUtil:
             ContractConfigs.get(name=name).contracts[self.chain_type] = address
 
     @property
+    def safe(self) -> str:
+        """Get safe address."""
+        chain_id = self.ledger_api.api.eth.chain_id
+        chain = OperateChain.from_id(chain_id)
+        if self.wallet.safes is None:
+            raise ValueError("Safes not initialized")
+        if chain not in self.wallet.safes:
+            raise ValueError(f"Safe for chain type {chain} not found")
+        return self.wallet.safes[chain]
+
+    @property
     def crypto(self) -> Crypto:
         """Load crypto object."""
         self._patch()
@@ -534,6 +593,29 @@ class _ChainUtil:
             password=self.wallet.password,
         )
         return ledger_api
+
+    @property
+    def service_manager_instance(self) -> Contract:
+        """Load service manager contract instance."""
+        contract_interface = registry_contracts.service_manager.contract_interface.get(
+            self.ledger_api.identifier, {}
+        )
+        instance = self.ledger_api.get_contract_instance(
+            contract_interface,
+            self.contracts["service_manager"],
+        )
+        return instance
+
+    def owner_of(self, token_id: int) -> str:
+        """Get owner of a service."""
+        self._patch()
+        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
+            chain_type=self.chain_type
+        )
+        owner = registry_contracts.service_manager.owner_of(
+            ledger_api=ledger_api, token_id=token_id
+        ).get("owner", "")
+        return owner
 
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""
@@ -770,7 +852,7 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.operate_types.ChainType.GNOSIS][
+            == STAKING[operate.operate_types.Chain.GNOSIS][
                 "pearl_beta_mech_marketplace"
             ]
         ):
@@ -803,6 +885,7 @@ class OnChainManager(_ChainUtil):
         nft: Optional[Union[Path, IPFSHash]],
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
+        metadata_description: t.Optional[str] = None,
     ) -> t.Dict:
         """Mint service."""
         # TODO: Support for update
@@ -823,6 +906,7 @@ class OnChainManager(_ChainUtil):
                 package_path=package_path, package_type=PackageType.SERVICE
             )
             .load_metadata()
+            .set_metadata_fields(description=metadata_description)
             .verify_nft(nft=nft)
             .verify_service_dependencies(agent_id=agent_id)
             .publish_metadata()
@@ -1011,7 +1095,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             crypto=self.crypto,
             chain_type=self.chain_type,
-            safe=t.cast(str, self.wallet.safe),
+            safe=t.cast(str, self.safe),
         )
 
     def get_mint_tx_data(  # pylint: disable=too-many-arguments
@@ -1024,6 +1108,7 @@ class EthSafeTxBuilder(_ChainUtil):
         nft: Optional[Union[Path, IPFSHash]],
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
+        metadata_description: t.Optional[str] = None,
     ) -> t.Dict:
         """Build mint transaction."""
         # TODO: Support for update
@@ -1043,20 +1128,19 @@ class EthSafeTxBuilder(_ChainUtil):
                 package_path=package_path, package_type=PackageType.SERVICE
             )
             .load_metadata()
+            .set_metadata_fields(description=metadata_description)
             .verify_nft(nft=nft)
             .verify_service_dependencies(agent_id=agent_id)
             .publish_metadata()
         )
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
 
+        instance = self.service_manager_instance
         if update_token is None:
+            safe = self.safe
             txd = instance.encodeABI(
                 fn_name="create",
                 args=[
-                    self.wallet.safe,
+                    safe,
                     token or ETHEREUM_ERC20,
                     manager.metadata_hash,
                     [agent_id],
@@ -1117,7 +1201,7 @@ class EthSafeTxBuilder(_ChainUtil):
             args=[service_id],
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_manager"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
@@ -1145,7 +1229,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ],
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_manager"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
@@ -1301,7 +1385,7 @@ class EthSafeTxBuilder(_ChainUtil):
             staking_contract=staking_contract,
         )
         return {
-            "from": self.wallet.safe,
+            "from": self.safe,
             "to": self.contracts["service_registry"],
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
@@ -1334,25 +1418,16 @@ class EthSafeTxBuilder(_ChainUtil):
         self,
         service_id: int,
         staking_contract: str,
-        force: bool = False,
     ) -> t.Dict:
         """Get unstaking tx data"""
         self._patch()
-        staking_manager = StakingManager(
+        txd = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
             chain_type=self.chain_type,
-        )
-        txd = (
-            staking_manager.get_forced_unstake_tx_data(
-                service_id=service_id,
-                staking_contract=staking_contract,
-            )
-            if force
-            else staking_manager.get_unstake_tx_data(
-                service_id=service_id,
-                staking_contract=staking_contract,
-            )
+        ).get_unstake_tx_data(
+            service_id=service_id,
+            staking_contract=staking_contract,
         )
         return {
             "to": staking_contract,
