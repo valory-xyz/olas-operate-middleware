@@ -149,18 +149,16 @@ export const useMasterBalances = () => {
 
     const agentNativeGasRequirement =
       selectedAgentConfig.agentSafeFundingRequirements?.[
-        homeChainNativeToken.symbol
+        selectedAgentConfig.evmHomeChainId
       ];
+
+    if (!agentNativeGasRequirement) return;
 
     return (
       masterSafeNative.balance <
-      parseFloat(formatEther(agentNativeGasRequirement))
+      parseFloat(formatEther(`${agentNativeGasRequirement}`))
     );
-  }, [
-    masterSafeNative,
-    selectedAgentConfig.agentSafeFundingRequirements,
-    homeChainNativeToken?.symbol,
-  ]);
+  }, [masterSafeNative, homeChainNativeToken, selectedAgentConfig]);
 
   const masterEoaNative = useMemo(() => {
     if (!masterEoaBalances) return;
