@@ -3,7 +3,7 @@ import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useChainDetails } from '@/hooks/useChainDetails';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
@@ -17,7 +17,8 @@ export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
   const { selectedAgentConfig } = useServices();
   const { masterSafes } = useMasterWalletContext();
-  const { isLoaded: isBalanceLoaded, isLowBalance } = useBalanceContext();
+  const { isLoaded: isBalanceLoaded, masterSafeNativeGasBalance } =
+    useMasterBalances();
 
   const homeChainId = selectedAgentConfig.evmHomeChainId;
   const { name, symbol } = useChainDetails(homeChainId);
@@ -30,6 +31,11 @@ export const LowOperatingBalanceAlert = () => {
       (masterSafe) => masterSafe.evmChainId === homeChainId,
     );
   }, [masterSafes, homeChainId]);
+
+  const isLowBalance = useMemo(() => {
+    if (!masterSafeNativeGasBalance) return false;
+    return masterSafeNativeGasBalance < LOW_MASTER_SAFE_BALANCE;
+  }, [masterSafeNativeGasBalance]);
 
   if (!isBalanceLoaded) return null;
   if (!storeState?.isInitialFunded) return;
