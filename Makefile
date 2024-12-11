@@ -4,6 +4,7 @@ define setup_env
     @echo " - setup env $(ENV_FILE)"
     $(eval include $(1).env)
     $(eval export)
+	@cp $(ENV_FILE) .env
 endef
 
 
