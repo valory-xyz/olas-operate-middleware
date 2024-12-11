@@ -2,8 +2,8 @@ import { Flex, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
-import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
+import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useChainDetails } from '@/hooks/useChainDetails';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
@@ -16,24 +16,21 @@ const { Text, Title } = Typography;
 export const LowSafeSignerBalanceAlert = () => {
   const { storeState } = useStore();
   const { selectedAgentConfig } = useServices();
-  const { masterSafes } = useMasterWalletContext();
-  const { isLoaded: isBalanceLoaded, isLowBalance } = useBalanceContext();
+  const { masterEoa } = useMasterWalletContext();
+  const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
+    useMasterBalances();
+
+  const isLowBalance = useMemo(() => {
+    if (!masterEoaNativeGasBalance) return false;
+    return masterEoaNativeGasBalance < LOW_AGENT_SAFE_BALANCE;
+  }, [masterEoaNativeGasBalance]);
 
   const homeChainId = selectedAgentConfig.evmHomeChainId;
   const { name, symbol } = useChainDetails(homeChainId);
 
-  const selectedMasterSafe = useMemo(() => {
-    if (!masterSafes) return;
-    if (!homeChainId) return;
-
-    return masterSafes.find(
-      (masterSafe) => masterSafe.evmChainId === homeChainId,
-    );
-  }, [masterSafes, homeChainId]);
-
-  // if (!isBalanceLoaded) return null;
-  // if (!storeState?.isInitialFunded) return;
-  // if (!isLowBalance) return null;
+  if (!isBalanceLoaded) return null;
+  if (!storeState?.isInitialFunded) return;
+  if (!isLowBalance) return null;
 
   return (
     <CustomAlert
@@ -47,7 +44,7 @@ export const LowSafeSignerBalanceAlert = () => {
           </Title>
           <Text>
             To keep your agent operational, add
-            <Text strong>{` ${LOW_MASTER_SAFE_BALANCE} ${symbol} `}</Text>
+            <Text strong>{` ${LOW_AGENT_SAFE_BALANCE} ${symbol} `}</Text>
             on {name} chain to the safe signer.
           </Text>
           <Text>
@@ -55,10 +52,10 @@ export const LowSafeSignerBalanceAlert = () => {
             several days&apos; suspension.
           </Text>
 
-          {selectedMasterSafe?.address && (
+          {masterEoa?.address && (
             <InlineBanner
               text="Safe signer address"
-              address={selectedMasterSafe.address}
+              address={masterEoa.address}
             />
           )}
         </Flex>
