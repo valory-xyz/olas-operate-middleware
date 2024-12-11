@@ -1,16 +1,5 @@
-import {
-  CopyOutlined,
-  // QrcodeOutlined,
-} from '@ant-design/icons';
-import {
-  Button,
-  Flex,
-  message,
-  Popover,
-  // QRCode,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
+import { Button, Flex, message, Popover, Tooltip, Typography } from 'antd';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
@@ -174,17 +163,5 @@ const AddFundsAddressSection = ({
     </Tooltip>
 
     <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
-
-    {/* <Popover
-      title="Scan QR code"
-      content={
-        <QRCode
-          size={250}
-          value={`https://metamask.app.link/send/${fundingAddress}@${100}`}
-        />
-      }
-    >
-      <Button icon={<QrcodeOutlined />} size="large" />
-    </Popover> */}
   </CardSection>
 );
