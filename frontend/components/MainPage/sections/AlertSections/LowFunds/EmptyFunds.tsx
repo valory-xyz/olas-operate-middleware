@@ -1,12 +1,10 @@
 import { Divider, Flex, Typography } from 'antd';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { COLOR } from '@/constants/colors';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
-import { TokenSymbol } from '@/enums/Token';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
@@ -51,23 +49,6 @@ export const EmptyFunds = () => {
     isInitialFunded,
   ]);
 
-  const olasRequired = useMemo(() => {
-    if (hasEnoughOlasForInitialFunding) return null;
-    const olas = serviceFundRequirements[homeChainId][TokenSymbol.OLAS];
-    return `${UNICODE_SYMBOLS.OLAS}${olas} OLAS `;
-  }, [homeChainId, hasEnoughOlasForInitialFunding, serviceFundRequirements]);
-
-  const nativeTokenRequired = useMemo(() => {
-    if (hasEnoughEthForInitialFunding) return null;
-    const native = serviceFundRequirements[homeChainId][nativeTokenSymbol];
-    return `${native} ${nativeTokenSymbol}`;
-  }, [
-    homeChainId,
-    hasEnoughEthForInitialFunding,
-    serviceFundRequirements,
-    nativeTokenSymbol,
-  ]);
-
   // if (!needsInitialFunding) return null;
 
   return (
@@ -94,7 +75,10 @@ export const EmptyFunds = () => {
             style={{ margin: '12px 0 8px 0', background: COLOR.PURPLE_LIGHT }}
           />
 
-          <FundsToActivate />
+          <FundsToActivate
+            stakingFundsRequired={true} // TODO:
+            tradingFundsRequired={true} // TODO:
+          />
         </Flex>
       }
       type="primary"
