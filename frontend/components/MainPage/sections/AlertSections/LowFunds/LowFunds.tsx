@@ -1,8 +1,10 @@
+import { round } from 'lodash';
 import { useMemo } from 'react';
 
 import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
+import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { useStore } from '@/hooks/useStore';
 
@@ -14,6 +16,7 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 export const LowFunds = () => {
   const { storeState } = useStore();
 
+  const { selectedAgentConfig } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
   const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
     useMasterBalances();
@@ -21,6 +24,9 @@ export const LowFunds = () => {
   const { nativeBalancesByChain, olasBalancesByChain, isInitialFunded } =
     useNeedsFunds(selectedStakingProgramId);
 
+  const chainId = selectedAgentConfig.evmHomeChainId;
+
+  // Check if the safe signer balance is low
   const isSafeSignerBalanceLow = useMemo(() => {
     if (!isBalanceLoaded) return false;
     if (!masterEoaNativeGasBalance) return false;
@@ -29,6 +35,7 @@ export const LowFunds = () => {
     return masterEoaNativeGasBalance < LOW_AGENT_SAFE_BALANCE;
   }, [isBalanceLoaded, masterEoaNativeGasBalance, storeState]);
 
+  // Show the empty funds alert if the agent is not funded
   const isEmptyFundsVisible = useMemo(() => {
     if (!isBalanceLoaded) return false;
     if (!olasBalancesByChain) return false;
@@ -38,8 +45,8 @@ export const LowFunds = () => {
     if (!isInitialFunded) return false;
 
     if (
-      nativeBalancesByChain[100] === 0 &&
-      olasBalancesByChain[100] === 0 &&
+      round(nativeBalancesByChain[chainId], 2) === 0 &&
+      round(olasBalancesByChain[chainId], 2) === 0 &&
       isSafeSignerBalanceLow
     ) {
       return true;
@@ -49,6 +56,7 @@ export const LowFunds = () => {
   }, [
     isBalanceLoaded,
     isInitialFunded,
+    chainId,
     nativeBalancesByChain,
     olasBalancesByChain,
     isSafeSignerBalanceLow,

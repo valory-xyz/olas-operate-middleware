@@ -31,11 +31,13 @@ export const FundsToActivate = ({
   const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
   const { chainName, masterSafeAddress } = useLowFundsDetails();
 
+  // Calculate the required OLAS
   const olasRequired = useMemo(() => {
     const olas = serviceFundRequirements[homeChainId][TokenSymbol.OLAS];
     return `${UNICODE_SYMBOLS.OLAS}${olas} OLAS `;
   }, [homeChainId, serviceFundRequirements]);
 
+  // Calculate the required native token (Eg. ETH)
   const nativeTokenRequired = useMemo(() => {
     const native = serviceFundRequirements[homeChainId][nativeTokenSymbol];
     return `${native} ${nativeTokenSymbol}`;
