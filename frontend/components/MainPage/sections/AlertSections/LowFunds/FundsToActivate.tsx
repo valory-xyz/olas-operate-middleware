@@ -19,8 +19,8 @@ type FundsToActivateProps = {
 };
 
 export const FundsToActivate = ({
-  stakingFundsRequired,
-  tradingFundsRequired,
+  stakingFundsRequired = true,
+  tradingFundsRequired = true,
 }: FundsToActivateProps) => {
   const { selectedStakingProgramId } = useStakingProgram();
 

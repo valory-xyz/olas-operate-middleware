@@ -1,10 +1,7 @@
 import { Flex, Typography } from 'antd';
-import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
-import { useMasterBalances } from '@/hooks/useBalanceContext';
-import { useStore } from '@/hooks/useStore';
 
 import { InlineBanner } from './InlineBanner';
 import { useLowFundsDetails } from './useLowFunds';
@@ -12,20 +9,7 @@ import { useLowFundsDetails } from './useLowFunds';
 const { Text, Title } = Typography;
 
 export const LowSafeSignerBalanceAlert = () => {
-  const { storeState } = useStore();
-  const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
-    useMasterBalances();
-
-  const isLowBalance = useMemo(() => {
-    if (!masterEoaNativeGasBalance) return false;
-    return masterEoaNativeGasBalance < LOW_AGENT_SAFE_BALANCE;
-  }, [masterEoaNativeGasBalance]);
-
   const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
-
-  if (!isBalanceLoaded) return null;
-  if (!storeState?.isInitialFunded) return;
-  if (!isLowBalance) return null;
 
   return (
     <CustomAlert
