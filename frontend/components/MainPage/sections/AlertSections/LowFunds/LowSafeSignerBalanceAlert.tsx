@@ -4,19 +4,15 @@ import { useMemo } from 'react';
 import { CustomAlert } from '@/components/Alert';
 import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
-import { useChainDetails } from '@/hooks/useChainDetails';
-import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
-import { useMasterWalletContext } from '@/hooks/useWallet';
 
 import { InlineBanner } from './InlineBanner';
+import { useLowFundsDetails } from './useLowFunds';
 
 const { Text, Title } = Typography;
 
 export const LowSafeSignerBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentConfig } = useServices();
-  const { masterEoa } = useMasterWalletContext();
   const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
     useMasterBalances();
 
@@ -25,8 +21,7 @@ export const LowSafeSignerBalanceAlert = () => {
     return masterEoaNativeGasBalance < LOW_AGENT_SAFE_BALANCE;
   }, [masterEoaNativeGasBalance]);
 
-  const homeChainId = selectedAgentConfig.evmHomeChainId;
-  const { name, symbol } = useChainDetails(homeChainId);
+  const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
 
   if (!isBalanceLoaded) return null;
   if (!storeState?.isInitialFunded) return;
@@ -44,18 +39,18 @@ export const LowSafeSignerBalanceAlert = () => {
           </Title>
           <Text>
             To keep your agent operational, add
-            <Text strong>{` ${LOW_AGENT_SAFE_BALANCE} ${symbol} `}</Text>
-            on {name} chain to the safe signer.
+            <Text strong>{` ${LOW_AGENT_SAFE_BALANCE} ${tokenSymbol} `}</Text>
+            on {chainName} chain to the safe signer.
           </Text>
           <Text>
             Your agent is at risk of missing its targets, which would result in
             several days&apos; suspension.
           </Text>
 
-          {masterEoa?.address && (
+          {masterEoaAddress && (
             <InlineBanner
               text="Safe signer address"
-              address={masterEoa.address}
+              address={masterEoaAddress}
             />
           )}
         </Flex>
