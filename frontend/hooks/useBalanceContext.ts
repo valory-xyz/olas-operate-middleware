@@ -3,6 +3,7 @@ import { useContext, useMemo } from 'react';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { Optional } from '@/types/Util';
+import { formatEther } from '@/utils/numberFormatters';
 
 import { useService } from './useService';
 import { useServices } from './useServices';
@@ -82,7 +83,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
 export const useMasterBalances = () => {
   const { selectedAgentConfig } = useServices();
   const { masterSafes, masterEoa } = useMasterWalletContext();
-  const { walletBalances } = useBalanceContext();
+  const { isLoaded, walletBalances } = useBalanceContext();
 
   // TODO: unused, check only services stake?
   // const masterStakedBalances = useMemo(
@@ -120,38 +121,71 @@ export const useMasterBalances = () => {
     return [...(masterSafeBalances || []), ...(masterEoaBalances || [])];
   }, [masterEoaBalances, masterSafeBalances]);
 
-  const isMasterSafeLowOnNativeGas = useMemo(() => {
+  const homeChainNativeToken = useMemo(() => {
+    if (!selectedAgentConfig?.evmHomeChainId) return;
+    return CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken;
+  }, [selectedAgentConfig.evmHomeChainId]);
+
+  const masterSafeNative = useMemo(() => {
     if (!masterSafeBalances) return;
     if (!selectedAgentConfig?.evmHomeChainId) return;
+    if (!homeChainNativeToken) return;
 
-    const homeChainNativeToken =
-      CHAIN_CONFIG[selectedAgentConfig?.evmHomeChainId].nativeToken;
-
-    const nativeGasBalance = masterSafeBalances.find(
-      (walletBalance) =>
-        walletBalance.isNative &&
-        walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId &&
-        walletBalance.symbol === homeChainNativeToken.symbol,
+    return masterSafeBalances.find(
+      ({ isNative, evmChainId, symbol }) =>
+        isNative &&
+        evmChainId === selectedAgentConfig.evmHomeChainId &&
+        symbol === homeChainNativeToken.symbol,
     );
+  }, [
+    masterSafeBalances,
+    selectedAgentConfig.evmHomeChainId,
+    homeChainNativeToken,
+  ]);
 
-    if (!nativeGasBalance) return;
+  const isMasterSafeLowOnNativeGas = useMemo(() => {
+    if (!masterSafeNative) return;
+    if (!homeChainNativeToken?.symbol) return;
 
     const agentNativeGasRequirement =
       selectedAgentConfig.agentSafeFundingRequirements?.[
-        homeChainNativeToken.symbol
+        selectedAgentConfig.evmHomeChainId
       ];
 
-    return nativeGasBalance.balance < agentNativeGasRequirement;
+    if (!agentNativeGasRequirement) return;
+
+    return (
+      masterSafeNative.balance <
+      parseFloat(formatEther(`${agentNativeGasRequirement}`))
+    );
+  }, [masterSafeNative, homeChainNativeToken, selectedAgentConfig]);
+
+  const masterEoaNative = useMemo(() => {
+    if (!masterEoaBalances) return;
+    if (!selectedAgentConfig?.evmHomeChainId) return;
+    if (!homeChainNativeToken) return;
+
+    return masterEoaBalances.find(
+      ({ isNative, evmChainId, symbol }) =>
+        isNative &&
+        evmChainId === selectedAgentConfig.evmHomeChainId &&
+        symbol === homeChainNativeToken.symbol,
+    );
   }, [
-    masterSafeBalances,
-    selectedAgentConfig.agentSafeFundingRequirements,
+    masterEoaBalances,
     selectedAgentConfig.evmHomeChainId,
+    homeChainNativeToken,
   ]);
 
   return {
+    isLoaded,
     masterWalletBalances,
     masterSafeBalances,
     masterEoaBalances,
     isMasterSafeLowOnNativeGas,
+
+    // Native gas balance. Eg. XDAI on gnosis
+    masterSafeNativeGasBalance: masterSafeNative?.balance,
+    masterEoaNativeGasBalance: masterEoaNative?.balance,
   };
 };
