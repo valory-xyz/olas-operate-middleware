@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 
-import { useChainDetails } from '@/hooks/useChainDetails';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
@@ -26,11 +26,11 @@ export const useLowFundsDetails = () => {
   }, [masterSafes, homeChainId]);
 
   // current chain details
-  const { name: chainName, symbol: tokenSymbol } = useChainDetails(homeChainId);
+  const { name: chainName, nativeToken } = CHAIN_CONFIG[homeChainId];
 
   return {
     chainName,
-    tokenSymbol,
+    tokenSymbol: nativeToken.symbol,
     masterSafeAddress: selectedMasterSafe?.address,
     masterEoaAddress: masterEoa?.address,
   };
