@@ -245,7 +245,14 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
       </Form.Item>
 
       <Form.Item name="xUsername" label="X username" {...commonFieldProps}>
-        <Input />
+        <Input
+          addonBefore="@"
+          onKeyDown={(e) => {
+            if (e.key === '@') {
+              e.preventDefault();
+            }
+          }}
+        />
       </Form.Item>
 
       <Form.Item name="xPassword" label="X password" {...commonFieldProps}>
