@@ -3,6 +3,7 @@ import { useContext, useMemo } from 'react';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { Optional } from '@/types/Util';
+import { formatEther } from '@/utils/numberFormatters';
 
 import { useService } from './useService';
 import { useServices } from './useServices';
@@ -151,7 +152,10 @@ export const useMasterBalances = () => {
         homeChainNativeToken.symbol
       ];
 
-    return masterSafeNative.balance < agentNativeGasRequirement;
+    return (
+      masterSafeNative.balance <
+      parseFloat(formatEther(agentNativeGasRequirement))
+    );
   }, [
     masterSafeNative,
     selectedAgentConfig.agentSafeFundingRequirements,
