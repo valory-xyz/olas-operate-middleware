@@ -7,7 +7,7 @@ import {
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
-import { BACKEND_URL, BACKEND_URL_V2 } from '@/constants/urls';
+import { BACKEND_URL_V2 } from '@/constants/urls';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
@@ -191,7 +191,7 @@ export const withdrawBalance = async ({
   serviceHash: ServiceHash;
 }): Promise<{ error: string | null }> =>
   new Promise((resolve, reject) =>
-    fetch(`${BACKEND_URL}/services/${serviceHash}/onchain/withdraw`, {
+    fetch(`${BACKEND_URL_V2}/services/${serviceHash}/onchain/withdraw`, {
       method: 'POST',
       body: JSON.stringify({ withdrawal_address: withdrawAddress }),
       headers: { ...CONTENT_TYPE_JSON_UTF8 },
