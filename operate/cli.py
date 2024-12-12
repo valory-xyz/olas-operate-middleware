@@ -538,9 +538,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         ledger_api = wallet.ledger_api(chain=chain)
         safes = t.cast(t.Dict[Chain, str], wallet.safes)
+
+        backup_owner = data.get("backup_owner")
+        if backup_owner:
+            backup_owner = ledger_api.api.to_checksum_address(backup_owner)
+
         wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
-            backup_owner=ledger_api.api.to_checksum_address(data.get("backup_owner")),
+            backup_owner=backup_owner,
         )
         wallet.transfer(
             to=t.cast(str, safes.get(chain)),
@@ -639,13 +644,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=401,
             )
 
-        ledger_api = wallet.ledger_api(chain=chain)
         wallet = manager.load(ledger_type=ledger_type)
+        ledger_api = wallet.ledger_api(chain=chain)
+
+        backup_owner = data.get("backup_owner")
+        if backup_owner:
+            backup_owner = ledger_api.api.to_checksum_address(backup_owner)
+
         backup_owner_updated = wallet.update_backup_owner(
             chain=chain,
-            backup_owner=ledger_api.api.to_checksum_address(data.get(
-                "backup_owner"
-            )),  # Optional value, it's fine to provide 'None' (set no backup owner/remove backup owner)
+            backup_owner=backup_owner,  # Optional value, it's fine to provide 'None' (set no backup owner/remove backup owner)
         )
         message = (
             "Backup owner updated."
