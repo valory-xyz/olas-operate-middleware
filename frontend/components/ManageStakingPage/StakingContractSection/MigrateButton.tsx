@@ -158,6 +158,7 @@ export const MigrateButton = ({
           } catch (error) {
             console.error(error);
           } finally {
+            overrideSelectedServiceStatus(null);
             setIsServicePollingPaused(false);
             setIsBalancePollingPaused(false);
           }
