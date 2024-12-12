@@ -35,11 +35,9 @@ export const MigrateButton = ({
     setPaused: setIsServicePollingPaused,
     isFetched: isServicesLoaded,
     selectedService,
-    selectedAgentConfig,
     selectedAgentType,
     overrideSelectedServiceStatus,
   } = useServices();
-  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
@@ -137,7 +135,6 @@ export const MigrateButton = ({
               useMechMarketplace:
                 stakingProgramIdToMigrateTo ===
                 StakingProgramId.PearlBetaMechMarketplace,
-              chainId: homeChainId,
             };
 
             if (selectedService) {
