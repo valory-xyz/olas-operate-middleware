@@ -31,7 +31,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 
 import { Container, infoBreakdownParentStyle } from './styles';
 import { SignerTitle } from './Titles';
-import { YourAgentWalletBreakdown } from './YourAgent';
+import { YourAgentWallet } from './YourAgent';
 
 const { Text } = Typography;
 
@@ -205,6 +205,7 @@ const MasterEoaSignerNativeBalance = () => {
 
 export const YourWalletPage = () => {
   const { goto } = usePageState();
+  const { selectedService } = useServices();
 
   return (
     <ConfigProvider theme={yourWalletTheme}>
@@ -224,7 +225,7 @@ export const YourWalletPage = () => {
           <OlasBalance />
           <MasterSafeNativeBalance />
           <MasterEoaSignerNativeBalance />
-          <YourAgentWalletBreakdown />
+          {selectedService && <YourAgentWallet />}
         </Container>
       </CardFlex>
     </ConfigProvider>

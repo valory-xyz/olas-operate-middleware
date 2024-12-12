@@ -152,7 +152,7 @@ const ServiceAndNftDetails = ({
   );
 };
 
-export const YourAgentWalletBreakdown = () => {
+const YourAgentWalletBreakdown = () => {
   const { isLoaded } = useBalanceContext();
   const { selectedService } = useServices();
   const { serviceSafes, serviceNftTokenId, serviceEoa } = useService(
