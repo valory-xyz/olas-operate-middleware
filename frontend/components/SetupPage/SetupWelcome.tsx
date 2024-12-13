@@ -237,7 +237,6 @@ export const SetupWelcomeLogin = () => {
     masterSafe?.address,
     selectedServiceOrAgentChainId,
     wallets?.length,
-    selectedService?.name,
     goto,
     gotoPage,
   ]);
