@@ -7,7 +7,6 @@ import { MemeooorBaseService } from '@/service/agents/Memeooor';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
-import { parseEther } from '@/utils/numberFormatters';
 
 // TODO: complete this config
 // TODO: add funding requirements
@@ -21,23 +20,23 @@ export const AGENT_CONFIG: {
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
     requiresAgentSafesOn: [EvmChainId.Gnosis],
     agentSafeFundingRequirements: {
-      [EvmChainId.Gnosis]: +parseEther(0.1),
+      [EvmChainId.Gnosis]: 0.1,
     },
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: +parseEther(1.5),
+          [TokenSymbol.XDAI]: 1.5,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: +parseEther(2),
+          [TokenSymbol.XDAI]: 2,
         },
       },
       [WalletOwnerType.Agent]: {
         [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: +parseEther(0.1),
+          [TokenSymbol.XDAI]: 0.1,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: +parseEther(0.1),
+          [TokenSymbol.XDAI]: 0.1,
         },
       },
     },
@@ -65,23 +64,23 @@ export const AGENT_CONFIG: {
     middlewareHomeChainId: MiddlewareChain.BASE,
     requiresAgentSafesOn: [EvmChainId.Base],
     agentSafeFundingRequirements: {
-      [EvmChainId.Base]: +parseEther(0.03),
+      [EvmChainId.Base]: 0.03,
     },
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: +parseEther(0.0001),
+          [TokenSymbol.ETH]: 0.0001,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: +parseEther(0.0001),
+          [TokenSymbol.ETH]: 0.0001,
         },
       },
       [WalletOwnerType.Agent]: {
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: +parseEther(0.0001),
+          [TokenSymbol.ETH]: 0.0001,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: +parseEther(0.0001),
+          [TokenSymbol.ETH]: 0.0001,
         },
       },
     },
