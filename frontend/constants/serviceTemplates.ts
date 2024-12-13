@@ -1,6 +1,7 @@
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { parseEther } from '@/utils/numberFormatters';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
@@ -158,7 +159,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     agentType: AgentType.Memeooorr,
     name: 'Memeooorr',
-    hash: 'bafybeidbgqxeh2yhzrxl3tib5s23hp4ihqjjw6melv7ks47afxc5gil5em',
+    hash: 'bafybeieslmmd2k4xzpypzr6a2jlkisxodrmt4lbuwjvsvtm3ury3yxv32m',
     description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
     image:
       'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
@@ -172,11 +173,11 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         agent_id: 43,
         threshold: 1,
         use_staking: true,
-        cost_of_bond: 50000000000000000000,
-        monthly_gas_estimate: 50000000000000000, // 0.05
+        cost_of_bond: +parseEther(50),
+        monthly_gas_estimate: +parseEther(0.03),
         fund_requirements: {
-          agent: 1000000000000000, // 0.001
-          safe: 2000000000000000, // 0.002
+          agent: +parseEther(0.001),
+          safe: +parseEther(0.001),
         },
       },
     },
