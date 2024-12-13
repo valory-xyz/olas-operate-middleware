@@ -8,7 +8,6 @@ import {
   Spin,
   Typography,
 } from 'antd';
-import { isNil } from 'lodash';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -25,7 +24,7 @@ import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
+import { asEvmChainId, asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { FormFlex } from '../styled/FormFlex';
 
@@ -136,7 +135,12 @@ export const SetupWelcomeLogin = () => {
   const { goto } = useSetup();
   const { goto: gotoPage } = usePageState();
 
-  const { selectedService, selectedAgentConfig } = useServices();
+  const {
+    selectedService,
+    selectedAgentConfig,
+    services,
+    isFetched: isServicesFetched,
+  } = useServices();
   const {
     masterSafes,
     masterWallets: wallets,
@@ -150,12 +154,11 @@ export const SetupWelcomeLogin = () => {
     ? asEvmChainId(selectedService?.home_chain)
     : selectedAgentConfig.evmHomeChainId;
 
-  const masterSafe =
-    masterSafes?.find(
-      (safe) =>
-        selectedServiceOrAgentChainId &&
-        safe.evmChainId === selectedServiceOrAgentChainId,
-    ) ?? null;
+  const masterSafe = masterSafes?.find(
+    (safe) =>
+      selectedServiceOrAgentChainId &&
+      safe.evmChainId === selectedServiceOrAgentChainId,
+  );
 
   const eoaBalanceEth = masterWalletBalances?.find(
     (balance) =>
@@ -183,6 +186,19 @@ export const SetupWelcomeLogin = () => {
     [updateBalances],
   );
 
+  const isServiceCreatedForAgent = useMemo(() => {
+    if (!isServicesFetched) return false;
+    if (!services) return false;
+    if (!selectedService) return false;
+    if (!selectedAgentConfig) return false;
+
+    return services.some(
+      (service) =>
+        service.home_chain ===
+        asMiddlewareChain(selectedAgentConfig.evmHomeChainId),
+    );
+  }, [isServicesFetched, services, selectedService, selectedAgentConfig]);
+
   useEffect(() => {
     if (!canNavigate) return;
     if (!isBalanceLoaded) return;
@@ -196,26 +212,32 @@ export const SetupWelcomeLogin = () => {
       return;
     }
 
-    // If no wallets are created, redirect to agent selection
-    if (isNil(masterSafe)) {
+    // If no service is created for the selected agent
+    if (!isServiceCreatedForAgent) {
+      window.console.log(
+        `No master safe for chain ${selectedServiceOrAgentChainId}`,
+      );
       goto(SetupScreen.AgentSelection);
       return;
     }
 
-    if (!masterSafe?.address) {
+    // if master safe
+    if (masterSafe?.address) {
       goto(SetupScreen.SetupCreateSafe);
-    } else {
-      gotoPage(Pages.Main);
+      return;
     }
+
+    gotoPage(Pages.Main);
   }, [
     isBalanceLoaded,
     isWalletsFetched,
+    isServiceCreatedForAgent,
     canNavigate,
     eoaBalanceEth,
-    masterSafe,
     masterSafe?.address,
     selectedServiceOrAgentChainId,
     wallets?.length,
+    selectedService?.name,
     goto,
     gotoPage,
   ]);
