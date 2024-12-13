@@ -41,7 +41,8 @@ const EachAgent = memo(
       updateAgentType(agentType);
 
       // DO NOTE REMOVE THIS DELAY
-      // NOTE: the delay is added so that agentType is update in electron store
+      // NOTE: the delay is added so that agentType is updated in electron store
+      // and re-rendered with the updated agentType
       await delayInSeconds(0.5);
 
       const isSafeCreated = masterSafes?.find(
@@ -49,12 +50,7 @@ const EachAgent = memo(
           masterSafe.evmChainId === AGENT_CONFIG[agentType].evmHomeChainId,
       );
 
-      console.log({
-        isSafeCreated,
-        masterSafes,
-        agentType,
-      });
-
+      // If safe is created for the agent type, then go to main page
       if (isSafeCreated) {
         gotoPage(Pages.Main);
         return;
