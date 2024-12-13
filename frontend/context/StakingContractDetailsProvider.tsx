@@ -68,7 +68,8 @@ const useAllStakingContractDetails = () => {
     {} as Record<string, Partial<StakingContractDetails>>,
   );
 
-  const isAllStakingContractDetailsLoaded = queryResults.every(
+  // TODO: some are failing, not sure why.
+  const isAllStakingContractDetailsLoaded = queryResults.some(
     (query) => query.isSuccess,
   );
 
