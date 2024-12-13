@@ -46,11 +46,8 @@ const statusMessage = (isFunded?: boolean) => {
   }
 };
 
-type SetupEoaFundingWaitingProps = { chainName: string; currency: string };
-const SetupEoaFundingWaiting = ({
-  chainName,
-  currency,
-}: SetupEoaFundingWaitingProps) => {
+type SetupEoaFundingWaitingProps = { chainName: string };
+const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
   const { masterEoa } = useMasterWalletContext();
   const masterEoaAddress = masterEoa?.address;
 
@@ -90,7 +87,7 @@ const SetupEoaFundingWaiting = ({
         </Flex>
 
         <span className="can-select-text break-word">
-          {`${currency}: ${masterEoaAddress || NA}`}
+          {`${masterEoaAddress || NA}`}
         </span>
         {/* <CustomAlert
           type="info"
@@ -131,9 +128,7 @@ export const SetupEoaFundingForChain = ({
           Status: {statusMessage(isFunded)}
         </Text>
       </CardSection>
-      {!isFunded && (
-        <SetupEoaFundingWaiting chainName={chainName} currency={currency} />
-      )}
+      {!isFunded && <SetupEoaFundingWaiting chainName={chainName} />}
     </CardFlex>
   );
 };
