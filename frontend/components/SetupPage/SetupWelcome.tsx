@@ -8,6 +8,7 @@ import {
   Spin,
   Typography,
 } from 'antd';
+import { isNil } from 'lodash';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -140,6 +141,7 @@ export const SetupWelcomeLogin = () => {
     masterSafes,
     masterWallets: wallets,
     masterEoa,
+    isFetched: isWalletsFetched,
   } = useMasterWalletContext();
   const { isLoaded: isBalanceLoaded, updateBalances } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
@@ -183,28 +185,39 @@ export const SetupWelcomeLogin = () => {
 
   useEffect(() => {
     if (!canNavigate) return;
-
-    // Navigate only when wallets and balances are loaded
     if (!isBalanceLoaded) return;
+    if (!isWalletsFetched) return;
 
     setIsLoggingIn(false);
 
+    // If no balance is loaded, redirect to setup screen
     if (!eoaBalanceEth) {
       goto(SetupScreen.SetupEoaFundingIncomplete);
-    } else if (!masterSafe?.address) {
+      return;
+    }
+
+    // If no wallets are created, redirect to agent selection
+    if (isNil(masterSafe)) {
+      goto(SetupScreen.AgentSelection);
+      return;
+    }
+
+    if (!masterSafe?.address) {
       goto(SetupScreen.SetupCreateSafe);
     } else {
       gotoPage(Pages.Main);
     }
   }, [
+    isBalanceLoaded,
+    isWalletsFetched,
     canNavigate,
     eoaBalanceEth,
-    goto,
-    gotoPage,
-    isBalanceLoaded,
+    masterSafe,
     masterSafe?.address,
     selectedServiceOrAgentChainId,
     wallets?.length,
+    goto,
+    gotoPage,
   ]);
 
   return (
