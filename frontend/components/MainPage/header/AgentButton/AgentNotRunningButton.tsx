@@ -230,6 +230,23 @@ export const AgentNotRunningButton = () => {
     if (isNil(service) && isNil(middlewareServiceResponse))
       throw new Error('Service not found');
 
+    // Update the service if the hash is different
+    if (!middlewareServiceResponse && service) {
+      if (service.hash !== serviceTemplate.hash) {
+        return ServicesService.updateService({
+          serviceConfigId: service!.service_config_id,
+          stakingProgramId: selectedStakingProgramId,
+          // chainId: selectedAgentConfig.evmHomeChainId,
+          serviceTemplate,
+          deploy: false, // TODO: deprecated will remove
+          useMechMarketplace:
+            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
+              selectedStakingProgramId
+            ].mechType === MechType.Marketplace,
+        });
+      }
+    }
+
     // Start the service
     try {
       const serviceToStart = service ?? middlewareServiceResponse;
