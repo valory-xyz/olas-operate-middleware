@@ -59,7 +59,7 @@ export const AGENT_CONFIG: {
   //   serviceApi: OptimusService,
   // },
   [AgentType.Memeooorr]: {
-    name: 'Memeooorr agent',
+    name: 'Agents.fun agent',
     evmHomeChainId: EvmChainId.Base,
     middlewareHomeChainId: MiddlewareChain.BASE,
     requiresAgentSafesOn: [EvmChainId.Base],
@@ -86,7 +86,7 @@ export const AGENT_CONFIG: {
     },
     requiresMasterSafesOn: [EvmChainId.Base],
     serviceApi: MemeooorBaseService,
-    displayName: 'Memeooorr agent',
+    displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
   },
