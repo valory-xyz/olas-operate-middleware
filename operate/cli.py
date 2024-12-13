@@ -861,7 +861,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 ledger_api=ledger_api,
                 contract_address=OLAS[ledger_config.chain],
             )
-            safe = master_wallet.safes[service.home_chain]
+            safe = master_wallet.safes[Chain(service.home_chain)]
             balance = token_instance.functions.balanceOf(safe).call()
             if balance == 0:
                 logger.info(f"No OLAS to drain from master safe: {safe}")

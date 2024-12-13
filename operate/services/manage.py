@@ -1044,7 +1044,7 @@ class ServiceManager:
                     / "ethereum_private_key.txt",
                 ),
                 withdrawal_address=withdrawal_address,
-                chain=ledger_config.chain,
+                chain_id=ledger_config.chain.id,
             )
             self.logger.info(f"{service.name} signer drained")
 
