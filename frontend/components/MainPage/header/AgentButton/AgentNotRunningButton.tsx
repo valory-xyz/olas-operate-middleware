@@ -234,7 +234,7 @@ export const AgentNotRunningButton = () => {
     if (!middlewareServiceResponse && service) {
       if (service.hash !== serviceTemplate.hash) {
         return ServicesService.updateService({
-          serviceConfigId: service!.service_config_id,
+          serviceConfigId: service.service_config_id,
           stakingProgramId: selectedStakingProgramId,
           // chainId: selectedAgentConfig.evmHomeChainId,
           serviceTemplate,
