@@ -206,18 +206,18 @@ export const SetupWelcomeLogin = () => {
 
     setIsLoggingIn(false);
 
-    // If no balance is loaded, redirect to setup screen
-    if (!eoaBalanceEth) {
-      goto(SetupScreen.SetupEoaFundingIncomplete);
-      return;
-    }
-
     // If no service is created for the selected agent
     if (!isServiceCreatedForAgent) {
       window.console.log(
         `No service created for chain ${selectedServiceOrAgentChainId}`,
       );
       goto(SetupScreen.AgentSelection);
+      return;
+    }
+
+    // If no balance is loaded, redirect to setup screen
+    if (!eoaBalanceEth) {
+      goto(SetupScreen.SetupEoaFundingIncomplete);
       return;
     }
 
