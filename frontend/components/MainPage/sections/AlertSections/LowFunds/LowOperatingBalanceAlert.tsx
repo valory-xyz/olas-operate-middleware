@@ -2,8 +2,10 @@ import { Flex, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
-import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
+import { CHAIN_CONFIG } from '@/config/chains';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
+import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
 import { InlineBanner } from './InlineBanner';
@@ -13,6 +15,7 @@ const { Text, Title } = Typography;
 
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
+  const { selectedAgentConfig } = useServices();
   const { isLoaded: isBalanceLoaded, masterSafeNativeGasBalance } =
     useMasterBalances();
 
@@ -20,8 +23,17 @@ export const LowOperatingBalanceAlert = () => {
 
   const isLowBalance = useMemo(() => {
     if (!masterSafeNativeGasBalance) return false;
-    return masterSafeNativeGasBalance < LOW_MASTER_SAFE_BALANCE;
-  }, [masterSafeNativeGasBalance]);
+    return (
+      masterSafeNativeGasBalance <
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.Safe
+      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+    );
+  }, [
+    masterSafeNativeGasBalance,
+    selectedAgentConfig.evmHomeChainId,
+    selectedAgentConfig.operatingThresholds,
+  ]);
 
   if (!isBalanceLoaded) return null;
   if (!storeState?.isInitialFunded) return;
@@ -39,7 +51,14 @@ export const LowOperatingBalanceAlert = () => {
           </Title>
           <Text>
             To run your agent, add at least
-            <Text strong>{` ${LOW_MASTER_SAFE_BALANCE} ${tokenSymbol} `}</Text>
+            <Text strong>{` ${
+              selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+                WalletType.Safe
+              ][
+                CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken
+                  .symbol
+              ]
+            } ${tokenSymbol} `}</Text>
             on {chainName} chain to your safe.
           </Text>
           <Text>

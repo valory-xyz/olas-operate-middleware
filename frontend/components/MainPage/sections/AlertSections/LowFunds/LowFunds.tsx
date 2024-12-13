@@ -1,7 +1,8 @@
 import { round } from 'lodash';
 import { useMemo } from 'react';
 
-import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
+import { CHAIN_CONFIG } from '@/config/chains';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
@@ -32,8 +33,19 @@ export const LowFunds = () => {
     if (!masterEoaNativeGasBalance) return false;
     if (!storeState?.isInitialFunded) return false;
 
-    return masterEoaNativeGasBalance < LOW_AGENT_SAFE_BALANCE;
-  }, [isBalanceLoaded, masterEoaNativeGasBalance, storeState]);
+    return (
+      masterEoaNativeGasBalance <
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.EOA
+      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+    );
+  }, [
+    isBalanceLoaded,
+    masterEoaNativeGasBalance,
+    selectedAgentConfig.evmHomeChainId,
+    selectedAgentConfig.operatingThresholds,
+    storeState?.isInitialFunded,
+  ]);
 
   // Show the empty funds alert if the agent is not funded
   const isEmptyFundsVisible = useMemo(() => {

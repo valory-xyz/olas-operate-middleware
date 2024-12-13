@@ -3,11 +3,12 @@ import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
-import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
 import { TokenSymbol } from '@/enums/Token';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
@@ -123,13 +124,19 @@ export const AgentNotRunningButton = () => {
       const hasEnoughOlas =
         (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
       const hasEnoughNativeGas =
-        (masterSafeNativeGasBalance ?? 0) > LOW_MASTER_SAFE_BALANCE;
+        (masterSafeNativeGasBalance ?? 0) >
+        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+          WalletType.Safe
+        ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol];
       return hasEnoughOlas && hasEnoughNativeGas;
     }
 
     const hasEnoughForInitialDeployment =
       (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) >= LOW_MASTER_SAFE_BALANCE;
+      (masterSafeNativeGasBalance ?? 0) >=
+        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+          WalletType.Safe
+        ][TokenSymbol.XDAI];
 
     return hasEnoughForInitialDeployment;
   }, [
@@ -145,6 +152,7 @@ export const AgentNotRunningButton = () => {
     isEligibleForStaking,
     isAgentEvicted,
     masterSafeNativeGasBalance,
+    selectedAgentConfig.operatingThresholds,
     selectedAgentConfig.evmHomeChainId,
     serviceTotalStakedOlas,
     serviceSafeOlasWithStaked,

@@ -28,4 +28,3 @@ export const MIN_ETH_BALANCE_THRESHOLDS: Record<
 
 // TODO: update to support multi-chain, very poor implementation
 export const LOW_AGENT_SAFE_BALANCE = 1.5;
-export const LOW_MASTER_SAFE_BALANCE = 2;

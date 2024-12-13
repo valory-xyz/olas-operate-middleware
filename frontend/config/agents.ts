@@ -1,10 +1,13 @@
 import { MiddlewareChain } from '@/client';
 import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
+import { TokenSymbol } from '@/enums/Token';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { MemeooorBaseService } from '@/service/agents/Memeooor';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
+import { formatEther } from '@/utils/numberFormatters';
 
 // TODO: complete this config
 // TODO: add funding requirements
@@ -18,7 +21,25 @@ export const AGENT_CONFIG: {
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
     requiresAgentSafesOn: [EvmChainId.Gnosis],
     agentSafeFundingRequirements: {
-      [EvmChainId.Gnosis]: 100000000000000000,
+      [EvmChainId.Gnosis]: +formatEther(0.1),
+    },
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: +formatEther(1.5),
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.XDAI]: +formatEther(2),
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: +formatEther(0.1),
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.XDAI]: +formatEther(0.1),
+        },
+      },
     },
     requiresMasterSafesOn: [EvmChainId.Gnosis],
     serviceApi: PredictTraderService,
@@ -44,7 +65,25 @@ export const AGENT_CONFIG: {
     middlewareHomeChainId: MiddlewareChain.BASE,
     requiresAgentSafesOn: [EvmChainId.Base],
     agentSafeFundingRequirements: {
-      [EvmChainId.Base]: 1000000000000000, // 0.001 eth
+      [EvmChainId.Base]: +formatEther(0.03),
+    },
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: +formatEther(0.0001),
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: +formatEther(0.0001),
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: +formatEther(0.0001),
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: +formatEther(0.0001),
+        },
+      },
     },
     requiresMasterSafesOn: [EvmChainId.Base],
     serviceApi: MemeooorBaseService,
