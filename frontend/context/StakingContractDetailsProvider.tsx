@@ -39,7 +39,7 @@ const useAllStakingContractDetails = () => {
         programId,
       ),
       queryFn: async () =>
-        await serviceApi.getStakingContractDetails(
+        serviceApi.getStakingContractDetails(
           programId as StakingProgramId,
           evmHomeChainId,
         ),

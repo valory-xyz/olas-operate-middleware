@@ -2,7 +2,6 @@ import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
-import { GNOSIS_STAKING_PROGRAMS } from '@/config/stakingPrograms/gnosis';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -187,8 +186,9 @@ export abstract class PredictTraderService extends StakedAgentService {
     chainId: EvmChainId,
   ): Promise<StakingContractDetails | undefined> => {
     const { multicallProvider } = PROVIDERS[chainId];
+
     const stakingTokenProxy =
-      GNOSIS_STAKING_PROGRAMS[stakingProgramId]?.contract;
+      STAKING_PROGRAMS[chainId]?.[stakingProgramId].contract;
 
     if (!stakingTokenProxy) return;
 
