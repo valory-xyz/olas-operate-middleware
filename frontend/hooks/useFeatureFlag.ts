@@ -10,6 +10,7 @@ const FeatureFlagsSchema = z.enum([
   'manage-wallet',
   'rewards-streak',
   'staking-contract-section',
+  'agent-activity',
 ]);
 type FeatureFlags = z.infer<typeof FeatureFlagsSchema>;
 
@@ -29,12 +30,14 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'last-transactions': true,
     'rewards-streak': true,
     'staking-contract-section': true,
+    'agent-activity': false,
   },
   [AgentType.Memeooorr]: {
     'manage-wallet': false,
     'last-transactions': false,
     'rewards-streak': false,
     'staking-contract-section': false,
+    'agent-activity': true,
   },
 });
 
