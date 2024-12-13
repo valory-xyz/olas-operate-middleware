@@ -1,7 +1,9 @@
+import { isNil } from 'lodash';
 import { useContext, useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { Optional } from '@/types/Util';
 
 import { useService } from './useService';
@@ -146,14 +148,14 @@ export const useMasterBalances = () => {
     if (!masterSafeNative) return;
     if (!homeChainNativeToken?.symbol) return;
 
-    const agentNativeGasRequirement =
-      selectedAgentConfig.agentSafeFundingRequirements?.[
-        selectedAgentConfig.evmHomeChainId
-      ];
+    const nativeGasRequirement =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.Safe
+      ][homeChainNativeToken.symbol];
 
-    if (!agentNativeGasRequirement) return;
+    if (isNil(nativeGasRequirement)) return;
 
-    return masterSafeNative.balance < agentNativeGasRequirement;
+    return masterSafeNative.balance < nativeGasRequirement;
   }, [masterSafeNative, homeChainNativeToken, selectedAgentConfig]);
 
   const masterEoaNative = useMemo(() => {
