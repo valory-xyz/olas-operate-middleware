@@ -181,7 +181,7 @@ const EOA_FUNDING_MAP: Record<
   //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Base].safeCreation,
   //   },
   // }
-};
+} as const;
 
 /**
  * EOA funding setup screen
@@ -221,8 +221,8 @@ export const SetupEoaFunding = () => {
     const indexOfCurrentChain = chains.indexOf(currentChain.toString());
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
+    // goto next chain
     if (nextChainExists) {
-      // goto next chain
       setCurrentChain(chains[indexOfCurrentChain + 1] as unknown as EvmChainId);
       return;
     }
