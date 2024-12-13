@@ -1,5 +1,5 @@
 import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
-import { getAddress } from 'ethers/lib/utils';
+import { getAddress, isAddress } from 'ethers/lib/utils';
 import { createContext, PropsWithChildren, useContext, useState } from 'react';
 
 import { MiddlewareWalletResponse } from '@/client';
@@ -73,7 +73,11 @@ export const MasterWalletProvider = ({ children }: PropsWithChildren) => {
     queryKey: REACT_QUERY_KEYS.WALLETS_KEY,
     queryFn: WalletService.getWallets,
     refetchInterval: isOnline && !paused ? FIVE_SECONDS_INTERVAL : false,
-    select: (data) => transformMiddlewareWalletResponse(data),
+    select: (data) =>
+      transformMiddlewareWalletResponse(data).filter(
+        (wallet) =>
+          wallet.owner === WalletOwnerType.Master && isAddress(wallet.address),
+      ),
   });
 
   const masterEoa = masterWallets?.find(
