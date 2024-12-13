@@ -157,6 +157,7 @@ jobs:
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
           GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
 
 
       # Build frontend for development
@@ -170,6 +171,7 @@ jobs:
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
           GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
 
       # Run the build and notarization process for production
       - name: Build, notarize, and publish (Production)
@@ -187,6 +189,7 @@ jobs:
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
           GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
         run: node build.js
 
       # Run the build and notarization process for development
@@ -205,4 +208,5 @@ jobs:
           BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
           GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
         run: node build.js

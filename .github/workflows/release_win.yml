@@ -16,12 +16,14 @@ jobs:
             BASE_RPC: "https://rpc-gate.autonolas.tech/base-rpc/"
             GNOSIS_RPC: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
             ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"
+            MODE_RPC: "https://mainnet.mode.network"
             arch: "x64"
           - env: "development"
             OPTIMISM_RPC: "https://rpc-gate.autonolas.tech/optimism-rpc/"
             BASE_RPC: "https://rpc-gate.autonolas.tech/base-rpc/"
             GNOSIS_RPC: "https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0"
-            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"            
+            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"  
+            MODE_RPC: "https://mainnet.mode.network"          
             arch: "x64"
     defaults:
       run:
@@ -107,6 +109,7 @@ jobs:
           BASE_RPC: ${{ matrix.BASE_RPC }}
           ETHEREUM_RPC: ${{ matrix.ETHEREUM_RPC }}
           OPTIMISM_RPC: ${{ matrix.OPTIMISM_RPC }}
+          MODE_RPC: ${{ matrix.MODE_RPC }}
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
           GH_TOKEN: ${{ secrets.github_token}}
         run: |
@@ -116,6 +119,7 @@ jobs:
           echo BASE_RPC=$BASE_RPC >> prod.env
           echo ETHEREUM_RPC=$ETHEREUM_RPC >> prod.env
           echo GNOSIS_RPC=$GNOSIS_RPC >> prod.env
+          echo MODE_RPC=$MODE_RPC >> prod.env
           cat prod.env
           echo GH_TOKEN=$GH_TOKEN >> prod.env
       - run: rm -rf /dist
