@@ -33,7 +33,7 @@ export const OPTIMISM_ACTIVITY_CHECKERS: ActivityCheckers = {};
 
 export const BASE_ACTIVITY_CHECKERS: ActivityCheckers = {
   [ActivityCheckerType.MemeActivityChecker]: new MulticallContract(
-    '0xAe2f766506F6BDF740Cc348a90139EF317Fa7Faf',
+    '0x026AB1c5ea14E61f67d245685D9561c0c2Cb39Ba',
     MEME_ACTIVITY_CHECKER_ABI,
   ),
 };

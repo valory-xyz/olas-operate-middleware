@@ -6,7 +6,7 @@ service_version: v0.0.1
 home_chain: "base"
 configurations:
   base:
-    staking_program_id: meme_base_alpha
+    staking_program_id: meme_base_alpha_2
     nft: bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve
     rpc: http://localhost:8545 # User provided
     threshold: 1 # TODO: Move to service component

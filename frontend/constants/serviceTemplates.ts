@@ -166,7 +166,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     home_chain: MiddlewareChain.BASE,
     configurations: {
       [MiddlewareChain.BASE]: {
-        staking_program_id: StakingProgramId.MemeBaseAlpha, // default, may be overwritten
+        staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
         nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
         rpc: 'http://localhost:8545', // overwritten
         agent_id: 43,
@@ -182,16 +182,16 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     },
     env_variables: {
       BASE_LEDGER_RPC: {
-        name: "Base ledger RPC",
-        description: "",
-        value: "",
-        provision_type: EnvProvisionType.COMPUTED
+        name: 'Base ledger RPC',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.COMPUTED,
       },
       CELO_LEDGER_RPC: {
-        name: "Base ledger RPC",
-        description: "",
-        value: "",
-        provision_type: EnvProvisionType.COMPUTED
+        name: 'Base ledger RPC',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.COMPUTED,
       },
       TWIKIT_USERNAME: {
         name: 'Twitter username',
