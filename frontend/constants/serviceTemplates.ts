@@ -1,6 +1,7 @@
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { parseEther } from '@/utils/numberFormatters';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
@@ -172,11 +173,11 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         agent_id: 43,
         threshold: 1,
         use_staking: true,
-        cost_of_bond: 50000000000000000000,
-        monthly_gas_estimate: 50000000000000000, // 0.05
+        cost_of_bond: +parseEther(50),
+        monthly_gas_estimate: +parseEther(0.03),
         fund_requirements: {
-          agent: 1000000000000000, // 0.001
-          safe: 2000000000000000, // 0.002
+          agent: +parseEther(0.001),
+          safe: +parseEther(0.001),
         },
       },
     },
