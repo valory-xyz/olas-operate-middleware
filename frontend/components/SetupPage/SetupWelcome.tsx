@@ -215,7 +215,7 @@ export const SetupWelcomeLogin = () => {
     // If no service is created for the selected agent
     if (!isServiceCreatedForAgent) {
       window.console.log(
-        `No service for chain ${selectedServiceOrAgentChainId}`,
+        `No service created for chain ${selectedServiceOrAgentChainId}`,
       );
       goto(SetupScreen.AgentSelection);
       return;
