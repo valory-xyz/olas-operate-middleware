@@ -58,7 +58,7 @@ const BalanceStatus = () => {
     if (!storeState?.isInitialFunded) return;
 
     if (isMasterSafeLowOnNativeGas && !isLowBalanceNotificationShown) {
-      showNotification('Trading balance is too low.');
+      showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
     }
 
