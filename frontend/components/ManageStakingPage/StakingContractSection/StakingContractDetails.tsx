@@ -62,7 +62,17 @@ export const StakingContractDetails = ({
     );
   }
 
+  if (!list || list.length === 0) {
+    return (
+      <Alert
+        message="No staking information available."
+        type="error"
+        showIcon
+      />
+    );
+  }
+
   return (
-    <InfoBreakdownList list={list!} parentStyle={{ gap: 12 }} color="primary" />
+    <InfoBreakdownList list={list} parentStyle={{ gap: 12 }} color="primary" />
   );
 };
