@@ -25,6 +25,3 @@ export const MIN_ETH_BALANCE_THRESHOLDS: Record<
     safeAddSigner: 0.005,
   },
 };
-
-// TODO: update to support multi-chain, very poor implementation
-export const LOW_AGENT_SAFE_BALANCE = 1.5;
