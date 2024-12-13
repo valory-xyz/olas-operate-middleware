@@ -136,7 +136,7 @@ export const AgentNotRunningButton = () => {
       (masterSafeNativeGasBalance ?? 0) >=
         selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
           WalletType.Safe
-        ][TokenSymbol.XDAI];
+        ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol];
 
     return hasEnoughForInitialDeployment;
   }, [
