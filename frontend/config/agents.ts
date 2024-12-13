@@ -52,4 +52,4 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
   },
-};
+} as const;
