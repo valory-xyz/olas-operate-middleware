@@ -2,7 +2,7 @@ import {
   Deployment,
   MiddlewareChain,
   MiddlewareServiceResponse,
-  ServiceHash,
+  ServiceConfigId,
   ServiceTemplate,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
@@ -188,7 +188,7 @@ export const withdrawBalance = async ({
   serviceConfigId,
 }: {
   withdrawAddress: Address;
-  serviceConfigId: ServiceHash;
+  serviceConfigId: ServiceConfigId;
 }): Promise<{ error: string | null }> =>
   new Promise((resolve, reject) =>
     fetch(`${BACKEND_URL_V2}/services/${serviceConfigId}/onchain/withdraw`, {
