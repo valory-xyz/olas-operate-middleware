@@ -141,12 +141,12 @@ export const GasBalanceSection = () => {
       padding="16px 24px"
     >
       <Text type="secondary">
-        Trading balance&nbsp;
+        Operating balance&nbsp;
         {masterSafe && (
           <Tooltip
             title={
               <TooltipContent>
-                Your agent uses this balance to fund trading activity on-chain.
+                Your agent uses this balance to fund on-chain activity.
                 <br />
                 {activityLink}
               </TooltipContent>
