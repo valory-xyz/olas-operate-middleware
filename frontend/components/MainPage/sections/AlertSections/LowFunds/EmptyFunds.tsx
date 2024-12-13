@@ -2,7 +2,8 @@ import { Divider, Flex, Typography } from 'antd';
 
 import { CustomAlert } from '@/components/Alert';
 import { COLOR } from '@/constants/colors';
-import { LOW_AGENT_SAFE_BALANCE } from '@/constants/thresholds';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
+import { useServices } from '@/hooks/useServices';
 
 import { FundsToActivate } from './FundsToActivate';
 import { InlineBanner } from './InlineBanner';
@@ -16,6 +17,7 @@ const PurpleDivider = () => (
 
 export const EmptyFunds = () => {
   const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
+  const { selectedAgentConfig } = useServices();
 
   return (
     <CustomAlert
@@ -29,7 +31,11 @@ export const EmptyFunds = () => {
 
           <Text>
             To keep your agent operational, add
-            <Text strong>{` ${LOW_AGENT_SAFE_BALANCE} ${tokenSymbol} `}</Text>
+            <Text strong>{` ${
+              selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+                WalletType.EOA
+              ][tokenSymbol]
+            } ${tokenSymbol} `}</Text>
             on {chainName} chain to the safe signer.
           </Text>
 
