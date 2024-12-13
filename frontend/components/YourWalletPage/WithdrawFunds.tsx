@@ -60,7 +60,6 @@ export const WithdrawFunds = () => {
   const { service, isServiceRunning } = useService(
     selectedService?.service_config_id,
   );
-  const serviceHash = service?.hash;
 
   const { isServiceStakedForMinimumDuration, selectedStakingContractDetails } =
     useActiveStakingContractDetails();
@@ -94,7 +93,7 @@ export const WithdrawFunds = () => {
 
   const handleProceed = useCallback(async () => {
     if (!withdrawAddress) return;
-    if (!serviceHash) return;
+    if (!selectedService?.service_config_id) return;
 
     const isValidAddress = isAddress(withdrawAddress);
     if (!isValidAddress) {
@@ -108,7 +107,7 @@ export const WithdrawFunds = () => {
     try {
       const response = await ServicesService.withdrawBalance({
         withdrawAddress: withdrawAddress as Address,
-        serviceHash,
+        serviceConfigId: selectedService.service_config_id,
       });
 
       if (response.error) {
@@ -128,7 +127,12 @@ export const WithdrawFunds = () => {
     } finally {
       setIsWithdrawalLoading(false);
     }
-  }, [withdrawAddress, serviceHash, handleCancel, refetchDetails]);
+  }, [
+    withdrawAddress,
+    selectedService?.service_config_id,
+    refetchDetails,
+    handleCancel,
+  ]);
 
   const withdrawButton = useMemo(
     () => (

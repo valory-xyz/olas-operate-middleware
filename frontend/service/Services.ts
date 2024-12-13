@@ -185,13 +185,13 @@ const getDeployment = async (serviceConfigId: string): Promise<Deployment> =>
  */
 export const withdrawBalance = async ({
   withdrawAddress,
-  serviceHash,
+  serviceConfigId,
 }: {
   withdrawAddress: Address;
-  serviceHash: ServiceHash;
+  serviceConfigId: ServiceHash;
 }): Promise<{ error: string | null }> =>
   new Promise((resolve, reject) =>
-    fetch(`${BACKEND_URL_V2}/services/${serviceHash}/onchain/withdraw`, {
+    fetch(`${BACKEND_URL_V2}/services/${serviceConfigId}/onchain/withdraw`, {
       method: 'POST',
       body: JSON.stringify({ withdrawal_address: withdrawAddress }),
       headers: { ...CONTENT_TYPE_JSON_UTF8 },
