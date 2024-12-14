@@ -1511,6 +1511,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
         ledger_config = chain_config.ledger_config
+        fund_requirements = chain_config.chain_data.user_params.fund_requirements
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1519,10 +1520,10 @@ class ServiceManager:
                         self.fund_service,
                         service_config_id,  # Service id
                         PUBLIC_RPCS[ledger_config.chain],  # RPC
-                        100000000000000000,  # agent_topup
-                        2000000000000000000,  # safe_topup
-                        50000000000000000,  # agent_fund_threshold
-                        500000000000000000,  # safe_fund_treshold
+                        fund_requirements.agent,  # agent_topup
+                        fund_requirements.safe,  # safe_topup
+                        int(fund_requirements.agent / 2),  # agent_fund_threshold
+                        int(fund_requirements.safe / 2),  # safe_fund_treshold
                         from_safe,
                     )
                 except Exception:  # pylint: disable=broad-except
