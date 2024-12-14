@@ -941,15 +941,16 @@ class Service(LocalResource):
         self.service_path = service_path
         self.name = service_template["name"]
         self.hash = service_template["hash"]
-        self.description = service_template["description"]
-        self.env_variables = service_template["env_variables"]
+
+        # TODO temporarily disable update on description and env variables - hotfix for Memeooorr
+        # self.description = service_template["description"]
+        # self.env_variables = service_template["env_variables"]
 
         # Only update hash_history if latest inserted hash is different
         if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:
             current_timestamp = int(time.time())
             self.hash_history[current_timestamp] = service_template["hash"]
 
-        self.description = service_template["description"]
         self.home_chain = service_template["home_chain"]
 
         ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
