@@ -118,7 +118,7 @@ export const AgentNotRunningButton = () => {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
-    if (isEligibleForStaking && isAgentEvicted) return true;
+    if (isEligibleForStaking && !isAgentEvicted) return true;
 
     if (isServiceStaked) {
       const hasEnoughOlas =
@@ -148,12 +148,11 @@ export const AgentNotRunningButton = () => {
     isServiceStaked,
     masterSafeBalances,
     service,
-    storeState?.isInitialFunded,
+    storeState,
     isEligibleForStaking,
     isAgentEvicted,
     masterSafeNativeGasBalance,
-    selectedAgentConfig.operatingThresholds,
-    selectedAgentConfig.evmHomeChainId,
+    selectedAgentConfig,
     serviceTotalStakedOlas,
     serviceSafeOlasWithStaked,
   ]);
