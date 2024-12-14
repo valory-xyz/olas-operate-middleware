@@ -101,6 +101,57 @@ SERVICE_CONFIG_PREFIX = "sc-"
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
 
+DEFAULT_TRADER_ENV_VARS = {
+    "GNOSIS_LEDGER_RPC": {
+        "name": "Gnosis ledger RPC",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    },
+    "STAKING_CONTRACT_ADDRESS": {
+        "name": "Staking contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    },
+    "MECH_ACTIVITY_CHECKER_CONTRACT": {
+        "name": "Mech activity checker contract",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    },
+    "MECH_CONTRACT_ADDRESS": {
+        "name": "Mech contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    },
+    "MECH_REQUEST_PRICE": {
+        "name": "Mech request price",
+        "description": "",
+        "value": "10000000000000000",
+        "provision_type": "computed"
+    },
+    "USE_MECH_MARKETPLACE": {
+        "name": "Use Mech marketplace",
+        "description": "",
+        "value": "False",
+        "provision_type": "computed"
+    },
+    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
+        "name": "Requester staking instance address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    },
+    "PRIORITY_MECH_ADDRESS": {
+        "name": "Priority Mech address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed"
+    }
+}
+
 
 def mkdirs(build_dir: Path) -> None:
     """Build necessary directories."""
@@ -658,6 +709,13 @@ class Service(LocalResource):
                 f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
             )
 
+        # Corner-case during testing: force include env_vars for empty env_vars during testing.
+        if data["name"] == "valory/trader_pearl":
+            if "env_variables" not in data or not data["env_variables"]:
+                data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+                with open(path / Service._file, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=2)
+
         if version == SERVICE_CONFIG_VERSION:
             return False
 
@@ -761,56 +819,7 @@ class Service(LocalResource):
 
         if "env_variables" not in data:
             if data["name"] == "valory/trader_pearl":
-                data["env_variables"] = {
-                    "GNOSIS_LEDGER_RPC": {
-                        "name": "Gnosis ledger RPC",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    },
-                    "STAKING_CONTRACT_ADDRESS": {
-                        "name": "Staking contract address",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    },
-                    "MECH_ACTIVITY_CHECKER_CONTRACT": {
-                        "name": "Mech activity checker contract",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    },
-                    "MECH_CONTRACT_ADDRESS": {
-                        "name": "Mech contract address",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    },
-                    "MECH_REQUEST_PRICE": {
-                        "name": "Mech request price",
-                        "description": "",
-                        "value": "10000000000000000",
-                        "provision_type": "computed"
-                    },
-                    "USE_MECH_MARKETPLACE": {
-                        "name": "Use Mech marketplace",
-                        "description": "",
-                        "value": "False",
-                        "provision_type": "computed"
-                    },
-                    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
-                        "name": "Requester staking instance address",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    },
-                    "PRIORITY_MECH_ADDRESS": {
-                        "name": "Priority Mech address",
-                        "description": "",
-                        "value": "",
-                        "provision_type": "computed"
-                    }
-                }
+                data["env_variables"] = DEFAULT_TRADER_ENV_VARS
             else:
                 data["env_variables"] = {}
 
