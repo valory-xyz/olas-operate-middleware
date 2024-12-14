@@ -760,7 +760,59 @@ class Service(LocalResource):
         del data["home_chain_id"]
 
         if "env_variables" not in data:
-            data["env_variables"] = {}
+            if data["name"] == "valory/trader_pearl":
+                data["env_variables"] = {
+                    "GNOSIS_LEDGER_RPC": {
+                        "name": "Gnosis ledger RPC",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    },
+                    "STAKING_CONTRACT_ADDRESS": {
+                        "name": "Staking contract address",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    },
+                    "MECH_ACTIVITY_CHECKER_CONTRACT": {
+                        "name": "Mech activity checker contract",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    },
+                    "MECH_CONTRACT_ADDRESS": {
+                        "name": "Mech contract address",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    },
+                    "MECH_REQUEST_PRICE": {
+                        "name": "Mech request price",
+                        "description": "",
+                        "value": "10000000000000000",
+                        "provision_type": "computed"
+                    },
+                    "USE_MECH_MARKETPLACE": {
+                        "name": "Use Mech marketplace",
+                        "description": "",
+                        "value": "False",
+                        "provision_type": "computed"
+                    },
+                    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
+                        "name": "Requester staking instance address",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    },
+                    "PRIORITY_MECH_ADDRESS": {
+                        "name": "Priority Mech address",
+                        "description": "",
+                        "value": "",
+                        "provision_type": "computed"
+                    }
+                }
+            else:
+                data["env_variables"] = {}
 
         data["version"] = SERVICE_CONFIG_VERSION
 
