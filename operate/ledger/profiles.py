@@ -123,3 +123,7 @@ DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, int] = {
     Chain.ETHEREUM: 1e15 / 4,
     Chain.MODE: 1e15 / 4,
 }
+
+WXDAI = {
+    Chain.GNOSIS: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
+}

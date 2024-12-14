@@ -2,7 +2,6 @@ import { CopyOutlined } from '@ant-design/icons';
 import { Button, Flex, message, Popover, Tooltip, Typography } from 'antd';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
-import styled from 'styled-components';
 
 import { CustomAlert } from '@/components/Alert';
 import { CHAIN_CONFIG } from '@/config/chains';
@@ -18,45 +17,30 @@ import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
 
-const CustomizedCardSection = styled(CardSection)<{ border?: boolean }>`
-  > .ant-btn {
-    width: 50%;
-  }
-`;
-
 export const AddFundsSection = () => {
   const fundSectionRef = useRef<HTMLDivElement>(null);
   const [isAddFundsVisible, setIsAddFundsVisible] = useState(false);
 
   const addFunds = useCallback(async () => {
     setIsAddFundsVisible(true);
+
     await delayInSeconds(0.1);
     fundSectionRef?.current?.scrollIntoView({ behavior: 'smooth' });
   }, []);
-
   const closeAddFunds = useCallback(() => setIsAddFundsVisible(false), []);
 
   return (
     <>
-      <CustomizedCardSection gap={12} padding="24px">
+      <CardSection gap={12} padding="24px">
         <Button
           type="default"
           size="large"
+          block
           onClick={isAddFundsVisible ? closeAddFunds : addFunds}
         >
           {isAddFundsVisible ? 'Close instructions' : 'Add funds'}
         </Button>
-
-        <Popover
-          placement="topRight"
-          trigger={['hover', 'click']}
-          content={<Text>Ability to withdraw is coming soon</Text>}
-        >
-          <Button type="default" size="large" disabled>
-            Withdraw
-          </Button>
-        </Popover>
-      </CustomizedCardSection>
+      </CardSection>
 
       {isAddFundsVisible && <OpenAddFundsSection ref={fundSectionRef} />}
     </>
