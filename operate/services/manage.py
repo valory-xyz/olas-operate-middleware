@@ -580,9 +580,9 @@ class ServiceManager:
         ):
             # TODO: This is possibly not a good idea: we are setting up a computed variable based on
             # the value passed in the template.
-            db_path = service.path / service.env_variables["DB_PATH"]["value"]
+            db_path = service.path / "persistent_data/memeooorr.db"
             cookies_path = (
-                service.path / service.env_variables["TWIKIT_COOKIES_PATH"]["value"]
+                service.path / "persistent_data/twikit_cookies.json"
             )
 
             env_var_to_value.update(
