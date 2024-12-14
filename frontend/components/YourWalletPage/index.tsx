@@ -205,7 +205,7 @@ const MasterEoaSignerNativeBalance = () => {
 
 export const YourWalletPage = () => {
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
-  const { services } = useServices();
+  const { selectedService } = useServices();
   const { goto } = usePageState();
 
   return (
@@ -227,13 +227,7 @@ export const YourWalletPage = () => {
             <OlasBalance />
             <MasterSafeNativeBalance />
             <MasterEoaSignerNativeBalance />
-            {services?.map(({ service_config_id }) => (
-              // TODO: bit dirty, but should be fine for now
-              <YourAgentWallet
-                key={service_config_id}
-                serviceConfigId={service_config_id}
-              />
-            ))}
+            {selectedService && <YourAgentWallet />}
           </Container>
         ) : (
           <FeatureNotEnabled />

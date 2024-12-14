@@ -1,5 +1,5 @@
 import { CopyOutlined } from '@ant-design/icons';
-import { Button, Flex, message, Popover, Tooltip, Typography } from 'antd';
+import { Button, Flex, message, Tooltip, Typography } from 'antd';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 
