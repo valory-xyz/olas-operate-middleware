@@ -66,7 +66,7 @@ export const FundsToActivate = ({
         {otherFundsRequired && (
           <div>
             {UNICODE_SYMBOLS.BULLET} <Text strong>{nativeTokenRequired}</Text> -
-            {` ${FUNDS_REQUIRED_FOR_BY_AGENT_TYPE[selectedAgentType]}`}
+            {` ${FUNDS_REQUIRED_FOR_BY_AGENT_TYPE[selectedAgentType]}.`}
           </div>
         )}
       </Flex>
