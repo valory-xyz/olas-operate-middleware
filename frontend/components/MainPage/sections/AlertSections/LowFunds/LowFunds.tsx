@@ -7,7 +7,6 @@ import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { useStore } from '@/hooks/useStore';
 
 import { EmptyFunds } from './EmptyFunds';
 import { LowOperatingBalanceAlert } from './LowOperatingBalanceAlert';
@@ -15,12 +14,13 @@ import { LowSafeSignerBalanceAlert } from './LowSafeSignerBalanceAlert';
 import { MainNeedsFunds } from './MainNeedsFunds';
 
 export const LowFunds = () => {
-  const { storeState } = useStore();
-
-  const { selectedAgentConfig, selectedAgentType } = useServices();
+  const { selectedAgentConfig } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
-  const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
-    useMasterBalances();
+  const {
+    isLoaded: isBalanceLoaded,
+    masterEoaNativeGasBalance,
+    masterSafeNativeGasBalance,
+  } = useMasterBalances();
 
   const { nativeBalancesByChain, olasBalancesByChain, isInitialFunded } =
     useNeedsFunds(selectedStakingProgramId);
@@ -31,7 +31,18 @@ export const LowFunds = () => {
   const isSafeSignerBalanceLow = useMemo(() => {
     if (!isBalanceLoaded) return false;
     if (!masterEoaNativeGasBalance) return false;
-    if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return false;
+    if (!masterSafeNativeGasBalance) return false;
+    if (!isInitialFunded) return false;
+
+    // Funds are transferred from master EOA to master Safe, no need to display
+    // low safe signer balance alert if EOA has funds
+    if (
+      masterSafeNativeGasBalance >=
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.Safe
+      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+    )
+      return false;
 
     return (
       masterEoaNativeGasBalance <
@@ -41,11 +52,11 @@ export const LowFunds = () => {
     );
   }, [
     isBalanceLoaded,
+    isInitialFunded,
     masterEoaNativeGasBalance,
+    masterSafeNativeGasBalance,
     selectedAgentConfig.evmHomeChainId,
     selectedAgentConfig.operatingThresholds,
-    selectedAgentType,
-    storeState,
   ]);
 
   // Show the empty funds alert if the agent is not funded
