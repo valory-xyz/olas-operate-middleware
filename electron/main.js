@@ -105,7 +105,7 @@ function sleep(ms) {
 }
 
 function setAppAutostart(is_set) {
-  logger.electron("Set app autostart: " + is_set);
+  logger.electron('Set app autostart: ' + is_set);
   app.setLoginItemSettings({ openAtLogin: is_set });
 }
 
@@ -115,7 +115,7 @@ function handleAppSettings() {
   try {
     if (!fs.existsSync(app_settings_file)) {
       logger.electron('Create app settings file');
-      let obj = { "app_auto_start": true };
+      let obj = { app_auto_start: true };
       fs.writeFileSync(app_settings_file, JSON.stringify(obj));
     }
     let data = JSON.parse(fs.readFileSync(app_settings_file));
@@ -126,46 +126,44 @@ function handleAppSettings() {
   }
 }
 
-
 let isBeforeQuitting = false;
 let appRealClose = false;
 
 async function beforeQuit(event) {
-  if ((typeof event.preventDefault === 'function') && !appRealClose) {
+  if (typeof event.preventDefault === 'function' && !appRealClose) {
     event.preventDefault();
     logger.electron('onquit event.preventDefault');
   }
 
-
   if (isBeforeQuitting) return;
   isBeforeQuitting = true;
-
 
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
 
-
-  logger.electron("Stop backend gracefully:");
+  logger.electron('Stop backend gracefully:');
   try {
-    logger.electron(`Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
     logger.electron(
-      'Killed backend server by shutdown endpoint!'
+      `Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`,
     );
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron('Killed backend server by shutdown endpoint!');
     logger.electron(
-      'Killed backend server by shutdown endpoint! result:' + JSON.stringify(result)
+      'Killed backend server by shutdown endpoint! result:' +
+        JSON.stringify(result),
     );
   } catch (err) {
     logger.electron('Backend stopped with error!');
-    logger.electron('Backend stopped with error, result: ' + JSON.stringify(err));
+    logger.electron(
+      'Backend stopped with error, result: ' + JSON.stringify(err),
+    );
   }
 
-
-
   if (operateDaemon || operateDaemonPid) {
-
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
@@ -214,7 +212,7 @@ async function beforeQuit(event) {
     // electron will kill next service on exit
   }
   appRealClose = true;
-  app.quit()
+  app.quit();
 }
 
 const APP_WIDTH = 460;
@@ -372,14 +370,18 @@ async function launchDaemon() {
     logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
   }
 
-
   try {
     logger.electron('Killing backend server by shutdown endpoint!');
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    logger.electron('Backend stopped with result: ' + JSON.stringify(result, null, 2));
-
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron(
+      'Backend stopped with result: ' + JSON.stringify(result, null, 2),
+    );
   } catch (err) {
-    logger.electron('Backend stopped with error: ' + JSON.stringify(err, null, 2));
+    logger.electron(
+      'Backend stopped with error: ' + JSON.stringify(err, null, 2),
+    );
   }
 
   const check = new Promise(function (resolve, _reject) {
@@ -724,11 +726,28 @@ ipcMain.handle('save-logs', async (_, data) => {
     });
 
   // Other debug data: balances, addresses, etc.
-  if (data.debugData)
+  if (data.debugData) {
+    const clonedDebugData = JSON.parse(JSON.stringify(data.debugData)); // TODO: deep clone with better method
+    const servicesData = clonedDebugData.services;
+    if (servicesData && Array.isArray(servicesData.services)) {
+      Object.entries(servicesData.services).forEach(([_, eachService]) => {
+        if (eachService && eachService.env_variables) {
+          Object.entries(eachService.env_variables).forEach(([_, envVar]) => {
+            if (envVar.provision_type === 'user') {
+              envVar.value = '*****';
+            }
+          });
+        }
+      });
+    }
+
+    clonedDebugData.services = servicesData;
+
     sanitizeLogs({
       name: 'debug_data.txt',
-      data: JSON.stringify(data.debugData, null, 2),
+      data: JSON.stringify(clonedDebugData, null, 2),
     });
+  }
 
   // Agent logs
   try {
