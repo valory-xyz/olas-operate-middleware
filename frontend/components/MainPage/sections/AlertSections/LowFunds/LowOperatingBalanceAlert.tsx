@@ -15,7 +15,7 @@ const { Text, Title } = Typography;
 
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentConfig } = useServices();
+  const { selectedAgentConfig, selectedAgentType } = useServices();
   const { isLoaded: isBalanceLoaded, masterSafeNativeGasBalance } =
     useMasterBalances();
 
@@ -36,7 +36,7 @@ export const LowOperatingBalanceAlert = () => {
   ]);
 
   if (!isBalanceLoaded) return null;
-  if (!storeState?.isInitialFunded) return;
+  if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return;
   if (!isLowBalance) return null;
 
   return (

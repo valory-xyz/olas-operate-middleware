@@ -114,7 +114,11 @@ export const AgentNotRunningButton = () => {
         walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
     )?.balance;
 
-    if (service && storeState?.isInitialFunded && isServiceStaked) {
+    if (
+      service &&
+      storeState?.[`isInitialFunded_${selectedAgentType}`] &&
+      isServiceStaked
+    ) {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 

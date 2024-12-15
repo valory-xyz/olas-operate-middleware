@@ -27,7 +27,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
 
-  const isInitialFunded = storeState?.isInitialFunded;
+  const isInitialFunded = storeState?.[`isInitialFunded_${selectedAgentType}`];
 
   const serviceFundRequirements = useMemo<{
     [chainId: number]: {

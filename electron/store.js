@@ -1,7 +1,7 @@
 const Store = require('electron-store');
+
 // set schema to validate store data
 const schema = {
-  isInitialFunded: { type: 'boolean', default: false }, // TODO: reconsider this default, can be problematic if user has already funded prior to implementation
   firstStakingRewardAchieved: { type: 'boolean', default: false },
   firstRewardNotificationShown: { type: 'boolean', default: false },
   agentEvictionAlertShown: { type: 'boolean', default: false },
@@ -11,6 +11,8 @@ const schema = {
 
   // agent settings
   lastSelectedAgentType: { type: 'string', default: 'trader' },
+  isInitialFunded_trader: { type: 'boolean', default: false },
+  isInitialFunded_memeooorr: { type: 'boolean', default: false },
 };
 
 /**
@@ -21,6 +23,17 @@ const schema = {
  */
 const setupStoreIpc = (ipcMain, mainWindow) => {
   const store = new Store({ schema });
+
+  /**
+   * isInitialFunded Migration
+   *
+   * Writes the old isInitialFunded value to the new isInitialFunded_trader
+   * And removes it from the store afterward
+   */
+  if (store.has('isInitialFunded')) {
+    store.set('isInitialFunded_trader', store.get('isInitialFunded'));
+    store.delete('isInitialFunded');
+  }
 
   store.onDidAnyChange((data) => {
     if (mainWindow?.webContents)

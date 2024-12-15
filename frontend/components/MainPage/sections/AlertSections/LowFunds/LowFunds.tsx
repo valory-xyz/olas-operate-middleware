@@ -17,7 +17,7 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 export const LowFunds = () => {
   const { storeState } = useStore();
 
-  const { selectedAgentConfig } = useServices();
+  const { selectedAgentConfig, selectedAgentType } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
   const { isLoaded: isBalanceLoaded, masterEoaNativeGasBalance } =
     useMasterBalances();
@@ -31,7 +31,7 @@ export const LowFunds = () => {
   const isSafeSignerBalanceLow = useMemo(() => {
     if (!isBalanceLoaded) return false;
     if (!masterEoaNativeGasBalance) return false;
-    if (!storeState?.isInitialFunded) return false;
+    if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return false;
 
     return (
       masterEoaNativeGasBalance <
@@ -44,7 +44,8 @@ export const LowFunds = () => {
     masterEoaNativeGasBalance,
     selectedAgentConfig.evmHomeChainId,
     selectedAgentConfig.operatingThresholds,
-    storeState?.isInitialFunded,
+    selectedAgentType,
+    storeState,
   ]);
 
   // Show the empty funds alert if the agent is not funded

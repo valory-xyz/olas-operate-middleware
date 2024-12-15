@@ -19,7 +19,7 @@ export const BASE_STAKING_PROGRAMS_CONTRACT_ADDRESSES: Record<string, Address> =
 export const BASE_STAKING_PROGRAMS: StakingProgramMap = {
   [StakingProgramId.MemeBaseAlpha2]: {
     chainId: EvmChainId.Base,
-    name: 'MemeBase Alpha',
+    name: 'MemeBase Alpha II',
     agentsSupported: [AgentType.Memeooorr],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
