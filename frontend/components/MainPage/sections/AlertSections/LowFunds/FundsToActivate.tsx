@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { AgentType } from '@/enums/Agent';
 import { TokenSymbol } from '@/enums/Token';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
@@ -15,18 +16,23 @@ const { Text } = Typography;
 
 type FundsToActivateProps = {
   stakingFundsRequired: boolean;
-  tradingFundsRequired: boolean;
+  otherFundsRequired: boolean;
+};
+
+const FUNDS_REQUIRED_FOR_BY_AGENT_TYPE = {
+  [AgentType.PredictTrader]: 'for trading',
+  [AgentType.Memeooorr]: 'for agent operations',
 };
 
 export const FundsToActivate = ({
   stakingFundsRequired = true,
-  tradingFundsRequired = true,
+  otherFundsRequired = true,
 }: FundsToActivateProps) => {
   const { selectedStakingProgramId } = useStakingProgram();
 
   const { serviceFundRequirements } = useNeedsFunds(selectedStakingProgramId);
 
-  const { selectedAgentConfig } = useServices();
+  const { selectedAgentConfig, selectedAgentType } = useServices();
   const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
   const { chainName, masterSafeAddress } = useLowFundsDetails();
@@ -57,10 +63,10 @@ export const FundsToActivate = ({
             staking.
           </div>
         )}
-        {tradingFundsRequired && (
+        {otherFundsRequired && (
           <div>
             {UNICODE_SYMBOLS.BULLET} <Text strong>{nativeTokenRequired}</Text> -
-            for trading.
+            {` ${FUNDS_REQUIRED_FOR_BY_AGENT_TYPE[selectedAgentType]}`}
           </div>
         )}
       </Flex>
