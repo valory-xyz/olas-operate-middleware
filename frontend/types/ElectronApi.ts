@@ -2,7 +2,8 @@ import { AgentType } from '@/enums/Agent';
 
 export type ElectronStore = {
   environmentName?: string;
-  isInitialFunded?: boolean;
+  isInitialFunded_trader?: boolean;
+  isInitialFunded_memeooorr?: boolean;
   firstStakingRewardAchieved?: boolean;
   firstRewardNotificationShown?: boolean;
   agentEvictionAlertShown?: boolean;

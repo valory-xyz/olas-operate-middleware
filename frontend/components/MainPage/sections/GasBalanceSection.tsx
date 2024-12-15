@@ -41,7 +41,7 @@ const FineDot = styled(Dot)`
 
 const BalanceStatus = () => {
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
-  const { isFetched: isServicesLoaded } = useServices();
+  const { isFetched: isServicesLoaded, selectedAgentType } = useServices();
 
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
@@ -55,7 +55,7 @@ const BalanceStatus = () => {
   useEffect(() => {
     if (!isBalanceLoaded || !isServicesLoaded) return;
     if (!showNotification) return;
-    if (!storeState?.isInitialFunded) return;
+    if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return;
 
     if (isMasterSafeLowOnNativeGas && !isLowBalanceNotificationShown) {
       showNotification('Operating balance is too low.');
@@ -73,7 +73,8 @@ const BalanceStatus = () => {
     isLowBalanceNotificationShown,
     isMasterSafeLowOnNativeGas,
     showNotification,
-    storeState?.isInitialFunded,
+    storeState,
+    selectedAgentType,
   ]);
 
   const status = useMemo(() => {

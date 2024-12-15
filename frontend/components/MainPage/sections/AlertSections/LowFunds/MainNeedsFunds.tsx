@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { CustomAlert } from '@/components/Alert';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
+import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { FundsToActivate } from './FundsToActivate';
@@ -11,6 +12,7 @@ import { FundsToActivate } from './FundsToActivate';
 const { Title } = Typography;
 
 export const MainNeedsFunds = () => {
+  const { selectedAgentType } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
 
   const {
@@ -28,10 +30,11 @@ export const MainNeedsFunds = () => {
       hasEnoughOlasForInitialFunding &&
       !isInitialFunded
     ) {
-      electronApi.store?.set?.('isInitialFunded', true);
+      electronApi.store?.set?.(`isInitialFunded_${selectedAgentType}`, true);
     }
   }, [
     electronApi.store,
+    selectedAgentType,
     hasEnoughEthForInitialFunding,
     hasEnoughOlasForInitialFunding,
     isInitialFunded,
