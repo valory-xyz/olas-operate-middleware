@@ -54,7 +54,7 @@ export const MainNeedsFunds = () => {
 
           <FundsToActivate
             stakingFundsRequired={!hasEnoughOlasForInitialFunding}
-            tradingFundsRequired={!hasEnoughEthForInitialFunding}
+            otherFundsRequired={!hasEnoughEthForInitialFunding}
           />
         </Flex>
       }

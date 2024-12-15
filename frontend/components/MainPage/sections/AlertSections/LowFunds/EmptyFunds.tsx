@@ -43,7 +43,7 @@ export const EmptyFunds = () => {
             <InlineBanner text="Your safe address" address={masterEoaAddress} />
           )}
           <PurpleDivider />
-          <FundsToActivate stakingFundsRequired tradingFundsRequired />
+          <FundsToActivate stakingFundsRequired otherFundsRequired />
         </Flex>
       }
       type="primary"

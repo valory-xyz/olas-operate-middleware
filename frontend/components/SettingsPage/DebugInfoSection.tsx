@@ -153,7 +153,8 @@ const DebugItem = ({
 
 export const DebugInfoSection = () => {
   const { masterEoa, masterSafes } = useMasterWalletContext();
-  const { serviceWallets: serviceAddresses } = useServices();
+  const { serviceWallets: serviceAddresses, selectedAgentConfig } =
+    useServices();
   const { walletBalances } = useBalanceContext();
   const { masterEoaBalances, masterSafeBalances } = useMasterBalances();
 
@@ -184,13 +185,15 @@ export const DebugInfoSection = () => {
       });
     }
 
-    if (!isNil(masterSafeBalances)) {
-      masterSafes.forEach((wallet) => {
-        result.push({
-          title: 'Master Safe',
-          ...getBalanceData(masterSafeBalances),
-          address: wallet.address,
-        });
+    const masterSafe = masterSafes.find(
+      (item) => item.evmChainId === selectedAgentConfig.evmHomeChainId,
+    );
+
+    if (!isNil(masterSafeBalances) && !isNil(masterSafe)) {
+      result.push({
+        title: 'Master Safe',
+        ...getBalanceData(masterSafeBalances),
+        address: masterSafe.address,
       });
     }
 
@@ -232,6 +235,7 @@ export const DebugInfoSection = () => {
     masterEoaBalances,
     masterSafeBalances,
     masterSafes,
+    selectedAgentConfig.evmHomeChainId,
     serviceAddresses,
     walletBalances,
   ]);
