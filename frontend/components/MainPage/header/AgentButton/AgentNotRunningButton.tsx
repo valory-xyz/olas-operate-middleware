@@ -122,7 +122,8 @@ export const AgentNotRunningButton = () => {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
-    if (isEligibleForStaking && !isAgentEvicted) return true;
+    // If was evicted, but can restake - unlock the button
+    if (isAgentEvicted && isEligibleForStaking) return true;
 
     if (isServiceStaked) {
       const hasEnoughOlas =
@@ -153,10 +154,12 @@ export const AgentNotRunningButton = () => {
     masterSafeBalances,
     service,
     storeState,
+    selectedAgentType,
     isEligibleForStaking,
     isAgentEvicted,
     masterSafeNativeGasBalance,
-    selectedAgentConfig,
+    selectedAgentConfig.operatingThresholds,
+    selectedAgentConfig.evmHomeChainId,
     serviceTotalStakedOlas,
     serviceSafeOlasWithStaked,
   ]);
