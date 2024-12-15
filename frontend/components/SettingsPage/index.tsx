@@ -83,7 +83,7 @@ export const Settings = () => {
 };
 
 const SettingsMain = () => {
-  const { selectedService } = useServices();
+  const { selectedAgentConfig } = useServices();
   const { masterEoa, masterSafes } = useMasterWalletContext();
 
   const { owners, ownersIsFetched } = useMultisig(
@@ -112,15 +112,18 @@ const SettingsMain = () => {
   const walletBackup = useMemo(() => {
     if (!ownersIsFetched) return <Skeleton.Input />;
     if (!masterSafeBackupAddress) return <NoBackupWallet />;
-    if (!selectedService?.home_chain) return null;
 
     return (
       <AddressLink
         address={masterSafeBackupAddress}
-        middlewareChain={selectedService.home_chain}
+        middlewareChain={selectedAgentConfig.middlewareHomeChainId}
       />
     );
-  }, [masterSafeBackupAddress, ownersIsFetched, selectedService?.home_chain]);
+  }, [
+    masterSafeBackupAddress,
+    ownersIsFetched,
+    selectedAgentConfig.middlewareHomeChainId,
+  ]);
 
   return (
     <Card
