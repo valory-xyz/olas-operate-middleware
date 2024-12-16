@@ -36,25 +36,26 @@ export const validateTwitterCredentials = async (
     email: string;
     username: string;
     password: string;
-  }) => Promise<{ success: boolean }>,
-) => {
-  if (!email || !username || !password) return false;
+  }) => Promise<{ success: boolean; cookies?: string }>,
+): Promise<{ isValid: boolean; cookies?: string }> => {
+  if (!email || !username || !password) return { isValid: false };
 
   try {
-    const isValidated = await validateTwitterLogin({
+    const result = await validateTwitterLogin({
       username,
       password,
       email,
     });
-    if (isValidated.success) {
-      return true;
+
+    if (result.success) {
+      return { isValid: true, cookies: JSON.stringify(result.cookies) };
     }
 
-    console.error('Error validating Twitter credentials:', isValidated);
-    return false;
+    console.error('Error validating Twitter credentials:', result);
+    return { isValid: false };
   } catch (error) {
     console.error('Unexpected error validating Twitter credentials:', error);
-    return false;
+    return { isValid: false };
   }
 };
 

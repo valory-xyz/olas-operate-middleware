@@ -40,7 +40,7 @@ type ElectronApiContextProps = {
     username: string;
     password: string;
     email: string;
-  }) => Promise<{ success: boolean }>;
+  }) => Promise<{ success: boolean; cookies?: string }>;
 };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({
