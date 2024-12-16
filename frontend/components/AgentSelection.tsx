@@ -63,12 +63,6 @@ const EachAgent = memo(
           masterSafe.evmChainId === AGENT_CONFIG[agentType].evmHomeChainId,
       );
 
-      console.log({
-        agentType,
-        isSafeCreated,
-        masterSafes,
-      });
-
       // If safe is created for the agent type, then go to main page
       if (isSafeCreated) {
         gotoPage(Pages.Main);
@@ -82,8 +76,8 @@ const EachAgent = memo(
         ({ name }) => name === serviceName,
       );
 
-      // If service is created but safe is NOT created, then go to create safe page
-      // Eg. This case will happen when the user has created the service and closed the app on funding page
+      // If service is created but safe is NOT, then go to create safe page.
+      // Eg. This case will happen when the user has created the service and closed the app on/during funding page.
       if (isServiceCreated) {
         gotoPage(Pages.Setup);
         gotoSetup(SetupScreen.SetupCreateSafe);
