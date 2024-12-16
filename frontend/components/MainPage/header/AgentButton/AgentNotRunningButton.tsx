@@ -1,4 +1,4 @@
-import { Button, ButtonProps } from 'antd';
+import { Button, ButtonProps, message } from 'antd';
 import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
@@ -7,14 +7,22 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
+import {
+  MasterEoa,
+  MasterSafe,
+  WalletOwnerType,
+  WalletType,
+} from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { MultisigOwners, useMultisigs } from '@/hooks/useMultisig';
+import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
@@ -26,6 +34,7 @@ import { useStore } from '@/hooks/useStore';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
+import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
 
 /** Button used to start / deploy the agent */
@@ -33,7 +42,9 @@ export const AgentNotRunningButton = () => {
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
-  const { masterWallets, masterSafes } = useMasterWalletContext();
+  const { goto: gotoPage } = usePageState();
+
+  const { masterWallets, masterSafes, masterEoa } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
@@ -83,6 +94,8 @@ export const AgentNotRunningButton = () => {
     useActiveStakingContractDetails();
 
   const { hasEnoughServiceSlots } = useActiveStakingContractDetails();
+
+  const { masterSafesOwners } = useMultisigs(masterSafes);
 
   const requiredStakedOlas =
     selectedStakingProgramId &&
@@ -183,22 +196,6 @@ export const AgentNotRunningButton = () => {
     setIsBalancePollingPaused,
     setIsStakingContractInfoPollingPaused,
   ]);
-
-  const createSafeIfNeeded = useCallback(async () => {
-    if (
-      !masterSafes?.find(
-        (masterSafe) =>
-          masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
-      )
-    ) {
-      await WalletService.createSafe(selectedAgentConfig.middlewareHomeChainId);
-    }
-  }, [
-    masterSafes,
-    selectedAgentConfig.evmHomeChainId,
-    selectedAgentConfig.middlewareHomeChainId,
-  ]);
-
   /**
    * @note only create a service if `service` does not exist
    */
@@ -287,7 +284,13 @@ export const AgentNotRunningButton = () => {
     overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
     try {
-      await createSafeIfNeeded();
+      await createSafeIfNeeded({
+        masterSafes,
+        masterSafesOwners,
+        masterEoa,
+        selectedAgentConfig,
+        gotoSettings: () => gotoPage(Pages.Settings),
+      });
       await deployAndStartService();
     } catch (error) {
       console.error('Error while starting the agent:', error);
@@ -312,10 +315,14 @@ export const AgentNotRunningButton = () => {
   }, [
     masterWallets,
     pauseAllPolling,
-    resumeAllPolling,
     overrideSelectedServiceStatus,
-    createSafeIfNeeded,
+    resumeAllPolling,
+    masterSafes,
+    masterSafesOwners,
+    masterEoa,
+    selectedAgentConfig,
     deployAndStartService,
+    gotoPage,
     showNotification,
     updateStatesSequentially,
   ]);
@@ -330,4 +337,63 @@ export const AgentNotRunningButton = () => {
   const buttonText = `Start agent ${service ? '' : '& stake'}`;
 
   return <Button {...buttonProps}>{buttonText}</Button>;
+};
+
+export const createSafeIfNeeded = async ({
+  masterSafes,
+  masterSafesOwners,
+  masterEoa,
+  selectedAgentConfig,
+  gotoSettings,
+}: {
+  selectedAgentConfig: AgentConfig;
+  gotoSettings: () => void;
+  masterEoa?: MasterEoa;
+  masterSafes?: MasterSafe[];
+  masterSafesOwners?: MultisigOwners[];
+}) => {
+  const selectedChainHasMasterSafe = masterSafes?.some(
+    (masterSafe) =>
+      masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
+  );
+
+  if (selectedChainHasMasterSafe) return;
+
+  // 1. get safe owners on other chains
+  const otherChainOwners = new Set(
+    masterSafesOwners
+      ?.filter(
+        (masterSafe) =>
+          masterSafe.evmChainId !== selectedAgentConfig.evmHomeChainId,
+      )
+      .map((masterSafe) => masterSafe.owners)
+      .flat(),
+  );
+
+  // 2. remove master eoa from the set, to find backup signers
+  if (masterEoa) otherChainOwners.delete(masterEoa?.address);
+
+  // 3. if there are no signers, the user needs to add a backup signer
+
+  if (otherChainOwners.size <= 0) {
+    message.error(
+      'A backup signer is required to create a new safe on the home chain. Please add a backup signer.',
+    );
+    gotoSettings();
+    throw new Error('No backup signers found');
+  }
+
+  if (otherChainOwners.size !== 1) {
+    message.error(
+      'The same backup signer address must be used on all chains. Please remove any extra backup signers.',
+    );
+    gotoSettings();
+    throw new Error('Multiple backup signers found');
+  }
+
+  // 4. otherwise, create a new safe with the same signer
+  await WalletService.createSafe(
+    selectedAgentConfig.middlewareHomeChainId,
+    [...otherChainOwners][0],
+  );
 };

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Contract } from 'ethers';
 import { Contract as MulticallContract, ContractCall } from 'ethers-multicall';
 import { isEmpty, isNil } from 'lodash';
+import { useMemo } from 'react';
 
 import { GNOSIS_SAFE_ABI } from '@/abis/gnosisSafe';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
@@ -50,7 +51,7 @@ export const useMultisig = (safe?: Safe) => {
   return { owners, ownersIsFetched, backupOwners };
 };
 
-type MultisigOwners = {
+export type MultisigOwners = {
   safeAddress: Address;
   evmChainId: EvmChainId;
   owners: Address[];
@@ -60,6 +61,7 @@ type MultisigOwners = {
  * Hook to fetch from an array of multisigs
  */
 export const useMultisigs = (safes?: Safe[]) => {
+  const { masterEoa } = useMasterWalletContext();
   const {
     data: masterSafesOwners,
     isFetched: masterSafesOwnersIsFetched,
@@ -133,7 +135,39 @@ export const useMultisigs = (safes?: Safe[]) => {
     refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
+  const allBackupAddressesByChainId = useMemo(
+    () =>
+      masterSafesOwners?.reduce(
+        (acc, { evmChainId, owners }) => {
+          acc[+evmChainId] = [
+            ...new Set<Address>(
+              owners
+                .filter((owner) => owner !== masterEoa?.address)
+                .map((owner) => owner as Address),
+            ),
+          ];
+          return acc;
+        },
+        {} as { [chainId: number]: Address[] },
+      ),
+    [masterEoa?.address, masterSafesOwners],
+  );
+
+  const allBackupAddresses = useMemo(
+    () => [
+      ...new Set(
+        masterSafesOwners
+          ?.map(({ owners }) => owners)
+          .flat()
+          .filter((owner) => owner !== masterEoa?.address),
+      ),
+    ],
+    [masterEoa?.address, masterSafesOwners],
+  );
+
   return {
+    allBackupAddresses,
+    allBackupAddressesByChainId,
     masterSafesOwners,
     masterSafesOwnersIsFetched,
     masterSafesOwnersIsPending,

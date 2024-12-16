@@ -9,6 +9,7 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import { EvmChainName } from '@/enums/Chain';
 import { Pages } from '@/enums/Pages';
+import { useMultisigs } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
@@ -64,6 +65,9 @@ export const SetupCreateSafe = () => {
     refetch: updateWallets,
     isFetched: isWalletsFetched,
   } = useMasterWalletContext();
+
+  const { allBackupAddresses } = useMultisigs();
+
   const { backupSigner } = useSetup();
 
   const masterSafeAddress = useMemo(() => {
@@ -83,7 +87,10 @@ export const SetupCreateSafe = () => {
       for (let attempt = retries; attempt > 0; attempt--) {
         try {
           // Attempt to create the safe
-          await WalletService.createSafe(middlewareChain, backupSigner);
+          await WalletService.createSafe(
+            middlewareChain,
+            backupSigner ?? allBackupAddresses[0],
+          );
 
           // Update wallets and handle successful creation
           await updateWallets?.();
@@ -106,7 +113,7 @@ export const SetupCreateSafe = () => {
         }
       }
     },
-    [backupSigner, updateWallets],
+    [allBackupAddresses, backupSigner, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {
