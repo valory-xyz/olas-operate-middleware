@@ -221,8 +221,8 @@ export const SetupWelcomeLogin = () => {
       return;
     }
 
-    // if master safe is available
-    if (masterSafe?.address) {
+    // if master safe is NOT created, then go to create safe
+    if (!masterSafe?.address) {
       goto(SetupScreen.SetupCreateSafe);
       return;
     }
