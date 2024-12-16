@@ -25,11 +25,7 @@ const Balance = styled.span`
   margin-right: 4px;
 `;
 
-type MainOlasBalanceProps = { isBorderTopVisible?: boolean };
-
-export const MainOlasBalance = ({
-  isBorderTopVisible = true,
-}: MainOlasBalanceProps) => {
+export const MainOlasBalance = () => {
   const { selectedService } = useServices();
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
@@ -83,7 +79,7 @@ export const MainOlasBalance = ({
     <CardSection
       vertical
       gap={8}
-      bordertop={isBorderTopVisible ? 'true' : 'false'}
+      bordertop="true"
       borderbottom="true"
       padding="16px 24px"
     >
