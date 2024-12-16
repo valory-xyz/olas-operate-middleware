@@ -76,11 +76,11 @@ const EachAgent = memo(
         ({ name }) => name === serviceName,
       );
 
-      // If service is created but safe is NOT, then go to create safe page.
+      // If service is created but safe is NOT, then setup EOA funding
       // Eg. This case will happen when the user has created the service and closed the app on/during funding page.
       if (isServiceCreated) {
         gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupCreateSafe);
+        gotoSetup(SetupScreen.SetupEoaFunding);
         return;
       }
 
