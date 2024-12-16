@@ -5,6 +5,7 @@ import { memo, useCallback } from 'react';
 
 import { AGENT_CONFIG } from '@/config/agents';
 import { COLOR } from '@/constants/colors';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { SetupScreen } from '@/enums/SetupScreen';
@@ -20,6 +21,18 @@ import { CardFlex } from './styled/CardFlex';
 
 const { Title, Text } = Typography;
 
+const getCardStyle = (isCurrentAgent: boolean) => ({
+  padding: 0,
+  marginBottom: 6,
+  body: {
+    padding: '12px 16px',
+    gap: 6,
+    borderRadius: 'inherit',
+    background: isCurrentAgent ? COLOR.GRAY_1 : 'transparent',
+    opacity: isCurrentAgent ? 0.75 : 1,
+  },
+});
+
 type EachAgentProps = {
   showSelected: boolean;
   agentType: AgentType;
@@ -30,7 +43,7 @@ const EachAgent = memo(
   ({ showSelected, agentType, agentConfig }: EachAgentProps) => {
     const { goto: gotoSetup } = useSetup();
     const { goto: gotoPage } = usePageState();
-    const { selectedAgentType, updateAgentType } = useServices();
+    const { services, selectedAgentType, updateAgentType } = useServices();
     const { masterSafes, isLoading } = useMasterWalletContext();
 
     const isCurrentAgent = showSelected
@@ -50,37 +63,59 @@ const EachAgent = memo(
           masterSafe.evmChainId === AGENT_CONFIG[agentType].evmHomeChainId,
       );
 
+      console.log({
+        agentType,
+        isSafeCreated,
+        masterSafes,
+      });
+
       // If safe is created for the agent type, then go to main page
       if (isSafeCreated) {
         gotoPage(Pages.Main);
         return;
       }
 
-      // If safe is NOT created, then go to setup page based on the agent type
+      const serviceName = SERVICE_TEMPLATES.find(
+        (service) => service.agentType === agentType,
+      )?.name;
+      const isServiceCreated = services?.find(
+        ({ name }) => name === serviceName,
+      );
+
+      // If service is created but safe is NOT created, then go to create safe page
+      // Eg. This case will happen when the user has created the service and closed the app on funding page
+      if (isServiceCreated) {
+        gotoPage(Pages.Setup);
+        gotoSetup(SetupScreen.SetupCreateSafe);
+        return;
+      }
+
+      // Neither service nor safe is created
       if (agentType === AgentType.Memeooorr) {
         // if the selected type is Memeooorr - should set up the agent first
         gotoPage(Pages.Setup);
         gotoSetup(SetupScreen.SetupYourAgent);
-      } else if (agentType === AgentType.PredictTrader) {
+        return;
+      }
+
+      if (agentType === AgentType.PredictTrader) {
         gotoPage(Pages.Setup);
         gotoSetup(SetupScreen.SetupEoaFunding);
+        return;
       }
-    }, [agentType, gotoPage, gotoSetup, masterSafes, updateAgentType]);
+
+      throw new Error('Invalid agent type');
+    }, [
+      services,
+      agentType,
+      gotoPage,
+      gotoSetup,
+      masterSafes,
+      updateAgentType,
+    ]);
 
     return (
-      <Card
-        key={agentType}
-        style={{ padding: 0, marginBottom: 6 }}
-        styles={{
-          body: {
-            padding: '12px 16px',
-            gap: 6,
-            borderRadius: 'inherit',
-            background: isCurrentAgent ? COLOR.GRAY_1 : 'transparent',
-            opacity: isCurrentAgent ? 0.75 : 1,
-          },
-        }}
-      >
+      <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
         <Flex vertical>
           <Flex align="center" justify="space-between" className="mb-8">
             <Image
