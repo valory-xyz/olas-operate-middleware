@@ -43,8 +43,14 @@ const EachAgent = memo(
   ({ showSelected, agentType, agentConfig }: EachAgentProps) => {
     const { goto: gotoSetup } = useSetup();
     const { goto: gotoPage } = usePageState();
-    const { services, selectedAgentType, updateAgentType } = useServices();
-    const { masterSafes, isLoading } = useMasterWalletContext();
+    const {
+      isLoading: isServicesLoading,
+      services,
+      selectedAgentType,
+      updateAgentType,
+    } = useServices();
+    const { masterSafes, isLoading: isMasterWalletLoading } =
+      useMasterWalletContext();
 
     const isCurrentAgent = showSelected
       ? selectedAgentType === agentType
@@ -124,7 +130,7 @@ const EachAgent = memo(
               <Button
                 type="primary"
                 onClick={handleSelectAgent}
-                disabled={isLoading}
+                disabled={isServicesLoading || isMasterWalletLoading}
               >
                 Select
               </Button>

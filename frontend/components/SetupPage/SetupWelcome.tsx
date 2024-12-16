@@ -143,7 +143,6 @@ export const SetupWelcomeLogin = () => {
   } = useServices();
   const {
     masterSafes,
-    masterWallets: wallets,
     masterEoa,
     isFetched: isWalletsFetched,
   } = useMasterWalletContext();
@@ -201,8 +200,9 @@ export const SetupWelcomeLogin = () => {
 
   useEffect(() => {
     if (!canNavigate) return;
-    if (!isBalanceLoaded) return;
+    if (!isServicesFetched) return;
     if (!isWalletsFetched) return;
+    if (!isBalanceLoaded) return;
 
     setIsLoggingIn(false);
 
@@ -229,14 +229,14 @@ export const SetupWelcomeLogin = () => {
 
     gotoPage(Pages.Main);
   }, [
-    isBalanceLoaded,
-    isWalletsFetched,
-    isServiceCreatedForAgent,
     canNavigate,
+    isServicesFetched,
+    isWalletsFetched,
+    isBalanceLoaded,
+    isServiceCreatedForAgent,
     eoaBalanceEth,
     masterSafe?.address,
     selectedServiceOrAgentChainId,
-    wallets?.length,
     goto,
     gotoPage,
   ]);
