@@ -15,6 +15,7 @@ import {
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useMultisigs } from '@/hooks/useMultisig';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
@@ -33,7 +34,7 @@ export const AgentNotRunningButton = () => {
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
-  const { masterWallets, masterSafes } = useMasterWalletContext();
+  const { masterWallets, masterSafes, masterEoa } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
@@ -83,6 +84,9 @@ export const AgentNotRunningButton = () => {
     useActiveStakingContractDetails();
 
   const { hasEnoughServiceSlots } = useActiveStakingContractDetails();
+
+  const { masterSafesOwners } = useMultisigs(masterSafes);
+  console.log(masterSafesOwners);
 
   const requiredStakedOlas =
     selectedStakingProgramId &&
@@ -185,18 +189,47 @@ export const AgentNotRunningButton = () => {
   ]);
 
   const createSafeIfNeeded = useCallback(async () => {
-    if (
-      !masterSafes?.find(
-        (masterSafe) =>
-          masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
-      )
-    ) {
-      await WalletService.createSafe(selectedAgentConfig.middlewareHomeChainId);
+    const selectedChainHasMasterSafe = masterSafes?.some(
+      (masterSafe) =>
+        masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
+    );
+
+    if (selectedChainHasMasterSafe) return;
+
+    // 1. check for other safe owners on other chains
+    const otherChainOwners = new Set(
+      masterSafesOwners
+        ?.filter(
+          (masterSafe) =>
+            masterSafe.evmChainId !== selectedAgentConfig.evmHomeChainId,
+        )
+        .map((masterSafe) => masterSafe.owners)
+        .flat(),
+    );
+
+    // 2. remove master eoa from the list
+    if (masterEoa) otherChainOwners.delete(masterEoa?.address);
+
+    // 3. if there's more than one signer, there's a disrepancy, alert user
+    if (otherChainOwners.size > 0) {
+      showNotification?.(
+        'You have safes on other chains. Please make sure you use the same signer on all chains.',
+      );
+      return;
     }
+
+    // 4. otherwise, create a new safe with the same signer
+    await WalletService.createSafe(
+      selectedAgentConfig.middlewareHomeChainId,
+      [...otherChainOwners][0],
+    );
   }, [
+    masterEoa,
     masterSafes,
+    masterSafesOwners,
     selectedAgentConfig.evmHomeChainId,
     selectedAgentConfig.middlewareHomeChainId,
+    showNotification,
   ]);
 
   /**
