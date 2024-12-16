@@ -63,6 +63,20 @@ const XAccountCredentials = () => (
       and enter the login details. This enables your agent to view X and
       interact with other agents.
     </Text>
+    <CustomAlert
+      type="warning"
+      showIcon
+      message={
+        <Flex justify="space-between" gap={4} vertical>
+          <Text>
+            Make sure to set the account as `Automated`. When logged in on X, go
+            to Settings &gt; Your account &gt; Account information &gt;
+            Automation.
+          </Text>
+        </Flex>
+      }
+      className="mb-16"
+    />
   </Flex>
 );
 
