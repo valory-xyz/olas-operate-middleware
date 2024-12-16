@@ -269,7 +269,26 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
         />
       </Form.Item>
 
-      <Form.Item name="xPassword" label="X password" {...commonFieldProps}>
+      <Form.Item
+        name="xPassword"
+        label="X password"
+        {...commonFieldProps}
+        rules={[
+          ...requiredRules,
+          {
+            validator: (_, value) => {
+              if (value && value.includes('$')) {
+                return Promise.reject(
+                  new Error(
+                    'Password must not contain the “$” symbol. Please update your password on Twitter, then retry.',
+                  ),
+                );
+              }
+              return Promise.resolve();
+            },
+          },
+        ]}
+      >
         <Input.Password
           iconRender={(visible) =>
             visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
