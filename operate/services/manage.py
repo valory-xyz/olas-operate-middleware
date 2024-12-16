@@ -575,6 +575,7 @@ class ServiceManager:
                 "TWIKIT_USERNAME",
                 "TWIKIT_EMAIL",
                 "TWIKIT_PASSWORD",
+                "TWIKIT_COOKIES",
                 "TWIKIT_COOKIES_PATH",
             ]
         ):
@@ -591,6 +592,7 @@ class ServiceManager:
                         username=service.env_variables["TWIKIT_USERNAME"]["value"],
                         email=service.env_variables["TWIKIT_EMAIL"]["value"],
                         password=service.env_variables["TWIKIT_PASSWORD"]["value"],
+                        cookies=service.env_variables["TWIKIT_COOKIES"]["value"],
                         cookies_path=cookies_path,
                     ),
                     "TWIKIT_COOKIES_PATH": str(cookies_path),
