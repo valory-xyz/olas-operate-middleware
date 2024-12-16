@@ -1,6 +1,7 @@
 import { ServiceTemplate } from '@/client';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { ServicesService } from '@/service/Services';
+import { XCookie } from '@/types/Cookies';
 
 /**
  * Validate the Google Gemini API key
@@ -21,6 +22,14 @@ export const validateGeminiApiKey = async (apiKey: string) => {
   }
 };
 
+const formatXCookies = (cookiesArray: XCookie[]) => {
+  const cookiesObject: Record<string, string> = {};
+  cookiesArray.forEach((cookie) => {
+    cookiesObject[cookie.key] = cookie.value;
+  });
+  return JSON.stringify(cookiesObject);
+};
+
 /**
  * Validate the Twitter credentials
  */
@@ -36,7 +45,7 @@ export const validateTwitterCredentials = async (
     email: string;
     username: string;
     password: string;
-  }) => Promise<{ success: boolean; cookies?: string }>,
+  }) => Promise<{ success: boolean; cookies?: XCookie[] }>,
 ): Promise<{ isValid: boolean; cookies?: string }> => {
   if (!email || !username || !password) return { isValid: false };
 
@@ -47,8 +56,8 @@ export const validateTwitterCredentials = async (
       email,
     });
 
-    if (result.success) {
-      return { isValid: true, cookies: JSON.stringify(result.cookies) };
+    if (result.success && result.cookies) {
+      return { isValid: true, cookies: formatXCookies(result.cookies) };
     }
 
     console.error('Error validating Twitter credentials:', result);
