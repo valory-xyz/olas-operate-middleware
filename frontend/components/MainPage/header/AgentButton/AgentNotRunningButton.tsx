@@ -25,7 +25,6 @@ import { MultisigOwners, useMultisigs } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { useSettings } from '@/hooks/useSettings';
 import {
   useActiveStakingContractDetails,
   useStakingContractContext,
@@ -44,7 +43,6 @@ export const AgentNotRunningButton = () => {
   const { showNotification } = useElectronApi();
 
   const { goto: gotoPage } = usePageState();
-  const { goto: gotoSettings } = useSettings();
 
   const { masterWallets, masterSafes, masterEoa } = useMasterWalletContext();
   const {

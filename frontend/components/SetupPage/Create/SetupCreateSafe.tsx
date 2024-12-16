@@ -113,7 +113,7 @@ export const SetupCreateSafe = () => {
         }
       }
     },
-    [backupSigner, updateWallets],
+    [allBackupAddresses, backupSigner, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {
