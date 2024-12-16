@@ -8,7 +8,6 @@ import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
-import { SettingsScreen } from '@/enums/SettingsScreen';
 import { TokenSymbol } from '@/enums/Token';
 import {
   MasterEoa,
@@ -292,13 +291,7 @@ export const AgentNotRunningButton = () => {
         masterSafesOwners,
         masterEoa,
         selectedAgentConfig,
-        gotoBackupPage: () => {
-          gotoPage(Pages.Settings);
-          gotoSettings(SettingsScreen.AddBackupWallet);
-        },
-        gotoBackupSafePage: () => {
-          gotoPage(Pages.AddBackupWalletViaSafe);
-        },
+        gotoSettings: () => gotoPage(Pages.Settings),
       });
       await deployAndStartService();
     } catch (error) {
@@ -332,7 +325,6 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig,
     deployAndStartService,
     gotoPage,
-    gotoSettings,
     showNotification,
     updateStatesSequentially,
   ]);
@@ -354,12 +346,10 @@ export const createSafeIfNeeded = async ({
   masterSafesOwners,
   masterEoa,
   selectedAgentConfig,
-  gotoBackupPage,
-  gotoBackupSafePage,
+  gotoSettings,
 }: {
   selectedAgentConfig: AgentConfig;
-  gotoBackupPage: () => void;
-  gotoBackupSafePage: () => void;
+  gotoSettings: () => void;
   masterEoa?: MasterEoa;
   masterSafes?: MasterSafe[];
   masterSafesOwners?: MultisigOwners[];
@@ -391,7 +381,7 @@ export const createSafeIfNeeded = async ({
     message.error(
       'A backup signer is required to create a new safe on the home chain. Please add a backup signer.',
     );
-    gotoBackupPage();
+    gotoSettings();
     throw new Error('No backup signers found');
   }
 
@@ -399,7 +389,7 @@ export const createSafeIfNeeded = async ({
     message.error(
       'The same backup signer address must be used on all chains. Please remove any extra backup signers.',
     );
-    gotoBackupSafePage();
+    gotoSettings();
     throw new Error('Multiple backup signers found');
   }
 
