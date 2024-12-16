@@ -1,4 +1,4 @@
-import { Button, Flex, Typography } from 'antd';
+import { Button, Flex, Popover, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
 
@@ -53,14 +53,19 @@ export const SwitchAgentSection = () => {
         <Text>{selectedAgentConfig.displayName}</Text>
       </Flex>
 
-      <Button
-        disabled={!isSwitchAgentEnabled}
-        onClick={() => goto(Pages.SwitchAgent)}
-        type="primary"
-        ghost
-      >
-        Switch agent
-      </Button>
+      {isSwitchAgentEnabled ? (
+        <Button onClick={() => goto(Pages.SwitchAgent)} type="primary" ghost>
+          Switch agent
+        </Button>
+      ) : (
+        <Popover
+          placement="bottomRight"
+          content="To switch, stop the agent you're running"
+          showArrow={false}
+        >
+          <Button disabled>Switch agent</Button>
+        </Popover>
+      )}
     </CardSection>
   );
 };
