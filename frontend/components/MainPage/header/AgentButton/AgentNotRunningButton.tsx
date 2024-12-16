@@ -86,7 +86,6 @@ export const AgentNotRunningButton = () => {
   const { hasEnoughServiceSlots } = useActiveStakingContractDetails();
 
   const { masterSafesOwners } = useMultisigs(masterSafes);
-  console.log(masterSafesOwners);
 
   const requiredStakedOlas =
     selectedStakingProgramId &&
@@ -211,7 +210,7 @@ export const AgentNotRunningButton = () => {
     if (masterEoa) otherChainOwners.delete(masterEoa?.address);
 
     // 3. if there's more than one signer, there's a disrepancy, alert user
-    if (otherChainOwners.size > 0) {
+    if (otherChainOwners.size > 1) {
       showNotification?.(
         'You have safes on other chains. Please make sure you use the same signer on all chains.',
       );
