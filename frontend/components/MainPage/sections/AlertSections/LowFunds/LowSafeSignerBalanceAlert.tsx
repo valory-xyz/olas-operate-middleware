@@ -9,6 +9,9 @@ import { useLowFundsDetails } from './useLowFunds';
 
 const { Text, Title } = Typography;
 
+/**
+ * Alert for low safe signer (EOA) balance
+ */
 export const LowSafeSignerBalanceAlert = () => {
   const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
   const { selectedAgentConfig } = useServices();

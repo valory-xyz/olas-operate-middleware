@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
+import { WalletOwnerType } from '@/enums/Wallet';
 import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
@@ -33,5 +34,7 @@ export const useLowFundsDetails = () => {
     tokenSymbol: nativeToken.symbol,
     masterSafeAddress: selectedMasterSafe?.address,
     masterEoaAddress: masterEoa?.address,
+    masterThresholds:
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master],
   };
 };

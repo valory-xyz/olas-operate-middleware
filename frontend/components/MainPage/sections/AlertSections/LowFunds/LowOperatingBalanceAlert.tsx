@@ -2,8 +2,7 @@ import { Flex, Typography } from 'antd';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
-import { CHAIN_CONFIG } from '@/config/chains';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
+import { WalletType } from '@/enums/Wallet';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
@@ -13,29 +12,30 @@ import { useLowFundsDetails } from './useLowFunds';
 
 const { Text, Title } = Typography;
 
+/**
+ * Alert for low operating (safe) balance
+ */
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentConfig, selectedAgentType } = useServices();
+  const { selectedAgentType } = useServices();
   const { isLoaded: isBalanceLoaded, masterSafeNativeGasBalance } =
     useMasterBalances();
 
-  const { chainName, tokenSymbol, masterSafeAddress } = useLowFundsDetails();
+  const { chainName, tokenSymbol, masterSafeAddress, masterThresholds } =
+    useLowFundsDetails();
 
   const isLowBalance = useMemo(() => {
     if (!masterSafeNativeGasBalance) return false;
+    if (!masterThresholds) return false;
+
     return (
       masterSafeNativeGasBalance <
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+      masterThresholds[WalletType.Safe][tokenSymbol]
     );
-  }, [
-    masterSafeNativeGasBalance,
-    selectedAgentConfig.evmHomeChainId,
-    selectedAgentConfig.operatingThresholds,
-  ]);
+  }, [masterSafeNativeGasBalance, masterThresholds, tokenSymbol]);
 
   if (!isBalanceLoaded) return null;
+  if (!masterThresholds) return null;
   if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return;
   if (!isLowBalance) return null;
 
@@ -52,12 +52,7 @@ export const LowOperatingBalanceAlert = () => {
           <Text>
             To run your agent, add at least
             <Text strong>{` ${
-              selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-                WalletType.Safe
-              ][
-                CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken
-                  .symbol
-              ]
+              masterThresholds[WalletType.Safe][tokenSymbol]
             } ${tokenSymbol} `}</Text>
             on {chainName} chain to your safe.
           </Text>

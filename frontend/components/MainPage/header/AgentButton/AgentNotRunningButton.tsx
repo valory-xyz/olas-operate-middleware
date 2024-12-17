@@ -65,7 +65,7 @@ export const AgentNotRunningButton = () => {
     updateBalances,
   } = useBalanceContext();
 
-  const { serviceStakedBalances } = useServiceBalances(
+  const { serviceStakedBalances, serviceSafeBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
 
@@ -135,26 +135,34 @@ export const AgentNotRunningButton = () => {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
-    // If was evicted, but can restake - unlock the button
+    // If was evicted, but can re-stake - unlock the button
     if (isAgentEvicted && isEligibleForStaking) return true;
+
+    // threshold check
+    const masterThresholds =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
+    const tokenSymbol =
+      CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
+    const agentSafeNativeBalance = serviceSafeBalances?.find(
+      ({ symbol }) => symbol === tokenSymbol,
+    )?.balance;
+    const safeThreshold = masterThresholds[WalletType.Safe][tokenSymbol];
 
     if (isServiceStaked) {
       const hasEnoughOlas =
         (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
+
+      // @note: Funds are transferred to the agent safe from the master safe.
+      // Hence, if the agent safe has enough funds, it is considered as enough.
       const hasEnoughNativeGas =
-        (masterSafeNativeGasBalance ?? 0) >
-        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-          WalletType.Safe
-        ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol];
+        (masterSafeNativeGasBalance ?? 0) > safeThreshold ||
+        (agentSafeNativeBalance ?? 0) > safeThreshold;
       return hasEnoughOlas && hasEnoughNativeGas;
     }
 
     const hasEnoughForInitialDeployment =
       (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) >=
-        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-          WalletType.Safe
-        ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol];
+      (masterSafeNativeGasBalance ?? 0) >= safeThreshold;
 
     return hasEnoughForInitialDeployment;
   }, [
@@ -175,6 +183,7 @@ export const AgentNotRunningButton = () => {
     selectedAgentConfig.evmHomeChainId,
     serviceTotalStakedOlas,
     serviceSafeOlasWithStaked,
+    serviceSafeBalances,
   ]);
 
   const pauseAllPolling = useCallback(() => {
