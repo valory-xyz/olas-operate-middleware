@@ -55,6 +55,7 @@ from operate.utils.gnosis import transfer_erc20_from_safe
 class InsufficientFundsException(Exception):
     pass
 
+
 class MasterWallet(LocalResource):
     """Master wallet."""
 
@@ -354,7 +355,7 @@ class EthereumMasterWallet(MasterWallet):
             amount=amount,
             chain=chain,
             rpc=rpc,
-        )        
+        )
 
     @classmethod
     def new(
