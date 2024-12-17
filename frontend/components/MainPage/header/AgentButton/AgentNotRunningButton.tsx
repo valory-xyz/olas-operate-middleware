@@ -69,15 +69,19 @@ export const AgentNotRunningButton = () => {
     selectedService?.service_config_id,
   );
 
-  const serviceStakedOlasBalanceOnHomeChain = serviceStakedBalances?.find(
+  const serviceStakedOlasBalancesOnHomeChain = serviceStakedBalances?.find(
     (stakedBalance) =>
       stakedBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
   );
 
   const serviceTotalStakedOlas = sum([
-    serviceStakedOlasBalanceOnHomeChain?.olasBondBalance,
-    serviceStakedOlasBalanceOnHomeChain?.olasDepositBalance,
+    serviceStakedOlasBalancesOnHomeChain?.olasBondBalance,
+    serviceStakedOlasBalancesOnHomeChain?.olasDepositBalance,
   ]);
+
+  const serviceOlasBalanceOnHomeChain = serviceSafeBalances?.find(
+    (balance) => balance.evmChainId === selectedAgentConfig.evmHomeChainId,
+  )?.balance;
 
   const { masterSafeBalances, masterSafeNativeGasBalance } =
     useMasterBalances();
@@ -103,7 +107,10 @@ export const AgentNotRunningButton = () => {
       selectedStakingProgramId
     ]?.stakingRequirements[TokenSymbol.OLAS];
 
-  const serviceSafeOlasWithStaked = sum([totalStakedOlasBalance]);
+  const serviceSafeOlasWithStaked = sum([
+    serviceOlasBalanceOnHomeChain,
+    serviceTotalStakedOlas,
+  ]);
 
   const isDeployable = useMemo(() => {
     if (isServicesLoading) return false;
@@ -143,25 +150,27 @@ export const AgentNotRunningButton = () => {
       selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
     const tokenSymbol =
       CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
-    const agentSafeNativeBalance = serviceSafeBalances?.find(
-      ({ symbol }) => symbol === tokenSymbol,
-    )?.balance;
+
     const safeThreshold = masterThresholds[WalletType.Safe][tokenSymbol];
 
+    // SERVICE IS STAKED, AND STARTING AGAIN
     if (isServiceStaked) {
-      const hasEnoughOlas =
-        (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
+      const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
 
-      // @note: Funds are transferred to the agent safe from the master safe.
-      // Hence, if the agent safe has enough funds, it is considered as enough.
       const hasEnoughNativeGas =
-        (masterSafeNativeGasBalance ?? 0) > safeThreshold ||
-        (agentSafeNativeBalance ?? 0) > safeThreshold;
-      return hasEnoughOlas && hasEnoughNativeGas;
+        (masterSafeNativeGasBalance ?? 0) > safeThreshold;
+      return hasEnoughNativeGas && hasEnoughOlas;
     }
 
+    // SERVICE IS NOT STAKED AND/OR IS STARTING FOR THE FIRST TIME
+    const totalOlasStakedAndInSafes = sum([
+      serviceOlasBalanceOnHomeChain,
+      serviceTotalStakedOlas,
+      masterSafeOlasBalance,
+    ]);
+
     const hasEnoughForInitialDeployment =
-      (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
+      (totalOlasStakedAndInSafes ?? 0) >= requiredStakedOlas &&
       (masterSafeNativeGasBalance ?? 0) >= safeThreshold;
 
     return hasEnoughForInitialDeployment;
@@ -176,14 +185,14 @@ export const AgentNotRunningButton = () => {
     service,
     storeState,
     selectedAgentType,
-    isEligibleForStaking,
     isAgentEvicted,
-    masterSafeNativeGasBalance,
+    isEligibleForStaking,
     selectedAgentConfig.operatingThresholds,
     selectedAgentConfig.evmHomeChainId,
+    serviceOlasBalanceOnHomeChain,
     serviceTotalStakedOlas,
+    masterSafeNativeGasBalance,
     serviceSafeOlasWithStaked,
-    serviceSafeBalances,
   ]);
 
   const pauseAllPolling = useCallback(() => {
