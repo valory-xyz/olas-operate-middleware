@@ -338,15 +338,12 @@ const createMainWindow = async () => {
     mainWindow.hide();
   });
 
-  app.on('ready', () => {
-    try {
-      logger.electron('Setting up store IPC');
-      setupStoreIpc(ipcMain, mainWindow);
-    } catch (e) {
-      logger.electron('Store IPC failed:', JSON.stringify(e));
-    }
-  });
-
+  try {
+    logger.electron('Setting up store IPC');
+    setupStoreIpc(ipcMain, mainWindow);
+  } catch (e) {
+    logger.electron('Store IPC failed:', JSON.stringify(e));
+  }
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }

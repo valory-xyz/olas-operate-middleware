@@ -1,23 +1,21 @@
 const Store = require('electron-store');
 
-const defaultAgentSettings = {
-  isInitialFunded: { type: 'boolean', default: false },
-  firstStakingRewardAchieved: { type: 'boolean', default: false },
-  firstRewardNotificationShown: { type: 'boolean', default: false },
-  agentEvictionAlertShown: { type: 'boolean', default: false },
-  currentStakingProgram: { type: 'string', default: '' },
+const defaultInitialAgentSettings = {
+  isInitialFunded: false,
+  firstStakingRewardAchieved: false,
+  firstRewardNotificationShown: false,
+  agentEvictionAlertShown: false,
+  currentStakingProgram: false,
 };
 
 // Schema for validating store data
 const schema = {
   environmentName: { type: 'string', default: '' },
   lastSelectedAgentType: { type: 'string', default: 'trader' },
-  isInitialFunded_trader: { type: 'boolean', default: false },
-  isInitialFunded_memeooorr: { type: 'boolean', default: false },
 
   // Each agent has its own settings
-  trader: { type: 'object', default: defaultAgentSettings },
-  memeooorr: { type: 'object', default: defaultAgentSettings },
+  trader: { type: 'object', default: defaultInitialAgentSettings },
+  memeooorr: { type: 'object', default: defaultInitialAgentSettings },
 };
 
 /**
@@ -37,10 +35,13 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
   const traderAgent = {
     ...(store.get('trader') || {}),
     isInitialFunded:
-      store.get('isInitialFunded_trader') || store.get('isInitialFunded'),
-    firstRewardNotificationShown: store.get('firstRewardNotificationShown'),
-    agentEvictionAlertShown: store.get('agentEvictionAlertShown'),
-    currentStakingProgram: store.get('currentStakingProgram'),
+      store.get('isInitialFunded_trader') ||
+      store.get('isInitialFunded') ||
+      false,
+    firstRewardNotificationShown:
+      store.get('firstRewardNotificationShown') || false,
+    agentEvictionAlertShown: store.get('agentEvictionAlertShown') || false,
+    currentStakingProgram: store.get('currentStakingProgram') || false,
   };
 
   // Set the trader agent and delete old keys
@@ -78,8 +79,6 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
   ipcMain.handle('store-set', (_, key, value) => store.set(key, value));
   ipcMain.handle('store-delete', (_, key) => store.delete(key));
   ipcMain.handle('store-clear', () => store.clear());
-
-  console.log('[Store] IPC handlers registered successfully.');
 };
 
 module.exports = { setupStoreIpc };
