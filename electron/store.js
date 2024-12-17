@@ -8,23 +8,22 @@ const defaultAgentSettings = {
   currentStakingProgram: { type: 'string', default: '' },
 };
 
-// set schema to validate store data
+// Schema for validating store data
 const schema = {
   environmentName: { type: 'string', default: '' },
   lastSelectedAgentType: { type: 'string', default: 'trader' },
   isInitialFunded_trader: { type: 'boolean', default: false },
   isInitialFunded_memeooorr: { type: 'boolean', default: false },
 
-  // each agent has its own settings
-  trader: { ...defaultAgentSettings },
-  memeooorr: { ...defaultAgentSettings },
+  // Each agent has its own settings
+  trader: { type: 'object', default: defaultAgentSettings },
+  memeooorr: { type: 'object', default: defaultAgentSettings },
 };
 
 /**
  * Sets up the IPC communication and initializes the Electron store with default values and schema.
  * @param {Electron.IpcMain} ipcMain - The IPC channel for communication.
  * @param {Electron.BrowserWindow} mainWindow - The main Electron browser window.
- * @returns {Promise<void>} - A promise that resolves once the store is set up.
  */
 const setupStoreIpc = (ipcMain, mainWindow) => {
   const store = new Store({ schema });
@@ -36,7 +35,7 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
    * The following code migrates the old store to the new store schema.
    */
   const traderAgent = {
-    ...store(store.get('trader') || {}),
+    ...(store.get('trader') || {}),
     isInitialFunded:
       store.get('isInitialFunded_trader') || store.get('isInitialFunded'),
     firstRewardNotificationShown: store.get('firstRewardNotificationShown'),
@@ -44,20 +43,21 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
     currentStakingProgram: store.get('currentStakingProgram'),
   };
 
-  // set the agent & delete old keys
+  // Set the trader agent and delete old keys
   store.set('trader', traderAgent);
-  store.delete('isInitialFunded');
-  store.delete('isInitialFunded_trader');
-  store.delete('firstStakingRewardAchieved');
-  store.delete('firstRewardNotificationShown');
-  store.delete('agentEvictionAlertShown');
-  store.delete('currentStakingProgram');
+  [
+    'isInitialFunded',
+    'isInitialFunded_trader',
+    'firstRewardNotificationShown',
+    'agentEvictionAlertShown',
+    'currentStakingProgram',
+  ].forEach((key) => store.delete(key));
 
   /**
    * agent: memeooorr Migration
    */
   if (store.has('isInitialFunded_memeooorr')) {
-    const memeooorrAgent = store.get('memeooorr');
+    const memeooorrAgent = store.get('memeooorr') || {};
     store.set('memeooorr', {
       ...memeooorrAgent,
       isInitialFunded: store.get('isInitialFunded_memeooorr') || false,
@@ -65,9 +65,11 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
     store.delete('isInitialFunded_memeooorr');
   }
 
+  // Notify renderer process when store changes
   store.onDidAnyChange((data) => {
-    if (mainWindow?.webContents)
+    if (mainWindow?.webContents) {
       mainWindow.webContents.send('store-changed', data);
+    }
   });
 
   // exposed to electron browser window
@@ -75,7 +77,9 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
   ipcMain.handle('store-get', (_, key) => store.get(key));
   ipcMain.handle('store-set', (_, key, value) => store.set(key, value));
   ipcMain.handle('store-delete', (_, key) => store.delete(key));
-  ipcMain.handle('store-clear', (_) => store.clear());
+  ipcMain.handle('store-clear', () => store.clear());
+
+  console.log('[Store] IPC handlers registered successfully.');
 };
 
 module.exports = { setupStoreIpc };
