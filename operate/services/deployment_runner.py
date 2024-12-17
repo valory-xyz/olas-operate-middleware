@@ -73,7 +73,7 @@ def _kill_process(pid: int) -> None:
         except OSError:
             return
         except psutil.AccessDenied:
-            return            
+            return
         time.sleep(1)
 
 

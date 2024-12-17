@@ -51,6 +51,11 @@ from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 
 
+# TODO Organize exceptions definition
+class InsufficientFundsException(Exception):
+    pass
+
+
 class MasterWallet(LocalResource):
     """Master wallet."""
 
@@ -249,6 +254,16 @@ class EthereumMasterWallet(MasterWallet):
             amount=amount,
         )
 
+    def _transfer_erc20_from_eoa(
+        self,
+        token: str,
+        to: str,
+        amount: int,
+        chain: Chain,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        raise NotImplementedError()
+
     def transfer(
         self,
         to: str,
@@ -258,6 +273,22 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer funds to the given account."""
+        if from_safe:
+            sender = t.cast(str, self.safes[chain])
+            sender_str = f"Safe {sender}"
+        else:
+            sender = self.crypto.address
+            sender_str = f"EOA {sender}"
+
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        balance = ledger_api.get_balance(address=sender)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} native units from {sender_str} to {to} on chain {chain.value.capitalize()}. "
+                f"Balance of {sender_str} is {balance} native units on chain {chain.value.capitalize()}."
+            )
+
         if from_safe:
             return self._transfer_from_safe(
                 to=to,
@@ -283,9 +314,42 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer funds to the given account."""
-        if not from_safe:
-            raise NotImplementedError()
-        return self._transfer_erc20_from_safe(
+
+        if from_safe:
+            sender = t.cast(str, self.safes[chain])
+            sender_str = f"Safe {sender}"
+        else:
+            sender = self.crypto.address
+            sender_str = f"EOA {sender}"
+
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        balance = (
+            registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token,
+            )
+            .functions.balanceOf(sender)
+            .call()
+        )
+
+        tokens = {OLAS[chain]: "OLAS", USDC[chain]: "USDC"}
+        token_name = tokens.get(token, token)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} {token_name} from {sender_str} to {to} on chain {chain.value.capitalize()}. "
+                f"Balance of {sender_str} is {balance} {token_name} on chain {chain.value.capitalize()}."
+            )
+
+        if from_safe:
+            return self._transfer_erc20_from_safe(
+                token=token,
+                to=to,
+                amount=amount,
+                chain=chain,
+                rpc=rpc,
+            )
+        return self._transfer_erc20_from_eoa(
             token=token,
             to=to,
             amount=amount,
@@ -443,7 +507,7 @@ class EthereumMasterWallet(MasterWallet):
         wallet_json["consistent_backup_owner"] = len(owner_sets) == 1
         wallet_json["consistent_backup_owner_count"] = all(
             len(owner) == 1 for owner in owner_sets
-        ) or all(len(owner) == 0 for owner in owner_sets)
+        )
         return wallet_json
 
     @classmethod
