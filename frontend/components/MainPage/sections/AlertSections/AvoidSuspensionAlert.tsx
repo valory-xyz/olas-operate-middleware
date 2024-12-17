@@ -18,9 +18,10 @@ export const AvoidSuspensionAlert = () => {
   const showAvoidSuspensionAlert = useMemo(() => {
     if (!storeState) return false;
 
+    const agentType = storeState[selectedAgentType];
     return (
-      storeState?.[selectedAgentType]?.firstRewardNotificationShown &&
-      !storeState.agentEvictionAlertShown
+      agentType?.firstRewardNotificationShown &&
+      !agentType?.agentEvictionAlertShown
     );
   }, [storeState, selectedAgentType]);
 
@@ -45,7 +46,9 @@ export const AvoidSuspensionAlert = () => {
           <Button
             type="primary"
             ghost
-            onClick={() => store?.set?.('agentEvictionAlertShown', true)}
+            onClick={() =>
+              store?.set?.(`${selectedAgentType}.agentEvictionAlertShown`, true)
+            }
             style={{ marginTop: 4 }}
           >
             Understood
