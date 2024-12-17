@@ -37,10 +37,10 @@ const DisplayRewards = () => {
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError)
       return <Skeleton.Input size="small" />;
-    if (!isEligibleForRewards) {
-      return <Tag color="processing">Not yet earned</Tag>;
+    if (isEligibleForRewards) {
+      return <Tag color="success">Earned</Tag>;
     }
-    return <Tag color="success">Earned</Tag>;
+    return <Tag color="processing">Not yet earned</Tag>;
   }, [
     isEligibleForRewards,
     isStakingRewardsDetailsLoading,
