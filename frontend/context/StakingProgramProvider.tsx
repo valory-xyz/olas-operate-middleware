@@ -36,11 +36,11 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
 
   const { serviceApi, evmHomeChainId } = selectedAgentConfig;
 
-  const isQueryEnabled =
-    !isNil(evmHomeChainId) && isServicesLoaded && !!serviceNftTokenId;
-
   const response = useQuery({
-    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(evmHomeChainId),
+    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(
+      evmHomeChainId,
+      serviceNftTokenId!,
+    ),
     queryFn: async () => {
       if (!serviceNftTokenId) return null;
       if (!Number(serviceNftTokenId)) return null;
