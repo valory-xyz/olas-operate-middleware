@@ -868,9 +868,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if balance == 0:
                 logger.info(f"No OLAS to drain from master safe: {safe}")
             else:
-                logger.info(
-                    f"Draining {balance} OLAS out of master safe: {safe}"
-                )
+                logger.info(f"Draining {balance} OLAS out of master safe: {safe}")
                 transfer_erc20_from_safe(
                     ledger_api=ledger_api,
                     crypto=master_wallet.crypto,
@@ -885,9 +883,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if balance == 0:
                 logger.info(f"No xDAI to drain from master safe: {safe}")
             else:
-                logger.info(
-                    f"Draining {balance} xDAI out of master safe: {safe}"
-                )
+                logger.info(f"Draining {balance} xDAI out of master safe: {safe}")
                 master_wallet.transfer(
                     to=withdrawal_address,
                     amount=balance,
