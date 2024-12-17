@@ -23,11 +23,15 @@ export const LowOperatingBalanceAlert = () => {
 
   const isLowBalance = useMemo(() => {
     if (!masterSafeNativeGasBalance) return false;
+
+    const masterThresholds =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
+    const tokenSymbol =
+      CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
+
     return (
       masterSafeNativeGasBalance <
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+      masterThresholds[WalletType.Safe][tokenSymbol]
     );
   }, [
     masterSafeNativeGasBalance,

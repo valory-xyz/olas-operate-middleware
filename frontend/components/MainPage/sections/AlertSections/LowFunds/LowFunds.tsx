@@ -34,21 +34,22 @@ export const LowFunds = () => {
     if (!masterSafeNativeGasBalance) return false;
     if (!isInitialFunded) return false;
 
+    const masterThresholds =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
+    const tokenSymbol =
+      CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
+
     // Funds are transferred from master EOA to master Safe, no need to display
-    // low safe signer balance alert if EOA has funds
+    // low safe signer balance alert if "Safe" has funds
     if (
       masterSafeNativeGasBalance >=
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
-    )
+      masterThresholds[WalletType.Safe][tokenSymbol]
+    ) {
       return false;
+    }
 
     return (
-      masterEoaNativeGasBalance <
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.EOA
-      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol]
+      masterEoaNativeGasBalance < masterThresholds[WalletType.EOA][tokenSymbol]
     );
   }, [
     isBalanceLoaded,
