@@ -39,15 +39,6 @@ export const LowFunds = () => {
     const tokenSymbol =
       CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
 
-    // Funds are transferred from master EOA to master Safe, no need to display
-    // low safe signer balance alert if "Safe" has funds
-    if (
-      masterSafeNativeGasBalance >=
-      masterThresholds[WalletType.Safe][tokenSymbol]
-    ) {
-      return false;
-    }
-
     return (
       masterEoaNativeGasBalance < masterThresholds[WalletType.EOA][tokenSymbol]
     );
