@@ -29,7 +29,8 @@ export const RewardContext = createContext<{
   optimisticRewardsEarnedForEpoch?: number;
   minimumStakedAmountRequired?: number;
   updateRewards: () => Promise<void>;
-  isStakingRewardsDetailsFetched?: boolean;
+  isStakingRewardsDetailsLoading?: boolean;
+  isStakingRewardsDetailsError?: boolean;
 }>({
   updateRewards: async () => {},
 });
@@ -137,6 +138,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
     data: stakingRewardsDetails,
     refetch: refetchStakingRewardsDetails,
     isLoading: isStakingRewardsDetailsLoading,
+    isError: isStakingRewardsDetailsError,
   } = useStakingRewardsDetails();
 
   const {
@@ -187,7 +189,8 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
         isEligibleForRewards,
         optimisticRewardsEarnedForEpoch,
         updateRewards,
-        isStakingRewardsDetailsFetched: !isStakingRewardsDetailsLoading,
+        isStakingRewardsDetailsLoading,
+        isStakingRewardsDetailsError,
       }}
     >
       {children}

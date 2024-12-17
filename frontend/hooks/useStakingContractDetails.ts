@@ -18,7 +18,7 @@ export const useStakingContractContext = () =>
 export const useActiveStakingContractDetails = () => {
   const {
     selectedStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     // allStakingContractDetailsRecord,
     // refetchActiveStakingContractDetails,
     // isPaused,
@@ -93,7 +93,7 @@ export const useActiveStakingContractDetails = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     selectedStakingContractDetails,
     hasEnoughRewardsAndSlots,
     hasEnoughServiceSlots,

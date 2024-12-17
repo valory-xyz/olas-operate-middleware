@@ -22,8 +22,7 @@ export const useNotifyOnNewEpoch = () => {
 
   const {
     selectedStakingContractDetails: activeStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded:
-      isActiveStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   } = useActiveStakingContractDetails();
   const epoch = activeStakingContractDetails?.epochCounter;
 
@@ -31,8 +30,8 @@ export const useNotifyOnNewEpoch = () => {
     useState<EpochStatusNotification | null>(null);
 
   useEffect(() => {
-    //  if active staking contract info is not loaded yet, return
-    if (!isActiveStakingContractDetailsLoaded) return;
+    // if active staking contract info is still loading, return
+    if (isSelectedStakingContractDetailsLoading) return;
 
     // if agent is running, no need to show notification
     if (isServiceRunning) return;
@@ -60,7 +59,7 @@ export const useNotifyOnNewEpoch = () => {
   }, [
     epochStatusNotification,
     epoch,
-    isActiveStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     showNotification,
     isServiceRunning,
   ]);
