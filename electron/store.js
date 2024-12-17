@@ -35,17 +35,14 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
    * Initially the store was setup with only trader agent settings.
    * The following code migrates the old store to the new store schema.
    */
-  const traderAgent = store.get('trader') || {};
-  traderAgent.isInitialFunded =
-    store.get('isInitialFunded_trader') || store.get('isInitialFunded');
-  traderAgent.firstStakingRewardAchieved = store.get(
-    'firstStakingRewardAchieved',
-  );
-  traderAgent.firstRewardNotificationShown = store.get(
-    'firstRewardNotificationShown',
-  );
-  traderAgent.agentEvictionAlertShown = store.get('agentEvictionAlertShown');
-  traderAgent.currentStakingProgram = store.get('currentStakingProgram');
+  const traderAgent = {
+    ...store(store.get('trader') || {}),
+    isInitialFunded:
+      store.get('isInitialFunded_trader') || store.get('isInitialFunded'),
+    firstRewardNotificationShown: store.get('firstRewardNotificationShown'),
+    agentEvictionAlertShown: store.get('agentEvictionAlertShown'),
+    currentStakingProgram: store.get('currentStakingProgram'),
+  };
 
   // set the agent & delete old keys
   store.set('trader', traderAgent);
