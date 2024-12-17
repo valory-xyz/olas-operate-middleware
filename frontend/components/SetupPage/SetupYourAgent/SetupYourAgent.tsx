@@ -140,7 +140,7 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
                 values.xPassword,
                 electronApi.validateTwitterLogin,
               )
-            : { isValid: false };
+            : { isValid: false, cookies: undefined };
         setTwitterCredentialsValidationStatus(
           isTwitterCredentialsValid ? 'valid' : 'invalid',
         );
