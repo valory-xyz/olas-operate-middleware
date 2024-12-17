@@ -1,6 +1,6 @@
 /**
  * Cookies returned by agent-twitter-client
- * when log in
+ * scraper.getCookies()
  */
 export type XCookie = {
   key: string;
