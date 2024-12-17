@@ -25,7 +25,7 @@ export const AGENT_CONFIG: {
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: 1.5,
+          [TokenSymbol.XDAI]: 0.1,
         },
         [WalletType.Safe]: {
           [TokenSymbol.XDAI]: 2,
