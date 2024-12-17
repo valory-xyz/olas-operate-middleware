@@ -59,11 +59,8 @@ export const AgentNotRunningButton = () => {
     selectedService?.service_config_id,
   );
 
-  const {
-    setIsPaused: setIsBalancePollingPaused,
-    totalStakedOlasBalance,
-    updateBalances,
-  } = useBalanceContext();
+  const { setIsPaused: setIsBalancePollingPaused, updateBalances } =
+    useBalanceContext();
 
   const { serviceStakedBalances, serviceSafeBalances } = useServiceBalances(
     selectedService?.service_config_id,
