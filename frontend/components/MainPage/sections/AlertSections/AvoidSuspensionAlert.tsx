@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
 const { Text, Title } = Typography;
@@ -10,6 +11,7 @@ const { Text, Title } = Typography;
 export const AvoidSuspensionAlert = () => {
   const { store } = useElectronApi();
   const { storeState } = useStore();
+  const { selectedAgentType } = useServices();
 
   // If first reward notification is shown BUT
   // agent eviction alert is NOT yet shown, show this alert.
@@ -17,10 +19,10 @@ export const AvoidSuspensionAlert = () => {
     if (!storeState) return false;
 
     return (
-      storeState.firstRewardNotificationShown &&
+      storeState?.[selectedAgentType]?.firstRewardNotificationShown &&
       !storeState.agentEvictionAlertShown
     );
-  }, [storeState]);
+  }, [storeState, selectedAgentType]);
 
   if (!showAvoidSuspensionAlert) return null;
 
