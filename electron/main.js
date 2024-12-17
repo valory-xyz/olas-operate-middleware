@@ -311,7 +311,8 @@ const createMainWindow = async () => {
 
     try {
       await scraper.login(username, password, email);
-      return { success: true };
+      const cookies = await scraper.getCookies();
+      return { success: true, cookies };
     } catch (error) {
       console.error('Twitter login error:', error);
       return { success: false, error: error.message };

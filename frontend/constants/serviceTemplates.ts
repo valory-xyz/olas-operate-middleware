@@ -189,7 +189,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         provision_type: EnvProvisionType.COMPUTED,
       },
       CELO_LEDGER_RPC: {
-        name: 'Base ledger RPC',
+        name: 'Celo ledger RPC',
         description: '',
         value: '',
         provision_type: EnvProvisionType.COMPUTED,
@@ -208,6 +208,12 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
       },
       TWIKIT_PASSWORD: {
         name: 'Twitter password',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      TWIKIT_COOKIES: {
+        name: 'Twitter cookies',
         description: '',
         value: '',
         provision_type: EnvProvisionType.USER,

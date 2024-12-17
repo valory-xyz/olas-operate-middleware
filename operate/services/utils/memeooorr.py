@@ -49,7 +49,7 @@ def await_for_cookies() -> dict:
 
 
 async def async_get_twitter_cookies(
-    username: str, email: str, password: str, cookies_path: Path
+    username: str, email: str, password: str, cookies: str, cookies_path: Path
 ) -> Optional[str]:
     """Verifies that the Twitter credentials are correct and get the cookies"""
 
@@ -59,13 +59,22 @@ async def async_get_twitter_cookies(
         valid_cookies = False
         cookies_path.parent.mkdir(exist_ok=True, parents=True)
 
-        # If cookies exist, try with those and validate
-        if cookies_path.exists():
+        if not valid_cookies and cookies:
+            print("Checking the provided cookies")
+            client.set_cookies(json.loads(cookies))
+            user = await client.user()
+            print(f"User from cookies: {user.screen_name}")
+            valid_cookies = user.screen_name == username
+
+        # If cookies file exist, try with those and validate
+        if not valid_cookies and cookies_path.exists():
+            print("Checking the cookies file")
             with open(cookies_path, "r", encoding="utf-8") as cookies_file:
                 cookies = json.load(cookies_file)
                 client.set_cookies(cookies)
 
             user = await client.user()
+            print(f"User from cookies file: {user.screen_name}")
             valid_cookies = user.screen_name == username
 
         if not valid_cookies:
@@ -89,9 +98,9 @@ async def async_get_twitter_cookies(
 
 
 def get_twitter_cookies(
-    username: str, email: str, password: str, cookies_path: Path
+    username: str, email: str, password: str, cookies: str, cookies_path: Path
 ) -> Optional[str]:
     """get_twitter_cookies"""
     return asyncio.run(
-        async_get_twitter_cookies(username, email, password, cookies_path)
+        async_get_twitter_cookies(username, email, password, cookies, cookies_path)
     )

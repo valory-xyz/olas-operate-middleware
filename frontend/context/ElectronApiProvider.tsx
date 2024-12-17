@@ -1,6 +1,7 @@
 import { get } from 'lodash';
 import { createContext, PropsWithChildren } from 'react';
 
+import { XCookie } from '@/types/Cookies';
 import { ElectronStore, ElectronTrayIconStatus } from '@/types/ElectronApi';
 
 type ElectronApiContextProps = {
@@ -40,7 +41,7 @@ type ElectronApiContextProps = {
     username: string;
     password: string;
     email: string;
-  }) => Promise<{ success: boolean }>;
+  }) => Promise<{ success: boolean; cookies?: XCookie[] }>;
 };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({

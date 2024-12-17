@@ -132,18 +132,20 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
 
         // validate the twitter credentials
         setSubmitButtonText('Validating Twitter credentials...');
-        const isTwitterCredentialsValid = electronApi?.validateTwitterLogin
-          ? await validateTwitterCredentials(
-              values.xEmail,
-              values.xUsername,
-              values.xPassword,
-              electronApi.validateTwitterLogin,
-            )
-          : false;
+        const { isValid: isTwitterCredentialsValid, cookies } =
+          electronApi?.validateTwitterLogin
+            ? await validateTwitterCredentials(
+                values.xEmail,
+                values.xUsername,
+                values.xPassword,
+                electronApi.validateTwitterLogin,
+              )
+            : { isValid: false };
         setTwitterCredentialsValidationStatus(
           isTwitterCredentialsValid ? 'valid' : 'invalid',
         );
         if (!isTwitterCredentialsValid) return;
+        if (!cookies) return;
 
         // wait for agent setup to complete
         setSubmitButtonText('Setting up agent...');
@@ -164,6 +166,10 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
             TWIKIT_PASSWORD: {
               ...serviceTemplate.env_variables.TWIKIT_PASSWORD,
               value: values.xPassword,
+            },
+            TWIKIT_COOKIES: {
+              ...serviceTemplate.env_variables.TWIKIT_COOKIES,
+              value: cookies,
             },
             GENAI_API_KEY: {
               ...serviceTemplate.env_variables.GENAI_API_KEY,
