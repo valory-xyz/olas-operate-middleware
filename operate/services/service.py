@@ -1002,9 +1002,9 @@ class Service(LocalResource):
         self.service_path = service_path
         self.name = service_template["name"]
         self.hash = service_template["hash"]
+        self.description = service_template["description"]
 
-        # TODO temporarily disable update on description and env variables - hotfix for Memeooorr
-        # self.description = service_template["description"]
+        # TODO temporarily disable update env variables - hotfix for Memeooorr
         # self.env_variables = service_template["env_variables"]
 
         # Only update hash_history if latest inserted hash is different
