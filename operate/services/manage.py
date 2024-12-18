@@ -254,7 +254,7 @@ class ServiceManager:
         service.store()
         return service_state
 
-    def _get_on_chain_hash(self, chain_config: ChainConfig) -> t.Optional[str]:
+    def _get_on_chain_metadata(self, chain_config: ChainConfig) -> t.Dict:
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         if chain_data.token == NON_EXISTENT_TOKEN:
@@ -265,9 +265,9 @@ class ServiceManager:
         config_hash = info["config_hash"]
         res = requests.get(f"{IPFS_GATEWAY}f01701220{config_hash}", timeout=30)
         if res.status_code == 200:
-            return res.json().get("code_uri", "")[URI_HASH_POSITION:]
+            return res.json()
         raise ValueError(
-            f"Something went wrong while trying to get the code uri from IPFS: {res}"
+            f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
 
     def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
@@ -367,7 +367,10 @@ class ServiceManager:
                     f"required olas: {required_olas}; your balance {balance}"
                 )
 
-        on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
+        on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_description = on_chain_metadata.get("description")
+
         current_agent_bond = staking_params[
             "min_staking_deposit"
         ]  # TODO fixme, read from service registry token utility contract
@@ -382,6 +385,7 @@ class ServiceManager:
                 on_chain_hash != service.hash
                 or current_agent_id != staking_params["agent_ids"][0]
                 or current_agent_bond != staking_params["min_staking_deposit"]
+                or on_chain_description != service.description
             )
         )
         current_staking_program = self._get_current_staking_program(
@@ -643,7 +647,10 @@ class ServiceManager:
         )
         staking_params["agent_ids"] = [agent_id]
 
-        on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
+        on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_description = on_chain_metadata.get("description")
+      
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
         )
@@ -652,11 +659,6 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         )
-
-        # TODO Determine if the mint metadata hash changed - if so, it requires
-        # an on-chain update.
-        # This has to be implemented. Temporarily added as a placeholder (ignored).
-        has_metadata_changed = False
 
         is_update = (
             (not is_first_mint)
@@ -667,7 +669,7 @@ class ServiceManager:
                 current_agent_id != staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
                 or current_agent_bond != staking_params["min_staking_deposit"]
-                or has_metadata_changed
+                or on_chain_description != service.description
             )
         )
         current_staking_program = self._get_current_staking_program(
