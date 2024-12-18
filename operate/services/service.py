@@ -106,50 +106,50 @@ DEFAULT_TRADER_ENV_VARS = {
         "name": "Gnosis ledger RPC",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "STAKING_CONTRACT_ADDRESS": {
         "name": "Staking contract address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_ACTIVITY_CHECKER_CONTRACT": {
         "name": "Mech activity checker contract",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_CONTRACT_ADDRESS": {
         "name": "Mech contract address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_REQUEST_PRICE": {
         "name": "Mech request price",
         "description": "",
         "value": "10000000000000000",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "USE_MECH_MARKETPLACE": {
         "name": "Use Mech marketplace",
         "description": "",
         "value": "False",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "REQUESTER_STAKING_INSTANCE_ADDRESS": {
         "name": "Requester staking instance address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "PRIORITY_MECH_ADDRESS": {
         "name": "Priority Mech address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
-    }
+        "provision_type": "computed",
+    },
 }
 
 
@@ -303,7 +303,9 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         tendermint_executable = str(
             shutil.which("tendermint"),
         )
-        # TODO: move all platform related things to a dedicated file
+        tendermint_executable = str(
+            Path(os.path.dirname(sys.executable)) / "tendermint"
+        )
         if platform.system() == "Windows":
             tendermint_executable = str(
                 Path(os.path.dirname(sys.executable)) / "tendermint.exe"
