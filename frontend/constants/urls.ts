@@ -52,6 +52,14 @@ export const EXPLORER_URL_BY_MIDDLEWARE_CHAIN: Record<
   [MiddlewareChain.BASE]: BASE_EXPLORER_URL,
 };
 
+export const BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN: Record<
+  string | MiddlewareChain,
+  Url
+> = {
+  [MiddlewareChain.GNOSIS]: 'https://gnosis.blockscout.com',
+  [MiddlewareChain.BASE]: 'https://base.blockscout.com',
+};
+
 export const SWAP_URL_BY_EVM_CHAIN: Record<number | EvmChainId, Url> = {
   [EvmChainId.Gnosis]: COW_SWAP_GNOSIS_XDAI_OLAS_URL,
   // [EvmChainId.OPTIMISM]: COW_SWAP_GNOSIS_XDAI_OLAS_URL,
