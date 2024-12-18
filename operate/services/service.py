@@ -822,7 +822,7 @@ class Service(LocalResource):
         )
 
         ledger_configs = ServiceHelper(path=service_path).ledger_configs()
-
+        
         chain_configs = {}
         for chain, config in service_template["configurations"].items():
             ledger_config = ledger_configs[chain]
@@ -843,6 +843,7 @@ class Service(LocalResource):
             )
 
         current_timestamp = int(time.time())
+        
         service = Service(
             version=SERVICE_CONFIG_VERSION,
             service_config_id=service_config_id,

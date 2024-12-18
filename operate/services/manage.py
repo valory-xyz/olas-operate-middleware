@@ -299,9 +299,9 @@ class ServiceManager:
 
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        os.environ[
-            "OPEN_AUTONOMY_SUBGRAPH_URL"
-        ] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
+        os.environ["OPEN_AUTONOMY_SUBGRAPH_URL"] = (
+            "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
+        )
 
         current_agent_id = None
         if chain_data.token > -1:
@@ -497,6 +497,7 @@ class ServiceManager:
         keys = service.keys
         instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
         # TODO fix this
@@ -512,7 +513,6 @@ class ServiceManager:
             current_agent_id = info["canonical_agents"][0]  # TODO Allow multiple agents
             service.store()
         self.logger.info(f"Service state: {chain_data.on_chain_state.name}")
-
         if user_params.use_staking:
             staking_params = sftxb.get_staking_params(
                 staking_contract=STAKING[ledger_config.chain][
@@ -598,7 +598,6 @@ class ServiceManager:
             else user_params.agent_id
         )
         staking_params["agent_ids"] = [agent_id]
-
         on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
@@ -620,8 +619,7 @@ class ServiceManager:
             and (
                 # TODO Discuss how to manage on-chain hash updates with staking programs.
                 # on_chain_hash != service.hash or  # noqa
-                current_agent_id
-                != staking_params["agent_ids"][0]
+                current_agent_id != staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
                 or current_agent_bond != staking_params["min_staking_deposit"]
                 or has_metadata_changed
@@ -703,31 +701,27 @@ class ServiceManager:
                 raise ValueError("No staking slots available")
 
             self.logger.info("Minting service")
-            receipt = (
-                sftxb.new_tx()
-                .add(
-                    sftxb.get_mint_tx_data(
-                        package_path=service.service_path,
-                        agent_id=agent_id,
-                        number_of_slots=service.helper.config.number_of_agents,
-                        cost_of_bond=(
-                            staking_params["min_staking_deposit"]
-                            if user_params.use_staking
-                            else user_params.cost_of_bond
-                        ),
-                        threshold=user_params.threshold,
-                        nft=IPFSHash(user_params.nft),
-                        update_token=None,
-                        token=(
-                            staking_params["staking_token"]
-                            if user_params.use_staking
-                            else None
-                        ),
-                        metadata_description=service.description,
-                    )
-                )
-                .settle()
+            params = dict(
+                package_path=service.service_path,
+                agent_id=agent_id,
+                number_of_slots=service.helper.config.number_of_agents,
+                cost_of_bond=(
+                    staking_params["min_staking_deposit"]
+                    if user_params.use_staking
+                    else user_params.cost_of_bond
+                ),
+                threshold=user_params.threshold,
+                nft=IPFSHash(user_params.nft),
+                update_token=None,
+                token=(
+                    staking_params["staking_token"] if user_params.use_staking else None
+                ),
+                metadata_description=service.description,
             )
+            tx = sftxb.new_tx().add(sftxb.get_mint_tx_data(**params))
+            receipt = tx.settle()
+            raise Exception(11111111111122222222222222)
+
             event_data, *_ = t.cast(
                 t.Tuple,
                 registry_contracts.service_registry.process_receipt(
@@ -1015,9 +1009,9 @@ class ServiceManager:
                         key=current_safe_owners[0]
                     ).private_key  # TODO allow multiple owners
                 ),  # noqa: E800
-                new_owner_address=safe
-                if safe
-                else wallet.crypto.address,  # TODO it should always be safe address
+                new_owner_address=(
+                    safe if safe else wallet.crypto.address
+                ),  # TODO it should always be safe address
             )  # noqa: E800
 
     @staticmethod

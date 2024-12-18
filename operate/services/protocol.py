@@ -161,6 +161,7 @@ class GnosisSafeTransaction:
             operation=SafeOperation.DELEGATE_CALL.value,
             nonce=self.ledger_api.api.eth.get_transaction_count(owner),
         )
+        # tx["gas"] = 200000
         self.tx = self.crypto.sign_transaction(tx)
         return t.cast(t.Dict, self.tx)
 
@@ -178,6 +179,7 @@ class GnosisSafeTransaction:
             except Exception as e:  # pylint: disable=broad-except
                 print(f"Error sending the safe tx: {e}")
                 tx_digest = None
+                raise
 
             if tx_digest is not None:
                 receipt = self.ledger_api.api.eth.wait_for_transaction_receipt(
@@ -1135,8 +1137,10 @@ class EthSafeTxBuilder(_ChainUtil):
         )
 
         instance = self.service_manager_instance
+        
         if update_token is None:
             safe = self.safe
+            print(111111111111111, "safe in protocol", safe)
             txd = instance.encodeABI(
                 fn_name="create",
                 args=[
