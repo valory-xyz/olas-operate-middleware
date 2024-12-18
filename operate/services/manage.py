@@ -586,9 +586,7 @@ class ServiceManager:
             # TODO: This is possibly not a good idea: we are setting up a computed variable based on
             # the value passed in the template.
             db_path = service.path / "persistent_data/memeooorr.db"
-            cookies_path = (
-                service.path / "persistent_data/twikit_cookies.json"
-            )
+            cookies_path = service.path / "persistent_data/twikit_cookies.json"
 
             env_var_to_value.update(
                 {
@@ -650,7 +648,7 @@ class ServiceManager:
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
         on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
         on_chain_description = on_chain_metadata.get("description")
-      
+
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
         )
@@ -1045,7 +1043,10 @@ class ServiceManager:
 
         if withdrawal_address is not None:
             # we don't drain signer yet, because the owner swapping tx may need to happen
-            self.drain_service_safe(service_config_id=service_config_id, withdrawal_address=withdrawal_address)
+            self.drain_service_safe(
+                service_config_id=service_config_id,
+                withdrawal_address=withdrawal_address,
+            )
 
         if counter_current_safe_owners == counter_instances:
             if withdrawal_address is None:
@@ -1076,9 +1077,9 @@ class ServiceManager:
         if withdrawal_address is not None:
             # drain xDAI from service signer key
             drain_signer(
-                ledger_api=self.wallet_manager.load(ledger_config.chain.ledger_type).ledger_api(
-                    chain=ledger_config.chain, rpc=ledger_config.rpc
-                ),
+                ledger_api=self.wallet_manager.load(
+                    ledger_config.chain.ledger_type
+                ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
                 crypto=EthereumCrypto(
                     private_key_path=service.path
                     / "deployment"
@@ -1463,7 +1464,7 @@ class ServiceManager:
             # we avoid the error here because there is a seperate prompt on the UI
             # when not enough funds are present, and the FE doesn't let the user to start the agent.
             # Ideally this error should be allowed, and then the FE should ask the user for more funds.
-            with suppress(RuntimeError):            
+            with suppress(RuntimeError):
                 wallet.transfer(
                     to=t.cast(str, chain_data.multisig),
                     amount=int(to_transfer),
@@ -1551,9 +1552,7 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        ledger_api = wallet.ledger_api(
-            chain=ledger_config.chain, rpc=ledger_config.rpc
-        )
+        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
         ethereum_crypto = EthereumCrypto(
             private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
         )
