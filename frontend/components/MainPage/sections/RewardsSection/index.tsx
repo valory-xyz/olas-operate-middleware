@@ -35,8 +35,9 @@ const DisplayRewards = () => {
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   const earnedTag = useMemo(() => {
-    if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError)
+    if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
       return <Skeleton.Input size="small" />;
+    }
     if (isEligibleForRewards) {
       return <Tag color="success">Earned</Tag>;
     }

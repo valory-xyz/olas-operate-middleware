@@ -63,23 +63,24 @@ const useStakingRewardsDetails = () => {
       token!,
     ),
     queryFn: async () => {
-      if (!multisig || !token || !selectedStakingProgramId) return null;
-      const response =
-        await selectedAgentConfig.serviceApi.getAgentStakingRewardsInfo({
-          agentMultisigAddress: multisig,
-          serviceId: token,
-          stakingProgramId: selectedStakingProgramId,
-          chainId: currentChainId,
-        });
-
-      if (!response) return null;
-
       try {
+        const response =
+          await selectedAgentConfig.serviceApi.getAgentStakingRewardsInfo({
+            agentMultisigAddress: multisig!,
+            serviceId: token!,
+            stakingProgramId: selectedStakingProgramId!,
+            chainId: currentChainId,
+          });
+
+        if (!response) return null;
+
         const parsed = StakingRewardsInfoSchema.parse(response);
         return parsed;
       } catch (e) {
         console.error('Error parsing staking rewards info', e);
       }
+
+      return null;
     },
     enabled:
       !!isOnline &&
