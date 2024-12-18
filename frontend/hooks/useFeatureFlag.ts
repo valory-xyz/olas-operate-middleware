@@ -33,7 +33,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'low-funds': true,
   },
   [AgentType.Memeooorr]: {
-    'manage-wallet': false,
+    'manage-wallet': true,
     'last-transactions': false,
     'rewards-streak': false,
     'staking-contract-section': false,
