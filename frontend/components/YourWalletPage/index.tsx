@@ -7,7 +7,7 @@ import {
   ThemeConfig,
   Typography,
 } from 'antd';
-import { isNil } from 'lodash';
+import { capitalize, isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { AddressLink } from '@/components/AddressLink';
@@ -74,6 +74,7 @@ const Address = () => {
 const OlasBalance = () => {
   const { totalStakedOlasBalance } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
+  const { middlewareChain } = useYourWallet();
 
   const masterSafeOlasBalance = masterWalletBalances
     ?.filter((walletBalance) => walletBalance.symbol === TokenSymbol.OLAS)
@@ -96,7 +97,9 @@ const OlasBalance = () => {
 
   return (
     <Flex vertical gap={8}>
-      <Text strong>{TokenSymbol.OLAS}</Text>
+      <Text strong>
+        {TokenSymbol.OLAS} ({capitalize(middlewareChain)})
+      </Text>
       <InfoBreakdownList
         list={olasBalances.map((item) => ({
           left: item.title,
@@ -110,7 +113,8 @@ const OlasBalance = () => {
 };
 
 const MasterSafeNativeBalance = () => {
-  const { evmHomeChainId, masterSafeAddress } = useYourWallet();
+  const { evmHomeChainId, masterSafeAddress, middlewareChain } =
+    useYourWallet();
   const { masterSafeBalances } = useMasterBalances();
 
   const nativeTokenSymbol = getNativeTokenSymbol(evmHomeChainId);
@@ -135,7 +139,11 @@ const MasterSafeNativeBalance = () => {
       <InfoBreakdownList
         list={[
           {
-            left: <Text strong>{nativeTokenSymbol}</Text>,
+            left: (
+              <Text strong>
+                {nativeTokenSymbol} ({capitalize(middlewareChain)})
+              </Text>
+            ),
             leftClassName: 'text-light',
             right: `${balanceFormat(masterSafeNativeBalance, 2)} ${nativeTokenSymbol}`,
           },
@@ -180,7 +188,7 @@ const MasterEoaSignerNativeBalance = () => {
               />
             ),
             leftClassName: 'text-light',
-            right: `${balanceFormat(masterEoaBalance, 2)} ${nativeTokenSymbol}`,
+            right: `${balanceFormat(masterEoaBalance, 3)} ${nativeTokenSymbol}`,
           },
         ]}
         parentStyle={infoBreakdownParentStyle}
