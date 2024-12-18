@@ -7,16 +7,13 @@ import { truncateAddress } from '@/utils/truncate';
 type AddressLinkProps = {
   address?: Address;
   hideLinkArrow?: boolean;
-
-  // TODO: mark as required once balance breakdown is updated.
-  // and remove the default value
-  middlewareChain?: MiddlewareChain;
+  middlewareChain: MiddlewareChain;
 };
 
 export const AddressLink = ({
   address,
   hideLinkArrow = false,
-  middlewareChain = MiddlewareChain.GNOSIS,
+  middlewareChain,
 }: AddressLinkProps) => {
   if (!address) return null;
   if (!middlewareChain) return null;

@@ -5,6 +5,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 
 import { COLOR } from '@/constants/colors';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingContractCountdown } from '@/hooks/useStakingContractCountdown';
@@ -14,6 +15,7 @@ import { ServicesService } from '@/service/Services';
 import { Address } from '@/types/Address';
 
 import { CustomAlert } from '../Alert';
+import { FeatureNotEnabled } from '../FeatureNotEnabled';
 
 const { Text } = Typography;
 
@@ -54,7 +56,6 @@ const CompatibleMessage = () => (
 export const WithdrawFunds = () => {
   const { selectedService, refetch: refetchServices } = useServices();
   const { refetch: refetchMasterWallets } = useMasterWalletContext();
-
   const { updateBalances } = useBalanceContext();
 
   const { service, isServiceRunning } = useService(
@@ -64,6 +65,7 @@ export const WithdrawFunds = () => {
   const { isServiceStakedForMinimumDuration, selectedStakingContractDetails } =
     useActiveStakingContractDetails();
 
+  // state
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [isWithdrawalLoading, setIsWithdrawalLoading] = useState(false);
@@ -147,6 +149,9 @@ export const WithdrawFunds = () => {
     ),
     [service, isServiceStakedForMinimumDuration, showModal],
   );
+
+  const isWithdrawFundsEnabled = useFeatureFlag('withdraw-funds');
+  if (!isWithdrawFundsEnabled) return <FeatureNotEnabled />;
 
   return (
     <>

@@ -2,12 +2,10 @@ import { useMemo } from 'react';
 
 import {
   MiddlewareBuildingStatuses,
-  MiddlewareChain,
   MiddlewareDeploymentStatus,
   MiddlewareRunningStatuses,
   MiddlewareTransitioningStatuses,
 } from '@/client';
-import { EvmChainId } from '@/enums/Chain';
 import {
   AgentEoa,
   AgentSafe,
@@ -54,12 +52,12 @@ export const useService = (serviceConfigId?: string) => {
     return service?.chain_configs?.[service?.home_chain]?.chain_data.token;
   }, [service?.chain_configs, service?.home_chain]);
 
-  // TODO: quick hack to fix for refactor (only predict), will make it dynamic later
   const serviceWallets: AgentWallets = useMemo(() => {
     if (!service) return [];
-    if (!service.chain_configs?.[MiddlewareChain.GNOSIS]) return [];
+    if (!selectedService?.home_chain) return [];
+    if (!service.chain_configs?.[selectedService?.home_chain]) return [];
 
-    const chainConfig = service.chain_configs[MiddlewareChain.GNOSIS];
+    const chainConfig = service.chain_configs[selectedService?.home_chain];
     if (!chainConfig) return [];
 
     return [
@@ -77,12 +75,12 @@ export const useService = (serviceConfigId?: string) => {
               address: chainConfig.chain_data.multisig,
               owner: WalletOwnerType.Agent,
               type: WalletType.Safe,
-              evmChainId: EvmChainId.Gnosis,
+              evmChainId: asEvmChainId(selectedService?.home_chain),
             } as AgentSafe,
           ]
         : []),
     ];
-  }, [service]);
+  }, [service, selectedService]);
 
   const addresses: ServiceChainIdAddressRecord = useMemo(() => {
     if (!service) return {};
