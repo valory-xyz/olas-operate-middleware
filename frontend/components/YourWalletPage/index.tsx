@@ -75,7 +75,7 @@ const OlasBalance = () => {
   const { selectedAgentConfig } = useServices();
   const { totalStakedOlasBalance } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
-  const { middlewareChain, evmHomeChainId } = useYourWallet();
+  const { middlewareChain } = useYourWallet();
 
   const masterSafeOlasBalance = masterWalletBalances
     ?.filter(
