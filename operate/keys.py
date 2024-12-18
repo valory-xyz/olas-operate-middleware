@@ -112,10 +112,7 @@ class KeysManager:
         with open(path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
-        old_to_new_ledgers = {
-            0: "ethereum",
-            1: "solana"
-        }
+        old_to_new_ledgers = {0: "ethereum", 1: "solana"}
 
         migrated = False
         if data.get("ledger") in old_to_new_ledgers:

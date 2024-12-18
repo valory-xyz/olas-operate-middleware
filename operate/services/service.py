@@ -106,50 +106,50 @@ DEFAULT_TRADER_ENV_VARS = {
         "name": "Gnosis ledger RPC",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "STAKING_CONTRACT_ADDRESS": {
         "name": "Staking contract address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_ACTIVITY_CHECKER_CONTRACT": {
         "name": "Mech activity checker contract",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_CONTRACT_ADDRESS": {
         "name": "Mech contract address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "MECH_REQUEST_PRICE": {
         "name": "Mech request price",
         "description": "",
         "value": "10000000000000000",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "USE_MECH_MARKETPLACE": {
         "name": "Use Mech marketplace",
         "description": "",
         "value": "False",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "REQUESTER_STAKING_INSTANCE_ADDRESS": {
         "name": "Requester staking instance address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
+        "provision_type": "computed",
     },
     "PRIORITY_MECH_ADDRESS": {
         "name": "Priority Mech address",
         "description": "",
         "value": "",
-        "provision_type": "computed"
-    }
+        "provision_type": "computed",
+    },
 }
 
 
@@ -1002,9 +1002,9 @@ class Service(LocalResource):
         self.service_path = service_path
         self.name = service_template["name"]
         self.hash = service_template["hash"]
+        self.description = service_template["description"]
 
-        # TODO temporarily disable update on description and env variables - hotfix for Memeooorr
-        # self.description = service_template["description"]
+        # TODO temporarily disable update env variables - hotfix for Memeooorr
         # self.env_variables = service_template["env_variables"]
 
         # Only update hash_history if latest inserted hash is different
