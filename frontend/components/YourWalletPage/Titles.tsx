@@ -1,5 +1,6 @@
 import { Flex, Typography } from 'antd';
 
+import { MiddlewareChain } from '@/client';
 import { InfoTooltip } from '@/components/InfoTooltip';
 import { TokenSymbol } from '@/enums/Token';
 import { Address } from '@/types/Address';
@@ -8,11 +9,16 @@ import { AddressLink } from '../AddressLink';
 
 const { Paragraph, Text, Title } = Typography;
 
-type SignerTitleProps = { signerText: string; signerAddress?: Address };
+type SignerTitleProps = {
+  signerText: string;
+  signerAddress: Address;
+  middlewareChain: MiddlewareChain;
+};
 
 export const SignerTitle = ({
   signerText,
   signerAddress,
+  middlewareChain,
 }: SignerTitleProps) => (
   <>
     Signer&nbsp;
@@ -28,7 +34,10 @@ export const SignerTitle = ({
       <Paragraph className="text-sm m-0">
         <Flex gap={4} vertical>
           <Text className="text-sm">{signerText}</Text>
-          <AddressLink address={signerAddress} />
+          <AddressLink
+            address={signerAddress}
+            middlewareChain={middlewareChain}
+          />
         </Flex>
       </Paragraph>
     </InfoTooltip>
@@ -58,7 +67,7 @@ export const NativeTokenTitle = ({ symbol }: { symbol: TokenSymbol }) => (
     </Title>
     &nbsp;
     <InfoTooltip>
-      {/* TODO: address multi-agent tooltip, specfic to agent config */}
+      {/* TODO: address multi-agent tooltip, specific to agent config */}
       <Paragraph className="text-sm m-0">
         {symbol} is used by the agent to engage in prediction markets. This
         amount will fluctuate based on your agent&apos;s performance.

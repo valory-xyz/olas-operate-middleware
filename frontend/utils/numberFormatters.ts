@@ -5,7 +5,7 @@ import { BigNumberish, ethers } from 'ethers';
  */
 export const balanceFormat = (
   balance: number | undefined,
-  decimals: 2,
+  decimals = 2,
 ): string => {
   if (balance === undefined) return '--';
   return Intl.NumberFormat('en-US', {
