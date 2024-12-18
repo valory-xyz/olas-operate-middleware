@@ -63,11 +63,12 @@ const AlertInsufficientMigrationFunds = ({
 
   if (isNil(totalStakedOlasBalanceOnHomeChain)) return null;
 
-  const requiredOlasDeposit = sum([
-    masterSafeBalanceOnHomeChain[TokenSymbol.OLAS],
-    totalStakedOlasBalanceOnHomeChain,
-    -requiredStakedOlas,
-  ]);
+  const requiredOlasDeposit =
+    requiredStakedOlas -
+    sum([
+      masterSafeBalanceOnHomeChain[TokenSymbol.OLAS],
+      totalStakedOlasBalanceOnHomeChain,
+    ]);
 
   const homeChainId = selectedAgentConfig.evmHomeChainId;
   const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
