@@ -32,6 +32,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 import { FeatureNotEnabled } from '../FeatureNotEnabled';
 import { Container, infoBreakdownParentStyle } from './styles';
 import { SignerTitle } from './Titles';
+import { useYourWallet } from './useYourWallet';
 import { YourAgentWallet } from './YourAgent';
 
 const { Text } = Typography;
@@ -40,21 +41,6 @@ const yourWalletTheme: ThemeConfig = {
   components: {
     Card: { paddingLG: 16 },
   },
-};
-
-const useYourWallet = () => {
-  const { selectedAgentConfig } = useServices();
-  const { isLoading: isMasterSafeLoading, masterSafes } =
-    useMasterWalletContext();
-
-  return {
-    middlewareChain: selectedAgentConfig?.middlewareHomeChainId,
-    evmHomeChainId: selectedAgentConfig?.evmHomeChainId,
-    isMasterSafeLoading,
-    masterSafeAddress: masterSafes?.find(
-      ({ evmChainId }) => evmChainId === selectedAgentConfig?.evmHomeChainId,
-    )?.address,
-  };
 };
 
 const Address = () => {
@@ -227,7 +213,7 @@ export const YourWalletPage = () => {
             <OlasBalance />
             <MasterSafeNativeBalance />
             <MasterEoaSignerNativeBalance />
-            {selectedService && <YourAgentWallet />}
+            {!selectedService && <YourAgentWallet />}
           </Container>
         ) : (
           <FeatureNotEnabled />
