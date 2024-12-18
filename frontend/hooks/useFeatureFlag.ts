@@ -6,8 +6,9 @@ import { assertRequired } from '@/types/Util';
 import { useServices } from './useServices';
 
 const FeatureFlagsSchema = z.enum([
-  'last-transactions',
   'manage-wallet',
+  'withdraw-funds',
+  'last-transactions',
   'rewards-streak',
   'staking-contract-section',
   'low-funds',
@@ -27,6 +28,7 @@ const FeaturesConfigSchema = z.record(
 const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   [AgentType.PredictTrader]: {
     'manage-wallet': true,
+    'withdraw-funds': true,
     'last-transactions': true,
     'rewards-streak': true,
     'staking-contract-section': true,
@@ -34,6 +36,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   },
   [AgentType.Memeooorr]: {
     'manage-wallet': true,
+    'withdraw-funds': false,
     'last-transactions': false,
     'rewards-streak': false,
     'staking-contract-section': false,
