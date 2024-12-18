@@ -79,6 +79,8 @@ const useStakingRewardsDetails = () => {
       } catch (e) {
         console.error('Error parsing staking rewards info', e);
       }
+
+      return null;
     },
     enabled:
       !!isOnline &&
