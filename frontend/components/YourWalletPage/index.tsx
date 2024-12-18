@@ -69,11 +69,18 @@ const Address = () => {
 };
 
 const OlasBalance = () => {
+  const { selectedAgentConfig } = useServices();
   const { totalStakedOlasBalance } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
 
   const masterSafeOlasBalance = masterWalletBalances
-    ?.filter((walletBalance) => walletBalance.symbol === TokenSymbol.OLAS)
+    ?.filter(
+      (walletBalance) =>
+        walletBalance.symbol === TokenSymbol.OLAS &&
+        selectedAgentConfig.requiresMasterSafesOn.includes(
+          walletBalance.evmChainId,
+        ),
+    )
     .reduce((acc, balance) => acc + balance.balance, 0);
 
   const olasBalances = useMemo(() => {
