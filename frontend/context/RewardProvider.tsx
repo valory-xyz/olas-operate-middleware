@@ -63,14 +63,12 @@ const useStakingRewardsDetails = () => {
       token!,
     ),
     queryFn: async () => {
-      if (!multisig || !token || !selectedStakingProgramId) return null;
-
       try {
         const response =
           await selectedAgentConfig.serviceApi.getAgentStakingRewardsInfo({
-            agentMultisigAddress: multisig,
-            serviceId: token,
-            stakingProgramId: selectedStakingProgramId,
+            agentMultisigAddress: multisig!,
+            serviceId: token!,
+            stakingProgramId: selectedStakingProgramId!,
             chainId: currentChainId,
           });
 
