@@ -74,10 +74,13 @@ const Address = () => {
 const OlasBalance = () => {
   const { totalStakedOlasBalance } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
-  const { middlewareChain } = useYourWallet();
+  const { middlewareChain, evmHomeChainId } = useYourWallet();
 
   const masterSafeOlasBalance = masterWalletBalances
-    ?.filter((walletBalance) => walletBalance.symbol === TokenSymbol.OLAS)
+    ?.filter(
+      ({ symbol, evmChainId }) =>
+        symbol === TokenSymbol.OLAS && evmChainId === evmHomeChainId,
+    )
     .reduce((acc, balance) => acc + balance.balance, 0);
 
   const olasBalances = useMemo(() => {
@@ -221,7 +224,7 @@ export const YourWalletPage = () => {
             <OlasBalance />
             <MasterSafeNativeBalance />
             <MasterEoaSignerNativeBalance />
-            {!selectedService && <YourAgentWallet />}
+            {selectedService && <YourAgentWallet />}
           </Container>
         ) : (
           <FeatureNotEnabled />
