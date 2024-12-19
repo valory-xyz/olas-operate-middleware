@@ -1,4 +1,4 @@
-import { Button, ButtonProps, message } from 'antd';
+import { Button, message } from 'antd';
 import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
@@ -37,8 +37,7 @@ import { WalletService } from '@/service/Wallet';
 import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
 
-/** Button used to start / deploy the agent */
-export const AgentNotRunningButton = () => {
+const useServiceDeployment = () => {
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
@@ -110,10 +109,13 @@ export const AgentNotRunningButton = () => {
   ]);
 
   const isDeployable = useMemo(() => {
-    if (isServicesLoading) return false;
-    if (isServiceRunning) return false;
-
-    if (!isAllStakingContractDetailsRecordLoaded) return false;
+    if (
+      isServicesLoading ||
+      isServiceRunning ||
+      !isAllStakingContractDetailsRecordLoaded
+    ) {
+      return false;
+    }
 
     if (isNil(requiredStakedOlas)) return false;
 
@@ -229,24 +231,21 @@ export const AgentNotRunningButton = () => {
     let middlewareServiceResponse;
     if (!service) {
       try {
-        middlewareServiceResponse = await ServicesService.createService({
+        return ServicesService.createService({
           stakingProgramId: selectedStakingProgramId,
           serviceTemplate,
-          deploy: true,
+          deploy: false, // TODO: deprecated will remove
           useMechMarketplace:
-            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][ // TODO: support multi-agent, during optimus week
+            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
               selectedStakingProgramId
             ].mechType === MechType.Marketplace,
         });
       } catch (error) {
-        console.error('Error while creating the service:', error);
+        console.error('Failed to create service:', error);
         showNotification?.('Failed to create service.');
-        throw new Error('Failed to create service');
+        throw error;
       }
     }
-
-    if (isNil(service) && isNil(middlewareServiceResponse))
-      throw new Error('Service not found');
 
     // Update the service if the hash is different
     if (!middlewareServiceResponse && service) {
@@ -294,6 +293,14 @@ export const AgentNotRunningButton = () => {
 
   const handleStart = useCallback(async () => {
     if (!masterWallets?.[0]) return;
+    if (!selectedStakingProgramId) {
+      throw new Error('Staking program ID required');
+    }
+
+    const selectedServiceTemplate = SERVICE_TEMPLATES.find(
+      (template) => template.agentType === selectedAgentType,
+    );
+    if (!selectedServiceTemplate) throw new Error('Service template required');
 
     pauseAllPolling();
     overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
@@ -308,27 +315,27 @@ export const AgentNotRunningButton = () => {
       });
       await deployAndStartService();
     } catch (error) {
-      console.error('Error while starting the agent:', error);
-      showNotification?.('An error occurred. Please try again.');
-      overrideSelectedServiceStatus(null); // wipe status
+      console.error('Error during start:', error);
+      showNotification?.('An error occurred while starting. Please try again.');
+      overrideSelectedServiceStatus(null);
+      resumeAllPolling();
       throw error;
     }
 
     try {
       await updateStatesSequentially();
     } catch (error) {
-      console.error('Error while updating states sequentially:', error);
-      showNotification?.('Failed to update app state.');
+      console.error('Failed to update states:', error);
+      showNotification?.('Failed to update state.');
     }
 
     overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYED);
-
     resumeAllPolling();
     await delayInSeconds(5);
-
     overrideSelectedServiceStatus(null);
   }, [
     masterWallets,
+    selectedStakingProgramId,
     pauseAllPolling,
     overrideSelectedServiceStatus,
     resumeAllPolling,
@@ -340,21 +347,15 @@ export const AgentNotRunningButton = () => {
     gotoPage,
     showNotification,
     updateStatesSequentially,
+    selectedAgentType,
   ]);
-
-  const buttonProps: ButtonProps = {
-    type: 'primary',
-    size: 'large',
-    disabled: !isDeployable,
-    onClick: isDeployable ? handleStart : undefined,
-  };
 
   const buttonText = `Start agent ${service ? '' : '& stake'}`;
 
-  return <Button {...buttonProps}>{buttonText}</Button>;
+  return { isDeployable, handleStart, buttonText };
 };
 
-export const createSafeIfNeeded = async ({
+const createSafeIfNeeded = async ({
   masterSafes,
   masterSafesOwners,
   masterEoa,
@@ -410,5 +411,23 @@ export const createSafeIfNeeded = async ({
   await WalletService.createSafe(
     selectedAgentConfig.middlewareHomeChainId,
     [...otherChainOwners][0],
+  );
+};
+
+/**
+ * Agent Not Running Button
+ */
+export const AgentNotRunningButton = () => {
+  const { isDeployable, handleStart, buttonText } = useServiceDeployment();
+
+  return (
+    <Button
+      type="primary"
+      size="large"
+      disabled={!isDeployable}
+      onClick={isDeployable ? handleStart : undefined}
+    >
+      {buttonText}
+    </Button>
   );
 };
