@@ -59,19 +59,19 @@ export const MigrateButton = ({
     useStakingProgram();
   const {
     selectedStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   } = useActiveStakingContractDetails();
   const { stakingContractInfo: defaultStakingContractInfo } =
     useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
-    if (!isSelectedStakingContractDetailsLoaded) return;
+    if (isSelectedStakingContractDetailsLoading) return;
     if (selectedStakingContractDetails) return selectedStakingContractDetails;
     return defaultStakingContractInfo;
   }, [
     selectedStakingContractDetails,
     defaultStakingContractInfo,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   ]);
 
   const { setMigrationModalOpen } = useModals();

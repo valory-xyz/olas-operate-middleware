@@ -36,11 +36,11 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
 
   const { serviceApi, evmHomeChainId } = selectedAgentConfig;
 
-  const isQueryEnabled =
-    !isNil(evmHomeChainId) && isServicesLoaded && !!serviceNftTokenId;
-
   const response = useQuery({
-    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(evmHomeChainId),
+    queryKey: REACT_QUERY_KEYS.STAKING_PROGRAM_KEY(
+      evmHomeChainId,
+      serviceNftTokenId!,
+    ),
     queryFn: async () => {
       if (!serviceNftTokenId) return null;
       if (!Number(serviceNftTokenId)) return null;
@@ -56,8 +56,8 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
         DEFAULT_STAKING_PROGRAM_IDS[selectedAgentConfig.evmHomeChainId]
       );
     },
-    // enabled: isQueryEnabled,
-    refetchInterval: isQueryEnabled ? FIVE_SECONDS_INTERVAL : false,
+    enabled: !isNil(evmHomeChainId) && isServicesLoaded && !!serviceNftTokenId,
+    refetchInterval: FIVE_SECONDS_INTERVAL,
   });
 
   const setActiveStakingProgramId = useCallback(
@@ -80,7 +80,7 @@ const useGetActiveStakingProgramId = (serviceNftTokenId: Maybe<number>) => {
     [queryClient, evmHomeChainId, serviceNftTokenId],
   );
 
-  return { ...response, isEnabled: isQueryEnabled, setActiveStakingProgramId };
+  return { ...response, setActiveStakingProgramId };
 };
 
 /**

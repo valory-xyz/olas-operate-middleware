@@ -22,18 +22,15 @@ export const NoAvailableSlotsOnTheContract = () => {
     selectedStakingProgramMeta,
   } = useStakingProgram();
 
-  const {
-    isServiceStaked,
-    isSelectedStakingContractDetailsLoaded:
-      isActiveStakingContractDetailsLoaded,
-  } = useActiveStakingContractDetails();
+  const { isServiceStaked, isSelectedStakingContractDetailsLoading } =
+    useActiveStakingContractDetails();
 
   const { hasEnoughServiceSlots } = useStakingContractDetails(
     selectedStakingProgramId,
   );
 
   if (!isActiveStakingProgramLoaded) return null;
-  if (!isActiveStakingContractDetailsLoaded) return null;
+  if (isSelectedStakingContractDetailsLoading) return null;
 
   if (hasEnoughServiceSlots) return null;
   if (isServiceStaked) return null;
