@@ -117,32 +117,6 @@ const AlertNoSlots = () => (
   />
 );
 
-// TODO: uncomment when required
-//
-// const AlertUpdateToMigrate = () => (
-//   <CustomAlert
-//     type="warning"
-//     showIcon
-//     message={
-//       <Flex vertical gap={4}>
-//         <Text className="font-weight-600">App update required</Text>
-
-//         {/*
-//           TODO: Define version requirement in some JSON store?
-//           How do we access this date on a previous version?
-//         */}
-//         <Text>
-//           Update Pearl to the latest version to switch to the staking contract.
-//         </Text>
-//         {/* TODO: trigger update through IPC */}
-//         <a href="#" target="_blank">
-//           Update Pearl to the latest version {UNICODE_SYMBOLS.EXTERNAL_LINK}
-//         </a>
-//       </Flex>
-//     }
-//   />
-// );
-
 /**
  * Displays alerts for specific non-migration reasons
  */
