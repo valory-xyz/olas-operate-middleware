@@ -4,7 +4,6 @@ import { Eoa, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { Service } from '@/types/Service';
 import { Optional } from '@/types/Util';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useBalanceContext } from './useBalanceContext';
 import { useMultisigs } from './useMultisig';
@@ -13,7 +12,6 @@ import { useStore } from './useStore';
 import { useMasterWalletContext } from './useWallet';
 
 const useAddressesLogs = () => {
-  const { selectedService } = useServices();
   const {
     masterSafes,
     masterEoa,
@@ -44,16 +42,11 @@ const useAddressesLogs = () => {
     return result;
   }, [masterSafesOwners, masterEoa]);
 
-  const masterSafe = masterSafes?.filter(
-    ({ evmChainId }) =>
-      evmChainId === asEvmChainId(selectedService?.home_chain),
-  );
-
   return {
     isLoaded: masterWalletsIsFetched && masterSafesOwnersIsFetched,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
-      { masterSafe: masterSafe ?? 'undefined' },
+      { masterSafe: masterSafes ?? 'undefined' },
       { masterSafeBackups: backupEoas ?? 'undefined' },
     ],
   };
