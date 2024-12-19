@@ -38,6 +38,9 @@ const useEpochEndTime = () => {
   return { data, isLoading };
 };
 
+/**
+ * Staking rewards for the current epoch
+ */
 export const StakingRewardsThisEpoch = () => {
   const { data: epochEndTimeInMs } = useEpochEndTime();
 

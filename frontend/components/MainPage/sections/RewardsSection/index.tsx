@@ -28,18 +28,25 @@ const DisplayRewards = () => {
   const {
     availableRewardsForEpochEth,
     isEligibleForRewards,
-    isStakingRewardsDetailsFetched,
+    isStakingRewardsDetailsLoading,
+    isStakingRewardsDetailsError,
   } = useReward();
   const { isLoaded: isBalancesLoaded } = useBalanceContext();
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   const earnedTag = useMemo(() => {
-    if (!isStakingRewardsDetailsFetched) return <Skeleton.Input size="small" />;
-    if (!isEligibleForRewards) {
-      return <Tag color="processing">Not yet earned</Tag>;
+    if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
+      return <Skeleton.Input size="small" />;
     }
-    return <Tag color="success">Earned</Tag>;
-  }, [isEligibleForRewards, isStakingRewardsDetailsFetched]);
+    if (isEligibleForRewards) {
+      return <Tag color="success">Earned</Tag>;
+    }
+    return <Tag color="processing">Not yet earned</Tag>;
+  }, [
+    isEligibleForRewards,
+    isStakingRewardsDetailsLoading,
+    isStakingRewardsDetailsError,
+  ]);
 
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
