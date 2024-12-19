@@ -5,7 +5,6 @@ import { MODAL_WIDTH } from '@/constants/width';
 
 import { CardSection } from '../styled/CardSection';
 import { CustomModal } from '../styled/CustomModal';
-import { DebugAddresses } from './DebugAddresses';
 
 const { Text } = Typography;
 
@@ -27,7 +26,7 @@ export const DebugInfoSection = () => {
         width={MODAL_WIDTH}
         onCancel={handleCancel}
       >
-        <DebugAddresses />
+        NEW!
       </CustomModal>
     </CardSection>
   );
