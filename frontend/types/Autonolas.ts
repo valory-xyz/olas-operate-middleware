@@ -45,7 +45,7 @@ export type StakingContractDetails = {
 };
 
 export type ServiceStakingDetails = {
-  /** time when service was staked (in seconds) - 0 = never staked */
+  /** time when service was staked (in seconds) - (0 = never staked) */
   serviceStakingStartTime: number;
   /** 0: not staked, 1: staked, 2: evicted */
   serviceStakingState: StakingState;
