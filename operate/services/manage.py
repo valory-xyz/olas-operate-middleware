@@ -1697,6 +1697,19 @@ class ServiceManager:
         service.update(service_template, allow_different_service_public_id)
         return service
 
+    def update(
+        self,
+        service_config_id: str,
+        service_template: ServiceTemplate,
+        allow_different_service_public_id: bool = False,
+    ) -> Service:
+        """Update a service."""
+
+        self.logger.info(f"Updating {service_config_id=}")
+        service = self.load(service_config_id=service_config_id)
+        service.update(service_template, allow_different_service_public_id)
+        return service
+
     def update_all_matching(
         self,
         service_template: ServiceTemplate,
