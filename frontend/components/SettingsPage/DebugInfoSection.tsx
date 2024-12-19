@@ -52,7 +52,7 @@ const AgentStakingInfo = () => {
       { key: 'Status', value: agentStakingState ?? NA },
       { key: 'Last staked', value: lastStaked ?? NA, column: true },
       {
-        key: 'The time remaining until it can be unstaked',
+        key: 'Can be unstaked at',
         value: isNil(timeRemainingToUnstake) ? NA : timeRemainingToUnstake,
         column: true,
       },
