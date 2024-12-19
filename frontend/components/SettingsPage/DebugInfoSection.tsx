@@ -1,4 +1,5 @@
 import { Button, Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 import { useCallback, useMemo, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
@@ -13,13 +14,13 @@ import { CustomModal } from '../styled/CustomModal';
 const { Text } = Typography;
 
 const AgentStakingInfo = () => {
-  // serviceStakingState
   const { selectedAgentConfig } = useServices();
   const { selectedStakingContractDetails } = useStakingContractContext();
 
   const agentName = selectedAgentConfig?.displayName;
-  const agentStatus = selectedStakingContractDetails?.serviceStakingState;
 
+  // agent status
+  const agentStatus = selectedStakingContractDetails?.serviceStakingState;
   const agentStakingState = useMemo(() => {
     if (agentStatus === StakingState.Evicted) return 'Evicted';
     if (agentStatus === StakingState.Staked) return 'Staked';
@@ -27,24 +28,41 @@ const AgentStakingInfo = () => {
     return null;
   }, [agentStatus]);
 
+  // last staked time
+  const lastStakedTime =
+    selectedStakingContractDetails?.serviceStakingStartTime;
+  const lastStaked = lastStakedTime
+    ? new Date(lastStakedTime).toLocaleString()
+    : null;
+
+  // time remaining until it can be unstaked
+  const timeRemainingToUnstake = useMemo(() => {
+    if (lastStakedTime === 0) return null; // If never staked, return null
+
+    if (!selectedStakingContractDetails) return null;
+    const { serviceStakingStartTime, minimumStakingDuration } =
+      selectedStakingContractDetails;
+    const timeRemaining =
+      (serviceStakingStartTime ?? 0) + (minimumStakingDuration ?? 0) * 1000;
+
+    return Intl.DateTimeFormat('en-US', {
+      dateStyle: 'medium',
+      timeStyle: 'long',
+    }).format(new Date(timeRemaining + Date.now()));
+  }, [lastStakedTime, selectedStakingContractDetails]);
+
   const info = useMemo(() => {
     return [
       { key: 'Name', value: agentName ?? NA },
-      {
-        key: 'Status',
-        value: agentStakingState ?? NA,
-      },
-      {
-        key: 'Staking state',
-        value: NA,
-      },
+      { key: 'Status', value: agentStakingState ?? NA },
+      { key: 'Last staked', value: lastStaked ?? NA },
       {
         key: 'The time remaining until it can be unstaked',
-        value: NA + ' ' + NA,
+        value: isNil(timeRemainingToUnstake) ? NA : timeRemainingToUnstake,
         column: true,
       },
     ];
-  }, [agentName, agentStakingState]);
+  }, [agentName, agentStakingState, lastStaked, timeRemainingToUnstake]);
 
   return (
     <Flex vertical style={{ padding: '16px 24px' }} gap={8}>
