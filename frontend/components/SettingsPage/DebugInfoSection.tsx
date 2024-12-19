@@ -7,6 +7,7 @@ import { MODAL_WIDTH } from '@/constants/width';
 import { useServices } from '@/hooks/useServices';
 import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 import { StakingState } from '@/types/Autonolas';
+import { formatDate } from '@/utils/dateFormatter';
 
 import { CardSection } from '../styled/CardSection';
 import { CustomModal } from '../styled/CustomModal';
@@ -31,31 +32,25 @@ const AgentStakingInfo = () => {
   // last staked time
   const lastStakedTime =
     selectedStakingContractDetails?.serviceStakingStartTime;
-  const lastStaked = lastStakedTime
-    ? new Date(lastStakedTime).toLocaleString()
-    : null;
+  const lastStaked = lastStakedTime ? formatDate(lastStakedTime * 1000) : null;
 
   // time remaining until it can be unstaked
   const timeRemainingToUnstake = useMemo(() => {
     if (lastStakedTime === 0) return null; // If never staked, return null
-
     if (!selectedStakingContractDetails) return null;
-    const { serviceStakingStartTime, minimumStakingDuration } =
-      selectedStakingContractDetails;
-    const timeRemaining =
-      (serviceStakingStartTime ?? 0) + (minimumStakingDuration ?? 0) * 1000;
 
-    return Intl.DateTimeFormat('en-US', {
-      dateStyle: 'medium',
-      timeStyle: 'long',
-    }).format(new Date(timeRemaining + Date.now()));
+    const timeRemaining =
+      (selectedStakingContractDetails?.serviceStakingStartTime ?? 0) +
+      (selectedStakingContractDetails?.minimumStakingDuration ?? 0);
+
+    return formatDate(timeRemaining * 1000);
   }, [lastStakedTime, selectedStakingContractDetails]);
 
   const info = useMemo(() => {
     return [
       { key: 'Name', value: agentName ?? NA },
       { key: 'Status', value: agentStakingState ?? NA },
-      { key: 'Last staked', value: lastStaked ?? NA },
+      { key: 'Last staked', value: lastStaked ?? NA, column: true },
       {
         key: 'The time remaining until it can be unstaked',
         value: isNil(timeRemainingToUnstake) ? NA : timeRemainingToUnstake,
@@ -66,11 +61,18 @@ const AgentStakingInfo = () => {
 
   return (
     <Flex vertical style={{ padding: '16px 24px' }} gap={8}>
-      <Text strong>Agent staking details:</Text>
+      <Text>Agent staking details:</Text>
       {selectedAgentConfig ? (
         info.map(({ key, value, column }) => (
-          <Flex key={key} gap={column ? 0 : 8} vertical={!!column}>
-            <Text type="secondary">{key}: </Text>
+          <Flex
+            key={key}
+            gap={column ? 2 : 8}
+            vertical={!!column}
+            align={column ? 'start' : 'center'}
+          >
+            <Text type="secondary" className="text-sm">
+              {key}:
+            </Text>
             <Text strong>{value}</Text>
           </Flex>
         ))
@@ -98,6 +100,7 @@ export const DebugInfoSection = () => {
         footer={null}
         width={MODAL_WIDTH}
         onCancel={handleCancel}
+        destroyOnClose
       >
         <AgentStakingInfo />
       </CustomModal>
