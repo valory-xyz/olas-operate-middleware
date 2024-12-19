@@ -85,21 +85,23 @@ const useServicesLogs = () => {
   const { services, isFetched: isLoaded, selectedService } = useServices();
 
   const formattedServices = useMemo(() => {
-    return (
-      services?.map((item: Service) => ({
+    return services?.map((item: Service) => {
+      const isSameService =
+        selectedService?.service_config_id === item.service_config_id;
+
+      return {
         ...item,
         keys: item.keys.map((key) => key.address),
-        deploymentStatus:
-          selectedService?.service_config_id === item.service_config_id
-            ? selectedService.deploymentStatus
-            : item.deploymentStatus,
-      })) ?? 'undefined'
-    );
+        deploymentStatus: isSameService
+          ? selectedService.deploymentStatus
+          : item.deploymentStatus,
+      };
+    });
   }, [services, selectedService]);
 
   return {
     isLoaded,
-    data: { services: formattedServices },
+    data: { services: formattedServices ?? 'undefined' },
   };
 };
 
@@ -129,9 +131,3 @@ export const useLogs = () => {
 
   return logs;
 };
-
-/**
- * - type of agent,
- * - when was it last staked,
- * - how long until it can be unstaked (we already have this),
- */
