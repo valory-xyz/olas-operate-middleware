@@ -37,7 +37,7 @@ import { WalletService } from '@/service/Wallet';
 import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
 
-export function useServiceDeployment() {
+const useServiceDeployment = () => {
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
@@ -113,8 +113,9 @@ export function useServiceDeployment() {
       isServicesLoading ||
       isServiceRunning ||
       !isAllStakingContractDetailsRecordLoaded
-    )
+    ) {
       return false;
+    }
 
     if (isNil(requiredStakedOlas)) return false;
 
@@ -292,8 +293,9 @@ export function useServiceDeployment() {
 
   const handleStart = useCallback(async () => {
     if (!masterWallets?.[0]) return;
-    if (!selectedStakingProgramId)
+    if (!selectedStakingProgramId) {
       throw new Error('Staking program ID required');
+    }
 
     const selectedServiceTemplate = SERVICE_TEMPLATES.find(
       (template) => template.agentType === selectedAgentType,
@@ -351,25 +353,9 @@ export function useServiceDeployment() {
   const buttonText = `Start agent ${service ? '' : '& stake'}`;
 
   return { isDeployable, handleStart, buttonText };
-}
-
-// Original component, now simplified
-export const AgentNotRunningButton = () => {
-  const { isDeployable, handleStart, buttonText } = useServiceDeployment();
-
-  return (
-    <Button
-      type="primary"
-      size="large"
-      disabled={!isDeployable}
-      onClick={isDeployable ? handleStart : undefined}
-    >
-      {buttonText}
-    </Button>
-  );
 };
 
-export const createSafeIfNeeded = async ({
+const createSafeIfNeeded = async ({
   masterSafes,
   masterSafesOwners,
   masterEoa,
@@ -425,5 +411,23 @@ export const createSafeIfNeeded = async ({
   await WalletService.createSafe(
     selectedAgentConfig.middlewareHomeChainId,
     [...otherChainOwners][0],
+  );
+};
+
+/**
+ * Agent Not Running Button
+ */
+export const AgentNotRunningButton = () => {
+  const { isDeployable, handleStart, buttonText } = useServiceDeployment();
+
+  return (
+    <Button
+      type="primary"
+      size="large"
+      disabled={!isDeployable}
+      onClick={isDeployable ? handleStart : undefined}
+    >
+      {buttonText}
+    </Button>
   );
 };
