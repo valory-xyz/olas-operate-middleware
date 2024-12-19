@@ -1,244 +1,92 @@
-import { CopyOutlined } from '@ant-design/icons';
-import {
-  Button,
-  Col,
-  Flex,
-  message,
-  Row,
-  Spin,
-  Tooltip,
-  Typography,
-} from 'antd';
-import { isAddress } from 'ethers/lib/utils';
-import { isEmpty, isNil } from 'lodash';
-import { Fragment, useCallback, useMemo, useState } from 'react';
-import styled from 'styled-components';
+import { Button, Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
+import { useCallback, useMemo, useState } from 'react';
 
-import { COLOR } from '@/constants/colors';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
+import { NA } from '@/constants/symbols';
 import { MODAL_WIDTH } from '@/constants/width';
-import { WalletBalanceResult } from '@/context/BalanceProvider';
-import { EvmChainId, EvmChainName } from '@/enums/Chain';
-import { TokenSymbol } from '@/enums/Token';
-import { WalletType } from '@/enums/Wallet';
-import {
-  useBalanceContext,
-  useMasterBalances,
-} from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
-import { useMasterWalletContext } from '@/hooks/useWallet';
-import { Address } from '@/types/Address';
-import { copyToClipboard } from '@/utils/copyToClipboard';
-import { balanceFormat } from '@/utils/numberFormatters';
-import { truncateAddress } from '@/utils/truncate';
+import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
+import { StakingState } from '@/types/Autonolas';
+import { formatDate } from '@/utils/dateFormatter';
 
 import { CardSection } from '../styled/CardSection';
 import { CustomModal } from '../styled/CustomModal';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
-const Card = styled.div`
-  padding: 16px 24px;
-  border-bottom: 1px solid ${COLOR.BORDER_GRAY};
-`;
+const AgentStakingInfo = () => {
+  const { selectedAgentConfig } = useServices();
+  const { selectedStakingContractDetails } = useStakingContractContext();
 
-const ICON_STYLE = { color: '#606F85' };
+  const agentName = selectedAgentConfig?.displayName;
 
-const getBalanceData = (walletBalances: WalletBalanceResult[]) => {
-  const result: { [chainId: number]: { [tokenSymbol: string]: number } } = {};
+  // agent status
+  const agentStatus = selectedStakingContractDetails?.serviceStakingState;
+  const agentStakingState = useMemo(() => {
+    if (agentStatus === StakingState.Evicted) return 'Evicted';
+    if (agentStatus === StakingState.Staked) return 'Staked';
+    if (agentStatus === StakingState.NotStaked) return 'Not Staked';
+    return null;
+  }, [agentStatus]);
 
-  for (const walletBalanceResult of walletBalances) {
-    const { evmChainId: chainId, symbol } = walletBalanceResult;
-    if (!result[chainId]) result[chainId] = {};
-    if (!result[chainId][symbol]) result[chainId][symbol] = 0;
-    result[chainId][symbol] += walletBalanceResult.balance;
-  }
+  // last staked time
+  const lastStakedTime =
+    selectedStakingContractDetails?.serviceStakingStartTime;
+  const lastStaked = lastStakedTime ? formatDate(lastStakedTime * 1000) : null;
 
-  return { balance: result };
-};
+  // time remaining until it can be unstaked
+  const timeRemainingToUnstake = useMemo(() => {
+    if (lastStakedTime === 0) return null; // If never staked, return null
+    if (!selectedStakingContractDetails) return null;
 
-const DebugItem = ({
-  item,
-}: {
-  item: {
-    title: string;
-    balance: Record<number | EvmChainId, Record<string | TokenSymbol, number>>;
-    address: Address;
-    link?: { title: string; href: string };
-  };
-}) => {
-  const truncatedAddress = truncateAddress(item.address);
+    const timeRemaining =
+      (selectedStakingContractDetails?.serviceStakingStartTime ?? 0) +
+      (selectedStakingContractDetails?.minimumStakingDuration ?? 0);
 
-  const onCopyToClipboard = useCallback(
-    () =>
-      copyToClipboard(item.address).then(() =>
-        message.success('Address copied!'),
-      ),
-    [item.address],
-  );
+    return formatDate(timeRemaining * 1000);
+  }, [lastStakedTime, selectedStakingContractDetails]);
 
-  const balances = Object.entries(item.balance);
+  const info = useMemo(() => {
+    return [
+      { key: 'Name', value: agentName ?? NA },
+      { key: 'Status', value: agentStakingState ?? NA },
+      { key: 'Last staked', value: lastStaked ?? NA, column: true },
+      {
+        key: 'Can be unstaked at',
+        value: isNil(timeRemainingToUnstake) ? NA : timeRemainingToUnstake,
+        column: true,
+      },
+    ];
+  }, [agentName, agentStakingState, lastStaked, timeRemainingToUnstake]);
 
   return (
-    <Card>
-      <Title level={5} className="m-0 mb-8 text-base">
-        {item.title}
-      </Title>
-      {balances.map(([chainId, balance]) => {
-        const evmChainId = +chainId as keyof typeof EvmChainName;
-        return (
-          <Fragment key={chainId}>
-            {balances.length > 1 && (
-              <Row>
-                <Text className="font-weight-600 mb-4">
-                  {EvmChainName[evmChainId]}:
-                </Text>
-              </Row>
-            )}
-            <Row className={balances.length > 1 ? 'mb-16' : undefined}>
-              <Col span={12}>
-                <Flex vertical gap={4} align="flex-start">
-                  <Text type="secondary" className="text-sm">
-                    Balance{' '}
-                  </Text>
-                  <Flex vertical gap={4}>
-                    {Object.entries(balance).map(([tokenSymbol, balance]) => {
-                      return (
-                        <Flex key={tokenSymbol} gap={12}>
-                          <Text>{balanceFormat(balance, 2)}</Text>
-                          <Text type="secondary">{tokenSymbol}</Text>
-                        </Flex>
-                      );
-                    })}
-                  </Flex>
-                </Flex>
-              </Col>
-
-              <Col span={12}>
-                <Flex vertical gap={4} align="flex-start">
-                  <Text type="secondary" className="text-sm">
-                    Address
-                  </Text>
-                  <Flex gap={12}>
-                    <a
-                      target="_blank"
-                      href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${item.address}`}
-                    >
-                      {truncatedAddress}
-                    </a>
-                    <Tooltip title="Copy to clipboard">
-                      <CopyOutlined
-                        style={ICON_STYLE}
-                        onClick={onCopyToClipboard}
-                      />
-                    </Tooltip>
-                  </Flex>
-                </Flex>
-              </Col>
-            </Row>
-          </Fragment>
-        );
-      })}
-      {item.link ? (
-        <Row className="mt-8">
-          <a target="_blank" href={item.link.href}>
-            {item.link.title} {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </a>
-        </Row>
-      ) : null}
-    </Card>
+    <Flex vertical style={{ padding: '16px 24px' }} gap={8}>
+      <Text>Agent staking details:</Text>
+      {selectedAgentConfig ? (
+        info.map(({ key, value, column }) => (
+          <Flex
+            key={key}
+            gap={column ? 2 : 8}
+            vertical={!!column}
+            align={column ? 'start' : 'center'}
+          >
+            <Text type="secondary" className="text-sm">
+              {key}:
+            </Text>
+            <Text strong>{value}</Text>
+          </Flex>
+        ))
+      ) : (
+        <Text type="secondary">No agent staking info available.</Text>
+      )}
+    </Flex>
   );
 };
 
 export const DebugInfoSection = () => {
-  const { masterEoa, masterSafes } = useMasterWalletContext();
-  const { serviceWallets: serviceAddresses, selectedAgentConfig } =
-    useServices();
-  const { walletBalances } = useBalanceContext();
-  const { masterEoaBalances, masterSafeBalances } = useMasterBalances();
-
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(true);
   const showModal = useCallback(() => setIsModalOpen(true), []);
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
-
-  const data = useMemo(() => {
-    if (isNil(masterEoa)) return null;
-    if (isNil(masterSafes) || isEmpty(masterSafes)) return null;
-    if (isNil(walletBalances) || isEmpty(walletBalances)) return null;
-
-    const result: {
-      title: string;
-      balance: Record<
-        number | EvmChainId,
-        Record<string | TokenSymbol, number>
-      >;
-      address: Address;
-      link?: { title: string; href: string };
-    }[] = [];
-
-    if (!isNil(masterEoaBalances)) {
-      result.push({
-        title: 'Master EOA',
-        ...getBalanceData(masterEoaBalances),
-        address: masterEoa.address,
-      });
-    }
-
-    const masterSafe = masterSafes.find(
-      (item) => item.evmChainId === selectedAgentConfig.evmHomeChainId,
-    );
-
-    if (!isNil(masterSafeBalances) && !isNil(masterSafe)) {
-      result.push({
-        title: 'Master Safe',
-        ...getBalanceData(masterSafeBalances),
-        address: masterSafe.address,
-      });
-    }
-
-    if (!isNil(serviceAddresses)) {
-      serviceAddresses?.forEach((serviceWallet) => {
-        if (!isAddress(serviceWallet.address)) return;
-
-        if (serviceWallet.type === WalletType.EOA) {
-          result.push({
-            title: 'Agent Instance EOA',
-            ...getBalanceData(
-              walletBalances.filter(
-                (balance) => balance.walletAddress === serviceWallet.address,
-              ),
-            ),
-            address: serviceWallet.address,
-          });
-        }
-
-        if (serviceWallet.type === WalletType.Safe) {
-          result.push({
-            title: 'Agent Safe',
-            ...getBalanceData(
-              walletBalances.filter(
-                (walletBalance) =>
-                  walletBalance.walletAddress === serviceWallet.address &&
-                  walletBalance.evmChainId === serviceWallet.evmChainId,
-              ),
-            ),
-            address: serviceWallet.address,
-          });
-        }
-      });
-    }
-
-    return result;
-  }, [
-    masterEoa,
-    masterEoaBalances,
-    masterSafeBalances,
-    masterSafes,
-    selectedAgentConfig.evmHomeChainId,
-    serviceAddresses,
-    walletBalances,
-  ]);
 
   return (
     <CardSection vertical gap={8} align="start" padding="24px">
@@ -252,14 +100,9 @@ export const DebugInfoSection = () => {
         footer={null}
         width={MODAL_WIDTH}
         onCancel={handleCancel}
+        destroyOnClose
       >
-        {data ? (
-          data.map((item) => <DebugItem key={item.address} item={item} />)
-        ) : (
-          <Flex justify="center" align="center" flex="auto">
-            <Spin size="large" />
-          </Flex>
-        )}
+        <AgentStakingInfo />
       </CustomModal>
     </CardSection>
   );

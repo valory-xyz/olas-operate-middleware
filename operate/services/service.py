@@ -303,7 +303,9 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         tendermint_executable = str(
             shutil.which("tendermint"),
         )
-        # TODO: move all platform related things to a dedicated file
+        tendermint_executable = str(
+            Path(os.path.dirname(sys.executable)) / "tendermint"
+        )
         if platform.system() == "Windows":
             tendermint_executable = str(
                 Path(os.path.dirname(sys.executable)) / "tendermint.exe"
