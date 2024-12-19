@@ -14,13 +14,13 @@ import {
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import {
   ServiceStakingDetails,
   StakingContractDetails,
 } from '@/types/Autonolas';
-import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { StakingProgramContext } from './StakingProgramProvider';
 
@@ -30,18 +30,18 @@ import { StakingProgramContext } from './StakingProgramProvider';
 const useAllStakingContractDetails = () => {
   const { allStakingProgramIds } = useStakingProgram();
   const { selectedAgentConfig } = useServices();
-  const { serviceApi, evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const { serviceApi, evmHomeChainId } = selectedAgentConfig;
 
   const queryResults = useQueries({
     queries: allStakingProgramIds.map((programId) => ({
       queryKey: REACT_QUERY_KEYS.ALL_STAKING_CONTRACT_DETAILS(
-        homeChainId,
+        evmHomeChainId,
         programId,
       ),
       queryFn: async () =>
-        await serviceApi.getStakingContractDetails(
+        serviceApi.getStakingContractDetails(
           programId as StakingProgramId,
-          homeChainId,
+          evmHomeChainId,
         ),
       onError: (error: Error) => {
         console.error(
@@ -57,7 +57,9 @@ const useAllStakingContractDetails = () => {
     (record, programId, index) => {
       const query = queryResults[index];
       if (query.status === 'success') {
-        record[programId] = query.data;
+        if (query.data) {
+          record[programId] = query.data;
+        }
       } else if (query.status === 'error') {
         console.error(query.error);
       }
@@ -66,7 +68,8 @@ const useAllStakingContractDetails = () => {
     {} as Record<string, Partial<StakingContractDetails>>,
   );
 
-  const isAllStakingContractDetailsLoaded = queryResults.every(
+  // TODO: some are failing, not sure why.
+  const isAllStakingContractDetailsLoaded = queryResults.some(
     (query) => query.isSuccess,
   );
 
@@ -87,6 +90,7 @@ const useStakingContractDetailsByStakingProgram = ({
 }) => {
   const { selectedAgentConfig } = useServices();
   const { serviceApi, evmHomeChainId } = selectedAgentConfig;
+
   return useQuery({
     queryKey: REACT_QUERY_KEYS.STAKING_CONTRACT_DETAILS_BY_STAKING_PROGRAM_KEY(
       evmHomeChainId,
@@ -98,8 +102,9 @@ const useStakingContractDetailsByStakingProgram = ({
        * Request staking contract details
        * if service is present, request it's info and states on the staking contract
        */
+
       const promises: Promise<
-        StakingContractDetails | ServiceStakingDetails
+        StakingContractDetails | ServiceStakingDetails | undefined
       >[] = [
         serviceApi.getStakingContractDetails(stakingProgramId!, evmHomeChainId),
       ];
@@ -117,16 +122,16 @@ const useStakingContractDetailsByStakingProgram = ({
       return Promise.allSettled(promises).then((results) => {
         const [stakingContractDetails, serviceStakingDetails] = results;
         return {
-          ...(stakingContractDetails.status === 'fulfilled'
+          ...(stakingContractDetails?.status === 'fulfilled'
             ? (stakingContractDetails.value as StakingContractDetails)
             : {}),
-          ...(serviceStakingDetails.status === 'fulfilled'
+          ...(serviceStakingDetails?.status === 'fulfilled'
             ? (serviceStakingDetails.value as ServiceStakingDetails)
             : {}),
         };
       });
     },
-    enabled: !isPaused && !!stakingProgramId,
+    enabled: !isPaused && !!stakingProgramId && serviceNftTokenId !== -1,
     refetchInterval: !isPaused ? FIVE_SECONDS_INTERVAL : false,
     refetchOnWindowFocus: false,
   });
@@ -136,7 +141,7 @@ type StakingContractDetailsContextProps = {
   selectedStakingContractDetails: Maybe<
     Partial<StakingContractDetails & ServiceStakingDetails>
   >;
-  isSelectedStakingContractDetailsLoaded: boolean;
+  isSelectedStakingContractDetailsLoading: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
@@ -155,7 +160,7 @@ export const StakingContractDetailsContext =
     selectedStakingContractDetails: null,
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
-    isSelectedStakingContractDetailsLoaded: false,
+    isSelectedStakingContractDetailsLoading: false,
     refetchSelectedStakingContractDetails: async () => {},
     setIsPaused: () => {},
   });
@@ -167,20 +172,16 @@ export const StakingContractDetailsProvider = ({
   children,
 }: PropsWithChildren) => {
   const [isPaused, setIsPaused] = useState(false);
-  const { selectedService, selectedAgentConfig } = useServices();
-
+  const { selectedService } = useServices();
+  const { serviceNftTokenId } = useService(selectedService?.service_config_id);
   const { selectedStakingProgramId } = useContext(StakingProgramContext);
 
   const {
     data: selectedStakingContractDetails,
-    isFetched,
+    isLoading,
     refetch,
   } = useStakingContractDetailsByStakingProgram({
-    serviceNftTokenId: !isNil(selectedService?.service_config_id)
-      ? selectedService?.chain_configs?.[
-          asMiddlewareChain(selectedAgentConfig.evmHomeChainId)
-        ].chain_data.token
-      : null,
+    serviceNftTokenId,
     stakingProgramId: selectedStakingProgramId,
   });
 
@@ -195,7 +196,7 @@ export const StakingContractDetailsProvider = ({
     <StakingContractDetailsContext.Provider
       value={{
         selectedStakingContractDetails,
-        isSelectedStakingContractDetailsLoaded: isFetched,
+        isSelectedStakingContractDetailsLoading: isLoading,
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,

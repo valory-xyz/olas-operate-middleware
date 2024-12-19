@@ -4,7 +4,7 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
 
 import { useService } from './useService';
-import { useActiveStakingContractInfo } from './useStakingContractDetails';
+import { useActiveStakingContractDetails } from './useStakingContractDetails';
 
 type EpochStatusNotification = {
   lastEpoch: number;
@@ -22,17 +22,16 @@ export const useNotifyOnNewEpoch = () => {
 
   const {
     selectedStakingContractDetails: activeStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded:
-      isActiveStakingContractDetailsLoaded,
-  } = useActiveStakingContractInfo();
+    isSelectedStakingContractDetailsLoading,
+  } = useActiveStakingContractDetails();
   const epoch = activeStakingContractDetails?.epochCounter;
 
   const [epochStatusNotification, setEpochStatusNotification] =
     useState<EpochStatusNotification | null>(null);
 
   useEffect(() => {
-    //  if active staking contract info is not loaded yet, return
-    if (!isActiveStakingContractDetailsLoaded) return;
+    // if active staking contract info is still loading, return
+    if (isSelectedStakingContractDetailsLoading) return;
 
     // if agent is running, no need to show notification
     if (isServiceRunning) return;
@@ -60,7 +59,7 @@ export const useNotifyOnNewEpoch = () => {
   }, [
     epochStatusNotification,
     epoch,
-    isActiveStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     showNotification,
     isServiceRunning,
   ]);

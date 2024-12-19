@@ -1,27 +1,23 @@
 import { CloseOutlined, SettingOutlined } from '@ant-design/icons';
 import { Button, Card, Flex, Skeleton, Typography } from 'antd';
 import { isEmpty, isNil } from 'lodash';
-import Link from 'next/link';
 import { useMemo } from 'react';
 
-import { MiddlewareChain } from '@/client';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { SettingsScreen } from '@/enums/SettingsScreen';
 import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useSettings } from '@/hooks/useSettings';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { Address } from '@/types/Address';
 import { Optional } from '@/types/Util';
-import { truncateAddress } from '@/utils/truncate';
 
+import { AddressLink } from '../AddressLink';
 import { CustomAlert } from '../Alert';
 import { CardTitle } from '../Card/CardTitle';
 import { CardSection } from '../styled/CardSection';
 import { AddBackupWalletPage } from './AddBackupWalletPage';
-import { DebugInfoSection } from './DebugInfoSection';
 
 const { Text, Paragraph } = Typography;
 
@@ -86,6 +82,7 @@ export const Settings = () => {
 };
 
 const SettingsMain = () => {
+  const { selectedAgentConfig } = useServices();
   const { masterEoa, masterSafes } = useMasterWalletContext();
 
   const { owners, ownersIsFetched } = useMultisig(
@@ -111,22 +108,27 @@ const SettingsMain = () => {
     return masterSafeBackupAddresses[0];
   }, [masterSafeBackupAddresses]);
 
-  const truncatedBackupSafeAddress: Optional<string> = useMemo(() => {
-    if (masterSafeBackupAddress && masterSafeBackupAddress?.length) {
-      return truncateAddress(masterSafeBackupAddress);
-    }
-  }, [masterSafeBackupAddress]);
+  const walletBackup = useMemo(() => {
+    if (!ownersIsFetched) return <Skeleton.Input />;
+    if (!masterSafeBackupAddress) return <NoBackupWallet />;
+
+    return (
+      <AddressLink
+        address={masterSafeBackupAddress}
+        middlewareChain={selectedAgentConfig.middlewareHomeChainId}
+      />
+    );
+  }, [
+    masterSafeBackupAddress,
+    ownersIsFetched,
+    selectedAgentConfig.middlewareHomeChainId,
+  ]);
 
   return (
     <Card
       title={<SettingsTitle />}
       bordered={false}
-      styles={{
-        body: {
-          paddingTop: 0,
-          paddingBottom: 0,
-        },
-      }}
+      styles={{ body: { paddingTop: 0, paddingBottom: 0 } }}
       extra={
         <Button
           size="large"
@@ -156,24 +158,8 @@ const SettingsMain = () => {
         gap={8}
       >
         <Text strong>Backup wallet</Text>
-
-        {!ownersIsFetched ? (
-          <Skeleton />
-        ) : masterSafeBackupAddress ? (
-          <Link
-            type="link"
-            target="_blank"
-            href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/address/${masterSafeBackupAddress}`} // TODO: dynamic by selected agent type's home_chain_id
-          >
-            {truncatedBackupSafeAddress} {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </Link>
-        ) : (
-          <NoBackupWallet />
-        )}
+        {walletBackup}
       </CardSection>
-
-      {/* Debug info */}
-      <DebugInfoSection />
     </Card>
   );
 };

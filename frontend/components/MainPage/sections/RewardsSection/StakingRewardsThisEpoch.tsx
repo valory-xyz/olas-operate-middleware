@@ -25,7 +25,7 @@ const useEpochEndTime = () => {
       activeStakingProgramAddress!,
     ),
     queryFn: async () => {
-      return await getLatestEpochDetails(activeStakingProgramAddress!);
+      return await getLatestEpochDetails(chainId, activeStakingProgramAddress!);
     },
     select: (data) => {
       // last epoch end time + epoch length
@@ -38,6 +38,9 @@ const useEpochEndTime = () => {
   return { data, isLoading };
 };
 
+/**
+ * Staking rewards for the current epoch
+ */
 export const StakingRewardsThisEpoch = () => {
   const { data: epochEndTimeInMs } = useEpochEndTime();
 
@@ -53,12 +56,15 @@ export const StakingRewardsThisEpoch = () => {
 
   const popoverContent = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return <Skeleton.Input />;
-    if (!activeStakingProgramMeta)
+
+    if (!activeStakingProgramMeta) {
       return (
         <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
           You&apos;re not yet in a staking program!
         </div>
       );
+    }
+
     return (
       <div style={{ maxWidth: POPOVER_WIDTH_MEDIUM }}>
         The epoch for {stakingProgramMeta?.name} ends each day at ~{' '}

@@ -1,14 +1,14 @@
 import {
   Deployment,
-  MiddlewareChain,
   MiddlewareServiceResponse,
+  ServiceConfigId,
   ServiceTemplate,
 } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL_V2 } from '@/constants/urls';
-import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { Address } from '@/types/Address';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /**
@@ -72,7 +72,7 @@ const createService = async ({
           (acc, [middlewareChain, config]) => {
             acc[middlewareChain] = {
               ...config,
-              rpc: CHAIN_CONFIG[asEvmChainId(MiddlewareChain.GNOSIS)].rpc,
+              rpc: CHAIN_CONFIG[asEvmChainId(middlewareChain)].rpc,
               staking_program_id: stakingProgramId,
               use_mech_marketplace: useMechMarketplace,
             };
@@ -101,14 +101,12 @@ const updateService = async ({
   serviceConfigId,
   stakingProgramId,
   useMechMarketplace = false,
-  chainId,
 }: {
   deploy: boolean;
   serviceTemplate: ServiceTemplate;
   serviceConfigId: string;
   stakingProgramId: StakingProgramId;
   useMechMarketplace?: boolean;
-  chainId: EvmChainId;
 }): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'PUT',
@@ -116,14 +114,20 @@ const updateService = async ({
       ...serviceTemplate,
       deploy,
       configurations: {
-        [CHAIN_CONFIG[chainId].middlewareChain]: {
-          ...serviceTemplate.configurations[
-            CHAIN_CONFIG[chainId].middlewareChain
-          ],
-          staking_program_id: stakingProgramId,
-          rpc: CHAIN_CONFIG[chainId].rpc,
-          use_mech_marketplace: useMechMarketplace,
-        },
+        ...serviceTemplate.configurations,
+        // overwrite defaults with chain-specific configurations
+        ...Object.entries(serviceTemplate.configurations).reduce(
+          (acc, [middlewareChain, config]) => {
+            acc[middlewareChain] = {
+              ...config,
+              rpc: CHAIN_CONFIG[asEvmChainId(middlewareChain)].rpc,
+              staking_program_id: stakingProgramId,
+              use_mech_marketplace: useMechMarketplace,
+            };
+            return acc;
+          },
+          {} as typeof serviceTemplate.configurations,
+        ),
       },
     }),
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
@@ -174,6 +178,34 @@ const getDeployment = async (serviceConfigId: string): Promise<Deployment> =>
     throw new Error('Failed to get deployment');
   });
 
+/**
+ * Withdraws the balance of a service
+ *
+ * @param withdrawAddress Address
+ * @param serviceTemplate ServiceTemplate
+ * @returns Promise<Service>
+ */
+export const withdrawBalance = async ({
+  withdrawAddress,
+  serviceConfigId,
+}: {
+  withdrawAddress: Address;
+  serviceConfigId: ServiceConfigId;
+}): Promise<{ error: string | null }> =>
+  new Promise((resolve, reject) =>
+    fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}/onchain/withdraw`, {
+      method: 'POST',
+      body: JSON.stringify({ withdrawal_address: withdrawAddress }),
+      headers: { ...CONTENT_TYPE_JSON_UTF8 },
+    }).then((response) => {
+      if (response.ok) {
+        resolve(response.json());
+      } else {
+        reject('Failed to withdraw balance');
+      }
+    }),
+  );
+
 export const ServicesService = {
   getService,
   getServices,
@@ -182,4 +214,6 @@ export const ServicesService = {
   createService,
   updateService,
   stopDeployment,
+  // deleteDeployment,
+  withdrawBalance,
 };

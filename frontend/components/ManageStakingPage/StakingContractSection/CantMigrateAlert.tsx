@@ -3,10 +3,11 @@ import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { getNativeTokenSymbol } from '@/config/tokens';
-import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
@@ -14,7 +15,7 @@ import {
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
 import {
-  useActiveStakingContractInfo,
+  useActiveStakingContractDetails,
   useStakingContractContext,
 } from '@/hooks/useStakingContractDetails';
 import { balanceFormat } from '@/utils/numberFormatters';
@@ -31,7 +32,7 @@ const AlertInsufficientMigrationFunds = ({
   const { selectedAgentConfig } = useServices();
   const { isAllStakingContractDetailsRecordLoaded } =
     useStakingContractContext();
-  const { isServiceStaked } = useActiveStakingContractInfo();
+  const { isServiceStaked } = useActiveStakingContractDetails();
   const { isLoaded: isBalanceLoaded, totalStakedOlasBalance } =
     useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
@@ -72,7 +73,10 @@ const AlertInsufficientMigrationFunds = ({
   const homeChainId = selectedAgentConfig.evmHomeChainId;
   const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
   const requiredNativeTokenDeposit = isInitialFunded
-    ? LOW_MASTER_SAFE_BALANCE - (safeBalance[nativeTokenSymbol] || 0) // is already funded allow minimal maintenance
+    ? selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.Safe
+      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol] -
+      (safeBalance[nativeTokenSymbol] || 0) // is already funded allow minimal maintenance
     : (serviceFundRequirements[homeChainId]?.[nativeTokenSymbol] || 0) -
       (safeBalance[nativeTokenSymbol] || 0); // otherwise require full initial funding requirements
 

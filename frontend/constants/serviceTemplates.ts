@@ -1,6 +1,7 @@
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
+import { parseEther } from '@/utils/numberFormatters';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
@@ -155,7 +156,114 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   //       },
   //     },
   //   },
-];
+  {
+    agentType: AgentType.Memeooorr,
+    name: 'Memeooorr',
+    hash: 'bafybeiayfvoreuxgytuvjxrxutzxpwlugcjmytnjncu4ksbnftgo7b5rr4',
+    description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+    image:
+      'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
+    service_version: 'v0.0.1',
+    home_chain: MiddlewareChain.BASE,
+    configurations: {
+      [MiddlewareChain.BASE]: {
+        staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
+        nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+        rpc: 'http://localhost:8545', // overwritten
+        agent_id: 43,
+        threshold: 1,
+        use_staking: true,
+        cost_of_bond: +parseEther(50),
+        monthly_gas_estimate: +parseEther(0.03),
+        fund_requirements: {
+          agent: +parseEther(0.001),
+          safe: +parseEther(0.001),
+        },
+      },
+    },
+    env_variables: {
+      BASE_LEDGER_RPC: {
+        name: 'Base ledger RPC',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.COMPUTED,
+      },
+      CELO_LEDGER_RPC: {
+        name: 'Celo ledger RPC',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.COMPUTED,
+      },
+      TWIKIT_USERNAME: {
+        name: 'Twitter username',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      TWIKIT_EMAIL: {
+        name: 'Twitter email',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      TWIKIT_PASSWORD: {
+        name: 'Twitter password',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      TWIKIT_COOKIES: {
+        name: 'Twitter cookies',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      GENAI_API_KEY: {
+        name: 'Gemini api key',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      PERSONA: {
+        name: 'Persona description',
+        description: '',
+        value: '',
+        provision_type: EnvProvisionType.USER,
+      },
+      // These are fixed, but may become user provided in the future
+      FEEDBACK_PERIOD_HOURS: {
+        name: 'Feedback period',
+        description: '',
+        value: '1',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      MIN_FEEDBACK_REPLIES: {
+        name: 'Minimum feedback replies',
+        description: '',
+        value: '10',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      RESET_PAUSE_DURATION: {
+        name: 'Reset pause duration',
+        description: '',
+        value: '1800',
+        provision_type: EnvProvisionType.FIXED,
+      },
+      DB_PATH: {
+        name: 'DB path',
+        description: '',
+        value: 'persistent_data/memeooorr.db',
+        provision_type: EnvProvisionType.COMPUTED,
+      },
+      TWIKIT_COOKIES_PATH: {
+        name: 'Twitter cookies path',
+        description: '',
+        value: 'persistent_data/twikit_cookies.json',
+        provision_type: EnvProvisionType.COMPUTED,
+      },
+    },
+  },
+] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;
 

@@ -1,6 +1,6 @@
 /**
  * This script sets the balance of the master EOA to 1000 ETH on all the networks
- * @note yarn dotenv -e .env node scripts/js/tenderly-optimus-fund-onboarding.js
+ * @note yarn dotenv -e .env node scripts/js/tenderly-optimus-fund-eoa-onboarding.js
  */
 
 require('dotenv').config();

@@ -5,7 +5,7 @@ import { BigNumberish, ethers } from 'ethers';
  */
 export const balanceFormat = (
   balance: number | undefined,
-  decimals: 2,
+  decimals = 2,
 ): string => {
   if (balance === undefined) return '--';
   return Intl.NumberFormat('en-US', {
@@ -26,6 +26,7 @@ export const formatUnits = (value: BigNumberish, decimals = 18): string => {
 
 /**
  * Assumes the input is in wei and converts it to ether
+ * @example `formatEther('1000000000000000000')` => '1.0'
  */
 export const formatEther = (wei: BigNumberish): string => {
   return ethers.utils.formatEther(wei);

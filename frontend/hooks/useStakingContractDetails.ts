@@ -15,10 +15,10 @@ export const useStakingContractContext = () =>
 
  * @note requires serviceConfigId once multiple instances are supported
  */
-export const useActiveStakingContractInfo = () => {
+export const useActiveStakingContractDetails = () => {
   const {
     selectedStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     // allStakingContractDetailsRecord,
     // refetchActiveStakingContractDetails,
     // isPaused,
@@ -93,7 +93,7 @@ export const useActiveStakingContractInfo = () => {
     isServiceStakedForMinimumDuration,
     isServiceStaked,
     evictionExpiresAt,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     selectedStakingContractDetails,
     hasEnoughRewardsAndSlots,
     hasEnoughServiceSlots,

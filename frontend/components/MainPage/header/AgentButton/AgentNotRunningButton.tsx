@@ -1,30 +1,32 @@
-// Same file, above the AgentNotRunningButton component
-
-import { Button } from 'antd';
+import { Button, message } from 'antd';
 import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
-import {
-  MiddlewareDeploymentStatus,
-  MiddlewareServiceResponse,
-  ServiceTemplate,
-} from '@/client';
+import { MiddlewareDeploymentStatus } from '@/client';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
-import { LOW_MASTER_SAFE_BALANCE } from '@/constants/thresholds';
-import { StakingProgramId } from '@/enums/StakingProgram';
+import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
+import {
+  MasterEoa,
+  MasterSafe,
+  WalletOwnerType,
+  WalletType,
+} from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { MultisigOwners, useMultisigs } from '@/hooks/useMultisig';
+import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
-  useActiveStakingContractInfo,
+  useActiveStakingContractDetails,
   useStakingContractContext,
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -32,14 +34,16 @@ import { useStore } from '@/hooks/useStore';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
-import { Service } from '@/types/Service';
+import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
 
 export function useServiceDeployment() {
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
-  const { masterWallets, masterSafes } = useMasterWalletContext();
+  const { goto: gotoPage } = usePageState();
+
+  const { masterWallets, masterSafes, masterEoa } = useMasterWalletContext();
   const {
     selectedService,
     setPaused: setIsServicePollingPaused,
@@ -54,32 +58,29 @@ export function useServiceDeployment() {
     selectedService?.service_config_id,
   );
 
-  const {
-    setIsPaused: setIsBalancePollingPaused,
-    totalStakedOlasBalance,
-    updateBalances,
-  } = useBalanceContext();
+  const { setIsPaused: setIsBalancePollingPaused, updateBalances } =
+    useBalanceContext();
 
-  const { serviceStakedBalances } = useServiceBalances(
+  const { serviceStakedBalances, serviceSafeBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
 
-  const serviceStakedOlasBalanceOnHomeChain = serviceStakedBalances?.find(
+  const serviceStakedOlasBalancesOnHomeChain = serviceStakedBalances?.find(
     (stakedBalance) =>
       stakedBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
   );
 
   const serviceTotalStakedOlas = sum([
-    serviceStakedOlasBalanceOnHomeChain?.olasBondBalance,
-    serviceStakedOlasBalanceOnHomeChain?.olasDepositBalance,
+    serviceStakedOlasBalancesOnHomeChain?.olasBondBalance,
+    serviceStakedOlasBalancesOnHomeChain?.olasDepositBalance,
   ]);
 
-  const { masterSafeBalances } = useMasterBalances();
-  const masterSafeNativeGasBalance = masterSafeBalances?.find(
-    (walletBalanceResult) =>
-      walletBalanceResult.isNative &&
-      walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
+  const serviceOlasBalanceOnHomeChain = serviceSafeBalances?.find(
+    (balance) => balance.evmChainId === selectedAgentConfig.evmHomeChainId,
   )?.balance;
+
+  const { masterSafeBalances, masterSafeNativeGasBalance } =
+    useMasterBalances();
 
   const {
     isAllStakingContractDetailsRecordLoaded,
@@ -89,12 +90,12 @@ export function useServiceDeployment() {
 
   const { selectedStakingProgramId } = useStakingProgram();
 
-  const {
-    isEligibleForStaking,
-    isAgentEvicted,
-    isServiceStaked,
-    hasEnoughServiceSlots,
-  } = useActiveStakingContractInfo();
+  const { isEligibleForStaking, isAgentEvicted, isServiceStaked } =
+    useActiveStakingContractDetails();
+
+  const { hasEnoughServiceSlots } = useActiveStakingContractDetails();
+
+  const { masterSafesOwners } = useMultisigs(masterSafes);
 
   const requiredStakedOlas =
     selectedStakingProgramId &&
@@ -102,7 +103,10 @@ export function useServiceDeployment() {
       selectedStakingProgramId
     ]?.stakingRequirements[TokenSymbol.OLAS];
 
-  const serviceSafeOlasWithStaked = sum([totalStakedOlasBalance]);
+  const serviceSafeOlasWithStaked = sum([
+    serviceOlasBalanceOnHomeChain,
+    serviceTotalStakedOlas,
+  ]);
 
   const isDeployable = useMemo(() => {
     if (
@@ -118,8 +122,9 @@ export function useServiceDeployment() {
       !isNil(hasEnoughServiceSlots) &&
       !hasEnoughServiceSlots &&
       !isServiceStaked
-    )
+    ) {
       return false;
+    }
 
     const masterSafeOlasBalance = masterSafeBalances?.find(
       (walletBalanceResult) =>
@@ -127,23 +132,44 @@ export function useServiceDeployment() {
         walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
     )?.balance;
 
-    if (service && storeState?.isInitialFunded && isServiceStaked) {
+    if (
+      service &&
+      storeState?.[`isInitialFunded_${selectedAgentType}`] &&
+      isServiceStaked
+    ) {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
-    if (isEligibleForStaking && isAgentEvicted) return true;
+    // If was evicted, but can re-stake - unlock the button
+    if (isAgentEvicted && isEligibleForStaking) return true;
 
+    // threshold check
+    const masterThresholds =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
+    const tokenSymbol =
+      CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
+
+    const safeThreshold = masterThresholds[WalletType.Safe][tokenSymbol];
+
+    // SERVICE IS STAKED, AND STARTING AGAIN
     if (isServiceStaked) {
-      const hasEnoughOlas =
-        (serviceSafeOlasWithStaked ?? 0) >= requiredStakedOlas;
+      const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
+
       const hasEnoughNativeGas =
-        (masterSafeNativeGasBalance ?? 0) > LOW_MASTER_SAFE_BALANCE;
-      return hasEnoughOlas && hasEnoughNativeGas;
+        (masterSafeNativeGasBalance ?? 0) > safeThreshold;
+      return hasEnoughNativeGas && hasEnoughOlas;
     }
 
+    // SERVICE IS NOT STAKED AND/OR IS STARTING FOR THE FIRST TIME
+    const totalOlasStakedAndInSafes = sum([
+      serviceOlasBalanceOnHomeChain,
+      serviceTotalStakedOlas,
+      masterSafeOlasBalance,
+    ]);
+
     const hasEnoughForInitialDeployment =
-      (masterSafeOlasBalance ?? 0) >= requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) >= LOW_MASTER_SAFE_BALANCE;
+      (totalOlasStakedAndInSafes ?? 0) >= requiredStakedOlas &&
+      (masterSafeNativeGasBalance ?? 0) >= safeThreshold;
 
     return hasEnoughForInitialDeployment;
   }, [
@@ -155,12 +181,15 @@ export function useServiceDeployment() {
     isServiceStaked,
     masterSafeBalances,
     service,
-    storeState?.isInitialFunded,
-    isEligibleForStaking,
+    storeState,
+    selectedAgentType,
     isAgentEvicted,
-    masterSafeNativeGasBalance,
+    isEligibleForStaking,
+    selectedAgentConfig.operatingThresholds,
     selectedAgentConfig.evmHomeChainId,
+    serviceOlasBalanceOnHomeChain,
     serviceTotalStakedOlas,
+    masterSafeNativeGasBalance,
     serviceSafeOlasWithStaked,
   ]);
 
@@ -183,27 +212,23 @@ export function useServiceDeployment() {
     setIsBalancePollingPaused,
     setIsStakingContractInfoPollingPaused,
   ]);
+  /**
+   * @note only create a service if `service` does not exist
+   */
+  const deployAndStartService = useCallback(async () => {
+    if (!selectedStakingProgramId) return;
 
-  const createSafeIfNeeded = useCallback(async () => {
-    if (
-      !masterSafes?.find(
-        (masterSafe) =>
-          masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
-      )
-    ) {
-      await WalletService.createSafe(selectedAgentConfig.middlewareHomeChainId);
+    const serviceTemplate = SERVICE_TEMPLATES.find(
+      (template) => template.agentType === selectedAgentType,
+    );
+
+    if (!serviceTemplate) {
+      throw new Error(`Service template not found for ${selectedAgentType}`);
     }
-  }, [
-    masterSafes,
-    selectedAgentConfig.evmHomeChainId,
-    selectedAgentConfig.middlewareHomeChainId,
-  ]);
 
-  const createService = useCallback(
-    async (
-      selectedStakingProgramId: StakingProgramId,
-      serviceTemplate: ServiceTemplate,
-    ): Promise<MiddlewareServiceResponse> => {
+    // Create a new service if it does not exist
+    let middlewareServiceResponse;
+    if (!service) {
       try {
         return ServicesService.createService({
           stakingProgramId: selectedStakingProgramId,
@@ -219,34 +244,15 @@ export function useServiceDeployment() {
         showNotification?.('Failed to create service.');
         throw error;
       }
-    },
-    [selectedAgentConfig.evmHomeChainId, showNotification],
-  );
+    }
 
-  const startService = useCallback(
-    async (service: Service) => {
-      try {
-        return ServicesService.startService(service.service_config_id);
-      } catch (error) {
-        console.error('Failed to start service:', error);
-        showNotification?.('Failed to start service.');
-        throw error;
-      }
-    },
-    [showNotification],
-  );
-
-  const updateService = useCallback(
-    async (
-      service: Service,
-      serviceTemplate: ServiceTemplate,
-      selectedStakingProgramId: StakingProgramId,
-    ) => {
+    // Update the service if the hash is different
+    if (!middlewareServiceResponse && service) {
       if (service.hash !== serviceTemplate.hash) {
-        return ServicesService.updateService({
+        await ServicesService.updateService({
           serviceConfigId: service.service_config_id,
           stakingProgramId: selectedStakingProgramId,
-          chainId: selectedAgentConfig.evmHomeChainId,
+          // chainId: selectedAgentConfig.evmHomeChainId,
           serviceTemplate,
           deploy: false, // TODO: deprecated will remove
           useMechMarketplace:
@@ -255,10 +261,24 @@ export function useServiceDeployment() {
             ].mechType === MechType.Marketplace,
         });
       }
-      return service;
-    },
-    [selectedAgentConfig.evmHomeChainId],
-  );
+    }
+
+    // Start the service
+    try {
+      const serviceToStart = service ?? middlewareServiceResponse;
+      await ServicesService.startService(serviceToStart!.service_config_id);
+    } catch (error) {
+      console.error('Error while starting the service:', error);
+      showNotification?.('Failed to start service.');
+      throw error;
+    }
+  }, [
+    selectedAgentConfig.evmHomeChainId,
+    selectedAgentType,
+    selectedStakingProgramId,
+    service,
+    showNotification,
+  ]);
 
   const updateStatesSequentially = useCallback(async () => {
     await updateServicesState?.();
@@ -284,26 +304,14 @@ export function useServiceDeployment() {
     overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
 
     try {
-      await createSafeIfNeeded();
-
-      let tempService: Service | undefined = service;
-
-      if (tempService) {
-        tempService = await updateService(
-          tempService,
-          selectedServiceTemplate,
-          selectedStakingProgramId,
-        );
-      } else {
-        tempService = await createService(
-          selectedStakingProgramId,
-          selectedServiceTemplate,
-        );
-      }
-
-      if (!tempService) throw new Error('Failed to create/update service');
-
-      await startService(tempService);
+      await createSafeIfNeeded({
+        masterSafes,
+        masterSafesOwners,
+        masterEoa,
+        selectedAgentConfig,
+        gotoSettings: () => gotoPage(Pages.Settings),
+      });
+      await deployAndStartService();
     } catch (error) {
       console.error('Error during start:', error);
       showNotification?.('An error occurred while starting. Please try again.');
@@ -329,14 +337,15 @@ export function useServiceDeployment() {
     pauseAllPolling,
     overrideSelectedServiceStatus,
     resumeAllPolling,
-    selectedAgentType,
-    createSafeIfNeeded,
-    service,
-    startService,
-    updateService,
-    createService,
+    masterSafes,
+    masterSafesOwners,
+    masterEoa,
+    selectedAgentConfig,
+    deployAndStartService,
+    gotoPage,
     showNotification,
     updateStatesSequentially,
+    selectedAgentType,
   ]);
 
   const buttonText = `Start agent ${service ? '' : '& stake'}`;
@@ -357,5 +366,64 @@ export const AgentNotRunningButton = () => {
     >
       {buttonText}
     </Button>
+  );
+};
+
+export const createSafeIfNeeded = async ({
+  masterSafes,
+  masterSafesOwners,
+  masterEoa,
+  selectedAgentConfig,
+  gotoSettings,
+}: {
+  selectedAgentConfig: AgentConfig;
+  gotoSettings: () => void;
+  masterEoa?: MasterEoa;
+  masterSafes?: MasterSafe[];
+  masterSafesOwners?: MultisigOwners[];
+}) => {
+  const selectedChainHasMasterSafe = masterSafes?.some(
+    (masterSafe) =>
+      masterSafe.evmChainId === selectedAgentConfig.evmHomeChainId,
+  );
+
+  if (selectedChainHasMasterSafe) return;
+
+  // 1. get safe owners on other chains
+  const otherChainOwners = new Set(
+    masterSafesOwners
+      ?.filter(
+        (masterSafe) =>
+          masterSafe.evmChainId !== selectedAgentConfig.evmHomeChainId,
+      )
+      .map((masterSafe) => masterSafe.owners)
+      .flat(),
+  );
+
+  // 2. remove master eoa from the set, to find backup signers
+  if (masterEoa) otherChainOwners.delete(masterEoa?.address);
+
+  // 3. if there are no signers, the user needs to add a backup signer
+
+  if (otherChainOwners.size <= 0) {
+    message.error(
+      'A backup signer is required to create a new safe on the home chain. Please add a backup signer.',
+    );
+    gotoSettings();
+    throw new Error('No backup signers found');
+  }
+
+  if (otherChainOwners.size !== 1) {
+    message.error(
+      'The same backup signer address must be used on all chains. Please remove any extra backup signers.',
+    );
+    gotoSettings();
+    throw new Error('Multiple backup signers found');
+  }
+
+  // 4. otherwise, create a new safe with the same signer
+  await WalletService.createSafe(
+    selectedAgentConfig.middlewareHomeChainId,
+    [...otherChainOwners][0],
   );
 };

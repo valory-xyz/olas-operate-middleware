@@ -9,6 +9,7 @@ import {
   Tooltip,
   Typography,
 } from 'antd';
+import { isAddress } from 'ethers/lib/utils';
 import { isEmpty, isNil } from 'lodash';
 import { Fragment, useCallback, useMemo, useState } from 'react';
 import styled from 'styled-components';
@@ -152,7 +153,8 @@ const DebugItem = ({
 
 export const DebugInfoSection = () => {
   const { masterEoa, masterSafes } = useMasterWalletContext();
-  const { serviceWallets: serviceAddresses } = useServices();
+  const { serviceWallets: serviceAddresses, selectedAgentConfig } =
+    useServices();
   const { walletBalances } = useBalanceContext();
   const { masterEoaBalances, masterSafeBalances } = useMasterBalances();
 
@@ -183,18 +185,22 @@ export const DebugInfoSection = () => {
       });
     }
 
-    if (!isNil(masterSafeBalances)) {
-      masterSafes.forEach((wallet) => {
-        result.push({
-          title: 'Master Safe',
-          ...getBalanceData(masterSafeBalances),
-          address: wallet.address,
-        });
+    const masterSafe = masterSafes.find(
+      (item) => item.evmChainId === selectedAgentConfig.evmHomeChainId,
+    );
+
+    if (!isNil(masterSafeBalances) && !isNil(masterSafe)) {
+      result.push({
+        title: 'Master Safe',
+        ...getBalanceData(masterSafeBalances),
+        address: masterSafe.address,
       });
     }
 
     if (!isNil(serviceAddresses)) {
       serviceAddresses?.forEach((serviceWallet) => {
+        if (!isAddress(serviceWallet.address)) return;
+
         if (serviceWallet.type === WalletType.EOA) {
           result.push({
             title: 'Agent Instance EOA',
@@ -229,6 +235,7 @@ export const DebugInfoSection = () => {
     masterEoaBalances,
     masterSafeBalances,
     masterSafes,
+    selectedAgentConfig.evmHomeChainId,
     serviceAddresses,
     walletBalances,
   ]);

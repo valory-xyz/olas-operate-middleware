@@ -24,7 +24,7 @@ import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AccountService } from '@/service/Account';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
+import { asEvmChainId, asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { FormFlex } from '../styled/FormFlex';
 
@@ -131,33 +131,42 @@ export const SetupWelcomeCreate = () => {
 };
 
 export const SetupWelcomeLogin = () => {
+  const [form] = Form.useForm();
   const { goto } = useSetup();
   const { goto: gotoPage } = usePageState();
 
-  const { selectedService } = useServices();
+  const {
+    selectedService,
+    selectedAgentConfig,
+    services,
+    isFetched: isServicesFetched,
+  } = useServices();
   const {
     masterSafes,
-    masterWallets: wallets,
     masterEoa,
+    isFetched: isWalletsFetched,
   } = useMasterWalletContext();
   const { isLoaded: isBalanceLoaded, updateBalances } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
 
-  const masterSafe =
-    masterSafes?.find(
-      (safe) =>
-        selectedService?.home_chain &&
-        safe.evmChainId === asEvmChainId(selectedService?.home_chain),
-    ) ?? null;
+  const selectedServiceOrAgentChainId = selectedService?.home_chain
+    ? asEvmChainId(selectedService?.home_chain)
+    : selectedAgentConfig.evmHomeChainId;
+
+  const masterSafe = masterSafes?.find(
+    (safe) =>
+      selectedServiceOrAgentChainId &&
+      safe.evmChainId === selectedServiceOrAgentChainId,
+  );
 
   const eoaBalanceEth = masterWalletBalances?.find(
-    (balance) => balance.walletAddress === masterEoa?.address,
-  );
+    (balance) =>
+      balance.walletAddress === masterEoa?.address &&
+      balance.evmChainId === selectedServiceOrAgentChainId,
+  )?.balance;
 
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [canNavigate, setCanNavigate] = useState(false);
-
-  const [form] = Form.useForm();
 
   const handleLogin = useCallback(
     async ({ password }: { password: string }) => {
@@ -176,30 +185,60 @@ export const SetupWelcomeLogin = () => {
     [updateBalances],
   );
 
-  useEffect(() => {
-    // Navigate only when wallets and balances are loaded
-    // To check if some setup steps were missed
-    // if (canNavigate && wallets?.length && isBalanceLoaded) {
+  const isServiceCreatedForAgent = useMemo(() => {
+    if (!isServicesFetched) return false;
+    if (!services) return false;
+    if (!selectedService) return false;
+    if (!selectedAgentConfig) return false;
 
-    // TODO: fix wallet and balance loads
-    if (canNavigate) {
-      setIsLoggingIn(false);
-      if (!eoaBalanceEth) {
-        goto(SetupScreen.SetupEoaFundingIncomplete);
-      } else if (!masterSafe?.address) {
-        goto(SetupScreen.SetupCreateSafe);
-      } else {
-        gotoPage(Pages.Main);
-      }
+    return services.some(
+      (service) =>
+        service.home_chain ===
+        asMiddlewareChain(selectedAgentConfig.evmHomeChainId),
+    );
+  }, [isServicesFetched, services, selectedService, selectedAgentConfig]);
+
+  useEffect(() => {
+    if (!canNavigate) return;
+    if (!isServicesFetched) return;
+    if (!isWalletsFetched) return;
+    if (!isBalanceLoaded) return;
+
+    setIsLoggingIn(false);
+
+    // If no service is created for the selected agent
+    if (!isServiceCreatedForAgent) {
+      window.console.log(
+        `No service created for chain ${selectedServiceOrAgentChainId}`,
+      );
+      goto(SetupScreen.AgentSelection);
+      return;
     }
+
+    // If no balance is loaded, redirect to setup screen
+    if (!eoaBalanceEth) {
+      goto(SetupScreen.SetupEoaFundingIncomplete);
+      return;
+    }
+
+    // if master safe is NOT created, then go to create safe
+    if (!masterSafe?.address) {
+      goto(SetupScreen.SetupCreateSafe);
+      return;
+    }
+
+    gotoPage(Pages.Main);
   }, [
     canNavigate,
+    isServicesFetched,
+    isWalletsFetched,
+    isBalanceLoaded,
+    isServiceCreatedForAgent,
     eoaBalanceEth,
+    masterSafe?.address,
+    selectedServiceOrAgentChainId,
     goto,
     gotoPage,
-    isBalanceLoaded,
-    masterSafe?.address,
-    wallets?.length,
   ]);
 
   return (

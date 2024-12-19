@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { MiddlewareDeploymentStatus } from '@/client';
 import { ErrorComponent } from '@/components/errors/ErrorComponent';
 import { useServices } from '@/hooks/useServices';
-import { useActiveStakingContractInfo } from '@/hooks/useStakingContractDetails';
+import { useActiveStakingContractDetails } from '@/hooks/useStakingContractDetails';
 
 import {
   CannotStartAgentDueToUnexpectedError,
@@ -19,18 +19,18 @@ import { AgentStoppingButton } from './AgentStoppingButton';
 export const AgentButton = () => {
   const {
     selectedService,
-    isFetched: isServicesLoaded,
+    isLoading: isServicesLoading,
     selectedServiceStatusOverride,
   } = useServices();
 
   const {
     isEligibleForStaking,
     isAgentEvicted,
-    isSelectedStakingContractDetailsLoaded,
-  } = useActiveStakingContractInfo();
+    isSelectedStakingContractDetailsLoading,
+  } = useActiveStakingContractDetails();
 
   const button = useMemo(() => {
-    if (!isServicesLoaded || !isSelectedStakingContractDetailsLoaded) {
+    if (isServicesLoading || isSelectedStakingContractDetailsLoading) {
       return (
         <Button type="primary" size="large" disabled loading>
           Loading...
@@ -68,8 +68,8 @@ export const AgentButton = () => {
 
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
-    isServicesLoaded,
-    isSelectedStakingContractDetailsLoaded,
+    isServicesLoading,
+    isSelectedStakingContractDetailsLoading,
     selectedServiceStatusOverride,
     selectedService,
     isEligibleForStaking,

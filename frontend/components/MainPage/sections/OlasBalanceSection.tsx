@@ -1,5 +1,4 @@
-import { RightOutlined } from '@ant-design/icons';
-import { Flex, Skeleton, Typography } from 'antd';
+import { Button, Flex, Skeleton, Typography } from 'antd';
 import { sum } from 'lodash';
 import { useMemo } from 'react';
 import styled from 'styled-components';
@@ -12,6 +11,7 @@ import {
   useMasterBalances,
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { balanceFormat } from '@/utils/numberFormatters';
@@ -25,10 +25,7 @@ const Balance = styled.span`
   margin-right: 4px;
 `;
 
-type MainOlasBalanceProps = { isBorderTopVisible?: boolean };
-export const MainOlasBalance = ({
-  isBorderTopVisible = true,
-}: MainOlasBalanceProps) => {
+export const MainOlasBalance = () => {
   const { selectedService } = useServices();
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
@@ -36,6 +33,7 @@ export const MainOlasBalance = ({
     selectedService?.service_config_id,
   );
   const { goto } = usePageState();
+  const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
 
   const displayedBalance = useMemo(() => {
     // olas across master wallets, safes and eoa
@@ -81,27 +79,30 @@ export const MainOlasBalance = ({
     <CardSection
       vertical
       gap={8}
-      bordertop={isBorderTopVisible ? 'true' : 'false'}
+      bordertop="true"
       borderbottom="true"
       padding="16px 24px"
     >
       {isBalanceLoaded ? (
         <Flex vertical gap={8}>
-          <Text type="secondary">Current balance</Text>
+          <Flex align="center" justify="space-between">
+            <Text type="secondary">Current balance</Text>
+            {isBalanceBreakdownEnabled && (
+              <Button
+                size="small"
+                onClick={() => goto(Pages.ManageWallet)}
+                className="text-sm"
+              >
+                Manage wallet
+              </Button>
+            )}
+          </Flex>
+
           <Flex align="end">
             <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
             <Balance className="balance">{displayedBalance}</Balance>
             <span className="balance-currency">OLAS</span>
           </Flex>
-
-          <Text
-            type="secondary"
-            className="text-sm pointer hover-underline"
-            onClick={() => goto(Pages.YourWalletBreakdown)}
-          >
-            See breakdown
-            <RightOutlined style={{ fontSize: 12, paddingLeft: 6 }} />
-          </Text>
         </Flex>
       ) : (
         <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />

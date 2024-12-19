@@ -52,7 +52,17 @@ export const StakingContractDetails = ({
     return <Skeleton active />;
   }
 
-  if (!allStakingContractDetailsRecord) {
+  if (!allStakingContractDetailsRecord || !list || list.length === 0) {
+    return (
+      <Alert
+        message="No staking information available."
+        type="error"
+        showIcon
+      />
+    );
+  }
+
+  if (!list || list.length === 0) {
     return (
       <Alert
         message="No staking information available."
@@ -63,6 +73,6 @@ export const StakingContractDetails = ({
   }
 
   return (
-    <InfoBreakdownList list={list!} parentStyle={{ gap: 12 }} color="primary" />
+    <InfoBreakdownList list={list} parentStyle={{ gap: 12 }} color="primary" />
   );
 };

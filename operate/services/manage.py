@@ -28,16 +28,18 @@ import traceback
 import typing as t
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
-from operate.ledger.profiles import CONTRACTS, OLAS, STAKING
+from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
 from operate.operate_types import Chain, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
@@ -50,7 +52,10 @@ from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
     Service,
 )
-from operate.utils.gnosis import NULL_ADDRESS
+from operate.services.utils.memeooorr import get_twitter_cookies
+from operate.utils.gnosis import NULL_ADDRESS, drain_signer
+from operate.utils.gnosis import transfer as transfer_from_safe
+from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -249,7 +254,7 @@ class ServiceManager:
         service.store()
         return service_state
 
-    def _get_on_chain_hash(self, chain_config: ChainConfig) -> t.Optional[str]:
+    def _get_on_chain_metadata(self, chain_config: ChainConfig) -> t.Dict:
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         if chain_data.token == NON_EXISTENT_TOKEN:
@@ -260,9 +265,9 @@ class ServiceManager:
         config_hash = info["config_hash"]
         res = requests.get(f"{IPFS_GATEWAY}f01701220{config_hash}", timeout=30)
         if res.status_code == 200:
-            return res.json().get("code_uri", "")[URI_HASH_POSITION:]
+            return res.json()
         raise ValueError(
-            f"Something went wrong while trying to get the code uri from IPFS: {res}"
+            f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
 
     def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
@@ -362,7 +367,10 @@ class ServiceManager:
                     f"required olas: {required_olas}; your balance {balance}"
                 )
 
-        on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
+        on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_description = on_chain_metadata.get("description")
+
         current_agent_bond = staking_params[
             "min_staking_deposit"
         ]  # TODO fixme, read from service registry token utility contract
@@ -377,6 +385,7 @@ class ServiceManager:
                 on_chain_hash != service.hash
                 or current_agent_id != staking_params["agent_ids"][0]
                 or current_agent_bond != staking_params["min_staking_deposit"]
+                or on_chain_description != service.description
             )
         )
         current_staking_program = self._get_current_staking_program(
@@ -532,31 +541,68 @@ class ServiceManager:
             )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
+        env_var_to_value = {}
         if chain == service.home_chain:
-            env_var_to_value = {
-                "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
-                "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
-                "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
-                "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
-                "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-                "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
-                    "activity_checker"
-                ),
-                "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
-                "MECH_REQUEST_PRICE": "10000000000000000",
-                "USE_MECH_MARKETPLACE": str(
-                    "mech_marketplace"
-                    in service.chain_configs[
-                        service.home_chain
-                    ].chain_data.user_params.staking_program_id
-                ),
-                "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
-                    "staking_contract"
-                ),
-                "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
-            }
+            env_var_to_value.update(
+                {
+                    "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
+                    "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
+                    "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
+                    "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
+                    "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                    "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
+                    "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
+                        "staking_contract"
+                    ),
+                    "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
+                        "activity_checker"
+                    ),
+                    "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+                    "MECH_REQUEST_PRICE": "10000000000000000",
+                    "USE_MECH_MARKETPLACE": str(
+                        "mech_marketplace"
+                        in service.chain_configs[
+                            service.home_chain
+                        ].chain_data.user_params.staking_program_id
+                    ),
+                    "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
+                        "staking_contract"
+                    ),
+                    "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+                }
+            )
 
-            service.update_env_variables_values(env_var_to_value)
+        # TODO: yet another agent specific logic for memeooorr, which should be abstracted
+        if all(
+            var in service.env_variables
+            for var in [
+                "TWIKIT_USERNAME",
+                "TWIKIT_EMAIL",
+                "TWIKIT_PASSWORD",
+                "TWIKIT_COOKIES",
+                "TWIKIT_COOKIES_PATH",
+            ]
+        ):
+            # TODO: This is possibly not a good idea: we are setting up a computed variable based on
+            # the value passed in the template.
+            db_path = service.path / "persistent_data/memeooorr.db"
+            cookies_path = service.path / "persistent_data/twikit_cookies.json"
+
+            env_var_to_value.update(
+                {
+                    "TWIKIT_COOKIES": get_twitter_cookies(
+                        username=service.env_variables["TWIKIT_USERNAME"]["value"],
+                        email=service.env_variables["TWIKIT_EMAIL"]["value"],
+                        password=service.env_variables["TWIKIT_PASSWORD"]["value"],
+                        cookies=service.env_variables["TWIKIT_COOKIES"]["value"],
+                        cookies_path=cookies_path,
+                    ),
+                    "TWIKIT_COOKIES_PATH": str(cookies_path),
+                    "DB_PATH": str(db_path),
+                }
+            )
+
+        service.update_env_variables_values(env_var_to_value)
 
         if user_params.use_staking:
             self.logger.info("Checking staking compatibility")
@@ -599,7 +645,10 @@ class ServiceManager:
         )
         staking_params["agent_ids"] = [agent_id]
 
-        on_chain_hash = self._get_on_chain_hash(chain_config=chain_config)
+        on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_description = on_chain_metadata.get("description")
+
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
         )
@@ -609,22 +658,16 @@ class ServiceManager:
             == OnChainState.NON_EXISTENT
         )
 
-        # TODO Determine if the mint metadata hash changed - if so, it requires
-        # an on-chain update.
-        # This has to be implemented. Temporarily added as a placeholder (ignored).
-        has_metadata_changed = False
-
         is_update = (
             (not is_first_mint)
             and (on_chain_hash is not None)
             and (
                 # TODO Discuss how to manage on-chain hash updates with staking programs.
                 # on_chain_hash != service.hash or  # noqa
-                current_agent_id
-                != staking_params["agent_ids"][0]
+                current_agent_id != staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
                 or current_agent_bond != staking_params["min_staking_deposit"]
-                or has_metadata_changed
+                or on_chain_description != service.description
             )
         )
         current_staking_program = self._get_current_staking_program(
@@ -644,7 +687,7 @@ class ServiceManager:
         self.logger.info(f"{is_update=}")
 
         if is_update:
-            self._terminate_service_on_chain_from_safe(
+            self.terminate_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
             )
             # Update service
@@ -919,8 +962,11 @@ class ServiceManager:
         chain_data.on_chain_state = OnChainState.TERMINATED_BONDED
         service.store()
 
-    def _terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
+        self,
+        service_config_id: str,
+        chain: str,
+        withdrawal_address: t.Optional[str] = None,
     ) -> None:
         """Terminate service on-chain"""
 
@@ -955,12 +1001,12 @@ class ServiceManager:
             )
 
         # Cannot unstake, terminate flow.
-        if is_staked and not can_unstake:
+        if is_staked and not can_unstake and withdrawal_address is None:
             self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
             return
 
         # Unstake the service if applies
-        if is_staked and can_unstake:
+        if is_staked and (can_unstake or withdrawal_address is not None):
             self.unstake_service_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
@@ -995,16 +1041,24 @@ class ServiceManager:
         counter_current_safe_owners = Counter(s.lower() for s in current_safe_owners)
         counter_instances = Counter(s.lower() for s in instances)
 
-        if counter_current_safe_owners == counter_instances:
-            self.logger.info("Service funded for safe swap")
-            self.fund_service(
+        if withdrawal_address is not None:
+            # we don't drain signer yet, because the owner swapping tx may need to happen
+            self.drain_service_safe(
                 service_config_id=service_config_id,
-                rpc=ledger_config.rpc,
-                agent_topup=chain_data.user_params.fund_requirements.agent,
-                agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
-                safe_topup=0,
-                safe_fund_treshold=0,
+                withdrawal_address=withdrawal_address,
             )
+
+        if counter_current_safe_owners == counter_instances:
+            if withdrawal_address is None:
+                self.logger.info("Service funded for safe swap")
+                self.fund_service(
+                    service_config_id=service_config_id,
+                    rpc=ledger_config.rpc,
+                    agent_topup=chain_data.user_params.fund_requirements.agent,
+                    agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
+                    safe_topup=0,
+                    safe_fund_treshold=0,
+                )
 
             self.logger.info("Swapping Safe owners")
             sftxb.swap(  # noqa: E800
@@ -1019,6 +1073,22 @@ class ServiceManager:
                 if safe
                 else wallet.crypto.address,  # TODO it should always be safe address
             )  # noqa: E800
+
+        if withdrawal_address is not None:
+            # drain xDAI from service signer key
+            drain_signer(
+                ledger_api=self.wallet_manager.load(
+                    ledger_config.chain.ledger_type
+                ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
+                crypto=EthereumCrypto(
+                    private_key_path=service.path
+                    / "deployment"
+                    / "ethereum_private_key.txt",
+                ),
+                withdrawal_address=withdrawal_address,
+                chain_id=ledger_config.chain.id,
+            )
+            self.logger.info(f"{service.name} signer drained")
 
     @staticmethod
     def _get_current_staking_program(
@@ -1261,6 +1331,7 @@ class ServiceManager:
         service_config_id: str,
         chain: str,
         staking_program_id: t.Optional[str] = None,
+        force: bool = False,
     ) -> None:
         """Unbond service on-chain"""
 
@@ -1297,6 +1368,7 @@ class ServiceManager:
             sftxb.get_unstaking_data(
                 service_id=chain_data.token,
                 staking_contract=STAKING[ledger_config.chain][staking_program_id],
+                force=force,
             )
         ).settle()
         chain_data.staked = False
@@ -1388,12 +1460,17 @@ class ServiceManager:
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )
-            wallet.transfer(
-                to=t.cast(str, chain_data.multisig),
-                amount=int(to_transfer),
-                chain=ledger_config.chain,
-                rpc=rpc or ledger_config.rpc,
-            )
+            # TODO: This is a temporary fix
+            # we avoid the error here because there is a seperate prompt on the UI
+            # when not enough funds are present, and the FE doesn't let the user to start the agent.
+            # Ideally this error should be allowed, and then the FE should ask the user for more funds.
+            with suppress(RuntimeError):
+                wallet.transfer(
+                    to=t.cast(str, chain_data.multisig),
+                    amount=int(to_transfer),
+                    chain=ledger_config.chain,
+                    rpc=rpc or ledger_config.rpc,
+                )
 
     def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -1463,6 +1540,71 @@ class ServiceManager:
                 rpc=rpc or ledger_config.rpc,
             )
 
+    def drain_service_safe(
+        self,
+        service_config_id: str,
+        withdrawal_address: str,
+    ) -> None:
+        """Drain the funds out of the service safe."""
+        self.logger.info(f"Draining the safe of service: {hash}")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[service.home_chain]  # TODO rest of chains
+        ledger_config = chain_config.ledger_config
+        chain_data = chain_config.chain_data
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+        ethereum_crypto = EthereumCrypto(
+            private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
+        )
+
+        # drain OLAS and wxDAI from service safe
+        for token_name, token_address in (
+            ("OLAS", OLAS[ledger_config.chain]),
+            ("wxDAI", WXDAI[ledger_config.chain]),
+        ):
+            token_instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token_address,
+            )
+            balance = token_instance.functions.balanceOf(chain_data.multisig).call()
+            if balance == 0:
+                self.logger.info(
+                    f"No {token_name} to drain from service safe: {chain_data.multisig}"
+                )
+                continue
+
+            self.logger.info(
+                f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}"
+            )
+            transfer_erc20_from_safe(
+                ledger_api=ledger_api,
+                crypto=ethereum_crypto,
+                safe=chain_data.multisig,
+                token=token_address,
+                to=withdrawal_address,
+                amount=balance,
+            )
+
+        # drain xDAI from service safe
+        balance = ledger_api.get_balance(chain_data.multisig)
+        if balance == 0:
+            self.logger.info(
+                f"No xDAI to drain from service safe: {chain_data.multisig}"
+            )
+        else:
+            self.logger.info(
+                f"Draining {balance} xDAI out of service safe: {chain_data.multisig}"
+            )
+            transfer_from_safe(
+                ledger_api=ledger_api,
+                crypto=ethereum_crypto,
+                safe=chain_data.multisig,
+                to=withdrawal_address,
+                amount=balance,
+            )
+
+        self.logger.info(f"{service.name} safe drained ({service_config_id=})")
+
     async def funding_job(
         self,
         service_config_id: str,
@@ -1474,6 +1616,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
         ledger_config = chain_config.ledger_config
+        fund_requirements = chain_config.chain_data.user_params.fund_requirements
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1482,10 +1625,10 @@ class ServiceManager:
                         self.fund_service,
                         service_config_id,  # Service id
                         PUBLIC_RPCS[ledger_config.chain],  # RPC
-                        100000000000000000,  # agent_topup
-                        2000000000000000000,  # safe_topup
-                        50000000000000000,  # agent_fund_threshold
-                        500000000000000000,  # safe_fund_treshold
+                        fund_requirements.agent,  # agent_topup
+                        fund_requirements.safe,  # safe_topup
+                        int(fund_requirements.agent / 2),  # agent_fund_threshold
+                        int(fund_requirements.safe / 2),  # safe_fund_treshold
                         from_safe,
                     )
                 except Exception:  # pylint: disable=broad-except
@@ -1493,9 +1636,6 @@ class ServiceManager:
                         f"Error occured while funding the service\n{traceback.format_exc()}"
                     )
                 await asyncio.sleep(60)
-
-    def _set_env_variables(self, service_config_id: str) -> None:
-        self.logger.info(f"_set_env_variables {service_config_id} - not implemented")
 
     def deploy_service_locally(
         self,
@@ -1513,7 +1653,6 @@ class ServiceManager:
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
         :return: Deployment instance
         """
-        self._set_env_variables(service_config_id=service_config_id)
         service = self.load(service_config_id=service_config_id)
 
         deployment = service.deployment

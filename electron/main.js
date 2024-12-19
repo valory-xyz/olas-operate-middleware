@@ -14,7 +14,6 @@ const os = require('os');
 const next = require('next/dist/server/next');
 const http = require('http');
 const AdmZip = require('adm-zip');
-const { validateEnv } = require('./utils/env-validation');
 
 const { setupDarwin, setupUbuntu, setupWindows, Env } = require('./install');
 
@@ -26,6 +25,7 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+const { Scraper } = require('agent-twitter-client');
 
 // Validates environment variables required for Pearl
 // kills the app/process if required environment variables are unavailable
@@ -100,31 +100,77 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 function showNotification(title, body) {
   new Notification({ title, body }).show();
 }
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-async function beforeQuit() {
+function setAppAutostart(is_set) {
+  logger.electron('Set app autostart: ' + is_set);
+  app.setLoginItemSettings({ openAtLogin: is_set });
+}
+
+function handleAppSettings() {
+  logger.electron('Handle app settings');
+  let app_settings_file = `${paths.dotOperateDirectory}/app_settings.json`;
+  try {
+    if (!fs.existsSync(app_settings_file)) {
+      logger.electron('Create app settings file');
+      let obj = { app_auto_start: true };
+      fs.writeFileSync(app_settings_file, JSON.stringify(obj));
+    }
+    let data = JSON.parse(fs.readFileSync(app_settings_file));
+    logger.electron('Loaded app settings file ' + JSON.stringify(data));
+    setAppAutostart(data.app_auto_start);
+  } catch {
+    logger.electron('Error loading settings');
+  }
+}
+
+let isBeforeQuitting = false;
+let appRealClose = false;
+
+async function beforeQuit(event) {
+  if (typeof event.preventDefault === 'function' && !appRealClose) {
+    event.preventDefault();
+    logger.electron('onquit event.preventDefault');
+  }
+
+  if (isBeforeQuitting) return;
+  isBeforeQuitting = true;
+
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
 
-  if (operateDaemon || operateDaemonPid) {
-    // gracefully stop running services
-    try {
-      await fetch(
-        `http://localhost:${appConfig.ports.prod.operate}/stop_all_services`,
-      );
-    } catch (e) {
-      logger.electron("Couldn't stop_all_services gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
-    }
+  logger.electron('Stop backend gracefully:');
+  try {
+    logger.electron(
+      `Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron('Killed backend server by shutdown endpoint!');
+    logger.electron(
+      'Killed backend server by shutdown endpoint! result:' +
+        JSON.stringify(result),
+    );
+  } catch (err) {
+    logger.electron('Backend stopped with error!');
+    logger.electron(
+      'Backend stopped with error, result: ' + JSON.stringify(err),
+    );
+  }
 
+  if (operateDaemon || operateDaemonPid) {
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
+      logger.electron('Killing backend server kill process');
       operateDaemonPid && (await killProcesses(operateDaemonPid));
     } catch (e) {
       logger.electron("Couldn't kill daemon processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
 
     // attempt to kill the daemon process via kill
@@ -136,7 +182,6 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill operate daemon process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
   }
 
@@ -149,7 +194,6 @@ async function beforeQuit() {
       }
     } catch (e) {
       logger.electron("Couldn't kill devNextApp process via kill:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
 
     // attempt to kill the dev next app process via pid
@@ -157,7 +201,6 @@ async function beforeQuit() {
       devNextAppPid && (await killProcesses(devNextAppPid));
     } catch (e) {
       logger.electron("Couldn't kill devNextApp processes via pid:");
-      logger.electron(JSON.stringify(e, null, 2));
     }
   }
 
@@ -165,10 +208,11 @@ async function beforeQuit() {
     // attempt graceful close of prod next app
     await nextApp.close().catch((e) => {
       logger.electron("Couldn't close NextApp gracefully:");
-      logger.electron(JSON.stringify(e, null, 2));
     });
     // electron will kill next service on exit
   }
+  appRealClose = true;
+  app.quit();
 }
 
 const APP_WIDTH = 460;
@@ -256,6 +300,25 @@ const createMainWindow = async () => {
 
   ipcMain.handle('app-version', () => app.getVersion());
 
+  // Handle twitter login
+  ipcMain.handle('validate-twitter-login', async (_event, credentials) => {
+    const scraper = new Scraper();
+
+    const { username, password, email } = credentials;
+    if (!username || !password || !email) {
+      return { success: false, error: 'Missing credentials' };
+    }
+
+    try {
+      await scraper.login(username, password, email);
+      const cookies = await scraper.getCookies();
+      return { success: true, cookies };
+    } catch (error) {
+      console.error('Twitter login error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
@@ -277,7 +340,7 @@ const createMainWindow = async () => {
 
   try {
     logger.electron('Setting up store IPC');
-    await setupStoreIpc(ipcMain, mainWindow);
+    setupStoreIpc(ipcMain, mainWindow);
   } catch (e) {
     logger.electron('Store IPC failed:', JSON.stringify(e));
   }
@@ -305,7 +368,21 @@ async function launchDaemon() {
 
     await fetch(`http://localhost:${appConfig.ports.prod.operate}/${endpoint}`);
   } catch (err) {
-    logger.electron('Backend not running!');
+    logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
+  }
+
+  try {
+    logger.electron('Killing backend server by shutdown endpoint!');
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron(
+      'Backend stopped with result: ' + JSON.stringify(result, null, 2),
+    );
+  } catch (err) {
+    logger.electron(
+      'Backend stopped with error: ' + JSON.stringify(err, null, 2),
+    );
   }
 
   const check = new Promise(function (resolve, _reject) {
@@ -446,6 +523,7 @@ ipcMain.on('check', async function (event, _argument) {
 
   // Setup
   try {
+    handleAppSettings();
     event.sender.send('response', 'Checking installation');
 
     if (platform === 'darwin') {
@@ -543,8 +621,8 @@ app.once('ready', async () => {
     app.quit();
   });
 
-  app.on('before-quit', async () => {
-    await beforeQuit();
+  app.on('before-quit', async (event) => {
+    await beforeQuit(event);
   });
 
   if (platform === 'darwin') {
@@ -559,7 +637,7 @@ app.once('ready', async () => {
 process.on('uncaughtException', (error) => {
   logger.electron('Uncaught Exception:', error);
   // Clean up your child processes here
-  beforeQuit().then(() => {
+  beforeQuit({}).then(() => {
     process.exit(1); // Exit with a failure code
   });
 });
@@ -567,7 +645,7 @@ process.on('uncaughtException', (error) => {
 ['SIGINT', 'SIGTERM'].forEach((signal) => {
   process.on(signal, () => {
     logger.electron(`Received ${signal}. Cleaning up...`);
-    beforeQuit().then(() => {
+    beforeQuit({}).then(() => {
       process.exit(0);
     });
   });
@@ -649,11 +727,28 @@ ipcMain.handle('save-logs', async (_, data) => {
     });
 
   // Other debug data: balances, addresses, etc.
-  if (data.debugData)
+  if (data.debugData) {
+    const clonedDebugData = JSON.parse(JSON.stringify(data.debugData)); // TODO: deep clone with better method
+    const servicesData = clonedDebugData.services;
+    if (servicesData && Array.isArray(servicesData.services)) {
+      Object.entries(servicesData.services).forEach(([_, eachService]) => {
+        if (eachService && eachService.env_variables) {
+          Object.entries(eachService.env_variables).forEach(([_, envVar]) => {
+            if (envVar.provision_type === 'user') {
+              envVar.value = '*****';
+            }
+          });
+        }
+      });
+    }
+
+    clonedDebugData.services = servicesData;
+
     sanitizeLogs({
       name: 'debug_data.txt',
-      data: JSON.stringify(data.debugData, null, 2),
+      data: JSON.stringify(clonedDebugData, null, 2),
     });
+  }
 
   // Agent logs
   try {

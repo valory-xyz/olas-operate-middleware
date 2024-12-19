@@ -56,7 +56,7 @@ const main = async () => {
             ethereum:
                 "0x0001a500a6b18995b03f44bb040a5ffc28e45cb0",
             base:
-                "0x54330d28ca3357F294334BDC454a032e7f353416"
+                "0x54330d28ca3357f294334bdc454a032e7f353416"
         },
         usdc: {
             ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"

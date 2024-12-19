@@ -15,7 +15,7 @@ import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
-  useActiveStakingContractInfo,
+  useActiveStakingContractDetails,
   useStakingContractDetails,
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -35,11 +35,9 @@ export const MigrateButton = ({
     setPaused: setIsServicePollingPaused,
     isFetched: isServicesLoaded,
     selectedService,
-    selectedAgentConfig,
     selectedAgentType,
     overrideSelectedServiceStatus,
   } = useServices();
-  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   const serviceConfigId =
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
@@ -61,19 +59,19 @@ export const MigrateButton = ({
     useStakingProgram();
   const {
     selectedStakingContractDetails,
-    isSelectedStakingContractDetailsLoaded,
-  } = useActiveStakingContractInfo();
+    isSelectedStakingContractDetailsLoading,
+  } = useActiveStakingContractDetails();
   const { stakingContractInfo: defaultStakingContractInfo } =
     useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
-    if (!isSelectedStakingContractDetailsLoaded) return;
+    if (isSelectedStakingContractDetailsLoading) return;
     if (selectedStakingContractDetails) return selectedStakingContractDetails;
     return defaultStakingContractInfo;
   }, [
     selectedStakingContractDetails,
     defaultStakingContractInfo,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   ]);
 
   const { setMigrationModalOpen } = useModals();
@@ -137,7 +135,6 @@ export const MigrateButton = ({
               useMechMarketplace:
                 stakingProgramIdToMigrateTo ===
                 StakingProgramId.PearlBetaMechMarketplace,
-              chainId: homeChainId,
             };
 
             if (selectedService) {
@@ -158,6 +155,7 @@ export const MigrateButton = ({
           } catch (error) {
             console.error(error);
           } finally {
+            overrideSelectedServiceStatus(null);
             setIsServicePollingPaused(false);
             setIsBalancePollingPaused(false);
           }

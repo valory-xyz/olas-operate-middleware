@@ -16,12 +16,14 @@ jobs:
             BASE_RPC: "https://rpc-gate.autonolas.tech/base-rpc/"
             GNOSIS_RPC: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
             ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"
+            MODE_RPC: "https://mainnet.mode.network"
             arch: "x64"
           - env: "development"
             OPTIMISM_RPC: "https://rpc-gate.autonolas.tech/optimism-rpc/"
-            BASE_RPC: "https://rpc-gate.autonolas.tech/base-rpc/"
-            GNOSIS_RPC: "https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0"
-            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"            
+            BASE_RPC: "https://virtual.base.rpc.tenderly.co/2a91611a-3251-48a6-8095-b86815de84bf"
+            GNOSIS_RPC: "https://virtual.gnosis.rpc.tenderly.co/7de511da-9ad7-4e9f-98c1-e99052e92b15"
+            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"  
+            MODE_RPC: "https://mainnet.mode.network"          
             arch: "x64"
     defaults:
       run:
@@ -100,6 +102,35 @@ jobs:
         run: yarn install:frontend
         
 
+      - name: Setup Certificate 
+        run: | 
+          echo "${{secrets.SM_CLIENT_CERT_FILE_B64 }}" | base64 --decode > /d/Certificate_pkcs12.p12 
+        shell: bash             
+
+      - name: Set variables 
+        id: variables 
+        run: | 
+          echo "::set-output name=version::${GITHUB_REF#refs/tags/v}" 
+          echo "SM_HOST=${{ secrets.SM_HOST }}" >> "$GITHUB_ENV" 
+          echo "SM_API_KEY=${{ secrets.SM_API_KEY }}" >> "$GITHUB_ENV" 
+          echo "SM_KEY_PAIR_ALIAS=${{ secrets.SM_KEY_PAIR_ALIAS }}" >> "$GITHUB_ENV" 
+          echo "SM_CLIENT_CERT_FILE=D:\\Certificate_pkcs12.p12" >> "$GITHUB_ENV" 
+          echo "SM_CLIENT_CERT_PASSWORD=${{ secrets.SM_CLIENT_CERT_PASSWORD }}" >> "$GITHUB_ENV" 
+          echo "C:\Program Files (x86)\Windows Kits\10\App Certification Kit" >> $GITHUB_PATH 
+          echo "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools" >> $GITHUB_PATH 
+          echo "C:\Program Files\DigiCert\DigiCert One Signing Manager Tools" >> $GITHUB_PATH 
+        shell: bash  
+
+      - name: Setup SSM KSP on windows latest 
+        run: | 
+          curl -X GET  https://one.digicert.com/signingmanager/api-ui/v1/releases/smtools-windows-x64.msi/download -H "x-api-key:%SM_API_KEY%" -o smtools-windows-x64.msi 
+          msiexec /i smtools-windows-x64.msi /quiet /qn 
+          smksp_registrar.exe list 
+          smctl.exe keypair ls 
+          C:\Windows\System32\certutil.exe -csp "DigiCert Signing Manager KSP" -key -user 
+          smksp_cert_sync.exe 
+
+        shell: cmd 
       - name: set env vars to prod.env
         env:
           NODE_ENV: ${{ matrix.env }}          
@@ -107,6 +138,7 @@ jobs:
           BASE_RPC: ${{ matrix.BASE_RPC }}
           ETHEREUM_RPC: ${{ matrix.ETHEREUM_RPC }}
           OPTIMISM_RPC: ${{ matrix.OPTIMISM_RPC }}
+          MODE_RPC: ${{ matrix.MODE_RPC }}
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
           GH_TOKEN: ${{ secrets.github_token}}
         run: |
@@ -116,6 +148,7 @@ jobs:
           echo BASE_RPC=$BASE_RPC >> prod.env
           echo ETHEREUM_RPC=$ETHEREUM_RPC >> prod.env
           echo GNOSIS_RPC=$GNOSIS_RPC >> prod.env
+          echo MODE_RPC=$MODE_RPC >> prod.env
           cat prod.env
           echo GH_TOKEN=$GH_TOKEN >> prod.env
       - run: rm -rf /dist

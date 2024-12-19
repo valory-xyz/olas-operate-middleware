@@ -101,6 +101,57 @@ SERVICE_CONFIG_PREFIX = "sc-"
 DUMMY_MULTISIG = "0xm"
 NON_EXISTENT_TOKEN = -1
 
+DEFAULT_TRADER_ENV_VARS = {
+    "GNOSIS_LEDGER_RPC": {
+        "name": "Gnosis ledger RPC",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "STAKING_CONTRACT_ADDRESS": {
+        "name": "Staking contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_ACTIVITY_CHECKER_CONTRACT": {
+        "name": "Mech activity checker contract",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_CONTRACT_ADDRESS": {
+        "name": "Mech contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_REQUEST_PRICE": {
+        "name": "Mech request price",
+        "description": "",
+        "value": "10000000000000000",
+        "provision_type": "computed",
+    },
+    "USE_MECH_MARKETPLACE": {
+        "name": "Use Mech marketplace",
+        "description": "",
+        "value": "False",
+        "provision_type": "computed",
+    },
+    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
+        "name": "Requester staking instance address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "PRIORITY_MECH_ADDRESS": {
+        "name": "Priority Mech address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+}
+
 
 def mkdirs(build_dir: Path) -> None:
     """Build necessary directories."""
@@ -193,9 +244,12 @@ class ServiceBuilder(BaseServiceBuilder):
                     has_multiple_overrides=has_multiple_overrides,
                 )
                 if service_id is not None:
-                    override["models"]["params"]["args"][
-                        "on_chain_service_id"
-                    ] = service_id
+                    if has_multiple_overrides:
+                        os.environ["ON_CHAIN_SERVICE_ID"] = str(service_id)
+                    else:
+                        override["models"]["params"]["args"][
+                            "on_chain_service_id"
+                        ] = service_id
 
             override["type"] = component_id.package_type.value
             override["public_id"] = str(component_id.public_id)
@@ -655,6 +709,13 @@ class Service(LocalResource):
                 f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
             )
 
+        # Corner-case during testing: force include env_vars for empty env_vars during testing.
+        if data["name"] == "valory/trader_pearl":
+            if "env_variables" not in data or not data["env_variables"]:
+                data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+                with open(path / Service._file, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=2)
+
         if version == SERVICE_CONFIG_VERSION:
             return False
 
@@ -757,7 +818,10 @@ class Service(LocalResource):
         del data["home_chain_id"]
 
         if "env_variables" not in data:
-            data["env_variables"] = {}
+            if data["name"] == "valory/trader_pearl":
+                data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+            else:
+                data["env_variables"] = {}
 
         data["version"] = SERVICE_CONFIG_VERSION
 
@@ -939,14 +1003,15 @@ class Service(LocalResource):
         self.name = service_template["name"]
         self.hash = service_template["hash"]
         self.description = service_template["description"]
-        self.env_variables = service_template["env_variables"]
+
+        # TODO temporarily disable update env variables - hotfix for Memeooorr
+        # self.env_variables = service_template["env_variables"]
 
         # Only update hash_history if latest inserted hash is different
         if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:
             current_timestamp = int(time.time())
             self.hash_history[current_timestamp] = service_template["hash"]
 
-        self.description = service_template["description"]
         self.home_chain = service_template["home_chain"]
 
         ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()

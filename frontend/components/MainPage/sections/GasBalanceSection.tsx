@@ -14,6 +14,7 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 import { useMasterWalletContext } from '@/hooks/useWallet';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { CardSection } from '../../styled/CardSection';
 
@@ -40,7 +41,7 @@ const FineDot = styled(Dot)`
 
 const BalanceStatus = () => {
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
-  const { isFetched: isServicesLoaded } = useServices();
+  const { isFetched: isServicesLoaded, selectedAgentType } = useServices();
 
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
@@ -54,10 +55,10 @@ const BalanceStatus = () => {
   useEffect(() => {
     if (!isBalanceLoaded || !isServicesLoaded) return;
     if (!showNotification) return;
-    if (!storeState?.isInitialFunded) return;
+    if (!storeState?.[`isInitialFunded_${selectedAgentType}`]) return;
 
     if (isMasterSafeLowOnNativeGas && !isLowBalanceNotificationShown) {
-      showNotification('Trading balance is too low.');
+      showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
     }
 
@@ -72,7 +73,8 @@ const BalanceStatus = () => {
     isLowBalanceNotificationShown,
     isMasterSafeLowOnNativeGas,
     showNotification,
-    storeState?.isInitialFunded,
+    storeState,
+    selectedAgentType,
   ]);
 
   const status = useMemo(() => {
@@ -116,6 +118,22 @@ export const GasBalanceSection = () => {
     return masterSafes.find((wallet) => wallet.evmChainId === homeChainId);
   }, [homeChainId, masterSafes]);
 
+  const activityLink = useMemo(() => {
+    if (!masterSafe) return;
+
+    const link =
+      EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(homeChainId)] +
+      '/address/' +
+      masterSafe.address;
+
+    return (
+      <a href={link} target="_blank">
+        Track activity on blockchain explorer{' '}
+        <ArrowUpOutlined style={{ rotate: '45deg' }} />
+      </a>
+    );
+  }, [masterSafe, homeChainId]);
+
   return (
     <CardSection
       justify="space-between"
@@ -124,27 +142,14 @@ export const GasBalanceSection = () => {
       padding="16px 24px"
     >
       <Text type="secondary">
-        Trading balance&nbsp;
+        Operating balance&nbsp;
         {masterSafe && (
           <Tooltip
             title={
               <TooltipContent>
-                Your agent uses this balance to fund trading activity on-chain.
+                Your agent uses this balance to fund on-chain activity.
                 <br />
-                <a
-                  href={
-                    `${
-                      EXPLORER_URL_BY_MIDDLEWARE_CHAIN[
-                        // TODO: fix unknown
-                        homeChainId as unknown as keyof typeof EXPLORER_URL_BY_MIDDLEWARE_CHAIN
-                      ]
-                    }/address/` + masterSafe.address
-                  }
-                  target="_blank"
-                >
-                  Track activity on blockchain explorer{' '}
-                  <ArrowUpOutlined style={{ rotate: '45deg' }} />
-                </a>
+                {activityLink}
               </TooltipContent>
             }
           >

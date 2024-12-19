@@ -10,30 +10,32 @@ endef
 
 ./trader/:
 	pwd
-	git clone https://github.com/valory-xyz/trader.git
+	git clone https://github.com/valory-xyz/meme-ooorr.git
 
-./dist/aea_win.exe: ./trader/
+./dist/aea_win.exe: ./electron/bins/ ./trader/
 	mkdir -p dist
-	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_win
-	cp -f trader/dist/trader_win.exe ./dist/aea_win.exe
+	cd meme-ooorr && poetry lock --no-update && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-all twitter_text --collect-all google.generativeai --collect-all peewee --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --collect-all twikit --collect-all twitter_text_parser --collect-all textblob --onefile pyinstaller/memeooorr_bin.py --name trader_win
+	cp -f meme-ooorr/dist/trader_win.exe ./dist/aea_win.exe
+	cp -f  meme-ooorr/dist/trader_win.exe  ./electron/bins/aea_win.exe
 	pwd
 
 
 ./dist/aea_bin: ./trader/
 	mkdir -p dist
-	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_bin
-	cp -f trader/dist/trader_bin ./dist/aea_bin
+	cd meme-ooorr && poetry lock --no-update && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-all twitter_text --collect-data eth_account --collect-all peewee --collect-all google.generativeai --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --collect-all twikit --collect-all twitter_text_parser --collect-all textblob --onefile pyinstaller/memeooorr_bin.py --name trader_bin
+	cp -f meme-ooorr/dist/trader_bin ./dist/aea_bin
 	pwd
 
 
-./dist/tendermint_win.exe: ./operate/
+./dist/tendermint_win.exe: ./electron/bins/ ./operate/
 	pwd
 	poetry install && poetry run pyinstaller operate/services/utils/tendermint.py --onefile --name tendermint_win
+	cp dist/tendermint_win.exe ./electron/bins/tendermint_win.exe
 
 
 ./dist/pearl_win.exe: ./operate/ ./dist/aea_win.exe ./dist/tendermint_win.exe
 	pwd
-	poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_win.exe:.  --add-binary dist/tendermint_win.exe:. --onefile --name pearl_win
+	poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --onefile --name pearl_win
 
 
 ./electron/bins/:
@@ -48,13 +50,13 @@ endef
 build: ./dist/pearl_win.exe ./electron/bins/tendermint.exe
 	$(call setup_env, prod)
 	cp -f dist/pearl_win.exe ./electron/bins/pearl_win.exe
-	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} yarn build:frontend
-	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} GH_TOKEN=${GH_TOKEN} node build-win.js
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} MODE_RPC=${MODE_RPC} yarn build:frontend
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} MODE_RPC=${MODE_RPC} GH_TOKEN=${GH_TOKEN} node build-win.js
 
 
 .PHONY: build-tenderly
 build-tenderly:  ./dist/pearl_win.exe
 	$(call setup_env, dev-tenderly)
 	cp -f dist/pearl_win.exe ./electron/bins/pearl_win.exe
-	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} yarn build:frontend
+	NODE_ENV=${NODE_ENV} GNOSIS_RPC=${GNOSIS_RPC} OPTIMISM_RPC=${OPTIMISM_RPC} BASE_RPC=${BASE_RPC} ETHEREUM_RPC=${ETHEREUM_RPC} MODE_RPC=${MODE_RPC} yarn build:frontend
 	GH_TOKEN=${GH_TOKEN} node build-win-tenderly.js

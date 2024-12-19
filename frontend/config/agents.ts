@@ -1,6 +1,9 @@
 import { MiddlewareChain } from '@/client';
 import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
+import { TokenSymbol } from '@/enums/Token';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
+import { MemeooorBaseService } from '@/service/agents/Memeooor';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
@@ -17,10 +20,30 @@ export const AGENT_CONFIG: {
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
     requiresAgentSafesOn: [EvmChainId.Gnosis],
     agentSafeFundingRequirements: {
-      [EvmChainId.Gnosis]: 100000000000000000,
+      [EvmChainId.Gnosis]: 0.1,
+    },
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: 0.1,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.XDAI]: 2,
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: 0.1,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.XDAI]: 0.1,
+        },
+      },
     },
     requiresMasterSafesOn: [EvmChainId.Gnosis],
     serviceApi: PredictTraderService,
+    displayName: 'Prediction agent',
+    description: 'Participates in prediction markets.',
   },
   // TODO: check optimus config
   // [AgentType.Optimus]: {
@@ -35,4 +58,36 @@ export const AGENT_CONFIG: {
   //   },
   //   serviceApi: OptimusService,
   // },
-};
+  [AgentType.Memeooorr]: {
+    name: 'Agents.fun agent',
+    evmHomeChainId: EvmChainId.Base,
+    middlewareHomeChainId: MiddlewareChain.BASE,
+    requiresAgentSafesOn: [EvmChainId.Base],
+    agentSafeFundingRequirements: {
+      [EvmChainId.Base]: 0.03,
+    },
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0001,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: 0.0001,
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0001,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: 0.0001,
+        },
+      },
+    },
+    requiresMasterSafesOn: [EvmChainId.Base],
+    serviceApi: MemeooorBaseService,
+    displayName: 'Agents.fun agent',
+    description:
+      'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
+  },
+} as const;

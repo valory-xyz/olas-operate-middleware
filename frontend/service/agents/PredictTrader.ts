@@ -1,7 +1,6 @@
 import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
-import { MECHS } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
@@ -32,18 +31,19 @@ export abstract class PredictTraderService extends StakedAgentService {
     if (!agentMultisigAddress) return;
     if (!serviceId) return;
 
-    const stakingProgramConfig =
-      STAKING_PROGRAMS[EvmChainId.Gnosis][stakingProgramId];
+    const stakingProgramConfig = STAKING_PROGRAMS[chainId][stakingProgramId];
 
     if (!stakingProgramConfig) throw new Error('Staking program not found');
 
-    const { activityChecker, contract: stakingTokenProxyContract } =
-      stakingProgramConfig;
+    const {
+      activityChecker,
+      contract: stakingTokenProxyContract,
+      mech: mechContract,
+    } = stakingProgramConfig;
+
+    if (!mechContract) throw new Error('Mech contract is not defined');
 
     const provider = PROVIDERS[chainId].multicallProvider;
-
-    const mechContract =
-      MECHS[chainId][stakingProgramConfig.mechType!].contract;
 
     const contractCalls = [
       mechContract.getRequestsCount(agentMultisigAddress),
@@ -127,8 +127,10 @@ export abstract class PredictTraderService extends StakedAgentService {
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId = EvmChainId.Gnosis,
   ): Promise<number | undefined> => {
-    const { contract: stakingTokenProxy } =
-      STAKING_PROGRAMS[chainId][stakingProgramId];
+    const stakingTokenProxy =
+      STAKING_PROGRAMS[chainId][stakingProgramId]?.contract;
+    if (!stakingTokenProxy) return;
+
     const { multicallProvider } = PROVIDERS[chainId];
 
     const contractCalls = [
@@ -182,11 +184,13 @@ export abstract class PredictTraderService extends StakedAgentService {
   static getStakingContractDetails = async (
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,
-  ): Promise<StakingContractDetails> => {
+  ): Promise<StakingContractDetails | undefined> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
-    const { contract: stakingTokenProxy } =
-      STAKING_PROGRAMS[chainId][stakingProgramId];
+    const stakingTokenProxy =
+      STAKING_PROGRAMS[chainId]?.[stakingProgramId]?.contract;
+
+    if (!stakingTokenProxy) return;
 
     const contractCalls = [
       stakingTokenProxy.availableRewards(),
