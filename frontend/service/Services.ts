@@ -110,26 +110,7 @@ const updateService = async ({
 }): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'PATCH',
-    body: JSON.stringify({
-      ...serviceTemplate,
-      deploy,
-      configurations: {
-        ...serviceTemplate.configurations,
-        // overwrite defaults with chain-specific configurations
-        ...Object.entries(serviceTemplate.configurations).reduce(
-          (acc, [middlewareChain, config]) => {
-            acc[middlewareChain] = {
-              ...config,
-              rpc: CHAIN_CONFIG[asEvmChainId(middlewareChain)].rpc,
-              staking_program_id: stakingProgramId,
-              use_mech_marketplace: useMechMarketplace,
-            };
-            return acc;
-          },
-          {} as typeof serviceTemplate.configurations,
-        ),
-      },
-    }),
+    body: JSON.stringify({ hash: serviceTemplate.hash }),
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
     if (response.ok) {

@@ -268,7 +268,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     )
 
     def with_retries(f: t.Callable) -> t.Callable:
@@ -778,6 +778,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             partial_update = False
         else:
             partial_update = True
+
+        logger.info(
+            f"_update_service {partial_update=} {allow_different_service_public_id=}"
+        )
 
         output = manager.update(
             service_config_id=service_config_id,
