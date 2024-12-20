@@ -258,7 +258,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "run"],
+            # TODO: Patch for Windows failing hash. Revert once it's fixed on OpenAutonomy / OpenAEA
+            args=[self._aea_bin, "run", "-s"] if platform.system() == "Windows" else [self._aea_bin, "run"],
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
