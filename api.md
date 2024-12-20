@@ -714,9 +714,11 @@ Update service configuration `service_config_id` with the provided template.
 
 ---
 
-### `PUSH /api/v2/service/{service_config_id}`
+### `PATCH /api/v2/service/{service_config_id}`
 
 Partial update service configuration `service_config_id` with the provided (partial) template.
+
+![Partial updates](docs/images/partial_update_examples.png)
 
 <details>
   <summary>Request</summary>
