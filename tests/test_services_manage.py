@@ -29,19 +29,20 @@ from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
 from operate.operate_types import ServiceTemplate
+
 from .test_services_service import DEFAULT_CONFIG_KWARGS
+
 
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE_HOME = ROOT_PATH / ".operate_test"
 
-from operate.services.service import Service
-
 
 @pytest.fixture
 def random_string() -> str:
+    """random_string"""
     length = 8
     chars = string.ascii_letters + string.digits
-    return "".join(random.choices(chars, k=length))
+    return "".join(random.choices(chars, k=length))  # nosec B311
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:
@@ -91,11 +92,11 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
 class TestServiceManager:
     """Tests for services.manager.ServiceManager class."""
 
-    @pytest.mark.parametrize("update_new_var", [True])
-    @pytest.mark.parametrize("update_update_var", [True])
-    @pytest.mark.parametrize("update_name", [True])
-    @pytest.mark.parametrize("update_description", [True])
-    @pytest.mark.parametrize("update_hash", [True])
+    @pytest.mark.parametrize("update_new_var", [True, False])
+    @pytest.mark.parametrize("update_update_var", [True, False])
+    @pytest.mark.parametrize("update_name", [True, False])
+    @pytest.mark.parametrize("update_description", [True, False])
+    @pytest.mark.parametrize("update_hash", [True, False])
     def test_service_update(
         self,
         update_new_var: bool,
