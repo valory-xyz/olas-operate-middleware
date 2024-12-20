@@ -261,7 +261,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "run", "-s"],  # TODO: Patch for Windows failing hash
+            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -345,7 +345,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "run", "-s"],  # TODO: Patch for Windows failing hash
+            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
             creationflags=(
