@@ -27,14 +27,14 @@ export const AddressLink = ({
       target="_blank"
       href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareChain]}/address/${address}`}
     >
-      {truncateAddress(address)}
-
       {prefix ? (
         <>
           &nbsp;
           {prefix}
         </>
-      ) : null}
+      ) : (
+        truncateAddress(address)
+      )}
 
       {hideLinkArrow ? null : (
         <>
