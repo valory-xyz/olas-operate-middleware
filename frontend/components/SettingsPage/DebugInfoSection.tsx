@@ -84,7 +84,7 @@ const AgentStakingInfo = () => {
 };
 
 export const DebugInfoSection = () => {
-  const [isModalOpen, setIsModalOpen] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
   const showModal = useCallback(() => setIsModalOpen(true), []);
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
 
