@@ -756,6 +756,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.put("/api/v2/service/{service_config_id}")
+    @app.patch("/api/v2/service/{service_config_id}")
     @with_retries
     async def _update_service(request: Request) -> JSONResponse:
         """Update a service."""
@@ -772,16 +773,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         allow_different_service_public_id = template.get(
             "allow_different_service_public_id", False
         )
+
+        if request.method == "PUT":
+            partial_update = False
+        else:
+            partial_update = True
+
         output = manager.update(
             service_config_id=service_config_id,
             service_template=template,
             allow_different_service_public_id=allow_different_service_public_id,
-            partial_update=False,
+            partial_update=partial_update,
         )
 
         return JSONResponse(content=output.json)
 
-    @app.patch("/api/v2/service/{service_config_id}")
     @with_retries
     async def _partial_update_service(request: Request) -> JSONResponse:
         """Partially update a service (merge update)."""
