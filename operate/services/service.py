@@ -278,7 +278,7 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         """Generate tendermint configuration."""
         tmhome = str(self.build_dir / "node")
         tendermint_executable = str(
-            shutil.which("tendermint"),
+            Path(os.path.dirname(sys.executable)) / "tendermint"
         )
         # TODO: move all platform related things to a dedicated file
         if platform.system() == "Windows":
