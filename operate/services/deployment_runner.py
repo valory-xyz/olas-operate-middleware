@@ -97,7 +97,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _run_aea(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        return self._run_cmd(args=[self._aea_bin, *args], cwd=cwd)
+        # TODO: Patch for Windows failing hash (add -s). Revert once it's fixed on OpenAutonomy / OpenAEA
+        return self._run_cmd(args=[self._aea_bin, "-s", *args], cwd=cwd)
 
     @staticmethod
     def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
@@ -258,8 +259,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            # TODO: Patch for Windows failing hash. Revert once it's fixed on OpenAutonomy / OpenAEA
-            args=[self._aea_bin, "run", "-s"] if platform.system() == "Windows" else [self._aea_bin, "run"],
+            args=[self._aea_bin, "run"],
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
