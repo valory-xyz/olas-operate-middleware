@@ -56,7 +56,7 @@ const Address = () => {
           {
             left: 'Address',
             leftClassName: 'text-light',
-            right: (
+            right: masterSafeAddress && (
               <AddressLink
                 address={masterSafeAddress}
                 middlewareChain={middlewareChain}

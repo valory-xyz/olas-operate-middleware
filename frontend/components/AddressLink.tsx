@@ -5,9 +5,9 @@ import { Address } from '@/types/Address';
 import { truncateAddress } from '@/utils/truncate';
 
 type AddressLinkProps = {
-  address?: Address;
-  hideLinkArrow?: boolean;
+  address: Address;
   middlewareChain: MiddlewareChain;
+  hideLinkArrow?: boolean;
 };
 
 export const AddressLink = ({
