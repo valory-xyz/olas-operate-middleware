@@ -683,7 +683,7 @@ class Service(LocalResource):
     _file = "config.json"
 
     @classmethod
-    def migrate_format(cls, path: Path) -> bool:
+    def migrate_format(cls, path: Path) -> bool:  # pylint: disable=too-many-statements
         """Migrate the JSON file format if needed."""
 
         if not path.is_dir():
