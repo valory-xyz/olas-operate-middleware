@@ -8,6 +8,7 @@ import {
   ServiceStakingDetails,
   StakingContractDetails,
 } from '@/types/Autonolas';
+import { formatCountdownDisplay } from '@/utils/time';
 
 const { Text } = Typography;
 
@@ -50,7 +51,7 @@ export const CountdownUntilMigration = ({
 
   const countdownDisplay = isNil(secondsUntilReady)
     ? 'Loading...'
-    : countdownDisplayFormat(secondsUntilReady);
+    : formatCountdownDisplay(secondsUntilReady);
 
   return (
     <Flex vertical gap={1} style={{ maxWidth: POPOVER_WIDTH_LARGE }}>
@@ -60,22 +61,4 @@ export const CountdownUntilMigration = ({
       <Text>{countdownDisplay}</Text>
     </Flex>
   );
-};
-
-const countdownDisplayFormat = (totalSeconds: number) => {
-  const days = Math.floor(totalSeconds / (24 * 3600));
-  totalSeconds %= 24 * 3600;
-
-  const hours = Math.floor(totalSeconds / 3600);
-  totalSeconds %= 3600;
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  // Ensure double digits for hours, minutes, and seconds
-  const formattedHours = String(hours).padStart(2, '0');
-  const formattedMinutes = String(minutes).padStart(2, '0');
-  const formattedSeconds = String(seconds).padStart(2, '0');
-  // TODO: update this support plural and singular text
-  return `${days} days ${formattedHours} hours ${formattedMinutes} minutes ${formattedSeconds} seconds`;
 };
