@@ -69,7 +69,7 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
                     "agent": kwargs.get("fund_requirements_agent"),
                     "safe": kwargs.get("fund_requirements_safe"),
                 },
-                "fallback_chain_params": {}
+                "fallback_chain_params": {},
             }
         },
         "env_variables": {
