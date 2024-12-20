@@ -1,18 +1,21 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
 
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { AddressLink } from '@/components/AddressLink';
 import { MODAL_WIDTH } from '@/constants/width';
+import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
-const { Title, Text, Link } = Typography;
+const { Title, Text } = Typography;
 
 type MigrationModalProps = { open: boolean; onClose: () => void };
 export const MigrationSuccessModal = ({
   open,
   onClose,
 }: MigrationModalProps) => {
-  const { activeStakingProgramMeta } = useStakingProgram();
+  const { selectedAgentConfig } = useServices();
+  const { activeStakingProgramMeta, activeStakingProgramAddress } =
+    useStakingProgram();
 
   // Close modal if no active staking program, migration doesn't apply to non-stakers
   if (!activeStakingProgramMeta) {
@@ -39,7 +42,6 @@ export const MigrationSuccessModal = ({
       ]}
     >
       <Flex gap={8} vertical>
-        {/* Robot head */}
         <Flex align="center" justify="center">
           <Image
             src="/splash-robot-head.png"
@@ -52,10 +54,13 @@ export const MigrationSuccessModal = ({
         <Text>
           Your agent is now staked on {activeStakingProgramMeta.name}.
         </Text>
-        {/* TODO: Add relevant block explorer domain */}
-        <Link href="#">
-          View full contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
-        </Link>
+        {activeStakingProgramAddress && (
+          <AddressLink
+            address={activeStakingProgramAddress}
+            middlewareChain={selectedAgentConfig.middlewareHomeChainId}
+            prefix="View full contract details"
+          />
+        )}
       </Flex>
     </Modal>
   );
