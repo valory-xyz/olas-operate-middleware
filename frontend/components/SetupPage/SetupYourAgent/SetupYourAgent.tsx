@@ -69,9 +69,9 @@ const XAccountCredentials = () => (
       message={
         <Flex justify="space-between" gap={4} vertical>
           <Text>
-            Make sure to set the account as `Automated`. When logged in on X, go
-            to Settings &gt; Your account &gt; Account information &gt;
-            Automation.
+            To avoid your X account getting suspended for bot activity, complete
+            the onboarding steps. You can find them on your profile page under
+            &quot;Let&lsquo;s get you set up&quot;.
           </Text>
         </Flex>
       }
