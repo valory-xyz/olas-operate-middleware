@@ -3,7 +3,6 @@ import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
 const { Text, Title } = Typography;
@@ -11,19 +10,17 @@ const { Text, Title } = Typography;
 export const AvoidSuspensionAlert = () => {
   const { store } = useElectronApi();
   const { storeState } = useStore();
-  const { selectedAgentType } = useServices();
 
   // If first reward notification is shown BUT
   // agent eviction alert is NOT yet shown, show this alert.
   const showAvoidSuspensionAlert = useMemo(() => {
     if (!storeState) return false;
 
-    const agentType = storeState[selectedAgentType];
     return (
-      agentType?.firstRewardNotificationShown &&
-      !agentType?.agentEvictionAlertShown
+      storeState?.firstRewardNotificationShown &&
+      !storeState?.agentEvictionAlertShown
     );
-  }, [storeState, selectedAgentType]);
+  }, [storeState]);
 
   if (!showAvoidSuspensionAlert) return null;
 
@@ -46,9 +43,7 @@ export const AvoidSuspensionAlert = () => {
           <Button
             type="primary"
             ghost
-            onClick={() =>
-              store?.set?.(`${selectedAgentType}.agentEvictionAlertShown`, true)
-            }
+            onClick={() => store?.set?.('agentEvictionAlertShown', true)}
             style={{ marginTop: 4 }}
           >
             Understood

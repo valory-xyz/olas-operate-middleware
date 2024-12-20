@@ -15,12 +15,12 @@ const cardSectionStyle = { marginBottom: '-1px', marginTop: '24px' };
 export const KeepAgentRunningSection = () => {
   const { storeState } = useStore();
 
-  const { selectedService, selectedAgentType } = useServices();
+  const { selectedService } = useServices();
   const { deploymentStatus: serviceStatus } = useService(
     selectedService?.service_config_id,
   );
 
-  if (storeState?.[selectedAgentType]?.firstStakingRewardAchieved) return null;
+  if (storeState?.firstStakingRewardAchieved) return null;
   if (serviceStatus !== MiddlewareDeploymentStatus.DEPLOYED) return null;
 
   return (
