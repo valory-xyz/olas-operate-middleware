@@ -2,16 +2,18 @@ const Store = require('electron-store');
 
 const defaultInitialAgentSettings = {
   isInitialFunded: false,
-  firstStakingRewardAchieved: false,
-  firstRewardNotificationShown: false,
-  agentEvictionAlertShown: false,
-  currentStakingProgram: false,
 };
 
 // Schema for validating store data
 const schema = {
+  // Global settings
   environmentName: { type: 'string', default: '' },
   lastSelectedAgentType: { type: 'string', default: 'trader' },
+
+  // First time user settings
+  firstStakingRewardAchieved: { type: 'boolean', default: false },
+  firstRewardNotificationShown: { type: 'boolean', default: false },
+  agentEvictionAlertShown: { type: 'boolean', default: false },
 
   // Each agent has its own settings
   trader: { type: 'object', default: defaultInitialAgentSettings },
@@ -38,21 +40,13 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
       store.get('isInitialFunded_trader') ||
       store.get('isInitialFunded') ||
       false,
-    firstRewardNotificationShown:
-      store.get('firstRewardNotificationShown') || false,
-    agentEvictionAlertShown: store.get('agentEvictionAlertShown') || false,
-    currentStakingProgram: store.get('currentStakingProgram') || false,
   };
 
   // Set the trader agent and delete old keys
   store.set('trader', traderAgent);
-  [
-    'isInitialFunded',
-    'isInitialFunded_trader',
-    'firstRewardNotificationShown',
-    'agentEvictionAlertShown',
-    'currentStakingProgram',
-  ].forEach((key) => store.delete(key));
+  ['isInitialFunded', 'isInitialFunded_trader'].forEach((key) =>
+    store.delete(key),
+  );
 
   /**
    * agent: memeooorr Migration
@@ -78,7 +72,7 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
   ipcMain.handle('store-get', (_, key) => store.get(key));
   ipcMain.handle('store-set', (_, key, value) => store.set(key, value));
   ipcMain.handle('store-delete', (_, key) => store.delete(key));
-  ipcMain.handle('store-clear', () => store.clear());
+  ipcMain.handle('store-clear', (_) => store.clear());
 };
 
 module.exports = { setupStoreIpc };
