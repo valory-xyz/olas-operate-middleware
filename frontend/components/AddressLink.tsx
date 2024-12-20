@@ -1,3 +1,5 @@
+import { ReactNode } from 'react';
+
 import { MiddlewareChain } from '@/client';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
@@ -7,12 +9,14 @@ import { truncateAddress } from '@/utils/truncate';
 type AddressLinkProps = {
   address: Address;
   middlewareChain: MiddlewareChain;
+  prefix?: ReactNode;
   hideLinkArrow?: boolean;
 };
 
 export const AddressLink = ({
   address,
   hideLinkArrow = false,
+  prefix,
   middlewareChain,
 }: AddressLinkProps) => {
   if (!address) return null;
@@ -24,6 +28,13 @@ export const AddressLink = ({
       href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareChain]}/address/${address}`}
     >
       {truncateAddress(address)}
+
+      {prefix ? (
+        <>
+          &nbsp;
+          {prefix}
+        </>
+      ) : null}
 
       {hideLinkArrow ? null : (
         <>

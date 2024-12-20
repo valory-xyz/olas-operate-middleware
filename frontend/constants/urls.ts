@@ -1,6 +1,5 @@
 import { MiddlewareChain } from '@/client';
 import { EvmChainId } from '@/enums/Chain';
-import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 type Url = `http${'s' | ''}://${string}`;
 
@@ -65,10 +64,3 @@ export const SWAP_URL_BY_EVM_CHAIN: Record<number | EvmChainId, Url> = {
   // [EvmChainId.OPTIMISM]: COW_SWAP_GNOSIS_XDAI_OLAS_URL,
   [EvmChainId.Base]: SWAP_BASE_URL,
 };
-
-export const EXPLORER_URL_BY_EVM_CHAIN_ID: Record<number | EvmChainId, Url> =
-  Object.fromEntries(
-    Object.entries(EXPLORER_URL_BY_MIDDLEWARE_CHAIN).map(
-      ([middlewareChain, url]) => [asEvmChainId(middlewareChain), url],
-    ),
-  );

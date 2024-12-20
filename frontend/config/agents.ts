@@ -45,7 +45,6 @@ export const AGENT_CONFIG: {
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
   },
-  // TODO: check optimus config
   // [AgentType.Optimus]: {
   //   name: 'Optimus',
   //   homeChainId: ChainId.Optimism,
