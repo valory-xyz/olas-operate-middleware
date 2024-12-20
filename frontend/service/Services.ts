@@ -109,7 +109,7 @@ const updateService = async ({
   useMechMarketplace?: boolean;
 }): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
-    method: 'PUT',
+    method: 'PATCH',
     body: JSON.stringify({
       ...serviceTemplate,
       deploy,
