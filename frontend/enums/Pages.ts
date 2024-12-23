@@ -11,4 +11,5 @@ export enum Pages {
   AddBackupWalletViaSafe,
   SwitchAgent,
   AgentActivity,
+  UpdateAgentTemplate,
 }
