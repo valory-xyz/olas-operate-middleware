@@ -244,6 +244,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
+          DEBUG: electron-builder
+          DEBUG_DMG: true
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ env.OS_ARCH }}
@@ -272,6 +274,8 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
+          DEBUG: electron-builder
+          DEBUG_DMG: true
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ env.OS_ARCH }}
