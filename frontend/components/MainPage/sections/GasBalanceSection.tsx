@@ -79,7 +79,11 @@ const BalanceStatus = () => {
           WalletType.Safe
         ][serviceSafeNativeBalance.symbol]
     );
-  }, []);
+  }, [
+    isMasterSafeLowOnNativeGas,
+    selectedAgentConfig.operatingThresholds,
+    serviceSafeNativeBalance,
+  ]);
 
   // show notification if balance is too low
   useEffect(() => {
@@ -96,14 +100,13 @@ const BalanceStatus = () => {
 
     // If it has already been shown and the balance has increased,
     // should show the notification again if it goes below the threshold.
-    if (!isMasterSafeLowOnNativeGas && isLowBalanceNotificationShown) {
+    if (!isLowFunds && isLowBalanceNotificationShown) {
       setIsLowBalanceNotificationShown(false);
     }
   }, [
     isBalanceLoaded,
     isLowBalanceNotificationShown,
     isLowFunds,
-    isMasterSafeLowOnNativeGas,
     isServicesLoaded,
     selectedAgentType,
     serviceSafeNativeBalance,
