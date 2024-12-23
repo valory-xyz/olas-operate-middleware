@@ -9,6 +9,7 @@ import { HelpAndSupport } from '@/components/Pages/HelpAndSupportPage';
 import { RewardsHistory } from '@/components/RewardsHistory/RewardsHistory';
 import { Settings } from '@/components/SettingsPage';
 import { Setup } from '@/components/SetupPage';
+import { UpdateAgentPage } from '@/components/UpdateAgentPage';
 import { YourWalletPage } from '@/components/YourWalletPage';
 import { Pages } from '@/enums/Pages';
 import { useElectronApi } from '@/hooks/useElectronApi';
@@ -64,6 +65,8 @@ export default function Home() {
         return <AddBackupWalletViaSafePage />;
       case Pages.AgentActivity:
         return <AgentActivityPage />;
+      case Pages.UpdateAgentTemplate:
+        return <UpdateAgentPage />;
       default:
         return <Main />;
     }
