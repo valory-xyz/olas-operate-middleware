@@ -1,3 +1,4 @@
+import { ControlOutlined } from '@ant-design/icons';
 import { Button, Flex, Popover, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
@@ -51,6 +52,7 @@ export const SwitchAgentSection = () => {
           alt={selectedAgentConfig.displayName}
         />
         <Text>{selectedAgentConfig.displayName}</Text>
+        <UpdateTemplateIcon />
       </Flex>
 
       {isSwitchAgentEnabled ? (
@@ -68,4 +70,15 @@ export const SwitchAgentSection = () => {
       )}
     </CardSection>
   );
+};
+
+export const UpdateTemplateIcon = () => {
+  const { goto } = usePageState();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    goto(Pages.UpdateAgentTemplate);
+  };
+
+  return <ControlOutlined onClick={handleClick} />;
 };
