@@ -148,7 +148,7 @@ const MasterSafeNativeBalance = () => {
               </Text>
             ),
             leftClassName: 'text-light',
-            right: `${balanceFormat(masterSafeNativeBalance, 2)} ${nativeTokenSymbol}`,
+            right: `${balanceFormat(masterSafeNativeBalance, 4)} ${nativeTokenSymbol}`,
           },
         ]}
         parentStyle={infoBreakdownParentStyle}
@@ -191,7 +191,7 @@ const MasterEoaSignerNativeBalance = () => {
               />
             ),
             leftClassName: 'text-light',
-            right: `${balanceFormat(masterEoaBalance, 3)} ${nativeTokenSymbol}`,
+            right: `${balanceFormat(masterEoaBalance, 4)} ${nativeTokenSymbol}`,
           },
         ]}
         parentStyle={infoBreakdownParentStyle}
