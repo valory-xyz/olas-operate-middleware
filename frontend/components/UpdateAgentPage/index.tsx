@@ -1,5 +1,13 @@
 import { EditFilled } from '@ant-design/icons';
-import { Button, Flex, Form, FormInstance, Typography } from 'antd';
+import {
+  Alert,
+  Button,
+  Flex,
+  Form,
+  FormInstance,
+  Input,
+  Typography,
+} from 'antd';
 import FormItem from 'antd/es/form/FormItem';
 import {
   createContext,
@@ -11,11 +19,12 @@ import {
   useState,
 } from 'react';
 
+import { Pages } from '@/enums/Pages';
+import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 
 import { CardTitle } from '../Card/CardTitle';
 import { CardFlex } from '../styled/CardFlex';
-import { CardSection } from '../styled/CardSection';
 import { useConfirmModal } from './hooks/useConfirmModal';
 import { ModalProps } from './hooks/useModal';
 import { useUnsavedModal } from './hooks/useUnsavedModal';
@@ -42,6 +51,8 @@ const xFields: DynamicElement[] = [
   {
     id: 'x-account-credentials',
     header: 'X account credentials',
+    description:
+      'Login details enables your agent to view X and interact with other agents.',
     type: ElementType.HEADER,
   },
   {
@@ -69,11 +80,17 @@ const xFields: DynamicElement[] = [
 
 const sections = [agentFields, xFields];
 
-const Field = memo(function Field({ field }: { field: DynamicElement }) {
+const Field = memo(function Field({
+  field,
+  initialValues,
+}: {
+  field: DynamicElement;
+  initialValues: any;
+}) {
   // HEADER
   if (field.type === ElementType.HEADER) {
     return (
-      <Flex dir="column" gap={2}>
+      <Flex dir="column" gap={0}>
         <Typography.Title level={5}>{field.header}</Typography.Title>
         {field.description && (
           <Typography.Paragraph>{field.description}</Typography.Paragraph>
@@ -84,17 +101,27 @@ const Field = memo(function Field({ field }: { field: DynamicElement }) {
   //   INPUTS
   if (field.type.startsWith('input')) {
     const inputField = field as DynamicInput;
-    return <FormItem label={inputField.label}></FormItem>;
+    return (
+      <Flex vertical gap={0}>
+        <FormItem label={inputField.label} name={inputField.label}>
+          <Input defaultValue={initialValues[inputField.label]} />
+        </FormItem>
+      </Flex>
+    );
   }
   //   ALERTS
   if (field.type.includes('alert')) {
     const alertField = field as DynamicAlert;
-    return <div>{alertField.content}</div>;
+    return <Alert type="warning" description={alertField.content}></Alert>;
   }
   // TEXTAREA
   if (field.type === ElementType.TEXTAREA) {
     const textAreaField = field as DynamicTextArea;
-    return <FormItem label={textAreaField.value}></FormItem>;
+    return (
+      <FormItem label={textAreaField.label} name={textAreaField.label}>
+        <Input.TextArea defaultValue={initialValues[textAreaField.label]} />
+      </FormItem>
+    );
   }
   return <div>Error</div>;
 });
@@ -131,32 +158,48 @@ const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
+const EditButton = () => {
+  const { setIsEditing, isEditing } = useContext(UpdateAgentContext);
+
+  return (
+    <Button
+      size="large"
+      icon={<EditFilled />}
+      onClick={() => setIsEditing?.(!isEditing)}
+    />
+  );
+};
+
 export const UpdateAgentPage = () => {
   const { selectedService } = useServices();
   const { form } = useContext(UpdateAgentContext);
+  const { goto } = usePageState();
 
   return (
     <UpdateAgentProvider>
       <CardFlex
         bordered={false}
-        title={<CardTitle title="Staking rewards history" />}
+        title={
+          <CardTitle
+            showBackButton={true}
+            backButtonCallback={() => goto(Pages.Main)}
+            title="Agent settings"
+          />
+        }
         noBodyPadding="true"
-        extra={<Button size="large" icon={<EditFilled />} />}
+        extra={<Button size="large" icon={<EditButton />} />}
       >
-        <Form form={form} initialValues={selectedService}>
+        <Form form={form} layout="vertical">
           {sections.map((section, index) => (
-            <CardSection
-              key={index}
-              gap={8}
-              padding="12px 24px"
-              justify="space-between"
-              align="center"
-              borderbottom="true"
-            >
+            <Flex key={index} gap={2} vertical style={{ padding: '16px' }}>
               {section.map((field) => (
-                <Field key={field.id} field={field} />
+                <Field
+                  key={field.id}
+                  field={field}
+                  initialValues={selectedService}
+                />
               ))}
-            </CardSection>
+            </Flex>
           ))}
         </Form>
       </CardFlex>
