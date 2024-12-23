@@ -101,12 +101,14 @@ const BalanceStatus = () => {
     }
   }, [
     isBalanceLoaded,
-    isServicesLoaded,
     isLowBalanceNotificationShown,
+    isLowFunds,
     isMasterSafeLowOnNativeGas,
+    isServicesLoaded,
+    selectedAgentType,
+    serviceSafeNativeBalance,
     showNotification,
     storeState,
-    selectedAgentType,
   ]);
 
   const status = useMemo(() => {
