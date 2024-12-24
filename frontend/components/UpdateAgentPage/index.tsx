@@ -1,6 +1,5 @@
 import { EditFilled } from '@ant-design/icons';
 import { Button, Form, FormInstance } from 'antd';
-import { noop } from 'lodash';
 import {
   createContext,
   Dispatch,
@@ -124,14 +123,26 @@ export const UpdateAgentPage = () => {
 
 const UpdateAgentPageCard = () => {
   const { selectedAgentType } = useServices();
-  const { unsavedModal, isEditing } = useContext(UpdateAgentContext);
+  const { goto } = usePageState();
+  const { unsavedModal, isEditing, form } = useContext(UpdateAgentContext);
+
+  const hasUnsavedChanges = form?.isFieldsTouched();
+
+  const handleClickBack = () => {
+    if (hasUnsavedChanges) {
+      unsavedModal?.openModal?.();
+    } else {
+      goto(Pages.Main);
+    }
+  };
+
   return (
     <CardFlex
       bordered={false}
       title={
         <CardTitle
           showBackButton={true}
-          backButtonCallback={unsavedModal?.openModal ?? noop}
+          backButtonCallback={handleClickBack}
           title={isEditing ? 'Edit agent settings' : 'Agent settings'}
         />
       }
