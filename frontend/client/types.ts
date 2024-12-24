@@ -39,8 +39,8 @@ export type ChainData = {
     nft: string;
     staking_program_id: StakingProgramId;
     threshold: number;
-    use_mech_marketplace: true;
-    use_staking: true;
+    use_mech_marketplace: boolean;
+    use_staking: boolean;
   };
 };
 

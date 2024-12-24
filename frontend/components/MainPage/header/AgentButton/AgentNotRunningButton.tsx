@@ -245,22 +245,13 @@ const useServiceDeployment = () => {
     }
 
     // Update the service if the hash is different
-    // TODO: "updateService" now uses PATCH instead of PUT,
-    // which means it updates only the provided values.
-    // Ideally we should consider rewriting this code
-    // so that only hash value is passed
     if (!middlewareServiceResponse && service) {
       if (service.hash !== serviceTemplate.hash) {
         await ServicesService.updateService({
           serviceConfigId: service.service_config_id,
-          stakingProgramId: selectedStakingProgramId,
-          // chainId: selectedAgentConfig.evmHomeChainId,
-          serviceTemplate,
-          deploy: false, // TODO: deprecated will remove
-          useMechMarketplace:
-            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
-              selectedStakingProgramId
-            ].mechType === MechType.Marketplace,
+          partialServiceTemplate: {
+            hash: serviceTemplate.hash,
+          },
         });
       }
     }

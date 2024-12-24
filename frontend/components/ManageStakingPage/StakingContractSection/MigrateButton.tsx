@@ -3,16 +3,12 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus, ServiceTemplate } from '@/client';
-import {
-  getServiceTemplate,
-  SERVICE_TEMPLATES,
-} from '@/constants/serviceTemplates';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
   useActiveStakingContractDetails,
@@ -20,6 +16,7 @@ import {
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
+import { DeepPartial } from '@/types/Util';
 
 import { CountdownUntilMigration } from './CountdownUntilMigration';
 import { CantMigrateReason, useMigrate } from './useMigrate';
@@ -42,15 +39,12 @@ export const MigrateButton = ({
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
       : '';
-  const { service } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () =>
-      service
-        ? getServiceTemplate(service.hash)
-        : SERVICE_TEMPLATES.find(
-            (template) => template.agentType === selectedAgentType,
-          ),
-    [selectedAgentType, service],
+      SERVICE_TEMPLATES.find(
+        (template) => template.agentType === selectedAgentType,
+      ),
+    [selectedAgentType],
   );
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
@@ -128,23 +122,39 @@ export const MigrateButton = ({
             overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            const serviceConfigParams = {
-              stakingProgramId: stakingProgramIdToMigrateTo,
-              serviceTemplate,
-              deploy: true,
-              useMechMarketplace:
-                stakingProgramIdToMigrateTo ===
-                StakingProgramId.PearlBetaMechMarketplace,
-            };
-
             if (selectedService) {
               // update service
               await ServicesService.updateService({
-                ...serviceConfigParams,
                 serviceConfigId,
+                partialServiceTemplate: {
+                  configurations: {
+                    ...Object.entries(serviceTemplate.configurations).reduce(
+                      (acc, [middlewareChain]) => {
+                        acc[middlewareChain] = {
+                          staking_program_id: stakingProgramIdToMigrateTo,
+                          use_mech_marketplace:
+                            stakingProgramIdToMigrateTo ===
+                            StakingProgramId.PearlBetaMechMarketplace,
+                        };
+                        return acc;
+                      },
+                      {} as DeepPartial<typeof serviceTemplate.configurations>,
+                    ),
+                  },
+                },
               });
             } else {
               // create service if it doesn't exist
+
+              const serviceConfigParams = {
+                stakingProgramId: stakingProgramIdToMigrateTo,
+                serviceTemplate,
+                deploy: true,
+                useMechMarketplace:
+                  stakingProgramIdToMigrateTo ===
+                  StakingProgramId.PearlBetaMechMarketplace,
+              };
+
               await ServicesService.createService(serviceConfigParams);
             }
 
