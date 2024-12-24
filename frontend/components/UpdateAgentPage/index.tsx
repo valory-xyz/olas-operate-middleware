@@ -110,24 +110,29 @@ const EditButton = () => {
 };
 
 export const UpdateAgentPage = () => {
-  const { selectedAgentType } = useServices();
-  const { unsavedModal, isEditing } = useContext(UpdateAgentContext);
-
   return (
     <UpdateAgentProvider>
-      <CardFlex
-        bordered={false}
-        title={
-          <CardTitle
-            showBackButton={true}
-            backButtonCallback={unsavedModal?.openModal ?? noop}
-            title={isEditing ? 'Agent settings' : 'Edit agent settings'}
-          />
-        }
-        extra={<EditButton />}
-      >
-        {selectedAgentType === AgentType.Memeooorr && <MemeUpdateForm />}
-      </CardFlex>
+      <UpdateAgentPageCard />
     </UpdateAgentProvider>
+  );
+};
+
+const UpdateAgentPageCard = () => {
+  const { selectedAgentType } = useServices();
+  const { unsavedModal, isEditing } = useContext(UpdateAgentContext);
+  return (
+    <CardFlex
+      bordered={false}
+      title={
+        <CardTitle
+          showBackButton={true}
+          backButtonCallback={unsavedModal?.openModal ?? noop}
+          title={isEditing ? 'Edit agent settings' : 'Agent settings'}
+        />
+      }
+      extra={<EditButton />}
+    >
+      {selectedAgentType === AgentType.Memeooorr && <MemeUpdateForm />}
+    </CardFlex>
   );
 };

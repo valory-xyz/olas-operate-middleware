@@ -1,3 +1,4 @@
+import { message } from 'antd';
 import { useCallback, useState } from 'react';
 
 import { useService } from '@/hooks/useService';
@@ -18,6 +19,7 @@ export const useConfirmUpdateModal = ({
   const restartIfServiceRunning = useCallback(async () => {
     if (isServiceRunning && service?.service_config_id) {
       try {
+        message.info('Restarting service ...');
         ServicesService.stopDeployment(service?.service_config_id).then(() =>
           ServicesService.startService(service?.service_config_id),
         );
@@ -29,13 +31,21 @@ export const useConfirmUpdateModal = ({
 
   const confirm = useCallback(async () => {
     setPending(true);
+    message.loading({
+      content: 'Updating agent settings ...',
+      key: 'updating',
+    });
     let failed = false;
 
     try {
       await confirmCallback();
+      message.destroy('updating');
+      message.success({ content: 'Agent settings updated successfully' });
 
       // restart may be time consuming, no need to await here
-      restartIfServiceRunning();
+      restartIfServiceRunning().catch(() =>
+        message.error({ content: 'Failed to restart service' }),
+      );
     } catch (e) {
       console.error(e);
       failed = true;
