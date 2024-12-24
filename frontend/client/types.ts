@@ -93,7 +93,7 @@ export type ConfigurationTemplate = {
   use_mech_marketplace?: boolean;
   cost_of_bond: number;
   monthly_gas_estimate: number;
-  fund_requirements: FundRequirementsTemplate;
+  fund_requirements: { [key: string]: FundRequirementsTemplate };
 };
 
 export type FundRequirementsTemplate = {

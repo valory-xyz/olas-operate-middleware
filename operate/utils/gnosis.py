@@ -37,6 +37,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
+    ZERO_ADDRESS,
 )
 
 
@@ -542,3 +543,20 @@ def drain_signer(
         ledger_api=ledger_api,
         build_and_send_tx=lambda: tx_helper.transact(lambda x: x, "", kwargs={}),
     )
+
+
+def get_asset_balance(
+    ledger_api: LedgerApi,
+    contract_address: str,
+    address: str,
+) -> int:
+    """
+    Get the balance of a native asset or ERC20 token.
+    If contract address is a zero address, return the native balance.
+    """
+    if contract_address == ZERO_ADDRESS:
+        return ledger_api.get_balance(address)
+    return registry_contracts.erc20.get_instance(
+        ledger_api=ledger_api,
+        contract_address=contract_address,
+    ).functions.balanceOf(address).call()

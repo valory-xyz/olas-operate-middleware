@@ -3,6 +3,8 @@ import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { parseEther } from '@/utils/numberFormatters';
 
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
@@ -26,8 +28,10 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: 10000000000000000,
         monthly_gas_estimate: 10000000000000000000,
         fund_requirements: {
-          agent: 100000000000000000,
-          safe: 5000000000000000000,
+          [ZERO_ADDRESS]: {  // zero address means native currency
+            agent: 100000000000000000,
+            safe: 5000000000000000000,
+          }
         },
       },
     },
@@ -176,8 +180,10 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: +parseEther(50),
         monthly_gas_estimate: +parseEther(0.03),
         fund_requirements: {
-          agent: +parseEther(0.001),
-          safe: +parseEther(0.001),
+          [ZERO_ADDRESS]: {  // zero address means native currency
+            agent: +parseEther(0.001),
+            safe: +parseEther(0.001),
+          }
         },
       },
     },
@@ -283,8 +289,14 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: +parseEther(20),
         monthly_gas_estimate: +parseEther(0.00516),
         fund_requirements: {
-          agent: +parseEther(0.001),
-          safe: 0,
+          [ZERO_ADDRESS]: {  // zero address means native currency
+            agent: +parseEther(0.0005),
+            safe: +parseEther(0.005),
+          },
+          "0xd988097fb8612cc24eec14542bc03424c656005f": {  // USDC
+            agent: 0,
+            safe: 16000000, // 16 USDC
+          }
         },
       },
     },
