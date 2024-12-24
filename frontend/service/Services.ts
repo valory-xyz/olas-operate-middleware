@@ -105,7 +105,7 @@ const updateService = async ({
 }): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ partialService }),
+    body: JSON.stringify({ ...partialService }),
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
     if (response.ok) {
