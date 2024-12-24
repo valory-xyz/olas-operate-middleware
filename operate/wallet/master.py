@@ -132,10 +132,10 @@ class MasterWallet(LocalResource):
 
     def transfer_asset(
         self,
-        asset: str,
         to: str,
         amount: int,
         chain: Chain,
+        asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> None:
@@ -381,6 +381,7 @@ class EthereumMasterWallet(MasterWallet):
     ) -> None:
         """
         Transfer assets to the given account.
+
         If asset is a zero address, transfer native currency.
         """
         if asset == ZERO_ADDRESS:

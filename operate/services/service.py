@@ -684,7 +684,7 @@ class Service(LocalResource):
     _file = "config.json"
 
     @classmethod
-    def migrate_format(cls, path: Path) -> bool:
+    def migrate_format(cls, path: Path) -> bool:  # pylint: disable=too-many-statements
         """Migrate the JSON file format if needed."""
 
         if not path.is_dir():
@@ -830,14 +830,16 @@ class Service(LocalResource):
         if version == 4:
             new_chain_configs = {}
             for chain, chain_data in data["chain_configs"].items():
-                fund_requirements = chain_data["chain_data"]["user_params"]["fund_requirements"]
+                fund_requirements = chain_data["chain_data"]["user_params"][
+                    "fund_requirements"
+                ]
                 if ZERO_ADDRESS not in fund_requirements:
                     chain_data["chain_data"]["user_params"]["fund_requirements"] = {
                         ZERO_ADDRESS: fund_requirements
                     }
 
                 new_chain_configs[chain] = chain_data  # type: ignore
-            
+
             data["chain_configs"] = new_chain_configs
 
         data["version"] = SERVICE_CONFIG_VERSION
@@ -1022,7 +1024,7 @@ class Service(LocalResource):
         self.description = service_template["description"]
 
         # TODO temporarily disable update env variables - hotfix for Memeooorr
-        # self.env_variables = service_template["env_variables"]
+        # self.env_variables = service_template["env_variables"]  # noqa: E800
 
         # Only update hash_history if latest inserted hash is different
         if self.hash_history[max(self.hash_history.keys())] != service_template["hash"]:

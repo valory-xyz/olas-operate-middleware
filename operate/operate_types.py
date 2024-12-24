@@ -339,4 +339,4 @@ class AssetFundingValues(TypedDict):
     safe: FundingConfig
 
 
-FundingValues = t.Dict[str, AssetFundingValues]   # str is the asset address
+FundingValues = t.Dict[str, AssetFundingValues]  # str is the asset address

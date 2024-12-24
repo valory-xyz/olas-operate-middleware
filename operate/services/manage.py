@@ -1058,12 +1058,16 @@ class ServiceManager:
                     funding_values={
                         ZERO_ADDRESS: {
                             "agent": {
-                                "topup": chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent,
-                                "threshold": chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent,
+                                "topup": chain_data.user_params.fund_requirements[
+                                    ZERO_ADDRESS
+                                ].agent,
+                                "threshold": chain_data.user_params.fund_requirements[
+                                    ZERO_ADDRESS
+                                ].agent,
                             },
                             "safe": {"topup": 0, "threshold": 0},
                         }
-                    }
+                    },
                 )
 
             self.logger.info("Swapping Safe owners")
@@ -1384,7 +1388,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
-        funding_values: FundingValues = {},
+        funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
     ) -> None:
         """Fund service if required."""
@@ -1404,7 +1408,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
-        funding_values: FundingValues = {},
+        funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
         chain: str = "gnosis",
     ) -> None:
@@ -1419,8 +1423,15 @@ class ServiceManager:
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
 
-        for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items():
-            asset_funding_values = funding_values.get(asset_address)
+        for (
+            asset_address,
+            fund_requirements,
+        ) in chain_data.user_params.fund_requirements.items():
+            asset_funding_values = (
+                funding_values.get(asset_address)
+                if funding_values is not None
+                else None
+            )
             agent_fund_threshold = (
                 asset_funding_values["agent"]["threshold"]
                 if asset_funding_values is not None
@@ -1428,8 +1439,14 @@ class ServiceManager:
             )
 
             for key in service.keys:
-                agent_balance = get_asset_balance(ledger_api=ledger_api, contract_address=asset_address, address=key.address)
-                self.logger.info(f"Agent {key.address} Asset: {asset_address} balance: {agent_balance}")
+                agent_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=asset_address,
+                    address=key.address,
+                )
+                self.logger.info(
+                    f"Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
+                )
                 if agent_fund_threshold > 0:
                     self.logger.info(f"Required balance: {agent_fund_threshold}")
                     if agent_balance < agent_fund_threshold:
@@ -1451,13 +1468,19 @@ class ServiceManager:
                             rpc=rpc or ledger_config.rpc,
                         )
 
-            safe_balance = get_asset_balance(ledger_api=ledger_api, contract_address=asset_address, address=chain_data.multisig)
+            safe_balance = get_asset_balance(
+                ledger_api=ledger_api,
+                contract_address=asset_address,
+                address=chain_data.multisig,
+            )
             safe_fund_treshold = (
                 asset_funding_values["safe"]["threshold"]
                 if asset_funding_values is not None
                 else fund_requirements.safe
             )
-            self.logger.info(f"Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}")
+            self.logger.info(
+                f"Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}"
+            )
             self.logger.info(f"Required balance: {safe_fund_treshold}")
             if safe_balance < safe_fund_treshold:
                 self.logger.info("Funding safe")
@@ -1504,7 +1527,8 @@ class ServiceManager:
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
-            agent_fund_threshold or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
+            agent_fund_threshold
+            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
         )
 
         for key in service.keys:
@@ -1514,7 +1538,8 @@ class ServiceManager:
             if agent_balance < agent_fund_threshold:
                 self.logger.info("Funding agents")
                 to_transfer = (
-                    agent_topup or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
+                    agent_topup
+                    or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
                 )
                 self.logger.info(f"Transferring {to_transfer} units to {key.address}")
                 wallet.transfer_erc20(
@@ -1532,13 +1557,17 @@ class ServiceManager:
             .call()
         )
         safe_fund_treshold = (
-            safe_fund_treshold or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
+            safe_fund_treshold
+            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
         )
         self.logger.info(f"Safe {chain_data.multisig} balance: {safe_balance}")
         self.logger.info(f"Required balance: {safe_fund_treshold}")
         if safe_balance < safe_fund_treshold:
             self.logger.info("Funding safe")
-            to_transfer = safe_topup or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
+            to_transfer = (
+                safe_topup
+                or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
+            )
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )

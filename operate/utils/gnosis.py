@@ -552,11 +552,16 @@ def get_asset_balance(
 ) -> int:
     """
     Get the balance of a native asset or ERC20 token.
+
     If contract address is a zero address, return the native balance.
     """
     if contract_address == ZERO_ADDRESS:
         return ledger_api.get_balance(address)
-    return registry_contracts.erc20.get_instance(
-        ledger_api=ledger_api,
-        contract_address=contract_address,
-    ).functions.balanceOf(address).call()
+    return (
+        registry_contracts.erc20.get_instance(
+            ledger_api=ledger_api,
+            contract_address=contract_address,
+        )
+        .functions.balanceOf(address)
+        .call()
+    )
