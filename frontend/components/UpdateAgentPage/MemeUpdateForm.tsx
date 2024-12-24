@@ -48,13 +48,13 @@ export const MemeUpdateForm = () => {
       onFinish={confirmModal?.openModal}
       initialValues={{ ...initialValues }}
     >
-      <Form.Item label="Persona description" name="PERSONA">
+      <Form.Item label="Persona description" name="PERSONA" required>
         <Input.TextArea
           placeholder="Describe your agent's persona"
           autoSize={{ minRows: 3, maxRows: 5 }}
         />
       </Form.Item>
-      <Form.Item label="Gemini API key" name="GENAI_API_KEY">
+      <Form.Item label="Gemini API key" name="GENAI_API_KEY" required>
         <Input.Password placeholder="Google Gemini API key" />
       </Form.Item>
       <Form.Item>
@@ -81,13 +81,13 @@ export const MemeUpdateForm = () => {
           description={`To avoid your X account getting suspended for bot activity, complete the onboarding steps. You can find them on your profile page under "Let's get you set up".`}
         />
       </Form.Item>
-      <Form.Item label="X Email" name="TWIKIT_EMAIL">
+      <Form.Item label="X Email" name="TWIKIT_EMAIL" required>
         <Input placeholder="X Email" />
       </Form.Item>
-      <Form.Item label="X Username" name="TWIKIT_USERNAME">
+      <Form.Item label="X Username" name="TWIKIT_USERNAME" required>
         <Input placeholder="X Username" prefix="@" />
       </Form.Item>
-      <Form.Item label="X Password" name="TWIKIT_PASSWORD">
+      <Form.Item label="X Password" name="TWIKIT_PASSWORD" required>
         <Input.Password placeholder="X Password" />
       </Form.Item>
       <Form.Item hidden={!isEditing}>
