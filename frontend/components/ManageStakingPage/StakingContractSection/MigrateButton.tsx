@@ -3,8 +3,6 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus, ServiceTemplate } from '@/client';
-import { MechType } from '@/config/mechs';
-import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -35,7 +33,6 @@ export const MigrateButton = ({
     isFetched: isServicesLoaded,
     selectedService,
     selectedAgentType,
-    selectedAgentConfig,
     overrideSelectedServiceStatus,
   } = useServices();
   const serviceConfigId =
