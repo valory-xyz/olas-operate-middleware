@@ -20,6 +20,7 @@ import {
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
+import { DeepPartial } from '@/types/Util';
 
 import { CountdownUntilMigration } from './CountdownUntilMigration';
 import { CantMigrateReason, useMigrate } from './useMigrate';
@@ -45,11 +46,10 @@ export const MigrateButton = ({
   const { service } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () =>
-      service
-        ? getServiceTemplate(service.hash)
-        : SERVICE_TEMPLATES.find(
-            (template) => template.agentType === selectedAgentType,
-          ),
+      (service && getServiceTemplate(service.hash)) ??
+      SERVICE_TEMPLATES.find(
+        (template) => template.agentType === selectedAgentType,
+      ),
     [selectedAgentType, service],
   );
 
@@ -128,23 +128,39 @@ export const MigrateButton = ({
             overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            const serviceConfigParams = {
-              stakingProgramId: stakingProgramIdToMigrateTo,
-              serviceTemplate,
-              deploy: true,
-              useMechMarketplace:
-                stakingProgramIdToMigrateTo ===
-                StakingProgramId.PearlBetaMechMarketplace,
-            };
-
             if (selectedService) {
               // update service
               await ServicesService.updateService({
-                ...serviceConfigParams,
                 serviceConfigId,
+                partialServiceTemplate: {
+                  configurations: {
+                    ...Object.entries(serviceTemplate.configurations).reduce(
+                      (acc, [middlewareChain]) => {
+                        acc[middlewareChain] = {
+                          staking_program_id: stakingProgramIdToMigrateTo,
+                          use_mech_marketplace:
+                            stakingProgramIdToMigrateTo ===
+                            StakingProgramId.PearlBetaMechMarketplace,
+                        };
+                        return acc;
+                      },
+                      {} as DeepPartial<typeof serviceTemplate.configurations>,
+                    ),
+                  },
+                },
               });
             } else {
               // create service if it doesn't exist
+
+              const serviceConfigParams = {
+                stakingProgramId: stakingProgramIdToMigrateTo,
+                serviceTemplate,
+                deploy: true,
+                useMechMarketplace:
+                  stakingProgramIdToMigrateTo ===
+                  StakingProgramId.PearlBetaMechMarketplace,
+              };
+
               await ServicesService.createService(serviceConfigParams);
             }
 

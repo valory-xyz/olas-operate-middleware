@@ -4,6 +4,10 @@ export type Optional<T> = T | undefined;
 
 export type Maybe<T> = Nullable<Optional<T>>;
 
+export type DeepPartial<T> = {
+  [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
+};
+
 /**
  * function to strip off the null or undefined types from a type by making an assertion.
  * @note This function should be used if you are confident that the value will never ever be null or undefined.
