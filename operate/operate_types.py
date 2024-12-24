@@ -275,6 +275,9 @@ class OnChainFundRequirements(LocalResource):
     safe: float
 
 
+OnChainTokenRequirements = t.Dict[str, OnChainFundRequirements]
+
+
 @dataclass
 class OnChainUserParams(LocalResource):
     """On-chain user params."""
@@ -286,7 +289,7 @@ class OnChainUserParams(LocalResource):
     use_staking: bool
     use_mech_marketplace: bool
     cost_of_bond: int
-    fund_requirements: OnChainFundRequirements
+    fund_requirements: OnChainTokenRequirements
 
     @classmethod
     def from_json(cls, obj: t.Dict) -> "OnChainUserParams":
@@ -320,3 +323,20 @@ class ChainConfig(LocalResource):
 
 
 ChainConfigs = t.Dict[str, ChainConfig]
+
+
+class FundingConfig(TypedDict):
+    """Funding config."""
+
+    topup: int
+    threshold: int
+
+
+class AssetFundingValues(TypedDict):
+    """Asset Funding values."""
+
+    agent: FundingConfig
+    safe: FundingConfig
+
+
+FundingValues = t.Dict[str, AssetFundingValues]  # str is the asset address
