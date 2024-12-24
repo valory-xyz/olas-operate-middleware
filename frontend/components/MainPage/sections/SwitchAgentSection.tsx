@@ -4,6 +4,7 @@ import Image from 'next/image';
 import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
+import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
@@ -74,11 +75,16 @@ export const SwitchAgentSection = () => {
 
 export const UpdateTemplateIcon = () => {
   const { goto } = usePageState();
+  const { selectedAgentType } = useServices();
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     goto(Pages.UpdateAgentTemplate);
   };
 
-  return <ControlOutlined onClick={handleClick} />;
+  if (selectedAgentType === AgentType.Memeooorr) {
+    return <ControlOutlined onClick={handleClick} />;
+  }
+
+  return null;
 };

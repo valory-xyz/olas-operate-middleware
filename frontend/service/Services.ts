@@ -161,7 +161,7 @@ const getDeployment = async (serviceConfigId: string): Promise<Deployment> =>
  * @param serviceTemplate ServiceTemplate
  * @returns Promise<Service>
  */
-export const withdrawBalance = async ({
+const withdrawBalance = async ({
   withdrawAddress,
   serviceConfigId,
 }: {
@@ -182,7 +182,7 @@ export const withdrawBalance = async ({
     }),
   );
 
-export const patchService = async ({
+const patchService = async ({
   serviceConfigId,
   partialServiceTemplate,
 }: {
@@ -207,6 +207,7 @@ export const ServicesService = {
   startService,
   createService,
   updateService,
+  patchService,
   stopDeployment,
   // deleteDeployment,
   withdrawBalance,
