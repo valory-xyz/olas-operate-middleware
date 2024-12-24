@@ -3,16 +3,12 @@ import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus, ServiceTemplate } from '@/client';
-import {
-  getServiceTemplate,
-  SERVICE_TEMPLATES,
-} from '@/constants/serviceTemplates';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
-import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import {
   useActiveStakingContractDetails,
@@ -43,14 +39,12 @@ export const MigrateButton = ({
     isServicesLoaded && selectedService
       ? selectedService.service_config_id
       : '';
-  const { service } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () =>
-      (service && getServiceTemplate(service.hash)) ??
       SERVICE_TEMPLATES.find(
         (template) => template.agentType === selectedAgentType,
       ),
-    [selectedAgentType, service],
+    [selectedAgentType],
   );
 
   const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
