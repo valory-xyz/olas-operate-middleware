@@ -20,7 +20,7 @@ const main = async () => {
   console.log('Building...');
 
   /** @type import {CliOptions} from "electron-builder" */
-  return build({
+  return await build({
     publish: 'onTag',
     config: {
       appId: 'xyz.valory.olas-operate-app',

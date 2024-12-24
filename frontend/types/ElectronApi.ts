@@ -15,8 +15,8 @@ export type ElectronStore = {
   agentEvictionAlertShown?: boolean;
 
   // Each agent has its own settings
-  trader: AgentSettings;
-  memeooorr: AgentSettings;
+  trader?: AgentSettings;
+  memeooorr?: AgentSettings;
 };
 
 export type ElectronTrayIconStatus =

@@ -1,4 +1,5 @@
 import { MiddlewareChain } from '@/client';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
@@ -7,9 +8,14 @@ import { MemeooorBaseService } from '@/service/agents/Memeooor';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
+import { formatEther } from '@/utils/numberFormatters';
 
 // TODO: complete this config
 // TODO: add funding requirements
+
+const traderFundRequirements = SERVICE_TEMPLATES.find(
+  (template) => template.agentType === AgentType.PredictTrader,
+)?.configurations[MiddlewareChain.GNOSIS].fund_requirements;
 
 export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
@@ -28,7 +34,14 @@ export const AGENT_CONFIG: {
           [TokenSymbol.XDAI]: 0.1,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: 2,
+          [TokenSymbol.XDAI]: Number(
+            formatEther(
+              `${
+                (traderFundRequirements?.agent ?? 0) +
+                (traderFundRequirements?.safe ?? 0)
+              }`,
+            ),
+          ),
         },
       },
       [WalletOwnerType.Agent]: {
