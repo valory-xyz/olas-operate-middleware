@@ -20,6 +20,7 @@ import {
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
+import { DeepPartial } from '@/types/Util';
 
 import { CountdownUntilMigration } from './CountdownUntilMigration';
 import { CantMigrateReason, useMigrate } from './useMigrate';
@@ -45,11 +46,10 @@ export const MigrateButton = ({
   const { service } = useService(serviceConfigId);
   const serviceTemplate = useMemo<ServiceTemplate | undefined>(
     () =>
-      service
-        ? getServiceTemplate(service.hash)
-        : SERVICE_TEMPLATES.find(
-            (template) => template.agentType === selectedAgentType,
-          ),
+      (service && getServiceTemplate(service.hash)) ??
+      SERVICE_TEMPLATES.find(
+        (template) => template.agentType === selectedAgentType,
+      ),
     [selectedAgentType, service],
   );
 
@@ -132,28 +132,19 @@ export const MigrateButton = ({
               // update service
               await ServicesService.updateService({
                 serviceConfigId,
-                partialService: {
-                  chain_configs: {
-                    ...selectedService.chain_configs,
-                    // overwrite defaults with chain-specific configurations
-                    ...Object.entries(selectedService.chain_configs).reduce(
-                      (acc, [middlewareChain, config]) => {
+                partialServiceTemplate: {
+                  configurations: {
+                    ...Object.entries(serviceTemplate.configurations).reduce(
+                      (acc, [middlewareChain]) => {
                         acc[middlewareChain] = {
-                          ...config,
-                          chain_data: {
-                            ...config.chain_data,
-                            user_params: {
-                              ...config.chain_data.user_params,
-                              staking_program_id: stakingProgramIdToMigrateTo,
-                              use_mech_marketplace:
-                                stakingProgramIdToMigrateTo ===
-                                StakingProgramId.PearlBetaMechMarketplace,
-                            },
-                          },
+                          staking_program_id: stakingProgramIdToMigrateTo,
+                          use_mech_marketplace:
+                            stakingProgramIdToMigrateTo ===
+                            StakingProgramId.PearlBetaMechMarketplace,
                         };
                         return acc;
                       },
-                      {} as typeof selectedService.chain_configs,
+                      {} as DeepPartial<typeof serviceTemplate.configurations>,
                     ),
                   },
                 },

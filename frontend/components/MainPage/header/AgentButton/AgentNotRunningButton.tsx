@@ -252,7 +252,7 @@ const useServiceDeployment = () => {
       if (service.hash !== serviceTemplate.hash) {
         await ServicesService.updateService({
           serviceConfigId: service.service_config_id,
-          partialService: {
+          partialServiceTemplate: {
             hash: serviceTemplate.hash,
           },
         });
