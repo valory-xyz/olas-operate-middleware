@@ -97,13 +97,18 @@ const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
 };
 
 const EditButton = () => {
-  const { setIsEditing } = useContext(UpdateAgentContext);
+  const { setIsEditing, isEditing } = useContext(UpdateAgentContext);
+
+  const handleEdit = () => {
+    setIsEditing?.((prev) => !prev);
+  };
+
+  if (isEditing) {
+    return null;
+  }
 
   return (
-    <Button
-      icon={<EditFilled />}
-      onClick={() => setIsEditing?.((prev) => !prev)}
-    >
+    <Button icon={<EditFilled />} onClick={handleEdit}>
       Edit
     </Button>
   );
