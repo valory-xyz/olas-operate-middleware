@@ -9,8 +9,8 @@ export const CardTitle = ({
   backButtonCallback,
 }: {
   title: string | ReactNode;
-  showBackButton: boolean;
-  backButtonCallback: () => void;
+  showBackButton?: boolean;
+  backButtonCallback?: () => void;
 }) => (
   <Flex justify="start" align="center" gap={12}>
     {showBackButton && (
