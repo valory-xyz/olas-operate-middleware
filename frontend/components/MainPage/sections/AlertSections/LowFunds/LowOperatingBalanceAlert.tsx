@@ -3,7 +3,10 @@ import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { WalletType } from '@/enums/Wallet';
-import { useMasterBalances } from '@/hooks/useBalanceContext';
+import {
+  useMasterBalances,
+  useServiceBalances,
+} from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
@@ -17,22 +20,42 @@ const { Text, Title } = Typography;
  */
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentType } = useServices();
-  const { isLoaded: isBalanceLoaded, masterSafeNativeGasBalance } =
+  const { selectedAgentType, selectedService, selectedAgentConfig } =
+    useServices();
+  const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
     useMasterBalances();
+  const { serviceSafeBalances } = useServiceBalances(
+    selectedService?.service_config_id,
+  );
 
   const { chainName, tokenSymbol, masterSafeAddress, masterThresholds } =
     useLowFundsDetails();
 
-  const isLowBalance = useMemo(() => {
-    if (!masterSafeNativeGasBalance) return false;
-    if (!masterThresholds) return false;
+  const serviceSafeNativeBalance = useMemo(
+    () =>
+      serviceSafeBalances?.find(
+        ({ isNative, evmChainId }) =>
+          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
+      ),
+    [serviceSafeBalances, selectedAgentConfig],
+  );
 
+  const isLowBalance = useMemo(() => {
+    if (!masterThresholds) return false;
+    if (!serviceSafeNativeBalance) return false;
+
+    // Check both master and agent safes
     return (
-      masterSafeNativeGasBalance <
-      masterThresholds[WalletType.Safe][tokenSymbol]
+      isMasterSafeLowOnNativeGas &&
+      serviceSafeNativeBalance.balance <
+        masterThresholds[WalletType.Safe][tokenSymbol]
     );
-  }, [masterSafeNativeGasBalance, masterThresholds, tokenSymbol]);
+  }, [
+    isMasterSafeLowOnNativeGas,
+    masterThresholds,
+    serviceSafeNativeBalance,
+    tokenSymbol,
+  ]);
 
   if (!isBalanceLoaded) return null;
   if (!masterThresholds) return null;

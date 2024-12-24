@@ -6,9 +6,11 @@ import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
+  useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
@@ -41,40 +43,75 @@ const FineDot = styled(Dot)`
 
 const BalanceStatus = () => {
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
-  const { isFetched: isServicesLoaded, selectedAgentType } = useServices();
+  const {
+    isFetched: isServicesLoaded,
+    selectedAgentType,
+    selectedAgentConfig,
+    selectedService,
+  } = useServices();
 
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
   const { isMasterSafeLowOnNativeGas } = useMasterBalances();
+  const { serviceSafeBalances } = useServiceBalances(
+    selectedService?.service_config_id,
+  );
 
   const [isLowBalanceNotificationShown, setIsLowBalanceNotificationShown] =
     useState(false);
+
+  const serviceSafeNativeBalance = useMemo(
+    () =>
+      serviceSafeBalances?.find(
+        ({ isNative, evmChainId }) =>
+          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
+      ),
+    [serviceSafeBalances, selectedAgentConfig],
+  );
+
+  const isLowFunds = useMemo(() => {
+    if (!serviceSafeNativeBalance) return false;
+    return (
+      isMasterSafeLowOnNativeGas &&
+      serviceSafeNativeBalance.balance <
+        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+          WalletType.Safe
+        ][serviceSafeNativeBalance.symbol]
+    );
+  }, [
+    isMasterSafeLowOnNativeGas,
+    selectedAgentConfig.operatingThresholds,
+    serviceSafeNativeBalance,
+  ]);
 
   // show notification if balance is too low
   useEffect(() => {
     if (!isBalanceLoaded || !isServicesLoaded) return;
     if (!showNotification) return;
     if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
+    if (!serviceSafeNativeBalance) return;
 
-    if (isMasterSafeLowOnNativeGas && !isLowBalanceNotificationShown) {
+    // Check both master and agent safes
+    if (isLowFunds && !isLowBalanceNotificationShown) {
       showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
     }
 
     // If it has already been shown and the balance has increased,
     // should show the notification again if it goes below the threshold.
-    if (!isMasterSafeLowOnNativeGas && isLowBalanceNotificationShown) {
+    if (!isLowFunds && isLowBalanceNotificationShown) {
       setIsLowBalanceNotificationShown(false);
     }
   }, [
     isBalanceLoaded,
-    isServicesLoaded,
     isLowBalanceNotificationShown,
-    isMasterSafeLowOnNativeGas,
+    isLowFunds,
+    isServicesLoaded,
+    selectedAgentType,
+    serviceSafeNativeBalance,
     showNotification,
     storeState,
-    selectedAgentType,
   ]);
 
   const status = useMemo(() => {
@@ -82,12 +119,12 @@ const BalanceStatus = () => {
       return { statusName: 'Loading...', StatusComponent: EmptyDot };
     }
 
-    if (isMasterSafeLowOnNativeGas) {
+    if (isLowFunds) {
       return { statusName: 'Too low', StatusComponent: EmptyDot };
     }
 
     return { statusName: 'Fine', StatusComponent: FineDot };
-  }, [isBalanceLoaded, isMasterSafeLowOnNativeGas, isServicesLoaded]);
+  }, [isBalanceLoaded, isLowFunds, isServicesLoaded]);
 
   const { statusName, StatusComponent } = status;
   return (
