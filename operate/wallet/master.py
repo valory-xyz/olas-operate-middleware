@@ -53,7 +53,7 @@ from operate.utils.gnosis import transfer_erc20_from_safe
 
 # TODO Organize exceptions definition
 class InsufficientFundsException(Exception):
-    pass
+    """Insufficient funds exception."""
 
 
 class MasterWallet(LocalResource):

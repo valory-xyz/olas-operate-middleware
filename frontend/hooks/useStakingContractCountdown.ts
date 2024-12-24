@@ -7,28 +7,7 @@ import {
   StakingContractDetails,
 } from '@/types/Autonolas';
 import { Maybe } from '@/types/Util';
-
-const countdownDisplayFormat = (totalSeconds: number) => {
-  const days = Math.floor(totalSeconds / (24 * 3600));
-  totalSeconds %= 24 * 3600;
-
-  const hours = Math.floor(totalSeconds / 3600);
-  totalSeconds %= 3600;
-
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  // Ensure double digits for hours, minutes, and seconds
-  const formattedHours = String(hours).padStart(2, '0');
-  const formattedMinutes = String(minutes).padStart(2, '0');
-  const formattedSeconds = String(seconds).padStart(2, '0');
-
-  const daysInWords = `${days} day${days !== 1 ? 's' : ''}`;
-  const hoursInWords = `${formattedHours} hour${hours !== 1 ? 's' : ''}`;
-  const minutesInWords = `${formattedMinutes} minute${minutes !== 1 ? 's' : ''}`;
-  const secondsInWords = `${formattedSeconds} second${seconds !== 1 ? 's' : ''}`;
-  return `${daysInWords} ${hoursInWords} ${minutesInWords} ${secondsInWords}`.trim();
-};
+import { formatCountdownDisplay } from '@/utils/time';
 
 export const useStakingContractCountdown = ({
   currentStakingContractInfo,
@@ -69,7 +48,7 @@ export const useStakingContractCountdown = ({
 
   const countdownDisplay = isNil(secondsUntilReady)
     ? 'Loading...'
-    : countdownDisplayFormat(secondsUntilReady);
+    : formatCountdownDisplay(secondsUntilReady);
 
   return countdownDisplay;
 };

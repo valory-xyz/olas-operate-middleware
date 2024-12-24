@@ -8,7 +8,8 @@ export const useReward = () => {
     availableRewardsForEpochEth,
     isEligibleForRewards,
     accruedServiceStakingRewards,
-    isStakingRewardsDetailsFetched,
+    isStakingRewardsDetailsLoading,
+    isStakingRewardsDetailsError,
   } = useContext(RewardContext);
 
   return {
@@ -16,6 +17,7 @@ export const useReward = () => {
     availableRewardsForEpochEth,
     isEligibleForRewards,
     accruedServiceStakingRewards,
-    isStakingRewardsDetailsFetched,
+    isStakingRewardsDetailsLoading,
+    isStakingRewardsDetailsError,
   };
 };

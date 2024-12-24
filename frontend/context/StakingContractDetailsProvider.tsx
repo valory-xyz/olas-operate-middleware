@@ -122,10 +122,10 @@ const useStakingContractDetailsByStakingProgram = ({
       return Promise.allSettled(promises).then((results) => {
         const [stakingContractDetails, serviceStakingDetails] = results;
         return {
-          ...(stakingContractDetails.status === 'fulfilled'
+          ...(stakingContractDetails?.status === 'fulfilled'
             ? (stakingContractDetails.value as StakingContractDetails)
             : {}),
-          ...(serviceStakingDetails.status === 'fulfilled'
+          ...(serviceStakingDetails?.status === 'fulfilled'
             ? (serviceStakingDetails.value as ServiceStakingDetails)
             : {}),
         };
@@ -141,7 +141,7 @@ type StakingContractDetailsContextProps = {
   selectedStakingContractDetails: Maybe<
     Partial<StakingContractDetails & ServiceStakingDetails>
   >;
-  isSelectedStakingContractDetailsLoaded: boolean;
+  isSelectedStakingContractDetailsLoading: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
@@ -160,7 +160,7 @@ export const StakingContractDetailsContext =
     selectedStakingContractDetails: null,
     isPaused: false,
     isAllStakingContractDetailsRecordLoaded: false,
-    isSelectedStakingContractDetailsLoaded: false,
+    isSelectedStakingContractDetailsLoading: false,
     refetchSelectedStakingContractDetails: async () => {},
     setIsPaused: () => {},
   });
@@ -196,7 +196,7 @@ export const StakingContractDetailsProvider = ({
     <StakingContractDetailsContext.Provider
       value={{
         selectedStakingContractDetails,
-        isSelectedStakingContractDetailsLoaded: !isLoading,
+        isSelectedStakingContractDetailsLoading: isLoading,
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,

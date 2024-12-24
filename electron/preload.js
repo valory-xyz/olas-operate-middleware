@@ -27,4 +27,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppVersion: () => ipcRenderer.invoke('app-version'),
   validateTwitterLogin: (credentials) =>
     ipcRenderer.invoke('validate-twitter-login', credentials),
+  healthCheck: () => ipcRenderer.invoke('health-check'),
 });

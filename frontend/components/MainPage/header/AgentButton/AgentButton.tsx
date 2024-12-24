@@ -17,17 +17,20 @@ import { AgentStartingButton } from './AgentStartingButton';
 import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
-  const { selectedService, isFetched, selectedServiceStatusOverride } =
-    useServices();
+  const {
+    selectedService,
+    isLoading: isServicesLoading,
+    selectedServiceStatusOverride,
+  } = useServices();
 
   const {
     isEligibleForStaking,
     isAgentEvicted,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   } = useActiveStakingContractDetails();
 
   const button = useMemo(() => {
-    if (!isFetched || !isSelectedStakingContractDetailsLoaded) {
+    if (isServicesLoading || isSelectedStakingContractDetailsLoading) {
       return (
         <Button type="primary" size="large" disabled loading>
           Loading...
@@ -65,8 +68,8 @@ export const AgentButton = () => {
 
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
-    isFetched,
-    isSelectedStakingContractDetailsLoaded,
+    isServicesLoading,
+    isSelectedStakingContractDetailsLoading,
     selectedServiceStatusOverride,
     selectedService,
     isEligibleForStaking,

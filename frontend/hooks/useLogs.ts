@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 
-import { EvmChainId } from '@/enums/Chain';
 import { Eoa, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { Service } from '@/types/Service';
@@ -47,11 +46,7 @@ const useAddressesLogs = () => {
     isLoaded: masterWalletsIsFetched && masterSafesOwnersIsFetched,
     data: [
       { masterEoa: masterEoa ?? 'undefined' },
-      {
-        masterSafes:
-          masterSafes?.find((safe) => safe.evmChainId === EvmChainId.Gnosis) ??
-          'undefined',
-      },
+      { masterSafe: masterSafes ?? 'undefined' },
       { masterSafeBackups: backupEoas ?? 'undefined' },
     ],
   };
@@ -81,21 +76,25 @@ const useBalancesLogs = () => {
 
 const useServicesLogs = () => {
   const { services, isFetched: isLoaded, selectedService } = useServices();
-  // const { getQueryData } = useQueryClient();
+
+  const formattedServices = useMemo(() => {
+    return services?.map((item: Service) => {
+      const isSameService =
+        selectedService?.service_config_id === item.service_config_id;
+
+      return {
+        ...item,
+        keys: item.keys.map((key) => key.address),
+        deploymentStatus: isSameService
+          ? selectedService.deploymentStatus
+          : item.deploymentStatus,
+      };
+    });
+  }, [services, selectedService]);
 
   return {
     isLoaded,
-    data: {
-      services:
-        services?.map((item: Service) => ({
-          ...item,
-          keys: item.keys.map((key) => key.address),
-          deploymentStatus:
-            selectedService?.service_config_id === item.service_config_id
-              ? selectedService.deploymentStatus
-              : item.deploymentStatus,
-        })) ?? 'undefined',
-    },
+    data: { services: formattedServices ?? 'undefined' },
   };
 };
 
@@ -110,11 +109,7 @@ export const useLogs = () => {
     if (isServicesLoaded && isBalancesLoaded && isAddressesLoaded) {
       return {
         store: storeState,
-        debugData: {
-          services,
-          addresses,
-          balances,
-        },
+        debugData: { services, addresses, balances },
       };
     }
   }, [

@@ -13,12 +13,10 @@ import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
 import { Nullable } from '@/types/Util';
 import { asMiddlewareChain } from '@/utils/middlewareHelpers';
+import { ONE_DAY_IN_MS } from '@/utils/time';
 
 import { useService } from './useService';
 import { useServices } from './useServices';
-
-const ONE_DAY_IN_S = 24 * 60 * 60;
-const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
 
 const CheckpointGraphResponseSchema = z.object({
   epoch: z.string({

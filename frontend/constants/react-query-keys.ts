@@ -72,4 +72,7 @@ export const REACT_QUERY_KEYS = {
       'getOwners',
       multisigs.map((multisig) => multisig.address),
     ] as const,
+
+  // agent activity
+  AGENT_ACTIVITY: ['agentActivity'] as const,
 } as const;

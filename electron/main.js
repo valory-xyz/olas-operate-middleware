@@ -319,6 +319,26 @@ const createMainWindow = async () => {
     }
   });
 
+  // Get the agent's current state
+  ipcMain.handle('health-check', async (_event) => {
+    try {
+      const response = await fetch('http://127.0.0.1:8716/healthcheck', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch health check');
+      }
+
+      const data = await response.json();
+      return { response: data };
+    } catch (error) {
+      console.error('Health check error:', error);
+      return { error: error.message };
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
@@ -344,7 +364,6 @@ const createMainWindow = async () => {
   } catch (e) {
     logger.electron('Store IPC failed:', JSON.stringify(e));
   }
-
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }

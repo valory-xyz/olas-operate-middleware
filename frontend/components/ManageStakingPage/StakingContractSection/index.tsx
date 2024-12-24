@@ -1,10 +1,9 @@
 import { Flex, Tag, theme, Typography } from 'antd';
 import { useMemo } from 'react';
 
+import { AddressLink } from '@/components/AddressLink';
 import { CardSection } from '@/components/styled/CardSection';
-import { GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES } from '@/config/stakingPrograms/gnosis';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { EXPLORER_URL_BY_EVM_CHAIN_ID } from '@/constants/urls';
+import { STAKING_PROGRAM_ADDRESS } from '@/config/stakingPrograms';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { StakingProgramStatus } from '@/enums/StakingProgramStatus';
 import { useServices } from '@/hooks/useServices';
@@ -115,15 +114,11 @@ export const StakingContractSection = ({
       <StakingContractDetails stakingProgramId={stakingProgramId} />
 
       {evmChainId && (
-        <a
-          href={`${EXPLORER_URL_BY_EVM_CHAIN_ID[evmChainId]}/address/${
-            // TODO: make chain independent
-            GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES[stakingProgramId]
-          }`}
-          target="_blank"
-        >
-          View contract details {UNICODE_SYMBOLS.EXTERNAL_LINK}
-        </a>
+        <AddressLink
+          address={STAKING_PROGRAM_ADDRESS[evmChainId][stakingProgramId]}
+          middlewareChain={selectedAgentConfig.middlewareHomeChainId}
+          prefix="View contract details"
+        />
       )}
 
       {!migrateValidation.canMigrate && (

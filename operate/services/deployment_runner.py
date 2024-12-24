@@ -36,7 +36,6 @@ import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
-from requests import get
 
 from operate import constants
 
@@ -98,7 +97,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _run_aea(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        return self._run_cmd(args=[self._aea_bin, *args], cwd=cwd)
+        # TODO: Patch for Windows failing hash (add -s). Revert once it's fixed on OpenAutonomy / OpenAEA
+        # The fix is also implemented in PyInstallerHostDeploymentRunner._start_agent and
+        # on HostPythonHostDeploymentRunner._start_agent
+        return self._run_cmd(args=[self._aea_bin, "-s", *args], cwd=cwd)
 
     @staticmethod
     def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
@@ -259,7 +261,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "run"],
+            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -343,7 +345,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "run"],
+            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
             creationflags=(

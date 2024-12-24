@@ -23,11 +23,11 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         use_staking: true,
         use_mech_marketplace: false,
         // TODO: pull fund requirements from staking program config
-        cost_of_bond: 10000000000000000,
-        monthly_gas_estimate: 10000000000000000000,
+        cost_of_bond: +parseEther(0.001),
+        monthly_gas_estimate: +parseEther(10),
         fund_requirements: {
-          agent: 100000000000000000,
-          safe: 5000000000000000000,
+          agent: +parseEther(0.1),
+          safe: +parseEther(5),
         },
       },
     },
@@ -159,11 +159,11 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     agentType: AgentType.Memeooorr,
     name: 'Memeooorr',
-    hash: 'bafybeiadi4stgvnsdi6l2kqwm7hluuepzsb5ifty7gcyp3ejzh6ufay46y',
+    hash: 'bafybeiemdxl3xh576hcnblljgaohrjcgmpec5mawesc5lwu3ipa7anpmbe',
     description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
     image:
       'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
-    service_version: 'v0.0.1',
+    service_version: 'v0.2.0-alpha16',
     home_chain: MiddlewareChain.BASE,
     configurations: {
       [MiddlewareChain.BASE]: {
@@ -174,10 +174,10 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: true,
         cost_of_bond: +parseEther(50),
-        monthly_gas_estimate: +parseEther(0.03),
+        monthly_gas_estimate: +parseEther(0.045),
         fund_requirements: {
           agent: +parseEther(0.001),
-          safe: +parseEther(0.001),
+          safe: +parseEther(0.0125),
         },
       },
     },
