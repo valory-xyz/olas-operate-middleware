@@ -2,12 +2,17 @@ import { useCallback } from 'react';
 
 import { ModalProps, useModal } from './useModal';
 
-export const useUnsavedModal = (): ModalProps => {
+export const useUnsavedModal = ({
+  confirmCallback,
+}: {
+  confirmCallback: () => void;
+}): ModalProps => {
   const modal = useModal();
 
-  const confirm = useCallback(() => {
-    // Do something
-  }, []);
+  const confirm = useCallback(async () => {
+    confirmCallback();
+    modal.closeModal();
+  }, [confirmCallback, modal]);
 
   return {
     ...modal,

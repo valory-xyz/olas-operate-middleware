@@ -6,17 +6,13 @@ import { UpdateAgentContext } from '..';
 export const UnsavedModal = () => {
   const { unsavedModal } = useContext(UpdateAgentContext);
   return (
-    <>
-      <Modal
-        title="Unsaved changes"
-        open={unsavedModal?.open}
-        onOk={unsavedModal?.confirm}
-        onCancel={unsavedModal?.cancel}
-      >
-        <p>
-          You have unsaved changes. Are you sure you want to leave this page?
-        </p>
-      </Modal>
-    </>
+    <Modal
+      title="Unsaved changes"
+      open={unsavedModal?.open}
+      onOk={unsavedModal?.confirm}
+      onCancel={unsavedModal?.cancel}
+    >
+      <p>You have unsaved changes. Are you sure you want to leave this page?</p>
+    </Modal>
   );
 };
