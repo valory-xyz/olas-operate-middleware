@@ -128,23 +128,48 @@ export const MigrateButton = ({
             overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            const serviceConfigParams = {
-              stakingProgramId: stakingProgramIdToMigrateTo,
-              serviceTemplate,
-              deploy: true,
-              useMechMarketplace:
-                stakingProgramIdToMigrateTo ===
-                StakingProgramId.PearlBetaMechMarketplace,
-            };
-
             if (selectedService) {
               // update service
               await ServicesService.updateService({
-                ...serviceConfigParams,
                 serviceConfigId,
+                partialService: {
+                  chain_configs: {
+                    ...selectedService.chain_configs,
+                    // overwrite defaults with chain-specific configurations
+                    ...Object.entries(selectedService.chain_configs).reduce(
+                      (acc, [middlewareChain, config]) => {
+                        acc[middlewareChain] = {
+                          ...config,
+                          chain_data: {
+                            ...config.chain_data,
+                            user_params: {
+                              ...config.chain_data.user_params,
+                              staking_program_id: stakingProgramIdToMigrateTo,
+                              use_mech_marketplace:
+                                stakingProgramIdToMigrateTo ===
+                                StakingProgramId.PearlBetaMechMarketplace,
+                            },
+                          },
+                        };
+                        return acc;
+                      },
+                      {} as typeof selectedService.chain_configs,
+                    ),
+                  },
+                },
               });
             } else {
               // create service if it doesn't exist
+
+              const serviceConfigParams = {
+                stakingProgramId: stakingProgramIdToMigrateTo,
+                serviceTemplate,
+                deploy: true,
+                useMechMarketplace:
+                  stakingProgramIdToMigrateTo ===
+                  StakingProgramId.PearlBetaMechMarketplace,
+              };
+
               await ServicesService.createService(serviceConfigParams);
             }
 

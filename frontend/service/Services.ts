@@ -9,6 +9,7 @@ import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL_V2 } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { Address } from '@/types/Address';
+import { Service } from '@/types/Service';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /**
@@ -92,25 +93,19 @@ const createService = async ({
 
 /**
  * Updates a service
- * @param serviceTemplate
+ * @param partialService
  * @returns Promise<Service>
  */
 const updateService = async ({
-  deploy,
-  serviceTemplate,
+  partialService,
   serviceConfigId,
-  stakingProgramId,
-  useMechMarketplace = false,
 }: {
-  deploy: boolean;
-  serviceTemplate: ServiceTemplate;
+  partialService: Partial<Service>;
   serviceConfigId: string;
-  stakingProgramId: StakingProgramId;
-  useMechMarketplace?: boolean;
 }): Promise<MiddlewareServiceResponse> =>
   fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
     method: 'PATCH',
-    body: JSON.stringify({ hash: serviceTemplate.hash }),
+    body: JSON.stringify({ partialService }),
     headers: { ...CONTENT_TYPE_JSON_UTF8 },
   }).then((response) => {
     if (response.ok) {
