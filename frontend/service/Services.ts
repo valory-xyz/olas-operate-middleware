@@ -182,24 +182,6 @@ const withdrawBalance = async ({
     }),
   );
 
-const patchService = async ({
-  serviceConfigId,
-  partialServiceTemplate,
-}: {
-  serviceConfigId: string;
-  partialServiceTemplate: Partial<ServiceTemplate>;
-}): Promise<ServiceTemplate> =>
-  fetch(`${BACKEND_URL_V2}/service/${serviceConfigId}`, {
-    method: 'PATCH',
-    body: JSON.stringify(partialServiceTemplate),
-    headers: { ...CONTENT_TYPE_JSON_UTF8 },
-  }).then((response) => {
-    if (response.ok) {
-      return response.json();
-    }
-    throw new Error('Failed to update service');
-  });
-
 export const ServicesService = {
   getService,
   getServices,
@@ -207,7 +189,6 @@ export const ServicesService = {
   startService,
   createService,
   updateService,
-  patchService,
   stopDeployment,
   // deleteDeployment,
   withdrawBalance,

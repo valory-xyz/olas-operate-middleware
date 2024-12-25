@@ -3,7 +3,7 @@ import { useContext } from 'react';
 
 import { useService } from '@/hooks/useService';
 
-import { UpdateAgentContext } from '..';
+import { UpdateAgentContext } from '../context/UpdateAgentProvider';
 
 export const ConfirmUpdateModal = () => {
   const { isServiceRunning } = useService();

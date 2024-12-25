@@ -1,7 +1,7 @@
 import { Modal } from 'antd';
 import { useContext } from 'react';
 
-import { UpdateAgentContext } from '..';
+import { UpdateAgentContext } from '../context/UpdateAgentProvider';
 
 export const UnsavedModal = () => {
   const { unsavedModal } = useContext(UpdateAgentContext);
