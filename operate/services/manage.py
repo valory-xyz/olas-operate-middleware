@@ -578,9 +578,10 @@ class ServiceManager:
                         for chain, config in service.chain_configs.items()
                     }, separators=(',', ':')),
                     "STAKING_CHAIN": (
-                        Chain.MODE.value
-                        if service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
-                        else None
+                        Chain.MODE.value if (
+                            Chain.MODE.value in service.chain_configs and
+                            service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
+                        ) else None
                     ),
                 }
             )
