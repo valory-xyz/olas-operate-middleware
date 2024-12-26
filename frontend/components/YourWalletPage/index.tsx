@@ -72,14 +72,18 @@ const Address = () => {
 };
 
 const OlasBalance = () => {
+  const { selectedAgentConfig } = useServices();
   const { totalStakedOlasBalance } = useBalanceContext();
   const { masterWalletBalances } = useMasterBalances();
-  const { middlewareChain, evmHomeChainId } = useYourWallet();
+  const { middlewareChain } = useYourWallet();
 
   const masterSafeOlasBalance = masterWalletBalances
     ?.filter(
-      ({ symbol, evmChainId }) =>
-        symbol === TokenSymbol.OLAS && evmChainId === evmHomeChainId,
+      (walletBalance) =>
+        walletBalance.symbol === TokenSymbol.OLAS &&
+        selectedAgentConfig.requiresMasterSafesOn.includes(
+          walletBalance.evmChainId,
+        ),
     )
     .reduce((acc, balance) => acc + balance.balance, 0);
 
@@ -148,7 +152,7 @@ const MasterSafeNativeBalance = () => {
               </Text>
             ),
             leftClassName: 'text-light',
-            right: `${balanceFormat(masterSafeNativeBalance, 2)} ${nativeTokenSymbol}`,
+            right: `${balanceFormat(masterSafeNativeBalance, 4)} ${nativeTokenSymbol}`,
           },
         ]}
         parentStyle={infoBreakdownParentStyle}
@@ -242,7 +246,7 @@ const MasterEoaSignerNativeBalance = () => {
               />
             ),
             leftClassName: 'text-light',
-            right: `${balanceFormat(masterEoaBalance, 3)} ${nativeTokenSymbol}`,
+            right: `${balanceFormat(masterEoaBalance, 4)} ${nativeTokenSymbol}`,
           },
         ]}
         parentStyle={infoBreakdownParentStyle}

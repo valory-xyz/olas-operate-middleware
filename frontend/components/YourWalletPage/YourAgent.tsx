@@ -272,7 +272,7 @@ const YourAgentWalletBreakdown = () => {
                 list={serviceSafeNativeBalances.map((balance) => ({
                   left: <strong>{balance.symbol}</strong>,
                   leftClassName: 'text-sm',
-                  right: `${balanceFormat(balance.balance, 2)} ${balance.symbol}`,
+                  right: `${balanceFormat(balance.balance, 4)} ${balance.symbol}`,
                 }))}
                 parentStyle={infoBreakdownParentStyle}
               />

@@ -133,11 +133,8 @@ const useServiceDeployment = () => {
         walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
     )?.balance;
 
-    if (
-      service &&
-      storeState?.[`isInitialFunded_${selectedAgentType}`] &&
-      isServiceStaked
-    ) {
+    const isInitialFunded = storeState?.[selectedAgentType]?.isInitialFunded;
+    if (service && isInitialFunded && isServiceStaked) {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
@@ -252,14 +249,9 @@ const useServiceDeployment = () => {
       if (service.hash !== serviceTemplate.hash) {
         await ServicesService.updateService({
           serviceConfigId: service.service_config_id,
-          stakingProgramId: selectedStakingProgramId,
-          // chainId: selectedAgentConfig.evmHomeChainId,
-          serviceTemplate,
-          deploy: false, // TODO: deprecated will remove
-          useMechMarketplace:
-            STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][
-              selectedStakingProgramId
-            ].mechType === MechType.Marketplace,
+          partialServiceTemplate: {
+            hash: serviceTemplate.hash,
+          },
         });
       }
     }

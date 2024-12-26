@@ -20,7 +20,7 @@ const main = async () => {
   console.log('Building...');
 
   /** @type import {CliOptions} from "electron-builder" */
-  return build({
+  return await build({
     publish: 'onTag',
     config: {
       appId: 'xyz.valory.olas-operate-app',
@@ -65,7 +65,6 @@ const main = async () => {
 main().then((res) => {
   console.log(JSON.stringify(res))
   console.log('Build & Notarize complete');
-
 }).catch((e) => {
   console.error(JSON.stringify(e))
   throw new Error('Failed to build and notarize.');
