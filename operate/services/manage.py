@@ -20,6 +20,7 @@
 """Service manager."""
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -551,6 +552,7 @@ class ServiceManager:
                     "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
                     "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
                     "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                    "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
                     "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
                     "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
                         "staking_contract"
@@ -570,6 +572,16 @@ class ServiceManager:
                         "staking_contract"
                     ),
                     "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+                    # for modius
+                    "SAFE_CONTRACT_ADDRESSES": json.dumps({
+                        chain: config.chain_data.multisig
+                        for chain, config in service.chain_configs.items()
+                    }, separators=(',', ':')),
+                    "STAKING_CHAIN": (
+                        Chain.MODE.value
+                        if service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
+                        else None
+                    ),
                 }
             )
 
