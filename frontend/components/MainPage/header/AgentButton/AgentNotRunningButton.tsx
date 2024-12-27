@@ -228,7 +228,7 @@ const useServiceDeployment = () => {
     let middlewareServiceResponse;
     if (!service) {
       try {
-        return ServicesService.createService({
+        middlewareServiceResponse = await ServicesService.createService({
           stakingProgramId: selectedStakingProgramId,
           serviceTemplate,
           deploy: false, // TODO: deprecated will remove
@@ -251,6 +251,19 @@ const useServiceDeployment = () => {
           serviceConfigId: service.service_config_id,
           partialServiceTemplate: {
             hash: serviceTemplate.hash,
+          },
+        });
+      }
+    }
+
+    // Temporary: update the service if it has the default description
+    if (service && service.description === 'Memeooorr @twitter_handle') {
+      const xUsername = service.env_variables?.TWIKIT_USERNAME?.value;
+      if (xUsername) {
+        await ServicesService.updateService({
+          serviceConfigId: service.service_config_id,
+          partialServiceTemplate: {
+            description: `Memeooorr @${xUsername}`,
           },
         });
       }
