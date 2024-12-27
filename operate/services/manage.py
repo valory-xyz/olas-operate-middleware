@@ -572,17 +572,6 @@ class ServiceManager:
                         "staking_contract"
                     ),
                     "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
-                    # for modius
-                    "SAFE_CONTRACT_ADDRESSES": json.dumps({
-                        chain: config.chain_data.multisig
-                        for chain, config in service.chain_configs.items()
-                    }, separators=(',', ':')),
-                    "STAKING_CHAIN": (
-                        Chain.MODE.value if (
-                            Chain.MODE.value in service.chain_configs and
-                            service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
-                        ) else None
-                    ),
                 }
             )
 
@@ -967,7 +956,22 @@ class ServiceManager:
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
         chain_data.on_chain_state = OnChainState(info["service_state"])
+
+        # TODO: this is a patch for modius, to be standardized
+        service.update_env_variables_values({
+            "SAFE_CONTRACT_ADDRESSES": json.dumps({
+                chain: config.chain_data.multisig
+                for chain, config in service.chain_configs.items()
+            }, separators=(',', ':')),
+            "STAKING_CHAIN": (
+                Chain.MODE.value if (
+                    Chain.MODE.value in service.chain_configs and
+                    service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
+                ) else None
+            ),
+        })
         service.store()
+
         if user_params.use_staking:
             self.stake_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
