@@ -7,6 +7,7 @@ import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -235,6 +236,25 @@ const useServiceDeployment = () => {
           serviceConfigId: service.service_config_id,
           partialServiceTemplate: {
             hash: serviceTemplate.hash,
+          },
+        });
+      }
+    }
+
+    // Temporary: update the service if it has the default description
+    if (
+      service &&
+      service.description ===
+        SERVICE_TEMPLATES.find(
+          (template) => template.agentType === AgentType.Memeooorr,
+        )?.description
+    ) {
+      const xUsername = service.env_variables?.TWIKIT_USERNAME?.value;
+      if (xUsername) {
+        await ServicesService.updateService({
+          serviceConfigId: service.service_config_id,
+          partialServiceTemplate: {
+            description: `Memeooorr @${xUsername}`,
           },
         });
       }
