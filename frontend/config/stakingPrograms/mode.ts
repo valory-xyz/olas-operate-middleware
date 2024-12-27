@@ -13,7 +13,7 @@ import { StakingProgramMap } from '.';
 export const MODE_STAKING_PROGRAMS_CONTRACT_ADDRESSES: Record<string, Address> =
   {
     [StakingProgramId.OptimusAlpha]:
-      '0x534c0a05b6d4d28d5f3630d6d74857b253cf8332',
+      '0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91',
   };
 
 export const MODE_STAKING_PROGRAMS: StakingProgramMap = {

@@ -1,5 +1,5 @@
 import { formatUnits } from 'ethers/lib/utils';
-import { isNil } from 'lodash';
+import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
@@ -86,7 +86,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
    * Balances by chain
    */
   const balancesByChain = useMemo(() => {
-    if (isNil(masterSafeBalances)) return;
+    if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
 
     return masterSafeBalances.reduce<{
       [chainId: number]: { [symbol: string]: number };

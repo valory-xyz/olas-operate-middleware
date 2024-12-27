@@ -22,6 +22,7 @@ import {
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { MultisigOwners, useMultisigs } from '@/hooks/useMultisig';
+import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
@@ -30,7 +31,6 @@ import {
   useStakingContractContext,
 } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
-import { useStore } from '@/hooks/useStore';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
@@ -38,7 +38,6 @@ import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
 
 const useServiceDeployment = () => {
-  const { storeState } = useStore();
   const { showNotification } = useElectronApi();
 
   const { goto: gotoPage } = usePageState();
@@ -79,8 +78,7 @@ const useServiceDeployment = () => {
     (balance) => balance.evmChainId === selectedAgentConfig.evmHomeChainId,
   )?.balance;
 
-  const { masterSafeBalances, masterSafeNativeGasBalance } =
-    useMasterBalances();
+  const { masterSafeNativeGasBalance } = useMasterBalances();
 
   const {
     isAllStakingContractDetailsRecordLoaded,
@@ -96,6 +94,10 @@ const useServiceDeployment = () => {
   const { hasEnoughServiceSlots } = useActiveStakingContractDetails();
 
   const { masterSafesOwners } = useMultisigs(masterSafes);
+
+  const { isInitialFunded, needsInitialFunding } = useNeedsFunds(
+    selectedStakingProgramId,
+  );
 
   const requiredStakedOlas =
     selectedStakingProgramId &&
@@ -127,13 +129,6 @@ const useServiceDeployment = () => {
       return false;
     }
 
-    const masterSafeOlasBalance = masterSafeBalances?.find(
-      (walletBalanceResult) =>
-        walletBalanceResult.symbol === TokenSymbol.OLAS &&
-        walletBalanceResult.evmChainId === selectedAgentConfig.evmHomeChainId,
-    )?.balance;
-
-    const isInitialFunded = storeState?.[selectedAgentType]?.isInitialFunded;
     if (service && isInitialFunded && isServiceStaked) {
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
@@ -159,17 +154,8 @@ const useServiceDeployment = () => {
     }
 
     // SERVICE IS NOT STAKED AND/OR IS STARTING FOR THE FIRST TIME
-    const totalOlasStakedAndInSafes = sum([
-      serviceOlasBalanceOnHomeChain,
-      serviceTotalStakedOlas,
-      masterSafeOlasBalance,
-    ]);
-
-    const hasEnoughForInitialDeployment =
-      (totalOlasStakedAndInSafes ?? 0) >= requiredStakedOlas &&
-      (masterSafeNativeGasBalance ?? 0) >= safeThreshold;
-
-    return hasEnoughForInitialDeployment;
+    // Check if it has enough initial funding
+    return !needsInitialFunding;
   }, [
     isServicesLoading,
     isServiceRunning,
@@ -177,18 +163,16 @@ const useServiceDeployment = () => {
     requiredStakedOlas,
     hasEnoughServiceSlots,
     isServiceStaked,
-    masterSafeBalances,
     service,
-    storeState,
-    selectedAgentType,
+    isInitialFunded,
     isAgentEvicted,
     isEligibleForStaking,
     selectedAgentConfig.operatingThresholds,
     selectedAgentConfig.evmHomeChainId,
-    serviceOlasBalanceOnHomeChain,
+    needsInitialFunding,
     serviceTotalStakedOlas,
-    masterSafeNativeGasBalance,
     serviceSafeOlasWithStaked,
+    masterSafeNativeGasBalance,
   ]);
 
   const pauseAllPolling = useCallback(() => {
@@ -342,7 +326,7 @@ const useServiceDeployment = () => {
     selectedAgentType,
   ]);
 
-  const buttonText = `Start agent ${service ? '' : '& stake'}`;
+  const buttonText = `Start agent ${isServiceStaked ? '' : '& stake'}`;
 
   return { isDeployable, handleStart, buttonText };
 };
