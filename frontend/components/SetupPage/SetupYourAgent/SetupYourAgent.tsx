@@ -20,15 +20,13 @@ import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
+import { LOCAL_FORM_THEME } from '@/theme';
 
 import { SetupCreateHeader } from '../Create/SetupCreateHeader';
 import { useMemeFormValidate } from '../hooks/useMemeFormValidate';
 import { onDummyServiceCreation } from './validation';
 
 const { Title, Text } = Typography;
-
-// TODO: consolidate theme into mainTheme
-const LOCAL_THEME = { components: { Input: { fontSize: 16 } } };
 
 type FieldValues = {
   personaDescription: string;
@@ -314,7 +312,7 @@ export const SetupYourAgent = () => {
   }
 
   return (
-    <ConfigProvider theme={LOCAL_THEME}>
+    <ConfigProvider theme={LOCAL_FORM_THEME}>
       <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }}>
         <SetupCreateHeader prev={SetupScreen.AgentSelection} />
         <Title level={3}>Set up your agent</Title>

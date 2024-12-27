@@ -6,6 +6,7 @@ import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
+import { LOCAL_FORM_THEME } from '@/theme';
 
 import { CardTitle } from '../Card/CardTitle';
 import { CardFlex } from '../styled/CardFlex';
@@ -14,9 +15,6 @@ import {
   UpdateAgentProvider,
 } from './context/UpdateAgentProvider';
 import { MemeUpdateForm } from './MemeUpdateForm';
-
-// TODO: consolidate theme into mainTheme
-const LOCAL_THEME = { components: { Input: { fontSize: 16 } } };
 
 const EditButton = () => {
   const { setIsEditing } = useContext(UpdateAgentContext);
@@ -48,27 +46,27 @@ const UpdateAgentPageCard = () => {
   }, [hasUnsavedChanges, unsavedModal, goto]);
 
   return (
-    <ConfigProvider theme={LOCAL_THEME}>
-      <CardFlex
-        bordered={false}
-        title={
-          <CardTitle
-            backButtonCallback={handleClickBack}
-            title={isEditing ? 'Edit agent settings' : 'Agent settings'}
-          />
-        }
-        extra={isEditing ? null : <EditButton />}
-      >
-        {selectedAgentType === AgentType.Memeooorr && <MemeUpdateForm />}
-      </CardFlex>
-    </ConfigProvider>
+    <CardFlex
+      bordered={false}
+      title={
+        <CardTitle
+          backButtonCallback={handleClickBack}
+          title={isEditing ? 'Edit agent settings' : 'Agent settings'}
+        />
+      }
+      extra={isEditing ? null : <EditButton />}
+    >
+      {selectedAgentType === AgentType.Memeooorr && <MemeUpdateForm />}
+    </CardFlex>
   );
 };
 
 export const UpdateAgentPage = () => {
   return (
     <UpdateAgentProvider>
-      <UpdateAgentPageCard />
+      <ConfigProvider theme={LOCAL_FORM_THEME}>
+        <UpdateAgentPageCard />
+      </ConfigProvider>
     </UpdateAgentProvider>
   );
 };
