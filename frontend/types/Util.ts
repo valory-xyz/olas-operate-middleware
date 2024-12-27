@@ -4,6 +4,9 @@ export type Optional<T> = T | undefined;
 
 export type Maybe<T> = Nullable<Optional<T>>;
 
+/**
+ * DeepPartial allows you to make all properties of an object optional.
+ */
 export type DeepPartial<T> = {
   [P in keyof T]?: T[P] extends object ? DeepPartial<T[P]> : T[P];
 };

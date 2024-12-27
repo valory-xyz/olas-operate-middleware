@@ -17,22 +17,16 @@ import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { SetupScreen } from '@/enums/SetupScreen';
-import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
+import { LOCAL_FORM_THEME } from '@/theme';
 
 import { SetupCreateHeader } from '../Create/SetupCreateHeader';
-import {
-  onDummyServiceCreation,
-  validateGeminiApiKey,
-  validateTwitterCredentials,
-} from './validation';
+import { useMemeFormValidate } from '../hooks/useMemeFormValidate';
+import { onDummyServiceCreation } from './validation';
 
 const { Title, Text } = Typography;
-
-// TODO: consolidate theme into mainTheme
-const LOCAL_THEME = { components: { Input: { fontSize: 16 } } };
 
 type FieldValues = {
   personaDescription: string;
@@ -41,15 +35,14 @@ type FieldValues = {
   xUsername: string;
   xPassword: string;
 };
-type ValidationStatus = 'valid' | 'invalid' | 'unknown';
 
-const requiredRules = [{ required: true, message: 'Field is required' }];
-const validateMessages = {
+export const requiredRules = [{ required: true, message: 'Field is required' }];
+export const validateMessages = {
   required: 'Field is required',
   types: { email: 'Enter a valid email' },
 };
 
-const XAccountCredentials = () => (
+export const XAccountCredentials = () => (
   <Flex vertical>
     <Divider style={{ margin: '16px 0' }} />
     <Title level={5} className="mt-0">
@@ -80,7 +73,7 @@ const XAccountCredentials = () => (
   </Flex>
 );
 
-const InvalidGeminiApiCredentials = () => (
+export const InvalidGeminiApiCredentials = () => (
   <CustomAlert
     type="error"
     showIcon
@@ -89,7 +82,7 @@ const InvalidGeminiApiCredentials = () => (
   />
 );
 
-const InvalidXCredentials = () => (
+export const InvalidXCredentials = () => (
   <CustomAlert
     type="error"
     showIcon
@@ -101,19 +94,21 @@ const InvalidXCredentials = () => (
 type SetupYourAgentFormProps = { serviceTemplate: ServiceTemplate };
 // Agent setup form
 const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
-  const electronApi = useElectronApi();
   const { goto } = useSetup();
   const { defaultStakingProgramId } = useStakingProgram();
 
   const [form] = Form.useForm<FieldValues>();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitButtonText, setSubmitButtonText] = useState('Continue');
-  const [geminiApiKeyValidationStatus, setGeminiApiKeyValidationStatus] =
-    useState<ValidationStatus>('unknown');
-  const [
+
+  const {
+    submitButtonText,
+    setSubmitButtonText,
+    geminiApiKeyValidationStatus,
+    setGeminiApiKeyValidationStatus,
     twitterCredentialsValidationStatus,
     setTwitterCredentialsValidationStatus,
-  ] = useState<ValidationStatus>('unknown');
+    handleValidate,
+  } = useMemeFormValidate();
 
   const onFinish = useCallback(
     async (values: Record<keyof FieldValues, string>) => {
@@ -122,33 +117,8 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
       try {
         setIsSubmitting(true);
 
-        // validate the gemini API
-        setSubmitButtonText('Validating Gemini API key...');
-        const isGeminiApiValid = await validateGeminiApiKey(
-          values.geminiApiKey,
-        );
-        setGeminiApiKeyValidationStatus(isGeminiApiValid ? 'valid' : 'invalid');
-        if (!isGeminiApiValid) return;
-
-        // validate the twitter credentials
-        setSubmitButtonText('Validating Twitter credentials...');
-        const { isValid: isTwitterCredentialsValid, cookies } =
-          electronApi?.validateTwitterLogin
-            ? await validateTwitterCredentials(
-                values.xEmail,
-                values.xUsername,
-                values.xPassword,
-                electronApi.validateTwitterLogin,
-              )
-            : { isValid: false, cookies: undefined };
-        setTwitterCredentialsValidationStatus(
-          isTwitterCredentialsValid ? 'valid' : 'invalid',
-        );
-        if (!isTwitterCredentialsValid) return;
+        const cookies = await handleValidate(values);
         if (!cookies) return;
-
-        // wait for agent setup to complete
-        setSubmitButtonText('Setting up agent...');
 
         const overriddenServiceConfig: ServiceTemplate = {
           ...serviceTemplate,
@@ -199,7 +169,13 @@ const SetupYourAgentForm = ({ serviceTemplate }: SetupYourAgentFormProps) => {
         setSubmitButtonText('Continue');
       }
     },
-    [electronApi, defaultStakingProgramId, serviceTemplate, goto],
+    [
+      defaultStakingProgramId,
+      handleValidate,
+      serviceTemplate,
+      goto,
+      setSubmitButtonText,
+    ],
   );
 
   // Clean up
@@ -336,7 +312,7 @@ export const SetupYourAgent = () => {
   }
 
   return (
-    <ConfigProvider theme={LOCAL_THEME}>
+    <ConfigProvider theme={LOCAL_FORM_THEME}>
       <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }}>
         <SetupCreateHeader prev={SetupScreen.AgentSelection} />
         <Title level={3}>Set up your agent</Title>
