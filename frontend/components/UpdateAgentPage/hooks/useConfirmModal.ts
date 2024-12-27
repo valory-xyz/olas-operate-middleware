@@ -39,11 +39,11 @@ export const useConfirmUpdateModal = ({
     try {
       await confirmCallback();
       message.destroy('updating');
-      message.success({ content: 'Agent settings updated successfully' });
+      message.success({ content: 'Agent settings updated successfully.' });
 
       // restart may be time consuming, no need to await here
       restartIfServiceRunning().catch(() =>
-        message.error({ content: 'Failed to restart service' }),
+        message.error({ content: 'Failed to restart service.' }),
       );
     } catch (e) {
       console.error(e);

@@ -38,6 +38,7 @@ export const MemeUpdateForm = () => {
   } = useContext(UpdateAgentContext);
 
   const {
+    isValidating,
     geminiApiKeyValidationStatus,
     twitterCredentialsValidationStatus,
     handleValidate,
@@ -179,7 +180,13 @@ export const MemeUpdateForm = () => {
       <Form.Item name="description" hidden />
 
       <Form.Item hidden={!isEditing}>
-        <Button size="large" type="primary" htmlType="submit" block>
+        <Button
+          size="large"
+          type="primary"
+          htmlType="submit"
+          block
+          loading={isValidating}
+        >
           Save changes
         </Button>
       </Form.Item>

@@ -20,6 +20,7 @@ type FieldValues = {
 export const useMemeFormValidate = () => {
   const electronApi = useElectronApi();
 
+  const [isValidating, setIsValidating] = useState(false);
   const [submitButtonText, setSubmitButtonText] = useState('Continue');
   const [geminiApiKeyValidationStatus, setGeminiApiKeyValidationStatus] =
     useState<ValidationStatus>('unknown');
@@ -30,40 +31,51 @@ export const useMemeFormValidate = () => {
 
   const handleValidate = useCallback(
     async (values: Record<keyof FieldValues, string>) => {
+      setIsValidating(true);
+
       setGeminiApiKeyValidationStatus('unknown');
       setTwitterCredentialsValidationStatus('unknown');
-
       setSubmitButtonText('Validating Gemini API key...');
-      const isGeminiApiValid = await validateGeminiApiKey(values.geminiApiKey);
-      setGeminiApiKeyValidationStatus(isGeminiApiValid ? 'valid' : 'invalid');
-      if (!isGeminiApiValid) return;
 
-      // validate the twitter credentials
-      setSubmitButtonText('Validating Twitter credentials...');
-      const { isValid: isTwitterCredentialsValid, cookies } =
-        electronApi?.validateTwitterLogin
-          ? await validateTwitterCredentials(
-              values.xEmail,
-              values.xUsername,
-              values.xPassword,
-              electronApi.validateTwitterLogin,
-            )
-          : { isValid: false, cookies: undefined };
-      setTwitterCredentialsValidationStatus(
-        isTwitterCredentialsValid ? 'valid' : 'invalid',
-      );
-      if (!isTwitterCredentialsValid) return;
-      if (!cookies) return;
+      try {
+        const isGeminiApiValid = await validateGeminiApiKey(
+          values.geminiApiKey,
+        );
+        setGeminiApiKeyValidationStatus(isGeminiApiValid ? 'valid' : 'invalid');
+        if (!isGeminiApiValid) return;
 
-      // wait for agent setup to complete
-      setSubmitButtonText('Setting up agent...');
+        // validate the twitter credentials
+        setSubmitButtonText('Validating Twitter credentials...');
+        const { isValid: isTwitterCredentialsValid, cookies } =
+          electronApi?.validateTwitterLogin
+            ? await validateTwitterCredentials(
+                values.xEmail,
+                values.xUsername,
+                values.xPassword,
+                electronApi.validateTwitterLogin,
+              )
+            : { isValid: false, cookies: undefined };
+        setTwitterCredentialsValidationStatus(
+          isTwitterCredentialsValid ? 'valid' : 'invalid',
+        );
+        if (!isTwitterCredentialsValid) return;
+        if (!cookies) return;
 
-      return cookies;
+        // wait for agent setup to complete
+        setSubmitButtonText('Setting up agent...');
+
+        return cookies;
+      } catch (error) {
+        console.error('Error validating meme form:', error);
+      } finally {
+        setIsValidating(false);
+      }
     },
     [electronApi.validateTwitterLogin],
   );
 
   return {
+    isValidating,
     submitButtonText,
     setSubmitButtonText,
     geminiApiKeyValidationStatus,
