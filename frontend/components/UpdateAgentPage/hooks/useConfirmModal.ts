@@ -20,9 +20,8 @@ export const useConfirmUpdateModal = ({
     if (isServiceRunning && service?.service_config_id) {
       try {
         message.info('Restarting service ...');
-        ServicesService.stopDeployment(service?.service_config_id).then(() =>
-          ServicesService.startService(service?.service_config_id),
-        );
+        await ServicesService.stopDeployment(service.service_config_id);
+        await ServicesService.startService(service.service_config_id)
       } catch (e) {
         console.error(e);
       }
@@ -32,7 +31,7 @@ export const useConfirmUpdateModal = ({
   const confirm = useCallback(async () => {
     setPending(true);
     message.loading({
-      content: 'Updating agent settings ...',
+      content: 'Updating agent settings...',
       key: 'updating',
     });
     let failed = false;

@@ -15,7 +15,7 @@ import {
 } from '../SetupPage/SetupYourAgent/SetupYourAgent';
 import { UpdateAgentContext } from './context/UpdateAgentProvider';
 
-type MemeFormValues = {
+type MemeooorrFormValues = {
   description: string;
   env_variables: {
     GENAI_API_KEY: string;
@@ -45,14 +45,10 @@ export const MemeUpdateForm = () => {
 
   const { selectedService } = useServices();
 
-  const { env_variables } = selectedService || {};
+  const initialValues = useMemo<MemeooorrFormValues | null>(() => {
+    if (!selectedService?.env_variables) return null;
 
-  const initialValues = useMemo<MemeFormValues | null>(() => {
-    if (!env_variables) {
-      return null;
-    }
-
-    const envEntries = Object.entries(env_variables);
+    const envEntries = Object.entries(selectedService.env_variables);
 
     return envEntries.reduce(
       (acc, [key, { value }]) => {
@@ -70,11 +66,11 @@ export const MemeUpdateForm = () => {
 
         return acc;
       },
-      { env_variables: {} } as MemeFormValues,
+      { env_variables: {} } as MemeooorrFormValues,
     );
-  }, [env_variables]);
+  }, [selectedService?.env_variables]);
 
-  const handleFinish = async (values: MemeFormValues) => {
+  const handleFinish = async (values: MemeooorrFormValues) => {
     const cookies = await handleValidate({
       personaDescription: values.env_variables.PERSONA,
       geminiApiKey: values.env_variables.GENAI_API_KEY,
@@ -94,7 +90,7 @@ export const MemeUpdateForm = () => {
   };
 
   return (
-    <Form<MemeFormValues>
+    <Form<MemeooorrFormValues>
       form={form}
       layout="vertical"
       disabled={!isEditing}
@@ -113,6 +109,8 @@ export const MemeUpdateForm = () => {
           rows={4}
         />
       </Form.Item>
+
+      {/* Gemini credentials */}
       <Form.Item
         label="Gemini API key"
         name={['env_variables', 'GENAI_API_KEY']}
@@ -120,7 +118,6 @@ export const MemeUpdateForm = () => {
       >
         <Input.Password placeholder="Google Gemini API key" />
       </Form.Item>
-
       {geminiApiKeyValidationStatus === 'invalid' && (
         <InvalidGeminiApiCredentials />
       )}

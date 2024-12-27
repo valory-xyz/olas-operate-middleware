@@ -40,9 +40,11 @@ export const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
   const confirmUpdateCallback = useCallback(async () => {
     const formValues = form.getFieldsValue();
 
-    if (selectedService && selectedService.service_config_id) {
+    if (!selectedService || !selectedService.service_config_id) return;
+
+    try {
       await ServicesService.updateService({
-        serviceConfigId: selectedService?.service_config_id,
+        serviceConfigId: selectedService.service_config_id,
         partialServiceTemplate: {
           ...formValues,
           env_variables: {
@@ -53,6 +55,9 @@ export const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
           },
         },
       });
+    } catch (error) {
+      console.error(error);
+    } finally {
       setIsEditing(false);
     }
   }, [form, selectedService]);

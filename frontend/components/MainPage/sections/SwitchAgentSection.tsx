@@ -13,6 +13,22 @@ import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 
 const { Text } = Typography;
 
+const UpdateTemplate = () => {
+  const { goto } = usePageState();
+  const { selectedAgentType } = useServices();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    goto(Pages.UpdateAgentTemplate);
+  };
+
+  if (selectedAgentType === AgentType.Memeooorr) {
+    return <ControlOutlined onClick={handleClick} />;
+  }
+
+  return null;
+};
+
 export const SwitchAgentSection = () => {
   const { goto } = usePageState();
   const {
@@ -53,7 +69,7 @@ export const SwitchAgentSection = () => {
           alt={selectedAgentConfig.displayName}
         />
         <Text>{selectedAgentConfig.displayName}</Text>
-        <UpdateTemplateIcon />
+        <UpdateTemplate />
       </Flex>
 
       {isSwitchAgentEnabled ? (
@@ -71,20 +87,4 @@ export const SwitchAgentSection = () => {
       )}
     </CardSection>
   );
-};
-
-export const UpdateTemplateIcon = () => {
-  const { goto } = usePageState();
-  const { selectedAgentType } = useServices();
-
-  const handleClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    goto(Pages.UpdateAgentTemplate);
-  };
-
-  if (selectedAgentType === AgentType.Memeooorr) {
-    return <ControlOutlined onClick={handleClick} />;
-  }
-
-  return null;
 };

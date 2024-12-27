@@ -1,6 +1,6 @@
 import { EditOutlined } from '@ant-design/icons';
 import { Button, ConfigProvider } from 'antd';
-import { useContext } from 'react';
+import { useCallback, useContext } from 'react';
 
 import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
@@ -19,15 +19,11 @@ import { MemeUpdateForm } from './MemeUpdateForm';
 const LOCAL_THEME = { components: { Input: { fontSize: 16 } } };
 
 const EditButton = () => {
-  const { setIsEditing, isEditing } = useContext(UpdateAgentContext);
+  const { setIsEditing } = useContext(UpdateAgentContext);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setIsEditing?.((prev) => !prev);
-  };
-
-  if (isEditing) {
-    return null;
-  }
+  }, [setIsEditing]);
 
   return (
     <Button icon={<EditOutlined />} onClick={handleEdit}>
@@ -43,13 +39,13 @@ const UpdateAgentPageCard = () => {
 
   const hasUnsavedChanges = form?.isFieldsTouched();
 
-  const handleClickBack = () => {
+  const handleClickBack = useCallback(() => {
     if (hasUnsavedChanges) {
       unsavedModal?.openModal?.();
     } else {
       goto(Pages.Main);
     }
-  };
+  }, [hasUnsavedChanges, unsavedModal, goto]);
 
   return (
     <ConfigProvider theme={LOCAL_THEME}>
@@ -57,12 +53,11 @@ const UpdateAgentPageCard = () => {
         bordered={false}
         title={
           <CardTitle
-            showBackButton={true}
             backButtonCallback={handleClickBack}
             title={isEditing ? 'Edit agent settings' : 'Agent settings'}
           />
         }
-        extra={<EditButton />}
+        extra={isEditing ? null : <EditButton />}
       >
         {selectedAgentType === AgentType.Memeooorr && <MemeUpdateForm />}
       </CardFlex>

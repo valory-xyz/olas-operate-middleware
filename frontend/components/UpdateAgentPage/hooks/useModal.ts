@@ -1,12 +1,12 @@
 import { useCallback, useState } from 'react';
 
-export interface ModalProps {
+export type ModalProps = {
   open: boolean;
   openModal: () => void;
   closeModal: () => void;
   cancel: () => void;
   confirm: () => void;
-}
+};
 
 export const useModal = (): ModalProps => {
   const [open, setOpen] = useState(false);

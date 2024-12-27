@@ -8,9 +8,8 @@ import { UpdateAgentContext } from '../context/UpdateAgentProvider';
 export const ConfirmUpdateModal = () => {
   const { isServiceRunning } = useService();
   const { confirmUpdateModal } = useContext(UpdateAgentContext);
-  if (!confirmUpdateModal) return null;
 
-  const okText = isServiceRunning ? 'Save and restart agent' : 'Save';
+  if (!confirmUpdateModal) return null;
 
   return (
     <Modal
@@ -18,9 +17,9 @@ export const ConfirmUpdateModal = () => {
       open={confirmUpdateModal.open}
       onOk={confirmUpdateModal.confirm}
       onCancel={confirmUpdateModal.cancel}
-      okText={okText}
+      okText={isServiceRunning ? "Save and restart agent" : "Save"}
     >
-      <p>These changes will only take effect when you restart the agent.</p>
+      These changes will only take effect when you restart the agent.
     </Modal>
   );
 };
