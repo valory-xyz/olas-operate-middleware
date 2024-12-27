@@ -44,9 +44,17 @@ export type ChainData = {
   };
 };
 
+export type EnvVariableAttributes = {
+  name: string;
+  description: string;
+  value: string;
+  provision_type: EnvProvisionType;
+};
+
 export type MiddlewareServiceResponse = {
   service_config_id: string; // TODO: update with uuid once middleware integrated
   name: string;
+  description: string;
   hash: string;
   hash_history: {
     [block: string]: string;
@@ -61,13 +69,7 @@ export type MiddlewareServiceResponse = {
       chain_data: ChainData;
     };
   };
-};
-
-export type EnvVariableAttributes = {
-  name: string;
-  description: string;
-  value: string;
-  provision_type: EnvProvisionType;
+  env_variables: { [key: string]: EnvVariableAttributes };
 };
 
 export type ServiceTemplate = {
