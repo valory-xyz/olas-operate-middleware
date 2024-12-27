@@ -284,7 +284,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
     home_chain: MiddlewareChain.MODE,
     configurations: {
       [MiddlewareChain.MODE]: {
-        staking_program_id: StakingProgramId.OptimusAlpha, // default, may be overwritten
+        staking_program_id: StakingProgramId.ModiusAlpha, // default, may be overwritten
         nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
         rpc: 'http://localhost:8545', // overwritten
         agent_id: 40,
@@ -382,7 +382,8 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
       INITIAL_ASSETS: {
         name: 'Initial assets',
         description: '',
-        value: '{"mode":{"0x0000000000000000000000000000000000000000":"ETH","0xd988097fb8612cc24eeC14542bC03424c656005f":"USDC"}}',
+        value:
+          '{"mode":{"0x0000000000000000000000000000000000000000":"ETH","0xd988097fb8612cc24eeC14542bC03424c656005f":"USDC"}}',
         provision_type: EnvProvisionType.FIXED,
       },
       SELECTED_STRATEGIES: {

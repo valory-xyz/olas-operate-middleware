@@ -97,6 +97,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     },
     Chain.MODE: {
         "optimus_alpha": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91",
+        "modius_alpha": "0x534c0a05b6d4d28d5f3630d6d74857b253cf8332",
     },
 }
 
