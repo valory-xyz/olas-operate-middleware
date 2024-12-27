@@ -1,7 +1,7 @@
 import { Button, Form, Input } from 'antd';
-import { useContext, useMemo } from 'react';
+import { useContext } from 'react';
 
-import { useServices } from '@/hooks/useServices';
+import { Nullable } from '@/types/Util';
 
 // TODO: move the following hook/components to a shared place
 // once Modius work is merged
@@ -30,7 +30,11 @@ type MemeooorrFormValues = {
 // TODO: use exported commonFieldProps once Modius is merged
 const commonFieldProps = { rules: requiredRules, hasFeedback: true };
 
-export const MemeUpdateForm = () => {
+type MemeUpdateFormProps = {
+  initialFormValues: Nullable<MemeooorrFormValues>;
+};
+
+export const MemeUpdateForm = ({ initialFormValues }: MemeUpdateFormProps) => {
   const {
     isEditing,
     form,
@@ -43,33 +47,6 @@ export const MemeUpdateForm = () => {
     twitterCredentialsValidationStatus,
     handleValidate,
   } = useMemeFormValidate();
-
-  const { selectedService } = useServices();
-
-  const initialValues = useMemo<MemeooorrFormValues | null>(() => {
-    if (!selectedService?.env_variables) return null;
-
-    const envEntries = Object.entries(selectedService.env_variables);
-
-    return envEntries.reduce(
-      (acc, [key, { value }]) => {
-        if (key === 'PERSONA') {
-          acc.env_variables.PERSONA = value;
-        } else if (key === 'GENAI_API_KEY') {
-          acc.env_variables.GENAI_API_KEY = value;
-        } else if (key === 'TWIKIT_EMAIL') {
-          acc.env_variables.TWIKIT_EMAIL = value;
-        } else if (key === 'TWIKIT_USERNAME') {
-          acc.env_variables.TWIKIT_USERNAME = value;
-        } else if (key === 'TWIKIT_PASSWORD') {
-          acc.env_variables.TWIKIT_PASSWORD = value;
-        }
-
-        return acc;
-      },
-      { env_variables: {} } as MemeooorrFormValues,
-    );
-  }, [selectedService?.env_variables]);
 
   const handleFinish = async (values: MemeooorrFormValues) => {
     const cookies = await handleValidate({
@@ -97,7 +74,7 @@ export const MemeUpdateForm = () => {
       disabled={!isEditing}
       onFinish={handleFinish}
       validateMessages={validateMessages}
-      initialValues={{ ...initialValues }}
+      initialValues={{ ...initialFormValues }}
     >
       <Form.Item
         label="Persona description"

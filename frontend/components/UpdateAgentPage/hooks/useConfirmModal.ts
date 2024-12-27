@@ -21,7 +21,7 @@ export const useConfirmUpdateModal = ({
       try {
         message.info('Restarting service ...');
         await ServicesService.stopDeployment(service.service_config_id);
-        await ServicesService.startService(service.service_config_id)
+        await ServicesService.startService(service.service_config_id);
       } catch (e) {
         console.error(e);
       }

@@ -17,7 +17,7 @@ export const ConfirmUpdateModal = () => {
       open={confirmUpdateModal.open}
       onOk={confirmUpdateModal.confirm}
       onCancel={confirmUpdateModal.cancel}
-      okText={isServiceRunning ? "Save and restart agent" : "Save"}
+      okText={isServiceRunning ? 'Save and restart agent' : 'Save'}
     >
       These changes will only take effect when you restart the agent.
     </Modal>
