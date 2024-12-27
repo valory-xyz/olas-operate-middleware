@@ -212,7 +212,7 @@ const useServiceDeployment = () => {
     let middlewareServiceResponse;
     if (!service) {
       try {
-        return ServicesService.createService({
+        middlewareServiceResponse = await ServicesService.createService({
           stakingProgramId: selectedStakingProgramId,
           serviceTemplate,
           deploy: false, // TODO: deprecated will remove
