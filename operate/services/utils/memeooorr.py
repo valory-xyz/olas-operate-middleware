@@ -21,6 +21,7 @@
 
 import asyncio
 import json
+import logging
 import time
 from pathlib import Path
 from typing import Optional
@@ -49,7 +50,12 @@ def await_for_cookies() -> dict:
 
 
 async def async_get_twitter_cookies(
-    username: str, email: str, password: str, cookies: str, cookies_path: Path
+    username: str,
+    email: str,
+    password: str,
+    cookies: str,
+    cookies_path: Path,
+    max_retries: int = 10,
 ) -> Optional[str]:
     """Verifies that the Twitter credentials are correct and get the cookies"""
 
@@ -70,8 +76,8 @@ async def async_get_twitter_cookies(
         if not valid_cookies and cookies_path.exists():
             print("Checking the cookies file")
             with open(cookies_path, "r", encoding="utf-8") as cookies_file:
-                cookies = json.load(cookies_file)
-                client.set_cookies(cookies)
+                cookies_json = json.load(cookies_file)
+                client.set_cookies(cookies_json)
 
             user = await client.user()
             print(f"User from cookies file: {user.screen_name}")
@@ -94,13 +100,30 @@ async def async_get_twitter_cookies(
         # cookies = await_for_cookies()  # noqa
         # client.set_cookies(cookies)  # noqa
 
+    except twikit.errors.NotFound as e:
+        logging.exception(e)
+        print("Error: Page not found. Sleeping for 10 seconds and retrying...")
+        await asyncio.sleep(10)
+        if max_retries == 0:
+            raise e
+        return await async_get_twitter_cookies(
+            username, email, password, cookies, cookies_path, max_retries - 1
+        )
+
     return json.dumps(client.get_cookies()).replace(" ", "")
 
 
 def get_twitter_cookies(
-    username: str, email: str, password: str, cookies: str, cookies_path: Path
+    username: str,
+    email: str,
+    password: str,
+    cookies: str,
+    cookies_path: Path,
+    max_retries: int = 10,
 ) -> Optional[str]:
     """get_twitter_cookies"""
     return asyncio.run(
-        async_get_twitter_cookies(username, email, password, cookies, cookies_path)
+        async_get_twitter_cookies(
+            username, email, password, cookies, cookies_path, max_retries
+        )
     )
