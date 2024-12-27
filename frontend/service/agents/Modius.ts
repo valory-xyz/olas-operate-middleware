@@ -82,13 +82,17 @@ export abstract class ModiusService extends StakedAgentService {
     const lastMultisigNonces = serviceInfo[2];
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
-    const [isEligibleForRewards] = await provider.all([
-      activityChecker.isRatioPass(
-        currentMultisigNonces,
-        lastMultisigNonces,
-        Math.ceil(nowInSeconds - tsCheckpoint),
-      ),
-    ]);
+    const isServiceStaked = serviceInfo[2].length > 0;
+
+    const [isEligibleForRewards] = isServiceStaked
+      ? await provider.all([
+          activityChecker.isRatioPass(
+            currentMultisigNonces,
+            lastMultisigNonces,
+            Math.ceil(nowInSeconds - tsCheckpoint),
+          ),
+        ])
+      : [false];
 
     const availableRewardsForEpoch = Math.max(
       rewardsPerSecond * livenessPeriod, // expected rewards for the epoch

@@ -1,3 +1,6 @@
+import { ethers } from 'ethers';
+import { formatUnits } from 'ethers/lib/utils';
+
 import { MiddlewareChain } from '@/client';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
@@ -11,12 +14,18 @@ import { PredictTraderService } from '@/service/agents/PredictTrader';
 import { AgentConfig } from '@/types/Agent';
 import { formatEther } from '@/utils/numberFormatters';
 
+import { MODE_TOKEN_CONFIG } from './tokens';
+
 // TODO: complete this config
 // TODO: add funding requirements
 
 const traderFundRequirements = SERVICE_TEMPLATES.find(
   (template) => template.agentType === AgentType.PredictTrader,
 )?.configurations[MiddlewareChain.GNOSIS].fund_requirements;
+
+const modiusFundRequirements = SERVICE_TEMPLATES.find(
+  (template) => template.agentType === AgentType.Modius,
+)?.configurations[MiddlewareChain.MODE].fund_requirements;
 
 export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
@@ -38,8 +47,10 @@ export const AGENT_CONFIG: {
           [TokenSymbol.XDAI]: Number(
             formatEther(
               `${
-                (traderFundRequirements?.agent ?? 0) +
-                (traderFundRequirements?.safe ?? 0)
+                (traderFundRequirements?.[ethers.constants.AddressZero]
+                  ?.agent ?? 0) +
+                (traderFundRequirements?.[ethers.constants.AddressZero]?.safe ??
+                  0)
               }`,
             ),
           ),
@@ -113,7 +124,14 @@ export const AGENT_CONFIG: {
     },
     additionalRequirements: {
       [EvmChainId.Mode]: {
-        [TokenSymbol.USDC]: 16,
+        [TokenSymbol.USDC]: Number(
+          formatUnits(
+            modiusFundRequirements?.[
+              MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string
+            ]?.safe ?? 0,
+            MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals,
+          ),
+        ),
       },
     },
     operatingThresholds: {

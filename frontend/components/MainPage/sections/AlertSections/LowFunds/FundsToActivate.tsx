@@ -42,18 +42,24 @@ export const FundsToActivate = ({
 
   // Calculate the required OLAS
   const olasRequired = useMemo(() => {
+    if (!serviceFundRequirements[homeChainId]) return;
+
     const olas = serviceFundRequirements[homeChainId][TokenSymbol.OLAS];
     return `${UNICODE_SYMBOLS.OLAS}${olas} OLAS `;
   }, [homeChainId, serviceFundRequirements]);
 
   // Calculate the required native token (Eg. ETH)
   const nativeTokenRequired = useMemo(() => {
+    if (!serviceFundRequirements[homeChainId]) return;
+
     const native = serviceFundRequirements[homeChainId][nativeTokenSymbol];
     return `${native} ${nativeTokenSymbol}`;
   }, [homeChainId, serviceFundRequirements, nativeTokenSymbol]);
 
   // Calculate additional tokens requirements (Eg. USDC)
   const additionalTokensRequired = useMemo(() => {
+    if (!serviceFundRequirements[homeChainId]) return [];
+
     const additionalTokens = Object.keys(
       serviceFundRequirements[homeChainId],
     ).filter(
@@ -63,7 +69,7 @@ export const FundsToActivate = ({
     if (additionalTokens.length === 0) return [];
 
     return additionalTokens.map((tokenSymbol) => {
-      const token = serviceFundRequirements[homeChainId][tokenSymbol];
+      const token = serviceFundRequirements[homeChainId]?.[tokenSymbol];
       return `${token} ${tokenSymbol}`;
     });
   }, [homeChainId, serviceFundRequirements, nativeTokenSymbol]);

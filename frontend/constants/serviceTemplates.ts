@@ -1,11 +1,11 @@
+import { ethers } from 'ethers';
+
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { MODE_TOKEN_CONFIG } from '@/config/tokens';
 import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 import { parseEther, parseUnits } from '@/utils/numberFormatters';
-
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
@@ -31,7 +31,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         monthly_gas_estimate: +parseEther(10),
         fund_requirements: {
           // zero address means native currency
-          [ZERO_ADDRESS]: {
+          [ethers.constants.AddressZero]: {
             agent: +parseEther(0.1),
             safe: +parseEther(5),
           },
@@ -184,7 +184,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         monthly_gas_estimate: +parseEther(0.045),
         fund_requirements: {
           // zero address means native currency
-          [ZERO_ADDRESS]: {
+          [ethers.constants.AddressZero]: {
             agent: +parseEther(0.001),
             safe: +parseEther(0.0125),
           },
@@ -293,7 +293,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: +parseEther(20),
         monthly_gas_estimate: +parseEther(0.00516),
         fund_requirements: {
-          [ZERO_ADDRESS]: {
+          [ethers.constants.AddressZero]: {
             // zero address means native currency
             agent: +parseEther(0.0005),
             safe: +parseEther(0.005),
