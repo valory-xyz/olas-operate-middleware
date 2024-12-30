@@ -13,7 +13,7 @@ import { StakingProgramMap } from '.';
 export const MODE_STAKING_PROGRAMS_CONTRACT_ADDRESSES: Record<string, Address> =
   {
     [StakingProgramId.ModiusAlpha]:
-      '0x534c0a05b6d4d28d5f3630d6d74857b253cf8332',
+      '0x534C0A05B6d4d28d5f3630D6D74857B253cf8332',
   };
 
 export const MODE_STAKING_PROGRAMS: StakingProgramMap = {
