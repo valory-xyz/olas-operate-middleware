@@ -64,11 +64,11 @@ const DisplayRewards = () => {
     return (
       <AnimatePresence>
         {isEligibleForRewards ? (
-          <motion.div key="earned" custom="up" {...commonMotionProps}>
+          <motion.div key="earned" {...commonMotionProps}>
             <Tag color="success">Earned</Tag>
           </motion.div>
         ) : (
-          <motion.div key="not-earned" custom="down" {...commonMotionProps}>
+          <motion.div key="not-earned" {...commonMotionProps}>
             <Tag color="processing">Not yet earned</Tag>
           </motion.div>
         )}
