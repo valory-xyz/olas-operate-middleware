@@ -1,5 +1,5 @@
 import { Flex, Skeleton, Tag, Typography } from 'antd';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, HTMLMotionProps, motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
@@ -17,16 +17,13 @@ const { Text } = Typography;
 
 // Variants for animations
 const tagVariants = {
-  initial: (direction: 'up' | 'down') => ({
-    y: 10,
-    opacity: 0,
-  }),
+  initial: { y: 10, opacity: 0 },
   animate: { y: 0, opacity: 1, transition: { duration: 0.5 } },
-  exit: (direction: 'up' | 'down') => ({
+  exit: {
     y: -10,
     opacity: 0,
     transition: { duration: 0.5 },
-  }),
+  },
 };
 
 const Loader = () => (
@@ -62,18 +59,19 @@ const DisplayRewards = () => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
       return <Skeleton.Input size="small" />;
     }
+
+    const commonMotionProps: HTMLMotionProps<'div'> = {
+      initial: 'initial',
+      animate: 'animate',
+      exit: 'exit',
+      variants: tagVariants,
+      style: { position: 'absolute' },
+    };
+
     if ((isEligibleForRewards || someValue === 1) && showEarned) {
       return (
         <AnimatePresence>
-          <motion.div
-            key="earned"
-            custom="up"
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            variants={tagVariants}
-            style={{ position: 'absolute' }}
-          >
+          <motion.div key="earned" custom="up" {...commonMotionProps}>
             <Tag color="success">Earned</Tag>
           </motion.div>
         </AnimatePresence>
@@ -82,15 +80,7 @@ const DisplayRewards = () => {
 
     return (
       <AnimatePresence onExitComplete={() => setShowEarned(true)}>
-        <motion.div
-          key="not-earned"
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          custom="down"
-          variants={tagVariants}
-          style={{ position: 'absolute' }}
-        >
+        <motion.div key="not-earned" custom="down" {...commonMotionProps}>
           <Tag color="processing">Not yet earned</Tag>
         </motion.div>
       </AnimatePresence>
@@ -109,8 +99,7 @@ const DisplayRewards = () => {
       {isBalancesLoaded ? (
         <Flex align="center" gap={12}>
           <Text className="text-xl font-weight-600">{reward} OLAS&nbsp;</Text>
-          {/* {earnedTag} */}
-          <div style={{ position: 'relative', top: -12 }}>{earnedTag}</div>
+          <div style={{ position: 'relative', top: -14 }}>{earnedTag}</div>
         </Flex>
       ) : (
         <Loader />
