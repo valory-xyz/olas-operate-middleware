@@ -1,27 +1,45 @@
-import { animate, motion, useMotionValue, useTransform } from 'framer-motion';
+import { motion, useSpring } from 'framer-motion';
 import { isNil } from 'lodash';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 
-type AnimatedNumberProps = { earned: number | null };
+import { balanceFormat } from '@/utils/numberFormatters';
 
-const AnimatedNumber = ({ earned }: AnimatedNumberProps) => {
-  const motionValue = useMotionValue(0);
+type AnimatedNumberProps = {
+  value: number | null;
+  formatter?: (value: number) => string;
+};
 
-  // Transform the motion value to a number with 2 decimals
-  const animatedValue = useTransform(motionValue, (value) => value.toFixed(2));
+/**
+ * Animate the number from 0 to the given value.
+ */
+const AnimatedNumber = ({
+  value,
+  formatter = balanceFormat,
+}: AnimatedNumberProps) => {
+  const springValue = useSpring(0, {
+    stiffness: 120, // Adjust to control how quickly it moves
+    damping: 20, // Adjust for smooth deceleration
+  });
 
-  // Update the motion value whenever "earned" changes
+  const [displayValue, setDisplayValue] = useState(0);
+
+  // Update spring target whenever value changes
   useEffect(() => {
-    if (!isNil(earned)) {
-      const controls = animate(motionValue, earned, {
-        duration: 1, // Animation duration in seconds
-        ease: 'easeOut',
-      });
-      return controls.stop; // Clean up animation on unmount
+    if (!isNil(value)) {
+      springValue.set(value);
     }
-  }, [earned, motionValue]);
+  }, [value, springValue]);
 
-  return <motion.div>{animatedValue}</motion.div>;
+  // Listen to the spring value changes
+  useEffect(() => {
+    const unsubscribe = springValue.on('change', (latest) => {
+      setDisplayValue(parseFloat(latest.toFixed(2)));
+    });
+
+    return () => unsubscribe();
+  }, [springValue]);
+
+  return <motion.div>{formatter(displayValue)}</motion.div>;
 };
 
 export const AnimatedNumberExample = () => {
@@ -31,7 +49,7 @@ export const AnimatedNumberExample = () => {
     // Simulate initial value setting
     const timer1 = setTimeout(() => setEarned(0), 1000);
     // Simulate an update to the "earned" value
-    const timer2 = setTimeout(() => setEarned(123.45), 3000);
+    const timer2 = setTimeout(() => setEarned(90.45), 3000);
 
     return () => {
       clearTimeout(timer1);
@@ -39,10 +57,18 @@ export const AnimatedNumberExample = () => {
     };
   }, []);
 
+  // setinterval every 3 seconds to random value between 0 and 100
+  // useEffect(() => {
+  //   const interval = setInterval(() => {
+  //     setEarned(Math.random() * 100);
+  //   }, 3000);
+  //   return () => clearInterval(interval);
+  // }, []);
+
   return (
     <div>
-      <div>Earned Amount</div>
-      <AnimatedNumber earned={earned} />
+      <div>Earned Amount </div>
+      <AnimatedNumber value={earned} />
     </div>
   );
 };
