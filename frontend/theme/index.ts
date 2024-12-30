@@ -48,3 +48,6 @@ export const mainTheme: ThemeConfig = {
     },
   },
 };
+
+// TODO: consolidate theme into mainTheme
+export const LOCAL_FORM_THEME = { components: { Input: { fontSize: 16 } } };

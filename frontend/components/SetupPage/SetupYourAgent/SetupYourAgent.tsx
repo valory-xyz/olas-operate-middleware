@@ -7,15 +7,13 @@ import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
+import { LOCAL_FORM_THEME } from '@/theme';
 
 import { SetupCreateHeader } from '../Create/SetupCreateHeader';
 import { MemeooorrAgentForm } from './MemeooorrAgentForm/MemeooorrAgentForm';
 import { ModiusAgentForm } from './ModiusAgentForm/ModiusAgentForm';
 
 const { Title, Text } = Typography;
-
-// TODO: consolidate theme into mainTheme
-const LOCAL_THEME = { components: { Input: { fontSize: 16 } } };
 
 export const SetupYourAgent = () => {
   const { selectedAgentType } = useServices();
@@ -35,7 +33,7 @@ export const SetupYourAgent = () => {
   }
 
   return (
-    <ConfigProvider theme={LOCAL_THEME}>
+    <ConfigProvider theme={LOCAL_FORM_THEME}>
       <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }}>
         <SetupCreateHeader prev={SetupScreen.AgentSelection} />
         <Title level={3}>Set up your agent</Title>

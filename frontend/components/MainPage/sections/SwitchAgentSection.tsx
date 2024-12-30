@@ -1,8 +1,10 @@
+import { ControlOutlined } from '@ant-design/icons';
 import { Button, Flex, Popover, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
+import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
@@ -10,6 +12,22 @@ import { useServices } from '@/hooks/useServices';
 import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 
 const { Text } = Typography;
+
+const UpdateTemplate = () => {
+  const { goto } = usePageState();
+  const { selectedAgentType } = useServices();
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    goto(Pages.UpdateAgentTemplate);
+  };
+
+  if (selectedAgentType === AgentType.Memeooorr) {
+    return <ControlOutlined onClick={handleClick} />;
+  }
+
+  return null;
+};
 
 export const SwitchAgentSection = () => {
   const { goto } = usePageState();
@@ -51,6 +69,7 @@ export const SwitchAgentSection = () => {
           alt={selectedAgentConfig.displayName}
         />
         <Text>{selectedAgentConfig.displayName}</Text>
+        <UpdateTemplate />
       </Flex>
 
       {isSwitchAgentEnabled ? (

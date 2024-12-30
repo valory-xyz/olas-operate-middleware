@@ -161,7 +161,7 @@ const getDeployment = async (serviceConfigId: string): Promise<Deployment> =>
  * @param serviceTemplate ServiceTemplate
  * @returns Promise<Service>
  */
-export const withdrawBalance = async ({
+const withdrawBalance = async ({
   withdrawAddress,
   serviceConfigId,
 }: {

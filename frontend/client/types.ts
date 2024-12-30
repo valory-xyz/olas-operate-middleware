@@ -55,6 +55,7 @@ export type EnvVariableAttributes = {
 
 export type MiddlewareServiceResponse = {
   service_config_id: string; // TODO: update with uuid once middleware integrated
+  version: number;
   name: string;
   description: string;
   hash: string;
@@ -64,7 +65,10 @@ export type MiddlewareServiceResponse = {
   home_chain: MiddlewareChain;
   keys: ServiceKeys[];
   service_path?: string;
-  version: string;
+  description: string;
+  env_variables: {
+    [key: string]: EnvVariableAttributes;
+  };
   chain_configs: {
     [middlewareChain: string]: {
       ledger_config: LedgerConfig;
