@@ -9,6 +9,7 @@ import {
 } from 'react';
 
 import { ServiceTemplate } from '@/client';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
@@ -49,7 +50,18 @@ export const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
           ...formValues,
           env_variables: {
             ...Object.entries(formValues.env_variables ?? {}).reduce(
-              (acc, [key, value]) => ({ ...acc, [key]: { value } }),
+              (acc, [key, value]) => ({
+                ...acc,
+                [key]: {
+                  // Pass the environment variable details
+                  // in case the variable doesn't exist yet in the service
+                  ...(SERVICE_TEMPLATES.find(
+                    (template) => template.name === selectedService.name,
+                  )?.env_variables?.[key] || {}),
+                  // Update with the value from the form
+                  value,
+                },
+              }),
               {},
             ),
           },
