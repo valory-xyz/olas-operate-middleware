@@ -18,12 +18,12 @@ const { Text } = Typography;
 // Variants for animations
 const tagVariants = {
   initial: (direction: 'up' | 'down') => ({
-    y: direction === 'up' ? -20 : 20,
+    y: 10,
     opacity: 0,
   }),
   animate: { y: 0, opacity: 1, transition: { duration: 0.5 } },
   exit: (direction: 'up' | 'down') => ({
-    y: direction === 'up' ? 20 : -20,
+    y: -10,
     opacity: 0,
     transition: { duration: 0.5 },
   }),
@@ -50,52 +50,57 @@ const DisplayRewards = () => {
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
   const [someValue, setSomeValue] = useState(0);
+  const [showEarned, setShowEarned] = useState(false);
 
   // after 5 seconds, set someValue to 1
   setTimeout(() => {
     setSomeValue(1);
+    setShowEarned(true);
   }, 3000);
-
-  console.log('someValue', someValue);
 
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
       return <Skeleton.Input size="small" />;
     }
-    if (isEligibleForRewards || someValue === 1) {
+    if ((isEligibleForRewards || someValue === 1) && showEarned) {
       return (
-        <motion.div
-          key="earned"
-          custom="up"
-          initial="initial"
-          animate="animate"
-          exit="exit"
-          variants={tagVariants}
-          style={{ position: 'absolute' }}
-        >
-          <Tag color="success">Earned</Tag>
-        </motion.div>
+        <AnimatePresence>
+          <motion.div
+            key="earned"
+            custom="up"
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            variants={tagVariants}
+            style={{ position: 'absolute' }}
+          >
+            <Tag color="success">Earned</Tag>
+          </motion.div>
+        </AnimatePresence>
       );
     }
 
     return (
-      <motion.div
-        key="not-earned"
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        custom="down"
-        variants={tagVariants}
-        style={{ position: 'absolute' }}
-      >
-        <Tag color="processing">Not yet earned</Tag>
-      </motion.div>
+      <AnimatePresence onExitComplete={() => setShowEarned(true)}>
+        <motion.div
+          key="not-earned"
+          initial="initial"
+          animate="animate"
+          exit="exit"
+          custom="down"
+          variants={tagVariants}
+          style={{ position: 'absolute' }}
+        >
+          <Tag color="processing">Not yet earned</Tag>
+        </motion.div>
+      </AnimatePresence>
     );
   }, [
     isEligibleForRewards,
     isStakingRewardsDetailsLoading,
     isStakingRewardsDetailsError,
     someValue,
+    showEarned,
   ]);
 
   return (
@@ -104,9 +109,8 @@ const DisplayRewards = () => {
       {isBalancesLoaded ? (
         <Flex align="center" gap={12}>
           <Text className="text-xl font-weight-600">{reward} OLAS&nbsp;</Text>
-          {/* <div style={{ position: 'relative' }}> */}
-          <AnimatePresence>{earnedTag}</AnimatePresence>
-          {/* </div> */}
+          {/* {earnedTag} */}
+          <div style={{ position: 'relative', top: -12 }}>{earnedTag}</div>
         </Flex>
       ) : (
         <Loader />
