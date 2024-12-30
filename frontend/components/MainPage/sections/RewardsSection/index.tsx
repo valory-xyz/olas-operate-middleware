@@ -1,6 +1,6 @@
 import { Flex, Skeleton, Tag, Typography } from 'antd';
 import { AnimatePresence, HTMLMotionProps, motion } from 'framer-motion';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
@@ -46,14 +46,14 @@ const DisplayRewards = () => {
   const { isLoaded: isBalancesLoaded } = useBalanceContext();
   const reward = getFormattedReward(availableRewardsForEpochEth);
 
-  const [someValue, setSomeValue] = useState(0);
   const [showEarned, setShowEarned] = useState(false);
 
-  // after 5 seconds, set someValue to 1
-  setTimeout(() => {
-    setSomeValue(1);
-    setShowEarned(true);
-  }, 3000);
+  console.log('someValue', { isEligibleForRewards, showEarned });
+
+  // as
+  useEffect(() => {
+    setShowEarned(isEligibleForRewards ? true : false);
+  }, [isEligibleForRewards]);
 
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
@@ -68,28 +68,59 @@ const DisplayRewards = () => {
       style: { position: 'absolute' },
     };
 
-    if ((isEligibleForRewards || someValue === 1) && showEarned) {
-      return (
+    // if (isEligibleForRewards && showEarned) {
+    //   return (
+    //     <AnimatePresence>
+    //       <motion.div key="earned" custom="up" {...commonMotionProps}>
+    //         <Tag color="success">Earned</Tag>
+    //       </motion.div>
+    //     </AnimatePresence>
+    //   );
+    // }
+
+    return (
+      <>
+        <AnimatePresence onExitComplete={() => setShowEarned(true)}>
+          {!isEligibleForRewards && !showEarned && (
+            <motion.div key="not-earned" custom="down" {...commonMotionProps}>
+              <Tag color="processing">Not yet earned</Tag>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <AnimatePresence>
-          <motion.div key="earned" custom="up" {...commonMotionProps}>
-            <Tag color="success">Earned</Tag>
+          {showEarned && (
+            <motion.div key="earned" custom="up" {...commonMotionProps}>
+              <Tag color="success">Earned</Tag>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </>
+    );
+
+    if (!isEligibleForRewards && !showEarned) {
+      return (
+        <AnimatePresence onExitComplete={() => setShowEarned(true)}>
+          <motion.div key="not-earned" custom="down" {...commonMotionProps}>
+            <Tag color="processing">Not yet earned</Tag>
           </motion.div>
         </AnimatePresence>
       );
     }
 
     return (
-      <AnimatePresence onExitComplete={() => setShowEarned(true)}>
-        <motion.div key="not-earned" custom="down" {...commonMotionProps}>
-          <Tag color="processing">Not yet earned</Tag>
-        </motion.div>
+      <AnimatePresence mode="wait" onExitComplete={() => setShowEarned(true)}>
+        {showEarned && (
+          <motion.div key="earned" custom="up" {...commonMotionProps}>
+            <Tag color="success">Earned</Tag>
+          </motion.div>
+        )}
       </AnimatePresence>
     );
   }, [
     isEligibleForRewards,
     isStakingRewardsDetailsLoading,
     isStakingRewardsDetailsError,
-    someValue,
     showEarned,
   ]);
 
