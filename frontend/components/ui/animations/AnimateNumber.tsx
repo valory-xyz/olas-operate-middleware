@@ -41,34 +41,3 @@ export const AnimateNumber = ({
 
   return <motion.span>{formatter(displayValue)}</motion.span>;
 };
-
-export const AnimatedNumberExample = () => {
-  const [earned, setEarned] = React.useState<number | null>(null);
-
-  useEffect(() => {
-    // Simulate initial value setting
-    const timer1 = setTimeout(() => setEarned(0), 1000);
-    // Simulate an update to the "earned" value
-    const timer2 = setTimeout(() => setEarned(90.45), 3000);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-    };
-  }, []);
-
-  // setinterval every 3 seconds to random value between 0 and 100
-  // useEffect(() => {
-  //   const interval = setInterval(() => {
-  //     setEarned(Math.random() * 100);
-  //   }, 3000);
-  //   return () => clearInterval(interval);
-  // }, []);
-
-  return (
-    <div>
-      <div>Earned Amount </div>
-      <AnimateNumber value={earned} />
-    </div>
-  );
-};
