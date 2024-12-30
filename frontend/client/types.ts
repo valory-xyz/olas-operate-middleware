@@ -63,10 +63,6 @@ export type MiddlewareServiceResponse = {
   home_chain: MiddlewareChain;
   keys: ServiceKeys[];
   service_path?: string;
-  description: string;
-  env_variables: {
-    [key: string]: EnvVariableAttributes;
-  };
   chain_configs: {
     [middlewareChain: string]: {
       ledger_config: LedgerConfig;
