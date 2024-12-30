@@ -140,15 +140,15 @@ export const AGENT_CONFIG: {
           [TokenSymbol.ETH]: 0.0002,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.001,
+          [TokenSymbol.ETH]: 0.01,
         },
       },
       [WalletOwnerType.Agent]: {
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.00005,
+          [TokenSymbol.ETH]: 0.0005,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.0005,
+          [TokenSymbol.ETH]: 0.005,
         },
       },
     },

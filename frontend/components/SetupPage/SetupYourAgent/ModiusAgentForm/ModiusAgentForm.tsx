@@ -130,14 +130,7 @@ export const ModiusAgentForm = ({ serviceTemplate }: ModiusAgentFormProps) => {
           label="Tenderly project slug"
           {...commonFieldProps}
         >
-          <Input
-            addonBefore="@"
-            onKeyDown={(e) => {
-              if (e.key === '@') {
-                e.preventDefault();
-              }
-            }}
-          />
+          <Input />
         </Form.Item>
 
         <Form.Item
