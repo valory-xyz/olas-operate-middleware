@@ -3,11 +3,11 @@ import { AnimatePresence, HTMLMotionProps, motion } from 'framer-motion';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
+import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
 import { NA } from '@/constants/symbols';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useReward } from '@/hooks/useReward';
-import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../../styled/CardSection';
 import { NotifyRewardsModal } from './NotifyRewardsModal';
@@ -53,8 +53,6 @@ const DisplayRewards = () => {
     isStakingRewardsDetailsError,
   } = useReward();
   const { isLoaded: isBalancesLoaded } = useBalanceContext();
-  const formattedReward =
-    reward === undefined ? NA : `~${balanceFormat(reward, 2)}`;
 
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
@@ -86,7 +84,15 @@ const DisplayRewards = () => {
       {isBalancesLoaded ? (
         <Flex align="center" gap={12}>
           <Text className="text-xl font-weight-600">
-            {formattedReward} OLAS&nbsp;
+            {reward === undefined ? (
+              NA
+            ) : (
+              <>
+                ~
+                <AnimateNumber value={reward} />
+              </>
+            )}
+            &nbsp;OLAS&nbsp;
           </Text>
           <EarnedTagContainer>{earnedTag}</EarnedTagContainer>
         </Flex>
