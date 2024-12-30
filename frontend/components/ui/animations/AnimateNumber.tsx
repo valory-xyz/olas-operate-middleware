@@ -12,7 +12,7 @@ type AnimatedNumberProps = {
 /**
  * Animate the number from 0 to the given value.
  */
-const AnimatedNumber = ({
+export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
 }: AnimatedNumberProps) => {
@@ -39,7 +39,7 @@ const AnimatedNumber = ({
     return () => unsubscribe();
   }, [springValue]);
 
-  return <motion.div>{formatter(displayValue)}</motion.div>;
+  return <motion.span>{formatter(displayValue)}</motion.span>;
 };
 
 export const AnimatedNumberExample = () => {
@@ -68,7 +68,7 @@ export const AnimatedNumberExample = () => {
   return (
     <div>
       <div>Earned Amount </div>
-      <AnimatedNumber value={earned} />
+      <AnimateNumber value={earned} />
     </div>
   );
 };
