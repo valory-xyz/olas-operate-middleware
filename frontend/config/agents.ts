@@ -140,7 +140,7 @@ export const AGENT_CONFIG: {
           [TokenSymbol.ETH]: 0.0002,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.01,
+          [TokenSymbol.ETH]: 0.0055,
         },
       },
       [WalletOwnerType.Agent]: {
