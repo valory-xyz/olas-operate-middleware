@@ -115,6 +115,10 @@ const EachAgent = memo(
       updateAgentType,
     ]);
 
+    if (agentConfig.isAgentEnabled === false) {
+      return null;
+    }
+
     return (
       <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
         <Flex vertical>
