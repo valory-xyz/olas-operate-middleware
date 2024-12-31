@@ -112,7 +112,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         )
         if result.returncode != 0:
             raise RuntimeError(
-                f"Error running: {args} @ {cwd}\n{result.stderr.decode()}"
+                f"Error running: {args} @ {cwd}\n{result.stdout} \n {result.stderr}"
             )
 
     def _prepare_agent_env(self) -> Any:
