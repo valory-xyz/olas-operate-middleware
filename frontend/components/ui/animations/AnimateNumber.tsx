@@ -16,14 +16,10 @@ export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
 }: AnimatedNumberProps) => {
-  const springValue = useSpring(0, {
-    stiffness: 120, // Adjust to control how quickly it moves
-    damping: 20, // Adjust for smooth deceleration
-  });
-
   const [displayValue, setDisplayValue] = useState(0);
 
-  // Update spring target whenever value changes
+  const springValue = useSpring(0, { stiffness: 120, damping: 20 });
+
   useEffect(() => {
     if (!isNil(value)) {
       springValue.set(value);
@@ -39,5 +35,9 @@ export const AnimateNumber = ({
     return () => unsubscribe();
   }, [springValue]);
 
-  return <motion.span>{formatter(displayValue)}</motion.span>;
+  return (
+    <motion.span>
+      {formatter ? formatter(displayValue) : displayValue}
+    </motion.span>
+  );
 };
