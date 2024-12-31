@@ -2,10 +2,11 @@ import { motion, useSpring } from 'framer-motion';
 import { isNil } from 'lodash';
 import React, { useEffect, useState } from 'react';
 
+import { Nullable } from '@/types/Util';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 type AnimatedNumberProps = {
-  value: number | null;
+  value: Nullable<number>;
   formatter?: (value: number) => string;
 };
 
@@ -32,8 +33,8 @@ export const AnimateNumber = ({
     const unsubscribe = springValue.on('change', (latest) => {
       const now = Date.now();
 
-      // Only update the state at most every 60ms
-      if (now - lastUpdate > 60) {
+      // Only update the state at most every 100ms
+      if (now - lastUpdate > 100) {
         lastUpdate = now;
         setDisplayValue(parseFloat(latest.toFixed(2)));
       }
