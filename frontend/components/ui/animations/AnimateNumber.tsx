@@ -18,7 +18,7 @@ export const AnimateNumber = ({
 }: AnimatedNumberProps) => {
   const [displayValue, setDisplayValue] = useState(0);
 
-  const springValue = useSpring(0, { stiffness: 120, damping: 20 });
+  const springValue = useSpring(0, { stiffness: 150, damping: 25 });
 
   useEffect(() => {
     if (!isNil(value)) {
@@ -26,10 +26,17 @@ export const AnimateNumber = ({
     }
   }, [value, springValue]);
 
-  // Listen to the spring value changes
   useEffect(() => {
+    let lastUpdate = Date.now();
+
     const unsubscribe = springValue.on('change', (latest) => {
-      setDisplayValue(parseFloat(latest.toFixed(2)));
+      const now = Date.now();
+
+      // Only update the state at most every 60ms
+      if (now - lastUpdate > 60) {
+        lastUpdate = now;
+        setDisplayValue(parseFloat(latest.toFixed(2)));
+      }
     });
 
     return () => unsubscribe();
