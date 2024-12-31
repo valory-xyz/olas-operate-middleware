@@ -108,16 +108,9 @@ class ChainMixin:
     @property
     def ledger_type(self) -> LedgerType:
         """Ledger type."""
-        if self in (
-            Chain.ETHEREUM,
-            Chain.GOERLI,
-            Chain.GNOSIS,
-            Chain.BASE,
-            Chain.OPTIMISTIC,
-            Chain.MODE,
-        ):
-            return LedgerType.ETHEREUM
-        return LedgerType.SOLANA
+        if self in (Chain.SOLANA,):
+            return LedgerType.SOLANA
+        return LedgerType.ETHEREUM
 
     @classmethod
     def from_string(cls, chain: str) -> "Chain":
