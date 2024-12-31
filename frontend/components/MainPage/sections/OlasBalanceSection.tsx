@@ -3,6 +3,7 @@ import { sum } from 'lodash';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
+import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
@@ -14,7 +15,6 @@ import {
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
-import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../styled/CardSection';
 
@@ -36,7 +36,7 @@ export const MainOlasBalance = () => {
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
 
   const displayedBalance = useMemo(() => {
-    // olas across master wallet -- safes and eoa -- on relevant chains for agent
+    // olas across master wallet (safes and eoa) on relevant chains for agent
     const masterWalletOlasBalance = masterWalletBalances?.reduce(
       (acc, { symbol, balance, evmChainId }) => {
         if (
@@ -81,7 +81,7 @@ export const MainOlasBalance = () => {
       serviceStakedOlasBalance,
     ]);
 
-    return balanceFormat(totalOlasBalance, 2);
+    return totalOlasBalance;
   }, [
     masterWalletBalances,
     selectedAgentConfig.requiresAgentSafesOn,
@@ -114,7 +114,9 @@ export const MainOlasBalance = () => {
 
           <Flex align="end">
             <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
-            <Balance className="balance">{displayedBalance}</Balance>
+            <Balance className="balance">
+              <AnimateNumber value={displayedBalance} />
+            </Balance>
             <span className="balance-currency">OLAS</span>
           </Flex>
         </Flex>
