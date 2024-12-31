@@ -38,7 +38,7 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
@@ -1491,19 +1491,25 @@ class ServiceManager:
                     address=key.address,
                 )
                 self.logger.info(
-                    f"Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
+                    f"[FUNDING_JOB] Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
                 )
                 if agent_fund_threshold > 0:
-                    self.logger.info(f"Required balance: {agent_fund_threshold}")
+                    self.logger.info(f"[FUNDING_JOB] Required balance: {agent_fund_threshold}")
                     if agent_balance < agent_fund_threshold:
-                        self.logger.info("Funding agents")
-                        to_transfer = (
+                        self.logger.info("[FUNDING_JOB] Funding agents")
+                        target_balance = (
                             asset_funding_values["agent"]["topup"]
                             if asset_funding_values is not None
                             else fund_requirements.agent
                         )
+                        transferable_balance = get_asset_balance(
+                            ledger_api=ledger_api,
+                            contract_address=asset_address,
+                            address=wallet.safes[ledger_config.chain],
+                        )
+                        to_transfer = max(min(transferable_balance, target_balance - agent_balance), 0)
                         self.logger.info(
-                            f"Transferring {to_transfer} asset ({asset_address}) to {key.address}"
+                            f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {key.address}"
                         )
                         wallet.transfer_asset(
                             asset=asset_address,
@@ -1519,24 +1525,38 @@ class ServiceManager:
                 contract_address=asset_address,
                 address=chain_data.multisig,
             )
+            if asset_address == ZERO_ADDRESS:
+                # also count the balance of the wrapped native asset
+                safe_balance += get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=WRAPPED_NATIVE_ASSET.get(chain, asset_address),
+                    address=chain_data.multisig,
+                )
+
             safe_fund_treshold = (
                 asset_funding_values["safe"]["threshold"]
                 if asset_funding_values is not None
                 else fund_requirements.safe
             )
             self.logger.info(
-                f"Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}"
+                f"[FUNDING_JOB] Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}"
             )
-            self.logger.info(f"Required balance: {safe_fund_treshold}")
+            self.logger.info(f"[FUNDING_JOB] Required balance: {safe_fund_treshold}")
             if safe_balance < safe_fund_treshold:
-                self.logger.info("Funding safe")
-                to_transfer = (
+                self.logger.info("[FUNDING_JOB] Funding safe")
+                target_balance = (
                     asset_funding_values["safe"]["topup"]
                     if asset_funding_values is not None
                     else fund_requirements.safe
                 )
+                transferable_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=asset_address,
+                    address=wallet.safes[ledger_config.chain],
+                )
+                to_transfer = max(min(transferable_balance, target_balance - safe_balance), 0)
                 self.logger.info(
-                    f"Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
+                    f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
                 )
                 # TODO: This is a temporary fix
                 # we avoid the error here because there is a seperate prompt on the UI
