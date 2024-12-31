@@ -18,7 +18,7 @@ export type AgentConfig = {
   serviceApi: typeof PredictTraderService;
   displayName: string;
   description: string;
-  isAgentEnabled?: boolean;
+  isAgentEnabled: boolean;
   operatingThresholds: {
     [owner: string | WalletOwnerType]: {
       [walletType: string | WalletOwnerType]: {
