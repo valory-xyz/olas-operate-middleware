@@ -38,7 +38,6 @@ _ACTIONS = {
     "stop": 3,
 }
 
-CHAIN_NAME_TO_CHAIN_ID["mode"] = 34443  # TODO: update open-autonomy and remove this
 CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
 
 _CHAIN_ID_TO_CHAIN_NAME = {
@@ -86,7 +85,6 @@ Chain = enum.Enum(
     "Chain",
     [(member.name, member.value) for member in ChainType]
     + [
-        ("MODE", "mode"),  # TODO: update open-autonomy version and remove this
         ("SOLANA", "solana"),
     ],
 )
