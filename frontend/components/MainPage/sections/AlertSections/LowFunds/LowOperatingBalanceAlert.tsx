@@ -1,13 +1,8 @@
 import { Flex, Typography } from 'antd';
-import { isNil } from 'lodash';
-import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { WalletType } from '@/enums/Wallet';
-import {
-  useMasterBalances,
-  useServiceBalances,
-} from '@/hooks/useBalanceContext';
+import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
@@ -21,12 +16,9 @@ const { Text, Title } = Typography;
  */
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentType, selectedService } = useServices();
+  const { selectedAgentType } = useServices();
   const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
     useMasterBalances();
-  const { isServiceSafeLowOnNativeGas } = useServiceBalances(
-    selectedService?.service_config_id,
-  );
 
   const {
     chainName,
@@ -36,18 +28,10 @@ export const LowOperatingBalanceAlert = () => {
     agentThresholds,
   } = useLowFundsDetails();
 
-  const isLowBalance = useMemo(() => {
-    if (isNil(isMasterSafeLowOnNativeGas)) return false;
-    if (isNil(isServiceSafeLowOnNativeGas)) return false;
-
-    // Check both master and agent safes
-    return isMasterSafeLowOnNativeGas || isServiceSafeLowOnNativeGas;
-  }, [isMasterSafeLowOnNativeGas, isServiceSafeLowOnNativeGas]);
-
   if (!isBalanceLoaded) return null;
   if (!agentThresholds) return null;
   if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
-  if (!isLowBalance) return null;
+  if (!isMasterSafeLowOnNativeGas) return null;
 
   return (
     <CustomAlert

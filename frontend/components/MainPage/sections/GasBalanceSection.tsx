@@ -75,7 +75,6 @@ const BalanceStatus = () => {
     if (!showNotification) return;
     if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
 
-    // Check both master and agent safes
     if (isLowFunds && !isLowBalanceNotificationShown) {
       showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
