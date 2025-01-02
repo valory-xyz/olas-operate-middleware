@@ -70,14 +70,20 @@ const BalanceStatus = () => {
     [serviceSafeBalances, selectedAgentConfig],
   );
 
+  /**
+   * If the master safe is low on native gas and the service safe balance is below the threshold,
+   */
   const isLowFunds = useMemo(() => {
     if (!serviceSafeNativeBalance) return false;
+
+    const masterSafeThreshold =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+        WalletType.Safe
+      ][serviceSafeNativeBalance.symbol];
+
     return (
       isMasterSafeLowOnNativeGas &&
-      serviceSafeNativeBalance.balance <
-        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-          WalletType.Safe
-        ][serviceSafeNativeBalance.symbol]
+      serviceSafeNativeBalance.balance < masterSafeThreshold
     );
   }, [
     isMasterSafeLowOnNativeGas,

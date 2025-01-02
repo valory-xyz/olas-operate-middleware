@@ -24,41 +24,36 @@ export const LowOperatingBalanceAlert = () => {
     useServices();
   const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
     useMasterBalances();
-  const { serviceSafeBalances } = useServiceBalances(
+  const { serviceSafeBalances, serviceSafeNative } = useServiceBalances(
     selectedService?.service_config_id,
   );
 
-  const { chainName, tokenSymbol, masterSafeAddress, masterThresholds } =
-    useLowFundsDetails();
-
-  const serviceSafeNativeBalance = useMemo(
-    () =>
-      serviceSafeBalances?.find(
-        ({ isNative, evmChainId }) =>
-          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
-      ),
-    [serviceSafeBalances, selectedAgentConfig],
-  );
+  const {
+    chainName,
+    tokenSymbol,
+    masterSafeAddress,
+    masterThresholds,
+    agentThresholds,
+  } = useLowFundsDetails();
 
   const isLowBalance = useMemo(() => {
-    if (!masterThresholds) return false;
-    if (!serviceSafeNativeBalance) return false;
+    if (!agentThresholds) return false;
+    if (!serviceSafeNative) return false;
 
     // Check both master and agent safes
     return (
-      isMasterSafeLowOnNativeGas &&
-      serviceSafeNativeBalance.balance <
-        masterThresholds[WalletType.Safe][tokenSymbol]
+      isMasterSafeLowOnNativeGas ||
+      serviceSafeNative.balance < agentThresholds[WalletType.Safe][tokenSymbol]
     );
   }, [
     isMasterSafeLowOnNativeGas,
-    masterThresholds,
-    serviceSafeNativeBalance,
+    agentThresholds,
     tokenSymbol,
+    serviceSafeNative,
   ]);
 
   if (!isBalanceLoaded) return null;
-  if (!masterThresholds) return null;
+  if (!agentThresholds) return null;
   if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
   if (!isLowBalance) return null;
 
