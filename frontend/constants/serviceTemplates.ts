@@ -26,8 +26,8 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: +parseEther(0.001),
         monthly_gas_estimate: +parseEther(10),
         fund_requirements: {
-          agent: +parseEther(0.1),
-          safe: +parseEther(5),
+          agent: +parseEther(2),
+          safe: +parseEther(2),
         },
       },
     },
@@ -176,7 +176,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         cost_of_bond: +parseEther(50),
         monthly_gas_estimate: +parseEther(0.045),
         fund_requirements: {
-          agent: +parseEther(0.001),
+          agent: +parseEther(0.00625),
           safe: +parseEther(0.0125),
         },
       },
