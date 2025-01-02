@@ -958,17 +958,18 @@ class ServiceManager:
         chain_data.on_chain_state = OnChainState(info["service_state"])
 
         # TODO: this is a patch for modius, to be standardized
+        staking_chain = None
+        for chain, config in service.chain_configs.items():
+            if config.chain_data.user_params.use_staking:
+                staking_chain = chain
+                break
+
         service.update_env_variables_values({
             "SAFE_CONTRACT_ADDRESSES": json.dumps({
                 chain: config.chain_data.multisig
                 for chain, config in service.chain_configs.items()
             }, separators=(',', ':')),
-            "STAKING_CHAIN": (
-                Chain.MODE.value if (
-                    Chain.MODE.value in service.chain_configs and
-                    service.chain_configs[Chain.MODE.value].chain_data.user_params.use_staking
-                ) else None
-            ),
+            "STAKING_CHAIN": staking_chain,
         })
         service.store()
 
