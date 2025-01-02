@@ -1,4 +1,5 @@
 import { Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
@@ -20,11 +21,10 @@ const { Text, Title } = Typography;
  */
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentType, selectedService, selectedAgentConfig } =
-    useServices();
+  const { selectedAgentType, selectedService } = useServices();
   const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
     useMasterBalances();
-  const { serviceSafeBalances, serviceSafeNative } = useServiceBalances(
+  const { isServiceSafeLowOnNativeGas } = useServiceBalances(
     selectedService?.service_config_id,
   );
 
@@ -37,20 +37,12 @@ export const LowOperatingBalanceAlert = () => {
   } = useLowFundsDetails();
 
   const isLowBalance = useMemo(() => {
-    if (!agentThresholds) return false;
-    if (!serviceSafeNative) return false;
+    if (isNil(isMasterSafeLowOnNativeGas)) return false;
+    if (isNil(isServiceSafeLowOnNativeGas)) return false;
 
     // Check both master and agent safes
-    return (
-      isMasterSafeLowOnNativeGas ||
-      serviceSafeNative.balance < agentThresholds[WalletType.Safe][tokenSymbol]
-    );
-  }, [
-    isMasterSafeLowOnNativeGas,
-    agentThresholds,
-    tokenSymbol,
-    serviceSafeNative,
-  ]);
+    return isMasterSafeLowOnNativeGas || isServiceSafeLowOnNativeGas;
+  }, [isMasterSafeLowOnNativeGas, isServiceSafeLowOnNativeGas]);
 
   if (!isBalanceLoaded) return null;
   if (!agentThresholds) return null;
