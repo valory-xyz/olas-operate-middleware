@@ -166,7 +166,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   {
     agentType: AgentType.Memeooorr,
     name: 'Memeooorr',
-    hash: 'bafybeidkbylrtawgal322jsi7qvecbkk3havbvdsms7sabbeupabx2nhru',
+    hash: 'bafybeicy44nktxwngev2dlgathl2ir644btp76q63wpcdteim66t6lyjuu',
     description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
     image:
       'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
