@@ -181,7 +181,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
         threshold: 1,
         use_staking: true,
         cost_of_bond: +parseEther(50),
-        monthly_gas_estimate: +parseEther(0.045),
+        monthly_gas_estimate: +parseEther(0.03),
         fund_requirements: {
           // zero address means native currency
           [ethers.constants.AddressZero]: {
