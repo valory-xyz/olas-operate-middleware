@@ -5,7 +5,7 @@ import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
-export type AgentSupportedEvmChainIds =
+export type AgentSupportedEvmChainId =
   | EvmChainId.Gnosis
   | EvmChainId.Base
   | EvmChainId.Mode;
@@ -23,7 +23,7 @@ export type AgentConfig = {
   displayName: string;
   description: string;
   eoaFunding: Partial<{
-    [chainId in AgentSupportedEvmChainIds]: {
+    [chainId in AgentSupportedEvmChainId]: {
       chainConfig: ChainConfig;
     };
   }>;

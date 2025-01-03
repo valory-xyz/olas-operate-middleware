@@ -9,13 +9,12 @@ import { CardSection } from '@/components/styled/CardSection';
 import { AGENT_CONFIG } from '@/config/agents';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { NA } from '@/constants/symbols';
-import { EvmChainId } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
-import { AgentSupportedEvmChainIds } from '@/types/Agent';
+import { AgentSupportedEvmChainId } from '@/types/Agent';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 
@@ -129,8 +128,8 @@ export const SetupEoaFunding = () => {
   const { masterWalletBalances } = useMasterBalances();
   const masterEoaAddress = masterEoa?.address;
 
-  const [currentChain, setCurrentChain] = useState<AgentSupportedEvmChainIds>(
-    selectedAgentConfig.evmHomeChainId as EvmChainId.Base | EvmChainId.Gnosis,
+  const [currentChain, setCurrentChain] = useState<AgentSupportedEvmChainId>(
+    selectedAgentConfig.evmHomeChainId as AgentSupportedEvmChainId,
   );
 
   const currentFundingRequirements =
@@ -160,7 +159,7 @@ export const SetupEoaFunding = () => {
     // goto next chain
     if (nextChainExists) {
       setCurrentChain(
-        chains[indexOfCurrentChain + 1] as unknown as AgentSupportedEvmChainIds,
+        chains[indexOfCurrentChain + 1] as unknown as AgentSupportedEvmChainId,
       );
       return;
     }
