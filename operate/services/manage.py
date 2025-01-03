@@ -959,18 +959,23 @@ class ServiceManager:
 
         # TODO: this is a patch for modius, to be standardized
         staking_chain = None
-        for chain, config in service.chain_configs.items():
+        for chain_, config in service.chain_configs.items():
             if config.chain_data.user_params.use_staking:
-                staking_chain = chain
+                staking_chain = chain_
                 break
 
-        service.update_env_variables_values({
-            "SAFE_CONTRACT_ADDRESSES": json.dumps({
-                chain: config.chain_data.multisig
-                for chain, config in service.chain_configs.items()
-            }, separators=(',', ':')),
-            "STAKING_CHAIN": staking_chain,
-        })
+        service.update_env_variables_values(
+            {
+                "SAFE_CONTRACT_ADDRESSES": json.dumps(
+                    {
+                        chain: config.chain_data.multisig
+                        for chain, config in service.chain_configs.items()
+                    },
+                    separators=(",", ":"),
+                ),
+                "STAKING_CHAIN": staking_chain,
+            }
+        )
         service.store()
 
         if user_params.use_staking:
@@ -1495,7 +1500,9 @@ class ServiceManager:
                     f"[FUNDING_JOB] Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
                 )
                 if agent_fund_threshold > 0:
-                    self.logger.info(f"[FUNDING_JOB] Required balance: {agent_fund_threshold}")
+                    self.logger.info(
+                        f"[FUNDING_JOB] Required balance: {agent_fund_threshold}"
+                    )
                     if agent_balance < agent_fund_threshold:
                         self.logger.info("[FUNDING_JOB] Funding agents")
                         target_balance = (
@@ -1508,7 +1515,9 @@ class ServiceManager:
                             contract_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
-                        to_transfer = max(min(transferable_balance, target_balance - agent_balance), 0)
+                        to_transfer = max(
+                            min(transferable_balance, target_balance - agent_balance), 0
+                        )
                         self.logger.info(
                             f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {key.address}"
                         )
@@ -1555,7 +1564,9 @@ class ServiceManager:
                     contract_address=asset_address,
                     address=wallet.safes[ledger_config.chain],
                 )
-                to_transfer = max(min(transferable_balance, target_balance - safe_balance), 0)
+                to_transfer = max(
+                    min(transferable_balance, target_balance - safe_balance), 0
+                )
                 self.logger.info(
                     f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
                 )
