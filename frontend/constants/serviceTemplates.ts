@@ -7,7 +7,7 @@ import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 import { parseEther, parseUnits } from '@/utils/numberFormatters';
 
-export const PREDICT_AGENT_TEMPLATE: ServiceTemplate = {
+export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
   name: 'Trader Agent',
   hash: 'bafybeicts6zhavxzz2rxahz3wzs2pzamoq64n64wp4q4cdanfuz7id6c2q',
@@ -198,7 +198,7 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
   },
 } as const;
 
-export const MODIUS_BASE_TEMPLATE: ServiceTemplate = {
+export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
   hash: 'bafybeihqho73he6mirkodg4ubom6ngf2nkgebhmxr435yxpsxgsthu5nvy',
@@ -321,9 +321,9 @@ export const MODIUS_BASE_TEMPLATE: ServiceTemplate = {
 } as const;
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
-  PREDICT_AGENT_TEMPLATE,
+  PREDICT_SERVICE_TEMPLATE,
   MEMEOOORR_BASE_TEMPLATE,
-  MODIUS_BASE_TEMPLATE,
+  MODIUS_SERVICE_TEMPLATE,
 ] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;
