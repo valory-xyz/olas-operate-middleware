@@ -1,5 +1,8 @@
 import { MiddlewareChain } from '@/client';
-import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import {
+  MEMEOOORR_BASE_TEMPLATE,
+  PREDICT_AGENT_TEMPLATE,
+} from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
@@ -13,9 +16,13 @@ import { formatEther } from '@/utils/numberFormatters';
 // TODO: complete this config
 // TODO: add funding requirements
 
-const traderFundRequirements = SERVICE_TEMPLATES.find(
-  (template) => template.agentType === AgentType.PredictTrader,
-)?.configurations[MiddlewareChain.GNOSIS].fund_requirements;
+const traderFundRequirements =
+  PREDICT_AGENT_TEMPLATE.configurations[MiddlewareChain.GNOSIS]
+    .fund_requirements;
+
+const memeooorrRequirements =
+  MEMEOOORR_BASE_TEMPLATE.configurations[MiddlewareChain.GNOSIS]
+    .fund_requirements;
 
 export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
@@ -25,9 +32,6 @@ export const AGENT_CONFIG: {
     evmHomeChainId: EvmChainId.Gnosis,
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
     requiresAgentSafesOn: [EvmChainId.Gnosis],
-    agentSafeFundingRequirements: {
-      [EvmChainId.Gnosis]: 0.1,
-    },
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.EOA]: {
@@ -49,7 +53,9 @@ export const AGENT_CONFIG: {
           [TokenSymbol.XDAI]: 0.1,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: 0.1,
+          [TokenSymbol.XDAI]: Number(
+            formatEther(traderFundRequirements?.agent ?? 0),
+          ),
         },
       },
     },
@@ -58,41 +64,26 @@ export const AGENT_CONFIG: {
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
   },
-  // [AgentType.Optimus]: {
-  //   name: 'Optimus',
-  //   homeChainId: ChainId.Optimism,
-  //   requiresAgentSafesOn: [ChainId.Optimism, ChainId.Ethereum, ChainId.Base],
-  //   requiresMasterSafesOn: [ChainId.Optimism, ChainId.Ethereum, ChainId.Base],
-  //   agentSafeFundingRequirements: {
-  //     [ChainId.Optimism]: 100000000000000000,
-  //     [ChainId.Ethereum]: 100000000000000000,
-  //     [ChainId.Base]: 100000000000000000,
-  //   },
-  //   serviceApi: OptimusService,
-  // },
   [AgentType.Memeooorr]: {
     name: 'Agents.fun agent',
     evmHomeChainId: EvmChainId.Base,
     middlewareHomeChainId: MiddlewareChain.BASE,
     requiresAgentSafesOn: [EvmChainId.Base],
-    agentSafeFundingRequirements: {
-      [EvmChainId.Base]: 0.03,
-    },
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.0001,
+          [TokenSymbol.ETH]: 0.0125,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.0001,
+          [TokenSymbol.ETH]: 0.0125,
         },
       },
       [WalletOwnerType.Agent]: {
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.0001,
+          [TokenSymbol.ETH]: 0.00625,
         },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.0001,
+          [TokenSymbol.ETH]: 0.00625,
         },
       },
     },
