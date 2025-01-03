@@ -23,7 +23,7 @@ const traderFundRequirements =
     .fund_requirements;
 
 const memeooorrRequirements =
-  MEMEOOORR_BASE_TEMPLATE.configurations[MiddlewareChain.GNOSIS]
+  MEMEOOORR_BASE_TEMPLATE.configurations[MiddlewareChain.BASE]
     .fund_requirements;
 
 export const AGENT_CONFIG: {
@@ -60,10 +60,9 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
-    eoaFundingMap: {
+    eoaFunding: {
       [EvmChainId.Gnosis]: {
         chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
-        requiredEth: CHAIN_CONFIG[EvmChainId.Gnosis].safeCreationThreshold,
       },
     },
   },
@@ -95,10 +94,9 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
-    eoaFundingMap: {
+    eoaFunding: {
       [EvmChainId.Base]: {
         chainConfig: CHAIN_CONFIG[EvmChainId.Base],
-        requiredEth: CHAIN_CONFIG[EvmChainId.Base].safeCreationThreshold,
       },
     },
   },

@@ -37,24 +37,6 @@ export const PREDICT_AGENT_TEMPLATE: ServiceTemplate = {
       value: '',
       provision_type: EnvProvisionType.COMPUTED,
     },
-    // ETHEREUM_LEDGER_RPC: {
-    //   name: "Ethereum ledger RPC",
-    //   description: "",
-    //   value: "",
-    //   provision_type: EnvProvisionType.COMPUTED
-    // },
-    // BASE_LEDGER_RPC: {
-    //   name: "Base ledger RPC",
-    //   description: "",
-    //   value: "",
-    //   provision_type: EnvProvisionType.COMPUTED
-    // },
-    // OPTIMISM_LEDGER_RPC: {
-    //   name: "Optimism ledger RPC",
-    //   description: "",
-    //   value: "",
-    //   provision_type: EnvProvisionType.COMPUTED
-    // },
     STAKING_CONTRACT_ADDRESS: {
       name: 'Staking contract address',
       description: '',

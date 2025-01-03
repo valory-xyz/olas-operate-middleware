@@ -5,8 +5,6 @@ import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
-export type StakedAgentServiceInstance = PredictTraderService;
-
 export type AgentSupportedEvmChainIds = EvmChainId.Base | EvmChainId.Gnosis;
 
 export type AgentConfig = {
@@ -18,6 +16,11 @@ export type AgentConfig = {
   serviceApi: typeof PredictTraderService;
   displayName: string;
   description: string;
+  eoaFunding: Partial<{
+    [chainId in AgentSupportedEvmChainIds]: {
+      chainConfig: ChainConfig;
+    };
+  }>;
   /**
    * The operating thresholds for the agent to continue running (after "initial funding").
    * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
@@ -29,12 +32,6 @@ export type AgentConfig = {
       };
     };
   };
-  eoaFundingMap: Partial<{
-    [chainId in AgentSupportedEvmChainIds]: {
-      chainConfig: ChainConfig;
-      requiredEth: number;
-    };
-  }>;
 };
 
 export type AgentHealthCheck = {

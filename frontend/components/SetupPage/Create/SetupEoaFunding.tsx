@@ -36,13 +36,8 @@ const AccountCreationCard = styled.div`
 
 const ICON_STYLE = { color: '#606F85' };
 
-const statusMessage = (isFunded?: boolean) => {
-  if (isFunded) {
-    return 'Funds have been received!';
-  } else {
-    return 'Waiting for transaction';
-  }
-};
+const statusMessage = (isFunded?: boolean) =>
+  isFunded ? 'Funds have been received!' : 'Waiting for transaction';
 
 type SetupEoaFundingWaitingProps = { chainName: string };
 const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
@@ -139,7 +134,8 @@ export const SetupEoaFunding = () => {
   );
 
   const currentFundingMapObject =
-    AGENT_CONFIG[selectedAgentType].eoaFundingMap[currentChain];
+    AGENT_CONFIG[selectedAgentType].eoaFunding[currentChain];
+  const chainName = currentFundingMapObject?.chainConfig.name;
 
   const eoaBalance = masterWalletBalances?.find(
     (balance) =>
@@ -152,15 +148,13 @@ export const SetupEoaFunding = () => {
     eoaBalance.balance >= CHAIN_CONFIG[currentChain].safeCreationThreshold;
 
   const handleFunded = useCallback(async () => {
-    message.success(
-      `${currentFundingMapObject?.chainConfig.name} funds have been received!`,
-    );
+    message.success(`${chainName} funds have been received!`);
 
     await delayInSeconds(1);
 
-    const chains = Object.keys(
-      AGENT_CONFIG[selectedAgentType].eoaFundingMap,
-    ).map((key) => key as unknown as AgentSupportedEvmChainIds);
+    const chains = Object.keys(AGENT_CONFIG[selectedAgentType].eoaFunding).map(
+      (key) => key as unknown as AgentSupportedEvmChainIds,
+    );
     const indexOfCurrentChain = chains.indexOf(currentChain);
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
@@ -171,12 +165,7 @@ export const SetupEoaFunding = () => {
     }
 
     goto(SetupScreen.SetupCreateSafe);
-  }, [
-    currentChain,
-    currentFundingMapObject?.chainConfig.name,
-    goto,
-    selectedAgentType,
-  ]);
+  }, [currentChain, selectedAgentType, chainName, goto]);
 
   useEffect(() => {
     if (!currentFundingMapObject) return;
@@ -188,12 +177,13 @@ export const SetupEoaFunding = () => {
 
   if (!currentFundingMapObject) return null;
 
+  const { chainConfig } = currentFundingMapObject;
   return (
     <SetupEoaFundingForChain
       isFunded={isFunded}
-      minRequiredBalance={currentFundingMapObject.requiredEth}
-      currency={currentFundingMapObject.chainConfig.nativeToken.symbol}
-      chainName={currentFundingMapObject.chainConfig.name}
+      minRequiredBalance={chainConfig.safeCreationThreshold}
+      currency={chainConfig.nativeToken.symbol}
+      chainName={chainConfig.name}
     />
   );
 };
