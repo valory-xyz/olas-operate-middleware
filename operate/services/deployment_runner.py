@@ -36,7 +36,7 @@ import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
-
+from aea.helpers.logging import setup_logger
 from operate import constants
 
 
@@ -46,6 +46,7 @@ class AbstractDeploymentRunner(ABC):
     def __init__(self, work_directory: Path) -> None:
         """Init the deployment runner."""
         self._work_directory = work_directory
+        self.logger = setup_logger(name="operate.deployment_runner")
 
     @abstractmethod
     def start(self) -> None:
@@ -99,21 +100,22 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Run aea command."""
         return self._run_cmd(args=[self._aea_bin, *args], cwd=cwd)
 
-    @staticmethod
-    def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
+    def _run_cmd(self, args: t.List[str], cwd: t.Optional[Path] = None) -> None:
         """Run command in a subprocess."""
-        print(f"Running: {' '.join(args)}")
-        print(f"Working dir: {os.getcwd()}")
+        self.logger.info(
+            f"Running: {' '.join(args)}  at Working dir: {cwd or os.getcwd()}"
+        )
         result = subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=args,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=240,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Error running: {args} @ {cwd}\n{result.stdout} \n {result.stderr}"
-            )
+            err_msg = f"Error running: {args} @ {cwd}, return code: {result.returncode } \n{result.stdout} \n {result.stderr}"
+            self.logger.error(err_msg)
+            raise RuntimeError(err_msg)
 
     def _prepare_agent_env(self) -> Any:
         """Prepare agent env, add keys, run aea commands."""
@@ -182,9 +184,17 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def start(self) -> None:
         """Start the deployment."""
-        self._setup_agent()
-        self._start_tendermint()
-        self._start_agent()
+        try:
+            self.logger.info("[DEPLOYMENT] Setting up the agent")
+            self._setup_agent()
+            self.logger.info("[DEPLOYMENT] Starting up tendermint")
+            self._start_tendermint()
+            self.logger.info("[DEPLOYMENT] Starting up agent")
+            self._start_agent()
+            self.logger.info("[DEPLOYMENT] Started")
+        except Exception as e:
+            self.logger.exception("[DEPLOYMENT] start ERROR: {e}")
+            raise
 
     def stop(self) -> None:
         """Stop the deployment."""
@@ -248,13 +258,14 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     def _start_agent(self) -> None:
         """Start agent process."""
         working_dir = self._work_directory
+        agent_working_dir = working_dir / "agent"
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._aea_bin, "run"],
-            cwd=working_dir / "agent",
+            cwd=agent_working_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=env,
@@ -266,6 +277,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             data=str(process.pid),
             encoding="utf-8",
         )
+        time.sleep(5)
+        if process.poll() is not None:
+            raise RuntimeError(f"AEA crashed! {agent_working_dir}")
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -300,6 +314,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             data=str(process.pid),
             encoding="utf-8",
         )
+        time.sleep(5)
+        if process.poll() is not None:
+            raise RuntimeError("Tendermint crashed!")
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):

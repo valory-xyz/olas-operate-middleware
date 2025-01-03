@@ -252,12 +252,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         allow_methods=["GET", "POST", "PUT", "DELETE"],
     )
 
+    @app.middleware("http")
+    async def log_non_200_responses(request: Request, call_next):
+        response = await call_next(request)
+
+        if response.status_code != 200:
+            logger.warning(
+                f"Non-200 response: {response.status_code} for {request.method} {request.url}"
+            )
+
+        return response
+
     def with_retries(f: t.Callable) -> t.Callable:
         """Retries decorator."""
 
         async def _call(request: Request) -> JSONResponse:
             """Call the endpoint."""
-            logger.info(f"Calling `{f.__name__}` with retries enabled")
+            # logger.info(f"Calling `{f.__name__}` with retries enabled")  # annoying and almost useless
             retries = 0
             errors = []
             while retries < DEFAULT_MAX_RETRIES:
@@ -880,6 +891,7 @@ def _daemon(
             app=app,
             host=host,
             port=port,
+            access_log=False
         )
     )
     app._server = server  # pylint: disable=protected-access
