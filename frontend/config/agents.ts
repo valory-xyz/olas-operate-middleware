@@ -49,7 +49,9 @@ export const AGENT_CONFIG: {
       },
       [WalletOwnerType.Agent]: {
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: Number(formatEther(traderFundRequirements.agent)),
+          [TokenSymbol.XDAI]: Number(
+            formatEther(`${traderFundRequirements.agent}`),
+          ),
         },
         [WalletType.EOA]: {
           [TokenSymbol.XDAI]: 0.1, // TODO: should come from the template
@@ -74,7 +76,9 @@ export const AGENT_CONFIG: {
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: Number(formatEther(memeooorrRequirements.safe)),
+          [TokenSymbol.ETH]: Number(
+            formatEther(`${memeooorrRequirements.safe}`),
+          ),
         },
         [WalletType.EOA]: {
           [TokenSymbol.ETH]: 0.0125, // TODO: should come from the template
@@ -82,7 +86,9 @@ export const AGENT_CONFIG: {
       },
       [WalletOwnerType.Agent]: {
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: Number(formatEther(memeooorrRequirements.agent)),
+          [TokenSymbol.ETH]: Number(
+            formatEther(`${memeooorrRequirements.agent}`),
+          ),
         },
         [WalletType.EOA]: {
           [TokenSymbol.ETH]: 0.00625, // TODO: should come from the template

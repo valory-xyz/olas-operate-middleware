@@ -152,15 +152,15 @@ export const SetupEoaFunding = () => {
 
     await delayInSeconds(1);
 
-    const chains = Object.keys(AGENT_CONFIG[selectedAgentType].eoaFunding).map(
-      (key) => key as unknown as AgentSupportedEvmChainIds,
-    );
-    const indexOfCurrentChain = chains.indexOf(currentChain);
+    const chains = Object.keys(AGENT_CONFIG[selectedAgentType].eoaFunding);
+    const indexOfCurrentChain = chains.indexOf(currentChain.toString());
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
     // goto next chain
     if (nextChainExists) {
-      setCurrentChain(chains[indexOfCurrentChain + 1]);
+      setCurrentChain(
+        chains[indexOfCurrentChain + 1] as unknown as AgentSupportedEvmChainIds,
+      );
       return;
     }
 
