@@ -47,3 +47,6 @@ leak_report
 
 # logs
 *.log
+
+# custom script for development
+custom-script.sh
