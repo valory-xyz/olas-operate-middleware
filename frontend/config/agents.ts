@@ -34,28 +34,23 @@ export const AGENT_CONFIG: {
     requiresAgentSafesOn: [EvmChainId.Gnosis],
     operatingThresholds: {
       [WalletOwnerType.Master]: {
-        [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: 0.1,
-        },
         [WalletType.Safe]: {
           [TokenSymbol.XDAI]: Number(
             formatEther(
-              `${
-                (traderFundRequirements?.agent ?? 0) +
-                (traderFundRequirements?.safe ?? 0)
-              }`,
+              `${traderFundRequirements.agent + traderFundRequirements.safe}`,
             ),
           ),
         },
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: 0.1, // TODO: should come from the template
+        },
       },
       [WalletOwnerType.Agent]: {
-        [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: 0.1,
-        },
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: Number(
-            formatEther(traderFundRequirements?.agent ?? 0),
-          ),
+          [TokenSymbol.XDAI]: Number(formatEther(traderFundRequirements.agent)),
+        },
+        [WalletType.EOA]: {
+          [TokenSymbol.XDAI]: 0.1, // TODO: should come from the template
         },
       },
     },
@@ -71,19 +66,19 @@ export const AGENT_CONFIG: {
     requiresAgentSafesOn: [EvmChainId.Base],
     operatingThresholds: {
       [WalletOwnerType.Master]: {
-        [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.0125,
-        },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.0125,
+          [TokenSymbol.ETH]: Number(formatEther(memeooorrRequirements.safe)),
+        },
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0125, // TODO: should come from the template
         },
       },
       [WalletOwnerType.Agent]: {
-        [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.00625,
-        },
         [WalletType.Safe]: {
-          [TokenSymbol.ETH]: 0.00625,
+          [TokenSymbol.ETH]: Number(formatEther(memeooorrRequirements.agent)),
+        },
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.00625, // TODO: should come from the template
         },
       },
     },

@@ -1,7 +1,7 @@
 import { MiddlewareChain } from '@/client';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletOwnerType } from '@/enums/Wallet';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
 export type StakedAgentServiceInstance = PredictTraderService;
@@ -19,8 +19,8 @@ export type AgentConfig = {
    * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
    */
   operatingThresholds: {
-    [owner: string | WalletOwnerType]: {
-      [walletType: string | WalletOwnerType]: {
+    [owner in WalletOwnerType.Agent | WalletOwnerType.Master]: {
+      [walletType in WalletType.EOA | WalletType.Safe]: {
         [tokenSymbol: string | TokenSymbol]: number;
       };
     };
