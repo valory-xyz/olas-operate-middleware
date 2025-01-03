@@ -39,6 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
+    ZERO_ADDRESS,
 )
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS, USDC
@@ -127,6 +128,18 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer funds to the given account."""
+        raise NotImplementedError()
+
+    def transfer_asset(
+        self,
+        to: str,
+        amount: int,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """Transfer erc20/native assets to the given account."""
         raise NotImplementedError()
 
     @staticmethod
@@ -354,6 +367,37 @@ class EthereumMasterWallet(MasterWallet):
             to=to,
             amount=amount,
             chain=chain,
+            rpc=rpc,
+        )
+
+    def transfer_asset(
+        self,
+        to: str,
+        amount: int,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """
+        Transfer assets to the given account.
+
+        If asset is a zero address, transfer native currency.
+        """
+        if asset == ZERO_ADDRESS:
+            return self.transfer(
+                to=to,
+                amount=amount,
+                chain=chain,
+                from_safe=from_safe,
+                rpc=rpc,
+            )
+        return self.transfer_erc20(
+            token=asset,
+            to=to,
+            amount=amount,
+            chain=chain,
+            from_safe=from_safe,
             rpc=rpc,
         )
 

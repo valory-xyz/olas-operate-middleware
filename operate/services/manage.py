@@ -20,6 +20,7 @@
 """Service manager."""
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -37,10 +38,11 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
+from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
-from operate.operate_types import Chain, LedgerConfig, ServiceTemplate
+from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -53,7 +55,7 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.memeooorr import get_twitter_cookies
-from operate.utils.gnosis import NULL_ADDRESS, drain_signer
+from operate.utils.gnosis import NULL_ADDRESS, drain_signer, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -550,6 +552,7 @@ class ServiceManager:
                     "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
                     "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
                     "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                    "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
                     "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
                     "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
                         "staking_contract"
@@ -953,7 +956,23 @@ class ServiceManager:
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
         chain_data.on_chain_state = OnChainState(info["service_state"])
+
+        # TODO: this is a patch for modius, to be standardized
+        staking_chain = None
+        for chain, config in service.chain_configs.items():
+            if config.chain_data.user_params.use_staking:
+                staking_chain = chain
+                break
+
+        service.update_env_variables_values({
+            "SAFE_CONTRACT_ADDRESSES": json.dumps({
+                chain: config.chain_data.multisig
+                for chain, config in service.chain_configs.items()
+            }, separators=(',', ':')),
+            "STAKING_CHAIN": staking_chain,
+        })
         service.store()
+
         if user_params.use_staking:
             self.stake_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
@@ -1083,10 +1102,19 @@ class ServiceManager:
                 self.fund_service(
                     service_config_id=service_config_id,
                     rpc=ledger_config.rpc,
-                    agent_topup=chain_data.user_params.fund_requirements.agent,
-                    agent_fund_threshold=chain_data.user_params.fund_requirements.agent,
-                    safe_topup=0,
-                    safe_fund_treshold=0,
+                    funding_values={
+                        ZERO_ADDRESS: {
+                            "agent": {
+                                "topup": chain_data.user_params.fund_requirements[
+                                    ZERO_ADDRESS
+                                ].agent,
+                                "threshold": chain_data.user_params.fund_requirements[
+                                    ZERO_ADDRESS
+                                ].agent,
+                            },
+                            "safe": {"topup": 0, "threshold": 0},
+                        }
+                    },
                 )
 
             self.logger.info("Swapping Safe owners")
@@ -1407,10 +1435,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
-        agent_topup: t.Optional[float] = None,
-        safe_topup: t.Optional[float] = None,
-        agent_fund_threshold: t.Optional[float] = None,
-        safe_fund_treshold: t.Optional[float] = None,
+        funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
     ) -> None:
         """Fund service if required."""
@@ -1421,10 +1446,7 @@ class ServiceManager:
             self.fund_service_single_chain(
                 service_config_id=service_config_id,
                 rpc=rpc,
-                agent_topup=agent_topup,
-                safe_topup=safe_topup,
-                agent_fund_threshold=agent_fund_threshold,
-                safe_fund_treshold=safe_fund_treshold,
+                funding_values=funding_values,
                 from_safe=from_safe,
                 chain=chain,
             )
@@ -1433,10 +1455,7 @@ class ServiceManager:
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
-        agent_topup: t.Optional[float] = None,
-        safe_topup: t.Optional[float] = None,
-        agent_fund_threshold: t.Optional[float] = None,
-        safe_fund_treshold: t.Optional[float] = None,
+        funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
         chain: str = "gnosis",
     ) -> None:
@@ -1450,56 +1469,108 @@ class ServiceManager:
         ledger_api = wallet.ledger_api(
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
-        agent_fund_threshold = (
-            agent_fund_threshold
-            if agent_fund_threshold is not None
-            else chain_data.user_params.fund_requirements.agent
-        )
 
-        for key in service.keys:
-            agent_balance = ledger_api.get_balance(address=key.address)
-            self.logger.info(f"Agent {key.address} balance: {agent_balance}")
-            if agent_fund_threshold > 0:
-                self.logger.info(f"Required balance: {agent_fund_threshold}")
-                if agent_balance < agent_fund_threshold:
-                    self.logger.info("Funding agents")
-                    to_transfer = (
-                        agent_topup or chain_data.user_params.fund_requirements.agent
-                    )
-                    self.logger.info(
-                        f"Transferring {to_transfer} units to {key.address}"
-                    )
-                    wallet.transfer(
-                        to=key.address,
+        for (
+            asset_address,
+            fund_requirements,
+        ) in chain_data.user_params.fund_requirements.items():
+            asset_funding_values = (
+                funding_values.get(asset_address)
+                if funding_values is not None
+                else None
+            )
+            agent_fund_threshold = (
+                asset_funding_values["agent"]["threshold"]
+                if asset_funding_values is not None
+                else fund_requirements.agent
+            )
+
+            for key in service.keys:
+                agent_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=asset_address,
+                    address=key.address,
+                )
+                self.logger.info(
+                    f"[FUNDING_JOB] Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
+                )
+                if agent_fund_threshold > 0:
+                    self.logger.info(f"[FUNDING_JOB] Required balance: {agent_fund_threshold}")
+                    if agent_balance < agent_fund_threshold:
+                        self.logger.info("[FUNDING_JOB] Funding agents")
+                        target_balance = (
+                            asset_funding_values["agent"]["topup"]
+                            if asset_funding_values is not None
+                            else fund_requirements.agent
+                        )
+                        transferable_balance = get_asset_balance(
+                            ledger_api=ledger_api,
+                            contract_address=asset_address,
+                            address=wallet.safes[ledger_config.chain],
+                        )
+                        to_transfer = max(min(transferable_balance, target_balance - agent_balance), 0)
+                        self.logger.info(
+                            f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {key.address}"
+                        )
+                        wallet.transfer_asset(
+                            asset=asset_address,
+                            to=key.address,
+                            amount=int(to_transfer),
+                            chain=ledger_config.chain,
+                            from_safe=from_safe,
+                            rpc=rpc or ledger_config.rpc,
+                        )
+
+            safe_balance = get_asset_balance(
+                ledger_api=ledger_api,
+                contract_address=asset_address,
+                address=chain_data.multisig,
+            )
+            if asset_address == ZERO_ADDRESS:
+                # also count the balance of the wrapped native asset
+                safe_balance += get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=WRAPPED_NATIVE_ASSET.get(chain, asset_address),
+                    address=chain_data.multisig,
+                )
+
+            safe_fund_treshold = (
+                asset_funding_values["safe"]["threshold"]
+                if asset_funding_values is not None
+                else fund_requirements.safe
+            )
+            self.logger.info(
+                f"[FUNDING_JOB] Safe {chain_data.multisig} Asset: {asset_address} balance: {safe_balance}"
+            )
+            self.logger.info(f"[FUNDING_JOB] Required balance: {safe_fund_treshold}")
+            if safe_balance < safe_fund_treshold:
+                self.logger.info("[FUNDING_JOB] Funding safe")
+                target_balance = (
+                    asset_funding_values["safe"]["topup"]
+                    if asset_funding_values is not None
+                    else fund_requirements.safe
+                )
+                transferable_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=asset_address,
+                    address=wallet.safes[ledger_config.chain],
+                )
+                to_transfer = max(min(transferable_balance, target_balance - safe_balance), 0)
+                self.logger.info(
+                    f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
+                )
+                # TODO: This is a temporary fix
+                # we avoid the error here because there is a seperate prompt on the UI
+                # when not enough funds are present, and the FE doesn't let the user to start the agent.
+                # Ideally this error should be allowed, and then the FE should ask the user for more funds.
+                with suppress(RuntimeError):
+                    wallet.transfer_asset(
+                        asset=asset_address,
+                        to=t.cast(str, chain_data.multisig),
                         amount=int(to_transfer),
                         chain=ledger_config.chain,
-                        from_safe=from_safe,
                         rpc=rpc or ledger_config.rpc,
                     )
-
-        safe_balance = ledger_api.get_balance(chain_data.multisig)
-        safe_fund_treshold = (
-            safe_fund_treshold or chain_data.user_params.fund_requirements.safe
-        )
-        self.logger.info(f"Safe {chain_data.multisig} balance: {safe_balance}")
-        self.logger.info(f"Required balance: {safe_fund_treshold}")
-        if safe_balance < safe_fund_treshold:
-            self.logger.info("Funding safe")
-            to_transfer = safe_topup or chain_data.user_params.fund_requirements.safe
-            self.logger.info(
-                f"Transferring {to_transfer} units to {chain_data.multisig}"
-            )
-            # TODO: This is a temporary fix
-            # we avoid the error here because there is a seperate prompt on the UI
-            # when not enough funds are present, and the FE doesn't let the user to start the agent.
-            # Ideally this error should be allowed, and then the FE should ask the user for more funds.
-            with suppress(RuntimeError):
-                wallet.transfer(
-                    to=t.cast(str, chain_data.multisig),
-                    amount=int(to_transfer),
-                    chain=ledger_config.chain,
-                    rpc=rpc or ledger_config.rpc,
-                )
 
     def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -1523,7 +1594,8 @@ class ServiceManager:
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
         agent_fund_threshold = (
-            agent_fund_threshold or chain_data.user_params.fund_requirements.agent
+            agent_fund_threshold
+            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
         )
 
         for key in service.keys:
@@ -1533,7 +1605,8 @@ class ServiceManager:
             if agent_balance < agent_fund_threshold:
                 self.logger.info("Funding agents")
                 to_transfer = (
-                    agent_topup or chain_data.user_params.fund_requirements.agent
+                    agent_topup
+                    or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
                 )
                 self.logger.info(f"Transferring {to_transfer} units to {key.address}")
                 wallet.transfer_erc20(
@@ -1551,13 +1624,17 @@ class ServiceManager:
             .call()
         )
         safe_fund_treshold = (
-            safe_fund_treshold or chain_data.user_params.fund_requirements.safe
+            safe_fund_treshold
+            or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
         )
         self.logger.info(f"Safe {chain_data.multisig} balance: {safe_balance}")
         self.logger.info(f"Required balance: {safe_fund_treshold}")
         if safe_balance < safe_fund_treshold:
             self.logger.info("Funding safe")
-            to_transfer = safe_topup or chain_data.user_params.fund_requirements.safe
+            to_transfer = (
+                safe_topup
+                or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
+            )
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )
@@ -1645,7 +1722,6 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
         ledger_config = chain_config.ledger_config
-        fund_requirements = chain_config.chain_data.user_params.fund_requirements
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1654,10 +1730,19 @@ class ServiceManager:
                         self.fund_service,
                         service_config_id,  # Service id
                         PUBLIC_RPCS[ledger_config.chain],  # RPC
-                        fund_requirements.agent,  # agent_topup
-                        fund_requirements.safe,  # safe_topup
-                        int(fund_requirements.agent / 2),  # agent_fund_threshold
-                        int(fund_requirements.safe / 2),  # safe_fund_treshold
+                        {
+                            asset_address: {
+                                "agent": {
+                                    "topup": fund_requirements.agent,
+                                    "threshold": int(fund_requirements.agent / 2),
+                                },
+                                "safe": {
+                                    "topup": fund_requirements.safe,
+                                    "threshold": int(fund_requirements.safe / 2),
+                                },
+                            }
+                            for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
+                        },
                         from_safe,
                     )
                 except Exception:  # pylint: disable=broad-except

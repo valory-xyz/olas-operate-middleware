@@ -65,6 +65,7 @@ from operate.constants import (
     DEPLOYMENT_JSON,
     DOCKER_COMPOSE_YAML,
     KEYS_JSON,
+    ZERO_ADDRESS,
 )
 from operate.keys import Keys
 from operate.operate_http.exceptions import NotAllowed
@@ -95,7 +96,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 4
+SERVICE_CONFIG_VERSION = 5
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = "0xm"
@@ -774,56 +775,72 @@ class Service(LocalResource):
             }
             data = new_data
 
-        # Add missing fields introduced in later versions, if necessary.
-        for _, chain_data in data.get("chain_configs", {}).items():
-            chain_data.setdefault("chain_data", {}).setdefault(
-                "user_params", {}
-            ).setdefault("use_mech_marketplace", False)
-            chain_data.setdefault("chain_data", {}).setdefault(
-                "user_params", {}
-            ).setdefault("agent_id", 14)
+        if version < 4:
+            # Add missing fields introduced in later versions, if necessary.
+            for _, chain_data in data.get("chain_configs", {}).items():
+                chain_data.setdefault("chain_data", {}).setdefault(
+                    "user_params", {}
+                ).setdefault("use_mech_marketplace", False)
+                chain_data.setdefault("chain_data", {}).setdefault(
+                    "user_params", {}
+                ).setdefault("agent_id", 14)
 
-        data["description"] = data.setdefault("description", data.get("name"))
-        data["hash_history"] = data.setdefault(
-            "hash_history", {int(time.time()): data["hash"]}
-        )
+            data["description"] = data.setdefault("description", data.get("name"))
+            data["hash_history"] = data.setdefault(
+                "hash_history", {int(time.time()): data["hash"]}
+            )
 
-        if "service_config_id" not in data:
-            service_config_id = Service.get_new_service_config_id(path)
-            new_path = path.parent / service_config_id
-            data["service_config_id"] = service_config_id
-            path = path.rename(new_path)
+            if "service_config_id" not in data:
+                service_config_id = Service.get_new_service_config_id(path)
+                new_path = path.parent / service_config_id
+                data["service_config_id"] = service_config_id
+                path = path.rename(new_path)
 
-        old_to_new_ledgers = ["ethereum", "solana"]
-        for key_data in data["keys"]:
-            key_data["ledger"] = old_to_new_ledgers[key_data["ledger"]]
+            old_to_new_ledgers = ["ethereum", "solana"]
+            for key_data in data["keys"]:
+                key_data["ledger"] = old_to_new_ledgers[key_data["ledger"]]
 
-        old_to_new_chains = [
-            "ethereum",
-            "goerli",
-            "gnosis",
-            "solana",
-            "optimistic",
-            "base",
-            "mode",
-        ]
-        new_chain_configs = {}
-        for chain_id, chain_data in data["chain_configs"].items():
-            chain_data["ledger_config"]["chain"] = old_to_new_chains[
-                chain_data["ledger_config"]["chain"]
+            old_to_new_chains = [
+                "ethereum",
+                "goerli",
+                "gnosis",
+                "solana",
+                "optimistic",
+                "base",
+                "mode",
             ]
-            del chain_data["ledger_config"]["type"]
-            new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data  # type: ignore
+            new_chain_configs = {}
+            for chain_id, chain_data in data["chain_configs"].items():
+                chain_data["ledger_config"]["chain"] = old_to_new_chains[
+                    chain_data["ledger_config"]["chain"]
+                ]
+                del chain_data["ledger_config"]["type"]
+                new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data  # type: ignore
 
-        data["chain_configs"] = new_chain_configs
-        data["home_chain"] = data.setdefault("home_chain", Chain.from_id(int(data.get("home_chain_id", "100"))).value)  # type: ignore
-        del data["home_chain_id"]
+            data["chain_configs"] = new_chain_configs
+            data["home_chain"] = data.setdefault("home_chain", Chain.from_id(int(data.get("home_chain_id", "100"))).value)  # type: ignore
+            del data["home_chain_id"]
 
-        if "env_variables" not in data:
-            if data["name"] == "valory/trader_pearl":
-                data["env_variables"] = DEFAULT_TRADER_ENV_VARS
-            else:
-                data["env_variables"] = {}
+            if "env_variables" not in data:
+                if data["name"] == "valory/trader_pearl":
+                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+                else:
+                    data["env_variables"] = {}
+
+        if version == 4:
+            new_chain_configs = {}
+            for chain, chain_data in data["chain_configs"].items():
+                fund_requirements = chain_data["chain_data"]["user_params"][
+                    "fund_requirements"
+                ]
+                if ZERO_ADDRESS not in fund_requirements:
+                    chain_data["chain_data"]["user_params"]["fund_requirements"] = {
+                        ZERO_ADDRESS: fund_requirements
+                    }
+
+                new_chain_configs[chain] = chain_data  # type: ignore
+
+            data["chain_configs"] = new_chain_configs
 
         data["version"] = SERVICE_CONFIG_VERSION
 

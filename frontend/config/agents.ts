@@ -1,3 +1,6 @@
+import { ethers } from 'ethers';
+import { formatUnits } from 'ethers/lib/utils';
+
 import { MiddlewareChain } from '@/client';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { AgentType } from '@/enums/Agent';
@@ -5,10 +8,13 @@ import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { MemeooorBaseService } from '@/service/agents/Memeooor';
+import { ModiusService } from '@/service/agents/Modius';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 // import { OptimusService } from '@/service/agents/Optimus';
 import { AgentConfig } from '@/types/Agent';
 import { formatEther } from '@/utils/numberFormatters';
+
+import { MODE_TOKEN_CONFIG } from './tokens';
 
 // TODO: complete this config
 // TODO: add funding requirements
@@ -16,6 +22,10 @@ import { formatEther } from '@/utils/numberFormatters';
 const traderFundRequirements = SERVICE_TEMPLATES.find(
   (template) => template.agentType === AgentType.PredictTrader,
 )?.configurations[MiddlewareChain.GNOSIS].fund_requirements;
+
+const modiusFundRequirements = SERVICE_TEMPLATES.find(
+  (template) => template.agentType === AgentType.Modius,
+)?.configurations[MiddlewareChain.MODE].fund_requirements;
 
 export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
@@ -37,8 +47,10 @@ export const AGENT_CONFIG: {
           [TokenSymbol.XDAI]: Number(
             formatEther(
               `${
-                (traderFundRequirements?.agent ?? 0) +
-                (traderFundRequirements?.safe ?? 0)
+                (traderFundRequirements?.[ethers.constants.AddressZero]
+                  ?.agent ?? 0) +
+                (traderFundRequirements?.[ethers.constants.AddressZero]?.safe ??
+                  0)
               }`,
             ),
           ),
@@ -57,6 +69,7 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
+    isAgentEnabled: true,
   },
   // [AgentType.Optimus]: {
   //   name: 'Optimus',
@@ -101,5 +114,51 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
+    isAgentEnabled: true,
   },
-} as const;
+  [AgentType.Modius]: {
+    name: 'Modius agent',
+    evmHomeChainId: EvmChainId.Mode,
+    middlewareHomeChainId: MiddlewareChain.MODE,
+    requiresAgentSafesOn: [EvmChainId.Mode],
+    agentSafeFundingRequirements: {
+      [EvmChainId.Mode]: 0.0005,
+    },
+    additionalRequirements: {
+      [EvmChainId.Mode]: {
+        [TokenSymbol.USDC]: Number(
+          formatUnits(
+            modiusFundRequirements?.[
+              MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string
+            ]?.safe ?? 0,
+            MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals,
+          ),
+        ),
+      },
+    },
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0002,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: 0.0055,
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0005,
+        },
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: 0.005,
+        },
+      },
+    },
+    requiresMasterSafesOn: [EvmChainId.Mode],
+    serviceApi: ModiusService,
+    displayName: 'Modius agent',
+    description:
+      'Invests crypto assets on your behalf and grows your portfolio.',
+    isAgentEnabled: false,
+  },
+};

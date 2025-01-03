@@ -233,7 +233,7 @@ jobs:
           BASE_RPC: https://virtual.base.rpc.tenderly.co/2a91611a-3251-48a6-8095-b86815de84bf
           GNOSIS_RPC: https://virtual.gnosis.rpc.tenderly.co/7de511da-9ad7-4e9f-98c1-e99052e92b15
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
-          MODE_RPC: https://mainnet.mode.network
+          MODE_RPC: https://virtual.mode.rpc.tenderly.co/9f5ab06c-f005-4f8d-8bb2-786cb7b8f865
 
       # Run the build and notarization process for production
       - name: Build, notarize, and publish (Production)
@@ -282,11 +282,11 @@ jobs:
           BASE_RPC: https://virtual.base.rpc.tenderly.co/2a91611a-3251-48a6-8095-b86815de84bf
           GNOSIS_RPC: https://virtual.gnosis.rpc.tenderly.co/7de511da-9ad7-4e9f-98c1-e99052e92b15
           ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
-          MODE_RPC: https://mainnet.mode.network
+          MODE_RPC: https://virtual.mode.rpc.tenderly.co/9f5ab06c-f005-4f8d-8bb2-786cb7b8f865
         run: |
           echo "OPTIMISM_RPC=https://rpc-gate.autonolas.tech/optimism-rpc/" >> .env
           echo "BASE_RPC=https://virtual.base.rpc.tenderly.co/2a91611a-3251-48a6-8095-b86815de84bf" >> .env
           echo "GNOSIS_RPC=https://virtual.gnosis.rpc.tenderly.co/7de511da-9ad7-4e9f-98c1-e99052e92b15" >> .env
           echo "ETHEREUM_RPC=https://rpc-gate.autonolas.tech/ethereum-rpc/" >> .env
-          echo "MODE_RPC=https://mainnet.mode.network" >> .env
+          echo "MODE_RPC=https://virtual.mode.rpc.tenderly.co/9f5ab06c-f005-4f8d-8bb2-786cb7b8f865" >> .env
           node build.js

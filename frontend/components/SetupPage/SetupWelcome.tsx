@@ -140,6 +140,7 @@ export const SetupWelcomeLogin = () => {
     selectedAgentConfig,
     services,
     isFetched: isServicesFetched,
+    selectedAgentType,
   } = useServices();
   const {
     masterSafes,
@@ -206,6 +207,15 @@ export const SetupWelcomeLogin = () => {
 
     setIsLoggingIn(false);
 
+    if (!selectedAgentConfig) return;
+
+    // If the agent is disabled then redirect to agent selection,
+    // if the disabled agent was previously selected.
+    if (!selectedAgentConfig.isAgentEnabled) {
+      goto(SetupScreen.AgentSelection);
+      return;
+    }
+
     // If no service is created for the selected agent
     if (!isServiceCreatedForAgent) {
       window.console.log(
@@ -239,6 +249,8 @@ export const SetupWelcomeLogin = () => {
     selectedServiceOrAgentChainId,
     goto,
     gotoPage,
+    selectedAgentConfig,
+    selectedAgentType,
   ]);
 
   return (

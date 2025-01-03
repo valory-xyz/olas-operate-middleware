@@ -18,6 +18,7 @@ const schema = {
   // Each agent has its own settings
   trader: { type: 'object', default: defaultInitialAgentSettings },
   memeooorr: { type: 'object', default: defaultInitialAgentSettings },
+  modius: { type: 'object', default: defaultInitialAgentSettings },
 };
 
 /**

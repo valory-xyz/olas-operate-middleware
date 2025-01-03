@@ -33,8 +33,10 @@ export type ChainData = {
     agent_id: number;
     cost_of_bond: number;
     fund_requirements: {
-      agent: number;
-      safe: number;
+      [tokenAddress: string]: {
+        agent: number;
+        safe: number;
+      };
     };
     nft: string;
     staking_program_id: StakingProgramId;
@@ -95,7 +97,7 @@ export type ConfigurationTemplate = {
   use_mech_marketplace?: boolean;
   cost_of_bond: number;
   monthly_gas_estimate: number;
-  fund_requirements: FundRequirementsTemplate;
+  fund_requirements: { [tokenAddress: string]: FundRequirementsTemplate };
 };
 
 export type FundRequirementsTemplate = {

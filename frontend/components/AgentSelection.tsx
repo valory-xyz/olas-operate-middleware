@@ -91,8 +91,9 @@ const EachAgent = memo(
       }
 
       // Neither service nor safe is created
-      if (agentType === AgentType.Memeooorr) {
-        // if the selected type is Memeooorr - should set up the agent first
+      if (agentType === AgentType.Memeooorr || agentType === AgentType.Modius) {
+        // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
+        // TODO: can have this as a boolean flag in agentConfig?
         gotoPage(Pages.Setup);
         gotoSetup(SetupScreen.SetupYourAgent);
         return;
@@ -113,6 +114,11 @@ const EachAgent = memo(
       masterSafes,
       updateAgentType,
     ]);
+
+    // If agent is disabled, then don't show the agent
+    if (agentConfig.isAgentEnabled === false) {
+      return null;
+    }
 
     return (
       <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
