@@ -115,6 +115,11 @@ const EachAgent = memo(
       updateAgentType,
     ]);
 
+    // If agent is disabled, then don't show the agent
+    if (agentConfig.isAgentEnabled === false) {
+      return null;
+    }
+
     return (
       <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
         <Flex vertical>
