@@ -10,7 +10,6 @@ import { CardSection } from '@/components/styled/CardSection';
 import { CHAIN_CONFIG, ChainConfig } from '@/config/chains';
 import { PROVIDERS } from '@/constants/providers';
 import { NA } from '@/constants/symbols';
-import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
 import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
@@ -149,33 +148,16 @@ const EOA_FUNDING_MAP: Record<
     [EvmChainId.Gnosis]: {
       provider: PROVIDERS[EvmChainId.Gnosis].provider,
       chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
-      requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Gnosis].safeCreation,
+      requiredEth: CHAIN_CONFIG[EvmChainId.Gnosis].safeCreationThreshold,
     },
   },
   [AgentType.Memeooorr]: {
     [EvmChainId.Base]: {
       provider: PROVIDERS[EvmChainId.Base].provider,
       chainConfig: CHAIN_CONFIG[EvmChainId.Base],
-      requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Base].safeCreation,
+      requiredEth: CHAIN_CONFIG[EvmChainId.Base].safeCreationThreshold,
     },
   },
-  // [AgentType.Optimus]: {
-  //   [EvmChainId.Optimism]: {
-  //     provider: PROVIDERS[EvmChainId.Optimism].provider,
-  //     chainConfig: CHAIN_CONFIG[EvmChainId.Optimism],
-  //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Optimism].safeCreation,
-  //   },
-  //   [EvmChainId.Ethereum]: {
-  //     provider: PROVIDERS[EvmChainId.Ethereum].provider,
-  //     chainConfig: CHAIN_CONFIG[EvmChainId.Ethereum],
-  //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Ethereum].safeCreation,
-  //   },
-  //   [EvmChainId.Base]: {
-  //     provider: PROVIDERS[EvmChainId.Base].provider,
-  //     chainConfig: CHAIN_CONFIG[EvmChainId.Base],
-  //     requiredEth: MIN_ETH_BALANCE_THRESHOLDS[EvmChainId.Base].safeCreation,
-  //   },
-  // }
 } as const;
 
 /**
@@ -203,7 +185,7 @@ export const SetupEoaFunding = () => {
 
   const isFunded =
     eoaBalance?.evmChainId === currentChain &&
-    eoaBalance.balance >= MIN_ETH_BALANCE_THRESHOLDS[currentChain].safeCreation;
+    eoaBalance.balance >= CHAIN_CONFIG[currentChain].safeCreationThreshold;
 
   const handleFunded = useCallback(async () => {
     message.success(

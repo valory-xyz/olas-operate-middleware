@@ -10,11 +10,14 @@ export type AgentConfig = {
   evmHomeChainId: EvmChainId;
   middlewareHomeChainId: MiddlewareChain;
   requiresAgentSafesOn: EvmChainId[];
-  agentSafeFundingRequirements: Record<string, number>;
   requiresMasterSafesOn: EvmChainId[];
   serviceApi: typeof PredictTraderService;
   displayName: string;
   description: string;
+  /**
+   * The operating thresholds for the agent to continue running (after "initial funding").
+   * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
+   */
   operatingThresholds: {
     [owner: string | WalletOwnerType]: {
       [walletType: string | WalletOwnerType]: {
