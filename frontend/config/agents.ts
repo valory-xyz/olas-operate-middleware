@@ -13,6 +13,8 @@ import { PredictTraderService } from '@/service/agents/PredictTrader';
 import { AgentConfig } from '@/types/Agent';
 import { formatEther } from '@/utils/numberFormatters';
 
+import { CHAIN_CONFIG } from './chains';
+
 // TODO: complete this config
 // TODO: add funding requirements
 
@@ -58,6 +60,12 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
+    eoaFundingMap: {
+      [EvmChainId.Gnosis]: {
+        chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
+        requiredEth: CHAIN_CONFIG[EvmChainId.Gnosis].safeCreationThreshold,
+      },
+    },
   },
   [AgentType.Memeooorr]: {
     name: 'Agents.fun agent',
@@ -87,5 +95,11 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
+    eoaFundingMap: {
+      [EvmChainId.Base]: {
+        chainConfig: CHAIN_CONFIG[EvmChainId.Base],
+        requiredEth: CHAIN_CONFIG[EvmChainId.Base].safeCreationThreshold,
+      },
+    },
   },
 } as const;

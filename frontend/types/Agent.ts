@@ -1,10 +1,14 @@
 import { MiddlewareChain } from '@/client';
+import { ChainConfig } from '@/config/chains';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
 export type StakedAgentServiceInstance = PredictTraderService;
+
+export type AgentSupportedEvmChainIds = EvmChainId.Base | EvmChainId.Gnosis;
+
 export type AgentConfig = {
   name: string;
   evmHomeChainId: EvmChainId;
@@ -25,6 +29,12 @@ export type AgentConfig = {
       };
     };
   };
+  eoaFundingMap: Partial<{
+    [chainId in AgentSupportedEvmChainIds]: {
+      chainConfig: ChainConfig;
+      requiredEth: number;
+    };
+  }>;
 };
 
 export type AgentHealthCheck = {

@@ -1,22 +1,21 @@
 import { CopyOutlined } from '@ant-design/icons';
 import { Flex, message, Tooltip, Typography } from 'antd';
-import { ethers } from 'ethers';
 import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
-import { CHAIN_CONFIG, ChainConfig } from '@/config/chains';
-import { PROVIDERS } from '@/constants/providers';
+import { AGENT_CONFIG } from '@/config/agents';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { NA } from '@/constants/symbols';
-import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
+import { AgentSupportedEvmChainIds } from '@/types/Agent';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 
@@ -88,13 +87,6 @@ const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
         <span className="can-select-text break-word">
           {`${masterEoaAddress || NA}`}
         </span>
-        {/* <CustomAlert
-          type="info"
-          showIcon
-          message={
-            'After this point, do not send more funds to this address. Once your account is created, you will be given a new address - send further funds there.'
-          }
-        /> */}
       </AccountCreationCard>
     </>
   );
@@ -132,34 +124,6 @@ export const SetupEoaFundingForChain = ({
   );
 };
 
-type EoaFundingMapParams = {
-  provider: ethers.providers.JsonRpcProvider;
-  chainConfig: ChainConfig;
-  requiredEth: number;
-};
-
-// TODO: chain independent
-// use SERVICE_TEMPLATES[].configurations instead?
-const EOA_FUNDING_MAP: Record<
-  AgentType,
-  Partial<Record<EvmChainId, EoaFundingMapParams>>
-> = {
-  [AgentType.PredictTrader]: {
-    [EvmChainId.Gnosis]: {
-      provider: PROVIDERS[EvmChainId.Gnosis].provider,
-      chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
-      requiredEth: CHAIN_CONFIG[EvmChainId.Gnosis].safeCreationThreshold,
-    },
-  },
-  [AgentType.Memeooorr]: {
-    [EvmChainId.Base]: {
-      provider: PROVIDERS[EvmChainId.Base].provider,
-      chainConfig: CHAIN_CONFIG[EvmChainId.Base],
-      requiredEth: CHAIN_CONFIG[EvmChainId.Base].safeCreationThreshold,
-    },
-  },
-} as const;
-
 /**
  * EOA funding setup screen
  */
@@ -170,12 +134,12 @@ export const SetupEoaFunding = () => {
   const { masterWalletBalances } = useMasterBalances();
   const masterEoaAddress = masterEoa?.address;
 
-  const [currentChain, setCurrentChain] = useState<EvmChainId>(
-    selectedAgentConfig.evmHomeChainId,
+  const [currentChain, setCurrentChain] = useState<AgentSupportedEvmChainIds>(
+    selectedAgentConfig.evmHomeChainId as EvmChainId.Base | EvmChainId.Gnosis,
   );
 
   const currentFundingMapObject =
-    EOA_FUNDING_MAP[selectedAgentType][currentChain];
+    AGENT_CONFIG[selectedAgentType].eoaFundingMap[currentChain];
 
   const eoaBalance = masterWalletBalances?.find(
     (balance) =>
@@ -194,13 +158,15 @@ export const SetupEoaFunding = () => {
 
     await delayInSeconds(1);
 
-    const chains = Object.keys(EOA_FUNDING_MAP[selectedAgentType]);
-    const indexOfCurrentChain = chains.indexOf(currentChain.toString());
+    const chains = Object.keys(
+      AGENT_CONFIG[selectedAgentType].eoaFundingMap,
+    ).map((key) => key as unknown as AgentSupportedEvmChainIds);
+    const indexOfCurrentChain = chains.indexOf(currentChain);
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
     // goto next chain
     if (nextChainExists) {
-      setCurrentChain(chains[indexOfCurrentChain + 1] as unknown as EvmChainId);
+      setCurrentChain(chains[indexOfCurrentChain + 1]);
       return;
     }
 
