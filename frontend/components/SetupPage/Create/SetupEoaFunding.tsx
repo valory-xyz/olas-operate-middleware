@@ -133,9 +133,10 @@ export const SetupEoaFunding = () => {
     selectedAgentConfig.evmHomeChainId as EvmChainId.Base | EvmChainId.Gnosis,
   );
 
-  const currentFundingMapObject =
-    AGENT_CONFIG[selectedAgentType].eoaFunding[currentChain];
-  const chainName = currentFundingMapObject?.chainConfig.name;
+  const currentFundingRequirements =
+    AGENT_CONFIG[selectedAgentType]?.eoaFunding[currentChain];
+
+  const chainName = currentFundingRequirements?.chainConfig.name;
 
   const eoaBalance = masterWalletBalances?.find(
     (balance) =>
@@ -168,16 +169,16 @@ export const SetupEoaFunding = () => {
   }, [currentChain, selectedAgentType, chainName, goto]);
 
   useEffect(() => {
-    if (!currentFundingMapObject) return;
+    if (!currentFundingRequirements) return;
     if (!masterEoaAddress) return;
     if (!isFunded) return;
 
     handleFunded();
-  }, [currentFundingMapObject, handleFunded, isFunded, masterEoaAddress]);
+  }, [currentFundingRequirements, handleFunded, isFunded, masterEoaAddress]);
 
-  if (!currentFundingMapObject) return null;
+  if (!currentFundingRequirements) return null;
 
-  const { chainConfig } = currentFundingMapObject;
+  const { chainConfig } = currentFundingRequirements;
   return (
     <SetupEoaFundingForChain
       isFunded={isFunded}

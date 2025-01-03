@@ -19,6 +19,9 @@
 
 """Constants."""
 
+from operate.operate_types import Chain
+
+
 OPERATE = ".operate"
 CONFIG = "config.json"
 SERVICES = "services"
@@ -39,3 +42,11 @@ ON_CHAIN_INTERACT_SLEEP = 3.0
 HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
 
 TM_CONTROL_URL = "http://localhost:8080"
+ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+WRAPPED_NATIVE_ASSET = {
+    Chain.GNOSIS.value: '0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d',
+    Chain.OPTIMISTIC.value: '0x4200000000000000000000000000000000000006',
+    Chain.MODE.value: '0x4200000000000000000000000000000000000006',
+    Chain.BASE.value: '0x4200000000000000000000000000000000000006',
+}

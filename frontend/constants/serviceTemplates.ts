@@ -1,7 +1,11 @@
+import { ethers } from 'ethers';
+
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
+import { MODE_TOKEN_CONFIG } from '@/config/tokens';
 import { AgentType } from '@/enums/Agent';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { parseEther } from '@/utils/numberFormatters';
+import { TokenSymbol } from '@/enums/Token';
+import { parseEther, parseUnits } from '@/utils/numberFormatters';
 
 export const PREDICT_AGENT_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
@@ -25,8 +29,10 @@ export const PREDICT_AGENT_TEMPLATE: ServiceTemplate = {
       cost_of_bond: +parseEther(0.001),
       monthly_gas_estimate: +parseEther(10),
       fund_requirements: {
-        agent: +parseEther(2),
-        safe: +parseEther(2),
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(2),
+          safe: +parseEther(2),
+        },
       },
     },
   },
@@ -102,8 +108,10 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       cost_of_bond: +parseEther(50),
       monthly_gas_estimate: +parseEther(0.045),
       fund_requirements: {
-        agent: +parseEther(0.00625),
-        safe: +parseEther(0.0125),
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625),
+          safe: +parseEther(0.0125),
+        },
       },
     },
   },
@@ -190,9 +198,132 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
   },
 } as const;
 
+export const MODIUS_BASE_TEMPLATE: ServiceTemplate = {
+  agentType: AgentType.Modius,
+  name: 'Optimus',
+  hash: 'bafybeihqho73he6mirkodg4ubom6ngf2nkgebhmxr435yxpsxgsthu5nvy',
+  description: 'Optimus',
+  image:
+    'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+  service_version: 'v0.18.1',
+  home_chain: MiddlewareChain.MODE,
+  configurations: {
+    [MiddlewareChain.MODE]: {
+      staking_program_id: StakingProgramId.ModiusAlpha, // default, may be overwritten
+      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+      rpc: 'http://localhost:8545', // overwritten
+      agent_id: 40,
+      threshold: 1,
+      use_staking: true,
+      cost_of_bond: +parseEther(20),
+      monthly_gas_estimate: +parseEther(0.006),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          // zero address means native currency
+          agent: +parseEther(0.0005),
+          safe: +parseEther(0.005),
+        },
+        [MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string]: {
+          // USDC
+          agent: 0,
+          safe: +parseUnits(16, MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals),
+        },
+      },
+    },
+  },
+  env_variables: {
+    MODE_LEDGER_RPC: {
+      name: 'Mode ledger RPC',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
+    SAFE_CONTRACT_ADDRESSES: {
+      name: 'Safe contract address',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
+    TENDERLY_ACCESS_KEY: {
+      name: 'Tenderly access key',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.USER,
+    },
+    TENDERLY_ACCOUNT_SLUG: {
+      name: 'Tenderly account slug',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.USER,
+    },
+    TENDERLY_PROJECT_SLUG: {
+      name: 'Tenderly project slug',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.USER,
+    },
+    STAKING_TOKEN_CONTRACT_ADDRESS: {
+      name: 'Staking token contract address',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
+    COINGECKO_API_KEY: {
+      name: 'Coingecko API key',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.USER,
+    },
+    STAKING_CHAIN: {
+      name: 'Staking chain',
+      description: '',
+      value: 'mode',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    STAKING_ACTIVITY_CHECKER_CONTRACT_ADDRESS: {
+      name: 'Staking activity checker contract address',
+      description: '',
+      value: '0x07bc3C23DbebEfBF866Ca7dD9fAA3b7356116164',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    MIN_SWAP_AMOUNT_THRESHOLD: {
+      name: 'Minimum swap amount threshold',
+      description: '',
+      value: '15',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    ALLOWED_CHAINS: {
+      name: 'Allowed chains',
+      description: '',
+      value: '["mode"]',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    TARGET_INVESTMENT_CHAINS: {
+      name: 'Target investment chains',
+      description: '',
+      value: '["mode"]',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    INITIAL_ASSETS: {
+      name: 'Initial assets',
+      description: '',
+      value:
+        '{"mode":{"0x0000000000000000000000000000000000000000":"ETH","0xd988097fb8612cc24eeC14542bC03424c656005f":"USDC"}}',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    SELECTED_STRATEGIES: {
+      name: 'Selected strategies',
+      description: '',
+      value: '["merkl_pools_search", "balancer_pools_search", "asset_lending"]',
+      provision_type: EnvProvisionType.FIXED,
+    },
+  },
+} as const;
+
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   PREDICT_AGENT_TEMPLATE,
   MEMEOOORR_BASE_TEMPLATE,
+  MODIUS_BASE_TEMPLATE,
 ] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;

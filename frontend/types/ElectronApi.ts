@@ -17,6 +17,7 @@ export type ElectronStore = {
   // Each agent has its own settings
   trader?: AgentSettings;
   memeooorr?: AgentSettings;
+  modius?: AgentSettings;
 };
 
 export type ElectronTrayIconStatus =

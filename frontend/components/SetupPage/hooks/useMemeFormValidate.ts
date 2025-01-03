@@ -5,7 +5,7 @@ import { useElectronApi } from '@/hooks/useElectronApi';
 import {
   validateGeminiApiKey,
   validateTwitterCredentials,
-} from '../SetupYourAgent/validation';
+} from '../SetupYourAgent/validations';
 
 type ValidationStatus = 'valid' | 'invalid' | 'unknown';
 

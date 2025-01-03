@@ -60,9 +60,20 @@ export const BASE_CHAIN_CONFIG: ChainConfig = {
   safeAddSignerThreshold: 0.005,
 };
 
+export const MODE_CHAIN_CONFIG: ChainConfig = {
+  evmChainId: EvmChainId.Mode,
+  name: 'Mode',
+  nativeToken: TOKEN_CONFIG[EvmChainId.Mode][TokenSymbol.ETH],
+  middlewareChain: MiddlewareChainId.MODE,
+  rpc: process.env.MODE_RPC as HttpUrl,
+  safeCreationThreshold: 0.0005,
+  safeAddSignerThreshold: 0.0005, // TODO: Modius - confirm this value
+};
+
 export const CHAIN_CONFIG: {
   [evmChainId: number]: ChainConfig;
 } = {
   [EvmChainId.Base]: BASE_CHAIN_CONFIG,
   [EvmChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
+  [EvmChainId.Mode]: MODE_CHAIN_CONFIG,
 } as const;

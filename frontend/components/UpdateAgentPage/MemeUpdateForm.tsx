@@ -7,12 +7,14 @@ import { Nullable } from '@/types/Util';
 // once Modius work is merged
 import { useMemeFormValidate } from '../SetupPage/hooks/useMemeFormValidate';
 import {
-  InvalidGeminiApiCredentials,
-  InvalidXCredentials,
   requiredRules,
   validateMessages,
+} from '../SetupPage/SetupYourAgent/formUtils';
+import {
+  InvalidGeminiApiCredentials,
+  InvalidXCredentials,
   XAccountCredentials,
-} from '../SetupPage/SetupYourAgent/SetupYourAgent';
+} from '../SetupPage/SetupYourAgent/MemeooorrAgentForm/MemeooorrAgentForm';
 import { UpdateAgentContext } from './context/UpdateAgentProvider';
 
 type MemeooorrFormValues = {
