@@ -136,7 +136,7 @@ export const AGENT_CONFIG: {
         [WalletType.Safe]: {
           [TokenSymbol.ETH]: Number(
             formatEther(
-              `${modiusFundRequirements[ethers.constants.AddressZero].safe}`,
+              `${modiusFundRequirements[ethers.constants.AddressZero].agent}`, // TODO: should be 0.0055, temp fix to avoid low balance alerts until the refund is fixed in the middleware
             ),
           ),
         },

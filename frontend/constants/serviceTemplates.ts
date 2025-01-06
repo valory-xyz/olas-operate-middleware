@@ -106,10 +106,10 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       threshold: 1,
       use_staking: true,
       cost_of_bond: +parseEther(50),
-      monthly_gas_estimate: +parseEther(0.045),
+      monthly_gas_estimate: +parseEther(0.03),
       fund_requirements: {
         [ethers.constants.AddressZero]: {
-          agent: +parseEther(0.00625),
+          agent: +parseEther(0.001),
           safe: +parseEther(0.0125),
         },
       },
