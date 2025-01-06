@@ -13,6 +13,7 @@ export enum MiddlewareChain {
   OPTIMISM = 'optimism',
   BASE = 'base',
   MODE = 'mode',
+  CELO = 'celo',
 }
 
 export enum MiddlewareLedger {
