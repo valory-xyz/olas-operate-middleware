@@ -31,7 +31,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
       fund_requirements: {
         [ethers.constants.AddressZero]: {
           agent: +parseEther(2),
-          safe: +parseEther(2),
+          safe: +parseEther(5),
         },
       },
     },
@@ -109,7 +109,7 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       monthly_gas_estimate: +parseEther(0.03),
       fund_requirements: {
         [ethers.constants.AddressZero]: {
-          agent: +parseEther(0.001),
+          agent: +parseEther(0.00625),
           safe: +parseEther(0.0125),
         },
       },
@@ -219,12 +219,10 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       monthly_gas_estimate: +parseEther(0.006),
       fund_requirements: {
         [ethers.constants.AddressZero]: {
-          // zero address means native currency
           agent: +parseEther(0.0005),
           safe: +parseEther(0.005),
         },
         [MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string]: {
-          // USDC
           agent: 0,
           safe: +parseUnits(16, MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals),
         },

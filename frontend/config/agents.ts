@@ -43,9 +43,7 @@ export const AGENT_CONFIG: {
       [WalletOwnerType.Master]: {
         [WalletType.Safe]: {
           [TokenSymbol.XDAI]: Number(
-            formatEther(
-              `${traderFundRequirements.agent + traderFundRequirements.safe}`,
-            ),
+            formatEther(`${traderFundRequirements.safe}`),
           ),
         },
         [WalletType.EOA]: {

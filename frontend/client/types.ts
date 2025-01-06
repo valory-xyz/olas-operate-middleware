@@ -97,7 +97,10 @@ export type ConfigurationTemplate = {
   use_mech_marketplace?: boolean;
   cost_of_bond: number;
   monthly_gas_estimate: number;
-  fund_requirements: { [tokenAddress: string]: FundRequirementsTemplate };
+  fund_requirements: {
+    // zero address means native currency
+    [tokenAddress: string]: FundRequirementsTemplate;
+  };
 };
 
 export type FundRequirementsTemplate = {
