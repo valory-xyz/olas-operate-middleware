@@ -15,6 +15,10 @@ const { Text, Title } = Typography;
 export const LowSafeSignerBalanceAlert = () => {
   const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
   const { selectedAgentConfig } = useServices();
+  const token =
+    selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
+      WalletType.EOA
+    ][tokenSymbol];
 
   return (
     <CustomAlert
@@ -28,9 +32,7 @@ export const LowSafeSignerBalanceAlert = () => {
           </Title>
           <Text>
             To keep your agent operational, add
-            <Text
-              strong
-            >{` ${selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][WalletType.EOA][tokenSymbol]} ${tokenSymbol} `}</Text>
+            <Text strong>{` ${token} ${tokenSymbol} `}</Text>
             on {chainName} chain to the safe signer.
           </Text>
           <Text>
