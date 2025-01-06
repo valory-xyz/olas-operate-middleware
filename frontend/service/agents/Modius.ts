@@ -48,7 +48,7 @@ export abstract class ModiusService extends StakedAgentService {
       stakingTokenProxyContract.minStakingDeposit(),
       stakingTokenProxyContract.tsCheckpoint(),
       activityChecker.livenessRatio(),
-      activityChecker.getMultisigNonces(),
+      activityChecker.getMultisigNonces(agentMultisigAddress),
     ];
     const multicallResponse = await provider.all(contractCalls);
 
