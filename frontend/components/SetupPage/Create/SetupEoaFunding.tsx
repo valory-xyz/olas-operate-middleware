@@ -6,7 +6,6 @@ import styled from 'styled-components';
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
-import { AGENT_CONFIG } from '@/config/agents';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { NA } from '@/constants/symbols';
 import { SetupScreen } from '@/enums/SetupScreen';
@@ -123,7 +122,7 @@ export const SetupEoaFundingForChain = ({
  */
 export const SetupEoaFunding = () => {
   const { goto } = useSetup();
-  const { selectedAgentType, selectedAgentConfig } = useServices();
+  const { selectedAgentConfig } = useServices();
   const { masterEoa } = useMasterWalletContext();
   const { masterWalletBalances } = useMasterBalances();
   const masterEoaAddress = masterEoa?.address;
@@ -132,10 +131,7 @@ export const SetupEoaFunding = () => {
     selectedAgentConfig.evmHomeChainId as AgentSupportedEvmChainId,
   );
 
-  const currentFundingRequirements =
-    AGENT_CONFIG[selectedAgentType]?.eoaFunding[currentChain];
-
-  const chainName = currentFundingRequirements?.chainConfig.name;
+  const currentFundingRequirements = CHAIN_CONFIG[currentChain];
 
   const eoaBalance = masterWalletBalances?.find(
     (balance) =>
@@ -148,12 +144,14 @@ export const SetupEoaFunding = () => {
     eoaBalance.balance >= CHAIN_CONFIG[currentChain].safeCreationThreshold;
 
   const handleFunded = useCallback(async () => {
-    message.success(`${chainName} funds have been received!`);
+    message.success(
+      `${currentFundingRequirements.name} funds have been received!`,
+    );
 
     await delayInSeconds(1);
 
-    const chains = Object.keys(AGENT_CONFIG[selectedAgentType].eoaFunding);
-    const indexOfCurrentChain = chains.indexOf(currentChain.toString());
+    const chains = selectedAgentConfig.requiresAgentSafesOn;
+    const indexOfCurrentChain = chains.indexOf(currentChain);
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
     // goto next chain
@@ -165,7 +163,12 @@ export const SetupEoaFunding = () => {
     }
 
     goto(SetupScreen.SetupCreateSafe);
-  }, [currentChain, selectedAgentType, chainName, goto]);
+  }, [
+    currentChain,
+    goto,
+    currentFundingRequirements.name,
+    selectedAgentConfig.requiresAgentSafesOn,
+  ]);
 
   useEffect(() => {
     if (!currentFundingRequirements) return;
@@ -177,13 +180,12 @@ export const SetupEoaFunding = () => {
 
   if (!currentFundingRequirements) return null;
 
-  const { chainConfig } = currentFundingRequirements;
   return (
     <SetupEoaFundingForChain
       isFunded={isFunded}
-      minRequiredBalance={chainConfig.safeCreationThreshold}
-      currency={chainConfig.nativeToken.symbol}
-      chainName={chainConfig.name}
+      minRequiredBalance={currentFundingRequirements.safeCreationThreshold}
+      currency={currentFundingRequirements.nativeToken.symbol}
+      chainName={currentFundingRequirements.name}
     />
   );
 };

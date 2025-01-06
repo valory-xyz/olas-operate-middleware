@@ -17,7 +17,6 @@ import { PredictTraderService } from '@/service/agents/PredictTrader';
 import { AgentConfig } from '@/types/Agent';
 import { formatEther } from '@/utils/numberFormatters';
 
-import { CHAIN_CONFIG } from './chains';
 import { MODE_TOKEN_CONFIG } from './tokens';
 
 const traderFundRequirements =
@@ -65,11 +64,6 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
-    eoaFunding: {
-      [EvmChainId.Gnosis]: {
-        chainConfig: CHAIN_CONFIG[EvmChainId.Gnosis],
-      },
-    },
     isAgentEnabled: true,
   },
   [AgentType.Memeooorr]: {
@@ -101,11 +95,6 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
-    eoaFunding: {
-      [EvmChainId.Base]: {
-        chainConfig: CHAIN_CONFIG[EvmChainId.Base],
-      },
-    },
     isAgentEnabled: true,
   },
   [AgentType.Modius]: {
@@ -153,11 +142,6 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    eoaFunding: {
-      [EvmChainId.Mode]: {
-        chainConfig: CHAIN_CONFIG[EvmChainId.Mode],
-      },
-    },
     isAgentEnabled: false,
   },
 };
