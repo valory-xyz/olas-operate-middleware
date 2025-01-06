@@ -19,6 +19,7 @@ const schema = {
   trader: { type: 'object', default: defaultInitialAgentSettings },
   memeooorr: { type: 'object', default: defaultInitialAgentSettings },
   modius: { type: 'object', default: defaultInitialAgentSettings },
+  agentsFunCelo: { type: 'object', default: defaultInitialAgentSettings },
 };
 
 /**
