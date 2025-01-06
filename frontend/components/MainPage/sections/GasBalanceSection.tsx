@@ -6,7 +6,6 @@ import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
@@ -46,7 +45,6 @@ const BalanceStatus = () => {
   const {
     isFetched: isServicesLoaded,
     selectedAgentType,
-    selectedAgentConfig,
     selectedService,
   } = useServices();
 
@@ -54,45 +52,29 @@ const BalanceStatus = () => {
   const { showNotification } = useElectronApi();
 
   const { isMasterSafeLowOnNativeGas } = useMasterBalances();
-  const { serviceSafeBalances } = useServiceBalances(
+  const { isServiceSafeLowOnNativeGas } = useServiceBalances(
     selectedService?.service_config_id,
   );
 
   const [isLowBalanceNotificationShown, setIsLowBalanceNotificationShown] =
     useState(false);
 
-  const serviceSafeNativeBalance = useMemo(
-    () =>
-      serviceSafeBalances?.find(
-        ({ isNative, evmChainId }) =>
-          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
-      ),
-    [serviceSafeBalances, selectedAgentConfig],
-  );
-
+  /**
+   * If the master safe is low on native gas and the service safe balance is below the threshold,
+   */
   const isLowFunds = useMemo(() => {
-    if (!serviceSafeNativeBalance) return false;
-    return (
-      isMasterSafeLowOnNativeGas &&
-      serviceSafeNativeBalance.balance <
-        selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-          WalletType.Safe
-        ][serviceSafeNativeBalance.symbol]
-    );
-  }, [
-    isMasterSafeLowOnNativeGas,
-    selectedAgentConfig.operatingThresholds,
-    serviceSafeNativeBalance,
-  ]);
+    if (isNil(isMasterSafeLowOnNativeGas)) return false;
+    if (isNil(isServiceSafeLowOnNativeGas)) return false;
+
+    return isMasterSafeLowOnNativeGas && isServiceSafeLowOnNativeGas;
+  }, [isMasterSafeLowOnNativeGas, isServiceSafeLowOnNativeGas]);
 
   // show notification if balance is too low
   useEffect(() => {
     if (!isBalanceLoaded || !isServicesLoaded) return;
     if (!showNotification) return;
     if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
-    if (!serviceSafeNativeBalance) return;
 
-    // Check both master and agent safes
     if (isLowFunds && !isLowBalanceNotificationShown) {
       showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
@@ -109,7 +91,6 @@ const BalanceStatus = () => {
     isLowFunds,
     isServicesLoaded,
     selectedAgentType,
-    serviceSafeNativeBalance,
     showNotification,
     storeState,
   ]);

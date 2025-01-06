@@ -1,16 +1,19 @@
 import { MiddlewareChain } from '@/client';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletOwnerType } from '@/enums/Wallet';
+import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
-export type StakedAgentServiceInstance = PredictTraderService;
+export type AgentSupportedEvmChainId =
+  | EvmChainId.Gnosis
+  | EvmChainId.Base
+  | EvmChainId.Mode;
+
 export type AgentConfig = {
   name: string;
   evmHomeChainId: EvmChainId;
   middlewareHomeChainId: MiddlewareChain;
   requiresAgentSafesOn: EvmChainId[];
-  agentSafeFundingRequirements: Record<string, number>;
   requiresMasterSafesOn: EvmChainId[];
   additionalRequirements?: Partial<
     Record<EvmChainId, Partial<Record<TokenSymbol, number>>>
@@ -18,10 +21,19 @@ export type AgentConfig = {
   serviceApi: typeof PredictTraderService;
   displayName: string;
   description: string;
+  /**
+   * The operating thresholds for the agent to continue running (after "initial funding").
+   * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
+   */
   isAgentEnabled: boolean;
   operatingThresholds: {
-    [owner: string | WalletOwnerType]: {
-      [walletType: string | WalletOwnerType]: {
+    [WalletOwnerType.Master]: {
+      [walletType in WalletType.EOA | WalletType.Safe]: {
+        [tokenSymbol: string | TokenSymbol]: number;
+      };
+    };
+    [WalletOwnerType.Agent]: {
+      [WalletType.Safe]: {
         [tokenSymbol: string | TokenSymbol]: number;
       };
     };

@@ -3,7 +3,7 @@ import { Button, Form, Input, Typography } from 'antd';
 import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
-import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { SettingsScreen } from '@/enums/SettingsScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
@@ -31,7 +31,7 @@ export const AddBackupWalletPage = () => {
     if (isNil(masterEoaNativeBalance)) return false;
 
     const nativeBalanceRequiredToAddSigner =
-      MIN_ETH_BALANCE_THRESHOLDS[homeChainId].safeAddSigner;
+      CHAIN_CONFIG[homeChainId].safeAddSignerThreshold;
 
     return masterEoaNativeBalance >= nativeBalanceRequiredToAddSigner;
   }, [homeChainId, masterEoaBalances]);

@@ -6,16 +6,14 @@ import styled from 'styled-components';
 import { CustomAlert } from '@/components/Alert';
 import { CardFlex } from '@/components/styled/CardFlex';
 import { CardSection } from '@/components/styled/CardSection';
-import { AGENT_CONFIG } from '@/config/agents';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { NA } from '@/constants/symbols';
-import { MIN_ETH_BALANCE_THRESHOLDS } from '@/constants/thresholds';
-import { EvmChainId, EvmChainName } from '@/enums/Chain';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 import { useMasterWalletContext } from '@/hooks/useWallet';
+import { AgentSupportedEvmChainId } from '@/types/Agent';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 
@@ -36,13 +34,8 @@ const AccountCreationCard = styled.div`
 
 const ICON_STYLE = { color: '#606F85' };
 
-const statusMessage = (isFunded?: boolean) => {
-  if (isFunded) {
-    return 'Funds have been received!';
-  } else {
-    return 'Waiting for transaction';
-  }
-};
+const statusMessage = (isFunded?: boolean) =>
+  isFunded ? 'Funds have been received!' : 'Waiting for transaction';
 
 type SetupEoaFundingWaitingProps = { chainName: string };
 const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
@@ -87,13 +80,6 @@ const SetupEoaFundingWaiting = ({ chainName }: SetupEoaFundingWaitingProps) => {
         <span className="can-select-text break-word">
           {`${masterEoaAddress || NA}`}
         </span>
-        {/* <CustomAlert
-          type="info"
-          showIcon
-          message={
-            'After this point, do not send more funds to this address. Once your account is created, you will be given a new address - send further funds there.'
-          }
-        /> */}
       </AccountCreationCard>
     </>
   );
@@ -136,19 +122,16 @@ export const SetupEoaFundingForChain = ({
  */
 export const SetupEoaFunding = () => {
   const { goto } = useSetup();
-  const { selectedAgentType, selectedAgentConfig } = useServices();
+  const { selectedAgentConfig } = useServices();
   const { masterEoa } = useMasterWalletContext();
   const { masterWalletBalances } = useMasterBalances();
   const masterEoaAddress = masterEoa?.address;
 
-  const [currentChain, setCurrentChain] = useState<EvmChainId>(
-    selectedAgentConfig.evmHomeChainId,
+  const [currentChain, setCurrentChain] = useState<AgentSupportedEvmChainId>(
+    selectedAgentConfig.evmHomeChainId as AgentSupportedEvmChainId,
   );
 
-  const agentSafeFundingRequirements =
-    AGENT_CONFIG[selectedAgentType]?.agentSafeFundingRequirements;
-  const currentFundingRequirements =
-    agentSafeFundingRequirements?.[currentChain];
+  const currentFundingRequirements = CHAIN_CONFIG[currentChain];
 
   const eoaBalance = masterWalletBalances?.find(
     (balance) =>
@@ -158,25 +141,34 @@ export const SetupEoaFunding = () => {
 
   const isFunded =
     eoaBalance?.evmChainId === currentChain &&
-    eoaBalance.balance >= MIN_ETH_BALANCE_THRESHOLDS[currentChain].safeCreation;
+    eoaBalance.balance >= CHAIN_CONFIG[currentChain].safeCreationThreshold;
 
   const handleFunded = useCallback(async () => {
-    message.success(`${EvmChainName[currentChain]} funds have been received!`);
+    message.success(
+      `${currentFundingRequirements.name} funds have been received!`,
+    );
 
     await delayInSeconds(1);
 
-    const chains = Object.keys(agentSafeFundingRequirements);
-    const indexOfCurrentChain = chains.indexOf(currentChain.toString());
+    const chains = selectedAgentConfig.requiresAgentSafesOn;
+    const indexOfCurrentChain = chains.indexOf(currentChain);
     const nextChainExists = chains.length > indexOfCurrentChain + 1;
 
     // goto next chain
     if (nextChainExists) {
-      setCurrentChain(chains[indexOfCurrentChain + 1] as unknown as EvmChainId);
+      setCurrentChain(
+        chains[indexOfCurrentChain + 1] as unknown as AgentSupportedEvmChainId,
+      );
       return;
     }
 
     goto(SetupScreen.SetupCreateSafe);
-  }, [agentSafeFundingRequirements, currentChain, goto]);
+  }, [
+    currentChain,
+    goto,
+    currentFundingRequirements.name,
+    selectedAgentConfig.requiresAgentSafesOn,
+  ]);
 
   useEffect(() => {
     if (!currentFundingRequirements) return;
@@ -191,9 +183,9 @@ export const SetupEoaFunding = () => {
   return (
     <SetupEoaFundingForChain
       isFunded={isFunded}
-      minRequiredBalance={currentFundingRequirements}
-      currency={CHAIN_CONFIG[currentChain].nativeToken.symbol}
-      chainName={CHAIN_CONFIG[currentChain].name}
+      minRequiredBalance={currentFundingRequirements.safeCreationThreshold}
+      currency={currentFundingRequirements.nativeToken.symbol}
+      chainName={currentFundingRequirements.name}
     />
   );
 };

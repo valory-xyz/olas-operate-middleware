@@ -1,4 +1,4 @@
-import { useContext } from 'react';
+import { useCallback, useContext } from 'react';
 
 import { SetupContext } from '@/context/SetupProvider';
 import { SetupScreen } from '@/enums/SetupScreen';
@@ -7,15 +7,26 @@ import { Address } from '@/types/Address';
 export const useSetup = () => {
   const { setupObject, setSetupObject } = useContext(SetupContext);
 
-  const goto = (state: SetupScreen) => {
-    setSetupObject((prev) => ({ ...prev, state }));
-  };
+  const goto = useCallback(
+    (state: SetupScreen) => {
+      setSetupObject((prev) => ({ ...prev, state }));
+    },
+    [setSetupObject],
+  );
 
-  const setMnemonic = (mnemonic: string[]) =>
-    setSetupObject((prev) => Object.assign(prev, { mnemonic }));
+  const setMnemonic = useCallback(
+    (mnemonic: string[]) => {
+      setSetupObject((prev) => Object.assign(prev, { mnemonic }));
+    },
+    [setSetupObject],
+  );
 
-  const setBackupSigner = (backupSigner: Address) =>
-    setSetupObject((prev) => Object.assign(prev, { backupSigner }));
+  const setBackupSigner = useCallback(
+    (backupSigner: Address) => {
+      setSetupObject((prev) => Object.assign(prev, { backupSigner }));
+    },
+    [setSetupObject],
+  );
 
   return {
     ...setupObject,

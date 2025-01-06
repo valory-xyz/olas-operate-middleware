@@ -36,5 +36,7 @@ export const useLowFundsDetails = () => {
     masterEoaAddress: masterEoa?.address,
     masterThresholds:
       selectedAgentConfig.operatingThresholds[WalletOwnerType.Master],
+    agentThresholds:
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Agent],
   };
 };

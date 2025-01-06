@@ -18,6 +18,11 @@ export const useBalanceContext = () => useContext(BalanceContext);
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string | undefined) => {
+  const { selectedAgentConfig } = useServices();
+  const homeChainId = selectedAgentConfig.evmHomeChainId;
+
+  const { nativeToken } = CHAIN_CONFIG[homeChainId];
+
   const { flatAddresses, serviceSafes, serviceEoa } =
     useService(serviceConfigId);
   const { walletBalances, stakedBalances } = useBalanceContext();
@@ -68,11 +73,41 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
     return result;
   }, [serviceEoaBalances, serviceSafeBalances]);
 
+  /**
+   * Native service safe
+   * @example XDAI on gnosis
+   */
+  const serviceSafeNative = useMemo(
+    () =>
+      serviceSafeBalances?.find(
+        ({ isNative, evmChainId }) =>
+          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
+      ),
+    [serviceSafeBalances, selectedAgentConfig],
+  );
+
+  /**
+   * Check if service safe native balance is below threshold
+   */
+  const isServiceSafeLowOnNativeGas = useMemo(() => {
+    if (!serviceSafeNative) return;
+    if (!nativeToken?.symbol) return;
+
+    const nativeGasRequirement =
+      selectedAgentConfig.operatingThresholds[WalletOwnerType.Agent][
+        WalletType.Safe
+      ][nativeToken.symbol];
+
+    return serviceSafeNative.balance < nativeGasRequirement;
+  }, [serviceSafeNative, nativeToken, selectedAgentConfig]);
+
   return {
     serviceWalletBalances,
     serviceStakedBalances,
     serviceSafeBalances,
     serviceEoaBalances,
+    serviceSafeNative,
+    isServiceSafeLowOnNativeGas,
   };
 };
 
@@ -144,6 +179,9 @@ export const useMasterBalances = () => {
     homeChainNativeToken,
   ]);
 
+  /**
+   * Check if master safe native balance is below threshold
+   */
   const isMasterSafeLowOnNativeGas = useMemo(() => {
     if (!masterSafeNative) return;
     if (!homeChainNativeToken?.symbol) return;
