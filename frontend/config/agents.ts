@@ -59,9 +59,6 @@ export const AGENT_CONFIG: {
             formatEther(`${traderFundRequirements.agent}`),
           ),
         },
-        [WalletType.EOA]: {
-          [TokenSymbol.XDAI]: 0.1, // TODO: should come from the template
-        },
       },
     },
     requiresMasterSafesOn: [EvmChainId.Gnosis],
@@ -96,9 +93,6 @@ export const AGENT_CONFIG: {
           [TokenSymbol.ETH]: Number(
             formatEther(`${memeooorrRequirements.agent}`),
           ),
-        },
-        [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.00625, // TODO: should come from the template
         },
       },
     },
@@ -151,9 +145,6 @@ export const AGENT_CONFIG: {
               `${modiusFundRequirements[ethers.constants.AddressZero].agent}`,
             ),
           ),
-        },
-        [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.0005, // TODO: should come from the template
         },
       },
     },

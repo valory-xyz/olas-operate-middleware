@@ -33,8 +33,13 @@ export type AgentConfig = {
    */
   isAgentEnabled: boolean;
   operatingThresholds: {
-    [owner in WalletOwnerType.Agent | WalletOwnerType.Master]: {
+    [WalletOwnerType.Master]: {
       [walletType in WalletType.EOA | WalletType.Safe]: {
+        [tokenSymbol: string | TokenSymbol]: number;
+      };
+    };
+    [WalletOwnerType.Agent]: {
+      [WalletType.Safe]: {
         [tokenSymbol: string | TokenSymbol]: number;
       };
     };
