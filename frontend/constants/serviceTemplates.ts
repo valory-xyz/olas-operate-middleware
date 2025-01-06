@@ -88,33 +88,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   },
 } as const;
 
-export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
-  agentType: AgentType.Memeooorr,
-  name: 'Memeooorr',
-  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
-  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  image:
-    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
-  service_version: 'v0.2.0-alpha16',
-  home_chain: MiddlewareChain.BASE,
-  configurations: {
-    [MiddlewareChain.BASE]: {
-      staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
-      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
-      rpc: 'http://localhost:8545', // overwritten
-      agent_id: 43,
-      threshold: 1,
-      use_staking: true,
-      cost_of_bond: +parseEther(50),
-      monthly_gas_estimate: +parseEther(0.03),
-      fund_requirements: {
-        [ethers.constants.AddressZero]: {
-          agent: +parseEther(0.00625),
-          safe: +parseEther(0.0125),
-        },
-      },
-    },
-  },
+const AGENTS_FUN_COMMON_TEMPLATE: Pick<ServiceTemplate, 'env_variables'> = {
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -196,6 +170,73 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       provision_type: EnvProvisionType.COMPUTED,
     },
   },
+};
+
+/**
+ * Agents.fun Base template
+ */
+export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
+  agentType: AgentType.Memeooorr,
+  name: 'Memeooorr',
+  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+  image:
+    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
+  service_version: 'v0.2.0-alpha16',
+  home_chain: MiddlewareChain.BASE,
+  configurations: {
+    [MiddlewareChain.BASE]: {
+      staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
+      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+      rpc: 'http://localhost:8545', // overwritten
+      agent_id: 43,
+      threshold: 1,
+      use_staking: true,
+      cost_of_bond: +parseEther(50),
+      monthly_gas_estimate: +parseEther(0.03),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625),
+          safe: +parseEther(0.0125),
+        },
+      },
+    },
+  },
+  ...AGENTS_FUN_COMMON_TEMPLATE,
+} as const;
+
+// TODO: celo template (check each key)
+/**
+ * Agents.fun Celo template
+ */
+export const AGENTS_FUN_CELO: ServiceTemplate = {
+  agentType: AgentType.AgentsFunCelo,
+  name: 'Memeooorr',
+  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+  image:
+    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
+  service_version: 'v0.2.0-alpha16',
+  home_chain: MiddlewareChain.CELO,
+  configurations: {
+    [MiddlewareChain.CELO]: {
+      staking_program_id: StakingProgramId.MemeCeloAlpha2, // default, may be overwritten
+      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+      rpc: 'http://localhost:8545', // overwritten
+      agent_id: 43,
+      threshold: 1,
+      use_staking: true,
+      cost_of_bond: +parseEther(50),
+      monthly_gas_estimate: +parseEther(0.03),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625),
+          safe: +parseEther(0.0125),
+        },
+      },
+    },
+  },
+  ...AGENTS_FUN_COMMON_TEMPLATE,
 } as const;
 
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
