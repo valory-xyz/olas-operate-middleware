@@ -216,7 +216,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       threshold: 1,
       use_staking: true,
       cost_of_bond: +parseEther(20),
-      monthly_gas_estimate: +parseEther(0.006),
+      monthly_gas_estimate: +parseEther(0.011), // TODO: should be 0.0055, temp fix to avoid low balance alerts until the refund is fixed in the middleware
       fund_requirements: {
         [ethers.constants.AddressZero]: {
           agent: +parseEther(0.0005),
