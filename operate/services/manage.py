@@ -1567,22 +1567,31 @@ class ServiceManager:
                 to_transfer = max(
                     min(transferable_balance, target_balance - safe_balance), 0
                 )
-                self.logger.info(
-                    f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
-                )
-                # TODO: This is a temporary fix
-                # we avoid the error here because there is a seperate prompt on the UI
-                # when not enough funds are present, and the FE doesn't let the user to start the agent.
-                # Ideally this error should be allowed, and then the FE should ask the user for more funds.
-                with suppress(RuntimeError):
-                    wallet.transfer_asset(
-                        asset=asset_address,
-                        to=t.cast(str, chain_data.multisig),
-                        amount=int(to_transfer),
-                        chain=ledger_config.chain,
-                        rpc=rpc or ledger_config.rpc,
-                    )
 
+                # TODO Possibly remove this logging
+                self.logger.info(f"{transferable_balance=}")
+                self.logger.info(f"{target_balance=}")
+                self.logger.info(f"{safe_balance=}")
+                self.logger.info(f"{to_transfer=}")
+
+                if to_transfer > 0:
+                    self.logger.info(
+                        f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
+                    )
+                    # TODO: This is a temporary fix
+                    # we avoid the error here because there is a seperate prompt on the UI
+                    # when not enough funds are present, and the FE doesn't let the user to start the agent.
+                    # Ideally this error should be allowed, and then the FE should ask the user for more funds.
+                    with suppress(RuntimeError):
+                        wallet.transfer_asset(
+                            asset=asset_address,
+                            to=t.cast(str, chain_data.multisig),
+                            amount=int(to_transfer),
+                            chain=ledger_config.chain,
+                            rpc=rpc or ledger_config.rpc,
+                        )
+
+    # TODO This method is possibly not used anymore
     def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         service_config_id: str,
