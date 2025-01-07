@@ -1,6 +1,6 @@
 import { BigNumberish } from 'ethers';
 import { getAddress, isAddress } from 'ethers/lib/utils';
-import { Contract as MulticallContract } from 'ethers-multicall';
+import { Contract as MulticallContract, Provider } from 'ethers-multicall';
 import { isEmpty, isNil, sum } from 'lodash';
 import {
   createContext,
@@ -213,6 +213,47 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
+type WrappedTokenBalance = Pick<
+  WalletBalanceResult,
+  'walletAddress' | 'balance'
+>;
+
+/**
+ * Fetches the wrapped token balances for the wallets
+ */
+const getWrappedTokenBalances = async (
+  chainId: EvmChainId,
+  wallets: Wallets,
+  multicallProvider: Provider,
+): Promise<WrappedTokenBalance[]> => {
+  const wrappedTokenBalances: WrappedTokenBalance[] = [];
+  if (!WRAPPED_TOKEN_PROVIDERS[chainId]) return wrappedTokenBalances;
+
+  const safeNativeAddresses = wallets.filter(
+    ({ type, address }) => type === WalletType.Safe && isAddress(address),
+  );
+
+  const wrappedTokenBalancesResults = await multicallProvider
+    .all(
+      safeNativeAddresses.map(({ address }) =>
+        wrappedXdaiProvider.balanceOf(address),
+      ),
+    )
+    .catch((e) => {
+      console.error('Error fetching wrapped balances:', e);
+      return [];
+    });
+
+  safeNativeAddresses.forEach((balance, index) => {
+    wrappedTokenBalances.push({
+      walletAddress: balance.address,
+      balance: Number(formatUnits(wrappedTokenBalancesResults[index])),
+    });
+  });
+
+  return wrappedTokenBalances;
+};
+
 const getCrossChainWalletBalances = async (
   wallets: Wallets,
 ): Promise<WalletBalanceResult[]> => {
@@ -265,30 +306,11 @@ const getCrossChainWalletBalances = async (
             },
           );
 
-          const wrappedTokenBalances: WalletBalanceResult[] = [];
-
-          if (WRAPPED_TOKEN_PROVIDERS[providerEvmChainId]) {
-            const safeNativeAddresses = relevantWallets.filter(
-              ({ type, address }) =>
-                type === WalletType.Safe && isAddress(address),
-            );
-
-            const erc20Balances = await multicallProvider.all(
-              safeNativeAddresses.map(({ address }) =>
-                wrappedXdaiProvider.balanceOf(address),
-              ),
-            );
-
-            safeNativeAddresses.forEach((balance, index) => {
-              wrappedTokenBalances.push({
-                walletAddress: balance.address,
-                evmChainId: providerEvmChainId,
-                symbol: tokenSymbol,
-                isNative: true,
-                balance: Number(formatUnits(erc20Balances[index])),
-              });
-            });
-          }
+          const wrappedTokenBalances = await getWrappedTokenBalances(
+            providerEvmChainId,
+            relevantWallets,
+            multicallProvider,
+          );
 
           // add the results to the balance results
           nativeBalances.forEach((balance, index) => {
