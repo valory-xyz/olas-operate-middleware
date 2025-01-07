@@ -269,10 +269,10 @@ const YourAgentWalletBreakdown = () => {
           <Flex vertical gap={8}>
             {isArray(serviceSafeNativeBalances) && (
               <InfoBreakdownList
-                list={serviceSafeNativeBalances.map((balance) => ({
-                  left: <strong>{balance.symbol}</strong>,
+                list={serviceSafeNativeBalances.map(({ symbol, balance }) => ({
+                  left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
-                  right: `${balanceFormat(balance.balance, 4)} ${balance.symbol}`,
+                  right: `${balanceFormat(balance, 4)} ${symbol}`,
                 }))}
                 parentStyle={infoBreakdownParentStyle}
               />
