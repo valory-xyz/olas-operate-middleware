@@ -19,7 +19,7 @@ type ActivityCheckers = {
   [activityCheckerType: string]: MulticallContract;
 };
 
-export const GNOSIS_ACTIVITY_CHECKERS: ActivityCheckers = {
+const GNOSIS_ACTIVITY_CHECKERS: ActivityCheckers = {
   [ActivityCheckerType.MechActivityChecker]: new MulticallContract(
     '0x155547857680A6D51bebC5603397488988DEb1c8',
     MECH_ACTIVITY_CHECKER_ABI,
@@ -30,19 +30,26 @@ export const GNOSIS_ACTIVITY_CHECKERS: ActivityCheckers = {
   ),
 };
 
-export const OPTIMISM_ACTIVITY_CHECKERS: ActivityCheckers = {};
+const OPTIMISM_ACTIVITY_CHECKERS: ActivityCheckers = {};
 
-export const BASE_ACTIVITY_CHECKERS: ActivityCheckers = {
+const BASE_ACTIVITY_CHECKERS: ActivityCheckers = {
   [ActivityCheckerType.MemeActivityChecker]: new MulticallContract(
     '0x026AB1c5ea14E61f67d245685D9561c0c2Cb39Ba',
     MEME_ACTIVITY_CHECKER_ABI,
   ),
 };
 
-export const MODE_ACTIVITY_CHECKERS: ActivityCheckers = {
+const MODE_ACTIVITY_CHECKERS: ActivityCheckers = {
   [ActivityCheckerType.Staking]: new MulticallContract(
     '0x07bc3C23DbebEfBF866Ca7dD9fAA3b7356116164',
     STAKING_ACTIVITY_CHECKER_ABI,
+  ),
+};
+
+const CELO_ACTIVITY_CHECKERS: ActivityCheckers = {
+  [ActivityCheckerType.MemeActivityChecker]: new MulticallContract(
+    '0x3FD8C757dE190bcc82cF69Df3Cd9Ab15bCec1426',
+    MEME_ACTIVITY_CHECKER_ABI,
   ),
 };
 
@@ -55,4 +62,5 @@ export const ACTIVITY_CHECKERS: {
   [EvmChainId.Optimism]: OPTIMISM_ACTIVITY_CHECKERS,
   [EvmChainId.Base]: BASE_ACTIVITY_CHECKERS,
   [EvmChainId.Mode]: MODE_ACTIVITY_CHECKERS,
+  [EvmChainId.Celo]: CELO_ACTIVITY_CHECKERS,
 } as const;
