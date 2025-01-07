@@ -184,12 +184,12 @@ class TestServiceManager:
 
         assert not diff, "Updated service does not match expected service."
 
-    @pytest.mark.parametrize("update_new_var", [True])
-    @pytest.mark.parametrize("update_update_var", [True])
-    @pytest.mark.parametrize("update_delete_var", [True])
-    @pytest.mark.parametrize("update_name", [True])
-    @pytest.mark.parametrize("update_description", [True])
-    @pytest.mark.parametrize("update_hash", [True])
+    @pytest.mark.parametrize("update_new_var", [True, False])
+    @pytest.mark.parametrize("update_update_var", [True, False])
+    @pytest.mark.parametrize("update_delete_var", [True, False])
+    @pytest.mark.parametrize("update_name", [True, False])
+    @pytest.mark.parametrize("update_description", [True, False])
+    @pytest.mark.parametrize("update_hash", [True, False])
     def test_service_manager_update(
         self,
         update_new_var: bool,
