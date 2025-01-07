@@ -15,7 +15,7 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
-// TODO: make it reusable
+// TODO: make it reusable (agents.fun base and celo)
 export abstract class AgentsFunCeloService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,

@@ -93,7 +93,6 @@ export const useService = (serviceConfigId?: string) => {
       (acc, middlewareChain) => {
         const { multisig, instances } =
           chainData[middlewareChain as keyof typeof chainData].chain_data;
-
         const evmChainId = asEvmChainId(middlewareChain);
 
         return {

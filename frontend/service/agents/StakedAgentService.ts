@@ -169,7 +169,7 @@ export abstract class StakedAgentService {
    * @example getStakingProgramIdByAddress('0x3052451e1eAee78e62E169AfdF6288F8791F2918') // StakingProgramId.Beta4
    */
   static getStakingProgramIdByAddress = (
-    chainId: number | EvmChainId,
+    chainId: EvmChainId,
     contractAddress: Address,
   ): Nullable<StakingProgramId> => {
     const addresses = STAKING_PROGRAM_ADDRESS[chainId];
