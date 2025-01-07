@@ -719,7 +719,7 @@ class Service(LocalResource):
             )
 
         # Complete missing env vars for trader
-        if data["name"] == "valory/trader_pearl":
+        if "trader" in data["name"].lower():
             data.setdefault("env_variables", {})
 
             for key, value in DEFAULT_TRADER_ENV_VARS.items():
