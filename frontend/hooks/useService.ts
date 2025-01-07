@@ -6,6 +6,7 @@ import {
   MiddlewareRunningStatuses,
   MiddlewareTransitioningStatuses,
 } from '@/client';
+import { EvmChainId } from '@/enums/Chain';
 import {
   AgentEoa,
   AgentSafe,
@@ -21,7 +22,7 @@ import { asEvmChainId } from '@/utils/middlewareHelpers';
 import { useServices } from './useServices';
 
 type ServiceChainIdAddressRecord = {
-  [evmChainId: number]: {
+  [evmChainId in EvmChainId]: {
     agentSafe?: Address;
     agentEoas?: Address[];
   };

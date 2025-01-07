@@ -10,10 +10,6 @@ import { EvmChainId } from '@/enums/Chain';
  */
 export const asEvmChainId = (chain?: MiddlewareChain | string): EvmChainId => {
   switch (chain) {
-    case MiddlewareChain.ETHEREUM:
-      return EvmChainId.Ethereum;
-    case MiddlewareChain.OPTIMISM:
-      return EvmChainId.Optimism;
     case MiddlewareChain.GNOSIS:
       return EvmChainId.Gnosis;
     case MiddlewareChain.BASE:
@@ -32,10 +28,6 @@ export const asEvmChainId = (chain?: MiddlewareChain | string): EvmChainId => {
  */
 export const asMiddlewareChain = (chainId?: EvmChainId | number) => {
   switch (chainId) {
-    case EvmChainId.Ethereum:
-      return MiddlewareChain.ETHEREUM;
-    case EvmChainId.Optimism:
-      return MiddlewareChain.OPTIMISM;
     case EvmChainId.Gnosis:
       return MiddlewareChain.GNOSIS;
     case EvmChainId.Base:

@@ -25,8 +25,6 @@ export const DOWNLOAD_URL: Url = 'https://olas.network/operate#download';
 
 // thegraph
 export const REWARDS_HISTORY_SUBGRAPH_URLS_BY_EVM_CHAIN = {
-  [EvmChainId.Ethereum]: '',
-  [EvmChainId.Optimism]: '',
   [EvmChainId.Gnosis]:
     'https://api.studio.thegraph.com/query/81371/gnosis-pearl-rewards-history/version/latest',
   [EvmChainId.Base]:

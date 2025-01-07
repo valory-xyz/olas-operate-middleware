@@ -3,7 +3,7 @@ import { Card, Flex, Skeleton, Typography } from 'antd';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { DISCORD_TICKET_URL } from '@/constants/urls';
-import { EvmChainId } from '@/enums/Chain';
+import { AllEvmChainId, EvmChainId } from '@/enums/Chain';
 import { useServices } from '@/hooks/useServices';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 
@@ -15,9 +15,9 @@ const { Text } = Typography;
  * update as needed; check https://app.safe.global/new-safe/create for prefixes
  */
 const safeChainPrefix = {
-  [EvmChainId.Ethereum]: 'eth',
+  [AllEvmChainId.Ethereum]: 'eth',
   [EvmChainId.Base]: 'base',
-  [EvmChainId.Optimism]: 'oeth',
+  [AllEvmChainId.Optimism]: 'oeth',
   [EvmChainId.Gnosis]: 'gno',
   [EvmChainId.Mode]: '', // TODO: provide correct prefix once mode is supported on safe
   [EvmChainId.Celo]: 'celo',
