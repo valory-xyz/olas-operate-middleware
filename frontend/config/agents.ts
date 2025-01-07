@@ -172,6 +172,6 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent - Celo',
     description:
       'Autonomously posts to Twitter, create and trade memecoins, and interact with other agents. Agent is operating on Celo chain.',
-    isAgentEnabled: true,
+    isAgentEnabled: false,
   },
 };
