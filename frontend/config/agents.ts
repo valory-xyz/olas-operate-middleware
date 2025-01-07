@@ -11,7 +11,7 @@ import { AgentType } from '@/enums/Agent';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
-import { MemeooorBaseService } from '@/service/agents/Memeooor';
+import { AgentsFunBaseService } from '@/service/agents/AgentsFunBase';
 import { ModiusService } from '@/service/agents/Modius';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 import { AgentConfig } from '@/types/Agent';
@@ -89,10 +89,10 @@ export const AGENT_CONFIG: {
       },
     },
     requiresMasterSafesOn: [EvmChainId.Base],
-    serviceApi: MemeooorBaseService,
-    displayName: 'Agents.fun agent',
+    serviceApi: AgentsFunBaseService,
+    displayName: 'Agents.fun agent - Base',
     description:
-      'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
+      'Autonomously posts to Twitter, create and trade memecoins, and interact with other agents. Agent is operating on Base chain.',
     isAgentEnabled: true,
   },
   [AgentType.Modius]: {
@@ -141,5 +141,37 @@ export const AGENT_CONFIG: {
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
     isAgentEnabled: false,
+  },
+  // TODO: celo (check each key)
+  [AgentType.AgentsFunCelo]: {
+    name: 'Agents.fun agent (Celo)',
+    evmHomeChainId: EvmChainId.Celo,
+    middlewareHomeChainId: MiddlewareChain.CELO,
+    requiresAgentSafesOn: [EvmChainId.Celo],
+    operatingThresholds: {
+      [WalletOwnerType.Master]: {
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: Number(
+            formatEther(`${memeooorrRequirements.safe}`),
+          ),
+        },
+        [WalletType.EOA]: {
+          [TokenSymbol.ETH]: 0.0125, // TODO: should come from the template
+        },
+      },
+      [WalletOwnerType.Agent]: {
+        [WalletType.Safe]: {
+          [TokenSymbol.ETH]: Number(
+            formatEther(`${memeooorrRequirements.agent}`),
+          ),
+        },
+      },
+    },
+    requiresMasterSafesOn: [EvmChainId.Celo],
+    serviceApi: AgentsFunBaseService,
+    displayName: 'Agents.fun agent - Celo',
+    description:
+      'Autonomously posts to Twitter, create and trade memecoins, and interact with other agents. Agent is operating on Celo chain.',
+    isAgentEnabled: true,
   },
 };

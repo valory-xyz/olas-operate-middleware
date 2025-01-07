@@ -2,7 +2,7 @@ import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
-import { BASE_STAKING_PROGRAMS } from '@/config/stakingPrograms/base';
+import { CELO_STAKING_PROGRAMS } from '@/config/stakingPrograms/celo';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -15,12 +15,13 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
-export abstract class MemeooorBaseService extends StakedAgentService {
+// TODO: make it reusable
+export abstract class AgentsFunCeloService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
     serviceId,
     stakingProgramId,
-    chainId = EvmChainId.Base,
+    chainId = EvmChainId.Celo,
   }: {
     agentMultisigAddress: Address;
     serviceId: number;
@@ -120,7 +121,7 @@ export abstract class MemeooorBaseService extends StakedAgentService {
 
   static getAvailableRewardsForEpoch = async (
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Base,
+    chainId: EvmChainId = EvmChainId.Celo,
   ): Promise<number | undefined> => {
     const stakingTokenProxy =
       STAKING_PROGRAMS[chainId][stakingProgramId]?.contract;
@@ -147,11 +148,10 @@ export abstract class MemeooorBaseService extends StakedAgentService {
   /**
    * Get service details by it's NftTokenId on a provided staking contract
    */
-
   static getServiceStakingDetails = async (
     serviceNftTokenId: number,
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Base,
+    chainId: EvmChainId = EvmChainId.Celo,
   ): Promise<ServiceStakingDetails> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
@@ -182,7 +182,7 @@ export abstract class MemeooorBaseService extends StakedAgentService {
   ): Promise<StakingContractDetails | undefined> => {
     const { multicallProvider } = PROVIDERS[chainId];
 
-    const stakingTokenProxy = BASE_STAKING_PROGRAMS[stakingProgramId]?.contract;
+    const stakingTokenProxy = CELO_STAKING_PROGRAMS[stakingProgramId]?.contract;
     if (!stakingTokenProxy) return;
 
     const contractCalls = [
