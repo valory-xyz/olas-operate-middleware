@@ -34,6 +34,11 @@ import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
 
+const wrappedXdaiProvider = new MulticallContract(
+  getAddress('0xe91d153e0b41518a2ce8dd3d7944fa863463a97d'),
+  ['function balanceOf(address owner) view returns (uint256)'],
+);
+
 type CrossChainStakedBalances = Array<{
   serviceId: string;
   evmChainId: number;
@@ -141,8 +146,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
             ? stakedBalancesResult.value
             : [];
 
-        setWalletBalances(walletBalances || []);
-        setStakedBalances(stakedBalances || []);
+        setWalletBalances(walletBalances);
+        setStakedBalances(stakedBalances);
         setIsLoaded(true);
       } catch (error) {
         console.error('Error updating balances:', error);
@@ -237,10 +242,10 @@ const getCrossChainWalletBalances = async (
           // get native balances for all relevant wallets
           const nativeBalancePromises =
             relevantWallets.map<Promise<BigNumberish> | null>(
-              ({ address: walletAddress }) =>
-                isAddress(walletAddress)
-                  ? provider.getBalance(getAddress(walletAddress))
-                  : null,
+              ({ address: walletAddress }) => {
+                if (!isAddress(walletAddress)) return null;
+                return provider.getBalance(getAddress(walletAddress));
+              },
             );
 
           const nativeBalances = await Promise.all(nativeBalancePromises).catch(
@@ -250,18 +255,51 @@ const getCrossChainWalletBalances = async (
             },
           );
 
-          // add the results to the balance results
-          nativeBalances.forEach(
-            (balance, index) =>
-              !isNil(balance) &&
-              balanceResults.push({
-                walletAddress: relevantWallets[index].address,
+          const wrappedXdaiBalances: WalletBalanceResult[] = [];
+          const isXdai = providerEvmChainId === EvmChainId.Gnosis;
+          if (isXdai) {
+            const nativeAddresses = relevantWallets.filter(
+              ({ type, address }) =>
+                type === WalletType.Safe && isAddress(address),
+            );
+
+            const wrappedXdaiBalancesCalls = nativeAddresses.map(
+              ({ address }) => wrappedXdaiProvider.balanceOf(address),
+            );
+            const erc20Balances = await multicallProvider.all(
+              wrappedXdaiBalancesCalls,
+            );
+
+            nativeAddresses.forEach((balance, index) => {
+              wrappedXdaiBalances.push({
+                walletAddress: balance.address,
                 evmChainId: providerEvmChainId,
                 symbol: tokenSymbol,
                 isNative: true,
-                balance: Number(formatUnits(balance)),
-              }),
-          );
+                balance: Number(formatUnits(erc20Balances[index])),
+              });
+            });
+          }
+
+          // add the results to the balance results
+          nativeBalances.forEach((balance, index) => {
+            if (!isNil(balance)) {
+              const address = relevantWallets[index].address;
+              const totalBalance =
+                wrappedXdaiBalances.find(
+                  ({ walletAddress }) =>
+                    walletAddress === relevantWallets[index].address,
+                )?.balance || 0;
+
+              balanceResults.push({
+                walletAddress: address,
+                evmChainId: providerEvmChainId,
+                symbol: tokenSymbol,
+                isNative: true,
+                balance: Number(formatUnits(balance)) + totalBalance,
+              });
+            }
+          });
         }
 
         if (isErc20) {
@@ -279,9 +317,7 @@ const getCrossChainWalletBalances = async (
           const erc20Calls = relevantWalletsFiltered.map((wallet) =>
             erc20Contract.balanceOf(wallet.address),
           );
-
           const erc20Balances = await multicallProvider.all(erc20Calls);
-
           const erc20Results = relevantWalletsFiltered.map(
             ({ address: walletAddress }, index) => ({
               walletAddress,
@@ -385,31 +421,16 @@ const correctBondDepositByServiceState = ({
   switch (serviceState) {
     case ServiceRegistryL2ServiceState.NonExistent:
     case ServiceRegistryL2ServiceState.PreRegistration:
-      return {
-        olasBondBalance: 0,
-        olasDepositBalance: 0,
-      };
+      return { olasBondBalance: 0, olasDepositBalance: 0 };
     case ServiceRegistryL2ServiceState.ActiveRegistration:
-      return {
-        olasBondBalance: 0,
-        olasDepositBalance,
-      };
+      return { olasBondBalance: 0, olasDepositBalance };
     case ServiceRegistryL2ServiceState.FinishedRegistration:
     case ServiceRegistryL2ServiceState.Deployed:
-      return {
-        olasBondBalance,
-        olasDepositBalance,
-      };
+      return { olasBondBalance, olasDepositBalance };
     case ServiceRegistryL2ServiceState.TerminatedBonded:
-      return {
-        olasBondBalance,
-        olasDepositBalance: 0,
-      };
+      return { olasBondBalance, olasDepositBalance: 0 };
     default:
       console.error('Invalid service state');
-      return {
-        olasBondBalance,
-        olasDepositBalance,
-      };
+      return { olasBondBalance, olasDepositBalance };
   }
 };
