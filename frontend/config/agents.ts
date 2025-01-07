@@ -93,7 +93,7 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent',
     description:
       'Autonomously post to Twitter, create and trade memecoins, and interact with other agents.',
-    isAgentEnabled: true,
+    isAgentEnabled: false,
   },
   [AgentType.Modius]: {
     name: 'Modius agent',
