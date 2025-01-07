@@ -20,6 +20,7 @@ import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
+import { WRAPPED_TOKEN_PROVIDERS } from '@/constants/wrappedTokenProviders';
 import { EvmChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
@@ -33,21 +34,6 @@ import { formatUnits } from '@/utils/numberFormatters';
 import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
-
-const wrappedXdaiProvider = new MulticallContract(
-  getAddress('0xe91d153e0b41518a2ce8dd3d7944fa863463a97d'),
-  ['function balanceOf(address owner) view returns (uint256)'],
-);
-
-const WRAPPED_TOKEN_PROVIDERS: {
-  [key in EvmChainId]: MulticallContract | null;
-} = {
-  [EvmChainId.Ethereum]: null,
-  [EvmChainId.Optimism]: null,
-  [EvmChainId.Gnosis]: wrappedXdaiProvider,
-  [EvmChainId.Base]: null,
-  [EvmChainId.Mode]: null,
-};
 
 export type WalletBalanceResult = {
   walletAddress: Address;
@@ -227,8 +213,11 @@ const getWrappedTokenBalances = async (
   multicallProvider: Provider,
 ): Promise<WrappedTokenBalance[]> => {
   const wrappedTokenBalances: WrappedTokenBalance[] = [];
-  if (!WRAPPED_TOKEN_PROVIDERS[chainId]) return wrappedTokenBalances;
 
+  const wrappedProvider = WRAPPED_TOKEN_PROVIDERS[chainId];
+  if (!wrappedProvider) return wrappedTokenBalances;
+
+  // filter out the safe wallets
   const safeNativeAddresses = wallets.filter(
     ({ type, address }) => type === WalletType.Safe && isAddress(address),
   );
@@ -236,7 +225,7 @@ const getWrappedTokenBalances = async (
   const wrappedTokenBalancesResults = await multicallProvider
     .all(
       safeNativeAddresses.map(({ address }) =>
-        wrappedXdaiProvider.balanceOf(address),
+        wrappedProvider.balanceOf(address),
       ),
     )
     .catch((e) => {
