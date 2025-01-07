@@ -39,6 +39,24 @@ const wrappedXdaiProvider = new MulticallContract(
   ['function balanceOf(address owner) view returns (uint256)'],
 );
 
+const WRAPPED_TOKEN_PROVIDERS: {
+  [key in EvmChainId]: MulticallContract | null;
+} = {
+  [EvmChainId.Ethereum]: null,
+  [EvmChainId.Optimism]: null,
+  [EvmChainId.Gnosis]: wrappedXdaiProvider,
+  [EvmChainId.Base]: null,
+  [EvmChainId.Mode]: null,
+};
+
+export type WalletBalanceResult = {
+  walletAddress: Address;
+  evmChainId: EvmChainId;
+  symbol: TokenSymbol;
+  isNative: boolean;
+  balance: number;
+};
+
 type CrossChainStakedBalances = Array<{
   serviceId: string;
   evmChainId: number;
@@ -195,14 +213,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-export type WalletBalanceResult = {
-  walletAddress: Address;
-  evmChainId: EvmChainId;
-  symbol: TokenSymbol;
-  isNative: boolean;
-  balance: number;
-};
-
 const getCrossChainWalletBalances = async (
   wallets: Wallets,
 ): Promise<WalletBalanceResult[]> => {
@@ -255,23 +265,22 @@ const getCrossChainWalletBalances = async (
             },
           );
 
-          const wrappedXdaiBalances: WalletBalanceResult[] = [];
-          const isXdai = providerEvmChainId === EvmChainId.Gnosis;
-          if (isXdai) {
-            const nativeAddresses = relevantWallets.filter(
+          const wrappedTokenBalances: WalletBalanceResult[] = [];
+
+          if (WRAPPED_TOKEN_PROVIDERS[providerEvmChainId]) {
+            const safeNativeAddresses = relevantWallets.filter(
               ({ type, address }) =>
                 type === WalletType.Safe && isAddress(address),
             );
 
-            const wrappedXdaiBalancesCalls = nativeAddresses.map(
-              ({ address }) => wrappedXdaiProvider.balanceOf(address),
-            );
             const erc20Balances = await multicallProvider.all(
-              wrappedXdaiBalancesCalls,
+              safeNativeAddresses.map(({ address }) =>
+                wrappedXdaiProvider.balanceOf(address),
+              ),
             );
 
-            nativeAddresses.forEach((balance, index) => {
-              wrappedXdaiBalances.push({
+            safeNativeAddresses.forEach((balance, index) => {
+              wrappedTokenBalances.push({
                 walletAddress: balance.address,
                 evmChainId: providerEvmChainId,
                 symbol: tokenSymbol,
@@ -285,18 +294,25 @@ const getCrossChainWalletBalances = async (
           nativeBalances.forEach((balance, index) => {
             if (!isNil(balance)) {
               const address = relevantWallets[index].address;
-              const totalBalance =
-                wrappedXdaiBalances.find(
+
+              // add the wrapped xdai balance if it exists
+              const wrappedTokenBalance =
+                wrappedTokenBalances.find(
                   ({ walletAddress }) =>
                     walletAddress === relevantWallets[index].address,
                 )?.balance || 0;
+
+              const totalBalance = sum([
+                Number(formatUnits(balance)),
+                wrappedTokenBalance,
+              ]);
 
               balanceResults.push({
                 walletAddress: address,
                 evmChainId: providerEvmChainId,
                 symbol: tokenSymbol,
                 isNative: true,
-                balance: Number(formatUnits(balance)) + totalBalance,
+                balance: totalBalance,
               });
             }
           });
