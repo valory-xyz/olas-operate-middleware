@@ -363,6 +363,7 @@ export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   PREDICT_SERVICE_TEMPLATE,
   MEMEOOORR_BASE_TEMPLATE,
   MODIUS_SERVICE_TEMPLATE,
+  AGENTS_FUN_CELO,
 ] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;
