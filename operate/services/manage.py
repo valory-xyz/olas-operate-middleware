@@ -557,6 +557,14 @@ class ServiceManager:
                     "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
                         "staking_contract"
                     ),
+                    "MECH_MARKETPLACE_CONFIG": (
+                        f'{{"mech_marketplace_address":"0x4554fE75c1f5576c1d7F765B2A036c199Adae329",'
+                        f'"priority_mech_address":"{staking_params.get("agent_mech")}",'
+                        f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
+                        f'"priority_mech_service_id":975,'
+                        f'"requester_staking_instance_address":"{staking_params.get("staking_contract")}",'
+                        f'"response_timeout":300}}'
+                    ),
                     "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
                         "activity_checker"
                     ),
