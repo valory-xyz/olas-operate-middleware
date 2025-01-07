@@ -17,6 +17,7 @@ import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
+import { CHAIN_CONFIG } from '@/config/chains';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
@@ -212,10 +213,13 @@ const getWrappedTokenBalances = async (
   wallets: Wallets,
   multicallProvider: Provider,
 ): Promise<WrappedTokenBalance[]> => {
-  const wrappedTokenBalances: WrappedTokenBalance[] = [];
+  // if the chain does not include wrapped tokens, return an empty array
+  if (!CHAIN_CONFIG[chainId].includeWrappedTokens) return [];
 
   const wrappedProvider = WRAPPED_TOKEN_PROVIDERS[chainId];
-  if (!wrappedProvider) return wrappedTokenBalances;
+  if (!wrappedProvider) return [];
+
+  const wrappedTokenBalances: WrappedTokenBalance[] = [];
 
   // filter out the safe wallets
   const safeNativeAddresses = wallets.filter(
@@ -306,7 +310,7 @@ const getCrossChainWalletBalances = async (
             if (!isNil(balance)) {
               const address = relevantWallets[index].address;
 
-              // add the wrapped xdai balance if it exists
+              // add the wrapped balance if it exists
               const wrappedTokenBalance =
                 wrappedTokenBalances.find(
                   ({ walletAddress }) =>
