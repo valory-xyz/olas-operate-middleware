@@ -288,7 +288,7 @@ class EthereumMasterWallet(MasterWallet):
         """Transfer funds to the given account."""
         if amount <= 0:
             return
-      
+
         if from_safe:
             sender = t.cast(str, self.safes[chain])
             sender_str = f"Safe {sender}"
