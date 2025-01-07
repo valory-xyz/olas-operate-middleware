@@ -213,7 +213,6 @@ const getCrossChainWalletBalances = async (
       const providerEvmChainId = +evmChainIdKey as EvmChainId;
 
       const tokensOnChain = TOKEN_CONFIG[providerEvmChainId];
-      // if (!tokensOnChain) continue;
 
       const relevantWallets = wallets.filter((wallet) => {
         const isEoa = wallet.type === WalletType.EOA;

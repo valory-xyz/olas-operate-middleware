@@ -118,7 +118,7 @@ export const ERC20_TOKEN_CONFIG = Object.fromEntries(
     ),
   ]),
 ) as {
-  [chainId: number]: {
+  [chainId in EvmChainId]: {
     [tokenSymbol: string]: Erc20TokenConfig;
   };
 };
@@ -136,7 +136,7 @@ export const NATIVE_TOKEN_CONFIG = Object.fromEntries(
     ),
   ]),
 ) as {
-  [chainId: number]: {
+  [chainId in EvmChainId]: {
     [tokenSymbol: string]: NativeTokenConfig;
   };
 };

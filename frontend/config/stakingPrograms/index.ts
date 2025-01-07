@@ -45,7 +45,7 @@ export type StakingProgramMap = {
 };
 
 export const STAKING_PROGRAMS: {
-  [chainId: number | EvmChainId]: StakingProgramMap;
+  [chainId in EvmChainId]: StakingProgramMap;
 } = {
   [EvmChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS,
   [EvmChainId.Base]: BASE_STAKING_PROGRAMS,
@@ -54,7 +54,7 @@ export const STAKING_PROGRAMS: {
 };
 
 export const STAKING_PROGRAM_ADDRESS: {
-  [chainId: number | EvmChainId]: Record<string, Address>;
+  [chainId in EvmChainId]: Record<string, Address>;
 } = {
   [EvmChainId.Gnosis]: GNOSIS_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
   [EvmChainId.Base]: BASE_STAKING_PROGRAMS_CONTRACT_ADDRESSES,
@@ -63,7 +63,7 @@ export const STAKING_PROGRAM_ADDRESS: {
 };
 
 export const DEFAULT_STAKING_PROGRAM_IDS: {
-  [chainId: number | EvmChainId]: StakingProgramId;
+  [chainId in EvmChainId]: StakingProgramId;
 } = {
   [EvmChainId.Gnosis]: StakingProgramId.PearlBeta,
   [EvmChainId.Base]: StakingProgramId.MemeBaseAlpha2,

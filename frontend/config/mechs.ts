@@ -12,7 +12,7 @@ export enum MechType {
 }
 
 type Mechs = {
-  [chainId: number]: {
+  [EvmChainId.Gnosis]: {
     [mechType: string]: {
       name: string;
       contract: MulticallContract;

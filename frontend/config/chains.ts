@@ -50,18 +50,19 @@ export const MODE_CHAIN_CONFIG: ChainConfig = {
   safeAddSignerThreshold: 0.0005, // TODO: Modius - confirm this value
 } as const;
 
+// TODO: celo - check each key
 export const CELO_CHAIN_CONFIG: ChainConfig = {
   evmChainId: EvmChainId.Celo,
   name: 'Celo',
   nativeToken: TOKEN_CONFIG[EvmChainId.Celo][TokenSymbol.ETH],
-  middlewareChain: MiddlewareChainId.BASE,
-  rpc: process.env.BASE_RPC as HttpUrl,
+  middlewareChain: MiddlewareChainId.CELO,
+  rpc: process.env.CELO_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
   safeAddSignerThreshold: 0.005,
 } as const;
 
 export const CHAIN_CONFIG: {
-  [evmChainId: number]: ChainConfig;
+  [evmChainId in EvmChainId]: ChainConfig;
 } = {
   [EvmChainId.Base]: BASE_CHAIN_CONFIG,
   [EvmChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
