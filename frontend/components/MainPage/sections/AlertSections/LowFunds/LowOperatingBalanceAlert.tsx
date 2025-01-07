@@ -1,12 +1,8 @@
 import { Flex, Typography } from 'antd';
-import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
 import { WalletType } from '@/enums/Wallet';
-import {
-  useMasterBalances,
-  useServiceBalances,
-} from '@/hooks/useBalanceContext';
+import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
 
@@ -20,47 +16,22 @@ const { Text, Title } = Typography;
  */
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
-  const { selectedAgentType, selectedService, selectedAgentConfig } =
-    useServices();
+  const { selectedAgentType } = useServices();
   const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
     useMasterBalances();
-  const { serviceSafeBalances } = useServiceBalances(
-    selectedService?.service_config_id,
-  );
 
-  const { chainName, tokenSymbol, masterSafeAddress, masterThresholds } =
-    useLowFundsDetails();
-
-  const serviceSafeNativeBalance = useMemo(
-    () =>
-      serviceSafeBalances?.find(
-        ({ isNative, evmChainId }) =>
-          isNative && evmChainId === selectedAgentConfig.evmHomeChainId,
-      ),
-    [serviceSafeBalances, selectedAgentConfig],
-  );
-
-  const isLowBalance = useMemo(() => {
-    if (!masterThresholds) return false;
-    if (!serviceSafeNativeBalance) return false;
-
-    // Check both master and agent safes
-    return (
-      isMasterSafeLowOnNativeGas &&
-      serviceSafeNativeBalance.balance <
-        masterThresholds[WalletType.Safe][tokenSymbol]
-    );
-  }, [
-    isMasterSafeLowOnNativeGas,
-    masterThresholds,
-    serviceSafeNativeBalance,
+  const {
+    chainName,
     tokenSymbol,
-  ]);
+    masterSafeAddress,
+    masterThresholds,
+    agentThresholds,
+  } = useLowFundsDetails();
 
   if (!isBalanceLoaded) return null;
-  if (!masterThresholds) return null;
+  if (!agentThresholds) return null;
   if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
-  if (!isLowBalance) return null;
+  if (!isMasterSafeLowOnNativeGas) return null;
 
   return (
     <CustomAlert

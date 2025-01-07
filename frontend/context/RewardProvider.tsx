@@ -74,10 +74,14 @@ const useStakingRewardsDetails = () => {
 
         if (!response) return null;
 
-        const parsed = StakingRewardsInfoSchema.parse(response);
-        return parsed;
+        try {
+          const parsed = StakingRewardsInfoSchema.parse(response);
+          return parsed;
+        } catch (e) {
+          console.error('Error parsing staking rewards info', e);
+        }
       } catch (e) {
-        console.error('Error parsing staking rewards info', e);
+        console.error('Error getting staking rewards info', e);
       }
 
       return null;
