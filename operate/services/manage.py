@@ -42,7 +42,7 @@ from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
-from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
+from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate, OnChainFundRequirements
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -76,6 +76,29 @@ SERVICE_YAML = "service.yaml"
 HTTP_OK = 200
 URI_HASH_POSITION = 7
 IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
+
+FUNDING_REQUIREMENT_DATA = {
+    Chain.ETHEREUM: {
+        "topup": 20000000000000000,
+        "threshold": 10000000000000000,
+    },
+    Chain.GNOSIS: {
+        "topup": 100000000000000000,
+        "threshold": 50000000000000000,
+    },
+    Chain.OPTIMISTIC: {
+        "topup": 5000000000000000,
+        "threshold": 2500000000000000,
+    },
+    Chain.BASE: {
+        "topup": 5000000000000000,
+        "threshold": 2500000000000000,
+    },
+    Chain.MODE: {
+        "topup": 500000000000000,
+        "threshold": 250000000000000,
+    }
+}
 
 
 class ServiceManager:
@@ -1912,7 +1935,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        user_fund_requirements: t.Dict = {}
+        refill_requirements: t.Dict = {}
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
@@ -1927,13 +1950,13 @@ class ServiceManager:
             service_safe = chain_data.multisig
             agent_addresses = {key.address for key in service.keys}
 
-            assets = [
+            assets = {
                 asset_address
                 for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
-            ]
+            }
 
             balances[chain] = {}
-            user_fund_requirements[chain] = {}
+            refill_requirements[chain] = {}
 
             for asset in assets:
                 for address in agent_addresses | {
@@ -1947,8 +1970,18 @@ class ServiceManager:
                         contract_address=asset,
                         address=address,
                     )
+
+                    if asset == ZERO_ADDRESS and address in agent_addresses | {service_safe} and chain in WRAPPED_NATIVE_ASSET:
+                        # also count the balance of the wrapped native asset
+                        asset_balance += get_asset_balance(
+                            ledger_api=ledger_api,
+                            contract_address=WRAPPED_NATIVE_ASSET.get(chain, ZERO_ADDRESS),
+                            address=chain_data.multisig,
+                        )
+
                     balances[chain][address][asset] = asset_balance
 
+                # Refill requirements for Master Safe
                 funding_requirement_data = {}
                 for address in agent_addresses:
                     funding_requirement_data[address] = {
@@ -1962,38 +1995,43 @@ class ServiceManager:
                     "balance": balances[chain][service_safe][asset],
                 }
 
-                user_funding_requirement = self._compute_fund_requirements(
+                recommended_refill_required = self._compute_refill_requirement(
                     funding_requirement_data, balances[chain][master_safe][asset]
                 )["recommended_refill_required"]
-                user_fund_requirements[chain].setdefault(master_safe, {})[
+                refill_requirements[chain].setdefault(master_safe, {})[
                     asset
-                ] = user_funding_requirement
+                ] = recommended_refill_required
 
+                # Refill requirements for Master EOA
+                funding_requirement_data = {}
                 if asset == ZERO_ADDRESS:
-                    user_fund_requirements[chain].setdefault(wallet.address, {})[
-                        asset
-                    ] = 0
-                else:
-                    user_fund_requirements[chain].setdefault(wallet.address, {})[
-                        asset
-                    ] = 0
+                    funding_requirement_data = {
+                        wallet.address: {**FUNDING_REQUIREMENT_DATA[Chain(chain)], "balance": balances[chain][wallet.address][asset]}
+                    }
 
-        is_funding_required = any(
+                recommended_refill_required = self._compute_refill_requirement(
+                    funding_requirement_data, balances[chain][wallet.address][asset]
+                )["recommended_refill_required"]
+                refill_requirements[chain].setdefault(wallet.address, {})[
+                    asset
+                ] = recommended_refill_required
+
+        is_refill_required = any(
             fund_requirement > 0
-            for chain_requirements in user_fund_requirements.values()
+            for chain_requirements in refill_requirements.values()
             for asset_requirements in chain_requirements.values()
             for fund_requirement in asset_requirements.values()
         )
 
         return {
             "balances": balances,
-            "user_fund_requirements": user_fund_requirements,
-            "is_funding_required": is_funding_required,
+            "refill_requirements": refill_requirements,  # TODO: rename to refill_requirements
+            "is_refill_required": is_refill_required,
             "allow_start_agent": True,
         }
 
     @staticmethod
-    def _compute_fund_requirements(
+    def _compute_refill_requirement(
         funding_requirement_data: t.Dict, sender_balance: int
     ) -> t.Dict:
         """
@@ -2003,7 +2041,7 @@ class ServiceManager:
             funding_requirement_data (dict): A dictionary where each key is an address, and the value contains:
                 - "topup": The full funding requirement for the address.
                 - "threshold": The minimum balance threshold for the address.
-                - "current_balance": The current balance of the address.
+                - "balance": The current balance of the address.
             sender_balance (int): The initial balance of the sender.
 
         Returns:

@@ -294,7 +294,7 @@ class TestServiceManager:
             (10, 5, 2, 20, 10, 3, 0, 0, 0, 4, 6, 21),
         ],
     )
-    def test_service_manager_compute_user_fund_requirements(
+    def test_service_manager_compute_refill_requirements(
         self,
         topup1: int,
         threshold1: int,
@@ -309,7 +309,7 @@ class TestServiceManager:
         minimum_refill_required: int,
         recommended_refill_required: int,
     ) -> None:
-        """Test operate.service_manager()._compute_user_fund_requirements()"""
+        """Test operate.service_manager()._compute_refill_requirements()"""
 
         funding_requirement_data = {}
         funding_requirement_data["0x1"] = {
@@ -332,7 +332,7 @@ class TestServiceManager:
             "minimum_refill_required": minimum_refill_required,
             "recommended_refill_required": recommended_refill_required,
         }
-        result = ServiceManager._compute_fund_requirements(
+        result = ServiceManager._compute_refill_requirement(
             funding_requirement_data, sender_balance
         )
 
