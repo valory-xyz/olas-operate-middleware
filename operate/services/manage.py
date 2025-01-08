@@ -37,6 +37,7 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
+from operate.constants import HTTP_OK, URI_HASH_POSITION
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
@@ -70,8 +71,6 @@ KEY = "master-key.txt"
 KEYS_JSON = "keys.json"
 DOCKER_COMPOSE_YAML = "docker-compose.yaml"
 SERVICE_YAML = "service.yaml"
-HTTP_OK = 200
-URI_HASH_POSITION = 7
 IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
 
 
@@ -228,7 +227,7 @@ class ServiceManager:
         info = sftxb.info(token_id=chain_data.token)
         config_hash = info["config_hash"]
         res = requests.get(f"{IPFS_GATEWAY}f01701220{config_hash}", timeout=30)
-        if res.status_code == 200:
+        if res.status_code == HTTP_OK:
             return res.json().get("code_uri", "")[URI_HASH_POSITION:]
         raise ValueError(
             f"Something went wrong while trying to get the code uri from IPFS: {res}"
@@ -1555,5 +1554,6 @@ class ServiceManager:
         return new_service
 
     def _log_directories(self) -> None:
+        return
         directories = [str(p) for p in self.path.iterdir() if p.is_dir()]
         self.logger.info(f"Directories in {self.path}: {', '.join(directories)}")

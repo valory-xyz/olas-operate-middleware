@@ -19,6 +19,7 @@
 
 """Operate app CLI module."""
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 import os
 import signal
@@ -47,7 +48,7 @@ from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger import get_ledger_type_from_chain_type
 from operate.ledger.profiles import OLAS
 from operate.operate_types import ChainType, DeploymentStatus
-from operate.services.health_checker import HealthChecker
+from operate.services.health_checker import HealtChecker
 from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
@@ -147,27 +148,18 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     home: t.Optional[Path] = None,
 ) -> FastAPI:
     """Create FastAPI object."""
-    HEALTH_CHECKER_OFF = os.environ.get("HEALTH_CHECKER_OFF", "0") == "1"
-    number_of_fails = int(
-        os.environ.get(
-            "HEALTH_CHECKER_TRIES", str(HealthChecker.NUMBER_OF_FAILS_DEFAULT)
-        )
-    )
-
     logger = setup_logger(name="operate")
-    if HEALTH_CHECKER_OFF:
-        logger.warning("healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
     funding_jobs: t.Dict[str, asyncio.Task] = {}
-    health_checker = HealthChecker(
-        operate.service_manager(), number_of_fails=number_of_fails
-    )
     # Create shutdown endpoint
     shutdown_endpoint = uuid.uuid4().hex
     (operate._path / "operate.kill").write_text(  # pylint: disable=protected-access
         shutdown_endpoint
     )
     thread_pool_executor = ThreadPoolExecutor()
+    
+    
+    
 
     async def run_in_executor(fn: t.Callable, *args: t.Any) -> t.Any:
         loop = asyncio.get_event_loop()
@@ -197,14 +189,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         )
 
-    def schedule_healthcheck_job(
-        service: str,
-    ) -> None:
-        """Schedule a healthcheck job."""
-        if not HEALTH_CHECKER_OFF:
-            # dont start health checker if it's switched off
-            health_checker.start_for_service(service)
-
     def cancel_funding_job(service: str) -> None:
         """Cancel funding job."""
         if service not in funding_jobs:
@@ -231,7 +215,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             deployment.stop(force=True)
             logger.info(f"Cancelling funding job for {service}")
             cancel_funding_job(service=service)
-            health_checker.stop_for_service(service=service)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
@@ -244,7 +227,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # on backend app started we assume there are now started agents, so we force to pause all
     pause_all_services_on_startup()
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # hack to set event loop for components running in threads
+        # need to restruct all the classes dependencies tree
+        HealtChecker.EVENT_LOOP  = asyncio.get_event_loop()
+        yield
+
+    app = FastAPI(lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -597,7 +587,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             await run_in_executor(_fn)
             schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
 
         return JSONResponse(
             content=operate.service_manager().load_or_create(hash=service.hash).json
@@ -622,7 +611,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.fund_service(hash=service.hash)
             manager.deploy_service_locally(hash=service.hash)
             schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
 
         return JSONResponse(content=service.json)
 
@@ -831,7 +819,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         await run_in_executor(_fn)
         schedule_funding_job(service=service)
-        schedule_healthcheck_job(service=service.hash)
         return JSONResponse(content=manager.load_or_create(service).deployment)
 
     @app.post("/api/services/{service}/deployment/stop")
@@ -842,7 +829,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service=request.path_params["service"])
         service = request.path_params["service"]
         deployment = operate.service_manager().load_or_create(service).deployment
-        health_checker.stop_for_service(service=service)
 
         await run_in_executor(deployment.stop)
         logger.info(f"Cancelling funding job for {service}")
@@ -886,14 +872,7 @@ def _daemon(
 
     app = create_app(home=home)
 
-    server = Server(
-        Config(
-            app=app,
-            host=host,
-            port=port,
-            access_log=False
-        )
-    )
+    server = Server(Config(app=app, host=host, port=port, access_log=False))
     app._server = server  # pylint: disable=protected-access
     server.run()
 
