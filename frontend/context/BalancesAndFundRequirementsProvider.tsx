@@ -13,10 +13,12 @@ export const BalancesAndFundRequirementsProviderContext = createContext<{
   isBalancesAndFundingRequirementsLoading: boolean;
   balances: Optional<AddressBalanceRecord>;
   userFundRequirements: Optional<AddressBalanceRecord>;
+  canStartAgent: boolean;
 }>({
   isBalancesAndFundingRequirementsLoading: false,
   balances: undefined,
   userFundRequirements: undefined,
+  canStartAgent: false,
 });
 
 export const BalancesAndFundRequirementsProvider = ({
@@ -36,7 +38,7 @@ export const BalancesAndFundRequirementsProvider = ({
     queryFn: () =>
       BalanceService.getBalancesAndFundingRequirements(configId as string),
     enabled: !!selectedService?.service_config_id,
-    refetchInterval: FIVE_SECONDS_INTERVAL * 20, // TODO
+    refetchInterval: FIVE_SECONDS_INTERVAL * 20, // TODO: 60 seconds if agent is already running else 5 seconds
   });
 
   const balances = useMemo(() => {
@@ -69,6 +71,8 @@ export const BalancesAndFundRequirementsProvider = ({
         isBalancesAndFundingRequirementsLoading,
         userFundRequirements,
         balances,
+        canStartAgent:
+          balancesAndFundingRequirements?.allow_start_agent || false,
       }}
     >
       {children}
