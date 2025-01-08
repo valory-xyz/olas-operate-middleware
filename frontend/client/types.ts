@@ -134,15 +134,22 @@ export type MiddlewareWalletResponse = {
   safe_nonce: number;
 };
 
-type ChainBalances = Partial<{
-  [chain in MiddlewareChain]: {
-    [tokenAddress: Address]: {
-      [address: Address]: number;
-    };
+export type AddressBalanceRecord = {
+  [address: Address]: {
+    [tokenAddress: Address]: number;
   };
-}>;
+};
 
 export type BalancesAndFundingRequirements = {
-  balances: ChainBalances;
-  user_fund_requirements: ChainBalances;
+  balances: Partial<{
+    [chain in MiddlewareChain]: AddressBalanceRecord;
+  }>;
+  /**
+   * User fund requirements
+   * @note this is the amount of funds required to be in the user's wallet.
+   * If it not present or is 0, the balance is sufficient.
+   */
+  user_fund_requirements: Partial<{
+    [chain in MiddlewareChain]: AddressBalanceRecord;
+  }>;
 };

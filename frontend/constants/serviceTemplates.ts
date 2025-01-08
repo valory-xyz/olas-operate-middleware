@@ -54,7 +54,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
       description: '',
       value: '',
       provision_type: EnvProvisionType.COMPUTED,
-    },    
+    },
     MECH_ACTIVITY_CHECKER_CONTRACT: {
       name: 'Mech activity checker contract',
       description: '',

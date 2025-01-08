@@ -1,14 +1,25 @@
-import { isNil } from 'lodash';
+import { get, isNil } from 'lodash';
 import { useContext, useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
+import { AddressZero } from '@/constants/address';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
-import { Optional } from '@/types/Util';
+import { Maybe, Optional } from '@/types/Util';
 
+import { useBalanceAndFundRequirementsContext } from './useBalanceAndFundRequirementsContext';
 import { useService } from './useService';
 import { useServices } from './useServices';
 import { useMasterWalletContext } from './useWallet';
+
+/**
+ * Function to check if a balance requires funding
+ * ie, greater than 0
+ */
+const requiresFund = (balance: Maybe<number>) => {
+  if (isNil(balance)) return false;
+  return isFinite(balance) && balance > 0;
+};
 
 export const useBalanceContext = () => useContext(BalanceContext);
 
@@ -120,6 +131,7 @@ export const useMasterBalances = () => {
   const { selectedAgentConfig } = useServices();
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { isLoaded, walletBalances } = useBalanceContext();
+  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
 
   // TODO: unused, check only services stake?
   // const masterStakedBalances = useMemo(
@@ -183,18 +195,16 @@ export const useMasterBalances = () => {
    * Check if master safe native balance is below threshold
    */
   const isMasterSafeLowOnNativeGas = useMemo(() => {
+    if (!userFundRequirements) return;
     if (!masterSafeNative) return;
-    if (!homeChainNativeToken?.symbol) return;
 
-    const nativeGasRequirement =
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][homeChainNativeToken.symbol];
+    const masterSafeRequirement = get(userFundRequirements, [
+      masterSafeNative.walletAddress,
+      AddressZero,
+    ]);
 
-    if (isNil(nativeGasRequirement)) return;
-
-    return masterSafeNative.balance < nativeGasRequirement;
-  }, [masterSafeNative, homeChainNativeToken, selectedAgentConfig]);
+    return requiresFund(masterSafeRequirement);
+  }, [masterSafeNative, userFundRequirements]);
 
   const masterEoaNative = useMemo(() => {
     if (!masterEoaBalances) return;
