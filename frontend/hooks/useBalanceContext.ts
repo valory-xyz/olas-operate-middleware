@@ -99,7 +99,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   );
 
   /**
-   * Check if service safe native balance is below threshold
+   * Check if service safe native (agent safe) balance is below threshold
    */
   const isServiceSafeLowOnNativeGas = useMemo(() => {
     if (!serviceSafeNative) return;

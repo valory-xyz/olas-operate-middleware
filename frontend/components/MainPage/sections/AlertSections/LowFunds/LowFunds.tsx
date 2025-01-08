@@ -15,8 +15,11 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 export const LowFunds = () => {
   const { selectedAgentConfig } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
-  const { isMasterEoaLowOnGas, masterSafeNativeGasRequirement } =
-    useMasterBalances();
+  const {
+    isMasterEoaLowOnGas,
+    masterSafeNativeGasRequirement,
+    masterEoaGasRequirement,
+  } = useMasterBalances();
 
   const { balancesByChain, isInitialFunded } = useNeedsFunds(
     selectedStakingProgramId,
@@ -50,11 +53,15 @@ export const LowFunds = () => {
 
   return (
     <>
-      {isEmptyFundsVisible && <EmptyFunds />}
+      {isEmptyFundsVisible && (
+        <EmptyFunds requiredSignerFunds={masterEoaGasRequirement} />
+      )}
       <MainNeedsFunds />
       <LowOperatingBalanceAlert />
       {!isEmptyFundsVisible && isMasterEoaLowOnGas && (
-        <LowSafeSignerBalanceAlert />
+        <LowSafeSignerBalanceAlert
+          requiredSignerFunds={masterEoaGasRequirement}
+        />
       )}
     </>
   );
