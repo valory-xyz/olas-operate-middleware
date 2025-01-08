@@ -721,7 +721,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         return JSONResponse(
-            content=operate.service_manager().user_fund_requirements(service_config_id=service_config_id)
+            content=operate.service_manager().user_fund_requirements(
+                service_config_id=service_config_id
+            )
         )
 
     @app.post("/api/v2/service")
