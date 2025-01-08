@@ -22,6 +22,7 @@
 import asyncio
 import json
 import logging
+import itertools
 import os
 import shutil
 import time
@@ -1904,3 +1905,41 @@ class ServiceManager:
                 self.logger.info(
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
+
+    def user_fund_requirements(self, service_config_id: str) -> t.Dict:
+        """Get user fund requirements for a service."""
+        service = self.load(service_config_id=service_config_id)
+
+        balances = {}
+        user_fund_requirements = {}
+
+        for chain, chain_config in service.chain_configs.items():
+            ledger_config = chain_config.ledger_config
+            chain_data = chain_config.chain_data
+            wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+            ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+
+            addresses = [key.address for key in service.keys] + [chain_data.multisig, wallet.address, wallet.safes[Chain(chain)]]
+            assets = [
+                asset_address for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
+            ]
+
+            balances[chain] = {}
+            user_fund_requirements[chain] = {}
+            for address, asset in itertools.product(addresses, assets):
+                balances[chain].setdefault(address, {})
+                asset_balance = get_asset_balance(
+                    ledger_api=ledger_api,
+                    contract_address=asset,
+                    address=address,
+                )
+                balances[chain][address][asset] = asset_balance
+                user_fund_requirements[chain].setdefault(wallet.address, {})[asset] = 42
+                user_fund_requirements[chain].setdefault(wallet.safes[Chain(chain)],{})[asset] = 43
+
+        return {
+            "balances": balances,
+            "user_fund_requirements": user_fund_requirements,
+            "is_funding_required": True,
+            "allow_start_agent": True
+        }
