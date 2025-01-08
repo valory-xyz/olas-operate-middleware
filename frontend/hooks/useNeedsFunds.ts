@@ -108,7 +108,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   /**
    * Check if the agent has enough eth for initial funding
    */
-  const hasEnoughEthForInitialFunding = useMemo(() => {
+  const hasEnoughNativeTokenForInitialFunding = useMemo(() => {
     if (isNil(serviceFundRequirements)) return;
     if (isEmpty(balancesByChain)) return;
 
@@ -179,7 +179,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     if (isInitialFunded) return false;
     if (!isBalanceLoaded) return false;
     if (
-      hasEnoughEthForInitialFunding &&
+      hasEnoughNativeTokenForInitialFunding &&
       hasEnoughOlasForInitialFunding &&
       hasEnoughAdditionalTokensForInitialFunding
     )
@@ -187,14 +187,14 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     return true;
   }, [
     hasEnoughAdditionalTokensForInitialFunding,
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     isBalanceLoaded,
     isInitialFunded,
   ]);
 
   return {
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     hasEnoughAdditionalTokensForInitialFunding,
     balancesByChain,

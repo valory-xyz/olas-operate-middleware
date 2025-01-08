@@ -60,9 +60,8 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
     isLowBalance,
   } = useBalanceContext();
   const { masterSafeBalances } = useMasterBalances();
-  const { needsInitialFunding, hasEnoughEthForInitialFunding } = useNeedsFunds(
-    migrateToStakingProgramId,
-  );
+  const { needsInitialFunding, hasEnoughNativeTokenForInitialFunding } =
+    useNeedsFunds(migrateToStakingProgramId);
 
   const { activeStakingProgramId } = useStakingProgram();
   const {
@@ -313,7 +312,7 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
       };
     }
 
-    if (!hasEnoughEthForInitialFunding) {
+    if (!hasEnoughNativeTokenForInitialFunding) {
       return {
         canMigrate: false,
         reason: CantMigrateReason.InsufficientGasToMigrate,
@@ -324,7 +323,7 @@ export const useMigrate = (migrateToStakingProgramId: StakingProgramId) => {
   }, [
     isServicesLoaded,
     isBalanceLoaded,
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     isAllStakingContractDetailsRecordLoaded,
     allStakingContractDetailsRecord,
     migrateToStakingProgramId,

@@ -88,6 +88,7 @@ export const FundsToActivate = ({
             staking.
           </div>
         )}
+
         {nativeFundsRequired && (
           <div>
             {UNICODE_SYMBOLS.BULLET} <Text strong>{nativeTokenRequired}</Text> -
