@@ -4,8 +4,6 @@ import { BACKEND_URL_V2 } from '@/constants/urls';
 
 /**
  * Get a single service from the backend
- * @param serviceHash
- * @returns
  */
 const getBalancesAndFundingRequirements = async (
   serviceConfigId: string,

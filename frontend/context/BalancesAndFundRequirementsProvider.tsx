@@ -11,11 +11,11 @@ import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 export const BalancesAndFundRequirementsProviderContext = createContext<{
   isBalancesAndFundingRequirementsLoading: boolean;
-  balancesAndFundingRequirements: Optional<BalancesAndFundingRequirements>;
+  balances: Optional<AddressBalanceRecord>;
   userFundRequirements: Optional<AddressBalanceRecord>;
 }>({
   isBalancesAndFundingRequirementsLoading: false,
-  balancesAndFundingRequirements: undefined,
+  balances: undefined,
   userFundRequirements: undefined,
 });
 
@@ -39,6 +39,17 @@ export const BalancesAndFundRequirementsProvider = ({
     refetchInterval: FIVE_SECONDS_INTERVAL * 20, // TODO
   });
 
+  const balances = useMemo(() => {
+    if (isBalancesAndFundingRequirementsLoading) return;
+    if (!balancesAndFundingRequirements) return;
+
+    return balancesAndFundingRequirements.balances[asMiddlewareChain(chainId)];
+  }, [
+    balancesAndFundingRequirements,
+    chainId,
+    isBalancesAndFundingRequirementsLoading,
+  ]);
+
   const userFundRequirements = useMemo(() => {
     if (isBalancesAndFundingRequirementsLoading) return;
     if (!balancesAndFundingRequirements) return;
@@ -56,8 +67,8 @@ export const BalancesAndFundRequirementsProvider = ({
     <BalancesAndFundRequirementsProviderContext.Provider
       value={{
         isBalancesAndFundingRequirementsLoading,
-        balancesAndFundingRequirements,
         userFundRequirements,
+        balances,
       }}
     >
       {children}

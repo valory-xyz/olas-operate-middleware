@@ -192,18 +192,16 @@ export const useMasterBalances = () => {
   ]);
 
   /**
-   * Check if master safe native balance is below threshold
+   * master safe native balance requirement
    */
-  const isMasterSafeLowOnNativeGas = useMemo(() => {
+  const masterSafeNativeGasRequirement = useMemo(() => {
     if (!userFundRequirements) return;
     if (!masterSafeNative) return;
 
-    const masterSafeRequirement = get(userFundRequirements, [
+    return get(userFundRequirements, [
       masterSafeNative.walletAddress,
       AddressZero,
     ]);
-
-    return requiresFund(masterSafeRequirement);
   }, [masterSafeNative, userFundRequirements]);
 
   const masterEoaNative = useMemo(() => {
@@ -223,15 +221,34 @@ export const useMasterBalances = () => {
     homeChainNativeToken,
   ]);
 
+  /**
+   * master EOA balance requirement
+   */
+  const masterEoaGasRequirement = useMemo(() => {
+    if (!userFundRequirements) return;
+    if (!masterEoaNative) return;
+
+    return get(userFundRequirements, [
+      masterEoaNative.walletAddress,
+      AddressZero,
+    ]);
+  }, [masterEoaNative, userFundRequirements]);
+
   return {
     isLoaded,
     masterWalletBalances,
-    masterSafeBalances,
-    masterEoaBalances,
-    isMasterSafeLowOnNativeGas,
 
-    // Native gas balance. Eg. XDAI on gnosis
+    // master safe
+    masterSafeBalances,
+    isMasterSafeLowOnNativeGas: requiresFund(masterSafeNativeGasRequirement),
+    masterSafeNativeGasRequirement,
     masterSafeNativeGasBalance: masterSafeNative?.balance,
+
+    // master eoa
+    // Native gas balance. Eg. XDAI on gnosis
     masterEoaNativeGasBalance: masterEoaNative?.balance,
+    isMasterEoaLowOnGas: requiresFund(masterEoaGasRequirement),
+    masterEoaGasRequirement,
+    masterEoaBalances,
   };
 };
