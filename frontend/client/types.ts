@@ -133,3 +133,16 @@ export type MiddlewareWalletResponse = {
   };
   safe_nonce: number;
 };
+
+type ChainBalances = Partial<{
+  [chain in MiddlewareChain]: {
+    [tokenAddress: Address]: {
+      [address: Address]: number;
+    };
+  };
+}>;
+
+export type BalancesAndFundingRequirements = {
+  balances: ChainBalances;
+  user_fund_requirements: ChainBalances;
+};
