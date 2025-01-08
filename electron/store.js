@@ -35,19 +35,21 @@ const setupStoreIpc = (ipcMain, mainWindow) => {
    * Initially the store was setup with only trader agent settings.
    * The following code migrates the old store to the new store schema.
    */
-  const traderAgent = {
-    ...(store.get('trader') || {}),
-    isInitialFunded:
-      store.get('isInitialFunded_trader') ||
-      store.get('isInitialFunded') ||
-      false,
-  };
+  const traderAgent = store.get('trader') || {};
 
-  // Set the trader agent and delete old keys
-  store.set('trader', traderAgent);
-  ['isInitialFunded', 'isInitialFunded_trader'].forEach((key) =>
-    store.delete(key),
-  );
+  if (store.has('isInitialFunded')) {
+    store.set('trader', {
+      ...traderAgent,
+      isInitialFunded: store.get('isInitialFunded') || false,
+    });
+    store.delete('isInitialFunded');
+  } else if (store.has('isInitialFunded_trader')) {
+    store.set('trader', {
+      ...traderAgent,
+      isInitialFunded: store.get('isInitialFunded_trader') || false,
+    });
+    store.delete('isInitialFunded_trader');
+  }
 
   /**
    * agent: memeooorr Migration
