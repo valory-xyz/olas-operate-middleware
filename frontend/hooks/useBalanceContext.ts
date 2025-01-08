@@ -4,7 +4,6 @@ import { useContext, useMemo } from 'react';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { AddressZero } from '@/constants/address';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { Maybe, Optional } from '@/types/Util';
 import { formatUnitsToNumber } from '@/utils/numberFormatters';
 
@@ -24,16 +23,28 @@ const requiresFund = (balance: Maybe<number>) => {
 
 export const useBalanceContext = () => useContext(BalanceContext);
 
+export const useFundRequirement = (wallet?: WalletBalanceResult) => {
+  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
+
+  if (!userFundRequirements || !wallet) return;
+
+  const requirement = get(userFundRequirements, [
+    wallet.walletAddress,
+    AddressZero,
+  ]);
+
+  if (isNil(requirement)) return;
+  return formatUnitsToNumber(`${requirement}`);
+};
+
 /**
  * Balances relevant to a specific service (agent)
  * @param serviceConfigId
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string | undefined) => {
+  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
   const { selectedAgentConfig } = useServices();
-  const homeChainId = selectedAgentConfig.evmHomeChainId;
-
-  const { nativeToken } = CHAIN_CONFIG[homeChainId];
 
   const { flatAddresses, serviceSafes, serviceEoa } =
     useService(serviceConfigId);
@@ -99,19 +110,20 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   );
 
   /**
-   * Check if service safe native (agent safe) balance is below threshold
+   * service safe native balance requirement
    */
-  const isServiceSafeLowOnNativeGas = useMemo(() => {
+  const serviceSafeNativeGasRequirement = useMemo(() => {
+    if (!userFundRequirements) return;
     if (!serviceSafeNative) return;
-    if (!nativeToken?.symbol) return;
 
-    const nativeGasRequirement =
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Agent][
-        WalletType.Safe
-      ][nativeToken.symbol];
+    const requirement = get(userFundRequirements, [
+      serviceSafeNative.walletAddress,
+      AddressZero,
+    ]);
 
-    return serviceSafeNative.balance < nativeGasRequirement;
-  }, [serviceSafeNative, nativeToken, selectedAgentConfig]);
+    if (isNil(requirement)) return;
+    return formatUnitsToNumber(`${requirement}`);
+  }, [serviceSafeNative, userFundRequirements]);
 
   return {
     serviceWalletBalances,
@@ -119,7 +131,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
     serviceSafeBalances,
     serviceEoaBalances,
     serviceSafeNative,
-    isServiceSafeLowOnNativeGas,
+    isServiceSafeLowOnNativeGas: requiresFund(serviceSafeNativeGasRequirement),
   };
 };
 
@@ -204,6 +216,7 @@ export const useMasterBalances = () => {
       AddressZero,
     ]);
 
+    if (isNil(requirement)) return;
     return formatUnitsToNumber(`${requirement}`);
   }, [masterSafeNative, userFundRequirements]);
 
@@ -238,6 +251,8 @@ export const useMasterBalances = () => {
       masterEoaNative.walletAddress,
       AddressZero,
     ]);
+
+    if (isNil(requirement)) return;
     return formatUnitsToNumber(`${requirement}`);
   }, [masterEoaNative, userFundRequirements]);
 
