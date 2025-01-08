@@ -1910,8 +1910,8 @@ class ServiceManager:
         """Get user fund requirements for a service."""
         service = self.load(service_config_id=service_config_id)
 
-        balances = {}
-        user_fund_requirements = {}
+        balances: t.Dict = {}
+        user_fund_requirements: t.Dict = {}
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
@@ -1919,27 +1919,100 @@ class ServiceManager:
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
             ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
 
-            addresses = [key.address for key in service.keys] + [chain_data.multisig, wallet.address, wallet.safes[Chain(chain)]]
+            master_safe = wallet.safes[Chain(chain)]
+            service_safe = chain_data.multisig
+            agent_addresses = set([key.address for key in service.keys])
+
             assets = [
                 asset_address for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
             ]
 
             balances[chain] = {}
             user_fund_requirements[chain] = {}
-            for address, asset in itertools.product(addresses, assets):
-                balances[chain].setdefault(address, {})
-                asset_balance = get_asset_balance(
-                    ledger_api=ledger_api,
-                    contract_address=asset,
-                    address=address,
-                )
-                balances[chain][address][asset] = asset_balance
-                user_fund_requirements[chain].setdefault(wallet.address, {})[asset] = 42
-                user_fund_requirements[chain].setdefault(wallet.safes[Chain(chain)],{})[asset] = 43
+
+            for asset in assets:
+                for address in agent_addresses | {service_safe, wallet.address, master_safe}:
+                    balances[chain].setdefault(address, {})
+                    asset_balance = get_asset_balance(
+                        ledger_api=ledger_api,
+                        contract_address=asset,
+                        address=address,
+                    )
+                    balances[chain][address][asset] = asset_balance
+
+                asset_funding_requirement = {}
+                for address in agent_addresses:
+                    asset_funding_requirement[address] = {
+                        "topup": chain_data.user_params.fund_requirements.get(asset).agent,
+                        "threshold": chain_data.user_params.fund_requirements.get(asset).agent/2,
+                        "balance": balances[chain][address][asset]
+                    }
+                asset_funding_requirement[service_safe] = {
+                    "topup": chain_data.user_params.fund_requirements.get(asset).safe,
+                    "threshold": chain_data.user_params.fund_requirements.get(asset).safe/2,
+                    "balance": balances[chain][service_safe][asset]
+                }
+
+                user_funding_requirement = self._compute_user_fund_requirements(asset_funding_requirement, balances[chain][master_safe][asset])["recommended_sender_refill_required"]
+                user_fund_requirements[chain].setdefault(master_safe, {})[asset] = user_funding_requirement
+
+                if asset == ZERO_ADDRESS:
+                    user_fund_requirements[chain].setdefault(wallet.address,{})[asset] = 0
+                else:
+                    user_fund_requirements[chain].setdefault(wallet.address,{})[asset] = 0
+
+        is_funding_required = any(
+            fund_requirement > 0
+            for chain_requirements in user_fund_requirements.values()
+            for asset_requirements in chain_requirements.values()
+            for fund_requirement in asset_requirements.values()
+        )
 
         return {
             "balances": balances,
             "user_fund_requirements": user_fund_requirements,
-            "is_funding_required": True,
+            "is_funding_required": is_funding_required,
             "allow_start_agent": True
+        }
+
+    @staticmethod
+    def _compute_user_fund_requirements(asset_funding_requirement: t.Dict, sender_balance: int) -> t.Dict:
+        """
+        Compute user fund requirements.
+
+        Args:
+            asset_funding_requirement (dict): A dictionary where each key is an address, and the value contains:
+                - "topup": The full funding requirement for the address.
+                - "threshold": The minimum balance threshold for the address.
+                - "current_balance": The current balance of the address.
+            sender_balance (int): The initial balance of the sender.
+
+        Returns:
+            dict: A dictionary containing:
+                - "minimum_required": The minimum refill amount for the sender.
+                - "recommended_required": The recommended refill amount for the sender.
+        """
+        minimum_sender_refill_required = 0
+        recommended_sender_refill_required = 0
+
+        remaining_sender_balance = sender_balance
+
+        for _, requirements in asset_funding_requirement.items():
+            topup = requirements["topup"]
+            threshold = requirements["threshold"]
+            balance = requirements["balance"]
+
+            combined_balance = remaining_sender_balance + balance
+
+            shortfall = 0
+            if combined_balance < threshold:
+                shortfall = threshold - combined_balance
+                minimum_sender_refill_required += shortfall
+
+            recommended_sender_refill_required += max(0, topup - combined_balance)
+            remaining_sender_balance = max(0, remaining_sender_balance - shortfall)
+
+        return {
+            "minimum_sender_refill_required": minimum_sender_refill_required,
+            "recommended_sender_refill_required": recommended_sender_refill_required
         }
