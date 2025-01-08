@@ -837,7 +837,7 @@ class Service(LocalResource):
                 else:
                     data["env_variables"] = {}
 
-        if version == 4:
+        if version < 5:
             new_chain_configs = {}
             for chain, chain_data in data["chain_configs"].items():
                 fund_requirements = chain_data["chain_data"]["user_params"][
