@@ -42,14 +42,14 @@ from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
-from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate, OnChainFundRequirements
+from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
     DELETE_PREFIX,
     Deployment,
-    NON_EXISTENT_TOKEN,
     NON_EXISTENT_MULTISIG,
+    NON_EXISTENT_TOKEN,
     OnChainData,
     OnChainState,
     SERVICE_CONFIG_PREFIX,
@@ -1925,7 +1925,11 @@ class ServiceManager:
             )
 
             master_safe = wallet.safes.get(Chain(chain))
-            service_safe = chain_data.multisig if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG else None
+            service_safe = (
+                chain_data.multisig
+                if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
+                else None
+            )
             agent_addresses = {key.address for key in service.keys}
 
             assets = {
@@ -1956,11 +1960,17 @@ class ServiceManager:
                         address=address,
                     )
 
-                    if asset == ZERO_ADDRESS and address in agent_addresses | {service_safe} and chain in WRAPPED_NATIVE_ASSET:
+                    if (
+                        asset == ZERO_ADDRESS
+                        and address in agent_addresses | {service_safe}
+                        and chain in WRAPPED_NATIVE_ASSET
+                    ):
                         # also count the balance of the wrapped native asset
                         asset_balance += get_asset_balance(
                             ledger_api=ledger_api,
-                            contract_address=WRAPPED_NATIVE_ASSET.get(chain, ZERO_ADDRESS),
+                            contract_address=WRAPPED_NATIVE_ASSET.get(
+                                chain, ZERO_ADDRESS
+                            ),
                             address=address,
                         )
 
@@ -1972,13 +1982,15 @@ class ServiceManager:
                     for address in agent_addresses:
                         asset_funding_values[address] = {
                             "topup": fund_requirements.get(asset).agent,
-                            "threshold": fund_requirements.get(asset).agent / 2,  # TODO make threshold configurable
+                            "threshold": fund_requirements.get(asset).agent
+                            / 2,  # TODO make threshold configurable
                             "balance": balances[chain][address][asset],
                         }
-                    asset_funding_values[service_safe] = {
+                    asset_funding_values[service_safe or "service_safe"] = {
                         "topup": fund_requirements.get(asset).safe,
-                        "threshold": fund_requirements.get(asset).safe / 2,  # TODO make threshold configurable
-                        "balance": balances[chain][service_safe][asset],
+                        "threshold": fund_requirements.get(asset).safe
+                        / 2,  # TODO make threshold configurable
+                        "balance": balances[chain].get(service_safe, {}).get(asset, 0),
                     }
 
                     recommended_refill = self._compute_refill_requirement(
@@ -1992,7 +2004,11 @@ class ServiceManager:
                 asset_funding_values = {}
                 if asset == ZERO_ADDRESS:
                     asset_funding_values = {
-                        wallet.address: self._get_master_eoa_native_funding_values(master_safe is not None, Chain(chain), balances[chain][wallet.address][asset])
+                        wallet.address: self._get_master_eoa_native_funding_values(
+                            master_safe is not None,
+                            Chain(chain),
+                            balances[chain][wallet.address][asset],
+                        )
                     }
 
                 recommended_refill = self._compute_refill_requirement(
@@ -2048,9 +2064,7 @@ class ServiceManager:
                 total_recommended_shortfall += topup - balance
 
         minimum_refill = max(total_minimum_shortfall - sender_balance, 0)
-        recommended_refill = max(
-            total_recommended_shortfall - sender_balance, 0
-        )
+        recommended_refill = max(total_recommended_shortfall - sender_balance, 0)
 
         return {
             "minimum_refill": minimum_refill,
@@ -2058,19 +2072,39 @@ class ServiceManager:
         }
 
     @staticmethod
-    def _get_master_eoa_native_funding_values(masterSafeExists: bool, chain: Chain, balance: int) -> t.Dict:
+    def _get_master_eoa_native_funding_values(
+        masterSafeExists: bool, chain: Chain, balance: int
+    ) -> t.Dict:
         funding_values = {
             True: {
-                Chain.ETHEREUM: {"topup": 20000000000000000, "threshold": 10000000000000000},
-                Chain.GNOSIS: {"topup": 100000000000000000, "threshold": 50000000000000000},
-                Chain.OPTIMISTIC: {"topup": 5000000000000000, "threshold": 2500000000000000},
+                Chain.ETHEREUM: {
+                    "topup": 20000000000000000,
+                    "threshold": 10000000000000000,
+                },
+                Chain.GNOSIS: {
+                    "topup": 100000000000000000,
+                    "threshold": 50000000000000000,
+                },
+                Chain.OPTIMISTIC: {
+                    "topup": 5000000000000000,
+                    "threshold": 2500000000000000,
+                },
                 Chain.BASE: {"topup": 5000000000000000, "threshold": 2500000000000000},
                 Chain.MODE: {"topup": 500000000000000, "threshold": 250000000000000},
             },
             False: {
-                Chain.ETHEREUM: {"topup": 20000000000000000, "threshold": 20000000000000000},
-                Chain.GNOSIS: {"topup": 1500000000000000000, "threshold": 1500000000000000000},
-                Chain.OPTIMISTIC: {"topup": 5000000000000000, "threshold": 5000000000000000},
+                Chain.ETHEREUM: {
+                    "topup": 20000000000000000,
+                    "threshold": 20000000000000000,
+                },
+                Chain.GNOSIS: {
+                    "topup": 1500000000000000000,
+                    "threshold": 1500000000000000000,
+                },
+                Chain.OPTIMISTIC: {
+                    "topup": 5000000000000000,
+                    "threshold": 5000000000000000,
+                },
                 Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
                 Chain.MODE: {"topup": 500000000000000, "threshold": 500000000000000},
             },
@@ -2079,4 +2113,3 @@ class ServiceManager:
         values = funding_values[masterSafeExists][chain]
         values["balance"] = balance
         return values
-
