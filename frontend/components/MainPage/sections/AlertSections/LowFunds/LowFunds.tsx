@@ -1,7 +1,6 @@
 import { isEmpty, round } from 'lodash';
 import { useMemo } from 'react';
 
-import { getNativeTokenSymbol } from '@/config/tokens';
 import { TokenSymbol } from '@/enums/Token';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
@@ -16,7 +15,8 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 export const LowFunds = () => {
   const { selectedAgentConfig } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
-  const { isMasterEoaLowOnGas } = useMasterBalances();
+  const { isMasterEoaLowOnGas, masterSafeNativeGasRequirement } =
+    useMasterBalances();
 
   const { balancesByChain, isInitialFunded } = useNeedsFunds(
     selectedStakingProgramId,
@@ -31,17 +31,22 @@ export const LowFunds = () => {
     // If the agent is not funded, <MainNeedsFunds /> will be displayed
     if (!isInitialFunded) return false;
 
-    const balances = balancesByChain[chainId];
     if (
-      round(balances[getNativeTokenSymbol(chainId)], 2) === 0 &&
-      round(balances[TokenSymbol.OLAS], 2) === 0 &&
+      masterSafeNativeGasRequirement === 0 &&
+      round(balancesByChain[chainId][TokenSymbol.OLAS], 2) === 0 &&
       isMasterEoaLowOnGas
     ) {
       return true;
     }
 
     return false;
-  }, [isInitialFunded, chainId, isMasterEoaLowOnGas, balancesByChain]);
+  }, [
+    isInitialFunded,
+    chainId,
+    isMasterEoaLowOnGas,
+    balancesByChain,
+    masterSafeNativeGasRequirement,
+  ]);
 
   return (
     <>

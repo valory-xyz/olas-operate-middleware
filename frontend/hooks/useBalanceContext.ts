@@ -6,6 +6,7 @@ import { AddressZero } from '@/constants/address';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { Maybe, Optional } from '@/types/Util';
+import { formatUnitsToNumber } from '@/utils/numberFormatters';
 
 import { useBalanceAndFundRequirementsContext } from './useBalanceAndFundRequirementsContext';
 import { useService } from './useService';
@@ -198,12 +199,17 @@ export const useMasterBalances = () => {
     if (!userFundRequirements) return;
     if (!masterSafeNative) return;
 
-    return get(userFundRequirements, [
+    const requirement = get(userFundRequirements, [
       masterSafeNative.walletAddress,
       AddressZero,
     ]);
+
+    return formatUnitsToNumber(`${requirement}`);
   }, [masterSafeNative, userFundRequirements]);
 
+  /**
+   * master EOA balance
+   */
   const masterEoaNative = useMemo(() => {
     if (!masterEoaBalances) return;
     if (!selectedAgentConfig?.evmHomeChainId) return;
@@ -228,10 +234,11 @@ export const useMasterBalances = () => {
     if (!userFundRequirements) return;
     if (!masterEoaNative) return;
 
-    return get(userFundRequirements, [
+    const requirement = get(userFundRequirements, [
       masterEoaNative.walletAddress,
       AddressZero,
     ]);
+    return formatUnitsToNumber(`${requirement}`);
   }, [masterEoaNative, userFundRequirements]);
 
   return {
@@ -245,7 +252,6 @@ export const useMasterBalances = () => {
     masterSafeNativeGasBalance: masterSafeNative?.balance,
 
     // master eoa
-    // Native gas balance. Eg. XDAI on gnosis
     masterEoaNativeGasBalance: masterEoaNative?.balance,
     isMasterEoaLowOnGas: requiresFund(masterEoaGasRequirement),
     masterEoaGasRequirement,
