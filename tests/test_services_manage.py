@@ -292,6 +292,7 @@ class TestServiceManager:
             (10, 5, 6, 10, 5, 6, 0, 0, 0, 1, 0, 0),
             (10, 5, 2, 20, 10, 7, 0, 0, 0, 4, 2, 17),
             (10, 5, 2, 20, 10, 3, 0, 0, 0, 4, 6, 21),
+            (15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 5, 5),
         ],
     )
     def test_service_manager_compute_refill_requirements(
@@ -311,33 +312,33 @@ class TestServiceManager:
     ) -> None:
         """Test operate.service_manager()._compute_refill_requirements()"""
 
-        funding_requirement_data = {}
-        funding_requirement_data["0x1"] = {
+        asset_funding_values = {}
+        asset_funding_values["0x1"] = {
             "topup": topup1,
             "threshold": threshold1,
             "balance": balance1,
         }
-        funding_requirement_data["0x2"] = {
+        asset_funding_values["0x2"] = {
             "topup": topup2,
             "threshold": threshold2,
             "balance": balance2,
         }
-        funding_requirement_data["0x3"] = {
+        asset_funding_values["0x3"] = {
             "topup": topup3,
             "threshold": threshold3,
             "balance": balance3,
         }
 
         expected_result = {
-            "minimum_refill_required": minimum_refill_required,
-            "recommended_refill_required": recommended_refill_required,
+            "minimum_refill": minimum_refill_required,
+            "recommended_refill": recommended_refill_required,
         }
         result = ServiceManager._compute_refill_requirement(
-            funding_requirement_data, sender_balance
+            asset_funding_values, sender_balance
         )
 
         diff = DeepDiff(result, expected_result)
         if diff:
             print(diff)
 
-        assert not diff, "Failed to compute user fund requirements."
+        assert not diff, "Failed to compute refill requirements."
