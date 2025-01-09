@@ -188,11 +188,18 @@ class LedgerConfig(LocalResource):
 LedgerConfigs = t.Dict[str, LedgerConfig]
 
 
+class NodeConfig(TypedDict):
+    """Deployment node config."""
+
+    ports: t.Optional[t.Dict[t.Union[str, int], t.Dict[int, int]]]
+    volumes: t.Optional[t.Union[t.Dict[str, str], t.Dict[t.Union[str, int], t.Dict[str, str]]]]
+
+
 class DeploymentConfig(TypedDict):
     """Deployments template."""
 
-    volumes: t.Dict[str, str]
-
+    agent: t.Optional[NodeConfig]
+    tendermint: t.Optional[NodeConfig]
 
 class FundRequirementsTemplate(TypedDict):
     """Fund requirement template."""
@@ -241,11 +248,13 @@ class ServiceTemplate(TypedDict, total=False):
     """Service template."""
 
     name: str
+    agent_id: int
     hash: str
     image: str
     description: str
     service_version: str
     home_chain: str
+    staking_programs: t.Dict[str, str]
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
 

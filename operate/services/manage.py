@@ -560,6 +560,7 @@ class ServiceManager:
                     "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
                     "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
                     "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
+                    f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
                     "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
                         "staking_contract"
@@ -1450,6 +1451,41 @@ class ServiceManager:
         ).settle()
         chain_data.staked = False
         service.store()
+
+    def claim_on_chain_from_safe(
+        self,
+        service_config_id: str,
+        chain: str,
+    ) -> str:
+        """Claim rewards from Safe and returns transaction hash"""
+        self.logger.info("claim_on_chain_from_safe")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        chain_data = chain_config.chain_data
+        staking_program_id = chain_data.user_params.staking_program_id
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        ledger_api = wallet.ledger_api(
+            chain=ledger_config.chain, rpc=ledger_config.rpc
+        )
+        print(
+            f"OLAS Balance on service Safe {chain_data.multisig}: "
+            f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_data.multisig)}"
+        )
+        if staking_program_id not in STAKING[ledger_config.chain]:
+            raise RuntimeError(
+                "No staking contract found for the current staking_program_id: "
+                f"{staking_program_id}. Not claiming the rewards."
+            )
+
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        receipt = sftxb.new_tx().add(
+            sftxb.get_claiming_data(
+                service_id=chain_data.token,
+                staking_contract=STAKING[ledger_config.chain][staking_program_id],
+            )
+        ).settle()
+        return receipt['transactionHash']
 
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,

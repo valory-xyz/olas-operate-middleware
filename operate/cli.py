@@ -43,9 +43,15 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.constants import KEY, KEYS, OPERATE, SERVICES
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT, OLAS
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.quickstart.reset_password import reset_password
+from operate.quickstart.reset_staking import reset_staking
+from operate.quickstart.claim_olas import claim_olas
+from operate.quickstart.run_service import run_service
+from operate.quickstart.stop_service import stop_service
+from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
 from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -77,7 +83,7 @@ class OperateApp:
     ) -> None:
         """Initialize object."""
         super().__init__()
-        self._path = (home or (Path.cwd() / OPERATE)).resolve()
+        self._path = (home or OPERATE_HOME).resolve()
         self._services = self._path / SERVICES
         self._keys = self._path / KEYS
         self._master_key = self._path / KEY
@@ -960,6 +966,64 @@ def _daemon(
     )
     app._server = server  # pylint: disable=protected-access
     server.run()
+
+
+@_operate.command(name="quickstart")
+def quickstart(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Quickstart."""
+    operate = OperateApp()
+    operate.setup()
+    run_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="quickstop")
+def quickstop(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Quickstart."""
+    operate = OperateApp()
+    operate.setup()
+    stop_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="terminate")
+def terminate(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Quickstart."""
+    operate = OperateApp()
+    operate.setup()
+    terminate_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="claim")
+def quickclaim(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Quickclaim OLAS rewards."""
+    operate = OperateApp()
+    operate.setup()
+    claim_olas(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-staking")
+def quick_reset_staking(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Reset staking."""
+    operate = OperateApp()
+    operate.setup()
+    reset_staking(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-password")
+def quick_reset_password() -> None:
+    """Reset password."""
+    operate = OperateApp()
+    operate.setup()
+    reset_password(operate=operate)
 
 
 def main() -> None:

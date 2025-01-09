@@ -849,7 +849,6 @@ class Service(LocalResource):
                     }
 
                 new_chain_configs[chain] = chain_data  # type: ignore
-
             data["chain_configs"] = new_chain_configs
 
         data["version"] = SERVICE_CONFIG_VERSION
