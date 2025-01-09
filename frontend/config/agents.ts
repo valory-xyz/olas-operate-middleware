@@ -15,6 +15,10 @@ import { MODE_TOKEN_CONFIG } from './tokens';
 const modiusFundRequirements =
   MODIUS_SERVICE_TEMPLATE.configurations[MiddlewareChain.MODE]
     .fund_requirements;
+const modiusUsdcConfig =
+  modiusFundRequirements?.[
+    MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string
+  ];
 
 export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
@@ -51,9 +55,7 @@ export const AGENT_CONFIG: {
       [EvmChainId.Mode]: {
         [TokenSymbol.USDC]: Number(
           formatUnits(
-            modiusFundRequirements[
-              MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string
-            ].safe,
+            modiusUsdcConfig?.safe || 0,
             MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals,
           ),
         ),
