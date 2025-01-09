@@ -578,7 +578,7 @@ def get_assets_balances(
 
     If contract address is a zero address, return the native balance.
     """
-    output:t.Dict[str, t.Dict[str, int]] = {}
+    output: t.Dict[str, t.Dict[str, int]] = {}
 
     for asset, address in itertools.product(assets, addresses):
         output.setdefault(address, {})[asset] = get_asset_balance(

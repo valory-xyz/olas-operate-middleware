@@ -1769,11 +1769,16 @@ class ServiceManager:
                             asset_address: {
                                 "agent": {
                                     "topup": fund_requirements.agent,
-                                    "threshold": int(fund_requirements.agent * DEFAULT_TOPUP_THRESHOLD),
+                                    "threshold": int(
+                                        fund_requirements.agent
+                                        * DEFAULT_TOPUP_THRESHOLD
+                                    ),
                                 },
                                 "safe": {
                                     "topup": fund_requirements.safe,
-                                    "threshold": int(fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD),
+                                    "threshold": int(
+                                        fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
+                                    ),
                                 },
                             }
                             for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
@@ -1949,20 +1954,18 @@ class ServiceManager:
             if master_safe:
                 addresses.add(master_safe)
 
-            assets = {asset_address for asset_address in fund_requirements}
+            assets = set(fund_requirements)
             balances[chain] = get_assets_balances(
-                ledger_api=ledger_api,
-                addresses=addresses,
-                assets=assets
+                ledger_api=ledger_api, addresses=addresses, assets=assets
             )
 
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
             if service_safe and chain in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
-                        ledger_api=ledger_api,
-                        contract_address=WRAPPED_NATIVE_ASSET[chain],
-                        address=service_safe,
+                    ledger_api=ledger_api,
+                    contract_address=WRAPPED_NATIVE_ASSET[chain],
+                    address=service_safe,
                 )
 
             # Compute refill requirements of Master Safe and Master EOA
