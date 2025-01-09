@@ -32,6 +32,12 @@ export type ChainData = {
   user_params: {
     agent_id: number;
     cost_of_bond: number;
+    fund_requirements: {
+      [tokenAddress: string]: {
+        agent: number;
+        safe: number;
+      };
+    };
     nft: string;
     staking_program_id: StakingProgramId;
     threshold: number;
@@ -91,7 +97,7 @@ export type ConfigurationTemplate = {
   use_mech_marketplace?: boolean;
   cost_of_bond: number;
   monthly_gas_estimate: number;
-  fund_requirements?: {
+  fund_requirements: {
     // zero address means native currency
     [tokenAddress: string]: FundRequirementsTemplate;
   };
@@ -147,4 +153,5 @@ export type BalancesAndFundingRequirements = {
     [chain in MiddlewareChain]: AddressBalanceRecord;
   }>;
   allow_start_agent: boolean;
+  is_funding_required: boolean; // TODO: ask Jose, why?
 };

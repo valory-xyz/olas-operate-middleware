@@ -130,12 +130,11 @@ const useServiceDeployment = () => {
     // If was evicted, but can re-stake - unlock the button
     if (isAgentEvicted && isEligibleForStaking) return true;
 
-    if (!canStartAgent) return false;
-
     // SERVICE IS STAKED, AND STARTING AGAIN
     if (isServiceStaked) {
-      const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
+      if (!canStartAgent) return false;
 
+      const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
       return hasEnoughOlas;
     }
 

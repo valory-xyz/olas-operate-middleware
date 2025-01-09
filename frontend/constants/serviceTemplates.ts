@@ -1,3 +1,5 @@
+import { ethers } from 'ethers';
+
 import { EnvProvisionType, MiddlewareChain, ServiceTemplate } from '@/client';
 import { MODE_TOKEN_CONFIG } from '@/config/tokens';
 import { AgentType } from '@/enums/Agent';
@@ -26,6 +28,12 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
       // TODO: pull fund requirements from staking program config
       cost_of_bond: +parseEther(0.001),
       monthly_gas_estimate: +parseEther(10),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(2),
+          safe: +parseEther(5),
+        },
+      },
     },
   },
   env_variables: {
@@ -105,6 +113,12 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       use_staking: true,
       cost_of_bond: +parseEther(50),
       monthly_gas_estimate: +parseEther(0.03),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625),
+          safe: +parseEther(0.0125),
+        },
+      },
     },
   },
   env_variables: {
@@ -210,6 +224,10 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       cost_of_bond: +parseEther(20),
       monthly_gas_estimate: +parseEther(0.011), // TODO: should be 0.0055, temp fix to avoid low balance alerts until the refund is fixed in the middleware
       fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.0005),
+          safe: +parseEther(0.005),
+        },
         [MODE_TOKEN_CONFIG[TokenSymbol.USDC].address as string]: {
           agent: 0,
           safe: +parseUnits(16, MODE_TOKEN_CONFIG[TokenSymbol.USDC].decimals),
