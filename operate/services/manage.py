@@ -56,7 +56,12 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.memeooorr import get_twitter_cookies
-from operate.utils.gnosis import NULL_ADDRESS, drain_signer, get_asset_balance
+from operate.utils.gnosis import (
+    NULL_ADDRESS,
+    drain_signer,
+    get_asset_balance,
+    get_assets_balances,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -1915,6 +1920,7 @@ class ServiceManager:
 
         balances: t.Dict = {}
         refill_requirements: t.Dict = {}
+        allow_start_agent = True
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
@@ -1925,58 +1931,44 @@ class ServiceManager:
                 chain=ledger_config.chain, rpc=ledger_config.rpc
             )
 
-            master_safe = wallet.safes.get(Chain(chain))
+            agent_addresses = {key.address for key in service.keys}
             service_safe = (
                 chain_data.multisig
                 if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
                 else None
             )
-            agent_addresses = {key.address for key in service.keys}
+            master_safe = wallet.safes.get(Chain(chain))
 
-            assets = {
-                asset_address
-                for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
-            }
-
-            balances[chain] = {}
-            refill_requirements[chain] = {}
-            allow_start_agent = True
-
-            addresses = agent_addresses | {wallet.address}
-            if master_safe:
-                addresses.add(master_safe)
-            else:
+            if not master_safe:
                 allow_start_agent = False
+
+            # Compute balances of relevant addresses
+            addresses = agent_addresses | {wallet.address}
             if service_safe:
                 addresses.add(service_safe)
+            if master_safe:
+                addresses.add(master_safe)
 
-            for asset in assets:
-                for address in addresses:
-                    balances[chain].setdefault(address, {})
-                    asset_balance = get_asset_balance(
+            assets = {asset_address for asset_address in fund_requirements}
+            balances[chain] = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses=addresses,
+                assets=assets
+            )
+
+            # TODO this is a patch to count the balance of the wrapped native asset as
+            # native assets for the service safe
+            if service_safe and chain in WRAPPED_NATIVE_ASSET:
+                balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                         ledger_api=ledger_api,
-                        contract_address=asset,
-                        address=address,
-                    )
+                        contract_address=WRAPPED_NATIVE_ASSET[chain],
+                        address=service_safe,
+                )
 
-                    # TODO this is a patch to count the balance of the wrapped native asset
-                    if (
-                        asset == ZERO_ADDRESS
-                        and address in agent_addresses | {service_safe}   # TODO maybe makes sense only for service safe.
-                        and chain in WRAPPED_NATIVE_ASSET
-                    ):
-                        # also count the balance of the wrapped native asset
-                        asset_balance += get_asset_balance(
-                            ledger_api=ledger_api,
-                            contract_address=WRAPPED_NATIVE_ASSET.get(
-                                chain, ZERO_ADDRESS
-                            ),
-                            address=address,
-                        )
-
-                    balances[chain][address][asset] = asset_balance
-
-                # Refill requirements for Master Safe
+            # Compute refill requirements of Master Safe and Master EOA
+            refill_requirements[chain] = {}
+            for asset in assets:
+                # Master Safe
                 if master_safe:
                     asset_funding_values = {}
                     for address in agent_addresses:
@@ -2000,7 +1992,7 @@ class ServiceManager:
                         asset
                     ] = recommended_refill
 
-                # Refill requirements for Master EOA
+                # Master EOA
                 asset_funding_values = {}
                 if asset == ZERO_ADDRESS:
                     asset_funding_values = {

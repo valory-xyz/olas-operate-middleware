@@ -20,6 +20,7 @@
 """Safe helpers."""
 
 import binascii
+import itertools
 import secrets
 import time
 import typing as t
@@ -565,3 +566,25 @@ def get_asset_balance(
         .functions.balanceOf(address)
         .call()
     )
+
+
+def get_assets_balances(
+    ledger_api: LedgerApi,
+    assets: t.Set[str],
+    addresses: t.Set[str],
+) -> t.Dict[str, t.Dict[str, int]]:
+    """
+    Get the balances of a list of native assets or ERC20 tokens.
+
+    If contract address is a zero address, return the native balance.
+    """
+    output:t.Dict[str, t.Dict[str, int]] = {}
+
+    for asset, address in itertools.product(assets, addresses):
+        output.setdefault(address, {})[asset] = get_asset_balance(
+            ledger_api=ledger_api,
+            contract_address=asset,
+            address=address,
+        )
+
+    return output
