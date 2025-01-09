@@ -77,7 +77,7 @@ const AlertInsufficientMigrationFunds = ({
   const requiredNativeTokenAmount =
     serviceFundRequirements[homeChainId]?.[nativeTokenSymbol] || 0;
   const requiredNativeTokenDeposit = isInitialFunded
-    ? masterSafeNativeGasRequirement // is already funded allow minimal maintenance
+    ? masterSafeNativeGasRequirement // is already funded - allow minimal maintenance
     : requiredNativeTokenAmount - currentNativeTokenBalance; // otherwise require full initial funding requirements
 
   return (

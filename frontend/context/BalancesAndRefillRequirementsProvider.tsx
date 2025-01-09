@@ -2,8 +2,12 @@ import { useQuery } from '@tanstack/react-query';
 import { createContext, PropsWithChildren, useMemo } from 'react';
 
 import { AddressBalanceRecord, BalancesAndFundingRequirements } from '@/client';
-import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
+import {
+  FIVE_SECONDS_INTERVAL,
+  ONE_MINUTE_INTERVAL,
+} from '@/constants/intervals';
 import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { BalanceService } from '@/service/balances';
 import { Optional } from '@/types/Util';
@@ -28,6 +32,17 @@ export const BalancesAndRefillRequirementsProvider = ({
   const configId = selectedService?.service_config_id;
   const chainId = selectedAgentConfig.evmHomeChainId;
 
+  const { isServiceRunning } = useService(configId);
+
+  const refetchInterval = useMemo(() => {
+    if (!configId) return false;
+
+    // If the service is running, we can afford to check balances less frequently
+    if (isServiceRunning) return ONE_MINUTE_INTERVAL;
+
+    return FIVE_SECONDS_INTERVAL;
+  }, [isServiceRunning, configId]);
+
   const {
     data: balancesAndRefillRequirements,
     isLoading: isBalancesAndFundingRequirementsLoading,
@@ -38,7 +53,7 @@ export const BalancesAndRefillRequirementsProvider = ({
     queryFn: () =>
       BalanceService.getBalancesAndFundingRequirements(configId as string),
     enabled: !!configId,
-    refetchInterval: FIVE_SECONDS_INTERVAL * 20, // TODO: 60 seconds if agent is already running else 5 seconds
+    refetchInterval,
   });
 
   const balances = useMemo(() => {
