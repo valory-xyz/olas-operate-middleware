@@ -200,10 +200,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-type WrappedTokenBalance = Pick<
-  WalletBalanceResult,
-  'walletAddress' | 'balance'
->;
+type WrappedToken = Pick<WalletBalanceResult, 'walletAddress' | 'balance'>;
 
 /**
  * Fetches the wrapped token balances for the wallets
@@ -212,14 +209,14 @@ const getWrappedTokenBalances = async (
   chainId: EvmChainId,
   wallets: Wallets,
   multicallProvider: Provider,
-): Promise<WrappedTokenBalance[]> => {
+): Promise<WrappedToken[]> => {
   // if the chain does not include wrapped tokens, return an empty array
   if (!CHAIN_CONFIG[chainId].includeWrappedTokens) return [];
 
   const wrappedProvider = WRAPPED_TOKEN_PROVIDERS[chainId];
   if (!wrappedProvider) return [];
 
-  const wrappedTokenBalances: WrappedTokenBalance[] = [];
+  const wrappedTokenBalances: WrappedToken[] = [];
 
   // filter out the safe wallets
   const safeNativeAddresses = wallets.filter(
