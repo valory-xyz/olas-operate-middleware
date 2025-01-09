@@ -22,7 +22,6 @@
 import asyncio
 import json
 import logging
-import itertools
 import os
 import shutil
 import time
@@ -49,6 +48,7 @@ from operate.services.service import (
     ChainConfig,
     DELETE_PREFIX,
     Deployment,
+    NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
     OnChainData,
     OnChainState,
@@ -1906,85 +1906,144 @@ class ServiceManager:
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
 
-    def user_fund_requirements(self, service_config_id: str) -> t.Dict:
-        """Get user fund requirements for a service."""
+    def refill_requirements(  # pylint: disable=too-many-locals
+        self, service_config_id: str
+    ) -> t.Dict:
+        """Get user refill requirements for a service."""
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        user_fund_requirements: t.Dict = {}
+        refill_requirements: t.Dict = {}
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
             chain_data = chain_config.chain_data
+            fund_requirements = chain_data.user_params.fund_requirements
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-            ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+            ledger_api = wallet.ledger_api(
+                chain=ledger_config.chain, rpc=ledger_config.rpc
+            )
 
-            master_safe = wallet.safes[Chain(chain)]
-            service_safe = chain_data.multisig
-            agent_addresses = set([key.address for key in service.keys])
+            master_safe = wallet.safes.get(Chain(chain))
+            service_safe = (
+                chain_data.multisig
+                if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
+                else None
+            )
+            agent_addresses = {key.address for key in service.keys}
 
-            assets = [
-                asset_address for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
-            ]
+            assets = {
+                asset_address
+                for asset_address, fund_requirements in chain_data.user_params.fund_requirements.items()
+            }
 
             balances[chain] = {}
-            user_fund_requirements[chain] = {}
+            refill_requirements[chain] = {}
+            allow_start_agent = True
+
+            addresses = agent_addresses | {wallet.address}
+            if master_safe:
+                addresses.add(master_safe)
+            else:
+                allow_start_agent = False
+            if service_safe:
+                addresses.add(service_safe)
+            else:
+                allow_start_agent = False
 
             for asset in assets:
-                for address in agent_addresses | {service_safe, wallet.address, master_safe}:
+                for address in addresses:
                     balances[chain].setdefault(address, {})
                     asset_balance = get_asset_balance(
                         ledger_api=ledger_api,
                         contract_address=asset,
                         address=address,
                     )
+
+                    if (
+                        asset == ZERO_ADDRESS
+                        and address in agent_addresses | {service_safe}
+                        and chain in WRAPPED_NATIVE_ASSET
+                    ):
+                        # also count the balance of the wrapped native asset
+                        asset_balance += get_asset_balance(
+                            ledger_api=ledger_api,
+                            contract_address=WRAPPED_NATIVE_ASSET.get(
+                                chain, ZERO_ADDRESS
+                            ),
+                            address=address,
+                        )
+
                     balances[chain][address][asset] = asset_balance
 
-                asset_funding_requirement = {}
-                for address in agent_addresses:
-                    asset_funding_requirement[address] = {
-                        "topup": chain_data.user_params.fund_requirements.get(asset).agent,
-                        "threshold": chain_data.user_params.fund_requirements.get(asset).agent/2,
-                        "balance": balances[chain][address][asset]
+                # Refill requirements for Master Safe
+                if master_safe:
+                    asset_funding_values = {}
+                    for address in agent_addresses:
+                        asset_funding_values[address] = {
+                            "topup": fund_requirements.get(asset).agent,
+                            "threshold": fund_requirements.get(asset).agent
+                            / 2,  # TODO make threshold configurable
+                            "balance": balances[chain][address][asset],
+                        }
+                    asset_funding_values[service_safe or "service_safe"] = {
+                        "topup": fund_requirements.get(asset).safe,
+                        "threshold": fund_requirements.get(asset).safe
+                        / 2,  # TODO make threshold configurable
+                        "balance": balances[chain].get(service_safe, {}).get(asset, 0),
                     }
-                asset_funding_requirement[service_safe] = {
-                    "topup": chain_data.user_params.fund_requirements.get(asset).safe,
-                    "threshold": chain_data.user_params.fund_requirements.get(asset).safe/2,
-                    "balance": balances[chain][service_safe][asset]
-                }
 
-                user_funding_requirement = self._compute_user_fund_requirements(asset_funding_requirement, balances[chain][master_safe][asset])["recommended_sender_refill_required"]
-                user_fund_requirements[chain].setdefault(master_safe, {})[asset] = user_funding_requirement
+                    recommended_refill = self._compute_refill_requirement(
+                        asset_funding_values, balances[chain][master_safe][asset]
+                    )["recommended_refill"]
+                    refill_requirements[chain].setdefault(master_safe, {})[
+                        asset
+                    ] = recommended_refill
 
+                # Refill requirements for Master EOA
+                asset_funding_values = {}
                 if asset == ZERO_ADDRESS:
-                    user_fund_requirements[chain].setdefault(wallet.address,{})[asset] = 0
-                else:
-                    user_fund_requirements[chain].setdefault(wallet.address,{})[asset] = 0
+                    asset_funding_values = {
+                        wallet.address: self._get_master_eoa_native_funding_values(
+                            master_safe is not None,
+                            Chain(chain),
+                            balances[chain][wallet.address][asset],
+                        )
+                    }
 
-        is_funding_required = any(
+                recommended_refill = self._compute_refill_requirement(
+                    asset_funding_values, 0
+                )["recommended_refill"]
+                refill_requirements[chain].setdefault(wallet.address, {})[
+                    asset
+                ] = recommended_refill
+
+        is_refill_required = any(
             fund_requirement > 0
-            for chain_requirements in user_fund_requirements.values()
+            for chain_requirements in refill_requirements.values()
             for asset_requirements in chain_requirements.values()
             for fund_requirement in asset_requirements.values()
         )
 
         return {
             "balances": balances,
-            "user_fund_requirements": user_fund_requirements,
-            "is_funding_required": is_funding_required,
-            "allow_start_agent": True
+            "refill_requirements": refill_requirements,
+            "is_refill_required": is_refill_required,
+            "allow_start_agent": allow_start_agent,
         }
 
     @staticmethod
-    def _compute_user_fund_requirements(asset_funding_requirement: t.Dict, sender_balance: int) -> t.Dict:
+    def _compute_refill_requirement(
+        asset_funding_values: t.Dict, sender_balance: int
+    ) -> t.Dict:
         """
         Compute user fund requirements.
 
         Args:
-            asset_funding_requirement (dict): A dictionary where each key is an address, and the value contains:
+            asset_funding_values (dict): A dictionary where each key is an address, and the value contains:
                 - "topup": The full funding requirement for the address.
                 - "threshold": The minimum balance threshold for the address.
-                - "current_balance": The current balance of the address.
+                - "balance": The current balance of the address.
             sender_balance (int): The initial balance of the sender.
 
         Returns:
@@ -1992,27 +2051,65 @@ class ServiceManager:
                 - "minimum_required": The minimum refill amount for the sender.
                 - "recommended_required": The recommended refill amount for the sender.
         """
-        minimum_sender_refill_required = 0
-        recommended_sender_refill_required = 0
+        total_minimum_shortfall = 0
+        total_recommended_shortfall = 0
 
-        remaining_sender_balance = sender_balance
-
-        for _, requirements in asset_funding_requirement.items():
+        for _, requirements in asset_funding_values.items():
             topup = requirements["topup"]
             threshold = requirements["threshold"]
             balance = requirements["balance"]
 
-            combined_balance = remaining_sender_balance + balance
+            if balance < threshold:
+                total_minimum_shortfall += threshold - balance
+                total_recommended_shortfall += topup - balance
 
-            shortfall = 0
-            if combined_balance < threshold:
-                shortfall = threshold - combined_balance
-                minimum_sender_refill_required += shortfall
-
-            recommended_sender_refill_required += max(0, topup - combined_balance)
-            remaining_sender_balance = max(0, remaining_sender_balance - shortfall)
+        minimum_refill = max(total_minimum_shortfall - sender_balance, 0)
+        recommended_refill = max(total_recommended_shortfall - sender_balance, 0)
 
         return {
-            "minimum_sender_refill_required": minimum_sender_refill_required,
-            "recommended_sender_refill_required": recommended_sender_refill_required
+            "minimum_refill": minimum_refill,
+            "recommended_refill": recommended_refill,
         }
+
+    @staticmethod
+    def _get_master_eoa_native_funding_values(
+        masterSafeExists: bool, chain: Chain, balance: int
+    ) -> t.Dict:
+        funding_values = {
+            True: {
+                Chain.ETHEREUM: {
+                    "topup": 20000000000000000,
+                    "threshold": 10000000000000000,
+                },
+                Chain.GNOSIS: {
+                    "topup": 100000000000000000,
+                    "threshold": 50000000000000000,
+                },
+                Chain.OPTIMISTIC: {
+                    "topup": 5000000000000000,
+                    "threshold": 2500000000000000,
+                },
+                Chain.BASE: {"topup": 5000000000000000, "threshold": 2500000000000000},
+                Chain.MODE: {"topup": 500000000000000, "threshold": 250000000000000},
+            },
+            False: {
+                Chain.ETHEREUM: {
+                    "topup": 20000000000000000,
+                    "threshold": 20000000000000000,
+                },
+                Chain.GNOSIS: {
+                    "topup": 1500000000000000000,
+                    "threshold": 1500000000000000000,
+                },
+                Chain.OPTIMISTIC: {
+                    "topup": 5000000000000000,
+                    "threshold": 5000000000000000,
+                },
+                Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
+                Chain.MODE: {"topup": 500000000000000, "threshold": 500000000000000},
+            },
+        }
+
+        values = funding_values[masterSafeExists][chain]
+        values["balance"] = balance
+        return values
