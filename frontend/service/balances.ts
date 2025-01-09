@@ -3,7 +3,7 @@ import { CONTENT_TYPE_JSON_UTF8 } from '@/constants/headers';
 import { BACKEND_URL_V2 } from '@/constants/urls';
 
 /**
- * Get a single service from the backend
+ * API call to get balances and refill requirements
  */
 const getBalancesAndFundingRequirements = async (
   serviceConfigId: string,
@@ -19,7 +19,7 @@ const getBalancesAndFundingRequirements = async (
       return response.json();
     }
     throw new Error(
-      `Failed to balances and fund requirements for ${serviceConfigId}`,
+      `Failed to balances and refill requirements for ${serviceConfigId}`,
     );
   });
 };

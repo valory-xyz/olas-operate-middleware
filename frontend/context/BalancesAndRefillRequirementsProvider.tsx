@@ -29,7 +29,7 @@ export const BalancesAndRefillRequirementsProvider = ({
   const chainId = selectedAgentConfig.evmHomeChainId;
 
   const {
-    data: balancesAndFundingRequirements,
+    data: balancesAndRefillRequirements,
     isLoading: isBalancesAndFundingRequirementsLoading,
   } = useQuery<BalancesAndFundingRequirements>({
     queryKey: REACT_QUERY_KEYS.BALANCES_AND_REFILL_REQUIREMENTS_KEY(
@@ -37,31 +37,31 @@ export const BalancesAndRefillRequirementsProvider = ({
     ),
     queryFn: () =>
       BalanceService.getBalancesAndFundingRequirements(configId as string),
-    enabled: !!selectedService?.service_config_id,
+    enabled: !!configId,
     refetchInterval: FIVE_SECONDS_INTERVAL * 20, // TODO: 60 seconds if agent is already running else 5 seconds
   });
 
   const balances = useMemo(() => {
     if (isBalancesAndFundingRequirementsLoading) return;
-    if (!balancesAndFundingRequirements) return;
+    if (!balancesAndRefillRequirements) return;
 
-    return balancesAndFundingRequirements.balances[asMiddlewareChain(chainId)];
+    return balancesAndRefillRequirements.balances[asMiddlewareChain(chainId)];
   }, [
-    balancesAndFundingRequirements,
+    balancesAndRefillRequirements,
     chainId,
     isBalancesAndFundingRequirementsLoading,
   ]);
 
   const refillRequirements = useMemo(() => {
     if (isBalancesAndFundingRequirementsLoading) return;
-    if (!balancesAndFundingRequirements) return;
+    if (!balancesAndRefillRequirements) return;
 
     // TODO: update here
-    return balancesAndFundingRequirements.user_fund_requirements[
+    return balancesAndRefillRequirements.user_fund_requirements[
       asMiddlewareChain(chainId)
     ];
   }, [
-    balancesAndFundingRequirements,
+    balancesAndRefillRequirements,
     chainId,
     isBalancesAndFundingRequirementsLoading,
   ]);
@@ -73,7 +73,7 @@ export const BalancesAndRefillRequirementsProvider = ({
         refillRequirements,
         balances,
         canStartAgent:
-          balancesAndFundingRequirements?.allow_start_agent || false,
+          balancesAndRefillRequirements?.allow_start_agent || false,
       }}
     >
       {children}

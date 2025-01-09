@@ -1,4 +1,4 @@
-import { get, isNil } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { useContext, useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
@@ -23,10 +23,10 @@ const requiresFund = (balance: Maybe<number>) => {
 
 export const useBalanceContext = () => useContext(BalanceContext);
 
-export const useFundRequirement = (wallet?: WalletBalanceResult) => {
+const useRefillRequirement = (wallet?: WalletBalanceResult) => {
   const { refillRequirements } = useBalanceAndRefillRequirementsContext();
 
-  if (!refillRequirements || !wallet) return;
+  if (isEmpty(refillRequirements) || isEmpty(wallet)) return;
 
   const requirement = get(refillRequirements, [
     wallet.walletAddress,
@@ -43,7 +43,6 @@ export const useFundRequirement = (wallet?: WalletBalanceResult) => {
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string | undefined) => {
-  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
   const { selectedAgentConfig } = useServices();
 
   const { flatAddresses, serviceSafes, serviceEoa } =
@@ -112,18 +111,8 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   /**
    * service safe native balance requirement
    */
-  const serviceSafeNativeGasRequirement = useMemo(() => {
-    if (!refillRequirements) return;
-    if (!serviceSafeNative) return;
-
-    const requirement = get(refillRequirements, [
-      serviceSafeNative.walletAddress,
-      AddressZero,
-    ]);
-
-    if (isNil(requirement)) return;
-    return formatUnitsToNumber(`${requirement}`);
-  }, [serviceSafeNative, refillRequirements]);
+  const serviceSafeNativeGasRequirement =
+    useRefillRequirement(serviceSafeNative);
 
   return {
     serviceWalletBalances,
@@ -144,7 +133,6 @@ export const useMasterBalances = () => {
   const { selectedAgentConfig } = useServices();
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { isLoaded, walletBalances } = useBalanceContext();
-  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
 
   // TODO: unused, check only services stake?
   // const masterStakedBalances = useMemo(
@@ -207,18 +195,7 @@ export const useMasterBalances = () => {
   /**
    * master safe native balance requirement
    */
-  const masterSafeNativeGasRequirement = useMemo(() => {
-    if (!refillRequirements) return;
-    if (!masterSafeNative) return;
-
-    const requirement = get(refillRequirements, [
-      masterSafeNative.walletAddress,
-      AddressZero,
-    ]);
-
-    if (isNil(requirement)) return;
-    return formatUnitsToNumber(`${requirement}`);
-  }, [masterSafeNative, refillRequirements]);
+  const masterSafeNativeGasRequirement = useRefillRequirement(masterSafeNative);
 
   /**
    * master EOA balance
@@ -243,18 +220,7 @@ export const useMasterBalances = () => {
   /**
    * master EOA balance requirement
    */
-  const masterEoaGasRequirement = useMemo(() => {
-    if (!refillRequirements) return;
-    if (!masterEoaNative) return;
-
-    const requirement = get(refillRequirements, [
-      masterEoaNative.walletAddress,
-      AddressZero,
-    ]);
-
-    if (isNil(requirement)) return;
-    return formatUnitsToNumber(`${requirement}`);
-  }, [masterEoaNative, refillRequirements]);
+  const masterEoaGasRequirement = useRefillRequirement(masterEoaNative);
 
   return {
     isLoaded,
