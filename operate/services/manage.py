@@ -1543,11 +1543,11 @@ class ServiceManager:
                 contract_address=asset_address,
                 address=chain_data.multisig,
             )
-            if asset_address == ZERO_ADDRESS:
+            if asset_address == ZERO_ADDRESS and chain in WRAPPED_NATIVE_ASSET:
                 # also count the balance of the wrapped native asset
                 safe_balance += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET.get(chain, asset_address),
+                    contract_address=WRAPPED_NATIVE_ASSET[chain],
                     address=chain_data.multisig,
                 )
 
