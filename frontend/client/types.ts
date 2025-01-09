@@ -146,9 +146,6 @@ export type BalancesAndFundingRequirements = {
   refill_requirements: Partial<{
     [chain in MiddlewareChain]: AddressBalanceRecord;
   }>;
-  user_fund_requirements: Partial<{
-    [chain in MiddlewareChain]: AddressBalanceRecord;
-  }>; // TODO: to be removed
   allow_start_agent: boolean;
   is_funding_required: boolean; // TODO: ask Jose, why?
 };

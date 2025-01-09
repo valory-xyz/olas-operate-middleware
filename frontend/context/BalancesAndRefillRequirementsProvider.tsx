@@ -71,8 +71,7 @@ export const BalancesAndRefillRequirementsProvider = ({
     if (isBalancesAndFundingRequirementsLoading) return;
     if (!balancesAndRefillRequirements) return;
 
-    // TODO: update here
-    return balancesAndRefillRequirements.user_fund_requirements[
+    return balancesAndRefillRequirements.refill_requirements[
       asMiddlewareChain(chainId)
     ];
   }, [
