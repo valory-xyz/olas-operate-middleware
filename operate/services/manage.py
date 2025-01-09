@@ -77,6 +77,7 @@ SERVICE_YAML = "service.yaml"
 HTTP_OK = 200
 URI_HASH_POSITION = 7
 IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
+DEFAULT_TOPUP_THRESHOLD = 0.5
 
 
 class ServiceManager:
@@ -1763,11 +1764,11 @@ class ServiceManager:
                             asset_address: {
                                 "agent": {
                                     "topup": fund_requirements.agent,
-                                    "threshold": int(fund_requirements.agent / 2),
+                                    "threshold": int(fund_requirements.agent * DEFAULT_TOPUP_THRESHOLD),
                                 },
                                 "safe": {
                                     "topup": fund_requirements.safe,
-                                    "threshold": int(fund_requirements.safe / 2),
+                                    "threshold": int(fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD),
                                 },
                             }
                             for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
@@ -1948,8 +1949,6 @@ class ServiceManager:
                 allow_start_agent = False
             if service_safe:
                 addresses.add(service_safe)
-            else:
-                allow_start_agent = False
 
             for asset in assets:
                 for address in addresses:
@@ -1960,9 +1959,10 @@ class ServiceManager:
                         address=address,
                     )
 
+                    # TODO this is a patch to count the balance of the wrapped native asset
                     if (
                         asset == ZERO_ADDRESS
-                        and address in agent_addresses | {service_safe}
+                        and address in agent_addresses | {service_safe}   # TODO maybe makes sense only for service safe.
                         and chain in WRAPPED_NATIVE_ASSET
                     ):
                         # also count the balance of the wrapped native asset
@@ -1983,13 +1983,13 @@ class ServiceManager:
                         asset_funding_values[address] = {
                             "topup": fund_requirements.get(asset).agent,
                             "threshold": fund_requirements.get(asset).agent
-                            / 2,  # TODO make threshold configurable
+                            * DEFAULT_TOPUP_THRESHOLD,  # TODO make threshold configurable
                             "balance": balances[chain][address][asset],
                         }
                     asset_funding_values[service_safe or "service_safe"] = {
                         "topup": fund_requirements.get(asset).safe,
                         "threshold": fund_requirements.get(asset).safe
-                        / 2,  # TODO make threshold configurable
+                        * DEFAULT_TOPUP_THRESHOLD,  # TODO make threshold configurable
                         "balance": balances[chain].get(service_safe, {}).get(asset, 0),
                     }
 
@@ -2048,8 +2048,14 @@ class ServiceManager:
 
         Returns:
             dict: A dictionary containing:
-                - "minimum_required": The minimum refill amount for the sender.
-                - "recommended_required": The recommended refill amount for the sender.
+                - "minimum_refill": The minimum refill amount for the sender.
+                - "recommended_refill": The recommended refill amount for the sender.
+
+        Note:
+            The aim of this method is to calculate the minimum and recommended refill amounts for the sender,
+            assuming that the sender is not within asset_funding_values.
+            If asset_funding_values contains the sender, then sender_balance must be set to 0.
+            (otherwise its balance will be counted twice).
         """
         total_minimum_shortfall = 0
         total_recommended_shortfall = 0
