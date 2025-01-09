@@ -18,7 +18,6 @@ import { AddressLink } from '../AddressLink';
 import { CustomAlert } from '../Alert';
 import { CardTitle } from '../Card/CardTitle';
 import { CardSection } from '../styled/CardSection';
-import { AddBackupWalletPage } from './AddBackupWalletPage';
 import { DebugInfoSection } from './DebugInfoSection';
 
 const { Text, Paragraph } = Typography;
@@ -73,8 +72,6 @@ export const Settings = () => {
     switch (screen) {
       case SettingsScreen.Main:
         return <SettingsMain />;
-      case SettingsScreen.AddBackupWallet:
-        return <AddBackupWalletPage />;
       default:
         return null;
     }

@@ -16,8 +16,11 @@ export type ChainConfig = {
   evmChainId: number;
   middlewareChain: MiddlewareChainId;
   rpc: HttpUrl;
+  /**
+   * Least amount of native token required to create a Safe
+   * @example for gnosis chain, 1.5 XDAI is required to create a Safe
+   */
   safeCreationThreshold: number;
-  safeAddSignerThreshold: number;
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
@@ -27,7 +30,6 @@ export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.ETHEREUM,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
   safeCreationThreshold: 0.02,
-  safeAddSignerThreshold: 0.02,
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
@@ -37,7 +39,6 @@ export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.GNOSIS,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
   safeCreationThreshold: 1.5,
-  safeAddSignerThreshold: 0.1,
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
@@ -47,7 +48,6 @@ export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.OPTIMISM,
   rpc: process.env.OPTIMISM_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
-  safeAddSignerThreshold: 0.005,
 };
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
@@ -57,7 +57,6 @@ export const BASE_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.BASE,
   rpc: process.env.BASE_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
-  safeAddSignerThreshold: 0.005,
 };
 
 export const MODE_CHAIN_CONFIG: ChainConfig = {
@@ -67,7 +66,6 @@ export const MODE_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.MODE,
   rpc: process.env.MODE_RPC as HttpUrl,
   safeCreationThreshold: 0.0005,
-  safeAddSignerThreshold: 0.0005, // TODO: Modius - confirm this value
 };
 
 export const CHAIN_CONFIG: {
