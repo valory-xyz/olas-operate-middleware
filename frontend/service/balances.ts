@@ -5,7 +5,7 @@ import { BACKEND_URL_V2 } from '@/constants/urls';
 /**
  * API call to get balances and refill requirements
  */
-const getBalancesAndFundingRequirements = async (
+const getBalancesAndRefillRequirements = async (
   serviceConfigId: string,
 ): Promise<BalancesAndFundingRequirements> => {
   return fetch(
@@ -25,5 +25,5 @@ const getBalancesAndFundingRequirements = async (
 };
 
 export const BalanceService = {
-  getBalancesAndFundingRequirements,
+  getBalancesAndRefillRequirements,
 };

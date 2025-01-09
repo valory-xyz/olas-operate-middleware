@@ -51,7 +51,7 @@ export const BalancesAndRefillRequirementsProvider = ({
       configId as string,
     ),
     queryFn: () =>
-      BalanceService.getBalancesAndFundingRequirements(configId as string),
+      BalanceService.getBalancesAndRefillRequirements(configId as string),
     enabled: !!configId,
     refetchInterval,
   });
