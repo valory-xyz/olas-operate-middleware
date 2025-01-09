@@ -149,9 +149,12 @@ export type BalancesAndFundingRequirements = {
    * @note this is the amount of funds required to be in the user's wallet.
    * If it not present or is 0, the balance is sufficient.
    */
-  user_fund_requirements: Partial<{
+  refill_requirements: Partial<{
     [chain in MiddlewareChain]: AddressBalanceRecord;
   }>;
+  user_fund_requirements: Partial<{
+    [chain in MiddlewareChain]: AddressBalanceRecord;
+  }>; // TODO: to be removed
   allow_start_agent: boolean;
   is_funding_required: boolean; // TODO: ask Jose, why?
 };

@@ -10,7 +10,7 @@ import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
 import { MasterEoa, MasterSafe } from '@/enums/Wallet';
-import { useBalanceAndFundRequirementsContext } from '@/hooks/useBalanceAndFundRequirementsContext';
+import { useBalanceAndRefillRequirementsContext } from '@/hooks/useBalanceAndRefillRequirementsContext';
 import {
   useBalanceContext,
   useServiceBalances,
@@ -48,7 +48,7 @@ const useServiceDeployment = () => {
     overrideSelectedServiceStatus,
   } = useServices();
 
-  const { canStartAgent } = useBalanceAndFundRequirementsContext();
+  const { canStartAgent } = useBalanceAndRefillRequirementsContext();
   const { service, isServiceRunning } = useService(
     selectedService?.service_config_id,
   );

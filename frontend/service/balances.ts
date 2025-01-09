@@ -9,7 +9,7 @@ const getBalancesAndFundingRequirements = async (
   serviceConfigId: string,
 ): Promise<BalancesAndFundingRequirements> => {
   return fetch(
-    `${BACKEND_URL_V2}/service/${serviceConfigId}/user_fund_requirements`,
+    `${BACKEND_URL_V2}/service/${serviceConfigId}/user_fund_requirements`, // TODO: update after backend
     {
       method: 'GET',
       headers: { ...CONTENT_TYPE_JSON_UTF8 },

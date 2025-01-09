@@ -9,19 +9,19 @@ import { BalanceService } from '@/service/balances';
 import { Optional } from '@/types/Util';
 import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
-export const BalancesAndFundRequirementsProviderContext = createContext<{
+export const BalancesAndRefillRequirementsProviderContext = createContext<{
   isBalancesAndFundingRequirementsLoading: boolean;
   balances: Optional<AddressBalanceRecord>;
-  userFundRequirements: Optional<AddressBalanceRecord>;
+  refillRequirements: Optional<AddressBalanceRecord>;
   canStartAgent: boolean;
 }>({
   isBalancesAndFundingRequirementsLoading: false,
   balances: undefined,
-  userFundRequirements: undefined,
+  refillRequirements: undefined,
   canStartAgent: false,
 });
 
-export const BalancesAndFundRequirementsProvider = ({
+export const BalancesAndRefillRequirementsProvider = ({
   children,
 }: PropsWithChildren) => {
   const { selectedService, selectedAgentConfig } = useServices();
@@ -32,7 +32,7 @@ export const BalancesAndFundRequirementsProvider = ({
     data: balancesAndFundingRequirements,
     isLoading: isBalancesAndFundingRequirementsLoading,
   } = useQuery<BalancesAndFundingRequirements>({
-    queryKey: REACT_QUERY_KEYS.BALANCES_AND_FUNDING_REQUIREMENTS_KEY(
+    queryKey: REACT_QUERY_KEYS.BALANCES_AND_REFILL_REQUIREMENTS_KEY(
       configId as string,
     ),
     queryFn: () =>
@@ -52,10 +52,11 @@ export const BalancesAndFundRequirementsProvider = ({
     isBalancesAndFundingRequirementsLoading,
   ]);
 
-  const userFundRequirements = useMemo(() => {
+  const refillRequirements = useMemo(() => {
     if (isBalancesAndFundingRequirementsLoading) return;
     if (!balancesAndFundingRequirements) return;
 
+    // TODO: update here
     return balancesAndFundingRequirements.user_fund_requirements[
       asMiddlewareChain(chainId)
     ];
@@ -66,16 +67,16 @@ export const BalancesAndFundRequirementsProvider = ({
   ]);
 
   return (
-    <BalancesAndFundRequirementsProviderContext.Provider
+    <BalancesAndRefillRequirementsProviderContext.Provider
       value={{
         isBalancesAndFundingRequirementsLoading,
-        userFundRequirements,
+        refillRequirements,
         balances,
         canStartAgent:
           balancesAndFundingRequirements?.allow_start_agent || false,
       }}
     >
       {children}
-    </BalancesAndFundRequirementsProviderContext.Provider>
+    </BalancesAndRefillRequirementsProviderContext.Provider>
   );
 };

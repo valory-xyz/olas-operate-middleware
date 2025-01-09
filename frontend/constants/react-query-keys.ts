@@ -77,6 +77,6 @@ export const REACT_QUERY_KEYS = {
   AGENT_ACTIVITY: ['agentActivity'] as const,
 
   // balances and funding requirements
-  BALANCES_AND_FUNDING_REQUIREMENTS_KEY: (serviceConfigId: string) =>
+  BALANCES_AND_REFILL_REQUIREMENTS_KEY: (serviceConfigId: string) =>
     ['balancesAndFundingRequirements', serviceConfigId] as const,
 } as const;

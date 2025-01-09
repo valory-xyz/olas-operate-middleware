@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 
 import { Layout } from '@/components/Layout';
 import { BalanceProvider } from '@/context/BalanceProvider';
-import { BalancesAndFundRequirementsProvider } from '@/context/BalancesAndFundRequirementsProvider';
+import { BalancesAndRefillRequirementsProvider } from '@/context/BalancesAndRefillRequirementsProvider';
 import { ElectronApiProvider } from '@/context/ElectronApiProvider';
 import { MasterWalletProvider } from '@/context/MasterWalletProvider';
 import { ModalProvider } from '@/context/ModalProvider';
@@ -43,7 +43,7 @@ export default function App({ Component, pageProps }: AppProps) {
                     <StakingContractDetailsProvider>
                       <RewardProvider>
                         <BalanceProvider>
-                          <BalancesAndFundRequirementsProvider>
+                          <BalancesAndRefillRequirementsProvider>
                             <SetupProvider>
                               <SettingsProvider>
                                 <ConfigProvider theme={mainTheme}>
@@ -59,7 +59,7 @@ export default function App({ Component, pageProps }: AppProps) {
                                 </ConfigProvider>
                               </SettingsProvider>
                             </SetupProvider>
-                          </BalancesAndFundRequirementsProvider>
+                          </BalancesAndRefillRequirementsProvider>
                         </BalanceProvider>
                       </RewardProvider>
                     </StakingContractDetailsProvider>

@@ -7,7 +7,7 @@ import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
 import { Maybe, Optional } from '@/types/Util';
 import { formatUnitsToNumber } from '@/utils/numberFormatters';
 
-import { useBalanceAndFundRequirementsContext } from './useBalanceAndFundRequirementsContext';
+import { useBalanceAndRefillRequirementsContext } from './useBalanceAndRefillRequirementsContext';
 import { useService } from './useService';
 import { useServices } from './useServices';
 import { useMasterWalletContext } from './useWallet';
@@ -24,11 +24,11 @@ const requiresFund = (balance: Maybe<number>) => {
 export const useBalanceContext = () => useContext(BalanceContext);
 
 export const useFundRequirement = (wallet?: WalletBalanceResult) => {
-  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
+  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
 
-  if (!userFundRequirements || !wallet) return;
+  if (!refillRequirements || !wallet) return;
 
-  const requirement = get(userFundRequirements, [
+  const requirement = get(refillRequirements, [
     wallet.walletAddress,
     AddressZero,
   ]);
@@ -43,7 +43,7 @@ export const useFundRequirement = (wallet?: WalletBalanceResult) => {
  * @returns
  */
 export const useServiceBalances = (serviceConfigId: string | undefined) => {
-  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
+  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
   const { selectedAgentConfig } = useServices();
 
   const { flatAddresses, serviceSafes, serviceEoa } =
@@ -113,17 +113,17 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
    * service safe native balance requirement
    */
   const serviceSafeNativeGasRequirement = useMemo(() => {
-    if (!userFundRequirements) return;
+    if (!refillRequirements) return;
     if (!serviceSafeNative) return;
 
-    const requirement = get(userFundRequirements, [
+    const requirement = get(refillRequirements, [
       serviceSafeNative.walletAddress,
       AddressZero,
     ]);
 
     if (isNil(requirement)) return;
     return formatUnitsToNumber(`${requirement}`);
-  }, [serviceSafeNative, userFundRequirements]);
+  }, [serviceSafeNative, refillRequirements]);
 
   return {
     serviceWalletBalances,
@@ -144,7 +144,7 @@ export const useMasterBalances = () => {
   const { selectedAgentConfig } = useServices();
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { isLoaded, walletBalances } = useBalanceContext();
-  const { userFundRequirements } = useBalanceAndFundRequirementsContext();
+  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
 
   // TODO: unused, check only services stake?
   // const masterStakedBalances = useMemo(
@@ -208,17 +208,17 @@ export const useMasterBalances = () => {
    * master safe native balance requirement
    */
   const masterSafeNativeGasRequirement = useMemo(() => {
-    if (!userFundRequirements) return;
+    if (!refillRequirements) return;
     if (!masterSafeNative) return;
 
-    const requirement = get(userFundRequirements, [
+    const requirement = get(refillRequirements, [
       masterSafeNative.walletAddress,
       AddressZero,
     ]);
 
     if (isNil(requirement)) return;
     return formatUnitsToNumber(`${requirement}`);
-  }, [masterSafeNative, userFundRequirements]);
+  }, [masterSafeNative, refillRequirements]);
 
   /**
    * master EOA balance
@@ -244,17 +244,17 @@ export const useMasterBalances = () => {
    * master EOA balance requirement
    */
   const masterEoaGasRequirement = useMemo(() => {
-    if (!userFundRequirements) return;
+    if (!refillRequirements) return;
     if (!masterEoaNative) return;
 
-    const requirement = get(userFundRequirements, [
+    const requirement = get(refillRequirements, [
       masterEoaNative.walletAddress,
       AddressZero,
     ]);
 
     if (isNil(requirement)) return;
     return formatUnitsToNumber(`${requirement}`);
-  }, [masterEoaNative, userFundRequirements]);
+  }, [masterEoaNative, refillRequirements]);
 
   return {
     isLoaded,
