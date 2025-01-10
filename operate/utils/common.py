@@ -203,33 +203,33 @@ def check_rpc(rpc_url: Optional[str] = None) -> True:
         response.raise_for_status()
         rpc_response = response.json()
     except Exception as e:
-        print("Error: Failed to send RPC request:", e)
+        spinner.fail(f"Error: Failed to send RPC request: {e}")
         return False
 
-    rcp_error_message = rpc_response.get("error", {}).get("message", "Exception processing RCP response")
+    rpc_error_message = rpc_response.get("error", {}).get("message", "exception processing rpc response").lower()
 
-    if rcp_error_message == "Exception processing RCP response":
-        print("Error: The received RCP response is malformed. Please verify the RPC address and/or RCP behavior.")
+    if rpc_error_message == "exception processing rpc response":
+        print("Error: The received rpc response is malformed. Please verify the RPC address and/or rpc behavior.")
         print("  Received response:")
         print("  ", rpc_response)
         print("")
-        print("Terminating script.")
+        spinner.fail("Terminating script.")
         return False
-    elif rcp_error_message == "Out of requests":
-        print("Error: The provided RCP is out of requests.")
-        print("Terminating script.")
+    elif rpc_error_message == "out of requests":
+        print("Error: The provided rpc is out of requests.")
+        spinner.fail("Terminating script.")
         return False
-    elif rcp_error_message == "The method eth_newFilter does not exist/is not available":
+    elif rpc_error_message == "the method eth_newfilter does not exist/is not available":
         print("Error: The provided RPC does not support 'eth_newFilter'.")
-        print("Terminating script.")
+        spinner.fail("Terminating script.")
         return False
-    elif rcp_error_message == "invalid params":
+    elif rpc_error_message == "invalid params":
         spinner.succeed("RPC checks passed.")
         return True
 
-    print("Error: Unknown RCP error.")
+    print("Error: Unknown rpc error.")
     print("  Received response:")
     print("  ", rpc_response)
     print("")
-    print("Terminating script.")
+    spinner.fail("Terminating script.")
     return False
