@@ -1,5 +1,5 @@
 import { Card, Flex, Skeleton, Tooltip, Typography } from 'antd';
-import { find, groupBy, isArray, isEmpty, isNil, map } from 'lodash';
+import { find, groupBy, isArray, isEmpty, isNil } from 'lodash';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import styled from 'styled-components';
@@ -224,25 +224,26 @@ const YourAgentWalletBreakdown = () => {
       ({ evmChainId }) => evmChainId === evmHomeChainId,
     );
 
-    // Group by wallet address and sum wrapped and native token balances
-    const result: WalletBalanceResult[] = map(
+    /**
+     * Native balances with wrapped token balances
+     * @example { xDai: 100, Wrapped xDai: 50 } => { xDai: 150 }
+     */
+    const groupedNativeBalances = Object.entries(
       groupBy(nativeBalances, 'walletAddress'),
-      (items, address) => {
-        const nativeTokenBalance =
-          find(items, { isNative: true })?.balance || 0;
-        const wrappedBalance =
-          find(items, { isWrappedToken: true })?.balance || 0;
-        const totalBalance = nativeTokenBalance + wrappedBalance;
+    ).map(([address, items]) => {
+      const nativeTokenBalance = find(items, { isNative: true })?.balance || 0;
+      const wrappedBalance =
+        find(items, { isWrappedToken: true })?.balance || 0;
+      const totalBalance = nativeTokenBalance + wrappedBalance;
 
-        return {
-          ...items[0],
-          walletAddress: address,
-          balance: totalBalance,
-        } as WalletBalanceResult;
-      },
-    );
+      return {
+        ...items[0],
+        walletAddress: address,
+        balance: totalBalance,
+      } as WalletBalanceResult;
+    });
 
-    return result;
+    return groupedNativeBalances;
   }, [serviceSafeBalances, evmHomeChainId]);
 
   const serviceSafeErc20Balances = useMemo(

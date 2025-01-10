@@ -290,8 +290,8 @@ const getCrossChainWalletBalances = async (
               evmChainId: providerEvmChainId,
               symbol: tokenSymbol,
               isNative: false,
-              balance: Number(formatUnits(erc20Balances[index], decimals)),
               isWrappedToken,
+              balance: Number(formatUnits(erc20Balances[index], decimals)),
             }),
           ) as WalletBalanceResult[];
 

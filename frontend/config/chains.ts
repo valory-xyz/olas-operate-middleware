@@ -18,8 +18,6 @@ export type ChainConfig = {
   rpc: HttpUrl;
   safeCreationThreshold: number;
   safeAddSignerThreshold: number;
-  /** Include wrapped tokens in the safe balance */
-  includeWrappedTokens?: boolean;
 };
 
 export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
@@ -40,7 +38,6 @@ export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
   rpc: process.env.GNOSIS_RPC as HttpUrl,
   safeCreationThreshold: 1.5,
   safeAddSignerThreshold: 0.1,
-  includeWrappedTokens: true,
 };
 
 export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
