@@ -46,7 +46,7 @@ const MODE_ACTIVITY_CHECKERS: ActivityCheckers = {
 
 const CELO_ACTIVITY_CHECKERS: ActivityCheckers = {
   [ActivityCheckerType.MemeActivityChecker]: new MulticallContract(
-    '0x3FD8C757dE190bcc82cF69Df3Cd9Ab15bCec1426', // TODO: celo
+    '0x3FD8C757dE190bcc82cF69Df3Cd9Ab15bCec1426',
     MEME_ACTIVITY_CHECKER_ABI,
   ),
 } as const;

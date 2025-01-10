@@ -54,7 +54,7 @@ export const MODE_CHAIN_CONFIG: ChainConfig = {
 export const CELO_CHAIN_CONFIG: ChainConfig = {
   evmChainId: EvmChainId.Celo,
   name: 'Celo',
-  nativeToken: TOKEN_CONFIG[EvmChainId.Celo][TokenSymbol.ETH],
+  nativeToken: TOKEN_CONFIG[EvmChainId.Celo][TokenSymbol.CELO],
   middlewareChain: MiddlewareChainId.CELO,
   rpc: process.env.CELO_RPC as HttpUrl,
   safeCreationThreshold: 0.005,

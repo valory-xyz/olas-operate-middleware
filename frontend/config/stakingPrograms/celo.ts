@@ -13,7 +13,7 @@ import { StakingProgramMap } from '.';
 export const CELO_STAKING_PROGRAMS_CONTRACT_ADDRESSES: Record<string, Address> =
   {
     [StakingProgramId.MemeCeloAlpha2]:
-      '0xc653622FD75026a020995a1d8c8651316cBBc4dA', // TODO: celo
+      '0x95D12D193d466237Bc1E92a1a7756e4264f574AB',
   };
 
 export const CELO_STAKING_PROGRAMS: StakingProgramMap = {
@@ -22,11 +22,11 @@ export const CELO_STAKING_PROGRAMS: StakingProgramMap = {
     name: 'MemeCelo Alpha II',
     agentsSupported: [AgentType.AgentsFunCelo],
     stakingRequirements: {
-      [TokenSymbol.OLAS]: 100, // TODO: celo
+      [TokenSymbol.OLAS]: 100,
     },
     activityChecker:
       ACTIVITY_CHECKERS[EvmChainId.Celo][
-        ActivityCheckerType.MemeActivityChecker // TODO: celo
+        ActivityCheckerType.MemeActivityChecker
       ],
     contract: new MulticallContract(
       CELO_STAKING_PROGRAMS_CONTRACT_ADDRESSES[StakingProgramId.MemeCeloAlpha2],

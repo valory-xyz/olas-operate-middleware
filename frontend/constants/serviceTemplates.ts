@@ -175,7 +175,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<ServiceTemplate, 'env_variables'> = {
 /**
  * Agents.fun Base template
  */
-export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
+export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
   name: 'Memeooorr',
   hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
@@ -209,7 +209,7 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
 /**
  * Agents.fun Celo template
  */
-export const AGENTS_FUN_CELO: ServiceTemplate = {
+export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.AgentsFunCelo,
   name: 'Memeooorr',
   hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
@@ -226,12 +226,12 @@ export const AGENTS_FUN_CELO: ServiceTemplate = {
       agent_id: 43,
       threshold: 1,
       use_staking: true,
-      cost_of_bond: +parseEther(50),
-      monthly_gas_estimate: +parseEther(0.03),
+      cost_of_bond: +parseEther(50), // TODO: celo
+      monthly_gas_estimate: +parseEther(0.03), // TODO: celo
       fund_requirements: {
         [ethers.constants.AddressZero]: {
-          agent: +parseEther(0.00625),
-          safe: +parseEther(0.0125),
+          agent: +parseEther(0.00625), // TODO: celo
+          safe: +parseEther(0.0125), // TODO: celo
         },
       },
     },
@@ -361,9 +361,9 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   PREDICT_SERVICE_TEMPLATE,
-  MEMEOOORR_BASE_TEMPLATE,
+  AGENTS_FUN_BASE_TEMPLATE,
   MODIUS_SERVICE_TEMPLATE,
-  AGENTS_FUN_CELO,
+  AGENTS_FUN_CELO_TEMPLATE,
 ] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;

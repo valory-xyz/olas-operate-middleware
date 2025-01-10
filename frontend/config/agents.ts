@@ -3,7 +3,7 @@ import { formatUnits } from 'ethers/lib/utils';
 
 import { MiddlewareChain } from '@/client';
 import {
-  MEMEOOORR_BASE_TEMPLATE,
+  AGENTS_FUN_BASE_TEMPLATE,
   MODIUS_SERVICE_TEMPLATE,
   PREDICT_SERVICE_TEMPLATE,
 } from '@/constants/serviceTemplates';
@@ -24,7 +24,11 @@ const traderFundRequirements =
     .fund_requirements[ethers.constants.AddressZero];
 
 const memeooorrRequirements =
-  MEMEOOORR_BASE_TEMPLATE.configurations[MiddlewareChain.BASE]
+  AGENTS_FUN_BASE_TEMPLATE.configurations[MiddlewareChain.BASE]
+    .fund_requirements[ethers.constants.AddressZero];
+
+const agentsFunCeloRequirements =
+  AGENTS_FUN_BASE_TEMPLATE.configurations[MiddlewareChain.BASE]
     .fund_requirements[ethers.constants.AddressZero];
 
 const modiusFundRequirements =
@@ -152,7 +156,7 @@ export const AGENT_CONFIG: {
       [WalletOwnerType.Master]: {
         [WalletType.Safe]: {
           [TokenSymbol.ETH]: Number(
-            formatEther(`${memeooorrRequirements.safe}`),
+            formatEther(`${agentsFunCeloRequirements.safe}`),
           ),
         },
         [WalletType.EOA]: {
@@ -162,7 +166,7 @@ export const AGENT_CONFIG: {
       [WalletOwnerType.Agent]: {
         [WalletType.Safe]: {
           [TokenSymbol.ETH]: Number(
-            formatEther(`${memeooorrRequirements.agent}`),
+            formatEther(`${agentsFunCeloRequirements.agent}`),
           ),
         },
       },
