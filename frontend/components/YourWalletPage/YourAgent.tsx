@@ -1,5 +1,5 @@
 import { Card, Flex, Skeleton, Tooltip, Typography } from 'antd';
-import { isArray, isEmpty, isNil } from 'lodash';
+import { find, groupBy, isArray, isEmpty, isNil, map } from 'lodash';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import styled from 'styled-components';
@@ -8,6 +8,7 @@ import { MiddlewareChain } from '@/client';
 import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
 import { BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { WalletBalanceResult } from '@/context/BalanceProvider';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -216,24 +217,57 @@ const YourAgentWalletBreakdown = () => {
     [accruedServiceStakingRewards, reward, serviceSafeOlas],
   );
 
-  const serviceSafeNativeBalances = useMemo(
-    () =>
-      serviceSafeBalances?.filter(
-        ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
-      ),
-    [serviceSafeBalances, evmHomeChainId],
-  );
+  const serviceSafeNativeBalances = useMemo(() => {
+    if (!serviceSafeBalances) return null;
+
+    return serviceSafeBalances?.filter(
+      ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
+    );
+
+    const nativeBalances = serviceSafeBalances.filter(
+      ({ evmChainId }) => evmChainId === evmHomeChainId,
+    );
+    // const wrappedTokenBalances = serviceSafeBalances?.filter(
+    //   ({ isWrappedToken, evmChainId }) =>
+    //     isWrappedToken && evmChainId === evmHomeChainId,
+    // );
+
+    // Group by walletAddress
+
+    // Group by walletAddress and return the updated array
+    const result: WalletBalanceResult[] = map(
+      groupBy(nativeBalances, 'walletAddress'),
+      (items, address) => {
+        const nativeTokenBalance =
+          find(items, { isNative: true })?.balance || 0;
+        const wrappedBalance =
+          find(items, { isWrappedToken: true })?.balance || 0;
+        const totalBalance = nativeTokenBalance + wrappedBalance;
+
+        return {
+          ...items[0],
+          walletAddress: address,
+          balance: totalBalance,
+        } as WalletBalanceResult;
+      },
+    );
+
+    return result;
+  }, [serviceSafeBalances, evmHomeChainId]);
 
   const serviceSafeErc20Balances = useMemo(
     () =>
       serviceSafeBalances?.filter(
-        ({ isNative, symbol, evmChainId }) =>
+        ({ isNative, symbol, evmChainId, isWrappedToken }) =>
           !isNative &&
           symbol !== TokenSymbol.OLAS &&
+          !isWrappedToken &&
           evmChainId === evmHomeChainId,
       ),
     [serviceSafeBalances, evmHomeChainId],
   );
+
+  console.log({ serviceSafeBalances, serviceSafeErc20Balances });
 
   const serviceEoaNativeBalances = useMemo(
     () =>
