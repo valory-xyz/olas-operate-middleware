@@ -570,17 +570,17 @@ def get_asset_balance(
 
 def get_assets_balances(
     ledger_api: LedgerApi,
-    assets: t.Set[str],
+    asset_addresses: t.Set[str],
     addresses: t.Set[str],
 ) -> t.Dict[str, t.Dict[str, int]]:
     """
     Get the balances of a list of native assets or ERC20 tokens.
 
-    If contract address is a zero address, return the native balance.
+    If asset address is a zero address, return the native balance.
     """
     output: t.Dict[str, t.Dict[str, int]] = {}
 
-    for asset, address in itertools.product(assets, addresses):
+    for asset, address in itertools.product(asset_addresses, addresses):
         output.setdefault(address, {})[asset] = get_asset_balance(
             ledger_api=ledger_api,
             contract_address=asset,
