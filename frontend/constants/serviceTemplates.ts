@@ -97,7 +97,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
 export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
   name: 'Memeooorr',
-  hash: 'bafybeicecxdycxh6tthzsj6v2c7q5b6ufaqhtn2bn6mpn4ur23tuk7brsm',
+  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
