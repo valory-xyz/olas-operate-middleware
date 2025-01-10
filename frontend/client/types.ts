@@ -153,5 +153,4 @@ export type BalancesAndFundingRequirements = {
     [chain in MiddlewareChain]: AddressBalanceRecord;
   }>;
   allow_start_agent: boolean;
-  is_funding_required: boolean; // TODO: ask Jose, why?
 };

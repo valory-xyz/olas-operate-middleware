@@ -105,25 +105,20 @@ const useServiceDeployment = () => {
   ]);
 
   const isDeployable = useMemo(() => {
-    if (
-      isServicesLoading ||
-      isServiceRunning ||
-      !isAllStakingContractDetailsRecordLoaded
-    ) {
-      return false;
-    }
+    if (isServicesLoading || isServiceRunning) return false;
+
+    if (!isAllStakingContractDetailsRecordLoaded) return false;
 
     if (isNil(requiredStakedOlas)) return false;
 
-    if (
-      !isNil(hasEnoughServiceSlots) &&
-      !hasEnoughServiceSlots &&
-      !isServiceStaked
-    ) {
-      return false;
-    }
+    // If not enough service slots, and service is not staked, return false
+    const hasSlot = !isNil(hasEnoughServiceSlots) && !hasEnoughServiceSlots;
+    if (hasSlot && !isServiceStaked) return false;
 
+    // If already staked and initial funded, check if it has enough staked OLAS
     if (service && isInitialFunded && isServiceStaked) {
+      if (!canStartAgent) return false;
+
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
@@ -132,8 +127,6 @@ const useServiceDeployment = () => {
 
     // SERVICE IS STAKED, AND STARTING AGAIN
     if (isServiceStaked) {
-      if (!canStartAgent) return false;
-
       const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
       return hasEnoughOlas;
     }
