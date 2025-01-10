@@ -1,6 +1,6 @@
 import { BigNumberish } from 'ethers';
 import { getAddress, isAddress } from 'ethers/lib/utils';
-import { Contract as MulticallContract, Provider } from 'ethers-multicall';
+import { Contract as MulticallContract } from 'ethers-multicall';
 import { isEmpty, isNil, sum } from 'lodash';
 import {
   createContext,
@@ -17,11 +17,9 @@ import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
-import { CHAIN_CONFIG } from '@/config/chains';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
-import { WRAPPED_TOKEN_PROVIDERS } from '@/constants/wrappedTokenProviders';
 import { EvmChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
@@ -42,6 +40,7 @@ export type WalletBalanceResult = {
   symbol: TokenSymbol;
   isNative: boolean;
   balance: number;
+  isWrappedToken?: boolean;
 };
 
 type CrossChainStakedBalances = Array<{
@@ -200,50 +199,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-type WrappedToken = Pick<WalletBalanceResult, 'walletAddress' | 'balance'>;
-
-/**
- * Fetches the wrapped token balances for the wallets
- */
-const getWrappedTokenBalances = async (
-  chainId: EvmChainId,
-  wallets: Wallets,
-  multicallProvider: Provider,
-): Promise<WrappedToken[]> => {
-  // if the chain does not include wrapped tokens, return an empty array
-  if (!CHAIN_CONFIG[chainId].includeWrappedTokens) return [];
-
-  const wrappedProvider = WRAPPED_TOKEN_PROVIDERS[chainId];
-  if (!wrappedProvider) return [];
-
-  const wrappedTokenBalances: WrappedToken[] = [];
-
-  // filter out the safe wallets
-  const safeNativeAddresses = wallets.filter(
-    ({ type, address }) => type === WalletType.Safe && isAddress(address),
-  );
-
-  const wrappedTokenBalancesResults = await multicallProvider
-    .all(
-      safeNativeAddresses.map(({ address }) =>
-        wrappedProvider.balanceOf(address),
-      ),
-    )
-    .catch((e) => {
-      console.error('Error fetching wrapped balances:', e);
-      return [];
-    });
-
-  safeNativeAddresses.forEach((balance, index) => {
-    wrappedTokenBalances.push({
-      walletAddress: balance.address,
-      balance: Number(formatUnits(wrappedTokenBalancesResults[index])),
-    });
-  });
-
-  return wrappedTokenBalances;
-};
-
 const getCrossChainWalletBalances = async (
   wallets: Wallets,
 ): Promise<WalletBalanceResult[]> => {
@@ -278,6 +233,7 @@ const getCrossChainWalletBalances = async (
       } of Object.values(tokensOnChain)) {
         const isNative = tokenType === TokenType.NativeGas;
         const isErc20 = tokenType === TokenType.Erc20;
+        const isWrappedToken = tokenType === TokenType.Wrapped;
 
         if (isNative) {
           // get native balances for all relevant wallets
@@ -296,41 +252,23 @@ const getCrossChainWalletBalances = async (
             },
           );
 
-          const wrappedTokenBalances = await getWrappedTokenBalances(
-            providerEvmChainId,
-            relevantWallets,
-            multicallProvider,
-          );
-
           // add the results to the balance results
           nativeBalances.forEach((balance, index) => {
             if (!isNil(balance)) {
               const address = relevantWallets[index].address;
-
-              // add the wrapped balance if it exists
-              const wrappedTokenBalance =
-                wrappedTokenBalances.find(
-                  ({ walletAddress }) =>
-                    walletAddress === relevantWallets[index].address,
-                )?.balance || 0;
-
-              const totalBalance = sum([
-                Number(formatUnits(balance)),
-                wrappedTokenBalance,
-              ]);
 
               balanceResults.push({
                 walletAddress: address,
                 evmChainId: providerEvmChainId,
                 symbol: tokenSymbol,
                 isNative: true,
-                balance: totalBalance,
+                balance: Number(formatUnits(balance)),
               });
             }
           });
         }
 
-        if (isErc20) {
+        if (isErc20 || isWrappedToken) {
           if (!tokenAddress) continue;
 
           const erc20Contract = new MulticallContract(
@@ -353,6 +291,7 @@ const getCrossChainWalletBalances = async (
               symbol: tokenSymbol,
               isNative: false,
               balance: Number(formatUnits(erc20Balances[index], decimals)),
+              isWrappedToken,
             }),
           ) as WalletBalanceResult[];
 

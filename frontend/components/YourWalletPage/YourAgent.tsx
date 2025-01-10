@@ -220,21 +220,11 @@ const YourAgentWalletBreakdown = () => {
   const serviceSafeNativeBalances = useMemo(() => {
     if (!serviceSafeBalances) return null;
 
-    return serviceSafeBalances?.filter(
-      ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
-    );
-
     const nativeBalances = serviceSafeBalances.filter(
       ({ evmChainId }) => evmChainId === evmHomeChainId,
     );
-    // const wrappedTokenBalances = serviceSafeBalances?.filter(
-    //   ({ isWrappedToken, evmChainId }) =>
-    //     isWrappedToken && evmChainId === evmHomeChainId,
-    // );
 
-    // Group by walletAddress
-
-    // Group by walletAddress and return the updated array
+    // Group by wallet address and sum wrapped and native token balances
     const result: WalletBalanceResult[] = map(
       groupBy(nativeBalances, 'walletAddress'),
       (items, address) => {
@@ -266,8 +256,6 @@ const YourAgentWalletBreakdown = () => {
       ),
     [serviceSafeBalances, evmHomeChainId],
   );
-
-  console.log({ serviceSafeBalances, serviceSafeErc20Balances });
 
   const serviceEoaNativeBalances = useMemo(
     () =>

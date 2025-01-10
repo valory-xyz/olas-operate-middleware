@@ -6,6 +6,7 @@ export enum TokenType {
   NativeGas = 'native',
   Erc20 = 'erc20',
   Erc721 = 'erc721',
+  Wrapped = 'wrapped',
   // Erc1155 = 'erc1155',
   // UniswapV2Lp = 'v2lp',
   // UniswapV3Lp = 'v3lp',
@@ -25,7 +26,17 @@ export type NativeTokenConfig = {
   symbol: TokenSymbol;
 };
 
-export type TokenConfig = Erc20TokenConfig | NativeTokenConfig;
+export type WrappedTokenConfig = {
+  address: Address;
+  tokenType: TokenType.Wrapped;
+  decimals: number;
+  symbol: TokenSymbol;
+};
+
+export type TokenConfig =
+  | Erc20TokenConfig
+  | NativeTokenConfig
+  | WrappedTokenConfig;
 
 export type ChainTokenConfig = {
   [tokenSymbol: string]: TokenConfig;
@@ -42,6 +53,12 @@ export const GNOSIS_TOKEN_CONFIG: ChainTokenConfig = {
     decimals: 18,
     tokenType: TokenType.Erc20,
     symbol: TokenSymbol.OLAS,
+  },
+  [TokenSymbol.WXDAI]: {
+    address: '0xe91d153e0b41518a2ce8dd3d7944fa863463a97d',
+    decimals: 18,
+    tokenType: TokenType.Wrapped,
+    symbol: TokenSymbol.WXDAI,
   },
 };
 
