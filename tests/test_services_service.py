@@ -56,6 +56,7 @@ DEFAULT_CONFIG_KWARGS = {
     "keys_private_key_0": "0x0000000000000000000000000000000000000000000000000000000000000001",
     "instance_0": "0x0000000000000000000000000000000000000001",
     "multisig": "0x0000000000000000000000000000000000000020",
+    "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
 }
 
 
@@ -186,7 +187,7 @@ def get_config_json_data_v4(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     """get_config_json_data_v4"""
 
     return {
-        "version": kwargs.get("version"),
+        "version": 4,
         "service_config_id": kwargs.get("service_config_id"),
         "hash": kwargs.get("hash"),
         "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
@@ -225,12 +226,62 @@ def get_config_json_data_v4(**kwargs: t.Any) -> t.Dict[str, t.Any]:
         },
         "description": kwargs.get("description"),
         "env_variables": {},
+        "service_path": f"/home/user/.operate/services/{kwargs.get('service_config_id')}/trader_pearl",
+        "name": kwargs.get("name"),
+    }
+
+
+def get_config_json_data_v5(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    """get_config_json_data_v4"""
+
+    return {
+        "version": 5,
+        "service_config_id": kwargs.get("service_config_id"),
+        "hash": kwargs.get("hash"),
+        "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
+        "keys": [
+            {
+                "ledger": "ethereum",
+                "address": kwargs.get("keys_address_0"),
+                "private_key": kwargs.get("keys_private_key_0"),
+            }
+        ],
+        "home_chain": "gnosis",
+        "chain_configs": {
+            "gnosis": {
+                "ledger_config": {"rpc": kwargs.get("rpc"), "chain": "gnosis"},
+                "chain_data": {
+                    "instances": [kwargs.get("instance_0")],
+                    "token": kwargs.get("token"),
+                    "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
+                    "user_params": {
+                        "staking_program_id": kwargs.get("staking_program_id"),
+                        "nft": kwargs.get("nft"),
+                        "threshold": kwargs.get("threshold"),
+                        "agent_id": kwargs.get("agent_id"),
+                        "use_staking": kwargs.get("use_staking"),
+                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
+                        "fund_requirements": {
+                            "0x0000000000000000000000000000000000000000": {
+                                "agent": kwargs.get("fund_requirements_agent"),
+                                "safe": kwargs.get("fund_requirements_safe"),
+                            }
+                        },
+                    },
+                },
+            }
+        },
+        "description": kwargs.get("description"),
+        "env_variables": {},
         "service_path": kwargs.get("service_path"),
         "name": kwargs.get("name"),
     }
 
 
-get_expected_data = get_config_json_data_v4
+get_expected_data = get_config_json_data_v5
 
 
 class TestService:
@@ -239,11 +290,16 @@ class TestService:
     @pytest.mark.parametrize(
         "staking_program_id", ["staking_program_1", "staking_program_2"]
     )
-    @pytest.mark.parametrize("use_mech_marketplace", [True, False])
-    @pytest.mark.parametrize("use_staking", [True, False])
+    @pytest.mark.parametrize("use_mech_marketplace", [True])
+    @pytest.mark.parametrize("use_staking", [True])
     @pytest.mark.parametrize(
         "get_config_json_data",
-        [get_config_json_data_v0, get_config_json_data_v2, get_config_json_data_v3],
+        [
+            get_config_json_data_v0,
+            get_config_json_data_v2,
+            get_config_json_data_v3,
+            get_config_json_data_v4,
+        ],
     )
     def test_service_migrate_format(
         self,
