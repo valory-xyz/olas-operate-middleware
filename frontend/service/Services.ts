@@ -14,8 +14,6 @@ import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 /**
  * Get a single service from the backend
- * @param serviceHash
- * @returns
  */
 const getService = async (
   serviceConfigId: string,

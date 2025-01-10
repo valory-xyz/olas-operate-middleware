@@ -1,24 +1,22 @@
 import { Flex, Typography } from 'antd';
 
 import { CustomAlert } from '@/components/Alert';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
-import { useServices } from '@/hooks/useServices';
+import { Optional } from '@/types/Util';
 
 import { InlineBanner } from './InlineBanner';
 import { useLowFundsDetails } from './useLowFunds';
 
 const { Text, Title } = Typography;
 
+type LowSafeSignerBalanceAlert = { requiredSignerFunds: Optional<number> };
+
 /**
  * Alert for low safe signer (EOA) balance
  */
-export const LowSafeSignerBalanceAlert = () => {
+export const LowSafeSignerBalanceAlert = ({
+  requiredSignerFunds,
+}: LowSafeSignerBalanceAlert) => {
   const { chainName, tokenSymbol, masterEoaAddress } = useLowFundsDetails();
-  const { selectedAgentConfig } = useServices();
-  const token =
-    selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-      WalletType.EOA
-    ][tokenSymbol];
 
   return (
     <CustomAlert
@@ -32,7 +30,7 @@ export const LowSafeSignerBalanceAlert = () => {
           </Title>
           <Text>
             To keep your agent operational, add
-            <Text strong>{` ${token} ${tokenSymbol} `}</Text>
+            <Text strong>{` ${requiredSignerFunds} ${tokenSymbol} `}</Text>
             on {chainName} chain to the safe signer.
           </Text>
           <Text>

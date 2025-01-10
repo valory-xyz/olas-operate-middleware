@@ -1,4 +1,5 @@
 import { BigNumberish, ethers } from 'ethers';
+import { round } from 'lodash';
 
 /**
  * Displays balance in a human readable format
@@ -22,6 +23,18 @@ export const balanceFormat = (
  */
 export const formatUnits = (value: BigNumberish, decimals = 18): string => {
   return ethers.utils.formatUnits(value, decimals);
+};
+
+/**
+ *
+ * Formats larger numbers into small numbers and returns a number (at most 2 decimal places)
+ * @example `formatUnitsToNumber('1000000000000000000', 18)` => 1.0
+ */
+export const formatUnitsToNumber = (
+  value: BigNumberish,
+  decimals = 18,
+): number => {
+  return round(parseFloat(formatUnits(value, decimals)), 2);
 };
 
 /**

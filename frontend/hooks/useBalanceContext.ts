@@ -1,16 +1,41 @@
-import { isNil } from 'lodash';
+import { get, isEmpty, isNil } from 'lodash';
 import { useContext, useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
+import { AddressZero } from '@/constants/address';
 import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
-import { Optional } from '@/types/Util';
+import { Maybe, Optional } from '@/types/Util';
+import { formatUnitsToNumber } from '@/utils/numberFormatters';
 
+import { useBalanceAndRefillRequirementsContext } from './useBalanceAndRefillRequirementsContext';
 import { useService } from './useService';
 import { useServices } from './useServices';
 import { useMasterWalletContext } from './useWallet';
 
+/**
+ * Function to check if a balance requires funding
+ * ie, greater than 0
+ */
+const requiresFund = (balance: Maybe<number>) => {
+  if (isNil(balance)) return false;
+  return isFinite(balance) && balance > 0;
+};
+
 export const useBalanceContext = () => useContext(BalanceContext);
+
+const useRefillRequirement = (wallet?: WalletBalanceResult) => {
+  const { refillRequirements } = useBalanceAndRefillRequirementsContext();
+
+  if (isEmpty(refillRequirements) || isEmpty(wallet)) return;
+
+  const requirement = get(refillRequirements, [
+    wallet.walletAddress,
+    AddressZero,
+  ]);
+
+  if (isNil(requirement)) return;
+  return formatUnitsToNumber(`${requirement}`);
+};
 
 /**
  * Balances relevant to a specific service (agent)
@@ -19,9 +44,6 @@ export const useBalanceContext = () => useContext(BalanceContext);
  */
 export const useServiceBalances = (serviceConfigId: string | undefined) => {
   const { selectedAgentConfig } = useServices();
-  const homeChainId = selectedAgentConfig.evmHomeChainId;
-
-  const { nativeToken } = CHAIN_CONFIG[homeChainId];
 
   const { flatAddresses, serviceSafes, serviceEoa } =
     useService(serviceConfigId);
@@ -87,19 +109,10 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   );
 
   /**
-   * Check if service safe native balance is below threshold
+   * service safe native balance requirement
    */
-  const isServiceSafeLowOnNativeGas = useMemo(() => {
-    if (!serviceSafeNative) return;
-    if (!nativeToken?.symbol) return;
-
-    const nativeGasRequirement =
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Agent][
-        WalletType.Safe
-      ][nativeToken.symbol];
-
-    return serviceSafeNative.balance < nativeGasRequirement;
-  }, [serviceSafeNative, nativeToken, selectedAgentConfig]);
+  const serviceSafeNativeGasRequirement =
+    useRefillRequirement(serviceSafeNative);
 
   return {
     serviceWalletBalances,
@@ -107,7 +120,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
     serviceSafeBalances,
     serviceEoaBalances,
     serviceSafeNative,
-    isServiceSafeLowOnNativeGas,
+    isServiceSafeLowOnNativeGas: requiresFund(serviceSafeNativeGasRequirement),
   };
 };
 
@@ -180,22 +193,13 @@ export const useMasterBalances = () => {
   ]);
 
   /**
-   * Check if master safe native balance is below threshold
+   * master safe native balance requirement
    */
-  const isMasterSafeLowOnNativeGas = useMemo(() => {
-    if (!masterSafeNative) return;
-    if (!homeChainNativeToken?.symbol) return;
+  const masterSafeNativeGasRequirement = useRefillRequirement(masterSafeNative);
 
-    const nativeGasRequirement =
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][homeChainNativeToken.symbol];
-
-    if (isNil(nativeGasRequirement)) return;
-
-    return masterSafeNative.balance < nativeGasRequirement;
-  }, [masterSafeNative, homeChainNativeToken, selectedAgentConfig]);
-
+  /**
+   * master EOA balance
+   */
   const masterEoaNative = useMemo(() => {
     if (!masterEoaBalances) return;
     if (!selectedAgentConfig?.evmHomeChainId) return;
@@ -213,15 +217,25 @@ export const useMasterBalances = () => {
     homeChainNativeToken,
   ]);
 
+  /**
+   * master EOA balance requirement
+   */
+  const masterEoaGasRequirement = useRefillRequirement(masterEoaNative);
+
   return {
     isLoaded,
     masterWalletBalances,
-    masterSafeBalances,
-    masterEoaBalances,
-    isMasterSafeLowOnNativeGas,
 
-    // Native gas balance. Eg. XDAI on gnosis
+    // master safe
+    masterSafeBalances,
+    isMasterSafeLowOnNativeGas: requiresFund(masterSafeNativeGasRequirement),
+    masterSafeNativeGasRequirement,
     masterSafeNativeGasBalance: masterSafeNative?.balance,
+
+    // master eoa
     masterEoaNativeGasBalance: masterEoaNative?.balance,
+    isMasterEoaLowOnGas: requiresFund(masterEoaGasRequirement),
+    masterEoaGasRequirement,
+    masterEoaBalances,
   };
 };
