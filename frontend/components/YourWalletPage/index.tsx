@@ -131,10 +131,11 @@ const MasterSafeNativeBalance = () => {
     if (isNil(masterSafeBalances)) return;
 
     return masterSafeBalances
-      .filter(({ walletAddress, evmChainId, isNative }) => {
+      .filter(({ walletAddress, evmChainId, isNative, isWrappedToken }) => {
         return (
           evmChainId === evmHomeChainId && // TODO: address multi chain, need to refactor as per product requirement
           isNative &&
+          !isWrappedToken &&
           walletAddress === masterSafeAddress
         );
       })
@@ -171,14 +172,17 @@ const MasterSafeErc20Balances = () => {
     if (isNil(masterSafeBalances)) return;
 
     return masterSafeBalances
-      .filter(({ walletAddress, evmChainId, symbol, isNative }) => {
-        return (
-          evmChainId === evmHomeChainId && // TODO: address multi chain, need to refactor as per product requirement
-          !isNative &&
-          symbol !== TokenSymbol.OLAS &&
-          walletAddress === masterSafeAddress
-        );
-      })
+      .filter(
+        ({ walletAddress, evmChainId, symbol, isNative, isWrappedToken }) => {
+          return (
+            evmChainId === evmHomeChainId && // TODO: address multi chain, need to refactor as per product requirement
+            !isNative &&
+            !isWrappedToken &&
+            symbol !== TokenSymbol.OLAS &&
+            walletAddress === masterSafeAddress
+          );
+        },
+      )
       .reduce<{ [tokenSymbol: string]: number }>((acc, { balance, symbol }) => {
         if (!acc[symbol]) acc[symbol] = 0;
         acc[symbol] += balance;
