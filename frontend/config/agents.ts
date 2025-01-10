@@ -66,6 +66,6 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: false,
+    isAgentEnabled: true,
   },
 };
