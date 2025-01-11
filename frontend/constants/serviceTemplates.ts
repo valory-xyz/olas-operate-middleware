@@ -207,7 +207,7 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
-  hash: 'bafybeia553i6ozhw5cta42sutzewuwe6pwwy6hxyvrlqoi6bhuxqg23rqe',
+  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
