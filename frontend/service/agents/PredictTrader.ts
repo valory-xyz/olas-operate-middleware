@@ -12,7 +12,10 @@ import {
   StakingRewardsInfo,
 } from '@/types/Autonolas';
 
-import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
+import {
+  ONE_YEAR,
+  StakedAgentService,
+} from './base-services/StakedAgentService';
 
 const MECH_REQUESTS_SAFETY_MARGIN = 1;
 

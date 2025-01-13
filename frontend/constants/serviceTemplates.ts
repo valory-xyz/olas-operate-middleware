@@ -88,7 +88,13 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   },
 } as const;
 
-const AGENTS_FUN_COMMON_TEMPLATE: Pick<ServiceTemplate, 'env_variables'> = {
+const AGENTS_FUN_COMMON_TEMPLATE: Pick<
+  ServiceTemplate,
+  'env_variables' | 'hash' | 'image'
+> = {
+  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  image:
+    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -177,11 +183,8 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<ServiceTemplate, 'env_variables'> = {
  */
 export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
-  name: 'Memeooorr',
-  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  name: 'Memeooorr - Base',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  image:
-    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   service_version: 'v0.2.0-alpha16',
   home_chain: MiddlewareChain.BASE,
   configurations: {
@@ -211,11 +214,9 @@ export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
  */
 export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.AgentsFunCelo,
-  name: 'Memeooorr',
-  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  name: 'Memeooorr - Celo',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  image:
-    'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
+
   service_version: 'v0.2.0-alpha16',
   home_chain: MiddlewareChain.CELO,
   configurations: {

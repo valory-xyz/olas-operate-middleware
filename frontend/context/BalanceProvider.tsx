@@ -24,7 +24,7 @@ import { EvmChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
 import { Wallets, WalletType } from '@/enums/Wallet';
-import { StakedAgentService } from '@/service/agents/StakedAgentService';
+import { StakedAgentService } from '@/service/agents/base-services/StakedAgentService';
 import { Address } from '@/types/Address';
 import { Maybe } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
