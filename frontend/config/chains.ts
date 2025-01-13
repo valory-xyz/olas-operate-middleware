@@ -13,21 +13,11 @@ type HttpUrl = `http${'s' | ''}://${string}`;
 export type ChainConfig = {
   name: string;
   nativeToken: TokenConfig;
-  evmChainId: number;
+  evmChainId: EvmChainId;
   middlewareChain: MiddlewareChainId;
   rpc: HttpUrl;
   safeCreationThreshold: number;
   safeAddSignerThreshold: number;
-};
-
-export const ETHEREUM_CHAIN_CONFIG: ChainConfig = {
-  evmChainId: EvmChainId.Ethereum,
-  name: 'Ethereum',
-  nativeToken: TOKEN_CONFIG[EvmChainId.Ethereum][TokenSymbol.ETH],
-  middlewareChain: MiddlewareChainId.ETHEREUM,
-  rpc: process.env.GNOSIS_RPC as HttpUrl,
-  safeCreationThreshold: 0.02,
-  safeAddSignerThreshold: 0.02,
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
@@ -38,17 +28,7 @@ export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
   rpc: process.env.GNOSIS_RPC as HttpUrl,
   safeCreationThreshold: 1.5,
   safeAddSignerThreshold: 0.1,
-};
-
-export const OPTIMISM_CHAIN_CONFIG: ChainConfig = {
-  evmChainId: EvmChainId.Optimism,
-  name: 'Optimism',
-  nativeToken: TOKEN_CONFIG[EvmChainId.Optimism][TokenSymbol.ETH],
-  middlewareChain: MiddlewareChainId.OPTIMISM,
-  rpc: process.env.OPTIMISM_RPC as HttpUrl,
-  safeCreationThreshold: 0.005,
-  safeAddSignerThreshold: 0.005,
-};
+} as const;
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
   evmChainId: EvmChainId.Base,
@@ -58,7 +38,7 @@ export const BASE_CHAIN_CONFIG: ChainConfig = {
   rpc: process.env.BASE_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
   safeAddSignerThreshold: 0.005,
-};
+} as const;
 
 export const MODE_CHAIN_CONFIG: ChainConfig = {
   evmChainId: EvmChainId.Mode,
@@ -68,12 +48,24 @@ export const MODE_CHAIN_CONFIG: ChainConfig = {
   rpc: process.env.MODE_RPC as HttpUrl,
   safeCreationThreshold: 0.0005,
   safeAddSignerThreshold: 0.0005, // TODO: Modius - confirm this value
-};
+} as const;
+
+// TODO: celo - check each key
+export const CELO_CHAIN_CONFIG: ChainConfig = {
+  evmChainId: EvmChainId.Celo,
+  name: 'Celo',
+  nativeToken: TOKEN_CONFIG[EvmChainId.Celo][TokenSymbol.CELO],
+  middlewareChain: MiddlewareChainId.CELO,
+  rpc: process.env.CELO_RPC as HttpUrl,
+  safeCreationThreshold: 0.005,
+  safeAddSignerThreshold: 0.005,
+} as const;
 
 export const CHAIN_CONFIG: {
-  [evmChainId: number]: ChainConfig;
+  [evmChainId in EvmChainId]: ChainConfig;
 } = {
   [EvmChainId.Base]: BASE_CHAIN_CONFIG,
   [EvmChainId.Gnosis]: GNOSIS_CHAIN_CONFIG,
   [EvmChainId.Mode]: MODE_CHAIN_CONFIG,
+  [EvmChainId.Celo]: CELO_CHAIN_CONFIG,
 } as const;

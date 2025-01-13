@@ -4,11 +4,6 @@ import { TokenSymbol } from '@/enums/Token';
 import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import { PredictTraderService } from '@/service/agents/PredictTrader';
 
-export type AgentSupportedEvmChainId =
-  | EvmChainId.Gnosis
-  | EvmChainId.Base
-  | EvmChainId.Mode;
-
 export type AgentConfig = {
   name: string;
   evmHomeChainId: EvmChainId;

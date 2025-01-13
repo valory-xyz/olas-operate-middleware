@@ -6,6 +6,7 @@ import {
   MiddlewareRunningStatuses,
   MiddlewareTransitioningStatuses,
 } from '@/client';
+import { EvmChainId } from '@/enums/Chain';
 import {
   AgentEoa,
   AgentSafe,
@@ -15,13 +16,13 @@ import {
 } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { Service } from '@/types/Service';
-import { Optional } from '@/types/Util';
+import { Nullable, Optional } from '@/types/Util';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { useServices } from './useServices';
 
 type ServiceChainIdAddressRecord = {
-  [evmChainId: number]: {
+  [evmChainId in EvmChainId]: {
     agentSafe?: Address;
     agentEoas?: Address[];
   };
@@ -82,38 +83,42 @@ export const useService = (serviceConfigId?: string) => {
     ];
   }, [service, selectedService]);
 
-  const addresses: ServiceChainIdAddressRecord = useMemo(() => {
-    if (!service) return {};
-    const chainData = service.chain_configs;
+  const addresses: Nullable<ServiceChainIdAddressRecord> = useMemo(() => {
+    const chainData = service?.chain_configs;
+
+    if (!chainData) return null;
 
     // group multisigs by chainId
-    const addressesByChainId: ServiceChainIdAddressRecord = chainData
-      ? Object.keys(chainData).reduce((acc, middlewareChain) => {
-          const { multisig, instances } =
-            chainData[middlewareChain as keyof typeof chainData].chain_data;
+    const addressesByChainId = Object.keys(chainData).reduce(
+      (acc, middlewareChain) => {
+        const { multisig, instances } =
+          chainData[middlewareChain as keyof typeof chainData].chain_data;
+        const evmChainId = asEvmChainId(middlewareChain);
 
-          const evmChainId = asEvmChainId(middlewareChain);
-
-          return {
-            ...acc,
-            [evmChainId]: {
-              agentSafe: multisig,
-              agentEoas: instances,
-            },
-          };
-        }, {})
-      : {};
+        return {
+          ...acc,
+          [evmChainId]: {
+            agentSafe: multisig,
+            agentEoas: instances,
+          },
+        };
+      },
+      {},
+    ) as ServiceChainIdAddressRecord;
 
     return addressesByChainId;
   }, [service]);
 
   const flatAddresses = useMemo(() => {
+    if (!service) return [];
+    if (!addresses) return [];
+
     return Object.values(addresses).reduce((acc, { agentSafe, agentEoas }) => {
       if (agentSafe) acc.push(agentSafe);
       if (agentEoas) acc.push(...agentEoas);
       return acc;
     }, [] as Address[]);
-  }, [addresses]);
+  }, [addresses, service]);
 
   const serviceSafes = useMemo(() => {
     return (

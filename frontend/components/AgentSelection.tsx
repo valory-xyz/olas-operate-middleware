@@ -91,7 +91,11 @@ const EachAgent = memo(
       }
 
       // Neither service nor safe is created
-      if (agentType === AgentType.Memeooorr || agentType === AgentType.Modius) {
+      if (
+        agentType === AgentType.Memeooorr ||
+        agentType === AgentType.Modius ||
+        agentType === AgentType.AgentsFunCelo
+      ) {
         // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
         // TODO: can have this as a boolean flag in agentConfig?
         gotoPage(Pages.Setup);

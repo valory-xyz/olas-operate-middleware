@@ -3,6 +3,7 @@ import { formatEther } from 'ethers/lib/utils';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { BASE_STAKING_PROGRAMS } from '@/config/stakingPrograms/base';
+import { CELO_STAKING_PROGRAMS } from '@/config/stakingPrograms/celo';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
@@ -15,24 +16,25 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
-export abstract class MemeooorBaseService extends StakedAgentService {
+export abstract class AgentsFunService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
     serviceId,
     stakingProgramId,
-    chainId = EvmChainId.Base,
+    chainId,
   }: {
     agentMultisigAddress: Address;
     serviceId: number;
     stakingProgramId: StakingProgramId;
-    chainId?: EvmChainId;
+    chainId: EvmChainId;
   }): Promise<StakingRewardsInfo | undefined> => {
+    if (!chainId) throw new Error('ChainId is required');
+
     if (!agentMultisigAddress) return;
     if (!serviceId) return;
     if (serviceId === -1) return;
 
     const stakingProgramConfig = STAKING_PROGRAMS[chainId][stakingProgramId];
-
     if (!stakingProgramConfig) throw new Error('Staking program not found');
 
     const { activityChecker, contract: stakingTokenProxyContract } =
@@ -63,27 +65,10 @@ export abstract class MemeooorBaseService extends StakedAgentService {
       currentMultisigNonces,
     ] = multicallResponse;
 
-    /**
-     * struct ServiceInfo {
-      // Service multisig address
-      address multisig;
-      // Service owner
-      address owner;
-      // Service multisig nonces
-      uint256[] nonces; <-- (we use this in the rewards eligibility check)
-      // Staking start time
-      uint256 tsStart;
-      // Accumulated service staking reward
-      uint256 reward;
-      // Accumulated inactivity that might lead to the service eviction
-      uint256 inactivity;}
-     */
-
     const lastMultisigNonces = serviceInfo[2];
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
     const isServiceStaked = serviceInfo[2].length > 0;
-
     const [isEligibleForRewards] = isServiceStaked
       ? await provider.all([
           activityChecker.isRatioPass(
@@ -120,8 +105,10 @@ export abstract class MemeooorBaseService extends StakedAgentService {
 
   static getAvailableRewardsForEpoch = async (
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Base,
+    chainId: EvmChainId,
   ): Promise<number | undefined> => {
+    if (!chainId) throw new Error('ChainId is required');
+
     const stakingTokenProxy =
       STAKING_PROGRAMS[chainId][stakingProgramId]?.contract;
     if (!stakingTokenProxy) return;
@@ -147,12 +134,13 @@ export abstract class MemeooorBaseService extends StakedAgentService {
   /**
    * Get service details by it's NftTokenId on a provided staking contract
    */
-
   static getServiceStakingDetails = async (
     serviceNftTokenId: number,
     stakingProgramId: StakingProgramId,
-    chainId: EvmChainId = EvmChainId.Base,
+    chainId: EvmChainId,
   ): Promise<ServiceStakingDetails> => {
+    if (!chainId) throw new Error('ChainId is required');
+
     const { multicallProvider } = PROVIDERS[chainId];
 
     const { contract: stakingTokenProxy } =
@@ -180,9 +168,19 @@ export abstract class MemeooorBaseService extends StakedAgentService {
     stakingProgramId: StakingProgramId,
     chainId: EvmChainId,
   ): Promise<StakingContractDetails | undefined> => {
+    if (!chainId) throw new Error('ChainId is required');
+
     const { multicallProvider } = PROVIDERS[chainId];
 
-    const stakingTokenProxy = BASE_STAKING_PROGRAMS[stakingProgramId]?.contract;
+    const getStakingTokenConfig = () => {
+      if (chainId === EvmChainId.Celo)
+        return CELO_STAKING_PROGRAMS[stakingProgramId];
+      if (chainId === EvmChainId.Base)
+        return BASE_STAKING_PROGRAMS[stakingProgramId];
+      return null;
+    };
+
+    const stakingTokenProxy = getStakingTokenConfig()?.contract;
     if (!stakingTokenProxy) return;
 
     const contractCalls = [
