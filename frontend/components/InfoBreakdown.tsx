@@ -56,16 +56,20 @@ export const InfoBreakdownList = ({
   parentStyle,
   size,
   color,
-}: InfoBreakdownListProps) => (
-  <Breakdown style={parentStyle}>
-    {list.map((item, index) => (
-      <BreakdownLine key={item.id || index} size={size}>
-        <span className={item.leftClassName}>{item.left}</span>
-        <Line color={color} />
-        <span className={item.rightClassName || 'font-weight-600'}>
-          {item.right}
-        </span>
-      </BreakdownLine>
-    ))}
-  </Breakdown>
-);
+}: InfoBreakdownListProps) => {
+  if (list.length === 0) return null;
+
+  return (
+    <Breakdown style={parentStyle}>
+      {list.map((item, index) => (
+        <BreakdownLine key={item.id || index} size={size}>
+          <span className={item.leftClassName}>{item.left}</span>
+          <Line color={color} />
+          <span className={item.rightClassName || 'font-weight-600'}>
+            {item.right}
+          </span>
+        </BreakdownLine>
+      ))}
+    </Breakdown>
+  );
+};

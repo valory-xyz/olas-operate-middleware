@@ -34,6 +34,15 @@ import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
 
+export type WalletBalanceResult = {
+  walletAddress: Address;
+  evmChainId: EvmChainId;
+  symbol: TokenSymbol;
+  isNative: boolean;
+  balance: number;
+  isWrappedToken?: boolean;
+};
+
 type CrossChainStakedBalances = Array<{
   serviceId: string;
   evmChainId: number;
@@ -141,8 +150,8 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
             ? stakedBalancesResult.value
             : [];
 
-        setWalletBalances(walletBalances || []);
-        setStakedBalances(stakedBalances || []);
+        setWalletBalances(walletBalances);
+        setStakedBalances(stakedBalances);
         setIsLoaded(true);
       } catch (error) {
         console.error('Error updating balances:', error);
@@ -190,14 +199,6 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   );
 };
 
-export type WalletBalanceResult = {
-  walletAddress: Address;
-  evmChainId: EvmChainId;
-  symbol: TokenSymbol;
-  isNative: boolean;
-  balance: number;
-};
-
 const getCrossChainWalletBalances = async (
   wallets: Wallets,
 ): Promise<WalletBalanceResult[]> => {
@@ -232,15 +233,16 @@ const getCrossChainWalletBalances = async (
       } of Object.values(tokensOnChain)) {
         const isNative = tokenType === TokenType.NativeGas;
         const isErc20 = tokenType === TokenType.Erc20;
+        const isWrappedToken = tokenType === TokenType.Wrapped;
 
         if (isNative) {
           // get native balances for all relevant wallets
           const nativeBalancePromises =
             relevantWallets.map<Promise<BigNumberish> | null>(
-              ({ address: walletAddress }) =>
-                isAddress(walletAddress)
-                  ? provider.getBalance(getAddress(walletAddress))
-                  : null,
+              ({ address: walletAddress }) => {
+                if (!isAddress(walletAddress)) return null;
+                return provider.getBalance(getAddress(walletAddress));
+              },
             );
 
           const nativeBalances = await Promise.all(nativeBalancePromises).catch(
@@ -251,20 +253,22 @@ const getCrossChainWalletBalances = async (
           );
 
           // add the results to the balance results
-          nativeBalances.forEach(
-            (balance, index) =>
-              !isNil(balance) &&
+          nativeBalances.forEach((balance, index) => {
+            if (!isNil(balance)) {
+              const address = relevantWallets[index].address;
+
               balanceResults.push({
-                walletAddress: relevantWallets[index].address,
+                walletAddress: address,
                 evmChainId: providerEvmChainId,
                 symbol: tokenSymbol,
                 isNative: true,
                 balance: Number(formatUnits(balance)),
-              }),
-          );
+              });
+            }
+          });
         }
 
-        if (isErc20) {
+        if (isErc20 || isWrappedToken) {
           if (!tokenAddress) continue;
 
           const erc20Contract = new MulticallContract(
@@ -279,15 +283,14 @@ const getCrossChainWalletBalances = async (
           const erc20Calls = relevantWalletsFiltered.map((wallet) =>
             erc20Contract.balanceOf(wallet.address),
           );
-
           const erc20Balances = await multicallProvider.all(erc20Calls);
-
           const erc20Results = relevantWalletsFiltered.map(
             ({ address: walletAddress }, index) => ({
               walletAddress,
               evmChainId: providerEvmChainId,
               symbol: tokenSymbol,
               isNative: false,
+              isWrappedToken,
               balance: Number(formatUnits(erc20Balances[index], decimals)),
             }),
           ) as WalletBalanceResult[];
@@ -385,31 +388,16 @@ const correctBondDepositByServiceState = ({
   switch (serviceState) {
     case ServiceRegistryL2ServiceState.NonExistent:
     case ServiceRegistryL2ServiceState.PreRegistration:
-      return {
-        olasBondBalance: 0,
-        olasDepositBalance: 0,
-      };
+      return { olasBondBalance: 0, olasDepositBalance: 0 };
     case ServiceRegistryL2ServiceState.ActiveRegistration:
-      return {
-        olasBondBalance: 0,
-        olasDepositBalance,
-      };
+      return { olasBondBalance: 0, olasDepositBalance };
     case ServiceRegistryL2ServiceState.FinishedRegistration:
     case ServiceRegistryL2ServiceState.Deployed:
-      return {
-        olasBondBalance,
-        olasDepositBalance,
-      };
+      return { olasBondBalance, olasDepositBalance };
     case ServiceRegistryL2ServiceState.TerminatedBonded:
-      return {
-        olasBondBalance,
-        olasDepositBalance: 0,
-      };
+      return { olasBondBalance, olasDepositBalance: 0 };
     default:
       console.error('Invalid service state');
-      return {
-        olasBondBalance,
-        olasDepositBalance,
-      };
+      return { olasBondBalance, olasDepositBalance };
   }
 };

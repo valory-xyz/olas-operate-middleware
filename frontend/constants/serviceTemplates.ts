@@ -10,7 +10,7 @@ import { parseEther, parseUnits } from '@/utils/numberFormatters';
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
   name: 'Trader Agent',
-  hash: 'bafybeictmh4vwvgeeqcbju5gfilm2oiyz7yuoajnxaffn4pfvr5qgmgrc4',
+  hash: 'bafybeicts6zhavxzz2rxahz3wzs2pzamoq64n64wp4q4cdanfuz7id6c2q',
   description: 'Trader agent for omen prediction markets',
   image:
     'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
@@ -207,7 +207,7 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
-  hash: 'bafybeia553i6ozhw5cta42sutzewuwe6pwwy6hxyvrlqoi6bhuxqg23rqe',
+  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -318,7 +318,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
     SELECTED_STRATEGIES: {
       name: 'Selected strategies',
       description: '',
-      value: '["merkl_pools_search", "balancer_pools_search", "asset_lending"]',
+      value: '["balancer_pools_search", "asset_lending"]',
       provision_type: EnvProvisionType.FIXED,
     },
   },

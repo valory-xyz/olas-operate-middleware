@@ -1,8 +1,12 @@
 import { Button, message } from 'antd';
-import { isNil, sum } from 'lodash';
+import { isEmpty, isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
-import { MiddlewareDeploymentStatus } from '@/client';
+import {
+  EnvProvisionType,
+  MiddlewareDeploymentStatus,
+  ServiceTemplate,
+} from '@/client';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
@@ -230,6 +234,36 @@ const useServiceDeployment = () => {
           serviceConfigId: service.service_config_id,
           partialServiceTemplate: {
             description: `Memeooorr @${xUsername}`,
+          },
+        });
+      }
+    }
+
+    // Update fixed env variables of the service if they were changed in the template
+    if (service) {
+      const templateEnvVariables = SERVICE_TEMPLATES.find(
+        (template) => template.name === service.name,
+      )?.env_variables;
+
+      const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
+
+      Object.entries(service.env_variables).forEach(([key, item]) => {
+        const templateEnvVariable = templateEnvVariables?.[key];
+        if (!templateEnvVariable) return;
+
+        if (
+          templateEnvVariable.provision_type === EnvProvisionType.FIXED &&
+          templateEnvVariable.value !== item.value
+        ) {
+          envVariablesToUpdate[key] = templateEnvVariable;
+        }
+      });
+
+      if (!isEmpty(envVariablesToUpdate)) {
+        await ServicesService.updateService({
+          serviceConfigId: service.service_config_id,
+          partialServiceTemplate: {
+            env_variables: envVariablesToUpdate,
           },
         });
       }
