@@ -55,7 +55,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'rewards-streak': false,
     'staking-contract-section': false,
     'low-funds': false,
-    'agent-activity': false,
+    'agent-activity': true,
     // temporarily hidden until mode is available on safe https://app.safe.global/new-safe/create
     'backup-via-safe': false,
   },
