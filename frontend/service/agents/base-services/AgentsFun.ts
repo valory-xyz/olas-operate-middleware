@@ -2,6 +2,7 @@ import { ethers } from 'ethers';
 import { formatEther } from 'ethers/lib/utils';
 
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
+import { BASE_STAKING_PROGRAMS } from '@/config/stakingPrograms/base';
 import { CELO_STAKING_PROGRAMS } from '@/config/stakingPrograms/celo';
 import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
@@ -171,7 +172,15 @@ export abstract class AgentsFunService extends StakedAgentService {
 
     const { multicallProvider } = PROVIDERS[chainId];
 
-    const stakingTokenProxy = CELO_STAKING_PROGRAMS[stakingProgramId]?.contract;
+    const getStakingTokenConfig = () => {
+      if (chainId === EvmChainId.Celo)
+        return CELO_STAKING_PROGRAMS[stakingProgramId];
+      if (chainId === EvmChainId.Base)
+        return BASE_STAKING_PROGRAMS[stakingProgramId];
+      return null;
+    };
+
+    const stakingTokenProxy = getStakingTokenConfig()?.contract;
     if (!stakingTokenProxy) return;
 
     const contractCalls = [
