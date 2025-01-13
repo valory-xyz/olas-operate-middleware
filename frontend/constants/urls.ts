@@ -14,6 +14,8 @@ const SWAP_BASE_URL: Url = 'https://balancer.fi/swap/base/ETH/OLAS';
 // TODO: Modius - confirm this URL is correct
 const SWAP_MODE_URL: Url =
   'https://jumper.exchange/?fromChain=34443&fromToken=0x0000000000000000000000000000000000000000&toChain=34443&toToken=0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9';
+const SWAP_CELO_URL: Url =
+  'https://app.ubeswap.org/#/swap?inputCurrency=0x471ece3750da237f93b8e339c536989b8978a438&outputCurrency=0xacffae8e57ec6e394eb1b41939a8cf7892dbdc51';
 
 // olas.network
 export const OPERATE_URL: Url = 'https://olas.network/operate';
@@ -22,14 +24,13 @@ export const DOWNLOAD_URL: Url = 'https://olas.network/operate#download';
 
 // thegraph
 export const REWARDS_HISTORY_SUBGRAPH_URLS_BY_EVM_CHAIN = {
-  [EvmChainId.Ethereum]: '',
-  [EvmChainId.Optimism]: '',
   [EvmChainId.Gnosis]:
     'https://api.studio.thegraph.com/query/81371/gnosis-pearl-rewards-history/version/latest',
   [EvmChainId.Base]:
     'https://api.studio.thegraph.com/query/67875/olas-base-staking-rewards-history/version/latest',
   [EvmChainId.Mode]:
     'https://api.studio.thegraph.com/query/67875/olas-mode-staking-rewards-history/version/latest',
+  [EvmChainId.Celo]: '', // TODO: celo
 };
 
 // discord
@@ -46,16 +47,17 @@ export const GITHUB_API_LATEST_RELEASE: Url =
 // export const OPTIMISM_EXPLORER_URL: Url = 'https://optimistic.etherscan.io';
 const GNOSIS_EXPLORER_URL: Url = 'https://gnosisscan.io';
 const BASE_EXPLORER_URL: Url = 'https://basescan.org';
-const MODE_EXPLORER_URL: Url = 'https://explorer.mode.network';
+const MODE_EXPLORER_URL: Url = 'https://modescan.io';
+const CELO_EXPLORER_URL: Url = 'https://celoscan.io';
 
 export const EXPLORER_URL_BY_MIDDLEWARE_CHAIN: Record<
   string | MiddlewareChain,
   Url
 > = {
   [MiddlewareChain.GNOSIS]: GNOSIS_EXPLORER_URL,
-  // [MiddlewareChain.OPTIMISM]: OPTIMISM_EXPLORER_URL,
   [MiddlewareChain.BASE]: BASE_EXPLORER_URL,
   [MiddlewareChain.MODE]: MODE_EXPLORER_URL,
+  [MiddlewareChain.CELO]: CELO_EXPLORER_URL,
 };
 
 export const BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN: Record<
@@ -64,11 +66,13 @@ export const BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN: Record<
 > = {
   [MiddlewareChain.GNOSIS]: 'https://gnosis.blockscout.com',
   [MiddlewareChain.BASE]: 'https://base.blockscout.com',
+  [MiddlewareChain.MODE]: 'https://explorer.mode.network',
+  [MiddlewareChain.CELO]: 'https://celo.blockscout.com',
 };
 
 export const SWAP_URL_BY_EVM_CHAIN: Record<number | EvmChainId, Url> = {
   [EvmChainId.Gnosis]: COW_SWAP_GNOSIS_XDAI_OLAS_URL,
-  // [EvmChainId.OPTIMISM]: COW_SWAP_GNOSIS_XDAI_OLAS_URL,
   [EvmChainId.Base]: SWAP_BASE_URL,
   [EvmChainId.Mode]: SWAP_MODE_URL,
+  [EvmChainId.Celo]: SWAP_CELO_URL,
 };

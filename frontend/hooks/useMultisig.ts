@@ -72,12 +72,12 @@ export const useMultisigs = (safes?: Safe[]) => {
     queryFn: async (): Promise<MultisigOwners[]> => {
       if (!safes || isEmpty(safes)) return [];
 
-      const contractCallsByChainId: {
-        [chainId: number]: {
+      const contractCallsByChainId = {} as {
+        [chainId in EvmChainId]: {
           safeAddress: string;
           contractCall: ContractCall;
         }[];
-      } = {};
+      };
 
       // Step 1: Group safes by chainId and prepare contract calls
       for (const [evmChainIdKey] of Object.entries(PROVIDERS)) {
@@ -139,7 +139,7 @@ export const useMultisigs = (safes?: Safe[]) => {
     () =>
       masterSafesOwners?.reduce(
         (acc, { evmChainId, owners }) => {
-          acc[+evmChainId] = [
+          acc[evmChainId as EvmChainId] = [
             ...new Set<Address>(
               owners
                 .filter((owner) => owner !== masterEoa?.address)
@@ -148,7 +148,7 @@ export const useMultisigs = (safes?: Safe[]) => {
           ];
           return acc;
         },
-        {} as { [chainId: number]: Address[] },
+        {} as { [chainId in EvmChainId]: Address[] },
       ),
     [masterEoa?.address, masterSafesOwners],
   );

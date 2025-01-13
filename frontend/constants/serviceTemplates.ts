@@ -94,33 +94,15 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   },
 } as const;
 
-export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
-  agentType: AgentType.Memeooorr,
-  name: 'Memeooorr',
-  hash: 'bafybeicecxdycxh6tthzsj6v2c7q5b6ufaqhtn2bn6mpn4ur23tuk7brsm',
-  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+const AGENTS_FUN_COMMON_TEMPLATE: Pick<
+  ServiceTemplate,
+  'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
+> = {
+  hash: 'bafybeibc46so6kwfsn6gy4sdn3g4rbhv7mkovhzcewci5ozhioasn5srbm',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
-  service_version: 'v0.2.0-alpha17',
-  home_chain: MiddlewareChain.BASE,
-  configurations: {
-    [MiddlewareChain.BASE]: {
-      staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
-      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
-      rpc: 'http://localhost:8545', // overwritten
-      agent_id: 43,
-      threshold: 1,
-      use_staking: true,
-      cost_of_bond: +parseEther(50),
-      monthly_gas_estimate: +parseEther(0.03),
-      fund_requirements: {
-        [ethers.constants.AddressZero]: {
-          agent: +parseEther(0.00625),
-          safe: +parseEther(0.0125),
-        },
-      },
-    },
-  },
+  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+  service_version: 'v0.2.0-alpha18',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -202,12 +184,69 @@ export const MEMEOOORR_BASE_TEMPLATE: ServiceTemplate = {
       provision_type: EnvProvisionType.COMPUTED,
     },
   },
+};
+
+/**
+ * Agents.fun Base template
+ */
+export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
+  agentType: AgentType.Memeooorr,
+  name: 'Memeooorr - Base',
+  home_chain: MiddlewareChain.BASE,
+  configurations: {
+    [MiddlewareChain.BASE]: {
+      staking_program_id: StakingProgramId.MemeBaseAlpha2, // default, may be overwritten
+      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+      rpc: 'http://localhost:8545', // overwritten
+      agent_id: 43,
+      threshold: 1,
+      use_staking: true,
+      cost_of_bond: +parseEther(50),
+      monthly_gas_estimate: +parseEther(0.03),
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625),
+          safe: +parseEther(0.0125),
+        },
+      },
+    },
+  },
+  ...AGENTS_FUN_COMMON_TEMPLATE,
+} as const;
+
+// TODO: celo template (check each key)
+/**
+ * Agents.fun Celo template
+ */
+export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
+  agentType: AgentType.AgentsFunCelo,
+  name: 'Memeooorr - Celo',
+  home_chain: MiddlewareChain.CELO,
+  configurations: {
+    [MiddlewareChain.CELO]: {
+      staking_program_id: StakingProgramId.MemeCeloAlpha2, // default, may be overwritten
+      nft: 'bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
+      rpc: 'http://localhost:8545', // overwritten
+      agent_id: 43,
+      threshold: 1,
+      use_staking: true,
+      cost_of_bond: +parseEther(50), // TODO: celo
+      monthly_gas_estimate: +parseEther(0.03), // TODO: celo
+      fund_requirements: {
+        [ethers.constants.AddressZero]: {
+          agent: +parseEther(0.00625), // TODO: celo
+          safe: +parseEther(0.0125), // TODO: celo
+        },
+      },
+    },
+  },
+  ...AGENTS_FUN_COMMON_TEMPLATE,
 } as const;
 
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
-  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
+  hash: 'bafybeihszqqr72q2mat4mwktx5n3pavvulykkaza7eqvwn2kdb33diieam',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -326,8 +365,9 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
 
 export const SERVICE_TEMPLATES: ServiceTemplate[] = [
   PREDICT_SERVICE_TEMPLATE,
-  MEMEOOORR_BASE_TEMPLATE,
+  AGENTS_FUN_BASE_TEMPLATE,
   MODIUS_SERVICE_TEMPLATE,
+  AGENTS_FUN_CELO_TEMPLATE,
 ] as const;
 
 export const getServiceTemplates = (): ServiceTemplate[] => SERVICE_TEMPLATES;

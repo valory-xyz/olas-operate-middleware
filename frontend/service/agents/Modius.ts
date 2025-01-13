@@ -13,7 +13,10 @@ import {
   StakingRewardsInfo,
 } from '@/types/Autonolas';
 
-import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
+import {
+  ONE_YEAR,
+  StakedAgentService,
+} from './shared-services/StakedAgentService';
 
 export abstract class ModiusService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
