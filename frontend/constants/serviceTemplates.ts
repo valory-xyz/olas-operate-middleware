@@ -318,7 +318,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
     SELECTED_STRATEGIES: {
       name: 'Selected strategies',
       description: '',
-      value: '["merkl_pools_search", "balancer_pools_search", "asset_lending"]',
+      value: '["balancer_pools_search", "asset_lending"]',
       provision_type: EnvProvisionType.FIXED,
     },
   },
