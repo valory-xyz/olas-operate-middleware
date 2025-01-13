@@ -53,7 +53,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'withdraw-funds': false,
     'last-transactions': false,
     'rewards-streak': false,
-    'staking-contract-section': false,
+    'staking-contract-section': true,
     'low-funds': false,
     'agent-activity': false,
     // temporarily hidden until mode is available on safe https://app.safe.global/new-safe/create

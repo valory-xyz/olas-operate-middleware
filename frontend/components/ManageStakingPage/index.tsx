@@ -78,6 +78,12 @@ export const ManageStakingPage = () => {
     },
   );
 
+  const browseText = useMemo(() => {
+    if (otherStakingProgramIds.length === 0)
+      return 'No other staking contracts available at this time.';
+    return `Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length > 1 ? 's' : ''}.`;
+  }, [otherStakingProgramIds.length]);
+
   return (
     <Card
       title={<CardTitle title="Manage staking contract" />}
@@ -113,7 +119,7 @@ export const ManageStakingPage = () => {
         vertical
         gap={16}
       >
-        {`Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length > 1 ? 's' : ''}.`}
+        {browseText}
       </CardSection>
 
       {otherStakingProgramIds.map((otherId) => (
