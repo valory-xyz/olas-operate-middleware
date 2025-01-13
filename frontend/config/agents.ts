@@ -46,9 +46,7 @@ export const AGENT_CONFIG: {
     operatingThresholds: {
       [WalletOwnerType.Master]: {
         [WalletType.Safe]: {
-          [TokenSymbol.XDAI]: Number(
-            formatEther(`${traderFundRequirements.safe}`),
-          ),
+          [TokenSymbol.XDAI]: 2,
         },
         [WalletType.EOA]: {
           [TokenSymbol.XDAI]: 0.1, // TODO: should come from the template
@@ -81,7 +79,7 @@ export const AGENT_CONFIG: {
           ),
         },
         [WalletType.EOA]: {
-          [TokenSymbol.ETH]: 0.0125, // TODO: should come from the template
+          [TokenSymbol.ETH]: 0.0025,
         },
       },
       [WalletOwnerType.Agent]: {
@@ -144,7 +142,7 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: false,
+    isAgentEnabled: true,
   },
   // TODO: celo (check each key)
   [AgentType.AgentsFunCelo]: {

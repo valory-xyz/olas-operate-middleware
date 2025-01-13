@@ -772,7 +772,7 @@ Partial update service configuration `service_config_id` with the provided (part
 
 ---
 
-### `POST /api/service/{service_config_id}/stop`
+### `POST /api/v2/service/{service_config_id}/deployment/stop`
 
 Stop service with service configuration `service_configuration_id`.
 
@@ -788,6 +788,68 @@ Stop service with service configuration `service_configuration_id`.
     "status": 1
   }
 ```
+
+</details>
+
+---
+
+### `GET /api/v2/service/{service_config_id}/refill_requirements`
+
+Returns the service refill requirements for `service_config_id`, in terms of refill requirements for the master safe and master signer. The output data structure returns the user refill requirements per chain, address and token.
+
+The refill requirements are computed based on the fund requirements present on the service template and the current balances of the agents, service safe, master signer and master safe.
+
+<details>
+  <summary>Response</summary>
+
+- If service configuration `service_config_id` exists:
+
+  ```json
+  {
+    "balances": {
+      "gnosis": {
+        "0x364fD50CB11B2fbc39706D4649f29508A7685538": {
+          "0x0000000000000000000000000000000000000000": 5420000000000000000,
+          "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 0
+        },
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 977830935992610300,
+          "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 0
+        },
+        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
+          "0x0000000000000000000000000000000000000000": 995900000000000000000,
+          "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 4000000
+        },
+        "0x28dD3709cF084D889f38d11dBC2435B31543294B": {
+          "0x0000000000000000000000000000000000000000": 100000000000000000,
+          "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 521000
+        }
+      }
+    },
+    "refill_requirements": {
+      "gnosis": {
+        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
+          "0x0000000000000000000000000000000000000000": 0,
+          "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 0,
+        },
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+         "0x0000000000000000000000000000000000000000": 0,
+         "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 16000000
+        }
+      }
+    },
+    "is_refill_required": false,
+    "allow_start_agent": true
+  }
+  ```
+
+- If service configuration `service_config_id` does not exist:
+  
+  ```json
+  {
+    "error": "Service foo not found"
+  }
+  ```
 
 </details>
 

@@ -711,6 +711,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .deployment.json
         )
 
+    @app.get("/api/v2/service/{service_config_id}/refill_requirements")
+    @with_retries
+    async def _get_refill_requirements(request: Request) -> JSONResponse:
+        """Get the service balances."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().refill_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
     @app.post("/api/v2/service")
     @with_retries
     async def _create_services_v2(request: Request) -> JSONResponse:

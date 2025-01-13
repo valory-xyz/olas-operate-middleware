@@ -29,6 +29,7 @@ from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
 from operate.operate_types import ServiceTemplate
+from operate.services.manage import ServiceManager
 
 from .test_services_service import DEFAULT_CONFIG_KWARGS
 
@@ -66,8 +67,10 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
                 "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                 "cost_of_bond": kwargs.get("cost_of_bond"),
                 "fund_requirements": {
-                    "agent": kwargs.get("fund_requirements_agent"),
-                    "safe": kwargs.get("fund_requirements_safe"),
+                    "0x0000000000000000000000000000000000000000": {
+                        "agent": kwargs.get("fund_requirements_agent"),
+                        "safe": kwargs.get("fund_requirements_safe"),
+                    }
                 },
                 "fallback_chain_params": {},
             }
@@ -278,3 +281,64 @@ class TestServiceManager:
             print(diff)
 
         assert not diff, "Updated service does not match expected service."
+
+    @pytest.mark.parametrize(
+        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_balance, minimum_refill_required, recommended_refill_required",
+        [
+            (10, 5, 1, 0, 0, 0, 0, 0, 0, 1, 3, 8),
+            (10, 5, 1, 10, 5, 8, 0, 0, 0, 1, 3, 8),
+            (10, 5, 8, 10, 5, 1, 0, 0, 0, 1, 3, 8),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 1, 7, 17),
+            (10, 5, 6, 10, 5, 6, 0, 0, 0, 1, 0, 0),
+            (10, 5, 2, 20, 10, 7, 0, 0, 0, 4, 2, 17),
+            (10, 5, 2, 20, 10, 3, 0, 0, 0, 4, 6, 21),
+            (15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 5, 5),
+        ],
+    )
+    def test_service_manager_compute_refill_requirements(
+        self,
+        topup1: int,
+        threshold1: int,
+        balance1: int,
+        topup2: int,
+        threshold2: int,
+        balance2: int,
+        topup3: int,
+        threshold3: int,
+        balance3: int,
+        sender_balance: int,
+        minimum_refill_required: int,
+        recommended_refill_required: int,
+    ) -> None:
+        """Test operate.service_manager()._compute_refill_requirements()"""
+
+        asset_funding_values = {}
+        asset_funding_values["0x1"] = {
+            "topup": topup1,
+            "threshold": threshold1,
+            "balance": balance1,
+        }
+        asset_funding_values["0x2"] = {
+            "topup": topup2,
+            "threshold": threshold2,
+            "balance": balance2,
+        }
+        asset_funding_values["0x3"] = {
+            "topup": topup3,
+            "threshold": threshold3,
+            "balance": balance3,
+        }
+
+        expected_result = {
+            "minimum_refill": minimum_refill_required,
+            "recommended_refill": recommended_refill_required,
+        }
+        result = ServiceManager._compute_refill_requirement(
+            asset_funding_values, sender_balance
+        )
+
+        diff = DeepDiff(result, expected_result)
+        if diff:
+            print(diff)
+
+        assert not diff, "Failed to compute refill requirements."

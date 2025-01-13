@@ -14,7 +14,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   description: 'Trader agent for omen prediction markets',
   image:
     'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
-  service_version: 'v0.18.4',
+  service_version: 'v0.22.0',
   home_chain: MiddlewareChain.GNOSIS,
   configurations: {
     [MiddlewareChain.GNOSIS]: {
@@ -45,6 +45,12 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
     },
     STAKING_CONTRACT_ADDRESS: {
       name: 'Staking contract address',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
+    MECH_MARKETPLACE_CONFIG: {
+      name: 'Mech marketplace configuration',
       description: '',
       value: '',
       provision_type: EnvProvisionType.COMPUTED,
@@ -92,7 +98,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image'
 > = {
-  hash: 'bafybeihgaoi7u4ryeopz3ujzeplmheqnsop7mh25nvkvzfp747uaurru6a',
+  hash: 'bafybeicecxdycxh6tthzsj6v2c7q5b6ufaqhtn2bn6mpn4ur23tuk7brsm',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   env_variables: {
@@ -243,7 +249,7 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
-  hash: 'bafybeihqho73he6mirkodg4ubom6ngf2nkgebhmxr435yxpsxgsthu5nvy',
+  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -258,7 +264,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       threshold: 1,
       use_staking: true,
       cost_of_bond: +parseEther(20),
-      monthly_gas_estimate: +parseEther(0.006),
+      monthly_gas_estimate: +parseEther(0.011), // TODO: should be 0.0055, temp fix to avoid low balance alerts until the refund is fixed in the middleware
       fund_requirements: {
         [ethers.constants.AddressZero]: {
           agent: +parseEther(0.0005),
