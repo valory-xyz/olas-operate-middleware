@@ -1,17 +1,12 @@
 import { Button, message } from 'antd';
-import { isEmpty, isNil, sum } from 'lodash';
+import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
-import {
-  EnvProvisionType,
-  MiddlewareDeploymentStatus,
-  ServiceTemplate,
-} from '@/client';
+import { MiddlewareDeploymentStatus } from '@/client';
 import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
-import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -41,6 +36,7 @@ import { ServicesService } from '@/service/Services';
 import { WalletService } from '@/service/Wallet';
 import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
+import { updateServiceIfNeeded } from '@/utils/service';
 
 const useServiceDeployment = () => {
   const { showNotification } = useElectronApi();
@@ -233,65 +229,9 @@ const useServiceDeployment = () => {
       }
     }
 
-    // Update the service if the hash is different
+    // Update the existing service
     if (!middlewareServiceResponse && service) {
-      if (service.hash !== serviceTemplate.hash) {
-        await ServicesService.updateService({
-          serviceConfigId: service.service_config_id,
-          partialServiceTemplate: {
-            hash: serviceTemplate.hash,
-          },
-        });
-      }
-    }
-
-    // Temporary: update the service if it has the default description
-    if (
-      service &&
-      service.description ===
-        SERVICE_TEMPLATES.find(
-          (template) => template.agentType === AgentType.Memeooorr,
-        )?.description
-    ) {
-      const xUsername = service.env_variables?.TWIKIT_USERNAME?.value;
-      if (xUsername) {
-        await ServicesService.updateService({
-          serviceConfigId: service.service_config_id,
-          partialServiceTemplate: {
-            description: `Memeooorr @${xUsername}`,
-          },
-        });
-      }
-    }
-
-    // Update fixed env variables of the service if they were changed in the template
-    if (service) {
-      const templateEnvVariables = SERVICE_TEMPLATES.find(
-        (template) => template.name === service.name,
-      )?.env_variables;
-
-      const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
-
-      Object.entries(service.env_variables).forEach(([key, item]) => {
-        const templateEnvVariable = templateEnvVariables?.[key];
-        if (!templateEnvVariable) return;
-
-        if (
-          templateEnvVariable.provision_type === EnvProvisionType.FIXED &&
-          templateEnvVariable.value !== item.value
-        ) {
-          envVariablesToUpdate[key] = templateEnvVariable;
-        }
-      });
-
-      if (!isEmpty(envVariablesToUpdate)) {
-        await ServicesService.updateService({
-          serviceConfigId: service.service_config_id,
-          partialServiceTemplate: {
-            env_variables: envVariablesToUpdate,
-          },
-        });
-      }
+      await updateServiceIfNeeded(service);
     }
 
     // Start the service
