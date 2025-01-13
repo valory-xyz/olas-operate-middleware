@@ -79,16 +79,27 @@ LEDGER_HELPERS: t.Dict[LedgerType, t.Type[LedgerHelper]] = {
     LedgerType.SOLANA: Solana,
 }
 
+# Base currency for each chain
 CURRENCY_DENOMS = {
+    Chain.ETHEREUM: "ETH",
+    Chain.GNOSIS: "xDAI",
+    Chain.SOLANA: "SOL",
+    Chain.BASE: "ETH",
+    Chain.CELO: "CELO",
+    Chain.OPTIMISTIC: "ETH",
+    Chain.MODE: "ETH",
+}
+
+# Smallest denomination for each chain
+CURRENCY_SMALLEST_UNITS = {
     Chain.ETHEREUM: "Wei",
-    Chain.GNOSIS: "xDai",
-    Chain.SOLANA: "Lamp",
+    Chain.GNOSIS: "Wei",
+    Chain.SOLANA: "Lamport",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
     Chain.OPTIMISTIC: "Wei",
     Chain.MODE: "Wei",
 }
-
 
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
@@ -107,4 +118,9 @@ def get_ledger_helper_by_ledger(rpc: str, ledger: LedgerHelper) -> LedgerHelper:
 
 def get_currency_denom(chain: Chain) -> str:
     """Get currency denom by chain type."""
-    return CURRENCY_DENOMS.get(chain, "Wei")
+    return CURRENCY_DENOMS.get(chain, "ETH")
+
+
+def get_currency_smallest_unit(chain: Chain) -> str:
+    """Get currency denom by chain type."""
+    return CURRENCY_SMALLEST_UNITS.get(chain, "Wei")

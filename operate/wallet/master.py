@@ -41,13 +41,19 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_rpc
+from operate.ledger import get_currency_denom, get_default_rpc
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils.gnosis import NULL_ADDRESS, add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
-from operate.utils.gnosis import get_owners, remove_owner, swap_owner
+from operate.utils.gnosis import (
+    drain_signer,
+    get_asset_balance,
+    get_owners,
+    remove_owner,
+    swap_owner,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 
@@ -140,6 +146,16 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer erc20/native assets to the given account."""
+        raise NotImplementedError()
+
+    def drain(
+        self,
+        withdrawal_address: str,
+        chain: Chain,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """Drain all erc20/native assets to the given account."""
         raise NotImplementedError()
 
     @staticmethod
@@ -297,6 +313,7 @@ class EthereumMasterWallet(MasterWallet):
             sender_str = f"EOA {sender}"
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        to = ledger_api.api.to_checksum_address(to)
         balance = ledger_api.get_balance(address=sender)
 
         if balance < amount:
@@ -341,6 +358,7 @@ class EthereumMasterWallet(MasterWallet):
             sender_str = f"EOA {sender}"
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        to = ledger_api.api.to_checksum_address(to)
         balance = (
             registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -405,6 +423,48 @@ class EthereumMasterWallet(MasterWallet):
             from_safe=from_safe,
             rpc=rpc,
         )
+
+    def drain(
+        self,
+        withdrawal_address: str,
+        chain: Chain,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """Drain all erc20/native assets to the given account."""
+
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        assets = [
+            (f"W{get_currency_denom(chain)}", WRAPPED_NATIVE_ASSET[ledger_config.chain]),
+            ("OLAS", OLAS[chain]),
+            ("USDC", USDC[chain]),
+        ]
+
+        if from_safe:
+            assets.append((get_currency_denom(chain), ZERO_ADDRESS)),
+
+        for (_, asset) in assets:
+            balance = get_asset_balance(
+                ledger_api=ledger_api,
+                contract_address=asset,
+                address=self.safes[chain] if from_safe else self.crypto.address,
+            )
+            self.transfer_asset(
+                to=withdrawal_address,
+                amount=balance,
+                chain=chain,
+                asset=asset,
+                from_safe=from_safe,
+                rpc=rpc,
+            )
+
+        if not from_safe:
+            drain_signer(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                withdrawal_address=withdrawal_address,
+                chain_id=chain.id,
+            )
 
     @classmethod
     def new(

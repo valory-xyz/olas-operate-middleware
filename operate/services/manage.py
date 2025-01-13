@@ -38,10 +38,10 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
-from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
+from operate.constants import ZERO_ADDRESS
 from operate.keys import Key, KeysManager
-from operate.ledger import PUBLIC_RPCS
-from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
+from operate.ledger import PUBLIC_RPCS, get_currency_denom
+from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, USDC, WRAPPED_NATIVE_ASSET
 from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
@@ -1554,7 +1554,7 @@ class ServiceManager:
                 # also count the balance of the wrapped native asset
                 safe_balance += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[chain],
+                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=chain_data.multisig,
                 )
 
@@ -1698,10 +1698,11 @@ class ServiceManager:
             private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
         )
 
-        # drain OLAS and wxDAI from service safe
+        # drain ERC20 tokens from service safe
         for token_name, token_address in (
             ("OLAS", OLAS[ledger_config.chain]),
-            ("wxDAI", WXDAI[ledger_config.chain]),
+            (f"W{get_currency_denom(ledger_config.chain)}", WRAPPED_NATIVE_ASSET[ledger_config.chain]),
+            ("USDC", USDC[ledger_config.chain]),
         ):
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -1964,7 +1965,7 @@ class ServiceManager:
             if service_safe and chain in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[chain],
+                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=service_safe,
                 )
 
