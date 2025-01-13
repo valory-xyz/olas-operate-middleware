@@ -96,7 +96,7 @@ export const AGENT_CONFIG: {
     serviceApi: AgentsFunBaseService,
     displayName: 'Agents.fun agent - Base',
     description:
-      'Autonomously posts to Twitter, create and trade memecoins, and interact with other agents. Agent is operating on Base chain.',
+      'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
     isAgentEnabled: true,
   },
   [AgentType.Modius]: {
@@ -175,7 +175,7 @@ export const AGENT_CONFIG: {
     serviceApi: AgentsFunBaseService,
     displayName: 'Agents.fun agent - Celo',
     description:
-      'Autonomously posts to Twitter, create and trade memecoins, and interact with other agents. Agent is operating on Celo chain.',
+      'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Celo chain.',
     isAgentEnabled: false,
   },
 };
