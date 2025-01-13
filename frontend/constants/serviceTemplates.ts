@@ -246,7 +246,7 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus',
-  hash: 'bafybeifncq2eojmko2j4rc2oguljil7xj4vogbugkenn35kgkalfsul4g4',
+  hash: 'bafybeihszqqr72q2mat4mwktx5n3pavvulykkaza7eqvwn2kdb33diieam',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -357,7 +357,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
     SELECTED_STRATEGIES: {
       name: 'Selected strategies',
       description: '',
-      value: '["merkl_pools_search", "balancer_pools_search", "asset_lending"]',
+      value: '["balancer_pools_search", "asset_lending"]',
       provision_type: EnvProvisionType.FIXED,
     },
   },
