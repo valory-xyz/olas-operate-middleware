@@ -96,11 +96,13 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
 
 const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
-  'env_variables' | 'hash' | 'image'
+  'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
   hash: 'bafybeicecxdycxh6tthzsj6v2c7q5b6ufaqhtn2bn6mpn4ur23tuk7brsm',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
+  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
+  service_version: 'v0.2.0-alpha16',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -190,8 +192,6 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
 export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
   name: 'Memeooorr - Base',
-  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.2.0-alpha16',
   home_chain: MiddlewareChain.BASE,
   configurations: {
     [MiddlewareChain.BASE]: {
@@ -221,9 +221,6 @@ export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
 export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.AgentsFunCelo,
   name: 'Memeooorr - Celo',
-  description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-
-  service_version: 'v0.2.0-alpha16',
   home_chain: MiddlewareChain.CELO,
   configurations: {
     [MiddlewareChain.CELO]: {

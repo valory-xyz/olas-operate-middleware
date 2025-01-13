@@ -7,7 +7,7 @@ import {
   StakingRewardsInfo,
 } from '@/types/Autonolas';
 
-import { AgentsFunService } from './base-services/AgentsFun';
+import { AgentsFunService } from './shared-services/AgentsFun';
 
 export abstract class AgentsFunBaseService extends AgentsFunService {
   static getAgentStakingRewardsInfo = async ({

@@ -15,7 +15,7 @@ import {
 import {
   ONE_YEAR,
   StakedAgentService,
-} from './base-services/StakedAgentService';
+} from './shared-services/StakedAgentService';
 
 const MECH_REQUESTS_SAFETY_MARGIN = 1;
 

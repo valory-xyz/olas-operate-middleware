@@ -16,7 +16,7 @@ import {
 import {
   ONE_YEAR,
   StakedAgentService,
-} from './base-services/StakedAgentService';
+} from './shared-services/StakedAgentService';
 
 export abstract class ModiusService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
