@@ -32,8 +32,8 @@ export const LowFunds = () => {
     if (!isInitialFunded) return false;
 
     if (
-      round(balancesByChain[chainId][getNativeTokenSymbol(chainId)], 2) === 0 &&
-      round(balancesByChain[chainId][TokenSymbol.OLAS], 2) === 0 &&
+      round(balancesByChain[chainId][getNativeTokenSymbol(chainId)], 4) === 0 &&
+      round(balancesByChain[chainId][TokenSymbol.OLAS], 4) === 0 &&
       isMasterEoaLowOnGas
     ) {
       return true;
