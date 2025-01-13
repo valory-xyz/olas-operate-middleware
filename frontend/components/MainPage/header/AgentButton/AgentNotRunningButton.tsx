@@ -269,12 +269,16 @@ const useServiceDeployment = () => {
       const templateEnvVariables = SERVICE_TEMPLATES.find(
         (template) => template.name === service.name,
       )?.env_variables;
+
       const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
+
       Object.entries(service.env_variables).forEach(([key, item]) => {
         const templateEnvVariable = templateEnvVariables?.[key];
+        if (!templateEnvVariable) return;
+
         if (
-          templateEnvVariable?.provision_type === EnvProvisionType.FIXED &&
-          templateEnvVariable?.value !== item.value
+          templateEnvVariable.provision_type === EnvProvisionType.FIXED &&
+          templateEnvVariable.value !== item.value
         ) {
           envVariablesToUpdate[key] = templateEnvVariable;
         }
