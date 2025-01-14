@@ -101,6 +101,7 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.MODE: "Wei",
 }
 
+
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
     return DEFAULT_RPCS.get(chain, ETHEREUM_RPC)

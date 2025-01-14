@@ -19,9 +19,6 @@
 
 """Constants."""
 
-from operate.operate_types import Chain
-
-
 OPERATE = ".operate"
 CONFIG = "config.json"
 SERVICES = "services"
@@ -43,4 +40,3 @@ HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on
 
 TM_CONTROL_URL = "http://localhost:8080"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
-

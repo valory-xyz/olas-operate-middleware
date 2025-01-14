@@ -41,14 +41,14 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_currency_denom, get_default_rpc
-from operate.ledger.profiles import OLAS, USDC
+from operate.ledger import get_default_rpc
+from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils.gnosis import NULL_ADDRESS, add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
-    drain_signer,
+    drain_eoa,
     get_asset_balance,
     get_owners,
     remove_owner,
@@ -434,16 +434,12 @@ class EthereumMasterWallet(MasterWallet):
         """Drain all erc20/native assets to the given account."""
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
-        assets = [
-            (f"W{get_currency_denom(chain)}", WRAPPED_NATIVE_ASSET[ledger_config.chain]),
-            ("OLAS", OLAS[chain]),
-            ("USDC", USDC[chain]),
-        ]
+        assets = {token[chain] for token in ERC20_TOKENS}
 
         if from_safe:
-            assets.append((get_currency_denom(chain), ZERO_ADDRESS)),
+            assets.add(ZERO_ADDRESS)
 
-        for (_, asset) in assets:
+        for asset in assets:
             balance = get_asset_balance(
                 ledger_api=ledger_api,
                 contract_address=asset,
@@ -459,7 +455,7 @@ class EthereumMasterWallet(MasterWallet):
             )
 
         if not from_safe:
-            drain_signer(
+            drain_eoa(
                 ledger_api=ledger_api,
                 crypto=self.crypto,
                 withdrawal_address=withdrawal_address,
