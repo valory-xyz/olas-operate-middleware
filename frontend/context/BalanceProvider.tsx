@@ -17,6 +17,7 @@ import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
+import { AGENT_CONFIG } from '@/config/agents';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { PROVIDERS } from '@/constants/providers';
@@ -33,6 +34,17 @@ import { formatUnits } from '@/utils/numberFormatters';
 import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
+
+const allAgentConfig = Object.values(AGENT_CONFIG);
+const providerEntries = Object.entries(PROVIDERS).filter(([key]) => {
+  const evmChainId = +key as EvmChainId;
+  const currentAgentConfig = allAgentConfig.find(
+    (agentConfig) => agentConfig.evmHomeChainId === evmChainId,
+  );
+
+  // Only return providers for enabled agents
+  return !!currentAgentConfig?.isAgentEnabled;
+});
 
 export type WalletBalanceResult = {
   walletAddress: Address;
@@ -204,15 +216,12 @@ const getCrossChainWalletBalances = async (
 ): Promise<WalletBalanceResult[]> => {
   const balanceResults: WalletBalanceResult[] = [];
 
-  const providerEntries = Object.entries(PROVIDERS);
-
   for (const [
     evmChainIdKey,
     { multicallProvider, provider },
   ] of providerEntries) {
     try {
       const providerEvmChainId = +evmChainIdKey as EvmChainId;
-
       const tokensOnChain = TOKEN_CONFIG[providerEvmChainId];
 
       const relevantWallets = wallets.filter((wallet) => {
