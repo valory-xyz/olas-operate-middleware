@@ -110,13 +110,15 @@ class MasterWallet(LocalResource):
         """Get ledger api object."""
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
         if chain == Chain.BASE:
-            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(5, GWEI)
+            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+                5, GWEI
+            )
 
         return make_ledger_api(
             self.ledger_type.name.lower(),
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
-            gas_price_strategies=gas_price_strategies
+            gas_price_strategies=gas_price_strategies,
         )
 
     def transfer(

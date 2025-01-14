@@ -1689,7 +1689,9 @@ class ServiceManager:
         chain: Chain,
     ) -> None:
         """Drain the funds out of the service safe."""
-        self.logger.info(f"Draining the safe of service: {service_config_id} on chain {chain.value}")
+        self.logger.info(
+            f"Draining the safe of service: {service_config_id} on chain {chain.value}"
+        )
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain.value]
         ledger_config = chain_config.ledger_config
