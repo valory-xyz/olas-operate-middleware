@@ -116,7 +116,7 @@ const EachAgent = memo(
     ]);
 
     // If agent is disabled, then don't show the agent
-    if (agentConfig.isAgentEnabled === false) {
+    if (!agentConfig.isAgentEnabled) {
       return null;
     }
 
