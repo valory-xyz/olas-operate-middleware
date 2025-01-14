@@ -45,7 +45,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const serviceFundRequirements = useMemo<ChainTokenSymbol>(() => {
     if (isNil(serviceTemplate)) return {} as ChainTokenSymbol;
 
-    const results: ChainTokenSymbol = {} as ChainTokenSymbol;
+    const results = {} as ChainTokenSymbol;
 
     Object.entries(serviceTemplate.configurations).forEach(
       ([middlewareChain, config]) => {
@@ -119,7 +119,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
    */
   const hasEnoughNativeTokenForInitialFunding = useMemo(() => {
     if (isNil(serviceChainIds)) return;
-    if (!balancesByChain) return;
+    if (isEmpty(balancesByChain)) return;
 
     return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
