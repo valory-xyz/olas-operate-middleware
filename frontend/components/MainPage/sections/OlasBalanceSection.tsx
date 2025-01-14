@@ -43,6 +43,11 @@ export const MainOlasBalance = () => {
   const { goto } = usePageState();
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
 
+  const isLoading =
+    !isBalanceLoaded ||
+    isStakingRewardsDetailsLoading ||
+    isAvailableRewardsForEpochLoading;
+
   const displayedBalance = useMemo(() => {
     // olas across master wallet (safes and eoa) on relevant chains for agent
     const masterWalletOlasBalance = masterWalletBalances?.reduce(
@@ -91,35 +96,15 @@ export const MainOlasBalance = () => {
       accruedServiceStakingRewards,
     ]);
 
-    // console.log({
-    //   masterWalletOlasBalance,
-    //   serviceWalletOlasBalance,
-    //   serviceStakedOlasBalance,
-    //   optimisticRewardsEarnedForEpoch,
-    //   accruedServiceStakingRewards,
-    // });
-
     return totalOlasBalance;
   }, [
-    accruedServiceStakingRewards,
     masterWalletBalances,
-    optimisticRewardsEarnedForEpoch,
-    selectedAgentConfig.requiresAgentSafesOn,
     serviceStakedBalances,
     serviceWalletBalances,
+    accruedServiceStakingRewards,
+    optimisticRewardsEarnedForEpoch,
+    selectedAgentConfig.requiresAgentSafesOn,
   ]);
-
-  const isLoading =
-    !isBalanceLoaded ||
-    isStakingRewardsDetailsLoading ||
-    isAvailableRewardsForEpochLoading;
-
-  console.log('isLoading', {
-    isLoading,
-    isBalanceLoading: !isBalanceLoaded,
-    isStakingRewardsDetailsLoading,
-    isAvailableRewardsForEpochLoading,
-  });
 
   return (
     <CardSection
