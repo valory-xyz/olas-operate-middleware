@@ -30,7 +30,6 @@ from pathlib import Path
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
-from autonomy.chain.base import registry_contracts
 from clea import group, params, run
 from compose.project import ProjectError
 from docker.errors import APIError
@@ -44,10 +43,9 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
-from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT, OLAS
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.services.health_checker import HealthChecker
-from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -867,61 +865,41 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
+            pause_all_services()
             service = service_manager.load(service_config_id=service_config_id)
-            chain_config = service.chain_configs[service.home_chain]
-            ledger_config = chain_config.ledger_config
+
+            # terminate the service on chain
+            for chain in service.chain_configs:
+                service_manager.terminate_service_on_chain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    withdrawal_address=withdrawal_address,
+                )
+
+            # drain the master safe and master signer for the home chain
+            chain = Chain(service.home_chain)
             master_wallet = service_manager.wallet_manager.load(
-                ledger_type=ledger_config.chain.ledger_type
+                ledger_type=chain.ledger_type
             )
-            ledger_api = master_wallet.ledger_api(
-                chain=ledger_config.chain, rpc=ledger_config.rpc
-            )
-            withdrawal_address = ledger_api.api.to_checksum_address(withdrawal_address)
 
-            service_manager.terminate_service_on_chain_from_safe(
-                service_config_id=service_config_id,
-                chain=service.home_chain,
+            # drain the master safe
+            logger.info(
+                f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
+            )
+            master_wallet.drain(
                 withdrawal_address=withdrawal_address,
+                chain=chain,
+                from_safe=True,
             )
 
-            # drain OLAS from the master safe
-            token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ledger_api,
-                contract_address=OLAS[ledger_config.chain],
+            # drain the master signer
+            logger.info(
+                f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
             )
-            safe = master_wallet.safes[Chain(service.home_chain)]
-            balance = token_instance.functions.balanceOf(safe).call()
-            if balance == 0:
-                logger.info(f"No OLAS to drain from master safe: {safe}")
-            else:
-                logger.info(f"Draining {balance} OLAS out of master safe: {safe}")
-                transfer_erc20_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=master_wallet.crypto,
-                    safe=t.cast(str, safe),
-                    token=OLAS[ledger_config.chain],
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-
-            # drain xDAI from the master safe
-            balance = ledger_api.get_balance(safe)
-            if balance == 0:
-                logger.info(f"No xDAI to drain from master safe: {safe}")
-            else:
-                logger.info(f"Draining {balance} xDAI out of master safe: {safe}")
-                master_wallet.transfer(
-                    to=withdrawal_address,
-                    amount=balance,
-                    chain=ledger_config.chain,
-                )
-
-            # drain xDAI from the master signer
-            drain_signer(
-                ledger_api=ledger_api,
-                crypto=master_wallet.crypto,
+            master_wallet.drain(
                 withdrawal_address=withdrawal_address,
-                chain_id=ledger_config.chain.id,
+                chain=chain,
+                from_safe=False,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(traceback.format_exc())
