@@ -33,8 +33,12 @@ export const MainOlasBalance = () => {
   const { serviceStakedBalances, serviceWalletBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
-  const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
-    useContext(RewardContext);
+  const {
+    isStakingRewardsDetailsLoading,
+    isAvailableRewardsForEpochLoading,
+    optimisticRewardsEarnedForEpoch,
+    accruedServiceStakingRewards,
+  } = useContext(RewardContext);
 
   const { goto } = usePageState();
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
@@ -87,6 +91,14 @@ export const MainOlasBalance = () => {
       accruedServiceStakingRewards,
     ]);
 
+    // console.log({
+    //   masterWalletOlasBalance,
+    //   serviceWalletOlasBalance,
+    //   serviceStakedOlasBalance,
+    //   optimisticRewardsEarnedForEpoch,
+    //   accruedServiceStakingRewards,
+    // });
+
     return totalOlasBalance;
   }, [
     accruedServiceStakingRewards,
@@ -97,6 +109,18 @@ export const MainOlasBalance = () => {
     serviceWalletBalances,
   ]);
 
+  const isLoading =
+    !isBalanceLoaded ||
+    isStakingRewardsDetailsLoading ||
+    isAvailableRewardsForEpochLoading;
+
+  console.log('isLoading', {
+    isLoading,
+    isBalanceLoading: !isBalanceLoaded,
+    isStakingRewardsDetailsLoading,
+    isAvailableRewardsForEpochLoading,
+  });
+
   return (
     <CardSection
       vertical
@@ -105,7 +129,9 @@ export const MainOlasBalance = () => {
       borderbottom="true"
       padding="16px 24px"
     >
-      {isBalanceLoaded ? (
+      {isLoading ? (
+        <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
+      ) : (
         <Flex vertical gap={8}>
           <Flex align="center" justify="space-between">
             <Text type="secondary">Current balance</Text>
@@ -128,8 +154,6 @@ export const MainOlasBalance = () => {
             <span className="balance-currency">OLAS</span>
           </Flex>
         </Flex>
-      ) : (
-        <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
       )}
     </CardSection>
   );
