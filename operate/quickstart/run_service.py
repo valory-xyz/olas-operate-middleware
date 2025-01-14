@@ -196,6 +196,8 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
         if env_var_data["provision_type"] == ServiceEnvProvisionType.USER:
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
+                if env_var_data["value"]:
+                    print(f"Example: {env_var_data['value']}")
                 config.user_provided_args[env_var_name] = input(f"Please enter {env_var_data['name']}: ")
                 print()
 
@@ -429,7 +431,6 @@ def run_service(operate: "OperateApp", config_path: str) -> None:
     config = load_local_config()
     ensure_enough_funds(operate, service)
 
-    # return  # TODO: Remove this line
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
     print_section(f"Deploying on-chain service on {config.principal_chain}...")
     print("Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n")

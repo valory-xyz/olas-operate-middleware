@@ -55,6 +55,7 @@ from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
     Service,
 )
+from operate.services.utils.mech import deploy_mech
 from operate.services.utils.memeooorr import get_twitter_cookies
 from operate.utils.gnosis import (
     NULL_ADDRESS,
@@ -972,6 +973,36 @@ class ServiceManager:
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
         chain_data.on_chain_state = OnChainState(info["service_state"])
+
+        # TODO: yet another agent specific logic for mech, which should be abstracted
+        if all(
+            var in service.env_variables
+            for var in [
+                "AGENT_ID",
+                "MECH_TO_CONFIG",
+                "ON_CHAIN_SERVICE_ID",
+                "GNOSIS_RPC_0",
+            ]
+        ):
+            if (
+                not service.env_variables["AGENT_ID"]["value"] or
+                not service.env_variables["MECH_TO_CONFIG"]["value"]
+            ):
+                mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
+                service.update_env_variables_values({
+                    "AGENT_ID": agent_id,
+                    "MECH_TO_CONFIG": json.dumps({
+                        mech_address: {
+                            "use_dynamic_pricing": False,
+                            "is_marketplace_mech": True,
+                        }
+                    }, separators=(',', ':')),
+                })
+            
+            service.update_env_variables_values({
+                "ON_CHAIN_SERVICE_ID": chain_data.token,
+                "GNOSIS_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"]["value"],
+            })
 
         # TODO: this is a patch for modius, to be standardized
         staking_chain = None
