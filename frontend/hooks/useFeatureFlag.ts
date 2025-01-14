@@ -51,8 +51,8 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   [AgentType.Modius]: {
     'manage-wallet': true,
     'withdraw-funds': false,
-    'last-transactions': false,
-    'rewards-streak': false,
+    'last-transactions': true,
+    'rewards-streak': true,
     'staking-contract-section': true,
     'low-funds': false,
     'agent-activity': false,
