@@ -23,12 +23,14 @@ import json
 import logging
 import os
 import typing as t
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
@@ -106,10 +108,15 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> LedgerApi:
         """Get ledger api object."""
+        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+        if chain == Chain.BASE:
+            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(5, GWEI)
+
         return make_ledger_api(
             self.ledger_type.name.lower(),
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
+            gas_price_strategies=gas_price_strategies
         )
 
     def transfer(
