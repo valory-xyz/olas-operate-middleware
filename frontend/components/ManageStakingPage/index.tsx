@@ -81,7 +81,7 @@ export const ManageStakingPage = () => {
   const browseText = useMemo(() => {
     if (otherStakingProgramIds.length === 0)
       return 'No other staking contracts available at this time.';
-    return `Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length > 1 ? 's' : ''}.`;
+    return `Browse ${otherStakingProgramIds.length} staking contract${otherStakingProgramIds.length === 1 ? '' : 's'}.`;
   }, [otherStakingProgramIds.length]);
 
   return (
