@@ -9,7 +9,7 @@ type AnimatedNumberProps = {
   value: Maybe<number>;
   formatter?: (value: number) => string;
   triggerAnimation?: boolean;
-  onAnimationComplete?: () => void;
+  onAnimationChange?: (isAnimating: boolean) => void;
 };
 
 /**
@@ -19,7 +19,7 @@ export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
   triggerAnimation = true,
-  onAnimationComplete,
+  onAnimationChange,
 }: AnimatedNumberProps) => {
   const [displayValue, setDisplayValue] = useState(isNil(value) ? 0 : value);
   const springValue = useSpring(0, { stiffness: 150, damping: 25 });
@@ -34,33 +34,31 @@ export const AnimateNumber = ({
     }
   }, [value, springValue, triggerAnimation]);
 
-  // actual animation step
+  // Handle animation updates and completion
   useEffect(() => {
     if (!triggerAnimation) return;
 
     let lastUpdate = Date.now();
+    const threshold = 0.01; // Precision threshold to detect completion
+
     const unsubscribe = springValue.on('change', (latest) => {
       const now = Date.now();
+
+      // Update display value periodically
       if (now - lastUpdate > 100) {
         lastUpdate = now;
         setDisplayValue(parseFloat(latest.toFixed(2)));
       }
-    });
-    // console.log('springValue', springValue);
 
-    return () => unsubscribe();
-  }, [springValue, value, triggerAnimation]);
-
-  // handle animation complete
-  useEffect(() => {
-    if (!triggerAnimation) return;
-
-    const unsubscribe = springValue.on('change', (latest) => {
-      if (latest === value) onAnimationComplete?.();
+      // Notify animation change
+      if (onAnimationChange) {
+        const isAnimating = Math.abs(latest - (value ?? 0)) >= threshold;
+        onAnimationChange(isAnimating);
+      }
     });
 
     return () => unsubscribe();
-  }, [springValue, value, triggerAnimation, onAnimationComplete]);
+  }, [springValue, value, triggerAnimation, onAnimationChange]);
 
   return (
     <motion.span>

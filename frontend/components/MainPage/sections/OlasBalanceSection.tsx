@@ -54,6 +54,8 @@ export const MainOlasBalance = () => {
 
   // boolean to trigger animation
   const triggerAnimation = useMemo(() => {
+    if (isAnimating) return true;
+
     if (isMainOlasBalanceLoading) return false;
 
     if (!isNumber(mainOlasBalance)) return false;
@@ -71,18 +73,19 @@ export const MainOlasBalance = () => {
     }
 
     // if balance has NOT changed
-    // if (mainOlasBalance === previousMainOlasBalance) return false;
+    if (mainOlasBalance === previousMainOlasBalance) return false;
 
     return true;
   }, [
+    isAnimating,
     isMainOlasBalanceLoading,
     mainOlasBalance,
     previousMainOlasBalance,
     hasMainOlasBalanceAnimatedOnLoad,
   ]);
 
-  const onAnimationComplete = useCallback(() => {
-    setIsAnimating(false);
+  const onAnimationChange = useCallback((inProgress: boolean) => {
+    setIsAnimating(inProgress);
   }, []);
 
   return (
@@ -116,7 +119,7 @@ export const MainOlasBalance = () => {
               <AnimateNumber
                 value={mainOlasBalance}
                 triggerAnimation={isAnimating || !!triggerAnimation}
-                onAnimationComplete={onAnimationComplete}
+                onAnimationChange={onAnimationChange}
               />
             </Balance>
             <span className="balance-currency">OLAS</span>
