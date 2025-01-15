@@ -6,7 +6,7 @@ import type { AppProps } from 'next/app';
 import { useEffect, useState } from 'react';
 
 import { Layout } from '@/components/Layout';
-import { BalanceProvider } from '@/context/BalanceProvider';
+import { BalanceProvider } from '@/context/BalanceProvider/BalanceProvider';
 import { ElectronApiProvider } from '@/context/ElectronApiProvider';
 import { MasterWalletProvider } from '@/context/MasterWalletProvider';
 import { ModalProvider } from '@/context/ModalProvider';

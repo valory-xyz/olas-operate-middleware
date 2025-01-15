@@ -88,7 +88,7 @@ export const MainOlasBalance = () => {
       0,
     );
 
-    const totalOlasBalance = sum([
+    const totalBalance = sum([
       masterWalletOlasBalance,
       serviceWalletOlasBalance,
       serviceStakedOlasBalance,
@@ -96,7 +96,7 @@ export const MainOlasBalance = () => {
       accruedServiceStakingRewards,
     ]);
 
-    return totalOlasBalance;
+    return totalBalance;
   }, [
     masterWalletBalances,
     serviceStakedBalances,
