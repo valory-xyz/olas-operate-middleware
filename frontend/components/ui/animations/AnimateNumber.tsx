@@ -2,13 +2,14 @@ import { motion, useSpring } from 'framer-motion';
 import { isNil } from 'lodash';
 import React, { useEffect, useState } from 'react';
 
+import { usePrevious } from '@/hooks/usePrevious';
 import { Maybe } from '@/types/Util';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 type AnimatedNumberProps = {
   value: Maybe<number>;
   formatter?: (value: number) => string;
-  hasAnimated?: boolean;
+  hasAnimatedOnFirstLoad: boolean; // Whether the animation has already been triggered
 };
 
 /**
@@ -17,36 +18,54 @@ type AnimatedNumberProps = {
 export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
-  hasAnimated = false,
+  hasAnimatedOnFirstLoad,
 }: AnimatedNumberProps) => {
   const [displayValue, setDisplayValue] = useState(0);
-
   const springValue = useSpring(0, { stiffness: 150, damping: 25 });
+  const previousValue = usePrevious(value);
 
-  useEffect(() => {
-    if (hasAnimated) {
-      setDisplayValue(value || 0);
-    } else {
-      if (!isNil(value)) {
-        springValue.set(value);
-      }
-    }
-  }, [value, springValue, hasAnimated]);
+  // console.log({ previousValue, value, displayValue, hasAnimatedOnFirstLoad });
 
+  // Detect changes and animate if the value is different from the previous one
   useEffect(() => {
-    if (!hasAnimated && !isNil(value)) {
+    if (isNil(value)) return;
+
+    console.log('value changed', { value, displayValue, previousValue });
+
+    if (value !== previousValue) {
       springValue.set(value);
+      // setDisplayValue(value);
+      return;
     }
-  }, [value, springValue, hasAnimated]);
+
+    // if (hasAnimatedOnFirstLoad) {
+    //   setDisplayValue(value);
+    // }
+
+    // setDisplayValue(value);
+  }, [value, springValue, hasAnimatedOnFirstLoad, previousValue]);
 
   useEffect(() => {
-    if (!hasAnimated) {
-      let lastUpdate = Date.now();
+    // Skip animation if already animated
+    // if (hasAnimatedOnFirstLoad && displayValue === previousValue) return;
 
+    // Skip animation if value hasn't changed
+    // if (isNil(displayValue) || displayValue === previousValue) return;
+    console.log('start animation', {
+      hasAnimatedOnFirstLoad,
+      value,
+      displayValue,
+      previousValue,
+      turrr: displayValue === previousValue,
+    });
+
+    if (!hasAnimatedOnFirstLoad || value !== displayValue) {
+      console.log('HERE');
+      console.log('--------------------------------------------------');
+      console.log('--------------------------------------------------');
+      let lastUpdate = Date.now();
       const unsubscribe = springValue.on('change', (latest) => {
         const now = Date.now();
-
-        // Only update the state at most every 100ms
         if (now - lastUpdate > 100) {
           lastUpdate = now;
           setDisplayValue(parseFloat(latest.toFixed(2)));
@@ -55,7 +74,7 @@ export const AnimateNumber = ({
 
       return () => unsubscribe();
     }
-  }, [springValue, hasAnimated]);
+  }, [springValue, hasAnimatedOnFirstLoad, previousValue, value, displayValue]);
 
   return (
     <motion.span>
