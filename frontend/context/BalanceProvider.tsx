@@ -35,7 +35,19 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
 
 const allAgentConfig = Object.values(AGENT_CONFIG);
-const providerEntries = Object.entries(PROVIDERS).filter(([key]) => {
+
+/**
+ * Provider entries for enabled agents.
+ * @example
+ * [{
+ *    key: '1',
+ *    value: {
+ *      provider: ethers.providers.JsonRpcProvider,
+ *      multicallProvider: MulticallProvider
+ *    }
+ * }]
+ */
+const providerList = Object.entries(PROVIDERS).filter(([key]) => {
   const evmChainId = +key as EvmChainId;
   const currentAgentConfig = allAgentConfig.find(
     (agentConfig) => agentConfig.evmHomeChainId === evmChainId,
@@ -208,10 +220,7 @@ const getCrossChainWalletBalances = async (
 ): Promise<WalletBalanceResult[]> => {
   const balanceResults: WalletBalanceResult[] = [];
 
-  for (const [
-    evmChainIdKey,
-    { multicallProvider, provider },
-  ] of providerEntries) {
+  for (const [evmChainIdKey, { multicallProvider, provider }] of providerList) {
     try {
       const providerEvmChainId = +evmChainIdKey as EvmChainId;
       const tokensOnChain = TOKEN_CONFIG[providerEvmChainId];
