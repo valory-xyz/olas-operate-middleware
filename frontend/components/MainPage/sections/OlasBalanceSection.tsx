@@ -8,7 +8,6 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/Pages';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
-import { usePrevious } from '@/hooks/usePrevious';
 import { useSharedContext } from '@/hooks/useSharedContext';
 
 import { CardSection } from '../../styled/CardSection';
@@ -26,29 +25,54 @@ export const MainOlasBalance = () => {
   const {
     isMainOlasBalanceLoading,
     mainOlasBalance,
-    hasMainOlasBalanceAnimated,
+    previousMainOlasBalance,
+    hasMainOlasBalanceAnimatedOnLoad,
     setMainOlasBalanceAnimated,
   } = useSharedContext();
 
-  const previousBalance = usePrevious(mainOlasBalance);
-
   useEffect(() => {
-    if (isNumber(mainOlasBalance) && !hasMainOlasBalanceAnimated) {
+    if (
+      !isMainOlasBalanceLoading &&
+      isNumber(mainOlasBalance) &&
+      !hasMainOlasBalanceAnimatedOnLoad
+    ) {
       setMainOlasBalanceAnimated(true);
     }
-  }, [mainOlasBalance, hasMainOlasBalanceAnimated, setMainOlasBalanceAnimated]);
+  }, [
+    isMainOlasBalanceLoading,
+    mainOlasBalance,
+    hasMainOlasBalanceAnimatedOnLoad,
+    setMainOlasBalanceAnimated,
+  ]);
 
+  // boolean to trigger animation
   const triggerAnimation = useMemo(() => {
-    if (isNumber(mainOlasBalance) && !hasMainOlasBalanceAnimated) {
-      return true;
+    if (isMainOlasBalanceLoading) return false;
+
+    if (!isNumber(mainOlasBalance)) return false;
+
+    // if balance has not been animated on load
+    if (!hasMainOlasBalanceAnimatedOnLoad) return true;
+
+    // if previous balance is not a number but already animated
+    // example: navigating to another page and coming back
+    if (
+      hasMainOlasBalanceAnimatedOnLoad &&
+      !isNumber(previousMainOlasBalance)
+    ) {
+      return false;
     }
 
-    if (isNumber(mainOlasBalance) && isNumber(previousBalance)) {
-      if (mainOlasBalance !== previousBalance) return true;
-    }
+    // if balance has changed, animate
+    if (mainOlasBalance !== previousMainOlasBalance) return true;
 
     return false;
-  }, [mainOlasBalance, previousBalance, hasMainOlasBalanceAnimated]);
+  }, [
+    isMainOlasBalanceLoading,
+    mainOlasBalance,
+    previousMainOlasBalance,
+    hasMainOlasBalanceAnimatedOnLoad,
+  ]);
 
   return (
     <CardSection
