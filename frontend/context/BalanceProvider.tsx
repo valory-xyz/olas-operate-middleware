@@ -125,7 +125,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       try {
         const masterSafes = masterWallets.filter(
           (masterWallet) => masterWallet.type === WalletType.Safe,
-        );
+        ) as MasterSafe[];
 
         const [walletBalancesResult, stakedBalancesResult] =
           await Promise.allSettled([
