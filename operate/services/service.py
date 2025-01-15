@@ -515,7 +515,7 @@ class Deployment(LocalResource):
                 deployment["services"][node]["volumes"].extend(_volumes)
                 new_mappings = []
                 for mapping in deployment["services"][node]["volumes"]:
-                    if mapping.startswith(("./data", "./persistent_data")):
+                    if mapping.startswith("./data"):
                         mapping = "." + mapping
 
                     new_mappings.append(mapping)
