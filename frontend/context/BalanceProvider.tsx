@@ -17,10 +17,9 @@ import { useInterval } from 'usehooks-ts';
 
 import { ERC20_BALANCE_OF_STRING_FRAGMENT } from '@/abis/erc20';
 import { MiddlewareChain, MiddlewareServiceResponse } from '@/client';
-import { AGENT_CONFIG } from '@/config/agents';
+import { providers } from '@/config/providers';
 import { TOKEN_CONFIG, TokenType } from '@/config/tokens';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
-import { PROVIDERS } from '@/constants/providers';
 import { EvmChainId } from '@/enums/Chain';
 import { ServiceRegistryL2ServiceState } from '@/enums/ServiceRegistryL2ServiceState';
 import { TokenSymbol } from '@/enums/Token';
@@ -33,29 +32,6 @@ import { formatUnits } from '@/utils/numberFormatters';
 import { MasterWalletContext } from './MasterWalletProvider';
 import { OnlineStatusContext } from './OnlineStatusProvider';
 import { ServicesContext } from './ServicesProvider';
-
-const allAgentConfig = Object.values(AGENT_CONFIG);
-
-/**
- * Provider entries for enabled agents.
- * @example
- * [{
- *    key: '1',
- *    value: {
- *      provider: ethers.providers.JsonRpcProvider,
- *      multicallProvider: MulticallProvider
- *    }
- * }]
- */
-const providerList = Object.entries(PROVIDERS).filter(([key]) => {
-  const evmChainId = +key as EvmChainId;
-  const currentAgentConfig = allAgentConfig.find(
-    (agentConfig) => agentConfig.evmHomeChainId === evmChainId,
-  );
-
-  // Only return providers for enabled agents
-  return !!currentAgentConfig?.isAgentEnabled;
-});
 
 export type WalletBalanceResult = {
   walletAddress: Address;
@@ -220,7 +196,7 @@ const getCrossChainWalletBalances = async (
 ): Promise<WalletBalanceResult[]> => {
   const balanceResults: WalletBalanceResult[] = [];
 
-  for (const [evmChainIdKey, { multicallProvider, provider }] of providerList) {
+  for (const [evmChainIdKey, { multicallProvider, provider }] of providers) {
     try {
       const providerEvmChainId = +evmChainIdKey as EvmChainId;
       const tokensOnChain = TOKEN_CONFIG[providerEvmChainId];
