@@ -9,6 +9,7 @@ type AnimatedNumberProps = {
   value: Maybe<number>;
   formatter?: (value: number) => string;
   triggerAnimation?: boolean;
+  onAnimationComplete?: () => void;
 };
 
 /**
@@ -18,8 +19,9 @@ export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
   triggerAnimation = true,
+  onAnimationComplete,
 }: AnimatedNumberProps) => {
-  const [displayValue, setDisplayValue] = useState(0);
+  const [displayValue, setDisplayValue] = useState(isNil(value) ? 0 : value);
   const springValue = useSpring(0, { stiffness: 150, damping: 25 });
 
   useEffect(() => {
@@ -32,6 +34,7 @@ export const AnimateNumber = ({
     }
   }, [value, springValue, triggerAnimation]);
 
+  // actual animation step
   useEffect(() => {
     if (!triggerAnimation) return;
 
@@ -46,6 +49,21 @@ export const AnimateNumber = ({
 
     return () => unsubscribe();
   }, [springValue, value, triggerAnimation]);
+
+  // handle animation complete
+  useEffect(() => {
+    if (!triggerAnimation) return;
+
+    const handleComplete = () => {
+      if (onAnimationComplete) {
+        onAnimationComplete();
+      }
+    };
+
+    const unsubscribe = springValue.on('animationComplete', handleComplete);
+
+    return () => unsubscribe();
+  }, [springValue, triggerAnimation, onAnimationComplete]);
 
   return (
     <motion.span>

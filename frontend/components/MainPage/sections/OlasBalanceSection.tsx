@@ -1,6 +1,6 @@
 import { Button, Flex, Skeleton, Typography } from 'antd';
 import { isNumber } from 'lodash';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
@@ -29,6 +29,7 @@ export const MainOlasBalance = () => {
     hasMainOlasBalanceAnimatedOnLoad,
     setMainOlasBalanceAnimated,
   } = useSharedContext();
+  const [isAnimating, setIsAnimating] = useState(false);
 
   useEffect(() => {
     if (
@@ -54,25 +55,37 @@ export const MainOlasBalance = () => {
     // if balance has not been animated on load
     if (!hasMainOlasBalanceAnimatedOnLoad) return true;
 
-    // if previous balance is not a number but already animated
-    // example: navigating to another page and coming back
-    if (
-      hasMainOlasBalanceAnimatedOnLoad &&
-      !isNumber(previousMainOlasBalance)
-    ) {
-      return false;
-    }
+    // // if previous balance is not a number but already animated
+    // // example: navigating to another page and coming back
+    // if (
+    //   hasMainOlasBalanceAnimatedOnLoad &&
+    //   !isNumber(previousMainOlasBalance)
+    // ) {
+    //   return false;
+    // }
 
-    // if balance has changed, animate
-    if (mainOlasBalance !== previousMainOlasBalance) return true;
+    // // if balance has changed, animate
+    // if (mainOlasBalance === previousMainOlasBalance) return false;
 
-    return false;
+    return true;
   }, [
     isMainOlasBalanceLoading,
     mainOlasBalance,
     previousMainOlasBalance,
     hasMainOlasBalanceAnimatedOnLoad,
   ]);
+
+  const onAnimationComplete = useCallback(() => {
+    setIsAnimating(false);
+  }, []);
+
+  console.log({
+    isMainOlasBalanceLoading,
+    mainOlasBalance,
+    previousMainOlasBalance,
+    hasMainOlasBalanceAnimatedOnLoad,
+    triggerAnimation,
+  });
 
   return (
     <CardSection
@@ -104,7 +117,8 @@ export const MainOlasBalance = () => {
             <Balance className="balance">
               <AnimateNumber
                 value={mainOlasBalance}
-                triggerAnimation={!!triggerAnimation}
+                triggerAnimation={isAnimating || !!triggerAnimation}
+                onAnimationComplete={onAnimationComplete}
               />
             </Balance>
             <span className="balance-currency">OLAS</span>
