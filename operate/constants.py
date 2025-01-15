@@ -62,6 +62,6 @@ WRAPPED_NATIVE_ASSET = {
 
 MECH_CONTRACT_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/mech/refs/heads/main/packages/valory/contracts/agent_mech/build/AgentMech.json"
 STAKING_TOKEN_INSTANCE_ABI_PATH = 'https://raw.githubusercontent.com/valory-xyz/trader/refs/heads/main/packages/valory/contracts/staking_token/build/StakingToken.json'
-STAKING_TOKEN_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/trader/refs/heads/main/packages/valory/contracts/service_staking_token/build/ServiceStakingToken.json"
+MECH_ACTIVITY_CHECKER_JSON_URL = 'https://raw.githubusercontent.com/valory-xyz/autonolas-staking-programmes/refs/heads/main/abis/0.8.28/SingleMechActivityChecker.json'
 SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/open-autonomy/refs/heads/main/packages/valory/contracts/service_registry_token_utility/build/ServiceRegistryTokenUtility.json"
 MECH_AGENT_FACTORY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/ai-registry-mech/main/abis/0.8.28/AgentFactory.json"
