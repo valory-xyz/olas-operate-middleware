@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
-import { MiddlewareChain } from '@/client';
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { usePageState } from '@/hooks/usePageState';
@@ -12,6 +11,7 @@ import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getLatestTransaction } from '@/service/Ethers';
 import { TransactionInfo } from '@/types/TransactionInfo';
 import { Optional } from '@/types/Util';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 import { getTimeAgo } from '@/utils/time';
 
 const { Text } = Typography;
@@ -86,7 +86,7 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
         className="text-xs pointer hover-underline"
         onClick={() =>
           window.open(
-            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/tx/${transaction.hash}`,
+            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(chainId)]}/tx/${transaction.hash}`,
           )
         }
       >

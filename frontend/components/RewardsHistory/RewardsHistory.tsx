@@ -19,7 +19,6 @@ import {
 import { CSSProperties, ReactNode, useMemo } from 'react';
 import styled from 'styled-components';
 
-import { MiddlewareChain } from '@/client';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { CardFlex } from '@/components/styled/CardFlex';
 import {
@@ -107,6 +106,9 @@ const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
 );
 
 const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
+  const { selectedAgentConfig } = useServices();
+  const { middlewareHomeChainId } = selectedAgentConfig;
+
   const timePeriod = useMemo(() => {
     if (epoch.epochStartTimeStamp && epoch.epochEndTimeStamp) {
       return `${formatToShortDateTime(epoch.epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epoch.epochEndTimeStamp * 1000)} (UTC)`;
@@ -133,7 +135,7 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
               {timePeriod}
             </Text>
             <a
-              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[MiddlewareChain.GNOSIS]}/tx/${epoch.transactionHash}`}
+              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareHomeChainId]}/tx/${epoch.transactionHash}`}
               target="_blank"
             >
               End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}

@@ -2,9 +2,6 @@ import { Card, Flex } from 'antd';
 
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
-// import { StakingProgramId } from '@/enums/StakingProgram';
-// import { useMasterSafe } from '@/hooks/useMasterSafe';
-// import { useMasterWalletContext } from '@/hooks/useWallet';
 import { MainHeader } from './header';
 import { AddFundsSection } from './sections/AddFundsSection';
 import { AlertSections } from './sections/AlertSections';

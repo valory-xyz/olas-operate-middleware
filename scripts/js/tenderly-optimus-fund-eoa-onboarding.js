@@ -30,7 +30,8 @@ const main = async () => {
         gnosis: process.env.GNOSIS_RPC,
         optimus: process.env.OPTIMISM_RPC,
         base: process.env.BASE_RPC,
-        ethereum: process.env.ETHEREUM_RPC
+        ethereum: process.env.ETHEREUM_RPC,
+        mode: process.env.MODE_RPC
     };
 
     console.log(rpcs)
