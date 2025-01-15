@@ -1,5 +1,6 @@
 import { Button, Flex, Skeleton, Typography } from 'antd';
-import { useEffect } from 'react';
+import { isNumber } from 'lodash';
+import { useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 
 import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
@@ -7,6 +8,7 @@ import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/Pages';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
+import { usePrevious } from '@/hooks/usePrevious';
 import { useSharedContext } from '@/hooks/useSharedContext';
 
 import { CardSection } from '../../styled/CardSection';
@@ -28,11 +30,25 @@ export const MainOlasBalance = () => {
     setMainOlasBalanceAnimated,
   } = useSharedContext();
 
+  const previousBalance = usePrevious(mainOlasBalance);
+
   useEffect(() => {
-    if (!hasMainOlasBalanceAnimated) {
+    if (isNumber(mainOlasBalance) && !hasMainOlasBalanceAnimated) {
       setMainOlasBalanceAnimated(true);
     }
-  }, [hasMainOlasBalanceAnimated, setMainOlasBalanceAnimated]);
+  }, [mainOlasBalance, hasMainOlasBalanceAnimated, setMainOlasBalanceAnimated]);
+
+  const triggerAnimation = useMemo(() => {
+    if (isNumber(mainOlasBalance) && !hasMainOlasBalanceAnimated) {
+      return true;
+    }
+
+    if (isNumber(mainOlasBalance) && isNumber(previousBalance)) {
+      if (mainOlasBalance !== previousBalance) return true;
+    }
+
+    return false;
+  }, [mainOlasBalance, previousBalance, hasMainOlasBalanceAnimated]);
 
   return (
     <CardSection
@@ -64,7 +80,7 @@ export const MainOlasBalance = () => {
             <Balance className="balance">
               <AnimateNumber
                 value={mainOlasBalance}
-                hasAnimated={hasMainOlasBalanceAnimated}
+                triggerAnimation={!!triggerAnimation}
               />
             </Balance>
             <span className="balance-currency">OLAS</span>

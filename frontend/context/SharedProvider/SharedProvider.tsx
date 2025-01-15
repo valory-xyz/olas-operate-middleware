@@ -38,3 +38,8 @@ export const SharedProvider = ({ children }: PropsWithChildren) => {
     </SharedContext.Provider>
   );
 };
+
+// TODO:
+// - (DONE) trigger only when the main olas balance is loaded for the first time
+// - (DONE) trigger only when the main olas balance changes
+// - each olas balance should be agent-specific
