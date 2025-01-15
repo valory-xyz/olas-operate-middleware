@@ -1,11 +1,10 @@
 import { Button, Flex, Skeleton, Typography } from 'antd';
 import { sum } from 'lodash';
-import { useContext, useMemo } from 'react';
+import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { RewardContext } from '@/context/RewardProvider';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -15,6 +14,7 @@ import {
 } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
+import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
 
 import { CardSection } from '../../styled/CardSection';
@@ -38,7 +38,7 @@ export const MainOlasBalance = () => {
     isAvailableRewardsForEpochLoading,
     optimisticRewardsEarnedForEpoch,
     accruedServiceStakingRewards,
-  } = useContext(RewardContext);
+  } = useReward();
 
   const { goto } = usePageState();
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');

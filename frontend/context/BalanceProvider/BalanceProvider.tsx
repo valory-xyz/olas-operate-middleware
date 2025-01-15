@@ -133,13 +133,14 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
     }
   }, [masterWallets, services, serviceWallets]);
 
+  // Update balances once on load, then use interval
   useEffect(() => {
-    // Update balances once on load, then use interval
     if (!isOnline || isUpdatingBalances || isLoaded) return;
 
     updateBalances();
   }, [isOnline, isUpdatingBalances, isLoaded, updateBalances]);
 
+  // Update balances every 5 seconds
   useInterval(() => {
     if (!isPaused && isOnline && !isUpdatingBalances) {
       updateBalances();
