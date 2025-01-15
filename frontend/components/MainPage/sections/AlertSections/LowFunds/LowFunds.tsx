@@ -3,7 +3,10 @@ import { useMemo } from 'react';
 
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { TokenSymbol } from '@/enums/Token';
-import { useMasterBalances } from '@/hooks/useBalanceContext';
+import {
+  useBalanceContext,
+  useMasterBalances,
+} from '@/hooks/useBalanceContext';
 import { useNeedsFunds } from '@/hooks/useNeedsFunds';
 import { useServices } from '@/hooks/useServices';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -16,6 +19,7 @@ import { MainNeedsFunds } from './MainNeedsFunds';
 export const LowFunds = () => {
   const { selectedAgentConfig } = useServices();
   const { selectedStakingProgramId } = useStakingProgram();
+  const { totalStakedOlasBalance } = useBalanceContext();
   const { isMasterEoaLowOnGas, masterEoaGasRequirement } = useMasterBalances();
 
   const { balancesByChain, isInitialFunded } = useNeedsFunds(
@@ -31,16 +35,24 @@ export const LowFunds = () => {
     // If the agent is not funded, <MainNeedsFunds /> will be displayed
     if (!isInitialFunded) return false;
 
+    const olasOnChain = balancesByChain[chainId][TokenSymbol.OLAS];
+
     if (
       round(balancesByChain[chainId][getNativeTokenSymbol(chainId)], 4) === 0 &&
-      round(balancesByChain[chainId][TokenSymbol.OLAS], 4) === 0 &&
+      round(olasOnChain + (totalStakedOlasBalance ?? 0), 4) === 0 &&
       isMasterEoaLowOnGas
     ) {
       return true;
     }
 
     return false;
-  }, [isInitialFunded, chainId, isMasterEoaLowOnGas, balancesByChain]);
+  }, [
+    isInitialFunded,
+    chainId,
+    isMasterEoaLowOnGas,
+    totalStakedOlasBalance,
+    balancesByChain,
+  ]);
 
   return (
     <>
