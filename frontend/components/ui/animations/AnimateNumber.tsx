@@ -1,6 +1,6 @@
 import { motion, useSpring } from 'framer-motion';
 import { isNil } from 'lodash';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 
 import { usePrevious } from '@/hooks/usePrevious';
 import { Maybe } from '@/types/Util';
@@ -22,59 +22,70 @@ export const AnimateNumber = ({
 }: AnimatedNumberProps) => {
   const [displayValue, setDisplayValue] = useState(0);
   const springValue = useSpring(0, { stiffness: 150, damping: 25 });
-  const previousValue = usePrevious(value);
+  const previousValue = usePrevious(value || 0);
 
-  // console.log({ previousValue, value, displayValue, hasAnimatedOnFirstLoad });
+  const isValidNumberToAnimate = useMemo(() => {
+    // if (isNil(value)) return;
+    // if (isNil(previousValue)) return;
+    // if (value === 0 || previousValue === 0) return;
 
-  // Detect changes and animate if the value is different from the previous one
+    return true;
+  }, [value, previousValue]);
+
   useEffect(() => {
     if (isNil(value)) return;
 
-    console.log('value changed', { value, displayValue, previousValue });
-
+    // Current value is different from the previous value
     if (value !== previousValue) {
+      if (!isValidNumberToAnimate) return;
       springValue.set(value);
-      // setDisplayValue(value);
       return;
     }
 
-    // if (hasAnimatedOnFirstLoad) {
-    //   setDisplayValue(value);
-    // }
+    // console.log('value', value);
 
-    // setDisplayValue(value);
-  }, [value, springValue, hasAnimatedOnFirstLoad, previousValue]);
+    // Set the display value to the new value if the animation has already been triggered
+    if (hasAnimatedOnFirstLoad) {
+      // setDisplayValue(value);
+      return;
+    }
+  }, [
+    value,
+    springValue,
+    hasAnimatedOnFirstLoad,
+    previousValue,
+    isValidNumberToAnimate,
+  ]);
 
   useEffect(() => {
-    // Skip animation if already animated
-    // if (hasAnimatedOnFirstLoad && displayValue === previousValue) return;
+    console.log({ value, previousValue });
 
-    // Skip animation if value hasn't changed
-    // if (isNil(displayValue) || displayValue === previousValue) return;
-    console.log('start animation', {
-      hasAnimatedOnFirstLoad,
-      value,
-      displayValue,
-      previousValue,
-      turrr: displayValue === previousValue,
+    // Skip animation if
+    // - already animated
+    // - the value is the same as the previous value
+    if (hasAnimatedOnFirstLoad && value === previousValue) return;
+
+    if (hasAnimatedOnFirstLoad) {
+      if (!isValidNumberToAnimate) return;
+    }
+
+    let lastUpdate = Date.now();
+    const unsubscribe = springValue.on('change', (latest) => {
+      const now = Date.now();
+      if (now - lastUpdate > 100) {
+        lastUpdate = now;
+        setDisplayValue(parseFloat(latest.toFixed(2)));
+      }
     });
 
-    if (!hasAnimatedOnFirstLoad || value !== displayValue) {
-      console.log('HERE');
-      console.log('--------------------------------------------------');
-      console.log('--------------------------------------------------');
-      let lastUpdate = Date.now();
-      const unsubscribe = springValue.on('change', (latest) => {
-        const now = Date.now();
-        if (now - lastUpdate > 100) {
-          lastUpdate = now;
-          setDisplayValue(parseFloat(latest.toFixed(2)));
-        }
-      });
-
-      return () => unsubscribe();
-    }
-  }, [springValue, hasAnimatedOnFirstLoad, previousValue, value, displayValue]);
+    return () => unsubscribe();
+  }, [
+    springValue,
+    hasAnimatedOnFirstLoad,
+    previousValue,
+    value,
+    isValidNumberToAnimate,
+  ]);
 
   return (
     <motion.span>
