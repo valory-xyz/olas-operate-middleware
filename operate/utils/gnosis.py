@@ -495,7 +495,7 @@ def transfer_erc20_from_safe(
     )
 
 
-def drain_signer(
+def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
     withdrawal_address: str,
@@ -532,10 +532,12 @@ def drain_signer(
             ledger_api.get_balance(crypto.address) - tx["gas"] * tx["maxFeePerGas"]
         )
         if tx["value"] <= 0:
-            logger.warning(f"No balance to drain from signer key: {crypto.address}")
+            logger.warning(f"No balance to drain from wallet: {crypto.address}")
             raise ChainInteractionError("Insufficient balance")
 
-        logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
+        logger.info(
+            f"Draining {tx['value']} native units from wallet: {crypto.address}"
+        )
 
         return tx
 

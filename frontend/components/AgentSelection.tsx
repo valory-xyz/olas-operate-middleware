@@ -119,11 +119,6 @@ const EachAgent = memo(
       updateAgentType,
     ]);
 
-    // If agent is disabled, then don't show the agent
-    if (agentConfig.isAgentEnabled === false) {
-      return null;
-    }
-
     return (
       <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
         <Flex vertical>
@@ -157,7 +152,6 @@ const EachAgent = memo(
     );
   },
 );
-
 EachAgent.displayName = 'EachAgent';
 
 type AgentSelectionProps = {
@@ -177,15 +171,19 @@ export const AgentSelection = ({
     <SetupCreateHeader prev={onPrev} />
     <Title level={3}>Select your agent</Title>
 
-    {entries(AGENT_CONFIG).map(([agentType, agentConfig]) => {
-      return (
-        <EachAgent
-          key={agentType}
-          showSelected={showSelected}
-          agentType={agentType as AgentType}
-          agentConfig={agentConfig}
-        />
-      );
-    })}
+    {entries(AGENT_CONFIG)
+      .filter(([, agentConfig]) => {
+        return !!agentConfig.isAgentEnabled;
+      })
+      .map(([agentType, agentConfig]) => {
+        return (
+          <EachAgent
+            key={agentType}
+            showSelected={showSelected}
+            agentType={agentType as AgentType}
+            agentConfig={agentConfig}
+          />
+        );
+      })}
   </CardFlex>
 );

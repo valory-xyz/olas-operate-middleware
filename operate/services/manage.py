@@ -38,10 +38,10 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
-from operate.constants import WRAPPED_NATIVE_ASSET, ZERO_ADDRESS
+from operate.constants import ZERO_ADDRESS
 from operate.keys import Key, KeysManager
-from operate.ledger import PUBLIC_RPCS
-from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, WXDAI
+from operate.ledger import PUBLIC_RPCS, get_currency_denom
+from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, USDC, WRAPPED_NATIVE_ASSET
 from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
@@ -59,7 +59,7 @@ from operate.services.utils.mech import deploy_mech
 from operate.services.utils.memeooorr import get_twitter_cookies
 from operate.utils.gnosis import (
     NULL_ADDRESS,
-    drain_signer,
+    drain_eoa,
     get_asset_balance,
     get_assets_balances,
 )
@@ -1146,6 +1146,7 @@ class ServiceManager:
             self.drain_service_safe(
                 service_config_id=service_config_id,
                 withdrawal_address=withdrawal_address,
+                chain=Chain(chain),
             )
 
         if counter_current_safe_owners == counter_instances:
@@ -1184,8 +1185,8 @@ class ServiceManager:
             )  # noqa: E800
 
         if withdrawal_address is not None:
-            # drain xDAI from service signer key
-            drain_signer(
+            # drain all native tokens from service signer key
+            drain_eoa(
                 ledger_api=self.wallet_manager.load(
                     ledger_config.chain.ledger_type
                 ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
@@ -1621,7 +1622,7 @@ class ServiceManager:
                 # also count the balance of the wrapped native asset
                 safe_balance += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[chain],
+                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=chain_data.multisig,
                 )
 
@@ -1752,11 +1753,14 @@ class ServiceManager:
         self,
         service_config_id: str,
         withdrawal_address: str,
+        chain: Chain,
     ) -> None:
         """Drain the funds out of the service safe."""
-        self.logger.info(f"Draining the safe of service: {hash}")
+        self.logger.info(
+            f"Draining the safe of service: {service_config_id} on chain {chain.value}"
+        )
         service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[service.home_chain]  # TODO rest of chains
+        chain_config = service.chain_configs[chain.value]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
@@ -1765,10 +1769,14 @@ class ServiceManager:
             private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
         )
 
-        # drain OLAS and wxDAI from service safe
+        # drain ERC20 tokens from service safe
         for token_name, token_address in (
-            ("OLAS", OLAS[ledger_config.chain]),
-            ("wxDAI", WXDAI[ledger_config.chain]),
+            ("OLAS", OLAS[chain]),
+            (
+                f"W{get_currency_denom(chain)}",
+                WRAPPED_NATIVE_ASSET[chain],
+            ),
+            ("USDC", USDC[chain]),
         ):
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -1793,15 +1801,15 @@ class ServiceManager:
                 amount=balance,
             )
 
-        # drain xDAI from service safe
+        # drain native asset from service safe
         balance = ledger_api.get_balance(chain_data.multisig)
         if balance == 0:
             self.logger.info(
-                f"No xDAI to drain from service safe: {chain_data.multisig}"
+                f"No {get_currency_denom(chain)} to drain from service safe: {chain_data.multisig}"
             )
         else:
             self.logger.info(
-                f"Draining {balance} xDAI out of service safe: {chain_data.multisig}"
+                f"Draining {balance} {get_currency_denom(chain)} out of service safe: {chain_data.multisig}"
             )
             transfer_from_safe(
                 ledger_api=ledger_api,
@@ -2031,7 +2039,7 @@ class ServiceManager:
             if service_safe and chain in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[chain],
+                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=service_safe,
                 )
 
