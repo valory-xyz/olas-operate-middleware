@@ -1,5 +1,5 @@
 import { sum } from 'lodash';
-import { createContext, useMemo } from 'react';
+import { useMemo } from 'react';
 
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -9,15 +9,6 @@ import {
 } from '@/hooks/useBalanceContext';
 import { useReward } from '@/hooks/useReward';
 import { useServices } from '@/hooks/useServices';
-import { Optional } from '@/types/Util';
-
-export const SharedContext = createContext<{
-  isMainOlasBalanceLoading: boolean;
-  mainOlasBalance: Optional<number>;
-}>({
-  isMainOlasBalanceLoading: true,
-  mainOlasBalance: undefined,
-});
 
 /**
  * hook to get the main OLAS balance owned by the selected service

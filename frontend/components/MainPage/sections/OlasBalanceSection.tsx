@@ -1,4 +1,5 @@
 import { Button, Flex, Skeleton, Typography } from 'antd';
+import { useEffect } from 'react';
 import styled from 'styled-components';
 
 import { AnimateNumber } from '@/components/ui/animations/AnimateNumber';
@@ -20,7 +21,18 @@ const Balance = styled.span`
 export const MainOlasBalance = () => {
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
   const { goto } = usePageState();
-  const { isMainOlasBalanceLoading, mainOlasBalance } = useSharedContext();
+  const {
+    isMainOlasBalanceLoading,
+    mainOlasBalance,
+    hasMainOlasBalanceAnimated,
+    setMainOlasBalanceAnimated,
+  } = useSharedContext();
+
+  useEffect(() => {
+    if (!hasMainOlasBalanceAnimated) {
+      setMainOlasBalanceAnimated(true);
+    }
+  }, [hasMainOlasBalanceAnimated, setMainOlasBalanceAnimated]);
 
   return (
     <CardSection
@@ -50,7 +62,10 @@ export const MainOlasBalance = () => {
           <Flex align="end">
             <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
             <Balance className="balance">
-              <AnimateNumber value={mainOlasBalance} />
+              <AnimateNumber
+                value={mainOlasBalance}
+                hasAnimated={hasMainOlasBalanceAnimated}
+              />
             </Balance>
             <span className="balance-currency">OLAS</span>
           </Flex>

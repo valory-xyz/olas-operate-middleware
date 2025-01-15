@@ -8,6 +8,7 @@ import { balanceFormat } from '@/utils/numberFormatters';
 type AnimatedNumberProps = {
   value: Maybe<number>;
   formatter?: (value: number) => string;
+  hasAnimated?: boolean;
 };
 
 /**
@@ -16,32 +17,45 @@ type AnimatedNumberProps = {
 export const AnimateNumber = ({
   value,
   formatter = balanceFormat,
+  hasAnimated = false,
 }: AnimatedNumberProps) => {
   const [displayValue, setDisplayValue] = useState(0);
 
   const springValue = useSpring(0, { stiffness: 150, damping: 25 });
 
   useEffect(() => {
-    if (!isNil(value)) {
-      springValue.set(value);
+    if (hasAnimated) {
+      setDisplayValue(value || 0);
+    } else {
+      if (!isNil(value)) {
+        springValue.set(value);
+      }
     }
-  }, [value, springValue]);
+  }, [value, springValue, hasAnimated]);
 
   useEffect(() => {
-    let lastUpdate = Date.now();
+    if (!hasAnimated && !isNil(value)) {
+      springValue.set(value);
+    }
+  }, [value, springValue, hasAnimated]);
 
-    const unsubscribe = springValue.on('change', (latest) => {
-      const now = Date.now();
+  useEffect(() => {
+    if (!hasAnimated) {
+      let lastUpdate = Date.now();
 
-      // Only update the state at most every 100ms
-      if (now - lastUpdate > 100) {
-        lastUpdate = now;
-        setDisplayValue(parseFloat(latest.toFixed(2)));
-      }
-    });
+      const unsubscribe = springValue.on('change', (latest) => {
+        const now = Date.now();
 
-    return () => unsubscribe();
-  }, [springValue]);
+        // Only update the state at most every 100ms
+        if (now - lastUpdate > 100) {
+          lastUpdate = now;
+          setDisplayValue(parseFloat(latest.toFixed(2)));
+        }
+      });
+
+      return () => unsubscribe();
+    }
+  }, [springValue, hasAnimated]);
 
   return (
     <motion.span>
