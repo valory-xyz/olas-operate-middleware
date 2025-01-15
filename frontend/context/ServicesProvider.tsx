@@ -222,7 +222,10 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       ({ home_chain }) =>
         home_chain === selectedAgentConfig.middlewareHomeChainId,
     );
-    if (!currentService) return;
+    if (!currentService) {
+      setSelectedServiceConfigId(null);
+      return;
+    }
 
     setSelectedServiceConfigId(currentService.service_config_id);
   }, [
