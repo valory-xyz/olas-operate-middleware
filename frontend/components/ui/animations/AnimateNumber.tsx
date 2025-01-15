@@ -2,11 +2,11 @@ import { motion, useSpring } from 'framer-motion';
 import { isNil } from 'lodash';
 import React, { useEffect, useState } from 'react';
 
-import { Nullable } from '@/types/Util';
+import { Maybe } from '@/types/Util';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 type AnimatedNumberProps = {
-  value: Nullable<number>;
+  value: Maybe<number>;
   formatter?: (value: number) => string;
 };
 
