@@ -26,15 +26,11 @@ export const MainOlasBalance = () => {
   const {
     isMainOlasBalanceLoading,
     mainOlasBalance,
-    // mainOlasBalance: wholeMainOlasBalance,
     hasMainOlasBalanceAnimatedOnLoad,
     setMainOlasBalanceAnimated,
   } = useSharedContext();
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // const mainOlasBalance = wholeMainOlasBalance
-  //   ? round(wholeMainOlasBalance, 4)
-  //   : 0;
   const previousMainOlasBalance = usePrevious(mainOlasBalance);
 
   useEffect(() => {
