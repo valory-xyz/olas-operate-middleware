@@ -5,6 +5,7 @@ import { useMemo } from 'react';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { EvmChainId } from '@/enums/Chain';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
 import { Maybe } from '@/types/Util';
@@ -14,6 +15,12 @@ import { useBalanceContext, useMasterBalances } from './useBalanceContext';
 import { useServices } from './useServices';
 import { useStakingProgram } from './useStakingProgram';
 import { useStore } from './useStore';
+
+type ChainTokenSymbol = {
+  [chainId in EvmChainId]: {
+    [tokenSymbol: string]: number;
+  };
+};
 
 export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { storeState } = useStore();
@@ -29,18 +36,10 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { masterSafeBalances } = useMasterBalances();
 
   const isInitialFunded = storeState?.[selectedAgentType]?.isInitialFunded;
-  const serviceFundRequirements = useMemo<{
-    [chainId: number]: {
-      [tokenSymbol: string]: number;
-    };
-  }>(() => {
-    if (isNil(serviceTemplate)) return {};
+  const serviceFundRequirements = useMemo<ChainTokenSymbol>(() => {
+    if (isNil(serviceTemplate)) return {} as ChainTokenSymbol;
 
-    const results: {
-      [chainId: number]: {
-        [tokenSymbol: string]: number;
-      };
-    } = {};
+    const results = {} as ChainTokenSymbol;
 
     Object.entries(serviceTemplate.configurations).forEach(
       ([middlewareChain, config]) => {
@@ -89,27 +88,36 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
 
     return masterSafeBalances.reduce<{
-      [chainId: number]: { [symbol: string]: number };
-    }>((acc, { symbol, balance, evmChainId }) => {
-      if (!acc[evmChainId]) acc[evmChainId] = { [symbol]: 0 };
-      if (!acc[evmChainId][symbol]) acc[evmChainId][symbol] = 0;
-      acc[evmChainId][symbol] += balance;
+      [chainId in EvmChainId]: { [symbol: string]: number };
+    }>(
+      (acc, { symbol, balance, evmChainId }) => {
+        if (!acc[evmChainId]) acc[evmChainId] = { [symbol]: 0 };
+        if (!acc[evmChainId][symbol]) acc[evmChainId][symbol] = 0;
+        acc[evmChainId][symbol] += balance;
 
-      return acc;
-    }, {});
+        return acc;
+      },
+      {} as { [chainId in EvmChainId]: { [symbol: string]: number } },
+    );
   }, [masterSafeBalances]);
+
+  const serviceChainIds = useMemo(() => {
+    if (isNil(serviceFundRequirements)) return;
+
+    return Object.keys(serviceFundRequirements).map(
+      (key) => key as unknown as EvmChainId,
+    );
+  }, [serviceFundRequirements]);
 
   /**
    * Check if the agent has enough eth for initial funding
    */
   const hasEnoughEthForInitialFunding = useMemo(() => {
-    if (isNil(serviceFundRequirements)) return;
+    if (isNil(serviceChainIds)) return;
     if (isNil(masterSafeBalances)) return;
     if (!balancesByChain) return;
 
-    const chainIds = Object.keys(serviceFundRequirements).map(Number);
-
-    return chainIds.every((chainId) => {
+    return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
       const nativeTokenBalance =
         balancesByChain[chainId]?.[nativeTokenSymbol] || 0;
@@ -118,38 +126,44 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
 
       return nativeTokenBalance >= nativeTokenRequired;
     });
-  }, [serviceFundRequirements, balancesByChain, masterSafeBalances]);
+  }, [
+    serviceFundRequirements,
+    serviceChainIds,
+    balancesByChain,
+    masterSafeBalances,
+  ]);
 
   /**
    * Check if the agent has enough OLAS for initial funding
    */
   const hasEnoughOlasForInitialFunding = useMemo(() => {
-    if (!serviceFundRequirements) return;
+    if (isNil(serviceChainIds)) return;
     if (!masterSafeBalances) return;
     if (!balancesByChain) return;
 
-    const chainIds = Object.keys(serviceFundRequirements).map(Number);
-
-    return chainIds.every((chainId) => {
+    return serviceChainIds.every((chainId) => {
       const olasBalance = balancesByChain[chainId]?.[TokenSymbol.OLAS] || 0;
       const olasRequired =
         serviceFundRequirements[chainId]?.[TokenSymbol.OLAS] || 0;
 
       return olasBalance >= olasRequired;
     });
-  }, [masterSafeBalances, balancesByChain, serviceFundRequirements]);
+  }, [
+    serviceFundRequirements,
+    serviceChainIds,
+    balancesByChain,
+    masterSafeBalances,
+  ]);
 
   /**
    * Check if the agent requires additional tokens and has enough for initial funding
    */
   const hasEnoughAdditionalTokensForInitialFunding = useMemo(() => {
-    if (isNil(serviceFundRequirements)) return;
+    if (isNil(serviceChainIds)) return;
     if (isNil(masterSafeBalances)) return;
     if (!balancesByChain) return;
 
-    const chainIds = Object.keys(serviceFundRequirements).map(Number);
-
-    return chainIds.every((chainId) => {
+    return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
       const additionalTokens = Object.keys(
         serviceFundRequirements[chainId],
@@ -167,7 +181,12 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
         return tokenBalance >= tokenRequired;
       });
     });
-  }, [serviceFundRequirements, masterSafeBalances, balancesByChain]);
+  }, [
+    serviceFundRequirements,
+    serviceChainIds,
+    balancesByChain,
+    masterSafeBalances,
+  ]);
 
   /**
    * Check if the agent needs initial funding (both eth and olas)

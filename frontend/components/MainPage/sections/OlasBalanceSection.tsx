@@ -33,11 +33,20 @@ export const MainOlasBalance = () => {
   const { serviceStakedBalances, serviceWalletBalances } = useServiceBalances(
     selectedService?.service_config_id,
   );
-  const { optimisticRewardsEarnedForEpoch, accruedServiceStakingRewards } =
-    useContext(RewardContext);
+  const {
+    isStakingRewardsDetailsLoading,
+    isAvailableRewardsForEpochLoading,
+    optimisticRewardsEarnedForEpoch,
+    accruedServiceStakingRewards,
+  } = useContext(RewardContext);
 
   const { goto } = usePageState();
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
+
+  const isLoading =
+    !isBalanceLoaded ||
+    isStakingRewardsDetailsLoading ||
+    isAvailableRewardsForEpochLoading;
 
   const displayedBalance = useMemo(() => {
     // olas across master wallet (safes and eoa) on relevant chains for agent
@@ -89,12 +98,12 @@ export const MainOlasBalance = () => {
 
     return totalOlasBalance;
   }, [
-    accruedServiceStakingRewards,
     masterWalletBalances,
-    optimisticRewardsEarnedForEpoch,
-    selectedAgentConfig.requiresAgentSafesOn,
     serviceStakedBalances,
     serviceWalletBalances,
+    accruedServiceStakingRewards,
+    optimisticRewardsEarnedForEpoch,
+    selectedAgentConfig.requiresAgentSafesOn,
   ]);
 
   return (
@@ -105,7 +114,9 @@ export const MainOlasBalance = () => {
       borderbottom="true"
       padding="16px 24px"
     >
-      {isBalanceLoaded ? (
+      {isLoading ? (
+        <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
+      ) : (
         <Flex vertical gap={8}>
           <Flex align="center" justify="space-between">
             <Text type="secondary">Current balance</Text>
@@ -128,8 +139,6 @@ export const MainOlasBalance = () => {
             <span className="balance-currency">OLAS</span>
           </Flex>
         </Flex>
-      ) : (
-        <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
       )}
     </CardSection>
   );

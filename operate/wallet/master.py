@@ -23,12 +23,14 @@ import json
 import logging
 import os
 import typing as t
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea.helpers.logging import setup_logger
+from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
@@ -42,12 +44,18 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import get_default_rpc
-from operate.ledger.profiles import OLAS, USDC
+from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils.gnosis import NULL_ADDRESS, add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
-from operate.utils.gnosis import get_owners, remove_owner, swap_owner
+from operate.utils.gnosis import (
+    drain_eoa,
+    get_asset_balance,
+    get_owners,
+    remove_owner,
+    swap_owner,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 
@@ -100,10 +108,17 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> LedgerApi:
         """Get ledger api object."""
+        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+        if chain == Chain.BASE:
+            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+                5, GWEI
+            )
+
         return make_ledger_api(
             self.ledger_type.name.lower(),
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
+            gas_price_strategies=gas_price_strategies,
         )
 
     def transfer(
@@ -140,6 +155,16 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Transfer erc20/native assets to the given account."""
+        raise NotImplementedError()
+
+    def drain(
+        self,
+        withdrawal_address: str,
+        chain: Chain,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """Drain all erc20/native assets to the given account."""
         raise NotImplementedError()
 
     @staticmethod
@@ -297,6 +322,7 @@ class EthereumMasterWallet(MasterWallet):
             sender_str = f"EOA {sender}"
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        to = ledger_api.api.to_checksum_address(to)
         balance = ledger_api.get_balance(address=sender)
 
         if balance < amount:
@@ -341,6 +367,7 @@ class EthereumMasterWallet(MasterWallet):
             sender_str = f"EOA {sender}"
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        to = ledger_api.api.to_checksum_address(to)
         balance = (
             registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -405,6 +432,44 @@ class EthereumMasterWallet(MasterWallet):
             from_safe=from_safe,
             rpc=rpc,
         )
+
+    def drain(
+        self,
+        withdrawal_address: str,
+        chain: Chain,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> None:
+        """Drain all erc20/native assets to the given account."""
+
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+        assets = {token[chain] for token in ERC20_TOKENS}
+
+        if from_safe:
+            assets.add(ZERO_ADDRESS)
+
+        for asset in assets:
+            balance = get_asset_balance(
+                ledger_api=ledger_api,
+                contract_address=asset,
+                address=self.safes[chain] if from_safe else self.crypto.address,
+            )
+            self.transfer_asset(
+                to=withdrawal_address,
+                amount=balance,
+                chain=chain,
+                asset=asset,
+                from_safe=from_safe,
+                rpc=rpc,
+            )
+
+        if not from_safe:
+            drain_eoa(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                withdrawal_address=withdrawal_address,
+                chain_id=chain.id,
+            )
 
     @classmethod
     def new(

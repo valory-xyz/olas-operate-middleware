@@ -91,7 +91,11 @@ const EachAgent = memo(
       }
 
       // Neither service nor safe is created
-      if (agentType === AgentType.Memeooorr || agentType === AgentType.Modius) {
+      if (
+        agentType === AgentType.Memeooorr ||
+        agentType === AgentType.Modius ||
+        agentType === AgentType.AgentsFunCelo
+      ) {
         // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
         // TODO: can have this as a boolean flag in agentConfig?
         gotoPage(Pages.Setup);
@@ -114,11 +118,6 @@ const EachAgent = memo(
       masterSafes,
       updateAgentType,
     ]);
-
-    // If agent is disabled, then don't show the agent
-    if (!agentConfig.isAgentEnabled) {
-      return null;
-    }
 
     return (
       <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
@@ -153,7 +152,6 @@ const EachAgent = memo(
     );
   },
 );
-
 EachAgent.displayName = 'EachAgent';
 
 type AgentSelectionProps = {
@@ -173,15 +171,19 @@ export const AgentSelection = ({
     <SetupCreateHeader prev={onPrev} />
     <Title level={3}>Select your agent</Title>
 
-    {entries(AGENT_CONFIG).map(([agentType, agentConfig]) => {
-      return (
-        <EachAgent
-          key={agentType}
-          showSelected={showSelected}
-          agentType={agentType as AgentType}
-          agentConfig={agentConfig}
-        />
-      );
-    })}
+    {entries(AGENT_CONFIG)
+      .filter(([, agentConfig]) => {
+        return !!agentConfig.isAgentEnabled;
+      })
+      .map(([agentType, agentConfig]) => {
+        return (
+          <EachAgent
+            key={agentType}
+            showSelected={showSelected}
+            agentType={agentType as AgentType}
+            agentConfig={agentConfig}
+          />
+        );
+      })}
   </CardFlex>
 );

@@ -48,6 +48,16 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'agent-activity': true,
     'backup-via-safe': true,
   },
+  [AgentType.AgentsFunCelo]: {
+    'manage-wallet': true,
+    'withdraw-funds': false,
+    'last-transactions': false,
+    'rewards-streak': false,
+    'staking-contract-section': false,
+    'low-funds': false,
+    'agent-activity': true,
+    'backup-via-safe': true,
+  },
   [AgentType.Modius]: {
     'manage-wallet': true,
     'withdraw-funds': false,
@@ -55,9 +65,8 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'rewards-streak': true,
     'staking-contract-section': true,
     'low-funds': false,
-    'agent-activity': false,
-    // temporarily hidden until mode is available on safe https://app.safe.global/new-safe/create
-    'backup-via-safe': false,
+    'agent-activity': true,
+    'backup-via-safe': false, // temporarily hidden until mode is available on safe https://app.safe.global/new-safe/create
   },
 });
 

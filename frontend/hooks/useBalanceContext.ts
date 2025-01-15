@@ -121,15 +121,6 @@ export const useMasterBalances = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { isLoaded, walletBalances } = useBalanceContext();
 
-  // TODO: unused, check only services stake?
-  // const masterStakedBalances = useMemo(
-  //   () =>
-  //     stakedBalances?.filter((balance) =>
-  //       masterSafes?.find((safe) => safe.address === balance.walletAddress),
-  //     ),
-  //   [masterSafes, stakedBalances],
-  // );
-
   const masterSafeBalances = useMemo<Optional<WalletBalanceResult[]>>(
     () =>
       walletBalances?.filter(({ walletAddress }) =>

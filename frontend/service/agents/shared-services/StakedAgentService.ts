@@ -125,6 +125,8 @@ export abstract class StakedAgentService {
       throw new Error('Chain not supported');
     }
 
+    const { multicallProvider } = PROVIDERS[chainId];
+
     const {
       [ContractType.ServiceRegistryTokenUtility]:
         serviceRegistryTokenUtilityContract,
@@ -140,16 +142,14 @@ export abstract class StakedAgentService {
       serviceRegistryL2Contract.mapServices(serviceId),
     ];
 
-    const { multicallProvider } = PROVIDERS[chainId];
-
     const [
-      getOperatorBalanceResponse,
+      operatorBalanceResponse,
       mapServiceIdTokenDepositResponse,
       mapServicesResponse,
     ] = await multicallProvider.all(contractCalls);
 
     const [bondValue, depositValue, serviceState] = [
-      parseFloat(ethers.utils.formatUnits(getOperatorBalanceResponse, 18)),
+      parseFloat(ethers.utils.formatUnits(operatorBalanceResponse, 18)),
       parseFloat(
         ethers.utils.formatUnits(mapServiceIdTokenDepositResponse[1], 18),
       ),
@@ -169,7 +169,7 @@ export abstract class StakedAgentService {
    * @example getStakingProgramIdByAddress('0x3052451e1eAee78e62E169AfdF6288F8791F2918') // StakingProgramId.Beta4
    */
   static getStakingProgramIdByAddress = (
-    chainId: number | EvmChainId,
+    chainId: EvmChainId,
     contractAddress: Address,
   ): Nullable<StakingProgramId> => {
     const addresses = STAKING_PROGRAM_ADDRESS[chainId];

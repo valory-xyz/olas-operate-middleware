@@ -24,6 +24,7 @@ const FUNDS_REQUIRED_FOR_BY_AGENT_TYPE = {
   [AgentType.PredictTrader]: 'for trading',
   [AgentType.Memeooorr]: 'for agent operations',
   [AgentType.Modius]: 'minimum for investment',
+  [AgentType.AgentsFunCelo]: 'for agent operations',
 };
 
 export const FundsToActivate = ({

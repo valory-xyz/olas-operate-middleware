@@ -44,7 +44,7 @@ const CheckpointGraphResponseSchema = z.object({
 const CheckpointsGraphResponseSchema = z.array(CheckpointGraphResponseSchema);
 type CheckpointResponse = z.infer<typeof CheckpointGraphResponseSchema>;
 
-const fetchRewardsQuery = (chainId: number) => {
+const fetchRewardsQuery = (chainId: EvmChainId) => {
   const supportedStakingContracts = Object.values(
     STAKING_PROGRAM_ADDRESS[chainId],
   ).map((address) => `"${address}"`);
