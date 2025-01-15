@@ -513,6 +513,14 @@ class Deployment(LocalResource):
         for node in deployment["services"]:
             if "abci" in node:
                 deployment["services"][node]["volumes"].extend(_volumes)
+                new_mappings = []
+                for mapping in deployment["services"][node]["volumes"]:
+                    if mapping.startswith(("./data", "./persistent_data")):
+                        mapping = "." + mapping
+
+                    new_mappings.append(mapping)
+
+                deployment["services"][node]["volumes"] = new_mappings
 
         with (build / DOCKER_COMPOSE_YAML).open("w", encoding="utf-8") as stream:
             yaml_dump(data=deployment, stream=stream)
