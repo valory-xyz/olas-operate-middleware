@@ -46,6 +46,7 @@ export const AnimateNumber = ({
         setDisplayValue(parseFloat(latest.toFixed(2)));
       }
     });
+    // console.log('springValue', springValue);
 
     return () => unsubscribe();
   }, [springValue, value, triggerAnimation]);
@@ -54,16 +55,12 @@ export const AnimateNumber = ({
   useEffect(() => {
     if (!triggerAnimation) return;
 
-    const handleComplete = () => {
-      if (onAnimationComplete) {
-        onAnimationComplete();
-      }
-    };
-
-    const unsubscribe = springValue.on('animationComplete', handleComplete);
+    const unsubscribe = springValue.on('change', (latest) => {
+      if (latest === value) onAnimationComplete?.();
+    });
 
     return () => unsubscribe();
-  }, [springValue, triggerAnimation, onAnimationComplete]);
+  }, [springValue, value, triggerAnimation, onAnimationComplete]);
 
   return (
     <motion.span>
