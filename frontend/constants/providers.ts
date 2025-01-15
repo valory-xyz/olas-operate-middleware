@@ -16,7 +16,7 @@ type Providers = {
 // Setup multicall addresses
 setupMulticallAddresses();
 
-export const PROVIDERS: Providers = Object.entries(CHAIN_CONFIG).reduce(
+export const PROVIDERS = Object.entries(CHAIN_CONFIG).reduce(
   (acc, [, { rpc, name, evmChainId }]) => {
     const provider = new ethers.providers.StaticJsonRpcProvider(rpc, {
       name,
