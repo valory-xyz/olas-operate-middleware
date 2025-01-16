@@ -33,19 +33,31 @@ export const updateServiceIfNeeded = async (
     }
   }
 
-  // Check if fixed env variables of the service were updated in the template
+  // Check if there's a need to update or add env variables
   const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
-  Object.entries(service.env_variables).forEach(([key, item]) => {
-    const templateEnvVariable = serviceTemplate.env_variables[key];
-    if (!templateEnvVariable) return;
+  Object.entries(serviceTemplate.env_variables).forEach(
+    ([key, templateVariable]) => {
+      const serviceEnvVariable = service.env_variables[key];
 
-    if (
-      templateEnvVariable.provision_type === EnvProvisionType.FIXED &&
-      templateEnvVariable.value !== item.value
-    ) {
-      envVariablesToUpdate[key] = templateEnvVariable;
-    }
-  });
+      // If there's a new variable in the template but it's not in the service
+      if (
+        !serviceEnvVariable &&
+        (templateVariable.provision_type === EnvProvisionType.FIXED ||
+          templateVariable.provision_type === EnvProvisionType.COMPUTED)
+      ) {
+        envVariablesToUpdate[key] = templateVariable;
+      }
+
+      // If the variable exist in the service and was just updated in the template
+      if (
+        serviceEnvVariable &&
+        serviceEnvVariable.value !== templateVariable.value &&
+        templateVariable.provision_type === EnvProvisionType.FIXED
+      ) {
+        envVariablesToUpdate[key] = templateVariable;
+      }
+    },
+  );
 
   if (!isEmpty(envVariablesToUpdate)) {
     partialServiceTemplate.env_variables = envVariablesToUpdate;
