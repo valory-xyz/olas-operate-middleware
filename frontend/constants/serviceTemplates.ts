@@ -363,7 +363,7 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
     INIT_FALLBACK_GAS: {
       name: 'Init fallback gas',
       description: '',
-      value: '150000',
+      value: '250000',
       provision_type: EnvProvisionType.FIXED,
     },
   },
