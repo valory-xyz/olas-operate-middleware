@@ -1964,6 +1964,11 @@ class ServiceManager:
                 asset_addresses=set(chain_data.user_params.fund_requirements),
             )
 
+            if not service_safe:
+                balances[chain]["service_safe"] = {}
+                for address in set(chain_data.user_params.fund_requirements):
+                    balances[chain]["service_safe"][address] = 0
+
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
             if service_safe and chain in WRAPPED_NATIVE_ASSET:
