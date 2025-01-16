@@ -2,7 +2,7 @@ import { PropsWithChildren, useCallback, useEffect, useRef } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useServices } from '@/hooks/useServices';
 
 const Notifications = {
@@ -13,7 +13,7 @@ const Notifications = {
 export const SystemNotificationTriggers = ({ children }: PropsWithChildren) => {
   const electronApi = useElectronApi();
   const { selectedService } = useServices();
-  const { isEligibleForRewards } = useReward();
+  const { isEligibleForRewards } = useRewardContext();
 
   const prevIsEligibleForRewards = useRef<boolean>();
 

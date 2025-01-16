@@ -6,7 +6,7 @@ import { NA } from '@/constants/symbols';
 import { OPERATE_URL } from '@/constants/urls';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useStore } from '@/hooks/useStore';
 import { balanceFormat } from '@/utils/numberFormatters';
 
@@ -20,7 +20,8 @@ const getFormattedReward = (reward: number | undefined) =>
 const SHARE_TEXT = `I just earned my first reward through the Operate app powered by #olas!\n\nDownload the Pearl app:`;
 
 export const NotifyRewardsModal = () => {
-  const { isEligibleForRewards, availableRewardsForEpochEth } = useReward();
+  const { isEligibleForRewards, availableRewardsForEpochEth } =
+    useRewardContext();
   const { totalOlasBalance } = useBalanceContext();
   const { showNotification, store } = useElectronApi();
   const { storeState } = useStore();

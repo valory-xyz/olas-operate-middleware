@@ -8,7 +8,6 @@ import { MiddlewareChain } from '@/client';
 import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
 import { BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
-import { WalletBalanceResult } from '@/context/BalanceProvider';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -16,10 +15,11 @@ import {
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { Address } from '@/types/Address';
+import { WalletBalance } from '@/types/Balance';
 import { generateName } from '@/utils/agentName';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
@@ -179,7 +179,7 @@ const YourAgentWalletBreakdown = () => {
     availableRewardsForEpochEth,
     isEligibleForRewards,
     accruedServiceStakingRewards,
-  } = useReward();
+  } = useRewardContext();
 
   const reward = useMemo(() => {
     if (!isLoaded) return <Skeleton.Input size="small" active />;
@@ -240,7 +240,7 @@ const YourAgentWalletBreakdown = () => {
         ...items[0],
         walletAddress: address,
         balance: totalBalance,
-      } as WalletBalanceResult;
+      } as WalletBalance;
     });
 
     return groupedNativeBalances;
