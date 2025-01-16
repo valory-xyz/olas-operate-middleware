@@ -56,7 +56,6 @@ const fetchRewardsQuery = (chainId: EvmChainId) => {
       orderDirection: desc
       first: 1000
       where: {
-        serviceIds_not: []
         contractAddress_in: [${supportedStakingContracts}]
       }
     ) {

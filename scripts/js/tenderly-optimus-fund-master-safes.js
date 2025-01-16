@@ -46,7 +46,8 @@ const main = async () => {
         gnosis: process.env.GNOSIS_RPC,
         optimism: process.env.OPTIMISM_RPC,
         base: process.env.BASE_RPC,
-        ethereum: process.env.ETHEREUM_RPC
+        ethereum: process.env.ETHEREUM_RPC,
+        mode: process.env.MODE_RPC
     };
 
     const erc20Addresses = {
@@ -56,10 +57,12 @@ const main = async () => {
             ethereum:
                 "0x0001a500a6b18995b03f44bb040a5ffc28e45cb0",
             base:
-                "0x54330d28ca3357f294334bdc454a032e7f353416"
+                "0x54330d28ca3357f294334bdc454a032e7f353416",
+            mode: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9"
         },
         usdc: {
-            ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+            ethereum: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+            mode: "0xd988097fb8612cc24eec14542bc03424c656005f"
         }
     }
 
@@ -85,7 +88,9 @@ const main = async () => {
 
     // ERC20s
     // await Promise.all(Object.entries(erc20Addresses.olas).map(([chain, address]) => (chain==="gnosis") && setErc20Balance(address, masterSafeAddress, rpcs[chain])));
-    await setErc20Balance(erc20Addresses.olas.gnosis, masterSafeAddress, rpcs.gnosis);
+    await setErc20Balance(erc20Addresses.olas.mode, masterSafeAddress, rpcs.mode);
+    await setErc20Balance(erc20Addresses.usdc.mode, masterSafeAddress, rpcs.mode);
+
 
     // check erc20s
     await Promise.all(Object.entries(erc20Addresses.olas).map(([chain, address]) =>
