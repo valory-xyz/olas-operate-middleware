@@ -18,7 +18,6 @@ import { AddressLink } from '../AddressLink';
 import { CustomAlert } from '../Alert';
 import { CardTitle } from '../Card/CardTitle';
 import { CardSection } from '../styled/CardSection';
-import { AddBackupWalletPage } from './AddBackupWalletPage';
 import { DebugInfoSection } from './DebugInfoSection';
 
 const { Text, Paragraph } = Typography;
@@ -73,8 +72,6 @@ export const Settings = () => {
     switch (screen) {
       case SettingsScreen.Main:
         return <SettingsMain />;
-      case SettingsScreen.AddBackupWallet:
-        return <AddBackupWalletPage />;
       default:
         return null;
     }
@@ -88,9 +85,11 @@ const SettingsMain = () => {
   const { selectedAgentConfig } = useServices();
   const { masterEoa, masterSafes } = useMasterWalletContext();
 
-  const { owners, ownersIsFetched } = useMultisig(
-    masterSafes?.[0], // TODO: all master safes should have the same address, but dirty implementation
+  const masterSafe = masterSafes?.find(
+    ({ evmChainId: chainId }) => selectedAgentConfig.evmHomeChainId === chainId,
   );
+
+  const { owners, ownersIsFetched } = useMultisig(masterSafe);
 
   const { goto } = usePageState();
 
