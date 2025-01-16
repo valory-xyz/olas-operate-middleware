@@ -31,6 +31,7 @@ import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { usePageState } from '@/hooks/usePageState';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { AgentConfig } from '@/types/Agent';
@@ -60,6 +61,9 @@ const EpochRow = styled(Row)`
   border-bottom: 1px solid ${COLOR.BORDER_GRAY};
 `;
 
+const formatReward = (reward?: number) =>
+  reward ? `~${balanceFormat(reward ?? 0, 2)} OLAS` : '0 OLAS';
+
 const EarnedTag = () => (
   <Tag color="success" className="m-0">
     Earned
@@ -69,6 +73,12 @@ const EarnedTag = () => (
 const NotEarnedTag = () => (
   <Tag color="red" className="m-0">
     Not earned
+  </Tag>
+);
+
+const NotYetEarnedTag = () => (
+  <Tag color="processing" className="m-0">
+    Not yet earned
   </Tag>
 );
 
@@ -162,6 +172,8 @@ const ContractRewards = ({
 }: ContractRewardsProps) => {
   const stakingProgramMeta =
     STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId];
+  const { availableRewardsForEpochEth: reward, isEligibleForRewards } =
+    useRewardContext();
 
   return (
     <Flex vertical>
@@ -169,30 +181,27 @@ const ContractRewards = ({
         <Text strong>{stakingProgramMeta.name}</Text>
       </ContractName>
 
+      {/* Today's rewards */}
       <EpochRow>
         <Col span={6}>
-          <Text>Epoch</Text>
+          <Text type="secondary">{formatToMonthDay(Date.now())}</Text>
         </Col>
         <Col span={11} className="text-right pr-16">
-          <Text>Reward</Text>
+          <Text type="secondary">{formatReward(reward)}</Text>
         </Col>
         <Col span={7} className="text-center pl-16">
-          <Text>Status</Text>
+          {isEligibleForRewards ? <EarnedTag /> : <NotYetEarnedTag />}
         </Col>
       </EpochRow>
 
       {checkpoints.map((checkpoint) => {
-        const currentEpochReward = checkpoint.reward
-          ? `~${balanceFormat(checkpoint.reward ?? 0, 2)} OLAS`
-          : '0 OLAS';
-
         return (
           <EpochRow key={checkpoint.epochEndTimeStamp}>
             <Col span={6}>
               <EpochTime epoch={checkpoint} />
             </Col>
             <Col span={11} className="text-right pr-16">
-              <Text type="secondary">{currentEpochReward}</Text>
+              <Text type="secondary">{formatReward(checkpoint.reward)}</Text>
             </Col>
             <Col span={7} className="text-center pl-16">
               {checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
