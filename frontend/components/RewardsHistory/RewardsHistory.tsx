@@ -169,6 +169,18 @@ const ContractRewards = ({
         <Text strong>{stakingProgramMeta.name}</Text>
       </ContractName>
 
+      <EpochRow>
+        <Col span={6}>
+          <Text>Epoch</Text>
+        </Col>
+        <Col span={11} className="text-right pr-16">
+          <Text>Reward</Text>
+        </Col>
+        <Col span={7} className="text-center pl-16">
+          <Text>Status</Text>
+        </Col>
+      </EpochRow>
+
       {checkpoints.map((checkpoint) => {
         const currentEpochReward = checkpoint.reward
           ? `~${balanceFormat(checkpoint.reward ?? 0, 2)} OLAS`
