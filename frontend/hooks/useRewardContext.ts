@@ -2,4 +2,4 @@ import { useContext } from 'react';
 
 import { RewardContext } from '@/context/RewardProvider';
 
-export const useReward = () => useContext(RewardContext);
+export const useRewardContext = () => useContext(RewardContext);

@@ -7,7 +7,7 @@ import {
   useMasterBalances,
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useServices } from '@/hooks/useServices';
 
 /**
@@ -25,7 +25,7 @@ export const useMainOlasBalance = () => {
     isAvailableRewardsForEpochLoading,
     optimisticRewardsEarnedForEpoch,
     accruedServiceStakingRewards,
-  } = useReward();
+  } = useRewardContext();
 
   const mainOlasBalance = useMemo(() => {
     // olas across master wallet (safes and eoa) on relevant chains for agent

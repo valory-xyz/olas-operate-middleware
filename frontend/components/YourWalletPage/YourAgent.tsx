@@ -15,7 +15,7 @@ import {
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { Address } from '@/types/Address';
@@ -179,7 +179,7 @@ const YourAgentWalletBreakdown = () => {
     availableRewardsForEpochEth,
     isEligibleForRewards,
     accruedServiceStakingRewards,
-  } = useReward();
+  } = useRewardContext();
 
   const reward = useMemo(() => {
     if (!isLoaded) return <Skeleton.Input size="small" active />;
