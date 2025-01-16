@@ -58,7 +58,12 @@ const DisplayRewards = () => {
 
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
-      return <Skeleton.Input size="small" />;
+      return (
+        <Skeleton.Input
+          size="small"
+          style={{ position: 'relative', top: 12 }}
+        />
+      );
     }
 
     return (
