@@ -203,6 +203,16 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
 
             template["env_variables"][env_var_name]["value"] = config.user_provided_args[env_var_name]
 
+        # TODO: Handle it in a more generic way
+        if (
+            template["env_variables"][env_var_name]["provision_type"] == ServiceEnvProvisionType.COMPUTED and
+            "SUBGRAPH_API_KEY" in config.user_provided_args and
+            "{SUBGRAPH_API_KEY}" in template["env_variables"][env_var_name]["value"]
+        ):
+            template["env_variables"][env_var_name]["value"] = template["env_variables"][env_var_name]["value"].format(
+                SUBGRAPH_API_KEY=config.user_provided_args["SUBGRAPH_API_KEY"],
+            )
+
     config.store()
     return config
 
@@ -317,7 +327,8 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
         if chain_config.ledger_config.rpc is not None:
             os.environ["CUSTOM_CHAIN_RPC"] = chain_config.ledger_config.rpc
-            os.environ["OPEN_AUTONOMY_SUBGRAPH_URL"] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
+            if "OPEN_AUTONOMY_SUBGRAPH_URL" not in os.environ:
+                os.environ["OPEN_AUTONOMY_SUBGRAPH_URL"] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
 
         chain = chain_config.ledger_config.chain
         ledger_api = wallet.ledger_api(

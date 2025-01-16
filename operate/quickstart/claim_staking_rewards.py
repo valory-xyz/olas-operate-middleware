@@ -16,12 +16,14 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""Claim OLAS rewards."""
+"""Claim staking rewards."""
 
 import json
 import logging
-from typing import TYPE_CHECKING
+import os
+import sys
 import warnings
+from typing import TYPE_CHECKING
 
 from operate.constants import OPERATE_HOME, SAFE_WEBAPP_URL
 from operate.operate_types import LedgerType
@@ -34,19 +36,30 @@ if TYPE_CHECKING:
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def claim_olas(operate: "OperateApp", config_path: str) -> None:
-    """Claim OLAS rewards."""
+def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
+    """Claim staking rewards."""
 
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
 
-    print_section(f"Claim OLAS rewards for {template['name']}")
+    print_section(f"Claim staking rewards for {template['name']}")
 
     # check if agent was started before
     path = OPERATE_HOME / "local_config.json"
     if not path.exists():
         print("No previous agent setup found. Exiting.")
         return
+
+    print(
+        "This script will claim the OLAS staking rewards "
+        "accrued in the current staking contract and transfer them to your service safe."
+    )
+    _continue = input("Do you want to continue (yes/no)? ").strip().lower()
+
+    if _continue not in ("y", "yes"):
+        sys.exit(0)
+
+    print("")
 
     config = configure_local_config(template)
     manager = operate.service_manager()
@@ -56,6 +69,7 @@ def claim_olas(operate: "OperateApp", config_path: str) -> None:
     # reload manger and config after setting operate.password
     manager = operate.service_manager()
     config = load_local_config()
+    os.environ["CUSTOM_CHAIN_RPC"] = config.rpc[config.principal_chain]
     try:
         tx_hash = manager.claim_on_chain_from_safe(
             service_config_id=service.service_config_id,
@@ -72,7 +86,7 @@ def claim_olas(operate: "OperateApp", config_path: str) -> None:
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     service_safe_address = service.chain_configs[config.principal_chain].chain_data.multisig
     print_title(f"Claim transaction done. Hash: {tx_hash}")
-    print(f"Claimed OLAS transferred to your service Safe {service_safe_address}.\n")
+    print(f"Claimed staking transferred to your service Safe {service_safe_address}.\n")
     print(
         f"You can use your Master EOA (address {wallet.crypto.address}) to connect your Safe at"
         f"{SAFE_WEBAPP_URL}{service_safe_address}"

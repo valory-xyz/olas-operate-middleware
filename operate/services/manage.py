@@ -314,9 +314,10 @@ class ServiceManager:
 
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        os.environ[
-            "OPEN_AUTONOMY_SUBGRAPH_URL"
-        ] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
+        if "OPEN_AUTONOMY_SUBGRAPH_URL" not in os.environ:
+            os.environ[
+                "OPEN_AUTONOMY_SUBGRAPH_URL"
+            ] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
 
         current_agent_id = None
         if chain_data.token > -1:
