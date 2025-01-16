@@ -15,7 +15,7 @@ import { useInterval } from 'usehooks-ts';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
 import { EvmChainId } from '@/enums/Chain';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletType } from '@/enums/Wallet';
+import { MasterSafe, WalletType } from '@/enums/Wallet';
 import { Address } from '@/types/Address';
 import { CrossChainStakedBalances, WalletBalance } from '@/types/Balance';
 
@@ -100,7 +100,7 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
       try {
         const masterSafes = masterWallets.filter(
           (masterWallet) => masterWallet.type === WalletType.Safe,
-        );
+        ) as MasterSafe[];
 
         const [walletBalancesResult, stakedBalancesResult] =
           await Promise.allSettled([
