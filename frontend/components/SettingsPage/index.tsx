@@ -88,9 +88,11 @@ const SettingsMain = () => {
   const { selectedAgentConfig } = useServices();
   const { masterEoa, masterSafes } = useMasterWalletContext();
 
-  const { owners, ownersIsFetched } = useMultisig(
-    masterSafes?.[0], // TODO: all master safes should have the same address, but dirty implementation
+  const masterSafe = masterSafes?.find(
+    ({ evmChainId: chainId }) => selectedAgentConfig.evmHomeChainId === chainId,
   );
+
+  const { owners, ownersIsFetched } = useMultisig(masterSafe);
 
   const { goto } = usePageState();
 
