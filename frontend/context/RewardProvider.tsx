@@ -22,6 +22,7 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 import { StakingProgramContext } from './StakingProgramProvider';
 
 export const RewardContext = createContext<{
+  isAvailableRewardsForEpochLoading?: boolean;
   accruedServiceStakingRewards?: number;
   availableRewardsForEpoch?: number;
   availableRewardsForEpochEth?: number;
@@ -32,6 +33,7 @@ export const RewardContext = createContext<{
   isStakingRewardsDetailsLoading?: boolean;
   isStakingRewardsDetailsError?: boolean;
 }>({
+  isAvailableRewardsForEpochLoading: false,
   updateRewards: async () => {},
 });
 
@@ -148,6 +150,7 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
 
   const {
     data: availableRewardsForEpoch,
+    isLoading: isAvailableRewardsForEpochLoading,
     refetch: refetchAvailableRewardsForEpoch,
   } = useAvailableRewardsForEpoch();
 
@@ -188,14 +191,20 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
   return (
     <RewardContext.Provider
       value={{
+        // staking rewards details
+        isStakingRewardsDetailsLoading,
+        isStakingRewardsDetailsError,
         accruedServiceStakingRewards,
+
+        // available rewards for the current epoch
+        isAvailableRewardsForEpochLoading,
         availableRewardsForEpoch,
         availableRewardsForEpochEth,
         isEligibleForRewards,
         optimisticRewardsEarnedForEpoch,
+
+        // others
         updateRewards,
-        isStakingRewardsDetailsLoading,
-        isStakingRewardsDetailsError,
       }}
     >
       {children}
