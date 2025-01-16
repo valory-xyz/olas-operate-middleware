@@ -1,4 +1,3 @@
-import { EyeInvisibleOutlined, EyeTwoTone } from '@ant-design/icons';
 import { Button, Divider, Flex, Form, Input, message, Typography } from 'antd';
 import React, { useCallback, useState } from 'react';
 import { useUnmount } from 'usehooks-ts';
@@ -203,11 +202,7 @@ export const MemeooorrAgentForm = ({
           label="Gemini API Key"
           {...commonFieldProps}
         >
-          <Input.Password
-            iconRender={(visible) =>
-              visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-            }
-          />
+          <Input.Password />
         </Form.Item>
         {geminiApiKeyValidationStatus === 'invalid' && (
           <InvalidGeminiApiCredentials />
@@ -259,11 +254,7 @@ export const MemeooorrAgentForm = ({
             },
           ]}
         >
-          <Input.Password
-            iconRender={(visible) =>
-              visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />
-            }
-          />
+          <Input.Password />
         </Form.Item>
 
         <Form.Item>
