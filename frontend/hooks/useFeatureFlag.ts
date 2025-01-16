@@ -41,9 +41,9 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   [AgentType.Memeooorr]: {
     'manage-wallet': true,
     'withdraw-funds': false,
-    'last-transactions': false,
-    'rewards-streak': false,
-    'staking-contract-section': false,
+    'last-transactions': true,
+    'rewards-streak': true,
+    'staking-contract-section': true,
     'low-funds': false,
     'agent-activity': true,
     'backup-via-safe': true,
