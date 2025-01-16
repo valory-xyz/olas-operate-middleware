@@ -3,7 +3,8 @@ import { useContext, useMemo } from 'react';
 
 import { CHAIN_CONFIG } from '@/config/chains';
 import { AddressZero } from '@/constants/address';
-import { BalanceContext, WalletBalanceResult } from '@/context/BalanceProvider';
+import { BalanceContext } from '@/context/BalanceProvider/BalanceProvider';
+import { WalletBalance } from '@/types/Balance';
 import { Maybe, Optional } from '@/types/Util';
 import { formatUnitsToNumber } from '@/utils/numberFormatters';
 
@@ -23,7 +24,7 @@ const requiresFund = (balance: Maybe<number>) => {
 
 export const useBalanceContext = () => useContext(BalanceContext);
 
-const useRefillRequirement = (wallet?: WalletBalanceResult) => {
+const useRefillRequirement = (wallet?: WalletBalance) => {
   const { refillRequirements } = useBalanceAndRefillRequirementsContext();
 
   if (isEmpty(refillRequirements) || isEmpty(wallet)) return;
@@ -63,7 +64,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   /**
    * Cross-chain unstaked balances in service safes
    */
-  const serviceSafeBalances = useMemo<Optional<WalletBalanceResult[]>>(
+  const serviceSafeBalances = useMemo<Optional<WalletBalance[]>>(
     () =>
       walletBalances?.filter((balance) =>
         serviceSafes.find(({ address }) => balance.walletAddress === address),
@@ -74,7 +75,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
   /**
    * Cross-chain unstaked balances in service eoa (signer)
    */
-  const serviceEoaBalances = useMemo<Optional<WalletBalanceResult[]>>(
+  const serviceEoaBalances = useMemo<Optional<WalletBalance[]>>(
     () =>
       walletBalances?.filter(
         (balance) => balance.walletAddress === serviceEoa?.address,
@@ -87,7 +88,7 @@ export const useServiceBalances = (serviceConfigId: string | undefined) => {
    * Across all service wallets, including eoa
    * @note NOT STAKED BALANCES
    */
-  const serviceWalletBalances = useMemo<Optional<WalletBalanceResult[]>>(() => {
+  const serviceWalletBalances = useMemo<Optional<WalletBalance[]>>(() => {
     let result;
     if (serviceSafeBalances || serviceEoaBalances) {
       result = [...(serviceSafeBalances || []), ...(serviceEoaBalances || [])];
@@ -134,7 +135,7 @@ export const useMasterBalances = () => {
   const { masterSafes, masterEoa } = useMasterWalletContext();
   const { isLoaded, walletBalances } = useBalanceContext();
 
-  const masterSafeBalances = useMemo<Optional<WalletBalanceResult[]>>(
+  const masterSafeBalances = useMemo<Optional<WalletBalance[]>>(
     () =>
       walletBalances?.filter(({ walletAddress }) =>
         masterSafes?.find(
@@ -146,7 +147,7 @@ export const useMasterBalances = () => {
     [masterSafes, walletBalances, selectedAgentConfig.requiresAgentSafesOn],
   );
 
-  const masterEoaBalances = useMemo<Optional<WalletBalanceResult[]>>(
+  const masterEoaBalances = useMemo<Optional<WalletBalance[]>>(
     () =>
       walletBalances?.filter(
         ({ walletAddress }) => walletAddress === masterEoa?.address,
@@ -157,7 +158,7 @@ export const useMasterBalances = () => {
   /**
    * Unstaked balances across master safes and eoas
    */
-  const masterWalletBalances = useMemo<Optional<WalletBalanceResult[]>>(() => {
+  const masterWalletBalances = useMemo<Optional<WalletBalance[]>>(() => {
     return [...(masterSafeBalances || []), ...(masterEoaBalances || [])];
   }, [masterEoaBalances, masterSafeBalances]);
 

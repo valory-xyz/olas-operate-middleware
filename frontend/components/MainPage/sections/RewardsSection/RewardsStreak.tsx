@@ -11,7 +11,7 @@ import { OPERATE_URL } from '@/constants/urls';
 import { Pages } from '@/enums/Pages';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { usePageState } from '@/hooks/usePageState';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useRewardsHistory } from '@/hooks/useRewardsHistory';
 
 const { Text } = Typography;
@@ -26,7 +26,7 @@ const RewardsStreakFlex = styled(Flex)`
 
 const Streak = () => {
   const { isLoaded: isBalanceLoaded } = useBalanceContext();
-  const { isEligibleForRewards } = useReward();
+  const { isEligibleForRewards } = useRewardContext();
   const {
     latestRewardStreak: streak,
     isLoading: isRewardsHistoryLoading,
