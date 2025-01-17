@@ -82,7 +82,7 @@ const NotEarnedTag = () => (
 
 const NotYetEarnedTag = () => (
   <Tag color="processing" className="m-0">
-    To be earned
+    Not yet earned
   </Tag>
 );
 
