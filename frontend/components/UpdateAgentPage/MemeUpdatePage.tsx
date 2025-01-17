@@ -1,12 +1,17 @@
 import { Button, Form, Input } from 'antd';
-import { useContext } from 'react';
+import { get, isEqual, omit } from 'lodash';
+import { useCallback, useContext, useMemo } from 'react';
 
+import { Pages } from '@/enums/Pages';
+import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { Nullable } from '@/types/Util';
 
 // TODO: move the following hook/components to a shared place
 // once Modius work is merged
 import { useMemeFormValidate } from '../SetupPage/hooks/useMemeFormValidate';
 import {
+  commonFieldProps,
   requiredRules,
   validateMessages,
 } from '../SetupPage/SetupYourAgent/formUtils';
@@ -15,6 +20,7 @@ import {
   InvalidXCredentials,
   XAccountCredentials,
 } from '../SetupPage/SetupYourAgent/MemeooorrAgentForm/MemeooorrAgentForm';
+import { CardLayout } from './CardLayout';
 import { UpdateAgentContext } from './context/UpdateAgentProvider';
 
 type MemeooorrFormValues = {
@@ -29,14 +35,11 @@ type MemeooorrFormValues = {
   };
 };
 
-// TODO: use exported commonFieldProps once Modius is merged
-const commonFieldProps = { rules: requiredRules, hasFeedback: true };
-
 type MemeUpdateFormProps = {
   initialFormValues: Nullable<MemeooorrFormValues>;
 };
 
-export const MemeUpdateForm = ({ initialFormValues }: MemeUpdateFormProps) => {
+const MemeUpdateForm = ({ initialFormValues }: MemeUpdateFormProps) => {
   const {
     isEditing,
     form,
@@ -74,6 +77,7 @@ export const MemeUpdateForm = ({ initialFormValues }: MemeUpdateFormProps) => {
       form={form}
       layout="vertical"
       disabled={!isEditing}
+      variant={isEditing ? 'outlined' : 'borderless'}
       onFinish={handleFinish}
       validateMessages={validateMessages}
       initialValues={{ ...initialFormValues }}
@@ -170,5 +174,57 @@ export const MemeUpdateForm = ({ initialFormValues }: MemeUpdateFormProps) => {
         </Button>
       </Form.Item>
     </Form>
+  );
+};
+
+export const MemeUpdatePage = () => {
+  const { goto } = usePageState();
+  const { selectedService } = useServices();
+  const { unsavedModal, form } = useContext(UpdateAgentContext);
+
+  const initialValues = useMemo<Nullable<MemeooorrFormValues>>(() => {
+    if (!selectedService?.env_variables) return null;
+
+    const envEntries = Object.entries(selectedService.env_variables);
+
+    return envEntries.reduce(
+      (acc, [key, { value }]) => {
+        if (key === 'PERSONA') {
+          acc.env_variables.PERSONA = value;
+        } else if (key === 'GENAI_API_KEY') {
+          acc.env_variables.GENAI_API_KEY = value;
+        } else if (key === 'TWIKIT_EMAIL') {
+          acc.env_variables.TWIKIT_EMAIL = value;
+        } else if (key === 'TWIKIT_USERNAME') {
+          acc.env_variables.TWIKIT_USERNAME = value;
+        } else if (key === 'TWIKIT_PASSWORD') {
+          acc.env_variables.TWIKIT_PASSWORD = value;
+        }
+
+        return acc;
+      },
+      { env_variables: {} } as MemeooorrFormValues,
+    );
+  }, [selectedService?.env_variables]);
+
+  const handleClickBack = useCallback(() => {
+    const unsavedFields = omit(
+      get(form?.getFieldsValue(), 'env_variables'),
+      'TWIKIT_COOKIES',
+    );
+    const previousValues = initialValues?.env_variables;
+
+    const hasUnsavedChanges = !isEqual(unsavedFields, previousValues);
+    if (hasUnsavedChanges) {
+      unsavedModal?.openModal?.();
+    } else {
+      goto(Pages.Main);
+    }
+  }, [unsavedModal, goto, form, initialValues]);
+
+  return (
+    <CardLayout onClickBack={handleClickBack}>
+      <MemeUpdateForm initialFormValues={initialValues} />
+    </CardLayout>
   );
 };

@@ -14,6 +14,7 @@ const FeatureFlagsSchema = z.enum([
   'low-funds',
   'agent-activity',
   'backup-via-safe',
+  'agent-settings',
 ]);
 type FeatureFlags = z.infer<typeof FeatureFlagsSchema>;
 
@@ -37,6 +38,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'low-funds': true,
     'agent-activity': false,
     'backup-via-safe': true,
+    'agent-settings': false,
   },
   [AgentType.Memeooorr]: {
     'manage-wallet': true,
@@ -47,6 +49,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'low-funds': false,
     'agent-activity': true,
     'backup-via-safe': true,
+    'agent-settings': true,
   },
   [AgentType.AgentsFunCelo]: {
     'manage-wallet': true,
@@ -57,6 +60,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'low-funds': false,
     'agent-activity': true,
     'backup-via-safe': true,
+    'agent-settings': false,
   },
   [AgentType.Modius]: {
     'manage-wallet': true,
@@ -67,6 +71,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'low-funds': false,
     'agent-activity': true,
     'backup-via-safe': false, // temporarily hidden until mode is available on safe https://app.safe.global/new-safe/create
+    'agent-settings': true,
   },
 });
 

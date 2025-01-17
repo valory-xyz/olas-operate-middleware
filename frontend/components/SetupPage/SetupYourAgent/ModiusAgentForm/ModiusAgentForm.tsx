@@ -9,6 +9,12 @@ import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { commonFieldProps, validateMessages } from '../formUtils';
 import { onDummyServiceCreation } from '../utils';
+import {
+  CoinGeckoApiKeyLabel,
+  TenderlyAccessTokenLabel,
+  TenderlyAccountSlugLabel,
+  TenderlyProjectSlugLabel,
+} from './labels';
 
 const { Text } = Typography;
 
@@ -111,7 +117,7 @@ export const ModiusAgentForm = ({ serviceTemplate }: ModiusAgentFormProps) => {
       >
         <Form.Item
           name="tenderlyAccessToken"
-          label="Tenderly access token"
+          label={<TenderlyAccessTokenLabel />}
           {...commonFieldProps}
         >
           <Input />
@@ -119,7 +125,7 @@ export const ModiusAgentForm = ({ serviceTemplate }: ModiusAgentFormProps) => {
 
         <Form.Item
           name="tenderlyAccountSlug"
-          label="Tenderly account slug"
+          label={<TenderlyAccountSlugLabel />}
           {...commonFieldProps}
         >
           <Input />
@@ -127,7 +133,7 @@ export const ModiusAgentForm = ({ serviceTemplate }: ModiusAgentFormProps) => {
 
         <Form.Item
           name="tenderlyProjectSlug"
-          label="Tenderly project slug"
+          label={<TenderlyProjectSlugLabel />}
           {...commonFieldProps}
         >
           <Input />
@@ -135,7 +141,7 @@ export const ModiusAgentForm = ({ serviceTemplate }: ModiusAgentFormProps) => {
 
         <Form.Item
           name="CoinGeckoApiKey"
-          label="CoinGecko API key"
+          label={<CoinGeckoApiKeyLabel />}
           {...commonFieldProps}
         >
           <Input />
