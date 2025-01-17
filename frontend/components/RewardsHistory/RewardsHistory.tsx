@@ -36,7 +36,11 @@ import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { AgentConfig } from '@/types/Agent';
 import { balanceFormat } from '@/utils/numberFormatters';
-import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
+import {
+  formatToMonthDay,
+  formatToShortDateTime,
+  ONE_DAY_IN_S,
+} from '@/utils/time';
 
 import { Checkpoint, useRewardsHistory } from '../../hooks/useRewardsHistory';
 import { EpochDetails } from './types';
@@ -78,7 +82,7 @@ const NotEarnedTag = () => (
 
 const NotYetEarnedTag = () => (
   <Tag color="processing" className="m-0">
-    Not yet earned
+    To be earned
   </Tag>
 );
 
@@ -115,23 +119,31 @@ const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
   </Container>
 );
 
-const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
+type EpochTimeProps = Pick<
+  EpochDetails,
+  'epochStartTimeStamp' | 'epochEndTimeStamp'
+>;
+const EpochTime = ({
+  epochEndTimeStamp,
+  epochStartTimeStamp,
+  transactionHash,
+}: EpochTimeProps & Partial<Pick<EpochDetails, 'transactionHash'>>) => {
   const { selectedAgentConfig } = useServices();
   const { middlewareHomeChainId } = selectedAgentConfig;
 
   const timePeriod = useMemo(() => {
-    if (epoch.epochStartTimeStamp && epoch.epochEndTimeStamp) {
-      return `${formatToShortDateTime(epoch.epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epoch.epochEndTimeStamp * 1000)} (UTC)`;
+    if (epochStartTimeStamp && epochEndTimeStamp) {
+      return `${formatToShortDateTime(epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epochEndTimeStamp * 1000)} (UTC)`;
     }
-    if (epoch.epochStartTimeStamp) {
-      return `${formatToMonthDay(epoch.epochStartTimeStamp * 1000)} (UTC)`;
+    if (epochStartTimeStamp) {
+      return `${formatToMonthDay(epochStartTimeStamp * 1000)} (UTC)`;
     }
     return 'NA';
-  }, [epoch]);
+  }, [epochStartTimeStamp, epochEndTimeStamp]);
 
   return (
     <Text type="secondary">
-      {formatToMonthDay(epoch.epochEndTimeStamp * 1000)}
+      {formatToMonthDay(epochEndTimeStamp * 1000)}
       &nbsp;
       <Popover
         arrow={false}
@@ -144,12 +156,14 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
             <Text type="secondary" className="text-sm m-0">
               {timePeriod}
             </Text>
-            <a
-              href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareHomeChainId]}/tx/${epoch.transactionHash}`}
-              target="_blank"
-            >
-              End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
-            </a>
+            {transactionHash && (
+              <a
+                href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareHomeChainId]}/tx/${transactionHash}`}
+                target="_blank"
+              >
+                End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              </a>
+            )}
           </Flex>
         }
       >
@@ -158,6 +172,19 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
     </Text>
   );
 };
+
+type RewardRowProps = { date: ReactNode; reward: string; earned: ReactNode };
+const RewardRow = ({ date, reward, earned }: RewardRowProps) => (
+  <EpochRow>
+    <Col span={6}>{date}</Col>
+    <Col span={11} className="text-right pr-16">
+      <Text type="secondary">{reward}</Text>
+    </Col>
+    <Col span={7} className="text-center pl-16">
+      {earned}
+    </Col>
+  </EpochRow>
+);
 
 type ContractRewardsProps = {
   stakingProgramId: StakingProgramId;
@@ -182,31 +209,33 @@ const ContractRewards = ({
       </ContractName>
 
       {/* Today's rewards */}
-      <EpochRow>
-        <Col span={6}>
-          <Text type="secondary">{formatToMonthDay(Date.now())}</Text>
-        </Col>
-        <Col span={11} className="text-right pr-16">
-          <Text type="secondary">{formatReward(reward)}</Text>
-        </Col>
-        <Col span={7} className="text-center pl-16">
-          {isEligibleForRewards ? <EarnedTag /> : <NotYetEarnedTag />}
-        </Col>
-      </EpochRow>
+      <RewardRow
+        date={
+          <EpochTime
+            epochStartTimeStamp={
+              checkpoints[0].epochStartTimeStamp + ONE_DAY_IN_S
+            }
+            epochEndTimeStamp={checkpoints[0].epochEndTimeStamp + ONE_DAY_IN_S}
+          />
+        }
+        reward={formatReward(reward)}
+        earned={isEligibleForRewards ? <EarnedTag /> : <NotYetEarnedTag />}
+      />
 
       {checkpoints.map((checkpoint) => {
         return (
-          <EpochRow key={checkpoint.epochEndTimeStamp}>
-            <Col span={6}>
-              <EpochTime epoch={checkpoint} />
-            </Col>
-            <Col span={11} className="text-right pr-16">
-              <Text type="secondary">{formatReward(checkpoint.reward)}</Text>
-            </Col>
-            <Col span={7} className="text-center pl-16">
-              {checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
-            </Col>
-          </EpochRow>
+          <RewardRow
+            key={checkpoint.epochEndTimeStamp}
+            date={
+              <EpochTime
+                epochStartTimeStamp={checkpoint.epochStartTimeStamp}
+                epochEndTimeStamp={checkpoint.epochEndTimeStamp}
+                transactionHash={checkpoint.transactionHash}
+              />
+            }
+            reward={formatReward(checkpoint.reward)}
+            earned={checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
+          />
         );
       })}
     </Flex>
