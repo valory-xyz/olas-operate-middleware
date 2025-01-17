@@ -36,6 +36,12 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   const { masterSafeBalances } = useMasterBalances();
 
   const isInitialFunded = storeState?.[selectedAgentType]?.isInitialFunded;
+
+  /**
+   * Service fund requirements by chain
+   * @example gnosis requires 20 OLAS and 10 XDAI
+   * { 100: { OLAS: 40, XDAI: 10 } }
+   */
   const serviceFundRequirements = useMemo<ChainTokenSymbol>(() => {
     if (isNil(serviceTemplate)) return {} as ChainTokenSymbol;
 
@@ -82,23 +88,22 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   ]);
 
   /**
-   * Balances by chain
+   * Actual balances by chain
+   * @example gnosis has 20 OLAS and 0.1 ETH
+   * { 100: { OLAS: 20, ETH: 0.1 } }
    */
   const balancesByChain = useMemo(() => {
     if (isNil(masterSafeBalances) || isEmpty(masterSafeBalances)) return;
 
     return masterSafeBalances.reduce<{
       [chainId in EvmChainId]: { [symbol: string]: number };
-    }>(
-      (acc, { symbol, balance, evmChainId }) => {
-        if (!acc[evmChainId]) acc[evmChainId] = { [symbol]: 0 };
-        if (!acc[evmChainId][symbol]) acc[evmChainId][symbol] = 0;
-        acc[evmChainId][symbol] += balance;
+    }>((acc, { symbol, balance, evmChainId }) => {
+      if (!acc[evmChainId]) acc[evmChainId] = { [symbol]: 0 };
+      if (!acc[evmChainId][symbol]) acc[evmChainId][symbol] = 0;
+      acc[evmChainId][symbol] += balance;
 
-        return acc;
-      },
-      {} as { [chainId in EvmChainId]: { [symbol: string]: number } },
-    );
+      return acc;
+    }, {} as ChainTokenSymbol);
   }, [masterSafeBalances]);
 
   const serviceChainIds = useMemo(() => {
@@ -112,56 +117,43 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
   /**
    * Check if the agent has enough eth for initial funding
    */
-  const hasEnoughEthForInitialFunding = useMemo(() => {
+  const hasEnoughNativeTokenForInitialFunding = useMemo(() => {
     if (isNil(serviceChainIds)) return;
-    if (isNil(masterSafeBalances)) return;
-    if (!balancesByChain) return;
+    if (isEmpty(balancesByChain)) return;
 
     return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
       const nativeTokenBalance =
-        balancesByChain[chainId]?.[nativeTokenSymbol] || 0;
+        balancesByChain[chainId][nativeTokenSymbol] || 0;
       const nativeTokenRequired =
-        serviceFundRequirements[chainId]?.[nativeTokenSymbol] || 0;
+        serviceFundRequirements[chainId][nativeTokenSymbol] || 0;
 
       return nativeTokenBalance >= nativeTokenRequired;
     });
-  }, [
-    serviceFundRequirements,
-    serviceChainIds,
-    balancesByChain,
-    masterSafeBalances,
-  ]);
+  }, [serviceChainIds, serviceFundRequirements, balancesByChain]);
 
   /**
    * Check if the agent has enough OLAS for initial funding
    */
   const hasEnoughOlasForInitialFunding = useMemo(() => {
     if (isNil(serviceChainIds)) return;
-    if (!masterSafeBalances) return;
-    if (!balancesByChain) return;
+    if (isEmpty(balancesByChain)) return;
 
     return serviceChainIds.every((chainId) => {
-      const olasBalance = balancesByChain[chainId]?.[TokenSymbol.OLAS] || 0;
+      const olasBalance = balancesByChain[chainId][TokenSymbol.OLAS] || 0;
       const olasRequired =
-        serviceFundRequirements[chainId]?.[TokenSymbol.OLAS] || 0;
+        serviceFundRequirements[chainId][TokenSymbol.OLAS] || 0;
 
       return olasBalance >= olasRequired;
     });
-  }, [
-    serviceFundRequirements,
-    serviceChainIds,
-    balancesByChain,
-    masterSafeBalances,
-  ]);
+  }, [serviceChainIds, serviceFundRequirements, balancesByChain]);
 
   /**
    * Check if the agent requires additional tokens and has enough for initial funding
    */
   const hasEnoughAdditionalTokensForInitialFunding = useMemo(() => {
     if (isNil(serviceChainIds)) return;
-    if (isNil(masterSafeBalances)) return;
-    if (!balancesByChain) return;
+    if (isEmpty(balancesByChain)) return;
 
     return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
@@ -176,17 +168,12 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
       return additionalTokens.every((tokenSymbol) => {
         const tokenBalance = balancesByChain[chainId][tokenSymbol] || 0;
         const tokenRequired =
-          serviceFundRequirements[chainId]?.[tokenSymbol] || 0;
+          serviceFundRequirements[chainId][tokenSymbol] || 0;
 
         return tokenBalance >= tokenRequired;
       });
     });
-  }, [
-    serviceFundRequirements,
-    serviceChainIds,
-    balancesByChain,
-    masterSafeBalances,
-  ]);
+  }, [serviceChainIds, serviceFundRequirements, balancesByChain]);
 
   /**
    * Check if the agent needs initial funding (both eth and olas)
@@ -195,7 +182,7 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     if (isInitialFunded) return false;
     if (!isBalanceLoaded) return false;
     if (
-      hasEnoughEthForInitialFunding &&
+      hasEnoughNativeTokenForInitialFunding &&
       hasEnoughOlasForInitialFunding &&
       hasEnoughAdditionalTokensForInitialFunding
     )
@@ -203,14 +190,14 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     return true;
   }, [
     hasEnoughAdditionalTokensForInitialFunding,
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     isBalanceLoaded,
     isInitialFunded,
   ]);
 
   return {
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     hasEnoughAdditionalTokensForInitialFunding,
     balancesByChain,

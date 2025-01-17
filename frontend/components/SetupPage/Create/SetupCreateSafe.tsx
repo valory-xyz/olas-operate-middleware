@@ -66,7 +66,7 @@ export const SetupCreateSafe = () => {
     isFetched: isWalletsFetched,
   } = useMasterWalletContext();
 
-  const { allBackupAddresses } = useMultisigs();
+  const { allBackupAddresses } = useMultisigs(masterSafes);
 
   const { backupSigner } = useSetup();
 

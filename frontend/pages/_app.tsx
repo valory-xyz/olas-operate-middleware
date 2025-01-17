@@ -6,7 +6,8 @@ import type { AppProps } from 'next/app';
 import { useEffect, useState } from 'react';
 
 import { Layout } from '@/components/Layout';
-import { BalanceProvider } from '@/context/BalanceProvider';
+import { BalanceProvider } from '@/context/BalanceProvider/BalanceProvider';
+import { BalancesAndRefillRequirementsProvider } from '@/context/BalancesAndRefillRequirementsProvider';
 import { ElectronApiProvider } from '@/context/ElectronApiProvider';
 import { MasterWalletProvider } from '@/context/MasterWalletProvider';
 import { ModalProvider } from '@/context/ModalProvider';
@@ -16,6 +17,7 @@ import { RewardProvider } from '@/context/RewardProvider';
 import { ServicesProvider } from '@/context/ServicesProvider';
 import { SettingsProvider } from '@/context/SettingsProvider';
 import { SetupProvider } from '@/context/SetupProvider';
+import { SharedProvider } from '@/context/SharedProvider/SharedProvider';
 import { StakingContractDetailsProvider } from '@/context/StakingContractDetailsProvider';
 import { StakingProgramProvider } from '@/context/StakingProgramProvider';
 import { StoreProvider } from '@/context/StoreProvider';
@@ -42,21 +44,25 @@ export default function App({ Component, pageProps }: AppProps) {
                     <StakingContractDetailsProvider>
                       <RewardProvider>
                         <BalanceProvider>
-                          <SetupProvider>
-                            <SettingsProvider>
-                              <ConfigProvider theme={mainTheme}>
-                                <ModalProvider>
-                                  {isMounted ? (
-                                    <SystemNotificationTriggers>
-                                      <Layout>
-                                        <Component {...pageProps} />
-                                      </Layout>
-                                    </SystemNotificationTriggers>
-                                  ) : null}
-                                </ModalProvider>
-                              </ConfigProvider>
-                            </SettingsProvider>
-                          </SetupProvider>
+                          <BalancesAndRefillRequirementsProvider>
+                            <SetupProvider>
+                              <SettingsProvider>
+                                <ConfigProvider theme={mainTheme}>
+                                  <ModalProvider>
+                                    <SharedProvider>
+                                      {isMounted ? (
+                                        <SystemNotificationTriggers>
+                                          <Layout>
+                                            <Component {...pageProps} />
+                                          </Layout>
+                                        </SystemNotificationTriggers>
+                                      ) : null}
+                                    </SharedProvider>
+                                  </ModalProvider>
+                                </ConfigProvider>
+                              </SettingsProvider>
+                            </SetupProvider>
+                          </BalancesAndRefillRequirementsProvider>
                         </BalanceProvider>
                       </RewardProvider>
                     </StakingContractDetailsProvider>

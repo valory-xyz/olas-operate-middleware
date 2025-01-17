@@ -4,7 +4,7 @@ import Image from 'next/image';
 import styled from 'styled-components';
 
 import { MiddlewareDeploymentStatus } from '@/client';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useServices } from '@/hooks/useServices';
 
 const badgeOffset: [number, number] = [-5, 32.5];
@@ -51,7 +51,7 @@ const IdleAgentHead = () => (
 
 export const AgentHead = () => {
   const { selectedService } = useServices();
-  const { isEligibleForRewards } = useReward();
+  const { isEligibleForRewards } = useRewardContext();
   const status = selectedService?.deploymentStatus;
 
   if (
