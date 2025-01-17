@@ -4,8 +4,8 @@ import Image from 'next/image';
 import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
-import { AgentType } from '@/enums/Agent';
 import { Pages } from '@/enums/Pages';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
@@ -15,14 +15,15 @@ const { Text } = Typography;
 
 const UpdateTemplate = () => {
   const { goto } = usePageState();
-  const { selectedAgentType } = useServices();
+
+  const isAgentSettingsEnabled = useFeatureFlag('agent-settings');
 
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
     goto(Pages.UpdateAgentTemplate);
   };
 
-  if (selectedAgentType === AgentType.Memeooorr) {
+  if (isAgentSettingsEnabled) {
     return <ControlOutlined onClick={handleClick} />;
   }
 
