@@ -76,7 +76,6 @@ export const AgentActivityPage = () => {
       return result;
     },
     select: (data) => {
-      console.log('data', data);
       if (!data || !('response' in data) || !data.response) return null;
 
       // The latest activity should go at the top, so sort the rounds accordingly
