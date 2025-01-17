@@ -1,9 +1,10 @@
 import { ControlOutlined } from '@ant-design/icons';
-import { Button, Flex, Popover, Typography } from 'antd';
+import { Button, Flex, Popover, Tooltip, Typography } from 'antd';
 import Image from 'next/image';
 import { useMemo } from 'react';
 
 import { CardSection } from '@/components/styled/CardSection';
+import { COLOR } from '@/constants/colors';
 import { Pages } from '@/enums/Pages';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { usePageState } from '@/hooks/usePageState';
@@ -27,7 +28,20 @@ const UpdateTemplate = () => {
     return <ControlOutlined onClick={handleClick} />;
   }
 
-  return null;
+  return (
+    <Tooltip
+      arrow={false}
+      title={
+        <Text className="text-sm">
+          The agent cannot be configured at the moment
+        </Text>
+      }
+      overlayInnerStyle={{ width: 'max-content' }}
+      placement="bottom"
+    >
+      <ControlOutlined style={{ color: COLOR.NEUTRAL_4, cursor: 'pointer' }} />
+    </Tooltip>
+  );
 };
 
 export const SwitchAgentSection = () => {
