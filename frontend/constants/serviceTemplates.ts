@@ -102,7 +102,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.2.0-alpha20',
+  service_version: 'v0.3.0-alpha1',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
