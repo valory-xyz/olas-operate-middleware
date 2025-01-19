@@ -191,7 +191,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
  */
 export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
-  name: 'Memeooorr - Base',
+  name: 'Memeooorr',
   home_chain: MiddlewareChain.BASE,
   configurations: {
     [MiddlewareChain.BASE]: {
