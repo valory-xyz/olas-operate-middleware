@@ -34,7 +34,7 @@ export const UpdateAgentContext = createContext<
 
 export const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
   const [form] = Form.useForm<DeepPartial<ServiceTemplate>>();
-  const { selectedService } = useServices();
+  const { selectedService, selectedAgentType } = useServices();
   const { goto } = usePageState();
   const [isEditing, setIsEditing] = useState(false);
 
@@ -56,7 +56,9 @@ export const UpdateAgentProvider = ({ children }: PropsWithChildren) => {
                   // Pass the environment variable details
                   // in case the variable doesn't exist yet in the service
                   ...(SERVICE_TEMPLATES.find(
-                    (template) => template.name === selectedService.name,
+                    (template) =>
+                      template.name === selectedService.name ||
+                      template.agentType === selectedAgentType,
                   )?.env_variables?.[key] || {}),
                   // Update with the value from the form
                   value,
