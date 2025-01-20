@@ -9,10 +9,13 @@ import { DeepPartial } from '@/types/Util';
 
 export const updateServiceIfNeeded = async (
   service: Service,
+  agentType: AgentType,
 ): Promise<void> => {
   const partialServiceTemplate: DeepPartial<ServiceTemplate> = {};
+
   const serviceTemplate = SERVICE_TEMPLATES.find(
-    (template) => template.name === service.name,
+    (template) =>
+      template.name === service.name || template.agentType === agentType,
   );
 
   if (!serviceTemplate) return;
@@ -31,6 +34,14 @@ export const updateServiceIfNeeded = async (
     if (xUsername) {
       partialServiceTemplate.description = `Memeooorr @${xUsername}`;
     }
+  }
+
+  // Temporary: check if the service has incorrect name
+  if (
+    serviceTemplate.agentType === AgentType.Memeooorr &&
+    service.name !== serviceTemplate.name
+  ) {
+    partialServiceTemplate.name = serviceTemplate.name;
   }
 
   // Check if there's a need to update or add env variables

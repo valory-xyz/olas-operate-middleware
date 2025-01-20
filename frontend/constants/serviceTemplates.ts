@@ -9,7 +9,7 @@ import { parseEther, parseUnits } from '@/utils/numberFormatters';
 
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
-  name: 'Trader Agent',
+  name: 'Trader Agent', // Should be unique across all services and not be updated
   hash: 'bafybeicts6zhavxzz2rxahz3wzs2pzamoq64n64wp4q4cdanfuz7id6c2q',
   description: 'Trader agent for omen prediction markets',
   image:
@@ -191,7 +191,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
  */
 export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
-  name: 'Memeooorr - Base',
+  name: 'Memeooorr', // Should be unique across all services and not be updated
   home_chain: MiddlewareChain.BASE,
   configurations: {
     [MiddlewareChain.BASE]: {
@@ -220,7 +220,7 @@ export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
  */
 export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.AgentsFunCelo,
-  name: 'Memeooorr - Celo',
+  name: 'Memeooorr - Celo', // Should be unique across all services and not be updated
   home_chain: MiddlewareChain.CELO,
   configurations: {
     [MiddlewareChain.CELO]: {
@@ -245,7 +245,7 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
-  name: 'Optimus',
+  name: 'Optimus', // Should be unique across all services and not be updated
   hash: 'bafybeibkgwyqirzpgdjfk6iurplzmp75d7cku72e52km4gjudnacxcqrte',
   description: 'Optimus',
   image:
