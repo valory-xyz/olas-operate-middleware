@@ -21,7 +21,12 @@ import { CardFlex } from './styled/CardFlex';
 
 const { Title, Text } = Typography;
 
-const getCardStyle = (isCurrentAgent: boolean): CardProps['styles'] => ({
+const getCardStyle = (isCurrentAgent: boolean): CardProps['style'] =>
+  isCurrentAgent
+    ? { borderColor: COLOR.PURPLE_LIGHT, backgroundColor: COLOR.PURPLE_LIGHT_2 }
+    : {};
+
+const getCardStyles = (isCurrentAgent: boolean): CardProps['styles'] => ({
   header: isCurrentAgent
     ? {
         padding: 4,
@@ -34,9 +39,10 @@ const getCardStyle = (isCurrentAgent: boolean): CardProps['styles'] => ({
       }
     : {},
   body: {
-    padding: isCurrentAgent ? '8px 16px 12px 16px' : '12px 16px',
     gap: 6,
+    padding: isCurrentAgent ? '8px 16px 12px 16px' : '12px 16px',
     borderRadius: 'inherit',
+    backgroundColor: isCurrentAgent ? COLOR.WHITE : undefined,
   },
 });
 
@@ -129,10 +135,8 @@ const EachAgent = memo(
     return (
       <Card
         key={agentType}
-        style={{
-          borderColor: isCurrentAgent ? COLOR.PURPLE_LIGHT : undefined,
-        }}
-        styles={getCardStyle(isCurrentAgent)}
+        style={getCardStyle(isCurrentAgent)}
+        styles={getCardStyles(isCurrentAgent)}
         title={isCurrentAgent ? 'Current agent' : undefined}
       >
         <Flex vertical>
