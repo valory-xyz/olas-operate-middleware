@@ -19,9 +19,8 @@ const { Text } = Typography;
 const Loader = styled(Skeleton.Input)`
   line-height: 1;
   span {
-    /* width: 60px !important; */
     height: 12px !important;
-    margin-top: 6px !important;
+    margin-top: 2px !important;
   }
 `;
 
@@ -66,21 +65,21 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   // Do not show the last transaction if the delay is not reached
   if (!isPageLoadedAndOneMinutePassed) return null;
 
-  // if (isFetching || 1 + 1 === 2) {
-  //   return <Loader active size="small" style={{ width: 100 }} />;
-  // }
+  if (isFetching) {
+    return <Loader active size="small" style={{ width: 100 }} />;
+  }
 
   if (!transaction) {
     return (
       <Text type="secondary" className="text-xs">
-        No txns recently!
+        No txs recently!
       </Text>
     );
   }
 
   return (
     <Text type="secondary" className="text-xs">
-      Last txn:&nbsp;
+      Last tx:&nbsp;
       <Text
         type="secondary"
         className="text-xs pointer hover-underline"
