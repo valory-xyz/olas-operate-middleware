@@ -206,7 +206,7 @@ const useServiceDeployment = () => {
 
     // Update the existing service
     if (!middlewareServiceResponse && service) {
-      await updateServiceIfNeeded(service);
+      await updateServiceIfNeeded(service, selectedAgentType);
     }
 
     // Start the service
