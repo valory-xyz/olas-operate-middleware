@@ -164,9 +164,8 @@ export const WithdrawFunds = () => {
   const buttonText = useMemo(() => {
     if (isWithdrawalLoading) return 'Loading';
     if (isComingSoon) return 'Coming soon';
-    if (!withdrawAddress) return 'Enter address to proceed';
     return 'Proceed';
-  }, [isComingSoon, isWithdrawalLoading, withdrawAddress]);
+  }, [isComingSoon, isWithdrawalLoading]);
 
   const isWithdrawFundsEnabled = useFeatureFlag('withdraw-funds');
   if (!isWithdrawFundsEnabled) return <FeatureNotEnabled />;
@@ -202,6 +201,7 @@ export const WithdrawFunds = () => {
 
           <Flex vertical gap={8}>
             <Text className="text-sm text-light">Withdrawal address</Text>
+
             <Input
               value={withdrawAddress}
               onChange={(e) => setWithdrawAddress(e.target.value)}
