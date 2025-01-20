@@ -120,7 +120,7 @@ const EachAgent = memo(
     ]);
 
     return (
-      <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
+      <Card key={agentType} styles={getCardStyle(isCurrentAgent)}>
         <Flex vertical>
           <Flex align="center" justify="space-between" className="mb-8">
             <Image
@@ -129,17 +129,14 @@ const EachAgent = memo(
               height={36}
               alt={agentConfig.displayName}
             />
-            {isCurrentAgent ? (
-              <Text>Selected Agent</Text>
-            ) : (
-              <Button
-                type="primary"
-                onClick={handleSelectAgent}
-                disabled={isServicesLoading || isMasterWalletLoading}
-              >
-                Select
-              </Button>
-            )}
+
+            <Button
+              type="primary"
+              onClick={handleSelectAgent}
+              disabled={isServicesLoading || isMasterWalletLoading}
+            >
+              Select
+            </Button>
           </Flex>
         </Flex>
 
