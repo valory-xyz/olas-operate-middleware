@@ -70,8 +70,8 @@ const SafeAddress = ({ address }: { address: Address }) => {
 
 const AgentTitle = ({ address }: { address: Address }) => {
   const { middlewareChain } = useYourWallet();
-  const { selectedAgentType } = useServices();
-  const { service } = useService(selectedAgentType);
+  const { selectedAgentType, selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
 
   const agentProfileLink = useMemo(() => {
     if (!address) return null;
@@ -82,19 +82,15 @@ const AgentTitle = ({ address }: { address: Address }) => {
     ) {
       return `https://predict.olas.network/agents/${address}`;
     }
+
     // base memeooorr
     if (
       middlewareChain === MiddlewareChain.BASE &&
       selectedAgentType === AgentType.Memeooorr &&
-      service?.env_variables?.TWIKIT_USERNAME
+      service?.env_variables?.TWIKIT_USERNAME?.value
     )
-      return `https://www.agents.fun/services/${service.env_variables.TWIKIT_USERNAME}`;
-  }, [
-    address,
-    middlewareChain,
-    selectedAgentType,
-    service?.env_variables?.TWIKIT_USERNAME,
-  ]);
+      return `https://www.agents.fun/services/${service?.env_variables?.TWIKIT_USERNAME.value}`;
+  }, [address, middlewareChain, selectedAgentType, service]);
 
   return (
     <Flex vertical gap={12}>
