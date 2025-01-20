@@ -66,7 +66,7 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   if (!isPageLoadedAndOneMinutePassed) return null;
 
   if (isFetching) {
-    return <Loader active size="small" style={{ width: 100 }} />;
+    return <Loader active size="small" />;
   }
 
   if (!transaction) {
