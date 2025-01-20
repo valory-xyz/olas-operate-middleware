@@ -3,6 +3,7 @@ import { Button, Flex, Tooltip, Typography } from 'antd';
 import { useCallback } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useRewardContext } from '@/hooks/useRewardContext';
@@ -77,20 +78,22 @@ export const AgentRunningButton = () => {
       </Button>
 
       <Flex vertical align="start">
-        {isEligibleForRewards ? (
-          <Text type="secondary" className="text-sm">
-            Agent is idle&nbsp;
-            <IdleTooltip />
-          </Text>
-        ) : (
-          <Text type="secondary" className="text-sm loading-ellipses">
-            Agent is working
-          </Text>
-        )}
+        <Flex>
+          {isEligibleForRewards ? (
+            <Text type="secondary" className="text-xs">
+              Idle&nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
+              <IdleTooltip />
+            </Text>
+          ) : (
+            <Text type="secondary" className="text-xs">
+              Working&nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
+            </Text>
+          )}
 
-        {isLastTransactionEnabled && (
-          <LastTransaction serviceConfigId={serviceConfigId} />
-        )}
+          {isLastTransactionEnabled && (
+            <LastTransaction serviceConfigId={serviceConfigId} />
+          )}
+        </Flex>
 
         {isAgentActivityEnabled && <WhatIsAgentDoing />}
       </Flex>

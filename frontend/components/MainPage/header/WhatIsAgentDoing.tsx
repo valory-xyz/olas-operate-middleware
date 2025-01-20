@@ -9,6 +9,7 @@ export const WhatIsAgentDoing = () => {
     <Button
       type="link"
       className="p-0 text-xs"
+      style={{ height: 'auto' }}
       onClick={() => goto(Pages.AgentActivity)}
     >
       What&apos;s my agent doing?
