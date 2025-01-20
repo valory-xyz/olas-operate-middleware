@@ -24,6 +24,7 @@ export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
 } = {
   [AgentType.PredictTrader]: {
+    isAgentEnabled: true,
     name: 'Predict Trader',
     evmHomeChainId: EvmChainId.Gnosis,
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
@@ -32,9 +33,11 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
-    isAgentEnabled: true,
+    withdrawalText:
+      'This will remove all OLAS and all XDAI from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },
   [AgentType.Memeooorr]: {
+    isAgentEnabled: true,
     name: 'Agents.fun agent',
     evmHomeChainId: EvmChainId.Base,
     middlewareHomeChainId: MiddlewareChain.BASE,
@@ -44,9 +47,11 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent - Base',
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
-    isAgentEnabled: true,
+    withdrawalText:
+      'This will remove all OLAS and all ETH from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },
   [AgentType.Modius]: {
+    isAgentEnabled: false,
     name: 'Modius agent',
     evmHomeChainId: EvmChainId.Mode,
     middlewareHomeChainId: MiddlewareChain.MODE,
@@ -66,7 +71,8 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: false,
+    withdrawalText:
+      'This will remove all OLAS, ETH and USDC from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },
   // TODO: celo (check each key)
   [AgentType.AgentsFunCelo]: {
@@ -80,5 +86,7 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Celo chain.',
     isAgentEnabled: false,
+    withdrawalText:
+      'This will remove all OLAS and all CELO from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },
 };

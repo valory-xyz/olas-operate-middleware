@@ -20,6 +20,7 @@ export type AgentConfig = {
    * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
    */
   isAgentEnabled: boolean;
+  withdrawalText: string;
 };
 
 export type AgentHealthCheck = {
