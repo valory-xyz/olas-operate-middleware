@@ -1,7 +1,6 @@
 import { Flex, Typography } from 'antd';
 
 import { CustomAlert } from '@/components/Alert';
-import { WalletType } from '@/enums/Wallet';
 import { useMasterBalances } from '@/hooks/useBalanceContext';
 import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
@@ -17,19 +16,11 @@ const { Text, Title } = Typography;
 export const LowOperatingBalanceAlert = () => {
   const { storeState } = useStore();
   const { selectedAgentType } = useServices();
-  const { isLoaded: isBalanceLoaded, isMasterSafeLowOnNativeGas } =
+  const { isMasterSafeLowOnNativeGas, masterSafeNativeGasRequirement } =
     useMasterBalances();
 
-  const {
-    chainName,
-    tokenSymbol,
-    masterSafeAddress,
-    masterThresholds,
-    agentThresholds,
-  } = useLowFundsDetails();
+  const { chainName, tokenSymbol, masterSafeAddress } = useLowFundsDetails();
 
-  if (!isBalanceLoaded) return null;
-  if (!agentThresholds) return null;
   if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
   if (!isMasterSafeLowOnNativeGas) return null;
 
@@ -45,9 +36,9 @@ export const LowOperatingBalanceAlert = () => {
           </Title>
           <Text>
             To run your agent, add at least
-            <Text strong>{` ${
-              masterThresholds[WalletType.Safe][tokenSymbol]
-            } ${tokenSymbol} `}</Text>
+            <Text
+              strong
+            >{` ${masterSafeNativeGasRequirement} ${tokenSymbol} `}</Text>
             on {chainName} chain to your safe.
           </Text>
           <Text>

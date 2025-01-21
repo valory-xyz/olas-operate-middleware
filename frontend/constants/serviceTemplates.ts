@@ -9,7 +9,7 @@ import { parseEther, parseUnits } from '@/utils/numberFormatters';
 
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
-  name: 'Trader Agent',
+  name: 'Trader Agent', // Should be unique across all services and not be updated
   hash: 'bafybeicts6zhavxzz2rxahz3wzs2pzamoq64n64wp4q4cdanfuz7id6c2q',
   description: 'Trader agent for omen prediction markets',
   image:
@@ -98,11 +98,11 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
-  hash: 'bafybeigeeduwab5athuwaqy56tbpezt4hzgpsi4jhmwjl2z2og55cntatu',
+  hash: 'bafybeig5h3el4kz3o7epnwtuvzhlojlgcpw3rlkmnqt5xjc6dnyio2afqi',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.2.0-alpha20',
+  service_version: 'v0.3.0-alpha1',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -191,7 +191,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
  */
 export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Memeooorr,
-  name: 'Memeooorr - Base',
+  name: 'Memeooorr', // Should be unique across all services and not be updated
   home_chain: MiddlewareChain.BASE,
   configurations: {
     [MiddlewareChain.BASE]: {
@@ -220,7 +220,7 @@ export const AGENTS_FUN_BASE_TEMPLATE: ServiceTemplate = {
  */
 export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.AgentsFunCelo,
-  name: 'Memeooorr - Celo',
+  name: 'Memeooorr - Celo', // Should be unique across all services and not be updated
   home_chain: MiddlewareChain.CELO,
   configurations: {
     [MiddlewareChain.CELO]: {
@@ -245,8 +245,8 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
-  name: 'Optimus',
-  hash: 'bafybeig5uqagio2k2f3zuzhw3pnpy2xg2gqz6w55l3p4blchoxmvqswwze',
+  name: 'Optimus', // Should be unique across all services and not be updated
+  hash: 'bafybeibkgwyqirzpgdjfk6iurplzmp75d7cku72e52km4gjudnacxcqrte',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -358,6 +358,12 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       name: 'Selected strategies',
       description: '',
       value: '["balancer_pools_search", "asset_lending"]',
+      provision_type: EnvProvisionType.FIXED,
+    },
+    INIT_FALLBACK_GAS: {
+      name: 'Init fallback gas',
+      description: '',
+      value: '250000',
       provision_type: EnvProvisionType.FIXED,
     },
   },

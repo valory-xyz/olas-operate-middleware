@@ -16,8 +16,12 @@ export type ChainConfig = {
   evmChainId: EvmChainId;
   middlewareChain: MiddlewareChainId;
   rpc: HttpUrl;
+  // TODO: the values are hardcoded, should be fetched from the backend
+  /**
+   * Least amount of native token required to create a Safe
+   * @example for gnosis chain, 1.5 XDAI is required to create a Safe
+   */
   safeCreationThreshold: number;
-  safeAddSignerThreshold: number;
 };
 
 export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
@@ -27,7 +31,6 @@ export const GNOSIS_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.GNOSIS,
   rpc: process.env.GNOSIS_RPC as HttpUrl,
   safeCreationThreshold: 1.5,
-  safeAddSignerThreshold: 0.1,
 } as const;
 
 export const BASE_CHAIN_CONFIG: ChainConfig = {
@@ -37,7 +40,6 @@ export const BASE_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.BASE,
   rpc: process.env.BASE_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
-  safeAddSignerThreshold: 0.005,
 } as const;
 
 export const MODE_CHAIN_CONFIG: ChainConfig = {
@@ -47,7 +49,6 @@ export const MODE_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.MODE,
   rpc: process.env.MODE_RPC as HttpUrl,
   safeCreationThreshold: 0.0005,
-  safeAddSignerThreshold: 0.0005, // TODO: Modius - confirm this value
 } as const;
 
 // TODO: celo - check each key
@@ -58,7 +59,6 @@ export const CELO_CHAIN_CONFIG: ChainConfig = {
   middlewareChain: MiddlewareChainId.CELO,
   rpc: process.env.CELO_RPC as HttpUrl,
   safeCreationThreshold: 0.005,
-  safeAddSignerThreshold: 0.005,
 } as const;
 
 export const CHAIN_CONFIG: {

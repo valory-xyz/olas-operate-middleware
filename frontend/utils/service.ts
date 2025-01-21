@@ -9,10 +9,13 @@ import { DeepPartial } from '@/types/Util';
 
 export const updateServiceIfNeeded = async (
   service: Service,
+  agentType: AgentType,
 ): Promise<void> => {
   const partialServiceTemplate: DeepPartial<ServiceTemplate> = {};
+
   const serviceTemplate = SERVICE_TEMPLATES.find(
-    (template) => template.name === service.name,
+    (template) =>
+      template.name === service.name || template.agentType === agentType,
   );
 
   if (!serviceTemplate) return;
@@ -33,19 +36,39 @@ export const updateServiceIfNeeded = async (
     }
   }
 
-  // Check if fixed env variables of the service were updated in the template
-  const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
-  Object.entries(service.env_variables).forEach(([key, item]) => {
-    const templateEnvVariable = serviceTemplate.env_variables[key];
-    if (!templateEnvVariable) return;
+  // Temporary: check if the service has incorrect name
+  if (
+    serviceTemplate.agentType === AgentType.Memeooorr &&
+    service.name !== serviceTemplate.name
+  ) {
+    partialServiceTemplate.name = serviceTemplate.name;
+  }
 
-    if (
-      templateEnvVariable.provision_type === EnvProvisionType.FIXED &&
-      templateEnvVariable.value !== item.value
-    ) {
-      envVariablesToUpdate[key] = templateEnvVariable;
-    }
-  });
+  // Check if there's a need to update or add env variables
+  const envVariablesToUpdate: ServiceTemplate['env_variables'] = {};
+  Object.entries(serviceTemplate.env_variables).forEach(
+    ([key, templateVariable]) => {
+      const serviceEnvVariable = service.env_variables[key];
+
+      // If there's a new variable in the template but it's not in the service
+      if (
+        !serviceEnvVariable &&
+        (templateVariable.provision_type === EnvProvisionType.FIXED ||
+          templateVariable.provision_type === EnvProvisionType.COMPUTED)
+      ) {
+        envVariablesToUpdate[key] = templateVariable;
+      }
+
+      // If the variable exist in the service and was just updated in the template
+      if (
+        serviceEnvVariable &&
+        serviceEnvVariable.value !== templateVariable.value &&
+        templateVariable.provision_type === EnvProvisionType.FIXED
+      ) {
+        envVariablesToUpdate[key] = templateVariable;
+      }
+    },
+  );
 
   if (!isEmpty(envVariablesToUpdate)) {
     partialServiceTemplate.env_variables = envVariablesToUpdate;

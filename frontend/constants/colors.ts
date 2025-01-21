@@ -4,6 +4,7 @@ export const COLOR = {
   PURPLE: '#722ed1',
   PURPLE_DARK: '#36075F',
   PURPLE_LIGHT: '#EFCFFF',
+  PURPLE_LIGHT_2: '#FAF0FF',
   BLUE: '#1677FF',
   ORANGE: '#FAAD14',
   WHITE: '#ffffff',
@@ -11,6 +12,7 @@ export const COLOR = {
   BROWN: '#873800',
   TEXT: '#1f2229',
   TEXT_LIGHT: '#606F85',
+  NEUTRAL_4: '#A3AEBB',
   GRAY_1: '#f2f4f9',
   GRAY_2: '#4D596A',
 };

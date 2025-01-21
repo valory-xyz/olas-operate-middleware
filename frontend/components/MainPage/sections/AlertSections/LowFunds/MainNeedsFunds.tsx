@@ -16,7 +16,7 @@ export const MainNeedsFunds = () => {
   const { selectedStakingProgramId } = useStakingProgram();
 
   const {
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     hasEnoughAdditionalTokensForInitialFunding,
     isInitialFunded,
@@ -27,7 +27,7 @@ export const MainNeedsFunds = () => {
   const electronApi = useElectronApi();
   useEffect(() => {
     if (
-      hasEnoughEthForInitialFunding &&
+      hasEnoughNativeTokenForInitialFunding &&
       hasEnoughOlasForInitialFunding &&
       hasEnoughAdditionalTokensForInitialFunding &&
       !isInitialFunded
@@ -37,7 +37,7 @@ export const MainNeedsFunds = () => {
   }, [
     electronApi.store,
     selectedAgentType,
-    hasEnoughEthForInitialFunding,
+    hasEnoughNativeTokenForInitialFunding,
     hasEnoughOlasForInitialFunding,
     hasEnoughAdditionalTokensForInitialFunding,
     isInitialFunded,
@@ -57,7 +57,7 @@ export const MainNeedsFunds = () => {
 
           <FundsToActivate
             stakingFundsRequired={!hasEnoughOlasForInitialFunding}
-            nativeFundsRequired={!hasEnoughEthForInitialFunding}
+            nativeFundsRequired={!hasEnoughNativeTokenForInitialFunding}
             additionalFundsRequired={
               !hasEnoughAdditionalTokensForInitialFunding
             }

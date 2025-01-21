@@ -3,21 +3,15 @@ import { isNil, sum } from 'lodash';
 import { useCallback, useMemo } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
-import { CHAIN_CONFIG } from '@/config/chains';
 import { MechType } from '@/config/mechs';
 import { STAKING_PROGRAMS } from '@/config/stakingPrograms';
 import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { Pages } from '@/enums/Pages';
 import { TokenSymbol } from '@/enums/Token';
-import {
-  MasterEoa,
-  MasterSafe,
-  WalletOwnerType,
-  WalletType,
-} from '@/enums/Wallet';
+import { MasterEoa, MasterSafe } from '@/enums/Wallet';
+import { useBalanceAndRefillRequirementsContext } from '@/hooks/useBalanceAndRefillRequirementsContext';
 import {
   useBalanceContext,
-  useMasterBalances,
   useServiceBalances,
 } from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
@@ -54,6 +48,7 @@ const useServiceDeployment = () => {
     overrideSelectedServiceStatus,
   } = useServices();
 
+  const { canStartAgent } = useBalanceAndRefillRequirementsContext();
   const { service, isServiceRunning } = useService(
     selectedService?.service_config_id,
   );
@@ -78,8 +73,6 @@ const useServiceDeployment = () => {
   const serviceOlasBalanceOnHomeChain = serviceSafeBalances?.find(
     (balance) => balance.evmChainId === selectedAgentConfig.evmHomeChainId,
   )?.balance;
-
-  const { masterSafeNativeGasBalance } = useMasterBalances();
 
   const {
     isAllStakingContractDetailsRecordLoaded,
@@ -112,46 +105,30 @@ const useServiceDeployment = () => {
   ]);
 
   const isDeployable = useMemo(() => {
-    if (
-      isServicesLoading ||
-      isServiceRunning ||
-      !isAllStakingContractDetailsRecordLoaded
-    ) {
-      return false;
-    }
+    if (isServicesLoading || isServiceRunning) return false;
+
+    if (!isAllStakingContractDetailsRecordLoaded) return false;
 
     if (isNil(requiredStakedOlas)) return false;
 
-    if (
-      !isNil(hasEnoughServiceSlots) &&
-      !hasEnoughServiceSlots &&
-      !isServiceStaked
-    ) {
-      return false;
-    }
+    // If not enough service slots, and service is not staked, return false
+    const hasSlot = !isNil(hasEnoughServiceSlots) && !hasEnoughServiceSlots;
+    if (hasSlot && !isServiceStaked) return false;
 
+    // If already staked and initial funded, check if it has enough staked OLAS
     if (service && isInitialFunded && isServiceStaked) {
+      if (!canStartAgent) return false;
+
       return (serviceTotalStakedOlas ?? 0) >= requiredStakedOlas;
     }
 
     // If was evicted, but can re-stake - unlock the button
     if (isAgentEvicted && isEligibleForStaking) return true;
 
-    // threshold check
-    const masterThresholds =
-      selectedAgentConfig.operatingThresholds[WalletOwnerType.Master];
-    const tokenSymbol =
-      CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol;
-
-    const safeThreshold = masterThresholds[WalletType.Safe][tokenSymbol];
-
     // SERVICE IS STAKED, AND STARTING AGAIN
     if (isServiceStaked) {
       const hasEnoughOlas = serviceSafeOlasWithStaked >= requiredStakedOlas;
-
-      const hasEnoughNativeGas =
-        (masterSafeNativeGasBalance ?? 0) > safeThreshold;
-      return hasEnoughNativeGas && hasEnoughOlas;
+      return hasEnoughOlas;
     }
 
     // SERVICE IS NOT STAKED AND/OR IS STARTING FOR THE FIRST TIME
@@ -168,12 +145,10 @@ const useServiceDeployment = () => {
     isInitialFunded,
     isAgentEvicted,
     isEligibleForStaking,
-    selectedAgentConfig.operatingThresholds,
-    selectedAgentConfig.evmHomeChainId,
     needsInitialFunding,
     serviceTotalStakedOlas,
     serviceSafeOlasWithStaked,
-    masterSafeNativeGasBalance,
+    canStartAgent,
   ]);
 
   const pauseAllPolling = useCallback(() => {
@@ -231,7 +206,7 @@ const useServiceDeployment = () => {
 
     // Update the existing service
     if (!middlewareServiceResponse && service) {
-      await updateServiceIfNeeded(service);
+      await updateServiceIfNeeded(service, selectedAgentType);
     }
 
     // Start the service

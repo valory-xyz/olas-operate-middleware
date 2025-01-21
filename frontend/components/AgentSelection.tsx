@@ -1,4 +1,4 @@
-import { Button, Card, Flex, Typography } from 'antd';
+import { Button, Card, CardProps, Flex, Typography } from 'antd';
 import { entries } from 'lodash';
 import Image from 'next/image';
 import { memo, useCallback } from 'react';
@@ -21,15 +21,28 @@ import { CardFlex } from './styled/CardFlex';
 
 const { Title, Text } = Typography;
 
-const getCardStyle = (isCurrentAgent: boolean) => ({
-  padding: 0,
-  marginBottom: 6,
+const getCardStyle = (isCurrentAgent: boolean): CardProps['style'] =>
+  isCurrentAgent
+    ? { borderColor: COLOR.PURPLE_LIGHT, backgroundColor: COLOR.PURPLE_LIGHT_2 }
+    : {};
+
+const getCardStyles = (isCurrentAgent: boolean): CardProps['styles'] => ({
+  header: isCurrentAgent
+    ? {
+        padding: 4,
+        minHeight: 0,
+        backgroundColor: COLOR.PURPLE_LIGHT_2,
+        color: COLOR.PURPLE,
+        textAlign: 'center',
+        fontSize: 'inherit',
+        borderColor: 'transparent',
+      }
+    : {},
   body: {
-    padding: '12px 16px',
     gap: 6,
+    padding: isCurrentAgent ? '8px 16px 12px 16px' : '12px 16px',
     borderRadius: 'inherit',
-    background: isCurrentAgent ? COLOR.GRAY_1 : 'transparent',
-    opacity: isCurrentAgent ? 0.75 : 1,
+    backgroundColor: isCurrentAgent ? COLOR.WHITE : undefined,
   },
 });
 
@@ -120,7 +133,12 @@ const EachAgent = memo(
     ]);
 
     return (
-      <Card key={agentType} {...getCardStyle(isCurrentAgent)}>
+      <Card
+        key={agentType}
+        style={getCardStyle(isCurrentAgent)}
+        styles={getCardStyles(isCurrentAgent)}
+        title={isCurrentAgent ? 'Current agent' : undefined}
+      >
         <Flex vertical>
           <Flex align="center" justify="space-between" className="mb-8">
             <Image
@@ -129,17 +147,14 @@ const EachAgent = memo(
               height={36}
               alt={agentConfig.displayName}
             />
-            {isCurrentAgent ? (
-              <Text>Selected Agent</Text>
-            ) : (
-              <Button
-                type="primary"
-                onClick={handleSelectAgent}
-                disabled={isServicesLoading || isMasterWalletLoading}
-              >
-                Select
-              </Button>
-            )}
+
+            <Button
+              type="primary"
+              onClick={handleSelectAgent}
+              disabled={isServicesLoading || isMasterWalletLoading}
+            >
+              Select
+            </Button>
           </Flex>
         </Flex>
 

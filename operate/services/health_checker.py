@@ -38,6 +38,7 @@ class HealthChecker:
 
     SLEEP_PERIOD_DEFAULT = 30
     PORT_UP_TIMEOUT_DEFAULT = 120  # seconds
+    REQUEST_TIMEOUT_DEFAULT = 90
     NUMBER_OF_FAILS_DEFAULT = 10
     HEALTH_CHECK_URL = HEALTH_CHECK_URL
 
@@ -88,7 +89,8 @@ class HealthChecker:
     async def check_service_health(cls, service: str) -> bool:
         """Check the service health"""
         del service
-        async with aiohttp.ClientSession() as session:
+        timeout = aiohttp.ClientTimeout(total=cls.REQUEST_TIMEOUT_DEFAULT)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(cls.HEALTH_CHECK_URL) as resp:
                 status = resp.status
                 response_json = await resp.json()

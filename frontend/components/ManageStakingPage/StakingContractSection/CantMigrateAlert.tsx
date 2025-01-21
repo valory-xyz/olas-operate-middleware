@@ -3,11 +3,9 @@ import { isEmpty, isNil, sum } from 'lodash';
 import { useMemo } from 'react';
 
 import { CustomAlert } from '@/components/Alert';
-import { CHAIN_CONFIG } from '@/config/chains';
 import { getNativeTokenSymbol } from '@/config/tokens';
 import { StakingProgramId } from '@/enums/StakingProgram';
 import { TokenSymbol } from '@/enums/Token';
-import { WalletOwnerType, WalletType } from '@/enums/Wallet';
 import {
   useBalanceContext,
   useMasterBalances,
@@ -33,7 +31,8 @@ const AlertInsufficientMigrationFunds = ({
     isLoaded: isBalanceLoaded,
     totalStakedOlasBalance: totalStakedOlasBalanceOnHomeChain,
   } = useBalanceContext();
-  const { masterSafeBalances } = useMasterBalances();
+  const { masterSafeBalances, masterSafeNativeGasRequirement } =
+    useMasterBalances();
   const { serviceFundRequirements, isInitialFunded } = useNeedsFunds(
     stakingProgramIdToMigrateTo,
   );
@@ -60,8 +59,8 @@ const AlertInsufficientMigrationFunds = ({
   if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isNil(requiredStakedOlas)) return null;
   if (isNil(masterSafeBalanceOnHomeChain?.[TokenSymbol.OLAS])) return null;
-
   if (isNil(totalStakedOlasBalanceOnHomeChain)) return null;
+  if (isNil(masterSafeNativeGasRequirement)) return null;
 
   const requiredOlasDeposit =
     requiredStakedOlas -
@@ -72,13 +71,14 @@ const AlertInsufficientMigrationFunds = ({
 
   const homeChainId = selectedAgentConfig.evmHomeChainId;
   const nativeTokenSymbol = getNativeTokenSymbol(homeChainId);
+
+  const currentNativeTokenBalance =
+    masterSafeBalanceOnHomeChain[nativeTokenSymbol] || 0;
+  const requiredNativeTokenAmount =
+    serviceFundRequirements[homeChainId]?.[nativeTokenSymbol] || 0;
   const requiredNativeTokenDeposit = isInitialFunded
-    ? selectedAgentConfig.operatingThresholds[WalletOwnerType.Master][
-        WalletType.Safe
-      ][CHAIN_CONFIG[selectedAgentConfig.evmHomeChainId].nativeToken.symbol] -
-      (masterSafeBalanceOnHomeChain[nativeTokenSymbol] || 0) // is already funded allow minimal maintenance
-    : (serviceFundRequirements[homeChainId]?.[nativeTokenSymbol] || 0) -
-      (masterSafeBalanceOnHomeChain[nativeTokenSymbol] || 0); // otherwise require full initial funding requirements
+    ? masterSafeNativeGasRequirement // is already funded - allow minimal maintenance
+    : requiredNativeTokenAmount - currentNativeTokenBalance; // otherwise require full initial funding requirements
 
   return (
     <CustomAlert

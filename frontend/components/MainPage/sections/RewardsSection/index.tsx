@@ -6,7 +6,7 @@ import styled from 'styled-components';
 import { NA } from '@/constants/symbols';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../../styled/CardSection';
@@ -51,14 +51,19 @@ const DisplayRewards = () => {
     isEligibleForRewards,
     isStakingRewardsDetailsLoading,
     isStakingRewardsDetailsError,
-  } = useReward();
+  } = useRewardContext();
   const { isLoaded: isBalancesLoaded } = useBalanceContext();
   const formattedReward =
     reward === undefined ? NA : `~${balanceFormat(reward, 2)}`;
 
   const earnedTag = useMemo(() => {
     if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
-      return <Skeleton.Input size="small" />;
+      return (
+        <Skeleton.Input
+          size="small"
+          style={{ position: 'relative', top: 12 }}
+        />
+      );
     }
 
     return (

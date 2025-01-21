@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { MiddlewareDeploymentStatus } from '@/client';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
-import { useReward } from '@/hooks/useReward';
+import { useRewardContext } from '@/hooks/useRewardContext';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { ServicesService } from '@/service/Services';
@@ -36,7 +36,7 @@ export const AgentRunningButton = () => {
     'agent-activity',
   ]);
   const { showNotification } = useElectronApi();
-  const { isEligibleForRewards } = useReward();
+  const { isEligibleForRewards } = useRewardContext();
 
   const {
     selectedService,
