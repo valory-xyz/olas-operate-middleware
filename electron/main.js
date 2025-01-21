@@ -215,7 +215,7 @@ async function beforeQuit(event) {
   app.quit();
 }
 
-const APP_WIDTH = 460;
+const APP_WIDTH = 500;
 
 /**
  * Creates the splash window

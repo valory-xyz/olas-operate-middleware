@@ -244,7 +244,6 @@ const MasterEoaSignerNativeBalance = () => {
           {
             left: masterEoa?.address && middlewareChain && (
               <SignerTitle
-                signerText="Your wallet signer address:"
                 signerAddress={masterEoa?.address}
                 middlewareChain={middlewareChain}
               />
