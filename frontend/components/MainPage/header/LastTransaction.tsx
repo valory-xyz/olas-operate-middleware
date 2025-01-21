@@ -19,9 +19,8 @@ const { Text } = Typography;
 const Loader = styled(Skeleton.Input)`
   line-height: 1;
   span {
-    width: 120px !important;
     height: 12px !important;
-    margin-top: 6px !important;
+    margin-top: 2px !important;
   }
 `;
 
@@ -73,14 +72,14 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   if (!transaction) {
     return (
       <Text type="secondary" className="text-xs">
-        No transactions recently!
+        No txs recently!
       </Text>
     );
   }
 
   return (
     <Text type="secondary" className="text-xs">
-      Last txn:&nbsp;
+      Last tx:&nbsp;
       <Text
         type="secondary"
         className="text-xs pointer hover-underline"
