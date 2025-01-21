@@ -10,13 +10,11 @@ import { AddressLink } from '../AddressLink';
 const { Paragraph, Text, Title } = Typography;
 
 type SignerTitleProps = {
-  signerText: string;
   signerAddress: Address;
   middlewareChain: MiddlewareChain;
 };
 
 export const SignerTitle = ({
-  signerText,
   signerAddress,
   middlewareChain,
 }: SignerTitleProps) => (
@@ -33,7 +31,7 @@ export const SignerTitle = ({
       </Paragraph>
       <Paragraph className="text-sm m-0">
         <Flex gap={4} vertical>
-          <Text className="text-sm">{signerText}</Text>
+          <Text className="text-sm">Your wallet signer address:</Text>
           <AddressLink
             address={signerAddress}
             middlewareChain={middlewareChain}

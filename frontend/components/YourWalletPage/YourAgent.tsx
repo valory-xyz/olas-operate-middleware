@@ -27,7 +27,12 @@ import { truncateAddress } from '@/utils/truncate';
 import { AddressLink } from '../AddressLink';
 import { InfoBreakdownList } from '../InfoBreakdown';
 import { Container, infoBreakdownParentStyle } from './styles';
-import { OlasTitle, OwnershipNftTitle, ServiceNftIdTitle } from './Titles';
+import {
+  OlasTitle,
+  OwnershipNftTitle,
+  ServiceNftIdTitle,
+  SignerTitle,
+} from './Titles';
 import { useYourWallet } from './useYourWallet';
 import { WithdrawFunds } from './WithdrawFunds';
 
@@ -314,7 +319,12 @@ const YourAgentWalletBreakdown = () => {
               <InfoBreakdownList
                 list={[
                   {
-                    left: 'Signer',
+                    left: serviceEoa.address && middlewareChain && (
+                      <SignerTitle
+                        signerAddress={serviceEoa.address}
+                        middlewareChain={middlewareChain}
+                      />
+                    ),
                     leftClassName: 'text-sm',
                     right: (
                       <AddressLink
