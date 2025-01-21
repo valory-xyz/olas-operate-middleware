@@ -263,9 +263,9 @@ const YourAgentWalletBreakdown = () => {
     [serviceSafeBalances, evmHomeChainId],
   );
 
-  const serviceEoaNativeBalances = useMemo(
+  const serviceEoaNativeBalance = useMemo(
     () =>
-      serviceEoaBalances?.filter(
+      serviceEoaBalances?.find(
         ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
       ),
     [serviceEoaBalances, evmHomeChainId],
@@ -293,11 +293,11 @@ const YourAgentWalletBreakdown = () => {
         )}
 
         {(!isNil(serviceSafeNativeBalances) ||
-          !isNil(serviceEoaNativeBalances)) && (
+          !isNil(serviceEoaNativeBalance)) && (
           <Flex vertical gap={8}>
             {isArray(serviceSafeNativeBalances) && (
               <InfoBreakdownList
-                list={serviceSafeNativeBalances.map(({ symbol, balance }) => ({
+                list={serviceSafeNativeBalances.map(({ balance, symbol }) => ({
                   left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
                   right: `${balanceFormat(balance, 4)} ${symbol}`,
@@ -307,10 +307,10 @@ const YourAgentWalletBreakdown = () => {
             )}
             {isArray(serviceSafeErc20Balances) && (
               <InfoBreakdownList
-                list={serviceSafeErc20Balances.map((balance) => ({
-                  left: <strong>{balance.symbol}</strong>,
+                list={serviceSafeErc20Balances.map(({ balance, symbol }) => ({
+                  left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
-                  right: `${balanceFormat(balance.balance, 2)} ${balance.symbol}`,
+                  right: `${balanceFormat(balance, 2)} ${symbol}`,
                 }))}
                 parentStyle={infoBreakdownParentStyle}
               />
@@ -326,13 +326,7 @@ const YourAgentWalletBreakdown = () => {
                       />
                     ),
                     leftClassName: 'text-sm',
-                    right: (
-                      <AddressLink
-                        address={serviceEoa.address}
-                        middlewareChain={middlewareChain}
-                      />
-                    ),
-                    rightClassName: 'font-normal text-sm',
+                    right: `${balanceFormat(serviceEoaNativeBalance?.balance, 2)} ${serviceEoaNativeBalance?.symbol}`,
                   },
                 ]}
                 parentStyle={infoBreakdownParentStyle}
