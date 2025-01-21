@@ -270,6 +270,9 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 service_config_id=manager.json[0]["service_config_id"],
                 service_template=template,
             )
+
+        service.env_variables = template["env_variables"]
+        service.store()
     else:
         print(f'Creating service {template["hash"]}')
         service = manager.load_or_create(
