@@ -10,7 +10,7 @@ endef
 
 ./trader/:
 	pwd
-	git clone https://github.com/valory-xyz/meme-ooorr.git
+	git clone https://github.com/dvilelaf/meme-ooorr.git
 
 ./dist/aea_win.exe: ./electron/bins/ ./trader/
 	mkdir -p dist
