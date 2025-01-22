@@ -3,6 +3,7 @@ import { Button, Flex, Tooltip, Typography } from 'antd';
 import { useCallback } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { Pages } from '@/enums/Pages';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
@@ -52,6 +53,7 @@ export const AgentRunningButton = () => {
     'agent-activity',
   ]);
   const { showNotification } = useElectronApi();
+  const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { isEligibleForRewards } = useRewardContext();
 
   const {
@@ -86,6 +88,10 @@ export const AgentRunningButton = () => {
     }
   }, [overrideSelectedServiceStatus, service, setPaused, showNotification]);
 
+  // Do not show the last transaction if the delay is not reached
+  const canShowLastTransaction =
+    isLastTransactionEnabled && isPageLoadedAndOneMinutePassed;
+
   return (
     <Flex gap={10} align="center">
       <Button type="default" size="large" onClick={handlePause}>
@@ -94,19 +100,27 @@ export const AgentRunningButton = () => {
 
       <Flex vertical align="start">
         <Flex>
-          {!isEligibleForRewards ? (
+          {isEligibleForRewards ? (
             <Text type="secondary" className="text-xs">
               <IdleTooltip />
               &nbsp;Idle
             </Text>
           ) : (
-            <Text type="secondary" className="text-xs">
+            <Text
+              type="secondary"
+              className={`text-xs ${canShowLastTransaction ? '' : 'loading-ellipses '}`}
+            >
               Working
             </Text>
           )}
 
-          {isLastTransactionEnabled && (
-            <LastTransaction serviceConfigId={serviceConfigId} />
+          {canShowLastTransaction && (
+            <>
+              <Text style={{ lineHeight: 1 }}>
+                &nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
+              </Text>
+              <LastTransaction serviceConfigId={serviceConfigId} />
+            </>
           )}
         </Flex>
 

@@ -1,12 +1,10 @@
 import { Skeleton, Typography } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
-import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getLatestTransaction } from '@/service/Ethers';
@@ -32,7 +30,6 @@ type LastTransactionProps = { serviceConfigId: Optional<string> };
  * by agent safe.
  */
 export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
-  const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { activeStakingProgramMeta } = useStakingProgram();
   const { serviceSafes } = useService(serviceConfigId);
 
@@ -63,47 +60,32 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
     fetchTransaction();
   }, [fetchTransaction]);
 
-  const lastTxn = useMemo(() => {
-    if (isFetching) {
-      return <Loader active size="small" />;
-    }
+  if (isFetching) {
+    return <Loader active size="small" />;
+  }
 
-    if (!transaction) {
-      return (
-        <Text type="secondary" className="text-xs">
-          No txs recently!
-        </Text>
-      );
-    }
-
+  if (!transaction) {
     return (
       <Text type="secondary" className="text-xs">
-        Last tx:&nbsp;
-        <Text
-          type="secondary"
-          className="text-xs pointer hover-underline"
-          onClick={() =>
-            window.open(
-              `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(chainId)]}/tx/${transaction.hash}`,
-            )
-          }
-        >
-          {getTimeAgo(transaction.timestamp)} ↗
-        </Text>
+        No txs recently!
       </Text>
     );
-  }, [isFetching, transaction, chainId]);
-
-  // Do not show the last transaction if the delay is not reached
-  if (!isPageLoadedAndOneMinutePassed) return null;
+  }
 
   return (
-    <>
-      <Text style={{ lineHeight: 1 }}>
-        &nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
+    <Text type="secondary" className="text-xs">
+      Last tx:&nbsp;
+      <Text
+        type="secondary"
+        className="text-xs pointer hover-underline"
+        onClick={() =>
+          window.open(
+            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(chainId)]}/tx/${transaction.hash}`,
+          )
+        }
+      >
+        {getTimeAgo(transaction.timestamp)} ↗
       </Text>
-
-      {lastTxn}
-    </>
+    </Text>
   );
 };
