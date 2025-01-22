@@ -50,16 +50,6 @@ TM_CONTROL_URL = "http://localhost:8080"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
-WRAPPED_NATIVE_ASSET = {
-    Chain.ETHEREUM.value: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
-    Chain.POLYGON.value: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
-    Chain.GNOSIS.value: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-    Chain.ARBITRUM_ONE.value: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
-    Chain.OPTIMISTIC.value: "0x4200000000000000000000000000000000000006",
-    Chain.MODE.value: "0x4200000000000000000000000000000000000006",
-    Chain.BASE.value: "0x4200000000000000000000000000000000000006",
-}
-
 # TODO: These links may break in the future, use a more robust approach
 MECH_CONTRACT_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/mech/refs/tags/v0.8.0/packages/valory/contracts/agent_mech/build/AgentMech.json"
 STAKING_TOKEN_INSTANCE_ABI_PATH = 'https://raw.githubusercontent.com/valory-xyz/trader/refs/tags/v0.23.0/packages/valory/contracts/staking_token/build/StakingToken.json'

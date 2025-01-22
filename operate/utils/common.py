@@ -25,6 +25,8 @@ from halo import Halo
 from typing import Optional
 
 from operate.constants import ZERO_ADDRESS
+from operate.ledger.profiles import OLAS, USDC
+from operate.operate_types import Chain
 
 
 def print_box(text: str, margin: int = 1, character: str = '=') -> None:
@@ -63,17 +65,17 @@ CHAIN_TO_METADATA = {
     "gnosis": {
         "name": "Gnosis",
         "gasFundReq": unit_to_wei(0.5),  # fund for master wallet
-        "staking_bonding_token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+        "staking_bonding_token": OLAS[Chain.GNOSIS],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "xDAI",
                 "decimals": 18,
             },
-            "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": {
+            USDC[Chain.GNOSIS]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": {
+            OLAS[Chain.GNOSIS]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             }
@@ -87,17 +89,17 @@ CHAIN_TO_METADATA = {
     "mode": {
         "name": "Mode",
         "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
-        "staking_bonding_token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
+        "staking_bonding_token": OLAS[Chain.MODE],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            "0xd988097fb8612cc24eeC14542bC03424c656005f": {
+            USDC[Chain.MODE]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9": {
+            OLAS[Chain.MODE]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             }
@@ -111,17 +113,17 @@ CHAIN_TO_METADATA = {
     "optimistic": {
         "name": "Optimism",
         "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
-        "staking_bonding_token": "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
+        "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85": {
+            USDC[Chain.OPTIMISTIC]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527": {
+            OLAS[Chain.OPTIMISTIC]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             }
@@ -135,17 +137,17 @@ CHAIN_TO_METADATA = {
     "base": {
         "name": "Base",
         "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
-        "staking_bonding_token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+        "staking_bonding_token": OLAS[Chain.BASE],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": {
+            USDC[Chain.BASE]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            "0x54330d28ca3357F294334BDC454a032e7f353416": {
+            OLAS[Chain.BASE]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             }

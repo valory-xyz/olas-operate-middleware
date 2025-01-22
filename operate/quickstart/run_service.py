@@ -330,8 +330,6 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
         if chain_config.ledger_config.rpc is not None:
             os.environ["CUSTOM_CHAIN_RPC"] = chain_config.ledger_config.rpc
-            if "OPEN_AUTONOMY_SUBGRAPH_URL" not in os.environ:
-                os.environ["OPEN_AUTONOMY_SUBGRAPH_URL"] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
 
         chain = chain_config.ledger_config.chain
         ledger_api = wallet.ledger_api(
