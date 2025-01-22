@@ -6,6 +6,7 @@ import { MiddlewareDeploymentStatus } from '@/client';
 import { ErrorComponent } from '@/components/errors/ErrorComponent';
 import { useServices } from '@/hooks/useServices';
 import { useActiveStakingContractDetails } from '@/hooks/useStakingContractDetails';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import {
   CannotStartAgentDueToUnexpectedError,
@@ -23,11 +24,12 @@ export const AgentButton = () => {
     selectedService,
     selectedServiceStatusOverride,
   } = useServices();
+  const { selectedStakingProgramId } = useStakingProgram();
 
   const {
     isEligibleForStaking,
     isAgentEvicted,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
   } = useActiveStakingContractDetails();
 
   const selectedServiceStatus =
@@ -36,8 +38,9 @@ export const AgentButton = () => {
   const button = useMemo(() => {
     if (
       isServicesLoading ||
-      !isSelectedStakingContractDetailsLoaded ||
-      isSelectedServiceDeploymentStatusLoading
+      isSelectedStakingContractDetailsLoading ||
+      isSelectedServiceDeploymentStatusLoading ||
+      !selectedStakingProgramId // Staking program not yet loaded
     ) {
       return (
         <Button type="primary" size="large" disabled loading>
@@ -73,8 +76,9 @@ export const AgentButton = () => {
 
     return <CannotStartAgentDueToUnexpectedError />;
   }, [
+    selectedStakingProgramId,
     isServicesLoading,
-    isSelectedStakingContractDetailsLoaded,
+    isSelectedStakingContractDetailsLoading,
     isSelectedServiceDeploymentStatusLoading,
     selectedServiceStatus,
     selectedService,

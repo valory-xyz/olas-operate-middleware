@@ -142,12 +142,6 @@ type StakingContractDetailsContextProps = {
     Partial<StakingContractDetails & ServiceStakingDetails>
   >;
   isSelectedStakingContractDetailsLoading: boolean;
-  /**
-   * Used to determine if the selected staking contract details are loaded
-   * AND all the parameters (such as selectedStakingProgramId is available)
-   * to call the contract and details are fetched.
-   */
-  isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
@@ -164,7 +158,6 @@ type StakingContractDetailsContextProps = {
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
     isSelectedStakingContractDetailsLoading: false,
-    isSelectedStakingContractDetailsLoaded: false,
     selectedStakingContractDetails: null,
     isAllStakingContractDetailsRecordLoaded: false,
     refetchSelectedStakingContractDetails: async () => {},
@@ -206,8 +199,6 @@ export const StakingContractDetailsProvider = ({
         // selected staking contract details
         selectedStakingContractDetails,
         isSelectedStakingContractDetailsLoading: isLoading,
-
-        isSelectedStakingContractDetailsLoaded: !isLoading,
         refetchSelectedStakingContractDetails,
 
         // all staking contract details
