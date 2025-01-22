@@ -53,7 +53,7 @@ const CreationError = () => (
 );
 
 export const SetupCreateSafe = () => {
-  const { goto, userLogin } = usePageState();
+  const { goto, setUserLoggedIn } = usePageState();
 
   const { selectedAgentType } = useServices();
   const serviceTemplate = SERVICE_TEMPLATES.find(
@@ -182,10 +182,10 @@ export const SetupCreateSafe = () => {
     if (masterSafeAddress) {
       delayInSeconds(2).then(() => {
         goto(Pages.Main);
-        userLogin();
+        setUserLoggedIn();
       });
     }
-  }, [masterSafeAddress, goto, userLogin]);
+  }, [masterSafeAddress, goto, setUserLoggedIn]);
 
   return (
     <Card bordered={false}>
