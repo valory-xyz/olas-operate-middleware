@@ -53,7 +53,7 @@ const CreationError = () => (
 );
 
 export const SetupCreateSafe = () => {
-  const { goto } = usePageState();
+  const { goto, updateIsUserLoggedIn } = usePageState();
 
   const { selectedAgentType } = useServices();
   const serviceTemplate = SERVICE_TEMPLATES.find(
@@ -177,14 +177,15 @@ export const SetupCreateSafe = () => {
     serviceTemplate,
   ]);
 
+  // Only progress is the safe is created and accessible via context (updates on timeout)
   useEffect(() => {
-    // Only progress is the safe is created and accessible via context (updates on interval)
     if (masterSafeAddress) {
       delayInSeconds(2).then(() => {
         goto(Pages.Main);
+        updateIsUserLoggedIn(true);
       });
     }
-  }, [goto, masterSafeAddress]);
+  }, [masterSafeAddress, goto, updateIsUserLoggedIn]);
 
   return (
     <Card bordered={false}>
