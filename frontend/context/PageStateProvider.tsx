@@ -8,16 +8,16 @@ import {
 } from 'react';
 import { useTimeout } from 'usehooks-ts';
 
+import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
 import { Pages } from '@/enums/Pages';
-
-const LAST_TRANSACTION_SHOW_DELAY = 60 * 1000;
 
 type PageStateContextType = {
   pageState: Pages;
   setPageState: Dispatch<SetStateAction<Pages>>;
   isPageLoadedAndOneMinutePassed: boolean;
   isUserLoggedIn: boolean;
-  updateIsUserLoggedIn: (isLoggedIn: boolean) => void;
+  userLogin: () => void;
+  userLogout: () => void;
 };
 
 export const PageStateContext = createContext<PageStateContextType>({
@@ -25,7 +25,8 @@ export const PageStateContext = createContext<PageStateContextType>({
   setPageState: () => {},
   isPageLoadedAndOneMinutePassed: false,
   isUserLoggedIn: false,
-  updateIsUserLoggedIn: () => {},
+  userLogin: () => {},
+  userLogout: () => {},
 });
 
 export const PageStateProvider = ({ children }: PropsWithChildren) => {
@@ -41,11 +42,15 @@ export const PageStateProvider = ({ children }: PropsWithChildren) => {
     },
     pageState === Pages.Setup || isPageLoadedAndOneMinutePassed
       ? null
-      : LAST_TRANSACTION_SHOW_DELAY,
+      : ONE_MINUTE_INTERVAL,
   );
 
-  const updateIsUserLoggedIn = useCallback((isLoggedIn: boolean) => {
-    setIsUserLoggedIn(isLoggedIn);
+  const userLogin = useCallback(() => {
+    setIsUserLoggedIn(true);
+  }, []);
+
+  const userLogout = useCallback(() => {
+    setIsUserLoggedIn(false);
   }, []);
 
   return (
@@ -53,7 +58,8 @@ export const PageStateProvider = ({ children }: PropsWithChildren) => {
       value={{
         // User login state
         isUserLoggedIn,
-        updateIsUserLoggedIn,
+        userLogin,
+        userLogout,
 
         // Page state
         pageState,

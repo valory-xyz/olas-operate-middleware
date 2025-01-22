@@ -133,7 +133,7 @@ export const SetupWelcomeCreate = () => {
 export const SetupWelcomeLogin = () => {
   const [form] = Form.useForm();
   const { goto } = useSetup();
-  const { goto: gotoPage, updateIsUserLoggedIn } = usePageState();
+  const { goto: gotoPage, userLogin } = usePageState();
 
   const {
     selectedService,
@@ -176,7 +176,7 @@ export const SetupWelcomeLogin = () => {
         .then(async () => {
           await updateBalances();
           setCanNavigate(true);
-          updateIsUserLoggedIn(true);
+          userLogin();
         })
         .catch((e) => {
           console.error(e);
@@ -186,7 +186,7 @@ export const SetupWelcomeLogin = () => {
           setIsLoggingIn(false);
         });
     },
-    [updateBalances, updateIsUserLoggedIn],
+    [updateBalances, userLogin],
   );
 
   const isServiceCreatedForAgent = useMemo(() => {
