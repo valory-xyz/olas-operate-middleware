@@ -124,7 +124,7 @@ export const AgentRunningButton = () => {
           )}
         </Flex>
 
-        {!isAgentActivityEnabled && <WhatIsAgentDoing />}
+        {isAgentActivityEnabled && <WhatIsAgentDoing />}
       </Flex>
     </Flex>
   );
