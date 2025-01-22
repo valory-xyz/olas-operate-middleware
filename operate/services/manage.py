@@ -2015,7 +2015,7 @@ class ServiceManager:
                         asset_address
                     ] = recommended_refill
 
-                    if any(
+                    if asset_address == ZERO_ADDRESS and any(
                         balances[chain][master_safe][asset_address] == 0
                         and balances[chain][address][asset_address] == 0
                         and asset_funding_values[address]["threshold"] > 0
