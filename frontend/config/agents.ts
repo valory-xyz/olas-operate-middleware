@@ -44,7 +44,7 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent - Base',
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
-    isAgentEnabled: true,
+    isAgentEnabled: false,
   },
   [AgentType.Modius]: {
     name: 'Modius agent',
