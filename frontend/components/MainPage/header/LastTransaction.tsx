@@ -1,9 +1,10 @@
 import { Skeleton, Typography } from 'antd';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 import { useInterval } from 'usehooks-ts';
 
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
@@ -62,35 +63,47 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
     fetchTransaction();
   }, [fetchTransaction]);
 
+  const lastTxn = useMemo(() => {
+    if (isFetching) {
+      return <Loader active size="small" />;
+    }
+
+    if (!transaction) {
+      return (
+        <Text type="secondary" className="text-xs">
+          No txs recently!
+        </Text>
+      );
+    }
+
+    return (
+      <Text type="secondary" className="text-xs">
+        Last tx:&nbsp;
+        <Text
+          type="secondary"
+          className="text-xs pointer hover-underline"
+          onClick={() =>
+            window.open(
+              `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(chainId)]}/tx/${transaction.hash}`,
+            )
+          }
+        >
+          {getTimeAgo(transaction.timestamp)} ↗
+        </Text>
+      </Text>
+    );
+  }, [isFetching, transaction, chainId]);
+
   // Do not show the last transaction if the delay is not reached
   if (!isPageLoadedAndOneMinutePassed) return null;
 
-  if (isFetching) {
-    return <Loader active size="small" />;
-  }
-
-  if (!transaction) {
-    return (
-      <Text type="secondary" className="text-xs">
-        No txs recently!
-      </Text>
-    );
-  }
-
   return (
-    <Text type="secondary" className="text-xs">
-      Last tx:&nbsp;
-      <Text
-        type="secondary"
-        className="text-xs pointer hover-underline"
-        onClick={() =>
-          window.open(
-            `${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(chainId)]}/tx/${transaction.hash}`,
-          )
-        }
-      >
-        {getTimeAgo(transaction.timestamp)} ↗
+    <>
+      <Text style={{ lineHeight: 1 }}>
+        &nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
       </Text>
-    </Text>
+
+      {lastTxn}
+    </>
   );
 };
