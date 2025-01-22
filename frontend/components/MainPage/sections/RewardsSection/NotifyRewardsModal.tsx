@@ -1,7 +1,7 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import sum from 'lodash/sum';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
 import { OPERATE_URL } from '@/constants/urls';
@@ -30,6 +30,15 @@ export const NotifyRewardsModal = () => {
   const [canShowNotification, setCanShowNotification] = useState(false);
 
   const firstRewardRef = useRef<number>();
+
+  const formattedCurrentOlasBalance = useMemo(
+    () => balanceFormat(sum([totalOlasBalance, totalStakedOlasBalance]), 2),
+    [totalOlasBalance, totalStakedOlasBalance],
+  );
+  const formattedEarnedRewards = useMemo(
+    () => balanceFormat(availableRewardsForEpochEth, 2),
+    [availableRewardsForEpochEth],
+  );
 
   // hook to set the flag to show the notification
   useEffect(() => {
@@ -116,17 +125,13 @@ export const NotifyRewardsModal = () => {
       <Flex vertical gap={16}>
         <Text>
           Congratulations! Your agent just earned the first
-          <Text strong>
-            {` ${balanceFormat(availableRewardsForEpochEth, 2)} OLAS `}
-          </Text>
+          <Text strong>{` ${formattedEarnedRewards} OLAS `}</Text>
           for you!
         </Text>
 
         <Text>
           Your current balance:
-          <Text
-            strong
-          >{` ${balanceFormat(sum([totalOlasBalance, totalStakedOlasBalance]), 2)} OLAS `}</Text>
+          <Text strong>{` ${formattedCurrentOlasBalance} OLAS `}</Text>
         </Text>
 
         <Text>Keep it running to get even more!</Text>
