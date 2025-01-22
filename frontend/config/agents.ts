@@ -51,7 +51,6 @@ export const AGENT_CONFIG: {
       'This will remove all OLAS and all ETH from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },
   [AgentType.Modius]: {
-    isAgentEnabled: false,
     name: 'Modius agent',
     evmHomeChainId: EvmChainId.Mode,
     middlewareHomeChainId: MiddlewareChain.MODE,
@@ -71,6 +70,7 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
+    isAgentEnabled: true,
     withdrawalText:
       'This will remove all OLAS, ETH and USDC from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
   },

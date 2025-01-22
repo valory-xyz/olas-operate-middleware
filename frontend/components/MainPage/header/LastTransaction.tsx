@@ -5,7 +5,6 @@ import { useInterval } from 'usehooks-ts';
 
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
-import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getLatestTransaction } from '@/service/Ethers';
@@ -19,9 +18,8 @@ const { Text } = Typography;
 const Loader = styled(Skeleton.Input)`
   line-height: 1;
   span {
-    width: 120px !important;
     height: 12px !important;
-    margin-top: 6px !important;
+    margin-top: 2px !important;
   }
 `;
 
@@ -32,7 +30,6 @@ type LastTransactionProps = { serviceConfigId: Optional<string> };
  * by agent safe.
  */
 export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
-  const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { activeStakingProgramMeta } = useStakingProgram();
   const { serviceSafes } = useService(serviceConfigId);
 
@@ -63,9 +60,6 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
     fetchTransaction();
   }, [fetchTransaction]);
 
-  // Do not show the last transaction if the delay is not reached
-  if (!isPageLoadedAndOneMinutePassed) return null;
-
   if (isFetching) {
     return <Loader active size="small" />;
   }
@@ -73,14 +67,14 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   if (!transaction) {
     return (
       <Text type="secondary" className="text-xs">
-        No transactions recently!
+        No txs recently!
       </Text>
     );
   }
 
   return (
     <Text type="secondary" className="text-xs">
-      Last txn:&nbsp;
+      Last tx:&nbsp;
       <Text
         type="secondary"
         className="text-xs pointer hover-underline"

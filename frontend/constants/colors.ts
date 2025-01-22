@@ -4,6 +4,7 @@ export const COLOR = {
   PURPLE: '#722ed1',
   PURPLE_DARK: '#36075F',
   PURPLE_LIGHT: '#EFCFFF',
+  PURPLE_LIGHT_2: '#FAF0FF',
   BLUE: '#1677FF',
   ORANGE: '#FAAD14',
   WHITE: '#ffffff',
