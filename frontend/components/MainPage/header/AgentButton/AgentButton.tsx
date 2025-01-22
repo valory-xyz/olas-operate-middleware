@@ -18,8 +18,9 @@ import { AgentStoppingButton } from './AgentStoppingButton';
 
 export const AgentButton = () => {
   const {
-    selectedService,
     isLoading: isServicesLoading,
+    isSelectedServiceDeploymentStatusLoading,
+    selectedService,
     selectedServiceStatusOverride,
   } = useServices();
 
@@ -29,17 +30,21 @@ export const AgentButton = () => {
     isSelectedStakingContractDetailsLoading,
   } = useActiveStakingContractDetails();
 
+  const selectedServiceStatus =
+    selectedServiceStatusOverride ?? selectedService?.deploymentStatus;
+
   const button = useMemo(() => {
-    if (isServicesLoading || isSelectedStakingContractDetailsLoading) {
+    if (
+      isServicesLoading ||
+      isSelectedStakingContractDetailsLoading ||
+      isSelectedServiceDeploymentStatusLoading
+    ) {
       return (
         <Button type="primary" size="large" disabled loading>
           Loading...
         </Button>
       );
     }
-
-    const selectedServiceStatus =
-      selectedServiceStatusOverride ?? selectedService?.deploymentStatus;
 
     if (selectedServiceStatus === MiddlewareDeploymentStatus.STOPPING) {
       return <AgentStoppingButton />;
@@ -70,7 +75,8 @@ export const AgentButton = () => {
   }, [
     isServicesLoading,
     isSelectedStakingContractDetailsLoading,
-    selectedServiceStatusOverride,
+    isSelectedServiceDeploymentStatusLoading,
+    selectedServiceStatus,
     selectedService,
     isEligibleForStaking,
     isAgentEvicted,

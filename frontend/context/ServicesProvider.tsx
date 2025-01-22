@@ -43,7 +43,7 @@ type ServicesContextType = {
   selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
   selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
-  isSelectedServiceStatusFetched: boolean;
+  isSelectedServiceDeploymentStatusLoading: boolean;
   refetchSelectedServiceStatus: () => void;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
@@ -59,7 +59,7 @@ export const ServicesContext = createContext<ServicesContextType>({
   setPaused: noop,
   togglePaused: noop,
   selectService: noop,
-  isSelectedServiceStatusFetched: false,
+  isSelectedServiceDeploymentStatusLoading: true,
   refetchSelectedServiceStatus: noop,
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
   selectedAgentType: AgentType.PredictTrader,
@@ -103,7 +103,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const {
     data: selectedServiceStatus,
-    isLoading: isSelectedServiceStatusLoading,
+    isLoading: isSelectedServiceDeploymentStatusLoading,
     refetch: refetchSelectedServiceStatus,
   } = useQuery({
     queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
@@ -214,7 +214,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
    */
   useEffect(() => {
     if (!selectedAgentConfig) return;
-    if (isSelectedServiceStatusLoading) return;
+    if (isSelectedServiceDeploymentStatusLoading) return;
     if (!services) return;
     if (isEmpty(services)) return;
 
@@ -229,7 +229,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
     setSelectedServiceConfigId(currentService.service_config_id);
   }, [
-    isSelectedServiceStatusLoading,
+    isSelectedServiceDeploymentStatusLoading,
     selectedServiceConfigId,
     services,
     selectedAgentConfig,
@@ -245,16 +245,22 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         isLoading: isServicesLoading,
         isFetching,
         refetch,
+        selectService,
+
+        // pause
         paused,
         setPaused,
         togglePaused,
-        selectService,
+
+        // selected service info
         selectedService: selectedServiceWithStatus,
         selectedServiceStatusOverride,
         refetchSelectedServiceStatus,
-        isSelectedServiceStatusFetched: !isSelectedServiceStatusLoading,
+        isSelectedServiceDeploymentStatusLoading,
         selectedAgentConfig,
         selectedAgentType,
+
+        // others
         updateAgentType,
         overrideSelectedServiceStatus: (
           status: Maybe<MiddlewareDeploymentStatus>,
