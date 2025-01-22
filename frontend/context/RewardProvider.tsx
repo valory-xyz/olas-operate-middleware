@@ -31,7 +31,6 @@ export const RewardContext = createContext<{
   minimumStakedAmountRequired?: number;
   updateRewards: () => Promise<void>;
   isStakingRewardsDetailsLoading?: boolean;
-  isStakingRewardsDetailsError?: boolean;
 }>({
   isAvailableRewardsForEpochLoading: false,
   updateRewards: async () => {},
@@ -145,7 +144,6 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
     data: stakingRewardsDetails,
     refetch: refetchStakingRewardsDetails,
     isLoading: isStakingRewardsDetailsLoading,
-    isError: isStakingRewardsDetailsError,
   } = useStakingRewardsDetails();
 
   const {
@@ -193,7 +191,6 @@ export const RewardProvider = ({ children }: PropsWithChildren) => {
       value={{
         // staking rewards details
         isStakingRewardsDetailsLoading,
-        isStakingRewardsDetailsError,
         accruedServiceStakingRewards,
 
         // available rewards for the current epoch

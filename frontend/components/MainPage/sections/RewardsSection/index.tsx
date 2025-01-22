@@ -4,9 +4,9 @@ import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { NA } from '@/constants/symbols';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useRewardContext } from '@/hooks/useRewardContext';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { balanceFormat } from '@/utils/numberFormatters';
 
 import { CardSection } from '../../../styled/CardSection';
@@ -15,6 +15,18 @@ import { RewardsStreak } from './RewardsStreak';
 import { StakingRewardsThisEpoch } from './StakingRewardsThisEpoch';
 
 const { Text } = Typography;
+
+const TodayRewardsLoader = () => (
+  <Skeleton.Button
+    active
+    size="small"
+    style={{ position: 'relative', top: -2, width: 60 }}
+  />
+);
+
+const TagLoader = () => (
+  <Skeleton.Input size="small" style={{ position: 'relative', top: 12 }} />
+);
 
 // Common motion props for the earned tag
 const commonMotionProps: HTMLMotionProps<'div'> = {
@@ -38,34 +50,24 @@ const EarnedTagContainer = styled.div`
   top: -14px;
 `;
 
-const Loader = () => (
-  <Flex vertical gap={8}>
-    <Skeleton.Button active size="small" style={{ width: 92 }} />
-    <Skeleton.Button active size="small" style={{ width: 92 }} />
-  </Flex>
-);
-
 const DisplayRewards = () => {
   const {
     availableRewardsForEpochEth: reward,
     isEligibleForRewards,
     isStakingRewardsDetailsLoading,
-    isStakingRewardsDetailsError,
   } = useRewardContext();
-  const { isLoaded: isBalancesLoaded } = useBalanceContext();
-  const formattedReward =
-    reward === undefined ? NA : `~${balanceFormat(reward, 2)}`;
+  const { selectedStakingProgramId } = useStakingProgram();
+
+  const isLoading = isStakingRewardsDetailsLoading || !selectedStakingProgramId;
+
+  const formattedReward = useMemo(() => {
+    if (isLoading) return <TodayRewardsLoader />;
+    if (reward === undefined) return NA;
+    return `~${balanceFormat(reward, 2)}`;
+  }, [isLoading, reward]);
 
   const earnedTag = useMemo(() => {
-    if (isStakingRewardsDetailsLoading && !isStakingRewardsDetailsError) {
-      return (
-        <Skeleton.Input
-          size="small"
-          style={{ position: 'relative', top: 12 }}
-        />
-      );
-    }
-
+    if (isLoading) return <TagLoader />;
     return (
       <AnimatePresence>
         {isEligibleForRewards ? (
@@ -79,25 +81,17 @@ const DisplayRewards = () => {
         )}
       </AnimatePresence>
     );
-  }, [
-    isEligibleForRewards,
-    isStakingRewardsDetailsLoading,
-    isStakingRewardsDetailsError,
-  ]);
+  }, [isEligibleForRewards, isLoading]);
 
   return (
     <CardSection vertical gap={8} padding="16px 24px" align="start">
       <StakingRewardsThisEpoch />
-      {isBalancesLoaded ? (
-        <Flex align="center" gap={12}>
-          <Text className="text-xl font-weight-600">
-            {formattedReward} OLAS&nbsp;
-          </Text>
-          <EarnedTagContainer>{earnedTag}</EarnedTagContainer>
-        </Flex>
-      ) : (
-        <Loader />
-      )}
+      <Flex align="center" gap={12}>
+        <Text className="text-xl font-weight-600">
+          {formattedReward} OLAS&nbsp;
+        </Text>
+        <EarnedTagContainer>{earnedTag}</EarnedTagContainer>
+      </Flex>
     </CardSection>
   );
 };
