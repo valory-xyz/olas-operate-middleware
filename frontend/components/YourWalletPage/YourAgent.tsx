@@ -94,7 +94,7 @@ const AgentTitle = ({ address }: { address: Address }) => {
       selectedAgentType === AgentType.Memeooorr &&
       service?.env_variables?.TWIKIT_USERNAME?.value
     )
-      return `https://www.agents.fun/services/${service?.env_variables?.TWIKIT_USERNAME.value}`;
+      return `https://www.agents.fun/services/${service.env_variables.TWIKIT_USERNAME.value}`;
   }, [address, middlewareChain, selectedAgentType, service]);
 
   return (
