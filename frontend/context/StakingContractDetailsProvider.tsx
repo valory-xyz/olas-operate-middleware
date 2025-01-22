@@ -142,6 +142,12 @@ type StakingContractDetailsContextProps = {
     Partial<StakingContractDetails & ServiceStakingDetails>
   >;
   isSelectedStakingContractDetailsLoading: boolean;
+  /**
+   * Used to determine if the selected staking contract details are loaded
+   * AND all the parameters (such as selectedStakingProgramId is available)
+   * to call the contract and details are fetched.
+   */
+  isSelectedStakingContractDetailsLoaded: boolean;
   isPaused: boolean;
   allStakingContractDetailsRecord?: Record<
     StakingProgramId,
@@ -157,11 +163,12 @@ type StakingContractDetailsContextProps = {
  */
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
-    selectedStakingContractDetails: null,
-    isPaused: false,
-    isAllStakingContractDetailsRecordLoaded: false,
     isSelectedStakingContractDetailsLoading: false,
+    isSelectedStakingContractDetailsLoaded: false,
+    selectedStakingContractDetails: null,
+    isAllStakingContractDetailsRecordLoaded: false,
     refetchSelectedStakingContractDetails: async () => {},
+    isPaused: false,
     setIsPaused: () => {},
   });
 
@@ -183,6 +190,7 @@ export const StakingContractDetailsProvider = ({
   } = useStakingContractDetailsByStakingProgram({
     serviceNftTokenId,
     stakingProgramId: selectedStakingProgramId,
+    isPaused,
   });
 
   const { allStakingContractDetailsRecord, isAllStakingContractDetailsLoaded } =
@@ -195,14 +203,21 @@ export const StakingContractDetailsProvider = ({
   return (
     <StakingContractDetailsContext.Provider
       value={{
+        // selected staking contract details
         selectedStakingContractDetails,
         isSelectedStakingContractDetailsLoading: isLoading,
+
+        isSelectedStakingContractDetailsLoaded: !isLoading,
+        refetchSelectedStakingContractDetails,
+
+        // all staking contract details
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,
+
+        // pause state
         isPaused,
         setIsPaused,
-        refetchSelectedStakingContractDetails,
       }}
     >
       {children}
