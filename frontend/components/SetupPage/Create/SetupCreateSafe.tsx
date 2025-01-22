@@ -167,6 +167,7 @@ export const SetupCreateSafe = () => {
       }
     })().then(() => {
       setIsCreatingSafe(false);
+      setUserLoggedIn();
     });
   }, [
     createSafeWithRetries,
@@ -175,6 +176,7 @@ export const SetupCreateSafe = () => {
     isWalletsFetched,
     masterSafes,
     serviceTemplate,
+    setUserLoggedIn,
   ]);
 
   // Only progress is the safe is created and accessible via context (updates on timeout)
@@ -182,10 +184,9 @@ export const SetupCreateSafe = () => {
     if (masterSafeAddress) {
       delayInSeconds(2).then(() => {
         goto(Pages.Main);
-        setUserLoggedIn();
       });
     }
-  }, [masterSafeAddress, goto, setUserLoggedIn]);
+  }, [masterSafeAddress, goto]);
 
   return (
     <Card bordered={false}>
