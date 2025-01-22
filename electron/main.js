@@ -28,7 +28,6 @@ const { PearlTray } = require('./components/PearlTray');
 const { Scraper } = require('agent-twitter-client');
 const {
   default: installExtension,
-  REDUX_DEVTOOLS,
   REACT_DEVELOPER_TOOLS,
 } = require('electron-devtools-installer');
 
@@ -41,10 +40,8 @@ const {
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 
-const extensions = [REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS];
-
 app.whenReady().then(() => {
-  installExtension(extensions, {
+  installExtension([REACT_DEVELOPER_TOOLS], {
     loadExtensionOptions: { allowFileAccess: true },
     forceDownload: false,
   })
