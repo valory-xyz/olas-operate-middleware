@@ -310,7 +310,7 @@ const YourAgentWalletBreakdown = () => {
                 list={serviceSafeErc20Balances.map(({ balance, symbol }) => ({
                   left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
-                  right: `${balanceFormat(balance, 2)} ${symbol}`,
+                  right: `${balanceFormat(balance, 4)} ${symbol}`,
                 }))}
                 parentStyle={infoBreakdownParentStyle}
               />
@@ -326,7 +326,7 @@ const YourAgentWalletBreakdown = () => {
                       />
                     ),
                     leftClassName: 'text-sm',
-                    right: `${balanceFormat(serviceEoaNativeBalance?.balance, 2)} ${serviceEoaNativeBalance?.symbol}`,
+                    right: `${balanceFormat(serviceEoaNativeBalance?.balance, 4)} ${serviceEoaNativeBalance?.symbol}`,
                   },
                 ]}
                 parentStyle={infoBreakdownParentStyle}

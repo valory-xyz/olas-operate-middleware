@@ -5,7 +5,6 @@ import { useInterval } from 'usehooks-ts';
 
 import { ONE_MINUTE_INTERVAL } from '@/constants/intervals';
 import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
-import { usePageState } from '@/hooks/usePageState';
 import { useService } from '@/hooks/useService';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { getLatestTransaction } from '@/service/Ethers';
@@ -31,7 +30,6 @@ type LastTransactionProps = { serviceConfigId: Optional<string> };
  * by agent safe.
  */
 export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
-  const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { activeStakingProgramMeta } = useStakingProgram();
   const { serviceSafes } = useService(serviceConfigId);
 
@@ -61,9 +59,6 @@ export const LastTransaction = ({ serviceConfigId }: LastTransactionProps) => {
   useEffect(() => {
     fetchTransaction();
   }, [fetchTransaction]);
-
-  // Do not show the last transaction if the delay is not reached
-  if (!isPageLoadedAndOneMinutePassed) return null;
 
   if (isFetching) {
     return <Loader active size="small" />;
