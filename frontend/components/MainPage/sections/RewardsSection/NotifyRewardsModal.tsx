@@ -1,4 +1,5 @@
 import { Button, Flex, Modal, Typography } from 'antd';
+import sum from 'lodash/sum';
 import Image from 'next/image';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
@@ -22,7 +23,7 @@ const SHARE_TEXT = `I just earned my first reward through the Operate app powere
 export const NotifyRewardsModal = () => {
   const { isEligibleForRewards, availableRewardsForEpochEth } =
     useRewardContext();
-  const { totalOlasBalance } = useBalanceContext();
+  const { totalOlasBalance, totalStakedOlasBalance } = useBalanceContext();
   const { showNotification, store } = useElectronApi();
   const { storeState } = useStore();
 
@@ -123,7 +124,9 @@ export const NotifyRewardsModal = () => {
 
         <Text>
           Your current balance:
-          <Text strong>{` ${balanceFormat(totalOlasBalance, 2)} OLAS `}</Text>
+          <Text
+            strong
+          >{` ${balanceFormat(sum([totalOlasBalance, totalStakedOlasBalance]), 2)} OLAS `}</Text>
         </Text>
 
         <Text>Keep it running to get even more!</Text>
