@@ -1,11 +1,10 @@
 import { Button, Flex, Modal, Typography } from 'antd';
-import sum from 'lodash/sum';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
 import { OPERATE_URL } from '@/constants/urls';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { useMainOlasBalance } from '@/context/SharedProvider/useMainOlasBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useRewardContext } from '@/hooks/useRewardContext';
 import { useStore } from '@/hooks/useStore';
@@ -23,7 +22,7 @@ const SHARE_TEXT = `I just earned my first reward through the Operate app powere
 export const NotifyRewardsModal = () => {
   const { isEligibleForRewards, availableRewardsForEpochEth } =
     useRewardContext();
-  const { totalOlasBalance, totalStakedOlasBalance } = useBalanceContext();
+  const { mainOlasBalance } = useMainOlasBalance();
   const { showNotification, store } = useElectronApi();
   const { storeState } = useStore();
 
@@ -31,9 +30,9 @@ export const NotifyRewardsModal = () => {
 
   const firstRewardRef = useRef<number>();
 
-  const formattedCurrentOlasBalance = useMemo(
-    () => balanceFormat(sum([totalOlasBalance, totalStakedOlasBalance]), 2),
-    [totalOlasBalance, totalStakedOlasBalance],
+  const formattedMainOlasBalance = useMemo(
+    () => balanceFormat(mainOlasBalance, 2),
+    [mainOlasBalance],
   );
   const formattedEarnedRewards = useMemo(
     () => balanceFormat(availableRewardsForEpochEth, 2),
@@ -131,7 +130,7 @@ export const NotifyRewardsModal = () => {
 
         <Text>
           Your current balance:
-          <Text strong>{` ${formattedCurrentOlasBalance} OLAS `}</Text>
+          <Text strong>{` ${formattedMainOlasBalance} OLAS `}</Text>
         </Text>
 
         <Text>Keep it running to get even more!</Text>
