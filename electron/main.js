@@ -44,9 +44,7 @@ if (isDev) {
       loadExtensionOptions: { allowFileAccess: true },
       forceDownload: false,
     })
-      .then(([redux, react]) =>
-        console.log(`Added Extensions:  ${redux.name}, ${react.name}`),
-      )
+      .then(([react]) => console.log(`Added Extensions: ${react.name}`))
       .catch((e) =>
         console.log('An error occurred on loading extensions: ', e),
       );
