@@ -6,13 +6,16 @@ on:
     tags:
       - "v*.*.*"
 
+env: 
+  MACOSX_DEPLOYMENT_TARGET: 12.0   #ensures backward compatibility with older macOS version
+
 jobs:
   # PyInstaller job for both x64 and arm64 binaries
   build-macos-pyinstaller:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14, macos-14-large]
+        os: [macos-14, macos-14-large] 
 
     steps:
       - uses: actions/checkout@v3
@@ -63,7 +66,7 @@ jobs:
           trader_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/trader.yaml')); print(config['service_version'])")
           echo $trader_version
           make ./dist/aea_bin
-        #instead of this one mwe use make; mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
+        #instead of this one we use make; mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
 
       - name: Build with PyInstaller
         run: |
@@ -154,8 +157,7 @@ jobs:
 
       # download TM
       - name: Set architecture environment variable
-        run: |
-          
+        run: |          
           if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
             export TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_amd64.tar.gz
           else 
@@ -250,3 +252,19 @@ jobs:
           echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
           echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
           node build.js
+
+      # Run universal build for both architectures (better legacy support)
+      - name: Build with electron-builder (Universal Production)
+        if: matrix.env == 'production' && matrix.os == 'macos-14'
+        env:
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
+          APPLE_ID: ${{ secrets.APPLEID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          GH_TOKEN: ${{ secrets.github_token }}
+          NODE_ENV: ${{ matrix.env }}
+          ARCH: "universal"
+          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+        run: node build.js
