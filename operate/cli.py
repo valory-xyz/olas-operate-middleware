@@ -948,7 +948,7 @@ def _daemon(
 
 
 @_operate.command(name="quickstart")
-def quickstart(
+def qs_start(
     config: Annotated[str, params.String(help="Quickstart config file path")],
 ) -> None:
     """Quickstart."""
@@ -958,7 +958,7 @@ def quickstart(
 
 
 @_operate.command(name="quickstop")
-def quickstop(
+def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
 ) -> None:
     """Quickstart."""
@@ -968,7 +968,7 @@ def quickstop(
 
 
 @_operate.command(name="terminate")
-def terminate(
+def qs_terminate(
     config: Annotated[str, params.String(help="Quickstart config file path")],
 ) -> None:
     """Quickstart."""
@@ -978,7 +978,7 @@ def terminate(
 
 
 @_operate.command(name="claim")
-def quickclaim(
+def qs_claim(
     config: Annotated[str, params.String(help="Quickstart config file path")],
 ) -> None:
     """Quickclaim staking rewards."""
@@ -988,7 +988,7 @@ def quickclaim(
 
 
 @_operate.command(name="reset-staking")
-def quick_reset_staking(
+def qs_reset_staking(
     config: Annotated[str, params.String(help="Quickstart config file path")],
 ) -> None:
     """Reset staking."""
@@ -998,7 +998,7 @@ def quick_reset_staking(
 
 
 @_operate.command(name="reset-password")
-def quick_reset_password() -> None:
+def qs_reset_password() -> None:
     """Reset password."""
     operate = OperateApp()
     operate.setup()
@@ -1006,7 +1006,7 @@ def quick_reset_password() -> None:
 
 
 @_operate.command(name="analyse-logs")
-def quick_analyse_logs(
+def qs_analyse_logs(
     config: Annotated[str, params.String(help="Quickstart config file path")],
     from_dir: Annotated[str, params.String(help="Path to the logs directory. If not provided, it is auto-detected.", default="")],
     agent: Annotated[str, params.String(help="The agent name to analyze (default: 'aea_0').", default="aea_0")],
