@@ -66,7 +66,7 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: true,
+    isAgentEnabled: false,
   },
   // TODO: celo (check each key)
   [AgentType.AgentsFunCelo]: {

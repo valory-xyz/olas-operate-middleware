@@ -33,6 +33,24 @@ const { Scraper } = require('agent-twitter-client');
 // TODO: only reintroduce once refactor completed
 // validateEnv();
 
+// Add devtools extension in Dev mode
+if (isDev) {
+  const {
+    default: installExtension,
+    REACT_DEVELOPER_TOOLS,
+  } = require('electron-devtools-installer');
+  app.whenReady().then(() => {
+    installExtension([REACT_DEVELOPER_TOOLS], {
+      loadExtensionOptions: { allowFileAccess: true },
+      forceDownload: false,
+    })
+      .then(([react]) => console.log(`Added Extensions: ${react.name}`))
+      .catch((e) =>
+        console.log('An error occurred on loading extensions: ', e),
+      );
+  });
+}
+
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
