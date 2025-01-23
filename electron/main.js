@@ -789,23 +789,40 @@ ipcMain.handle('save-logs', async (_, data) => {
 
   // Agent logs
   try {
-    fs.readdirSync(paths.servicesDir).map((serviceDirName) => {
+    fs.readdirSync(paths.servicesDir).forEach((serviceDirName) => {
       const servicePath = path.join(paths.servicesDir, serviceDirName);
       if (!fs.existsSync(servicePath)) return;
       if (!fs.statSync(servicePath).isDirectory()) return;
 
-      const agentLogFilePath = path.join(
-        servicePath,
-        'deployment',
-        'agent',
-        'log.txt',
-      );
-      if (!fs.existsSync(agentLogFilePath)) return;
+      // Most recent log
+      try {
+        const agentLogFilePath = path.join(
+          servicePath,
+          'deployment',
+          'agent',
+          'log.txt',
+        );
+        if (!fs.existsSync(agentLogFilePath)) return;
 
-      return sanitizeLogs({
-        name: `${serviceDirName}_agent.log`,
-        filePath: agentLogFilePath,
-      });
+        sanitizeLogs({
+          name: `${serviceDirName}_agent.log`,
+          filePath: agentLogFilePath,
+        });
+      } catch (e) {
+        logger.electron(e);
+      }
+
+      // Previous log
+      try {
+        const prevAgentLogFilePath = path.join(servicePath, 'prev_log.txt');
+        if (!fs.existsSync(prevAgentLogFilePath)) return;
+        sanitizeLogs({
+          name: `${serviceDirName}_prev_agent.log`,
+          filePath: prevAgentLogFilePath,
+        });
+      } catch (e) {
+        logger.electron(e);
+      }
     });
   } catch (e) {
     logger.electron(e);
