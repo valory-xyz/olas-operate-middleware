@@ -57,16 +57,13 @@ class HealthChecker:
         self.sleep_period = sleep_period or self.SLEEP_PERIOD_DEFAULT
         self.number_of_fails = number_of_fails or self.NUMBER_OF_FAILS_DEFAULT
 
-    async def start_for_service(self, service_config_id: str, delay: int = 0) -> None:
+    def start_for_service(self, service_config_id: str) -> None:
         """Start for a specific service."""
         self.logger.info(
             f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
         )
         if service_config_id in self._jobs:
             self.stop_for_service(service_config_id=service_config_id)
-
-        if delay > 0:
-            await asyncio.sleep(delay)
 
         loop = asyncio.get_running_loop()
         self._jobs[service_config_id] = loop.create_task(
