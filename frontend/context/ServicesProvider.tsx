@@ -37,13 +37,17 @@ import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
+type ServicesResponse = Pick<
+  QueryObserverBaseResult<MiddlewareServiceResponse[]>,
+  'isLoading' | 'refetch'
+>;
+
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
   serviceWallets?: AgentWallets;
   selectedService?: Service;
   selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
   isSelectedServiceDeploymentStatusLoading: boolean;
-  refetchSelectedServiceStatus: () => void;
   selectedAgentConfig: AgentConfig;
   selectedAgentType: AgentType;
   updateAgentType: (agentType: AgentType) => void;
@@ -51,12 +55,7 @@ type ServicesContextType = {
     status?: Maybe<MiddlewareDeploymentStatus>,
   ) => void;
   isFetched: boolean;
-} & Partial<
-  Pick<
-    QueryObserverBaseResult<MiddlewareServiceResponse[]>,
-    'isLoading' | 'refetch'
-  >
-> &
+} & Partial<ServicesResponse> &
   UsePause;
 
 export const ServicesContext = createContext<ServicesContextType>({
@@ -65,7 +64,6 @@ export const ServicesContext = createContext<ServicesContextType>({
   setPaused: noop,
   togglePaused: noop,
   isSelectedServiceDeploymentStatusLoading: true,
-  refetchSelectedServiceStatus: noop,
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
   selectedAgentType: AgentType.PredictTrader,
   updateAgentType: noop,
@@ -107,7 +105,6 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const {
     data: selectedServiceStatus,
     isLoading: isSelectedServiceDeploymentStatusLoading,
-    refetch: refetchSelectedServiceStatus,
   } = useQuery({
     queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
       selectedServiceConfigId,
@@ -160,9 +157,9 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
     if (isServicesLoading) return;
-    if (isEmpty(services)) return [];
+    if (!services || isEmpty(services)) return [];
 
-    return services?.reduce<AgentWallets>(
+    return services.reduce<AgentWallets>(
       (acc, service: MiddlewareServiceResponse) => {
         return [
           ...acc,
@@ -214,8 +211,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!selectedAgentConfig) return;
     if (isSelectedServiceDeploymentStatusLoading) return;
-    if (!services) return;
-    if (isEmpty(services)) return;
+    if (!services || isEmpty(services)) return;
 
     const currentService = services.find(
       ({ home_chain }) =>
@@ -251,7 +247,6 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         // selected service info
         selectedService: selectedServiceWithStatus,
         selectedServiceStatusOverride,
-        refetchSelectedServiceStatus,
         isSelectedServiceDeploymentStatusLoading,
         selectedAgentConfig,
         selectedAgentType,
