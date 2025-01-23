@@ -40,7 +40,6 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 type ServicesContextType = {
   services?: MiddlewareServiceResponse[];
   serviceWallets?: AgentWallets;
-  selectService: (serviceConfigId: string) => void;
   selectedService?: Service;
   selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
   isSelectedServiceDeploymentStatusLoading: boolean;
@@ -65,7 +64,6 @@ export const ServicesContext = createContext<ServicesContextType>({
   paused: false,
   setPaused: noop,
   togglePaused: noop,
-  selectService: noop,
   isSelectedServiceDeploymentStatusLoading: true,
   refetchSelectedServiceStatus: noop,
   selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
@@ -143,10 +141,6 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
     selectedServiceStatus?.status,
     selectedServiceStatusOverride,
   ]);
-
-  const selectService = useCallback((serviceConfigId: string) => {
-    setSelectedServiceConfigId(serviceConfigId);
-  }, []);
 
   const updateAgentType = useCallback(
     (agentType: AgentType) => {
@@ -248,7 +242,6 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
         isFetched: !isServicesLoading,
         isLoading: isServicesLoading,
         refetch,
-        selectService,
 
         // pause
         paused,
