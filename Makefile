@@ -13,7 +13,7 @@ endef
 
 ./dist/aea_win.exe: ./electron/bins/ ./trader/
 	mkdir -p dist
-	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_win
+	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_win
 	cp -f trader/dist/trader_win.exe ./dist/aea_win.exe
 	cp -f  trader/dist/trader_win.exe  ./electron/bins/aea_win.exe
 	pwd
@@ -21,7 +21,7 @@ endef
 
 ./dist/aea_bin: ./trader/
 	mkdir -p dist
-	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_bin
+	cd trader && poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots --hidden-import grpc --hidden-import openapi_core --collect-all google.protobuf --collect-all openapi_core --collect-all openapi_spec_validator --collect-all asn1crypto --hidden-import py_ecc --hidden-import pytz --onefile pyinstaller/trader_bin.py --name trader_bin
 	cp -f trader/dist/trader_bin ./dist/aea_bin
 	pwd
 
@@ -34,7 +34,7 @@ endef
 
 ./dist/pearl_win.exe: ./operate/ ./dist/aea_win.exe ./dist/tendermint_win.exe
 	pwd
-	poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --onefile --name pearl_win
+	poetry install && rm -fr ./open-aea  && git clone https://github.com/valory-xyz/open-aea.git && poetry run pip install ./open-aea/ && poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all coincurve --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --onefile --name pearl_win
 
 
 ./electron/bins/:
