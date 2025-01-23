@@ -802,12 +802,12 @@ ipcMain.handle('save-logs', async (_, data) => {
           'agent',
           'log.txt',
         );
-        if (!fs.existsSync(agentLogFilePath)) return;
-
-        sanitizeLogs({
-          name: `${serviceDirName}_agent.log`,
-          filePath: agentLogFilePath,
-        });
+        if (fs.existsSync(agentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_agent.log`,
+            filePath: agentLogFilePath,
+          });
+        }
       } catch (e) {
         logger.electron(e);
       }
@@ -815,11 +815,12 @@ ipcMain.handle('save-logs', async (_, data) => {
       // Previous log
       try {
         const prevAgentLogFilePath = path.join(servicePath, 'prev_log.txt');
-        if (!fs.existsSync(prevAgentLogFilePath)) return;
-        sanitizeLogs({
-          name: `${serviceDirName}_prev_agent.log`,
-          filePath: prevAgentLogFilePath,
-        });
+        if (fs.existsSync(prevAgentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_prev_agent.log`,
+            filePath: prevAgentLogFilePath,
+          });
+        }
       } catch (e) {
         logger.electron(e);
       }
