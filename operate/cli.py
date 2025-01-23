@@ -56,6 +56,7 @@ DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
     content={"error": "User not logged in!"}, status_code=401
 )
+HEALTH_CHECKER_DELAY = 180
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
@@ -207,11 +208,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     def schedule_healthcheck_job(
         service_config_id: str,
+        delay: int = 0,
     ) -> None:
         """Schedule a healthcheck job."""
         if not HEALTH_CHECKER_OFF:
             # dont start health checker if it's switched off
-            health_checker.start_for_service(service_config_id)
+            health_checker.start_for_service(service_config_id, delay)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -757,10 +759,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
             manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
-            schedule_healthcheck_job(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
         schedule_funding_job(service_config_id=service_config_id)
+        schedule_healthcheck_job(
+            service_config_id=service_config_id, delay=HEALTH_CHECKER_DELAY
+        )
 
         return JSONResponse(
             content=(
