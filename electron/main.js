@@ -43,10 +43,23 @@ const binaryPaths = {
   darwin: {
     arm64: 'bins/pearl_arm64',
     x64: 'bins/pearl_x64',
+    universal: 'bins/pearl_universal', // Add universal binary support
   },
   win32: {
     x64: 'bins/pearl_win.exe',
   },
+};
+
+// Add architecture detection
+const getArchitecture = () => {
+  if (platform === 'darwin') {
+    // Check for universal binary first
+    if (fs.existsSync(path.join(__dirname, binaryPaths.darwin.universal))) {
+      return 'universal';
+    }
+    return process.arch === 'arm64' ? 'arm64' : 'x64';
+  }
+  return process.arch === 'x64' ? 'x64' : process.arch;
 };
 
 let appConfig = {
@@ -60,6 +73,7 @@ let appConfig = {
       next: 3000,
     },
   },
+  architecture: getArchitecture(), // Add architecture to config
 };
 
 /** @type {Electron.BrowserWindow | null} */

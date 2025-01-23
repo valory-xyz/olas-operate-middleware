@@ -15,8 +15,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-14, macos-14-large] 
-
+        include:
+          - os: macos-14
+            arch: arm64     
+          - os: macos-14-large
+            arch: x64     
+          - os: macos-14
+            arch: universal
     steps:
       - uses: actions/checkout@v3
 
@@ -36,14 +41,9 @@ jobs:
           virtualenvs-path: ~/my-custom-path
           installer-parallel: true
 
-      # Set OS_ARCH env
+      # Set architecture environment variable
       - name: Set architecture environment variable
-        run: |
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
-            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
-          else 
-            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
-          fi
+        run: echo "OS_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
 
       # Cache Poetry dependencies with unique key for each environment and architecture
       - name: Cache Poetry dependencies
@@ -83,8 +83,8 @@ jobs:
       - name: Upload Release Assets
         uses: actions/upload-artifact@v4
         with:
-          name: pearl_${{ env.OS_ARCH }}
-          path: dist/pearl_${{ env.OS_ARCH }}
+          name: pearl_${{ matrix.arch }}
+          path: dist/pearl_${{ matrix.arch }}
 
       - name: Upload Tendermint
         uses: actions/upload-artifact@v4
@@ -103,8 +103,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        env: [production, development]
-        os: [macos-14, macos-14-large]
+        include:
+          - os: macos-14
+            env: production
+            arch: universal
+          - os: macos-14-large 
+            env: production
+            arch: x64
+          - os: macos-14
+            env: production 
+            arch: arm64
 
     needs: build-macos-pyinstaller
 
@@ -123,14 +131,12 @@ jobs:
               yarn config set network-retries 10             # Retry up to 10 times
               yarn config set network-concurrency 2          # Reduce concurrency to 2 connections
     
-      # Set OS_ARCH env
+      # Set architecture environment variable
       - name: Set architecture environment variable
         run: |
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
-            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
-          else 
-            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
-          fi
+          echo "OS_ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+          echo "ARCH=${{ matrix.arch }}" >> $GITHUB_ENV
+
       # Download the appropriate architecture artifact
       - name: Download Pearl binary for architecture
         uses: actions/download-artifact@v4
@@ -252,19 +258,3 @@ jobs:
           echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
           echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
           node build.js
-
-      # Run universal build for both architectures (better legacy support)
-      - name: Build with electron-builder (Universal Production)
-        if: matrix.env == 'production' && matrix.os == 'macos-14'
-        env:
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-          APPLE_ID: ${{ secrets.APPLEID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          GH_TOKEN: ${{ secrets.github_token }}
-          NODE_ENV: ${{ matrix.env }}
-          ARCH: "universal"
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-        run: node build.js

@@ -18,8 +18,17 @@ function artifactName() {
 
 const main = async () => {
   console.log('Building...');
-
-  /** @type import {CliOptions} from "electron-builder" */
+ 
+  const macTarget = process.env.ARCH === 'universal' ? {
+    target: 'dmg',
+    arch: ['arm64', 'x64'],
+    artifactName: '${productName}-${version}-${platform}-universal.${ext}'
+  } : {
+    target: 'dmg',
+    arch: [process.env.ARCH],
+    artifactName: '${productName}-${version}-${platform}-${arch}.${ext}'
+  };
+ 
   await build({
     publish: 'onTag',
     config: {
@@ -32,7 +41,7 @@ const main = async () => {
       },
       extraResources: [
         {
-          from: 'electron/bins',
+          from: process.env.ARCH === 'universal' ? 'electron/bins' : 'electron/bins',
           to: 'bins',
           filter: ['**/*'],
         },
@@ -41,15 +50,10 @@ const main = async () => {
           to: '.env'
         },
       ],
-      cscKeyPassword: process.env.CSC_KEY_PASSWORD,
+      cscKeyPassword: process.env.CSC_KEY_PASSWORD, 
       cscLink: process.env.CSC_LINK,
       mac: {
-        target: [
-          {
-            target: 'dmg',
-            arch: [process.env.ARCH], // ARCH env is set during release CI
-          },
-        ],
+        target: [macTarget],
         publish: publishOptions,
         category: 'public.app-category.utilities',
         icon: 'electron/assets/icons/splash-robot-head-dock.png',
@@ -60,7 +64,7 @@ const main = async () => {
       },
     },
   });
-};
+ };
 
 main().then(() => {
   console.log('Build & Notarize complete');
