@@ -91,7 +91,7 @@ export const useMainOlasBalance = () => {
     !isBalanceLoaded,
     isStakingRewardsDetailsLoading,
     isAvailableRewardsForEpochLoading,
-    !selectedStakingProgramId,
+    !selectedStakingProgramId, // staking program is required to calculate staking rewards
   ].some(Boolean);
 
   return { isMainOlasBalanceLoading, mainOlasBalance };

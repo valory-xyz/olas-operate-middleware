@@ -51,10 +51,17 @@ type ServicesContextType = {
   overrideSelectedServiceStatus: (
     status?: Maybe<MiddlewareDeploymentStatus>,
   ) => void;
-} & Partial<QueryObserverBaseResult<MiddlewareServiceResponse[]>> &
+  isFetched: boolean;
+} & Partial<
+  Pick<
+    QueryObserverBaseResult<MiddlewareServiceResponse[]>,
+    'isLoading' | 'refetch'
+  >
+> &
   UsePause;
 
 export const ServicesContext = createContext<ServicesContextType>({
+  isFetched: false,
   paused: false,
   setPaused: noop,
   togglePaused: noop,
@@ -90,9 +97,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const {
     data: services,
-    isError,
     isLoading: isServicesLoading,
-    isFetching,
     refetch,
   } = useQuery<MiddlewareServiceResponse[]>({
     queryKey: REACT_QUERY_KEYS.SERVICES_KEY,
@@ -240,10 +245,8 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
       value={{
         services,
         serviceWallets,
-        isError,
         isFetched: !isServicesLoading,
         isLoading: isServicesLoading,
-        isFetching,
         refetch,
         selectService,
 

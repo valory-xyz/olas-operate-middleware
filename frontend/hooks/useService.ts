@@ -33,8 +33,6 @@ type ServiceChainIdAddressRecord = {
  */
 export const useService = (serviceConfigId?: string) => {
   const { services, isFetched: isLoaded, selectedService } = useServices();
-  // const queryClient = useQueryClient();
-  // const { wallets } = useMasterWalletContext(); // TODO: implement
 
   const service = useMemo<Optional<Service>>(() => {
     if (serviceConfigId === selectedService?.service_config_id)
@@ -97,10 +95,7 @@ export const useService = (serviceConfigId?: string) => {
 
         return {
           ...acc,
-          [evmChainId]: {
-            agentSafe: multisig,
-            agentEoas: instances,
-          },
+          [evmChainId]: { agentSafe: multisig, agentEoas: instances },
         };
       },
       {},
@@ -141,28 +136,6 @@ export const useService = (serviceConfigId?: string) => {
       ) ?? null
     );
   }, [flatAddresses, serviceWallets]);
-
-  /**
-   * Overrides the deployment status of the service in the cache.
-   * @note Overwrite is only temporary if ServicesContext is polling
-   */
-  // const setDeploymentStatus = (
-  //   deploymentStatus?: MiddlewareDeploymentStatus,
-  // ) => {
-  //   // if (!serviceConfigId) throw new Error('Service config ID is required');
-  //   // if (!deploymentStatus) throw new Error('Deployment status is required');
-
-  //   queryClient.setQueryData(
-  //     REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
-  //     deploymentStatus,
-  //   );
-  // };
-
-  // const deploymentStatus = serviceConfigId
-  //   ? queryClient.getQueryData<MiddlewareDeploymentStatus | undefined>(
-  //       REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(serviceConfigId),
-  //     )
-  //   : undefined;
 
   /** @note deployment is transitioning from stopped to deployed (and vice versa) */
   const isServiceTransitioning = deploymentStatus
