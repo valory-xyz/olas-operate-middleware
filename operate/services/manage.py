@@ -649,6 +649,17 @@ class ServiceManager:
                 }
             )
 
+        # TODO yet another computed variable for modius
+        if all(
+            var in service.env_variables
+            for var in [
+                "STORE_PATH",
+            ]
+        ):
+            store_path = service.path / "persistent_data"
+            store_path.parent.mkdir(parents=True, exist_ok=True)
+            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
+
         service.update_env_variables_values(env_var_to_value)
 
         if user_params.use_staking:
