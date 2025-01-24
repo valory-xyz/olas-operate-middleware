@@ -39,7 +39,7 @@ import { OnlineStatusContext } from './OnlineStatusProvider';
 
 type ServicesResponse = Pick<
   QueryObserverBaseResult<MiddlewareServiceResponse[]>,
-  'isLoading' | 'refetch'
+  'isLoading' | 'refetch' | 'isFetched'
 >;
 
 type ServicesContextType = {
@@ -54,7 +54,6 @@ type ServicesContextType = {
   overrideSelectedServiceStatus: (
     status?: Maybe<MiddlewareDeploymentStatus>,
   ) => void;
-  isFetched: boolean;
 } & Partial<ServicesResponse> &
   UsePause;
 
