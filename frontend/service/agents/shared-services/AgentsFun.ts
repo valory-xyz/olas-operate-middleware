@@ -16,6 +16,8 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
+const TS_SAFETY_MARGIN = 21600; // 6 hours
+
 export abstract class AgentsFunService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
@@ -74,7 +76,8 @@ export abstract class AgentsFunService extends StakedAgentService {
           activityChecker.isRatioPass(
             currentMultisigNonces,
             lastMultisigNonces,
-            Math.ceil(nowInSeconds - tsCheckpoint),
+            // Need to add a margin in case epoch closes later, otherwise users won't be rewarded
+            Math.ceil(nowInSeconds - tsCheckpoint) + TS_SAFETY_MARGIN,
           ),
         ])
       : [false];
