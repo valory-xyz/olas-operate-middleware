@@ -1,5 +1,5 @@
 import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
-import { isEmpty, noop } from 'lodash';
+import { noop } from 'lodash';
 import {
   createContext,
   PropsWithChildren,
@@ -33,6 +33,7 @@ import { ServicesService } from '@/service/Services';
 import { AgentConfig } from '@/types/Agent';
 import { Service } from '@/types/Service';
 import { Maybe, Nullable, Optional } from '@/types/Util';
+import { isNilOrEmpty } from '@/utils/lodashExtensions';
 import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
@@ -156,7 +157,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
 
   const serviceWallets: Optional<AgentWallets> = useMemo(() => {
     if (isServicesLoading) return;
-    if (!services || isEmpty(services)) return [];
+    if (isNilOrEmpty(services)) return [];
 
     return services.reduce<AgentWallets>(
       (acc, service: MiddlewareServiceResponse) => {
@@ -210,7 +211,7 @@ export const ServicesProvider = ({ children }: PropsWithChildren) => {
   useEffect(() => {
     if (!selectedAgentConfig) return;
     if (isSelectedServiceDeploymentStatusLoading) return;
-    if (!services || isEmpty(services)) return;
+    if (isNilOrEmpty(services)) return;
 
     const currentService = services.find(
       ({ home_chain }) =>
