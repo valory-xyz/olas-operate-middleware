@@ -650,7 +650,7 @@ class ServiceManager:
             )
 
         # TODO yet another computed variable for modius
-        if service.name.lower() == "optimus":
+        if "optimus" in service.name.lower():
             store_path = service.path / "persistent_data"
             store_path.mkdir(parents=True, exist_ok=True)
             env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
