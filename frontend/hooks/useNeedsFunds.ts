@@ -174,9 +174,9 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
       if (additionalTokens.length === 0) return true;
 
       return additionalTokens.every((tokenSymbol) => {
-        const tokenBalance = balancesByChain[chainId][tokenSymbol] || 0;
+        const tokenBalance = balancesByChain[chainId]?.[tokenSymbol] || 0;
         const tokenRequired =
-          serviceFundRequirements[chainId][tokenSymbol] || 0;
+          serviceFundRequirements[chainId]?.[tokenSymbol] || 0;
 
         return tokenBalance >= tokenRequired;
       });
