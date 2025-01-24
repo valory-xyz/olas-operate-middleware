@@ -752,6 +752,8 @@ ipcMain.handle('save-logs', async (_, data) => {
     OS Release: ${os.release()}
     Total Memory: ${os.totalmem()}
     Free Memory: ${os.freemem()}
+    Available Parallelism: ${os.availableParallelism()}
+    CPUs: ${JSON.stringify(os.cpus())}
   `;
   const osInfoFilePath = path.join(paths.osPearlTempDir, 'os_info.txt');
   fs.writeFileSync(osInfoFilePath, osInfo);
