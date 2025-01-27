@@ -72,11 +72,6 @@ const EachAgent = memo(
     const handleSelectAgent = useCallback(async () => {
       updateAgentType(agentType);
 
-      // TEST: Remove this line
-      gotoPage(Pages.Setup);
-      gotoSetup(SetupScreen.AgentIntroduction);
-      return;
-
       // DO NOTE REMOVE THIS DELAY
       // NOTE: the delay is added so that agentType is updated in electron store
       // and re-rendered with the updated agentType
@@ -108,15 +103,9 @@ const EachAgent = memo(
         return;
       }
 
-      // Neither service nor safe is created
-      if (agentConfig.requiresSetup) {
-        // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupYourAgent);
-      } else {
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupEoaFunding);
-      }
+      // If service is NOT created, then go to agent introduction
+      gotoPage(Pages.Setup);
+      gotoSetup(SetupScreen.AgentIntroduction);
     }, [
       services,
       agentType,
@@ -124,7 +113,6 @@ const EachAgent = memo(
       gotoSetup,
       masterSafes,
       updateAgentType,
-      agentConfig.requiresSetup,
     ]);
 
     return (

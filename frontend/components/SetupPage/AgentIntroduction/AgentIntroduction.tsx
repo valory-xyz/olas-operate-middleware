@@ -1,114 +1,53 @@
-import { LeftOutlined } from '@ant-design/icons';
-import { Button, Divider, Flex, Typography } from 'antd';
-import { AnimatePresence, motion } from 'framer-motion';
-import Image from 'next/image';
+import { Divider, Flex, Typography } from 'antd';
 import React, { FC, useCallback, useMemo, useState } from 'react';
 
-import { APP_WIDTH } from '@/constants/width';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
 
-const { Title, Text } = Typography;
+import { IntroductionStep, OnboardingStep } from './IntroductionStep';
 
-const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
+const { Text } = Typography;
+
+type IntroductionProps = {
+  steps: OnboardingStep[];
+  onOnboardingComplete: () => void;
+};
+
+const Introduction = ({ steps, onOnboardingComplete }: IntroductionProps) => {
   const { goto } = useSetup();
   const [currentStep, setCurrentStep] = useState(0);
 
-  const isLastStep = currentStep === steps.length - 1;
-
   const onNextStep = useCallback(() => {
-    // TODO
-    if (isLastStep) {
-      goto(SetupScreen.SetupYourAgent);
-      return;
+    if (currentStep === steps.length - 1) {
+      onOnboardingComplete();
+    } else {
+      setCurrentStep((prev) => (prev + 1) % steps.length);
     }
-
-    setCurrentStep((prev) => (prev + 1) % steps.length);
-  }, [isLastStep, goto, steps.length]);
+  }, [currentStep, steps.length, onOnboardingComplete]);
 
   const onPreviousStep = useCallback(() => {
     if (currentStep === 0) {
       goto(SetupScreen.AgentSelection);
-      return;
+    } else {
+      setCurrentStep((prev) => prev - 1);
     }
-    setCurrentStep((prev) => prev - 1);
   }, [currentStep, goto]);
 
   return (
-    <div style={{ overflow: 'hidden' }}>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={currentStep}
-          initial={{ opacity: 0, x: 25, scale: 0.99 }}
-          animate={{ opacity: 1, x: 0, scale: 1 }}
-          exit={{ opacity: 0, x: -25, scale: 0.99 }}
-          transition={{
-            opacity: { duration: 0.1 },
-            scale: { duration: 0.1 },
-            duration: 0.1,
-          }}
-        >
-          <Image
-            src={`/${steps[currentStep].imgSrc}.svg`}
-            alt={steps[currentStep].title}
-            width={APP_WIDTH - 8}
-            height={400 - 8}
-            priority
-          />
-        </motion.div>
-      </AnimatePresence>
-
-      <div style={{ padding: 24 }}>
-        <Flex vertical gap={24}>
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentStep}
-              initial={{ opacity: 0, x: 10 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -10 }}
-              transition={{ duration: 0.1 }}
-            >
-              <Flex vertical gap={8}>
-                <Title level={5} className="m-0">
-                  {steps[currentStep].title}
-                </Title>
-                <Text>
-                  {steps[currentStep].desc}
-                  {steps[currentStep].helper && (
-                    <Text type="secondary"> {steps[currentStep].helper}</Text>
-                  )}
-                </Text>
-              </Flex>
-            </motion.div>
-          </AnimatePresence>
-
-          <Flex gap={12}>
-            <Button
-              size="large"
-              onClick={onPreviousStep}
-              style={{ minWidth: 40 }}
-              icon={<LeftOutlined />}
-            />
-
-            <Button type="primary" block size="large" onClick={onNextStep}>
-              {isLastStep ? 'Set up agent' : 'Continue'}
-            </Button>
-          </Flex>
-        </Flex>
-      </div>
-    </div>
+    <IntroductionStep
+      title={steps[currentStep].title}
+      desc={steps[currentStep].desc}
+      imgSrc={steps[currentStep].imgSrc}
+      helper={steps[currentStep].helper}
+      btnText={currentStep === steps.length - 1 ? 'Set up agent' : 'Continue'}
+      onPrev={onPreviousStep}
+      onNext={onNextStep}
+    />
   );
 };
 
-type IntroductionStep = {
-  title: string;
-  desc: string;
-  imgSrc: string;
-  helper?: string;
-};
-
-const predictionAgentSteps: IntroductionStep[] = [
+const predictionAgentSteps: OnboardingStep[] = [
   {
     title: 'Monitor prediction markets',
     desc: 'Your prediction agent actively scans prediction markets to identify new opportunities for investment.',
@@ -126,7 +65,7 @@ const predictionAgentSteps: IntroductionStep[] = [
   },
 ];
 
-const agentsFunSteps: IntroductionStep[] = [
+const agentsFunSteps: OnboardingStep[] = [
   {
     title: 'Create your agent’s persona',
     desc: 'Your agent will post autonomously on X, crafting content based on the persona you provide.',
@@ -146,7 +85,7 @@ const agentsFunSteps: IntroductionStep[] = [
   },
 ];
 
-const modiusSteps: IntroductionStep[] = [
+const modiusSteps: OnboardingStep[] = [
   {
     title: 'Gather market data',
     desc: 'Your Modius autonomous investment trading agent collects up-to-date market data from CoinGecko, focusing on select DeFi protocols on the Mode chain.',
@@ -165,9 +104,10 @@ const modiusSteps: IntroductionStep[] = [
 ];
 
 /**
- * Display the introduction of the selected agent.
+ * Display the introduction (onboarding) of the selected agent.
  */
 export const AgentIntroduction: FC = () => {
+  const { goto } = useSetup();
   const { selectedAgentType, selectedAgentConfig } = useServices();
 
   const introductionSteps = useMemo(() => {
@@ -178,13 +118,26 @@ export const AgentIntroduction: FC = () => {
     throw new Error('Invalid agent type');
   }, [selectedAgentType]);
 
+  const onComplete = useCallback(() => {
+    // if the selected type requires setting up an agent,
+    // should be redirected to setup screen.
+    if (selectedAgentConfig.requiresSetup) {
+      goto(SetupScreen.SetupYourAgent);
+    } else {
+      goto(SetupScreen.SetupEoaFunding);
+    }
+  }, [goto, selectedAgentConfig.requiresSetup]);
+
   return (
     <>
       <Flex align="center" justify="center" style={{ paddingTop: 12 }}>
         <Text>{selectedAgentConfig.displayName}</Text>
       </Flex>
       <Divider style={{ margin: '12px 0' }} />
-      <Introduction steps={introductionSteps} />
+      <Introduction
+        steps={introductionSteps}
+        onOnboardingComplete={onComplete}
+      />
     </>
   );
 };
