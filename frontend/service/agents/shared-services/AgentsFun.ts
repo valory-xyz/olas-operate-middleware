@@ -16,6 +16,8 @@ import {
 
 import { ONE_YEAR, StakedAgentService } from './StakedAgentService';
 
+const REQUESTS_SAFETY_MARGIN = 1;
+
 export abstract class AgentsFunService extends StakedAgentService {
   static getAgentStakingRewardsInfo = async ({
     agentMultisigAddress,
@@ -69,15 +71,18 @@ export abstract class AgentsFunService extends StakedAgentService {
     const nowInSeconds = Math.floor(Date.now() / 1000);
 
     const isServiceStaked = serviceInfo[2].length > 0;
-    const [isEligibleForRewards] = isServiceStaked
-      ? await provider.all([
-          activityChecker.isRatioPass(
-            currentMultisigNonces,
-            lastMultisigNonces,
-            Math.ceil(nowInSeconds - tsCheckpoint),
-          ),
-        ])
-      : [false];
+
+    const requiredRequests =
+      (Math.ceil(Math.max(livenessPeriod, nowInSeconds - tsCheckpoint)) *
+        livenessRatio) /
+        1e18 +
+      REQUESTS_SAFETY_MARGIN;
+
+    const eligibleRequests = isServiceStaked
+      ? currentMultisigNonces[0] - lastMultisigNonces[0]
+      : 0;
+
+    const isEligibleForRewards = eligibleRequests >= requiredRequests;
 
     const availableRewardsForEpoch = Math.max(
       rewardsPerSecond * livenessPeriod, // expected rewards for the epoch

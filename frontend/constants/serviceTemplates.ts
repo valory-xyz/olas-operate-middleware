@@ -10,11 +10,11 @@ import { parseEther, parseUnits } from '@/utils/numberFormatters';
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
   name: 'Trader Agent', // Should be unique across all services and not be updated
-  hash: 'bafybeicts6zhavxzz2rxahz3wzs2pzamoq64n64wp4q4cdanfuz7id6c2q',
+  hash: 'bafybeiel3n4wjf63gdhbslmsoctb32eiy7iilzu465omsyejx5hry3r5em',
   description: 'Trader agent for omen prediction markets',
   image:
     'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
-  service_version: 'v0.22.0',
+  service_version: 'v0.23.0',
   home_chain: MiddlewareChain.GNOSIS,
   configurations: {
     [MiddlewareChain.GNOSIS]: {
@@ -98,11 +98,11 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
-  hash: 'bafybeig5h3el4kz3o7epnwtuvzhlojlgcpw3rlkmnqt5xjc6dnyio2afqi',
+  hash: 'bafybeig6p2tujazmwglrx6frtkobz2gmx7og3jy5wrixtmdir74rxo3cy4',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.3.0-alpha1',
+  service_version: 'v0.3.0-alpha3',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
@@ -246,7 +246,7 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus', // Should be unique across all services and not be updated
-  hash: 'bafybeibkgwyqirzpgdjfk6iurplzmp75d7cku72e52km4gjudnacxcqrte',
+  hash: 'bafybeicmohtqkz5nkswwcu2uqj6julngc3d5daljjvhfab4z2x6rfroogi',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
@@ -366,6 +366,12 @@ export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
       value: '250000',
       provision_type: EnvProvisionType.FIXED,
     },
+    STORE_PATH: {
+      name: 'Store path',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },    
   },
 } as const;
 

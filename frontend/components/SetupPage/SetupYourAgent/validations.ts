@@ -53,8 +53,10 @@ export const validateTwitterCredentials = async (
       email,
     });
 
-    if (result.success && result.cookies) {
-      return { isValid: true, cookies: formatXCookies(result.cookies) };
+    const cookies = result.cookies;
+
+    if (cookies) {
+      return { isValid: true, cookies: formatXCookies(cookies) };
     }
 
     console.error('Error validating Twitter credentials:', result);

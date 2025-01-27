@@ -33,6 +33,24 @@ const { Scraper } = require('agent-twitter-client');
 // TODO: only reintroduce once refactor completed
 // validateEnv();
 
+// Add devtools extension in Dev mode
+if (isDev) {
+  const {
+    default: installExtension,
+    REACT_DEVELOPER_TOOLS,
+  } = require('electron-devtools-installer');
+  app.whenReady().then(() => {
+    installExtension([REACT_DEVELOPER_TOOLS], {
+      loadExtensionOptions: { allowFileAccess: true },
+      forceDownload: false,
+    })
+      .then(([react]) => console.log(`Added Extensions: ${react.name}`))
+      .catch((e) =>
+        console.log('An error occurred on loading extensions: ', e),
+      );
+  });
+}
+
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -215,7 +233,7 @@ async function beforeQuit(event) {
   app.quit();
 }
 
-const APP_WIDTH = 460;
+const APP_WIDTH = 500;
 
 /**
  * Creates the splash window
@@ -734,6 +752,8 @@ ipcMain.handle('save-logs', async (_, data) => {
     OS Release: ${os.release()}
     Total Memory: ${os.totalmem()}
     Free Memory: ${os.freemem()}
+    Available Parallelism: ${os.availableParallelism()}
+    CPUs: ${JSON.stringify(os.cpus())}
   `;
   const osInfoFilePath = path.join(paths.osPearlTempDir, 'os_info.txt');
   fs.writeFileSync(osInfoFilePath, osInfo);
@@ -771,23 +791,41 @@ ipcMain.handle('save-logs', async (_, data) => {
 
   // Agent logs
   try {
-    fs.readdirSync(paths.servicesDir).map((serviceDirName) => {
+    fs.readdirSync(paths.servicesDir).forEach((serviceDirName) => {
       const servicePath = path.join(paths.servicesDir, serviceDirName);
       if (!fs.existsSync(servicePath)) return;
       if (!fs.statSync(servicePath).isDirectory()) return;
 
-      const agentLogFilePath = path.join(
-        servicePath,
-        'deployment',
-        'agent',
-        'log.txt',
-      );
-      if (!fs.existsSync(agentLogFilePath)) return;
+      // Most recent log
+      try {
+        const agentLogFilePath = path.join(
+          servicePath,
+          'deployment',
+          'agent',
+          'log.txt',
+        );
+        if (fs.existsSync(agentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_agent.log`,
+            filePath: agentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
 
-      return sanitizeLogs({
-        name: `${serviceDirName}_agent.log`,
-        filePath: agentLogFilePath,
-      });
+      // Previous log
+      try {
+        const prevAgentLogFilePath = path.join(servicePath, 'prev_log.txt');
+        if (fs.existsSync(prevAgentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_prev_agent.log`,
+            filePath: prevAgentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
     });
   } catch (e) {
     logger.electron(e);

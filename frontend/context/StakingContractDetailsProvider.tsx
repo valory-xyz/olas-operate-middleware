@@ -157,11 +157,11 @@ type StakingContractDetailsContextProps = {
  */
 export const StakingContractDetailsContext =
   createContext<StakingContractDetailsContextProps>({
-    selectedStakingContractDetails: null,
-    isPaused: false,
-    isAllStakingContractDetailsRecordLoaded: false,
     isSelectedStakingContractDetailsLoading: false,
+    selectedStakingContractDetails: null,
+    isAllStakingContractDetailsRecordLoaded: false,
     refetchSelectedStakingContractDetails: async () => {},
+    isPaused: false,
     setIsPaused: () => {},
   });
 
@@ -183,6 +183,7 @@ export const StakingContractDetailsProvider = ({
   } = useStakingContractDetailsByStakingProgram({
     serviceNftTokenId,
     stakingProgramId: selectedStakingProgramId,
+    isPaused,
   });
 
   const { allStakingContractDetailsRecord, isAllStakingContractDetailsLoaded } =
@@ -195,14 +196,19 @@ export const StakingContractDetailsProvider = ({
   return (
     <StakingContractDetailsContext.Provider
       value={{
+        // selected staking contract details
         selectedStakingContractDetails,
         isSelectedStakingContractDetailsLoading: isLoading,
+        refetchSelectedStakingContractDetails,
+
+        // all staking contract details
         isAllStakingContractDetailsRecordLoaded:
           isAllStakingContractDetailsLoaded,
         allStakingContractDetailsRecord,
+
+        // pause state
         isPaused,
         setIsPaused,
-        refetchSelectedStakingContractDetails,
       }}
     >
       {children}

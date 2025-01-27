@@ -124,9 +124,13 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     return serviceChainIds.every((chainId) => {
       const nativeTokenSymbol = getNativeTokenSymbol(chainId);
       const nativeTokenBalance =
-        balancesByChain[chainId][nativeTokenSymbol] || 0;
+        // TODO: temporarily use .? here, because when switching between agents,
+        // the memoized serviceChainIds and balancesByChain can have different keys
+        // leading balancesByChain[chainId] to be undefined and this code fail.
+        // We need to properly check if the data is loading in both useMemo and return null
+        balancesByChain[chainId]?.[nativeTokenSymbol] || 0;
       const nativeTokenRequired =
-        serviceFundRequirements[chainId][nativeTokenSymbol] || 0;
+        serviceFundRequirements[chainId]?.[nativeTokenSymbol] || 0;
 
       return nativeTokenBalance >= nativeTokenRequired;
     });
@@ -140,9 +144,13 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
     if (isEmpty(balancesByChain)) return;
 
     return serviceChainIds.every((chainId) => {
-      const olasBalance = balancesByChain[chainId][TokenSymbol.OLAS] || 0;
+      // TODO: temporarily use .? here, because when switching between agents,
+      // the memoized serviceChainIds and balancesByChain can have different keys
+      // leading balancesByChain[chainId] to be undefined and this code fail.
+      // We need to properly check if the data is loading in both useMemo and return null
+      const olasBalance = balancesByChain[chainId]?.[TokenSymbol.OLAS] || 0;
       const olasRequired =
-        serviceFundRequirements[chainId][TokenSymbol.OLAS] || 0;
+        serviceFundRequirements[chainId]?.[TokenSymbol.OLAS] || 0;
 
       return olasBalance >= olasRequired;
     });
@@ -166,9 +174,9 @@ export const useNeedsFunds = (stakingProgramId: Maybe<StakingProgramId>) => {
       if (additionalTokens.length === 0) return true;
 
       return additionalTokens.every((tokenSymbol) => {
-        const tokenBalance = balancesByChain[chainId][tokenSymbol] || 0;
+        const tokenBalance = balancesByChain[chainId]?.[tokenSymbol] || 0;
         const tokenRequired =
-          serviceFundRequirements[chainId][tokenSymbol] || 0;
+          serviceFundRequirements[chainId]?.[tokenSymbol] || 0;
 
         return tokenBalance >= tokenRequired;
       });

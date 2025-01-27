@@ -20,6 +20,14 @@ const Balance = styled.span`
   margin-right: 4px;
 `;
 
+const BalanceLoader = () => (
+  <Skeleton.Button
+    active
+    size="large"
+    style={{ margin: '8px 4px 0px 0px', width: 160 }}
+  />
+);
+
 export const MainOlasBalance = () => {
   const isBalanceBreakdownEnabled = useFeatureFlag('manage-wallet');
   const { goto } = usePageState();
@@ -92,25 +100,26 @@ export const MainOlasBalance = () => {
       borderbottom="true"
       padding="16px 24px"
     >
-      {isMainOlasBalanceLoading ? (
-        <Skeleton.Input active size="large" style={{ margin: '4px 0' }} />
-      ) : (
-        <Flex vertical gap={8}>
-          <Flex align="center" justify="space-between">
-            <Text type="secondary">Current balance</Text>
-            {isBalanceBreakdownEnabled && (
-              <Button
-                size="small"
-                onClick={() => goto(Pages.ManageWallet)}
-                className="text-sm"
-              >
-                Manage wallet
-              </Button>
-            )}
-          </Flex>
+      <Flex vertical gap={8}>
+        <Flex align="center" justify="space-between">
+          <Text type="secondary">Current balance</Text>
+          {isBalanceBreakdownEnabled && (
+            <Button
+              size="small"
+              disabled={isMainOlasBalanceLoading}
+              onClick={() => goto(Pages.ManageWallet)}
+              className="text-sm"
+            >
+              Manage wallet
+            </Button>
+          )}
+        </Flex>
 
-          <Flex align="end">
-            <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
+        <Flex align="end">
+          <span className="balance-symbol">{UNICODE_SYMBOLS.OLAS}</span>
+          {isMainOlasBalanceLoading ? (
+            <BalanceLoader />
+          ) : (
             <Balance className="balance">
               <AnimateNumber
                 value={mainOlasBalance}
@@ -118,10 +127,10 @@ export const MainOlasBalance = () => {
                 onAnimationChange={onAnimationChange}
               />
             </Balance>
-            <span className="balance-currency">OLAS</span>
-          </Flex>
+          )}
+          <span className="balance-currency">OLAS</span>
         </Flex>
-      )}
+      </Flex>
     </CardSection>
   );
 };
