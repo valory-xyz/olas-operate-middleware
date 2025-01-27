@@ -14,7 +14,7 @@ export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   description: 'Trader agent for omen prediction markets',
   image:
     'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
-  service_version: 'v0.18.7',
+  service_version: 'v0.18.4',
   home_chain: MiddlewareChain.GNOSIS,
   configurations: {
     [MiddlewareChain.GNOSIS]: {
