@@ -531,9 +531,8 @@ class ServiceManager:
 
         if user_params.use_staking:
             staking_params = sftxb.get_staking_params(
-                staking_contract=STAKING[ledger_config.chain][
-                    user_params.staking_program_id
-                ],
+                chain=ledger_config.chain,
+                program_id=user_params.staking_program_id,
             )
         else:
             staking_params = dict(  # nosec
