@@ -1,5 +1,6 @@
 import { LeftOutlined } from '@ant-design/icons';
 import { Button, Divider, Flex, Typography } from 'antd';
+import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 import React, { FC, useCallback, useMemo, useState } from 'react';
 
@@ -35,13 +36,24 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
   }, [currentStep, goto]);
 
   return (
-    <>
-      <Image
-        src={`/${steps[currentStep].imgSrc}.svg`}
-        alt={steps[currentStep].title}
-        width={APP_WIDTH - 8}
-        height={400 - 8}
-      />
+    <div style={{ overflow: 'hidden' }}>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={currentStep}
+          initial={{ opacity: 0, x: 25 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -25 }}
+          transition={{ duration: 0.125 }}
+        >
+          <Image
+            src={`/${steps[currentStep].imgSrc}.svg`}
+            alt={steps[currentStep].title}
+            width={APP_WIDTH - 8}
+            height={400 - 8}
+            priority
+          />
+        </motion.div>
+      </AnimatePresence>
 
       <div style={{ padding: 24 }}>
         <Flex vertical gap={24}>
@@ -71,7 +83,7 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
           </Flex>
         </Flex>
       </div>
-    </>
+    </div>
   );
 };
 
