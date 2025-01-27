@@ -31,4 +31,20 @@ export const MODE_STAKING_PROGRAMS: StakingProgramMap = {
       STAKING_TOKEN_PROXY_ABI,
     ),
   },
+  [StakingProgramId.ModiusOptimusAlpha]: {
+    chainId: EvmChainId.Mode,
+    name: 'Optimus Alpha',
+    agentsSupported: [AgentType.Modius],
+    stakingRequirements: {
+      [TokenSymbol.OLAS]: 40,
+    },
+    activityChecker:
+      ACTIVITY_CHECKERS[EvmChainId.Mode][ActivityCheckerType.Staking],
+    contract: new MulticallContract(
+      MODE_STAKING_PROGRAMS_CONTRACT_ADDRESSES[
+        StakingProgramId.ModiusOptimusAlpha
+      ],
+      STAKING_TOKEN_PROXY_ABI,
+    ),
+  },
 };
