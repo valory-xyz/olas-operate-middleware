@@ -136,6 +136,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     if config.staking_vars is None:
         print_section("Please, select your staking program preference")
         ids = list(template["staking_programs"].keys())
+        available_choices = {}
         for index, key in enumerate(ids):
             metadata = staking_handler.get_staking_contract_metadata(program_id=key)
             name = metadata["name"]
@@ -143,20 +144,38 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
             wrapped_description = textwrap.fill(
                 description, width=80, initial_indent="   ", subsequent_indent="   "
             )
-            print(f"{index + 1}) {name}\n{wrapped_description}\n")
-
+            program_id = key
+            if name.lower().startswith('no staking'):
+                print(f"{index + 1}) {name}\n{wrapped_description}\n")
+                available_choices[index + 1] = {
+                    "program_id": program_id,
+                    "slots": "∞",
+                    "name": name
+                }
+                continue
+            available = staking_handler.get_staking_slots_count(program_id=program_id)
+            print(f"{index + 1}) {name} ( available slots : {available} )\n{wrapped_description}\n")
+            if available > 0:
+                available_choices[index + 1] = {
+                    "program_id": program_id,
+                    "slots": available,
+                    "name": name
+                }
         while True:
             try:
-                choice = int(input(f"Enter your choice (1 - {len(ids)}): ")) - 1
-                if not (0 <= choice < len(ids)):
-                    raise ValueError
-                program_id = ids[choice]
+                choice = int(input(f"Enter your choice (1 - {len(ids)}): "))
+                if choice not in available_choices:
+                    print("\nPlease select from available programs:")
+                    for idx, prog in available_choices.items():
+                        print(f"{idx}) {prog['name']} : available slots {prog['slots']}")
+                    continue
+                selected_program = available_choices[choice]
+                program_id = selected_program["program_id"]
+                print(f"Selected staking program: {selected_program['name']}")
+                config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
                 break
             except ValueError:
                 print(f"Please enter a valid option (1 - {len(ids)}).")
-
-        print(f"Selected staking program: {program_id}")
-        config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
 
     if config.principal_chain is None:
         config.principal_chain = template["home_chain"]
