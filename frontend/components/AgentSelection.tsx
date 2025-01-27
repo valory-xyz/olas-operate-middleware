@@ -72,6 +72,11 @@ const EachAgent = memo(
     const handleSelectAgent = useCallback(async () => {
       updateAgentType(agentType);
 
+      // TEST: Remove this line
+      gotoPage(Pages.Setup);
+      gotoSetup(SetupScreen.AgentIntroduction);
+      return;
+
       // DO NOTE REMOVE THIS DELAY
       // NOTE: the delay is added so that agentType is updated in electron store
       // and re-rendered with the updated agentType

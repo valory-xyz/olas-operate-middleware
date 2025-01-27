@@ -13,4 +13,5 @@ export enum SetupScreen {
   RestoreViaSeed,
   RestoreSetPassword,
   RestoreViaBackup,
+  AgentIntroduction,
 }
