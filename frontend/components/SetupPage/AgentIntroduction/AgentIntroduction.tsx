@@ -40,10 +40,14 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
       <AnimatePresence mode="wait">
         <motion.div
           key={currentStep}
-          initial={{ opacity: 0, x: 25 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -25 }}
-          transition={{ duration: 0.125 }}
+          initial={{ opacity: 0, x: 25, scale: 0.99 }}
+          animate={{ opacity: 1, x: 0, scale: 1 }}
+          exit={{ opacity: 0, x: -25, scale: 0.99 }}
+          transition={{
+            opacity: { duration: 0.1 },
+            scale: { duration: 0.1 },
+            duration: 0.1,
+          }}
         >
           <Image
             src={`/${steps[currentStep].imgSrc}.svg`}
@@ -57,17 +61,27 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
 
       <div style={{ padding: 24 }}>
         <Flex vertical gap={24}>
-          <Flex vertical gap={8}>
-            <Title level={5} className="m-0">
-              {steps[currentStep].title}
-            </Title>
-            <Text>
-              {steps[currentStep].desc}
-              {steps[currentStep].helper && (
-                <Text type="secondary"> {steps[currentStep].helper}</Text>
-              )}
-            </Text>
-          </Flex>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={currentStep}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.1 }}
+            >
+              <Flex vertical gap={8}>
+                <Title level={5} className="m-0">
+                  {steps[currentStep].title}
+                </Title>
+                <Text>
+                  {steps[currentStep].desc}
+                  {steps[currentStep].helper && (
+                    <Text type="secondary"> {steps[currentStep].helper}</Text>
+                  )}
+                </Text>
+              </Flex>
+            </motion.div>
+          </AnimatePresence>
 
           <Flex gap={12}>
             <Button
