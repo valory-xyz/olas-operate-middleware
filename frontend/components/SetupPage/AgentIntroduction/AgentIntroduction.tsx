@@ -1,8 +1,8 @@
 import { LeftOutlined } from '@ant-design/icons';
-import { Button, Flex, Typography } from 'antd';
+import { Button, Divider, Flex, Typography } from 'antd';
+import Image from 'next/image';
 import React, { FC, useCallback, useMemo, useState } from 'react';
 
-import { CardFlex } from '@/components/styled/CardFlex';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
@@ -34,34 +34,48 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
   }, [currentStep, goto]);
 
   return (
-    <div>
-      <Flex vertical gap={24}>
-        <Flex vertical gap={8}>
-          <Title level={5} className="m-0">
-            {steps[currentStep].title}
-          </Title>
-          <Text>
-            {steps[currentStep].desc}
-            {steps[currentStep].helper && (
-              <Text type="secondary"> {steps[currentStep].helper}</Text>
-            )}
-          </Text>
-        </Flex>
+    <>
+      <Image
+        src={`/${steps[currentStep].imgSrc}.svg`}
+        alt={steps[currentStep].title}
+        width={0}
+        height={0}
+        // sizes="100vw"
+        style={{ width: '90%', height: 'auto' }} // optional
+        // width={APP_WIDTH}
+        // height={400}
+        // fill
+      />
 
-        <Flex gap={12}>
-          <Button
-            size="large"
-            onClick={onPreviousStep}
-            style={{ minWidth: 40 }}
-            icon={<LeftOutlined />}
-          />
+      <div style={{ padding: 24 }}>
+        <Flex vertical gap={24}>
+          <Flex vertical gap={8}>
+            <Title level={5} className="m-0">
+              {steps[currentStep].title}
+            </Title>
+            <Text>
+              {steps[currentStep].desc}
+              {steps[currentStep].helper && (
+                <Text type="secondary"> {steps[currentStep].helper}</Text>
+              )}
+            </Text>
+          </Flex>
 
-          <Button type="primary" block size="large" onClick={onNextStep}>
-            {isLastStep ? 'Set up agent' : 'Continue'}
-          </Button>
+          <Flex gap={12}>
+            <Button
+              size="large"
+              onClick={onPreviousStep}
+              style={{ minWidth: 40 }}
+              icon={<LeftOutlined />}
+            />
+
+            <Button type="primary" block size="large" onClick={onNextStep}>
+              {isLastStep ? 'Set up agent' : 'Continue'}
+            </Button>
+          </Flex>
         </Flex>
-      </Flex>
-    </div>
+      </div>
+    </>
   );
 };
 
@@ -132,7 +146,7 @@ const modiusSteps: IntroductionStep[] = [
  * Display the introduction of the selected agent.
  */
 export const AgentIntroduction: FC = () => {
-  const { selectedAgentType } = useServices();
+  const { selectedAgentType, selectedAgentConfig } = useServices();
 
   const introductionSteps = useMemo(() => {
     if (selectedAgentType === 'trader') return predictionAgentSteps;
@@ -143,12 +157,12 @@ export const AgentIntroduction: FC = () => {
   }, [selectedAgentType]);
 
   return (
-    <CardFlex
-      gap={10}
-      styles={{ body: { padding: '12px 24px' } }}
-      style={{ border: 'none' }}
-    >
+    <>
+      <Flex align="center" justify="center" style={{ paddingTop: 12 }}>
+        <Text>{selectedAgentConfig.displayName}</Text>
+      </Flex>
+      <Divider style={{ margin: '12px 0' }} />
       <Introduction steps={introductionSteps} />
-    </CardFlex>
+    </>
   );
 };
