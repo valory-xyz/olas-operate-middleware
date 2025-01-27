@@ -3,6 +3,7 @@ import { Button, Divider, Flex, Typography } from 'antd';
 import Image from 'next/image';
 import React, { FC, useCallback, useMemo, useState } from 'react';
 
+import { APP_WIDTH } from '@/constants/width';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
@@ -38,13 +39,8 @@ const Introduction = ({ steps }: { steps: IntroductionStep[] }) => {
       <Image
         src={`/${steps[currentStep].imgSrc}.svg`}
         alt={steps[currentStep].title}
-        width={0}
-        height={0}
-        // sizes="100vw"
-        style={{ width: '90%', height: 'auto' }} // optional
-        // width={APP_WIDTH}
-        // height={400}
-        // fill
+        width={APP_WIDTH - 8}
+        height={400 - 8}
       />
 
       <div style={{ padding: 24 }}>
