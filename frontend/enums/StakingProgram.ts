@@ -10,5 +10,4 @@ export enum StakingProgramId {
   MemeBaseAlpha2 = 'meme_base_alpha_2',
   MemeCeloAlpha2 = 'meme_celo_alpha_2',
   ModiusAlpha = 'modius_alpha',
-  ModiusOptimusAlpha = 'modius_optimus_alpha',
 }
