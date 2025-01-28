@@ -21,7 +21,11 @@ type AnimatedImageProps = {
   height: number;
 };
 
-const AnimatedImage = ({ imgSrc, alt, width, height }: AnimatedImageProps) => (
+const AnimatedImage = ({
+  imgSrc,
+  alt,
+  //  width, height
+}: AnimatedImageProps) => (
   <AnimatePresence mode="wait">
     <motion.div
       key={imgSrc}
@@ -34,7 +38,17 @@ const AnimatedImage = ({ imgSrc, alt, width, height }: AnimatedImageProps) => (
         duration: 0.1,
       }}
     >
-      <Image src={imgSrc} alt={alt} width={width} height={height} priority />
+      <Image
+        src={imgSrc}
+        alt={alt}
+        // width={width}
+        // height={height}
+        priority
+        width={0}
+        height={0}
+        sizes="100vw"
+        style={{ width: '100%', height: 'auto', minHeight: 400 }} // optional
+      />
     </motion.div>
   </AnimatePresence>
 );
