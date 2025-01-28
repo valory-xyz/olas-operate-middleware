@@ -18,6 +18,8 @@
 #
 # ------------------------------------------------------------------------------
 """Source code to run and stop deployments created."""
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 import json
 import os
 import platform
@@ -32,12 +34,15 @@ from traceback import print_exc
 from typing import Any
 from venv import main as venv_cli
 
+import aiohttp
 import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
 from autonomy.__version__ import __version__ as autonomy_version
-
+from aea.helpers.logging import setup_logger
 from operate import constants
+from operate.constants import HEALTH_CHECK_URL, HTTP_OK
+from operate.services.health_checker import HealtChecker
 
 
 class AbstractDeploymentRunner(ABC):
@@ -46,6 +51,7 @@ class AbstractDeploymentRunner(ABC):
     def __init__(self, work_directory: Path) -> None:
         """Init the deployment runner."""
         self._work_directory = work_directory
+        self.logger = setup_logger(name="operate.deployment_runner")
 
     @abstractmethod
     def start(self) -> None:
@@ -95,6 +101,32 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
 
+    def __init__(self, work_directory):
+        super().__init__(work_directory)
+        self._tm_process: t.Optional[subprocess.Popen] = None
+        self._agent_process: t.Optional[subprocess.Popen] = None
+        self._health_checker = HealtChecker(
+            work_directory, self._restart_by_healthchecker
+        )
+        self._tm_file = None
+        self._agent_file = None
+
+    def _start_process(self, *args, **kwargs) -> subprocess.Popen:
+        proc = subprocess.Popen(
+            *args,
+            **{
+                **dict(
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.STDOUT,
+                    creationflags=(
+                        0x00000200 if platform.system() == "Windows" else 0
+                    ),  # Detach process from the main process
+                ),
+                **kwargs,
+            },
+        )
+        return proc
+
     def _run_aea(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
         # TODO: Patch for Windows failing hash (add -s). Revert once it's fixed on OpenAutonomy / OpenAEA
@@ -102,21 +134,22 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         # on HostPythonHostDeploymentRunner._start_agent
         return self._run_cmd(args=[self._aea_bin, "-s", *args], cwd=cwd)
 
-    @staticmethod
-    def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
+    def _run_cmd(self, args: t.List[str], cwd: t.Optional[Path] = None) -> None:
         """Run command in a subprocess."""
-        print(f"Running: {' '.join(args)}")
-        print(f"Working dir: {os.getcwd()}")
+        self.logger.info(
+            f"Running: {' '.join(args)}  at Working dir: {cwd or os.getcwd()}"
+        )
         result = subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=args,
             cwd=cwd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            timeout=240,
         )
         if result.returncode != 0:
-            raise RuntimeError(
-                f"Error running: {args} @ {cwd}\n{result.stderr.decode()}"
-            )
+            err_msg = f"Error running: {args} @ {cwd}, return code: {result.returncode } \n{result.stdout} \n {result.stderr}"
+            self.logger.error(err_msg)
+            raise RuntimeError(err_msg)
 
     def _prepare_agent_env(self) -> Any:
         """Prepare agent env, add keys, run aea commands."""
@@ -161,6 +194,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _setup_agent(self) -> None:
         """Setup agent."""
+        self.logger.info("[DEPLOYMENT] Setting up the agent")
         working_dir = self._work_directory
         env = self._prepare_agent_env()
 
@@ -190,17 +224,50 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def start(self) -> None:
         """Start the deployment."""
-        self._setup_agent()
+        try:
+            self._setup_agent()
+            self._start_tendermint()
+            self._start_agent()
+            self.logger.info("[DEPLOYMENT] Started")
+            self._health_checker.start()
+            self.logger.info("[DEPLOYMENT] healthchecker Started")
+        except Exception as e:
+            self.logger.exception("[DEPLOYMENT] start ERROR: {e}")
+            raise
+
+    def _restart_by_healthchecker(self):
+        self._stop_agent()
+        self._stop_tendermint()
+
         self._start_tendermint()
         self._start_agent()
 
     def stop(self) -> None:
         """Stop the deployment."""
+        self._health_checker.stop()
         self._stop_agent()
         self._stop_tendermint()
 
+    def _stop_process(self, proc: t.Optional[subprocess.Popen]):
+        if not proc:
+            return False
+
+        if proc.poll() == None:
+            kill_process(proc.pid)
+
+        with suppress(Exception):
+            proc.stdout.close()
+
+        return True
+
     def _stop_agent(self) -> None:
         """Start process."""
+        if self._stop_process(self._agent_process):
+            return
+        if self._agent_file:
+            with suppress(Exception):
+                self._agent_file.close()
+
         pid = self._work_directory / "agent.pid"
         if not pid.exists():
             return
@@ -218,6 +285,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             print(f"No Tendermint process listening on {self._get_tm_exit_url()}.")
         except Exception:  # pylint: disable=broad-except
             print_exc()
+
+        if self._tm_file:
+            with suppress(Exception):
+                self._tm_file.close()
+        if self._stop_process(self._tm_process):
+            return
 
         pid = self._work_directory / "tendermint.pid"
         if not pid.exists():
@@ -253,30 +326,37 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Return tendermint path."""
         return str(Path(os.path.dirname(sys.executable)) / "tendermint_bin")  # type: ignore # pylint: disable=protected-access
 
+    def _make_log_file(self, name):
+        file_path = Path(self._work_directory) / f"../{name}.extra.log"
+        return open(file_path, "a+")
+
     def _start_agent(self) -> None:
         """Start agent process."""
+        self.logger.info("[DEPLOYMENT] Starting up agent")
         working_dir = self._work_directory
+        agent_working_dir = working_dir / "agent"
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
-        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
-            cwd=working_dir / "agent",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        self._agent_file = self._make_log_file("aea")
+        process = self._start_process(  # pylint: disable=consider-using-with # nosec
+            args=[self._aea_bin, "-s", "run"],
+            cwd=agent_working_dir,
             env=env,
-            creationflags=(
-                0x00000200 if platform.system() == "Windows" else 0
-            ),  # Detach process from the main process
+            stdout=self._agent_file,
         )
         (working_dir / "agent.pid").write_text(
             data=str(process.pid),
             encoding="utf-8",
         )
+        self._agent_process = process
+        if process.poll() is not None:
+            raise RuntimeError(f"AEA crashed! {agent_working_dir}")
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
+        self.logger.info("[DEPLOYMENT] Starting up tendermint")
         working_dir = self._work_directory
         env = json.loads((working_dir / "tendermint.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
@@ -294,20 +374,18 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
 
         tendermint_com = self._tendermint_bin  # type: ignore  # pylint: disable=protected-access
-        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[tendermint_com],
-            cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=env,
-            creationflags=(
-                0x00000200 if platform.system() == "Windows" else 0
-            ),  # Detach process from the main process
+        self._tm_file = self._make_log_file("tm")
+        process = self._start_process(
+            args=[tendermint_com], cwd=working_dir, env=env, stdout=self._tm_file
         )
+        self._tm_process = process
+
         (working_dir / "tendermint.pid").write_text(
             data=str(process.pid),
             encoding="utf-8",
         )
+        if process.poll() is not None:
+            raise RuntimeError("Tendermint crashed!")
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
@@ -428,21 +506,32 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         )
 
 
-def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
-    """Return depoyment runner according to running env."""
-    deployment_runner: BaseDeploymentRunner
+DEPLOYMENTS_RUNNING = {}
+
+
+def _get_deployment_runner_class() -> t.Type[BaseDeploymentRunner]:
+    deployment_runner_class: t.Type[BaseDeploymentRunner]
 
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # pyinstaller inside!
         if platform.system() == "Darwin":
-            deployment_runner = PyInstallerHostDeploymentRunnerMac(build_dir)
+            deployment_runner_class = PyInstallerHostDeploymentRunnerMac
         elif platform.system() == "Windows":
-            deployment_runner = PyInstallerHostDeploymentRunnerWindows(build_dir)
+            deployment_runner_class = PyInstallerHostDeploymentRunnerWindows
         else:
             raise ValueError(f"Platform not supported {platform.system()}")
     else:
-        deployment_runner = HostPythonHostDeploymentRunner(build_dir)
-    return deployment_runner
+        deployment_runner_class = HostPythonHostDeploymentRunner
+    return deployment_runner_class
+
+
+def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
+    """Return depoyment runner according to running env."""
+    if build_dir not in DEPLOYMENTS_RUNNING:
+        deployment_runner_class = _get_deployment_runner_class()
+        deployment_runner = deployment_runner_class(work_directory=build_dir)
+        DEPLOYMENTS_RUNNING[build_dir] = deployment_runner
+    return DEPLOYMENTS_RUNNING[build_dir]
 
 
 def run_host_deployment(build_dir: Path) -> None:
@@ -455,3 +544,5 @@ def stop_host_deployment(build_dir: Path) -> None:
     """Stop host deployment."""
     deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
     deployment_runner.stop()
+    if build_dir in DEPLOYMENTS_RUNNING:
+        del DEPLOYMENTS_RUNNING[build_dir]

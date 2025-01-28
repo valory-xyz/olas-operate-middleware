@@ -39,6 +39,7 @@ from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
 from operate.constants import ZERO_ADDRESS
+from operate.constants import URI_HASH_POSITION
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, USDC, WRAPPED_NATIVE_ASSET
@@ -79,8 +80,6 @@ KEY = "master-key.txt"
 KEYS_JSON = "keys.json"
 DOCKER_COMPOSE_YAML = "docker-compose.yaml"
 SERVICE_YAML = "service.yaml"
-HTTP_OK = 200
-URI_HASH_POSITION = 7
 IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
 DEFAULT_TOPUP_THRESHOLD = 0.5
 

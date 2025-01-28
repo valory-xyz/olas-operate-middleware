@@ -19,6 +19,7 @@
 
 """Operate app CLI module."""
 import asyncio
+from contextlib import asynccontextmanager
 import logging
 import os
 import signal
@@ -45,7 +46,9 @@ from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
-from operate.services.health_checker import HealthChecker
+from operate.ledger.profiles import OLAS
+from operate.operate_types import ChainType, DeploymentStatus
+from operate.services.health_checker import HealtChecker
 from operate.wallet.master import MasterWalletManager
 
 
@@ -144,16 +147,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     home: t.Optional[Path] = None,
 ) -> FastAPI:
     """Create FastAPI object."""
-    HEALTH_CHECKER_OFF = os.environ.get("HEALTH_CHECKER_OFF", "0") == "1"
-    number_of_fails = int(
-        os.environ.get(
-            "HEALTH_CHECKER_TRIES", str(HealthChecker.NUMBER_OF_FAILS_DEFAULT)
-        )
-    )
-
     logger = setup_logger(name="operate")
-    if HEALTH_CHECKER_OFF:
-        logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
 
     operate.service_manager().log_directories()
@@ -167,9 +161,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     logger.info("Migrating wallet configs done.")
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
-    health_checker = HealthChecker(
-        operate.service_manager(), number_of_fails=number_of_fails
-    )
     # Create shutdown endpoint
     shutdown_endpoint = uuid.uuid4().hex
     (operate._path / "operate.kill").write_text(  # pylint: disable=protected-access
@@ -204,14 +195,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 from_safe=from_safe,
             )
         )
-
-    def schedule_healthcheck_job(
-        service_config_id: str,
-    ) -> None:
-        """Schedule a healthcheck job."""
-        if not HEALTH_CHECKER_OFF:
-            # dont start health checker if it's switched off
-            health_checker.start_for_service(service_config_id)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -248,7 +231,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             deployment.stop(force=True)
             logger.info(f"Cancelling funding job for {service_config_id}")
             cancel_funding_job(service_config_id=service_config_id)
-            health_checker.stop_for_service(service_config_id=service_config_id)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
@@ -261,7 +243,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # on backend app started we assume there are now started agents, so we force to pause all
     pause_all_services_on_startup()
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # hack to set event loop for components running in threads
+        # need to restruct all the classes dependencies tree
+        HealtChecker.EVENT_LOOP = asyncio.get_event_loop()
+        yield
+
+    app = FastAPI(lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -269,12 +258,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     )
 
+    @app.middleware("http")
+    async def log_non_200_responses(request: Request, call_next):
+        response = await call_next(request)
+
+        if response.status_code != 200:
+            logger.warning(
+                f"Non-200 response: {response.status_code} for {request.method} {request.url}"
+            )
+
+        return response
+
     def with_retries(f: t.Callable) -> t.Callable:
         """Retries decorator."""
 
         async def _call(request: Request) -> JSONResponse:
             """Call the endpoint."""
-            logger.info(f"Calling `{f.__name__}` with retries enabled")
+            # logger.info(f"Calling `{f.__name__}` with retries enabled")  # annoying and almost useless
             retries = 0
             errors = []
             while retries < DEFAULT_MAX_RETRIES:
@@ -760,7 +760,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         await run_in_executor(_fn)
         schedule_funding_job(service_config_id=service_config_id)
-        schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
             content=(
@@ -836,8 +835,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .load(service_config_id=service_config_id)
             .deployment
         )
-        health_checker.stop_for_service(service_config_id=service_config_id)
-
         await run_in_executor(deployment.stop)
         logger.info(f"Cancelling funding job for {service_config_id}")
         cancel_funding_job(service_config_id=service_config_id)
@@ -929,13 +926,7 @@ def _daemon(
     """Launch operate daemon."""
     app = create_app(home=home)
 
-    server = Server(
-        Config(
-            app=app,
-            host=host,
-            port=port,
-        )
-    )
+    server = Server(Config(app=app, host=host, port=port, access_log=False))
     app._server = server  # pylint: disable=protected-access
     server.run()
 
