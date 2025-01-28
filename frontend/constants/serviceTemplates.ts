@@ -98,11 +98,11 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
-  hash: 'bafybeig6p2tujazmwglrx6frtkobz2gmx7og3jy5wrixtmdir74rxo3cy4',
+  hash: 'bafybeigpemq6ox45mtwtz34zdma5hsv6zqcqnggzjf3gqgk6yy2lywmena',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.3.0-alpha3',
+  service_version: 'v0.3.0-alpha4',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
