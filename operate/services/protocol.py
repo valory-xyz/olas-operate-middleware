@@ -385,7 +385,10 @@ class StakingManager(OnChainHelper):
                 self.ledger_api, staking_contract
             ).get("data"),
         )
-        staked_duration = time.time() - ts_start
+        
+        current_block = self.ledger_api.api.eth.get_block('latest')
+        current_timestamp = current_block.timestamp
+        staked_duration = current_timestamp - ts_start
         if staked_duration < minimum_staking_duration and available_rewards > 0:
             raise ValueError("Service cannot be unstaked yet.")
 

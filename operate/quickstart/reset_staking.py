@@ -22,8 +22,9 @@ import json
 from typing import TYPE_CHECKING
 
 from operate.constants import OPERATE_HOME
-from operate.quickstart.run_service import configure_local_config, get_service
-from operate.utils.common import ask_yes_or_no, print_title
+from operate.quickstart.run_service import ask_password_if_needed, configure_local_config, ensure_enough_funds, get_service
+from operate.services.protocol import StakingState
+from operate.utils.common import ask_yes_or_no, print_section, print_title
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -45,20 +46,48 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     config = configure_local_config(template)
     manager = operate.service_manager()
 
-    print(f"Your current staking program preference is set to '{config.staking_vars['STAKING_PROGRAM']}'.")
+    print(f"Your current staking program preference is set to '{config.staking_vars['STAKING_PROGRAM']}'.\n")
     print(
         "You can reset your preference. "
         "However, your agent might not be able to switch between staking contracts "
-        "until it has been staked for a minimum staking period in the current program."
+        "until it has been staked for a minimum staking period in the current program.\n"
     )
     if not ask_yes_or_no("Do you want to reset your staking program preference?"):
         print("Cancelled.")
         return
 
-    config.staking_vars = None
-    config.store()
+    if not ask_yes_or_no(
+        "Please, ensure that your service is stopped (./stop_service.sh) before proceeding. "
+        "Do you want to continue?"
+    ):
+        print("Cancelled.")
+        return
+
     config = configure_local_config(template)
-    manager.update(
-        service_config_id=manager.json[0]["service_config_id"],
-        service_template=template,
+    ask_password_if_needed(operate, config)
+    manager = operate.service_manager()
+    service = get_service(manager, template)
+    ensure_enough_funds(operate, service)
+
+    status, was_reset, reason = manager.reset_staking_on_chain_from_safe(
+        service_config_id=service.service_config_id,
+        chain=config.principal_chain,
     )
+    
+    if status == StakingState.UNSTAKED.name:
+        if was_reset:
+            # Service was successfully unstaked now
+            print_section(f"{reason}")
+            config.staking_vars = None
+            config.store()
+            config = configure_local_config(template)
+            manager.update(
+                service_config_id=manager.json[0]["service_config_id"],
+                service_template=template,
+            )
+            print("\nStaking preference has been reset successfully.")
+        else:
+            # Service was already unstaked
+            print(f"\n{reason}")
+    else:
+        print(f"\nFailed to reset staking: {reason}")

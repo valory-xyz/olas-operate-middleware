@@ -1059,6 +1059,76 @@ class ServiceManager:
         chain_data.on_chain_state = OnChainState.TERMINATED_BONDED
         service.store()
 
+    def reset_staking_on_chain_from_safe(  # pylint: disable=too-many-locals
+        self,
+        service_config_id: str,
+        chain: str,
+        withdrawal_address: t.Optional[str] = None,
+    ) -> tuple[str, bool, str]:
+        """Reset service on-chain.
+        Returns:
+            tuple: (staking_status, was_action_taken, reason)
+            - staking_status: current staking state
+            - was_action_taken: True if service was unstaked now, False if already unstaked
+            - reason: Details about why action couldn't be taken (if applicable)
+        """
+        self.logger.info("reset_staking_on_chain_from_safe")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        chain_data = chain_config.chain_data
+
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+
+        # Early check for staking status
+        current_staking_program = self._get_current_staking_program(
+            chain_data, ledger_config, sftxb
+        )
+        if current_staking_program is None:
+            self.logger.info("Service is not staked. No reset needed.")
+            return StakingState.UNSTAKED.name, False, "Service is not staked"
+
+        # Only set environment variable if we need to proceed
+        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+        staking_contract = STAKING[ledger_config.chain][current_staking_program]
+        can_unstake = sftxb.can_unstake(
+            service_id=chain_data.token,
+            staking_contract=staking_contract,
+        )
+
+        if not can_unstake and withdrawal_address is None:
+            status = sftxb.staking_status(
+                service_id=chain_data.token,
+                staking_contract=staking_contract,
+            ).name
+            
+            reason = (f"Service is staked in program {current_staking_program} and "
+                      "minimum staking period has not been reached yet.")
+                
+            self.logger.info(f"Service cannot be resetted on-chain: {reason}")
+            return status, False, reason
+
+        # Try to unstake
+        if can_unstake or withdrawal_address is not None:
+            self.unstake_service_on_chain_from_safe(
+                service_config_id=service_config_id,
+                chain=chain,
+                staking_program_id=current_staking_program,
+            )
+
+        # Get final staking status
+        final_staking_program = self._get_current_staking_program(
+            chain_data, ledger_config, sftxb
+        )
+        if final_staking_program is not None:
+            status = sftxb.staking_status(
+                service_id=chain_data.token,
+                staking_contract=STAKING[ledger_config.chain][final_staking_program],
+            ).name
+            return status, True, "Unstaking attempt completed"
+
+        return StakingState.UNSTAKED.name, True, "Successfully unstaked"
+    
     def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
