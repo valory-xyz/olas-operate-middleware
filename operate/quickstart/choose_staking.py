@@ -131,30 +131,6 @@ class StakingHandler:
                 "description": program_id,
             }
 
-    def get_staking_slots_count(self: "StakingHandler", program_id: str) -> int:
-        """Get available staking slots count for a program."""
-        try:
-            if program_id == NO_STAKING_PROGRAM_ID:
-                return NO_STAKING_PROGRAM_METADATA
-
-            staking_token_contract = self._get_staking_token_contract(program_id) 
-            if not staking_token_contract:
-                self.logger.error(f"No contract found for {program_id}")
-                return 0
-
-            try:
-                max_services = staking_token_contract.functions.maxNumServices().call()
-                current_services = staking_token_contract.functions.getServiceIds().call()
-                return max_services - len(current_services)
-                
-            except (ContractLogicError) as e:
-                self.logger.error(f"Contract call failed for {program_id}: {str(e)}")
-                return 0
-                
-        except Exception as e:
-            self.logger.error(f"Unexpected error getting slots for {program_id}: {str(e)}")
-            return 0    
-
     def get_staking_env_variables(self: "StakingHandler", program_id: str) -> StakingVariables:
         if program_id == NO_STAKING_PROGRAM_ID:
             return StakingVariables({
