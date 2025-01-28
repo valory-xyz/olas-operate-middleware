@@ -3,8 +3,6 @@ import { Button, Flex, Typography } from 'antd';
 import { AnimatePresence, motion } from 'framer-motion';
 import Image from 'next/image';
 
-import { APP_WIDTH } from '@/constants/width';
-
 const { Title, Text } = Typography;
 
 export type OnboardingStep = {
@@ -14,18 +12,9 @@ export type OnboardingStep = {
   helper?: string;
 };
 
-type AnimatedImageProps = {
-  imgSrc: string;
-  alt: string;
-  width: number;
-  height: number;
-};
+type AnimatedImageProps = { imgSrc: string; alt: string };
 
-const AnimatedImage = ({
-  imgSrc,
-  alt,
-  //  width, height
-}: AnimatedImageProps) => (
+const AnimatedImage = ({ imgSrc, alt }: AnimatedImageProps) => (
   <AnimatePresence mode="wait">
     <motion.div
       key={imgSrc}
@@ -41,13 +30,11 @@ const AnimatedImage = ({
       <Image
         src={imgSrc}
         alt={alt}
-        // width={width}
-        // height={height}
         priority
         width={0}
         height={0}
         sizes="100vw"
-        style={{ width: '100%', height: 'auto', minHeight: 400 }} // optional
+        style={{ width: '100%', height: 'auto', minHeight: 412 }}
       />
     </motion.div>
   </AnimatePresence>
@@ -98,15 +85,9 @@ export const IntroductionStep = ({
 }: IntroductionProps) => {
   return (
     <div style={{ overflow: 'hidden' }}>
-      {/* TODO: width & height needs to be fixed */}
-      <AnimatedImage
-        imgSrc={`/${imgSrc}.svg`}
-        alt={title}
-        width={APP_WIDTH - 8}
-        height={400 - 8}
-      />
+      <AnimatedImage imgSrc={`/${imgSrc}.svg`} alt={title} />
 
-      <div className="p-24">
+      <div style={{ padding: '12px 24px 20px 24px' }}>
         <Flex vertical gap={24}>
           <AnimatedContent title={title} desc={desc} helper={helper} />
 
