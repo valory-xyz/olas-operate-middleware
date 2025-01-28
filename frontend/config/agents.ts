@@ -45,7 +45,7 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent - Base',
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
-    isAgentEnabled: false,
+    isAgentEnabled: true,
     requiresSetup: true,
   },
   [AgentType.Modius]: {
@@ -68,7 +68,7 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: true,
+    isAgentEnabled: false,
     requiresSetup: true,
   },
   // TODO: celo (check each key)

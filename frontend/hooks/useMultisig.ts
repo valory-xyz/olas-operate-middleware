@@ -66,6 +66,7 @@ export const useMultisigs = (safes?: Safe[]) => {
     data: masterSafesOwners,
     isFetched: masterSafesOwnersIsFetched,
     isPending: masterSafesOwnersIsPending,
+    isLoading: masterSafesOwnersIsLoading,
   } = useQuery<MultisigOwners[]>({
     enabled: !isNil(safes) && !isEmpty(safes),
     queryKey: safes ? REACT_QUERY_KEYS.MULTISIGS_GET_OWNERS_KEY(safes) : [],
@@ -171,5 +172,6 @@ export const useMultisigs = (safes?: Safe[]) => {
     masterSafesOwners,
     masterSafesOwnersIsFetched,
     masterSafesOwnersIsPending,
+    masterSafesOwnersIsLoading,
   };
 };
