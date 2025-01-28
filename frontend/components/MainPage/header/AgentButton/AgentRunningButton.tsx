@@ -93,7 +93,7 @@ export const AgentRunningButton = () => {
     isLastTransactionEnabled && isPageLoadedAndOneMinutePassed;
 
   return (
-    <Flex gap={10} align="center">
+    <Flex gap={8} align="center">
       <Button type="default" size="large" onClick={handlePause}>
         Pause
       </Button>

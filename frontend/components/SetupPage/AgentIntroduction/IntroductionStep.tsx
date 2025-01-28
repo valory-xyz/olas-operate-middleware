@@ -21,11 +21,7 @@ type AnimatedImageProps = {
   height: number;
 };
 
-const AnimatedImage = ({
-  imgSrc,
-  alt,
-  //  width, height
-}: AnimatedImageProps) => (
+const AnimatedImage = ({ imgSrc, alt, width, height }: AnimatedImageProps) => (
   <AnimatePresence mode="wait">
     <motion.div
       key={imgSrc}

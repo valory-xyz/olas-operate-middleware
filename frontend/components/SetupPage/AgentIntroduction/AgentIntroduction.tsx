@@ -133,7 +133,7 @@ export const AgentIntroduction: FC = () => {
       <Flex align="center" justify="center" style={{ paddingTop: 12 }}>
         <Text>{selectedAgentConfig.displayName}</Text>
       </Flex>
-      <Divider style={{ margin: '12px 0' }} />
+      <Divider style={{ margin: '12px 0 0 0' }} />
       <Introduction
         steps={introductionSteps}
         onOnboardingComplete={onComplete}

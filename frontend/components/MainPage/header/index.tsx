@@ -46,8 +46,8 @@ export const MainHeader = () => {
   // TODO: support loading state
 
   return (
-    <CardSection gap={8} padding="8px 24px" justify="space-between">
-      <Flex justify="start" align="center" gap={10}>
+    <CardSection gap={6} padding="8px 24px" justify="space-between">
+      <Flex justify="start" align="center" gap={4}>
         <AgentHead />
         <AgentButton />
         <FirstRunModal open={isFirstRunModalOpen} onClose={handleModalClose} />
