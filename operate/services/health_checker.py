@@ -37,7 +37,7 @@ class HealthChecker:
     """Health checker manager."""
 
     SLEEP_PERIOD_DEFAULT = 30
-    PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
+    PORT_UP_TIMEOUT_DEFAULT = 3000  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90
     NUMBER_OF_FAILS_DEFAULT = 10
     HEALTH_CHECK_URL = HEALTH_CHECK_URL
