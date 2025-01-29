@@ -42,7 +42,10 @@ const getWithdrawMessage = (agentType: AgentType) => {
   }
 };
 
-const comingSoonAgentTypes: AgentType[] = [AgentType.Modius];
+const agentsWithWithdrawalsComingSoon: AgentType[] = [
+  AgentType.Modius,
+  AgentType.Memeooorr,
+];
 
 const ServiceNotRunning = () => (
   <div className="mt-8">
@@ -176,7 +179,7 @@ export const WithdrawFunds = () => {
   );
 
   const isComingSoon = useMemo(
-    () => comingSoonAgentTypes.includes(selectedAgentType),
+    () => agentsWithWithdrawalsComingSoon.includes(selectedAgentType),
     [selectedAgentType],
   );
 
