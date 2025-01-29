@@ -85,6 +85,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "pearl_beta_3": "0xBd59Ff0522aA773cB6074ce83cD1e4a05A457bc1",
         "pearl_beta_4": "0x3052451e1eAee78e62E169AfdF6288F8791F2918",
         "pearl_beta_5": "0x4Abe376Fda28c2F43b84884E5f822eA775DeA9F4",
+        "pearl_beta_6": "0x6C6D01e8eA8f806eF0c22F0ef7ed81D868C1aB39",
         "pearl_beta_mech_marketplace": "0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA",
     },
     Chain.OPTIMISTIC: {
@@ -98,6 +99,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.MODE: {
         "optimus_alpha": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91",
         "modius_alpha": "0x534C0A05B6d4d28d5f3630D6D74857B253cf8332",
+        "modius_alpha_2": "0xeC013E68FE4B5734643499887941eC197fd757D0",
+        "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
+        "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
     },
 }
 

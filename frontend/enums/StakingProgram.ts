@@ -5,9 +5,13 @@ export enum StakingProgramId {
   PearlBeta3 = 'pearl_beta_3',
   PearlBeta4 = 'pearl_beta_4',
   PearlBeta5 = 'pearl_beta_5',
+  PearlBeta6 = 'pearl_beta_6',
   PearlBetaMechMarketplace = 'pearl_beta_mech_marketplace',
   OptimusAlpha = 'optimus_alpha',
   MemeBaseAlpha2 = 'meme_base_alpha_2',
   MemeCeloAlpha2 = 'meme_celo_alpha_2',
   ModiusAlpha = 'modius_alpha',
+  ModiusAlpha2 = 'modius_alpha_2',
+  ModiusAlpha3 = 'modius_alpha_3',
+  ModiusAlpha4 = 'modius_alpha_4',
 }
