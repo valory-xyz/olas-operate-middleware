@@ -1,9 +1,10 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Input, message, Modal, Tooltip, Typography } from 'antd';
 import { isAddress } from 'ethers/lib/utils';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 
 import { COLOR } from '@/constants/colors';
+import { AgentType } from '@/enums/Agent';
 import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 import { useService } from '@/hooks/useService';
@@ -22,6 +23,30 @@ const { Text } = Typography;
 const minDurationMessage =
   "You have not reached the minimum duration of staking. Keep running your agent and you'll be able to withdraw in";
 
+const afterWithdrawing =
+  'Your agent will not be able to run again until it is refunded.';
+
+const getWithdrawMessage = (agentType: AgentType) => {
+  //predit
+  switch (agentType) {
+    case AgentType.PredictTrader:
+      return `This will withdraw all OLAS and XDAI from your account. ${afterWithdrawing}`;
+    case AgentType.Memeooorr:
+      return `This will withdraw all OLAS and ETH from your account. ${afterWithdrawing}`;
+    case AgentType.Modius:
+      return `This will withdraw all OLAS, ETH and USDC from your account. ${afterWithdrawing}`;
+    case AgentType.AgentsFunCelo:
+      return `This will withdraw all OLAS and CELO from your account. ${afterWithdrawing}`;
+    default:
+      return `This will withdraw all funds from your account. ${afterWithdrawing}`;
+  }
+};
+
+const agentsWithWithdrawalsComingSoon: AgentType[] = [
+  AgentType.Modius,
+  AgentType.Memeooorr,
+];
+
 const ServiceNotRunning = () => (
   <div className="mt-8">
     <InfoCircleOutlined style={{ color: COLOR.TEXT_LIGHT }} />
@@ -32,19 +57,18 @@ const ServiceNotRunning = () => (
   </div>
 );
 
-const ToProceedMessage = () => (
-  <CustomAlert
-    type="warning"
-    showIcon
-    message={
-      <Text className="text-sm">
-        This will remove all OLAS and all XDAI - excluding the DAI currently in
-        prediction markets - from your account. You will not be able to run your
-        agent after withdrawing.
-      </Text>
-    }
-  />
-);
+const ToProceedMessage = memo(function ToProceedMessage() {
+  const { selectedAgentType } = useServices();
+  return (
+    <CustomAlert
+      type="warning"
+      showIcon
+      message={
+        <Text className="text-sm">{getWithdrawMessage(selectedAgentType)}</Text>
+      }
+    />
+  );
+});
 
 const CompatibleMessage = () => (
   <Text className="text-sm text-light">
@@ -54,7 +78,11 @@ const CompatibleMessage = () => (
 );
 
 export const WithdrawFunds = () => {
-  const { selectedService, refetch: refetchServices } = useServices();
+  const {
+    selectedService,
+    refetch: refetchServices,
+    selectedAgentType,
+  } = useServices();
   const { refetch: refetchMasterWallets } = useMasterWalletContext();
   const { updateBalances } = useBalanceContext();
 
@@ -150,6 +178,17 @@ export const WithdrawFunds = () => {
     [service, isServiceStakedForMinimumDuration, showModal],
   );
 
+  const isComingSoon = useMemo(
+    () => agentsWithWithdrawalsComingSoon.includes(selectedAgentType),
+    [selectedAgentType],
+  );
+
+  const buttonText = useMemo(() => {
+    if (isWithdrawalLoading) return 'Loading';
+    if (isComingSoon) return 'Coming soon';
+    return 'Proceed';
+  }, [isComingSoon, isWithdrawalLoading]);
+
   const isWithdrawFundsEnabled = useFeatureFlag('withdraw-funds');
   if (!isWithdrawFundsEnabled) return <FeatureNotEnabled />;
 
@@ -172,7 +211,7 @@ export const WithdrawFunds = () => {
       {!isServiceRunning && <ServiceNotRunning />}
 
       <Modal
-        title="Withdraw Funds"
+        title="Withdraw all funds"
         open={isModalVisible}
         footer={null}
         onCancel={handleCancel}
@@ -184,6 +223,7 @@ export const WithdrawFunds = () => {
 
           <Flex vertical gap={8}>
             <Text className="text-sm text-light">Withdrawal address</Text>
+
             <Input
               value={withdrawAddress}
               onChange={(e) => setWithdrawAddress(e.target.value)}
@@ -197,14 +237,14 @@ export const WithdrawFunds = () => {
           <CompatibleMessage />
 
           <Button
-            disabled={!withdrawAddress}
+            disabled={!withdrawAddress || isComingSoon}
             loading={isWithdrawalLoading}
             onClick={handleProceed}
             block
             type="primary"
             className="text-base"
           >
-            Proceed
+            {buttonText}
           </Button>
         </Flex>
       </Modal>
