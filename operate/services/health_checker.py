@@ -101,11 +101,9 @@ class HealthChecker:
 
                 if service_path:
                     healthcheck_json_path = service_path / "healthcheck.json"
-                    try:
-                        with open(healthcheck_json_path, "w", encoding="utf-8") as file:
-                            json.dump(response_json, file, indent=2)
-                    except Exception:  # pylint: disable=broad-except
-                        pass
+                    healthcheck_json_path.write_text(
+                        json.dumps(response_json, indent=2), encoding="utf-8"
+                    )
 
                 return status == HTTP_OK and response_json.get(
                     "is_transitioning_fast", False
