@@ -12,6 +12,7 @@ import { SetupScreen } from '@/enums/SetupScreen';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
+import { useSharedContext } from '@/hooks/useSharedContext';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
@@ -56,6 +57,7 @@ const EachAgent = memo(
   ({ showSelected, agentType, agentConfig }: EachAgentProps) => {
     const { goto: gotoSetup } = useSetup();
     const { goto: gotoPage } = usePageState();
+    const { updateOnboardingStep } = useSharedContext();
     const {
       isLoading: isServicesLoading,
       services,
@@ -71,6 +73,7 @@ const EachAgent = memo(
 
     const handleSelectAgent = useCallback(async () => {
       updateAgentType(agentType);
+      updateOnboardingStep(0); // Reset onboarding step
 
       // DO NOTE REMOVE THIS DELAY
       // NOTE: the delay is added so that agentType is updated in electron store
@@ -113,6 +116,7 @@ const EachAgent = memo(
       gotoSetup,
       masterSafes,
       updateAgentType,
+      updateOnboardingStep,
     ]);
 
     return (
