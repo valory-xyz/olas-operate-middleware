@@ -34,7 +34,7 @@ const AnimatedImage = ({ imgSrc, alt }: AnimatedImageProps) => (
         width={0}
         height={0}
         sizes="100vw"
-        style={{ width: '100%', height: 'auto', minHeight: 412 }}
+        style={{ width: '100%', height: 'auto', minHeight: 416 }}
       />
     </motion.div>
   </AnimatePresence>
