@@ -1,10 +1,10 @@
 import { Button, Flex, Modal, Typography } from 'antd';
 import Image from 'next/image';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { NA } from '@/constants/symbols';
 import { OPERATE_URL } from '@/constants/urls';
-import { useBalanceContext } from '@/hooks/useBalanceContext';
+import { useMainOlasBalance } from '@/context/SharedProvider/useMainOlasBalance';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useRewardContext } from '@/hooks/useRewardContext';
 import { useStore } from '@/hooks/useStore';
@@ -22,13 +22,22 @@ const SHARE_TEXT = `I just earned my first reward through the Operate app powere
 export const NotifyRewardsModal = () => {
   const { isEligibleForRewards, availableRewardsForEpochEth } =
     useRewardContext();
-  const { totalOlasBalance } = useBalanceContext();
+  const { mainOlasBalance } = useMainOlasBalance();
   const { showNotification, store } = useElectronApi();
   const { storeState } = useStore();
 
   const [canShowNotification, setCanShowNotification] = useState(false);
 
   const firstRewardRef = useRef<number>();
+
+  const formattedMainOlasBalance = useMemo(
+    () => balanceFormat(mainOlasBalance, 2),
+    [mainOlasBalance],
+  );
+  const formattedEarnedRewards = useMemo(
+    () => balanceFormat(availableRewardsForEpochEth, 2),
+    [availableRewardsForEpochEth],
+  );
 
   // hook to set the flag to show the notification
   useEffect(() => {
@@ -115,15 +124,13 @@ export const NotifyRewardsModal = () => {
       <Flex vertical gap={16}>
         <Text>
           Congratulations! Your agent just earned the first
-          <Text strong>
-            {` ${balanceFormat(availableRewardsForEpochEth, 2)} OLAS `}
-          </Text>
+          <Text strong>{` ${formattedEarnedRewards} OLAS `}</Text>
           for you!
         </Text>
 
         <Text>
           Your current balance:
-          <Text strong>{` ${balanceFormat(totalOlasBalance, 2)} OLAS `}</Text>
+          <Text strong>{` ${formattedMainOlasBalance} OLAS `}</Text>
         </Text>
 
         <Text>Keep it running to get even more!</Text>

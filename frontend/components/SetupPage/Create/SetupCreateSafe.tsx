@@ -53,7 +53,7 @@ const CreationError = () => (
 );
 
 export const SetupCreateSafe = () => {
-  const { goto } = usePageState();
+  const { goto, setUserLoggedIn } = usePageState();
 
   const { selectedAgentType } = useServices();
   const serviceTemplate = SERVICE_TEMPLATES.find(
@@ -66,7 +66,8 @@ export const SetupCreateSafe = () => {
     isFetched: isWalletsFetched,
   } = useMasterWalletContext();
 
-  const { allBackupAddresses } = useMultisigs(masterSafes);
+  const { allBackupAddresses, masterSafesOwnersIsLoading } =
+    useMultisigs(masterSafes);
 
   const { backupSigner } = useSetup();
 
@@ -82,15 +83,14 @@ export const SetupCreateSafe = () => {
   const [isFailed, setIsFailed] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
 
+  const backupSignerAddress = backupSigner ?? allBackupAddresses[0];
+
   const createSafeWithRetries = useCallback(
     async (middlewareChain: MiddlewareChain, retries: number) => {
       for (let attempt = retries; attempt > 0; attempt--) {
         try {
           // Attempt to create the safe
-          await WalletService.createSafe(
-            middlewareChain,
-            backupSigner ?? allBackupAddresses[0],
-          );
+          await WalletService.createSafe(middlewareChain, backupSignerAddress);
 
           // Update wallets and handle successful creation
           await updateWallets?.();
@@ -113,7 +113,7 @@ export const SetupCreateSafe = () => {
         }
       }
     },
-    [allBackupAddresses, backupSigner, updateWallets],
+    [backupSignerAddress, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {
@@ -129,7 +129,11 @@ export const SetupCreateSafe = () => {
        */
       isFailed || // creation failed - it's retried in background
       isCreatingSafe || // already creating a safe
-      !isWalletsFetched // wallets are not loaded yet
+      !isWalletsFetched || // wallets are not loaded yet
+      // backup address is not loaded yet.
+      // Note: the only case when it can be null forever is when the user closed the app
+      // after entering the backup wallet but before creating a first safe
+      masterSafesOwnersIsLoading
     )
       return;
 
@@ -167,24 +171,28 @@ export const SetupCreateSafe = () => {
       }
     })().then(() => {
       setIsCreatingSafe(false);
+      setUserLoggedIn();
     });
   }, [
+    backupSignerAddress,
     createSafeWithRetries,
     isCreatingSafe,
     isFailed,
     isWalletsFetched,
     masterSafes,
+    masterSafesOwnersIsLoading,
     serviceTemplate,
+    setUserLoggedIn,
   ]);
 
+  // Only progress is the safe is created and accessible via context (updates on timeout)
   useEffect(() => {
-    // Only progress is the safe is created and accessible via context (updates on interval)
     if (masterSafeAddress) {
       delayInSeconds(2).then(() => {
         goto(Pages.Main);
       });
     }
-  }, [goto, masterSafeAddress]);
+  }, [masterSafeAddress, goto]);
 
   return (
     <Card bordered={false}>

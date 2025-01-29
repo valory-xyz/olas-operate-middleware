@@ -36,7 +36,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
     'rewards-streak': true,
     'staking-contract-section': true,
     'low-funds': true,
-    'agent-activity': false,
+    'agent-activity': true,
     'backup-via-safe': true,
     'agent-settings': false,
   },

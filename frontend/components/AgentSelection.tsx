@@ -103,26 +103,9 @@ const EachAgent = memo(
         return;
       }
 
-      // Neither service nor safe is created
-      if (
-        agentType === AgentType.Memeooorr ||
-        agentType === AgentType.Modius ||
-        agentType === AgentType.AgentsFunCelo
-      ) {
-        // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
-        // TODO: can have this as a boolean flag in agentConfig?
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupYourAgent);
-        return;
-      }
-
-      if (agentType === AgentType.PredictTrader) {
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupEoaFunding);
-        return;
-      }
-
-      throw new Error('Invalid agent type');
+      // If service is NOT created, then go to agent introduction
+      gotoPage(Pages.Setup);
+      gotoSetup(SetupScreen.AgentIntroduction);
     }, [
       services,
       agentType,

@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useBalanceContext';
 import { useRewardContext } from '@/hooks/useRewardContext';
 import { useServices } from '@/hooks/useServices';
+import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 /**
  * hook to get the main OLAS balance owned by the selected service
@@ -26,6 +27,7 @@ export const useMainOlasBalance = () => {
     optimisticRewardsEarnedForEpoch,
     accruedServiceStakingRewards,
   } = useRewardContext();
+  const { selectedStakingProgramId } = useStakingProgram();
 
   const mainOlasBalance = useMemo(() => {
     // olas across master wallet (safes and eoa) on relevant chains for agent
@@ -89,6 +91,7 @@ export const useMainOlasBalance = () => {
     !isBalanceLoaded,
     isStakingRewardsDetailsLoading,
     isAvailableRewardsForEpochLoading,
+    !selectedStakingProgramId, // staking program is required to calculate staking rewards
   ].some(Boolean);
 
   return { isMainOlasBalanceLoading, mainOlasBalance };
