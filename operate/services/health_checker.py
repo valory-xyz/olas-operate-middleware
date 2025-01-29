@@ -19,8 +19,10 @@
 # ------------------------------------------------------------------------------
 """Source code for checking aea is alive.."""
 import asyncio
+import json
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from traceback import print_exc
 
 import aiohttp  # type: ignore
@@ -86,14 +88,25 @@ class HealthChecker:
             )
 
     @classmethod
-    async def check_service_health(cls, service: str) -> bool:
+    async def check_service_health(
+        cls, service_config_id: str, service_path: t.Optional[Path] = None
+    ) -> bool:
         """Check the service health"""
-        del service
+        del service_config_id
         timeout = aiohttp.ClientTimeout(total=cls.REQUEST_TIMEOUT_DEFAULT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.get(cls.HEALTH_CHECK_URL) as resp:
                 status = resp.status
                 response_json = await resp.json()
+
+                if service_path:
+                    healthcheck_json_path = service_path / "healthcheck.json"
+                    try:
+                        with open(healthcheck_json_path, "w", encoding="utf-8") as file:
+                            json.dump(response_json, file, indent=2)
+                    except Exception:  # pylint: disable=broad-except
+                        pass
+
                 return status == HTTP_OK and response_json.get(
                     "is_transitioning_fast", False
                 )
@@ -104,16 +117,17 @@ class HealthChecker:
     ) -> None:
         """Start a background health check job."""
 
+        service_path = self._service_manager.load(service_config_id).path
         try:
             self.logger.info(
                 f"[HEALTH_CHECKER] Start healthcheck job for service: {service_config_id}"
             )
 
-            async def _wait_for_port(sleep_period: int = 30) -> None:
+            async def _wait_for_port(sleep_period: int = 15) -> None:
                 self.logger.info("[HEALTH_CHECKER]: wait port is up")
                 while True:
                     try:
-                        await self.check_service_health(service_config_id)
+                        await self.check_service_health(service_config_id, service_path)
                         self.logger.info("[HEALTH_CHECKER]: port is UP")
                         return
                     except aiohttp.ClientConnectionError:
@@ -140,7 +154,9 @@ class HealthChecker:
                 while True:
                     try:
                         # Check the service health
-                        healthy = await self.check_service_health(service_config_id)
+                        healthy = await self.check_service_health(
+                            service_config_id, service_path
+                        )
                     except aiohttp.ClientConnectionError as e:
                         print_exc()
                         self.logger.warning(

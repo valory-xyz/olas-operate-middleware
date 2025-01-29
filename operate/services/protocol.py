@@ -25,7 +25,6 @@ import io
 import json
 import logging
 import tempfile
-import time
 import typing as t
 from enum import Enum
 from pathlib import Path
@@ -385,7 +384,7 @@ class StakingManager(OnChainHelper):
                 self.ledger_api, staking_contract
             ).get("data"),
         )
-        current_block = self.ledger_api.api.eth.get_block('latest')
+        current_block = self.ledger_api.api.eth.get_block("latest")
         current_timestamp = current_block.timestamp
         staked_duration = current_timestamp - ts_start
         if staked_duration < minimum_staking_duration and available_rewards > 0:

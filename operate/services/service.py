@@ -1014,6 +1014,19 @@ class Service(LocalResource):
             if not new_path.exists():
                 return service_config_id
 
+    def get_latest_healthcheck(self) -> t.Dict:
+        """Return the latest stored healthcheck.json"""
+        healthcheck_json_path = self.path / "healthcheck.json"
+
+        if not healthcheck_json_path.exists():
+            return {}
+
+        try:
+            with open(healthcheck_json_path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except (IOError, json.JSONDecodeError) as e:
+            return {"error": f"Error reading healthcheck.json: {e}"}
+
     def update(
         self,
         service_template: ServiceTemplate,
