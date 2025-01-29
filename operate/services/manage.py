@@ -517,6 +517,16 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
+
+        # Remove the latest healthcheck.json if it exists
+        healthcheck_json_path = service.path / "healthcheck.json"
+        if healthcheck_json_path.exists():
+            try:
+                healthcheck_json_path.unlink()
+                self.logger.info(f"Deleted {healthcheck_json_path}")
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error(f"Error deleting {healthcheck_json_path}: {e}")
+
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
