@@ -88,7 +88,7 @@ export const IntroductionStep = ({
 }: IntroductionProps) => {
   return (
     <div style={{ overflow: 'hidden' }}>
-      <AnimatedImage imgSrc={`/${imgSrc}.svg`} alt={title} />
+      <AnimatedImage imgSrc={`/${imgSrc}.png`} alt={title} />
 
       <div style={{ padding: '12px 24px 20px 24px' }}>
         <Flex vertical gap={24}>
