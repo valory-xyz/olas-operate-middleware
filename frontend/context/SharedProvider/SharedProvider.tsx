@@ -1,4 +1,10 @@
-import { createContext, PropsWithChildren, useCallback, useRef } from 'react';
+import {
+  createContext,
+  PropsWithChildren,
+  useCallback,
+  useRef,
+  useState,
+} from 'react';
 
 import { Optional } from '@/types/Util';
 
@@ -11,12 +17,22 @@ export const SharedContext = createContext<{
   hasMainOlasBalanceAnimatedOnLoad: boolean;
   setMainOlasBalanceAnimated: (value: boolean) => void;
 
+  // onboarding
+  onboardingStep: number;
+  updateOnboardingStep: (step: number) => void;
+
   // others
 }>({
   isMainOlasBalanceLoading: true,
   mainOlasBalance: undefined,
   hasMainOlasBalanceAnimatedOnLoad: false,
   setMainOlasBalanceAnimated: () => {},
+
+  // onboarding
+  onboardingStep: 0,
+  updateOnboardingStep: () => {},
+
+  // others
 });
 
 /**
@@ -25,11 +41,18 @@ export const SharedContext = createContext<{
  * - Track the main OLAS balance animation state & mount state.
  */
 export const SharedProvider = ({ children }: PropsWithChildren) => {
+  // state to track the onboarding step of the user (independent of the agent)
+  const [onboardingStep, setOnboardingStep] = useState(0);
+
   const hasAnimatedRef = useRef(false);
 
   const mainOlasBalanceDetails = useMainOlasBalance();
   const setMainOlasBalanceAnimated = useCallback((value: boolean) => {
     hasAnimatedRef.current = value;
+  }, []);
+
+  const updateOnboardingStep = useCallback((step: number) => {
+    setOnboardingStep(step);
   }, []);
 
   return (
@@ -38,6 +61,10 @@ export const SharedProvider = ({ children }: PropsWithChildren) => {
         ...mainOlasBalanceDetails,
         hasMainOlasBalanceAnimatedOnLoad: hasAnimatedRef.current,
         setMainOlasBalanceAnimated,
+
+        // onboarding
+        onboardingStep,
+        updateOnboardingStep,
       }}
     >
       {children}

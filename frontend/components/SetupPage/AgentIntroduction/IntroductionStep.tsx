@@ -34,7 +34,7 @@ const AnimatedImage = ({ imgSrc, alt }: AnimatedImageProps) => (
         width={0}
         height={0}
         sizes="100vw"
-        style={{ width: '100%', height: 'auto', minHeight: 412 }}
+        style={{ width: '100%', height: 'auto', minHeight: 416 }}
       />
     </motion.div>
   </AnimatePresence>
@@ -74,6 +74,9 @@ type IntroductionProps = OnboardingStep & {
   onNext: () => void;
 };
 
+/**
+ * Functional component to display the introduction step of the onboarding process.
+ */
 export const IntroductionStep = ({
   title,
   desc,
@@ -85,7 +88,7 @@ export const IntroductionStep = ({
 }: IntroductionProps) => {
   return (
     <div style={{ overflow: 'hidden' }}>
-      <AnimatedImage imgSrc={`/${imgSrc}.svg`} alt={title} />
+      <AnimatedImage imgSrc={`/${imgSrc}.png`} alt={title} />
 
       <div style={{ padding: '12px 24px 20px 24px' }}>
         <Flex vertical gap={24}>

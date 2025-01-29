@@ -1,9 +1,10 @@
 import { Divider, Flex, Typography } from 'antd';
-import React, { FC, useCallback, useMemo, useState } from 'react';
+import { FC, useCallback, useMemo } from 'react';
 
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
+import { useSharedContext } from '@/hooks/useSharedContext';
 
 import {
   AGENTS_FUND_ONBOARDING_STEPS,
@@ -21,31 +22,38 @@ type IntroductionProps = {
 
 const Introduction = ({ steps, onOnboardingComplete }: IntroductionProps) => {
   const { goto } = useSetup();
-  const [currentStep, setCurrentStep] = useState(0);
+  const { onboardingStep, updateOnboardingStep } = useSharedContext();
 
   const onNextStep = useCallback(() => {
-    if (currentStep === steps.length - 1) {
+    if (onboardingStep === steps.length - 1) {
       onOnboardingComplete();
     } else {
-      setCurrentStep((prev) => prev + 1);
+      updateOnboardingStep(onboardingStep + 1);
     }
-  }, [currentStep, steps.length, onOnboardingComplete]);
+  }, [
+    onboardingStep,
+    steps.length,
+    onOnboardingComplete,
+    updateOnboardingStep,
+  ]);
 
   const onPreviousStep = useCallback(() => {
-    if (currentStep === 0) {
+    if (onboardingStep === 0) {
       goto(SetupScreen.AgentSelection);
     } else {
-      setCurrentStep((prev) => prev - 1);
+      updateOnboardingStep(onboardingStep - 1);
     }
-  }, [currentStep, goto]);
+  }, [onboardingStep, goto, updateOnboardingStep]);
 
   return (
     <IntroductionStep
-      title={steps[currentStep].title}
-      desc={steps[currentStep].desc}
-      imgSrc={steps[currentStep].imgSrc}
-      helper={steps[currentStep].helper}
-      btnText={currentStep === steps.length - 1 ? 'Set up agent' : 'Continue'}
+      title={steps[onboardingStep].title}
+      desc={steps[onboardingStep].desc}
+      imgSrc={steps[onboardingStep].imgSrc}
+      helper={steps[onboardingStep].helper}
+      btnText={
+        onboardingStep === steps.length - 1 ? 'Set up agent' : 'Continue'
+      }
       onPrev={onPreviousStep}
       onNext={onNextStep}
     />
