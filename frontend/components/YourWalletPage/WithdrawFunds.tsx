@@ -1,7 +1,7 @@
 import { InfoCircleOutlined } from '@ant-design/icons';
 import { Button, Flex, Input, message, Modal, Tooltip, Typography } from 'antd';
 import { isAddress } from 'ethers/lib/utils';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { memo, useCallback, useMemo, useState } from 'react';
 
 import { COLOR } from '@/constants/colors';
 import { AgentType } from '@/enums/Agent';
@@ -23,6 +23,25 @@ const { Text } = Typography;
 const minDurationMessage =
   "You have not reached the minimum duration of staking. Keep running your agent and you'll be able to withdraw in";
 
+const afterWithdrawing =
+  'Your agent will not be able to run again until it is refunded.';
+
+const getWithdrawMessage = (agentType: AgentType) => {
+  //predit
+  switch (agentType) {
+    case AgentType.PredictTrader:
+      return `This will withdraw all OLAS and XDAI from your account. ${afterWithdrawing}`;
+    case AgentType.Memeooorr:
+      return `This will withdraw all OLAS and ETH from your account. ${afterWithdrawing}`;
+    case AgentType.Modius:
+      return `This will withdraw all OLAS, ETH and USDC from your account. ${afterWithdrawing}`;
+    case AgentType.AgentsFunCelo:
+      return `This will withdraw all OLAS and CELO from your account. ${afterWithdrawing}`;
+    default:
+      return `This will withdraw all funds from your account. ${afterWithdrawing}`;
+  }
+};
+
 const comingSoonAgentTypes: AgentType[] = [AgentType.Modius];
 
 const ServiceNotRunning = () => (
@@ -35,18 +54,18 @@ const ServiceNotRunning = () => (
   </div>
 );
 
-const ToProceedMessage = () => {
-  const { selectedAgentConfig } = useServices();
+const ToProceedMessage = memo(function ToProceedMessage() {
+  const { selectedAgentType } = useServices();
   return (
     <CustomAlert
       type="warning"
       showIcon
       message={
-        <Text className="text-sm">{selectedAgentConfig?.withdrawalText}</Text>
+        <Text className="text-sm">{getWithdrawMessage(selectedAgentType)}</Text>
       }
     />
   );
-};
+});
 
 const CompatibleMessage = () => (
   <Text className="text-sm text-light">
