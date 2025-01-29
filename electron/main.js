@@ -317,9 +317,9 @@ const createMainWindow = async () => {
 
   // Handle twitter login
   ipcMain.handle('validate-twitter-login', async (_event, credentials) => {
-    logger.electron('Validating X login:', credentials);
-
     const { username, password, email } = credentials;
+
+    logger.electron('Validating X login:', { username });
     if (!username || !password || !email) {
       logger.electron('Missing credentials for X login');
       return { success: false, error: 'Missing credentials' };
@@ -334,7 +334,7 @@ const createMainWindow = async () => {
       return { success: true, cookies };
     } catch (error) {
       logger.electron('X login failed:', error);
-      console.error('Twitter login error:', error);
+      console.error('X login error:', error);
       return { success: false, error: error.message };
     }
   });
