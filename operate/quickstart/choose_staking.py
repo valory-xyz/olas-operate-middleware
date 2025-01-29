@@ -38,6 +38,7 @@ NO_STAKING_PROGRAM_METADATA = {
     "name": "No staking",
     "description": "Your Olas Predict agent will still actively participate in prediction\
         markets, but it will not be staked within any staking program.",
+    "available_staking_slots":"∞"
 }
 
 
@@ -109,7 +110,7 @@ class StakingHandler:
 
         return contract
 
-    def get_staking_contract_metadata(self: "StakingHandler", program_id: str) -> Dict[str, str]:
+    def get_staking_contract_metadata(self: "StakingHandler", program_id: str) -> Dict[str, Any]:
         try:
             if program_id == NO_STAKING_PROGRAM_ID:
                 return NO_STAKING_PROGRAM_METADATA
@@ -120,7 +121,15 @@ class StakingHandler:
             response = requests.get(ipfs_address)
 
             if response.status_code == 200:
-                return response.json()
+                metadata = response.json()
+                # Add staking slots count to successful response
+                try:
+                    max_services = staking_token_contract.functions.maxNumServices().call()
+                    current_services = staking_token_contract.functions.getServiceIds().call()
+                    metadata["available_staking_slots"] = max_services - len(current_services)
+                except ContractLogicError as e:
+                    metadata["available_staking_slots"] = "?"
+                return metadata
 
             raise Exception(  # pylint: disable=broad-except
                 f"Failed to fetch data from {ipfs_address}: {response.status_code}"
@@ -129,6 +138,7 @@ class StakingHandler:
             return {
                 "name": program_id,
                 "description": program_id,
+                "available_staking_slots": "?"
             }
 
     def get_staking_env_variables(self: "StakingHandler", program_id: str) -> StakingVariables:
