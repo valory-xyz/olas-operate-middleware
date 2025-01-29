@@ -135,7 +135,7 @@ class HealthChecker:
                     await asyncio.sleep(sleep_period)
 
             async def _check_port_ready(
-                timeout: int = self.port_up_timeout, sleep_period: int = 30
+                timeout: int = self.port_up_timeout, sleep_period: int = 15
             ) -> bool:
                 try:
                     await asyncio.wait_for(
