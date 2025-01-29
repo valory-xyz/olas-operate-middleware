@@ -118,9 +118,6 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 function showNotification(title, body) {
   new Notification({ title, body }).show();
 }
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function setAppAutostart(is_set) {
   logger.electron('Set app autostart: ' + is_set);
@@ -320,19 +317,24 @@ const createMainWindow = async () => {
 
   // Handle twitter login
   ipcMain.handle('validate-twitter-login', async (_event, credentials) => {
-    const scraper = new Scraper();
-
     const { username, password, email } = credentials;
+
+    logger.electron('Validating X login:', { username });
     if (!username || !password || !email) {
+      logger.electron('Missing credentials for X login');
       return { success: false, error: 'Missing credentials' };
     }
 
     try {
+      const scraper = new Scraper();
+
       await scraper.login(username, password, email);
       const cookies = await scraper.getCookies();
+      logger.electron('X login successful!');
       return { success: true, cookies };
     } catch (error) {
-      console.error('Twitter login error:', error);
+      logger.electron('X login failed:', error);
+      console.error('X login error:', error);
       return { success: false, error: error.message };
     }
   });
