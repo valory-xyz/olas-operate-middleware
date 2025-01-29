@@ -221,7 +221,7 @@ async function beforeQuit(event) {
 
   if (nextApp) {
     // attempt graceful close of prod next app
-    await nextApp.close().catch((e) => {
+    await nextApp.close().catch(() => {
       logger.electron("Couldn't close NextApp gracefully:");
     });
     // electron will kill next service on exit
@@ -230,7 +230,7 @@ async function beforeQuit(event) {
   app.quit();
 }
 
-const APP_WIDTH = 500;
+const APP_WIDTH = 480;
 
 /**
  * Creates the splash window

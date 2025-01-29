@@ -15,11 +15,12 @@ export type AgentConfig = {
   serviceApi: typeof PredictTraderService;
   displayName: string;
   description: string;
-  /**
-   * The operating thresholds for the agent to continue running (after "initial funding").
-   * (For example, the agent may require a minimum balance of 0.1 xDAI to continue running)
-   */
   isAgentEnabled: boolean;
+  /**
+   * Whether the agent requires setup before it can be used.
+   * (e.g. Persona for memeooorr)
+   */
+  requiresSetup: boolean;
 };
 
 export type AgentHealthCheck = {

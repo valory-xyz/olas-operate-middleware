@@ -33,6 +33,7 @@ export const AGENT_CONFIG: {
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
     isAgentEnabled: true,
+    requiresSetup: false,
   },
   [AgentType.Memeooorr]: {
     name: 'Agents.fun agent',
@@ -45,6 +46,7 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
     isAgentEnabled: true,
+    requiresSetup: true,
   },
   [AgentType.Modius]: {
     name: 'Modius agent',
@@ -67,6 +69,7 @@ export const AGENT_CONFIG: {
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
     isAgentEnabled: false,
+    requiresSetup: true,
   },
   // TODO: celo (check each key)
   [AgentType.AgentsFunCelo]: {
@@ -80,5 +83,6 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Celo chain.',
     isAgentEnabled: false,
+    requiresSetup: true,
   },
 };
