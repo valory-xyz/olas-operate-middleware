@@ -1027,6 +1027,16 @@ class Service(LocalResource):
         except (IOError, json.JSONDecodeError) as e:
             return {"error": f"Error reading healthcheck.json: {e}"}
 
+    def remove_latest_healthcheck(self) -> None:
+        """Remove the latest healthcheck.json, if it exists"""
+        healthcheck_json_path = self.path / "healthcheck.json"
+
+        if healthcheck_json_path.exists():
+            try:
+                healthcheck_json_path.unlink()
+            except Exception as e:  # pylint: disable=broad-except
+                print(f"Exception deleting {healthcheck_json_path}: {e}")
+
     def update(
         self,
         service_template: ServiceTemplate,

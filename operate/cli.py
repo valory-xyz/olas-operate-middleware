@@ -829,11 +829,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        deployment = (
-            operate.service_manager()
-            .load(service_config_id=service_config_id)
-            .deployment
-        )
+        service = operate.service_manager().load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
+        deployment = service.deployment
         health_checker.stop_for_service(service_config_id=service_config_id)
 
         await run_in_executor(deployment.stop)
