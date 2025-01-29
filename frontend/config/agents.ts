@@ -33,8 +33,6 @@ export const AGENT_CONFIG: {
     serviceApi: PredictTraderService,
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
-    withdrawalText:
-      'This will remove all OLAS and all XDAI from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
     requiresSetup: false,
   },
   [AgentType.Memeooorr]: {
@@ -48,8 +46,6 @@ export const AGENT_CONFIG: {
     displayName: 'Agents.fun agent - Base',
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
-    withdrawalText:
-      'This will remove all OLAS and all ETH from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
     requiresSetup: true,
   },
   [AgentType.Modius]: {
@@ -73,8 +69,6 @@ export const AGENT_CONFIG: {
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
     isAgentEnabled: true,
-    withdrawalText:
-      'This will remove all OLAS, ETH and USDC from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
     requiresSetup: true,
   },
   // TODO: celo (check each key)
@@ -89,8 +83,6 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Celo chain.',
     isAgentEnabled: false,
-    withdrawalText:
-      'This will remove all OLAS and all CELO from your account. After withdrawing, your agent will not be able to run again until it is refunded.',
     requiresSetup: true,
   },
 };
