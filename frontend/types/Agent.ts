@@ -19,9 +19,8 @@ export type AgentConfig = {
   /**
    * Whether the agent requires setup before it can be used.
    * (e.g. Persona for memeooorr)
-   */  
+   */
   requiresSetup: boolean;
-  withdrawalText: string;
 };
 
 export type AgentHealthCheck = {
