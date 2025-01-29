@@ -10,7 +10,7 @@ import { parseEther, parseUnits } from '@/utils/numberFormatters';
 export const PREDICT_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.PredictTrader, // TODO: remove if causes errors on middleware
   name: 'Trader Agent', // Should be unique across all services and not be updated
-  hash: 'bafybeieet4i6kirmjfe75equxf4la7vmvf2jrtsmouygdtn544pmke7cta',
+  hash: 'bafybeiaw36jpiyh6pmgkpfvklhshigyvakkefl27k47duz22moxnxnwlcu',
   description: 'Trader agent for omen prediction markets',
   image:
     'https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75',
@@ -98,11 +98,11 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
-  hash: 'bafybeigpemq6ox45mtwtz34zdma5hsv6zqcqnggzjf3gqgk6yy2lywmena',
+  hash: 'bafybeidstyvnzrvldc5pprhlyal7wikmns2wgdlxtlqar35ujycc4hxa7y',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
-  service_version: 'v0.3.0-alpha4',
+  service_version: 'v0.3.0-alpha6',
   env_variables: {
     BASE_LEDGER_RPC: {
       name: 'Base ledger RPC',
