@@ -1517,7 +1517,7 @@ class ServiceManager:
             for key in service.keys:
                 agent_balance = get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=asset_address,
+                    asset_address=asset_address,
                     address=key.address,
                 )
                 self.logger.info(
@@ -1536,7 +1536,7 @@ class ServiceManager:
                         )
                         transferable_balance = get_asset_balance(
                             ledger_api=ledger_api,
-                            contract_address=asset_address,
+                            asset_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
                         to_transfer = max(
@@ -1556,14 +1556,14 @@ class ServiceManager:
 
             safe_balance = get_asset_balance(
                 ledger_api=ledger_api,
-                contract_address=asset_address,
+                asset_address=asset_address,
                 address=chain_data.multisig,
             )
             if asset_address == ZERO_ADDRESS and chain in WRAPPED_NATIVE_ASSET:
                 # also count the balance of the wrapped native asset
                 safe_balance += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
+                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=chain_data.multisig,
                 )
 
@@ -1585,7 +1585,7 @@ class ServiceManager:
                 )
                 transferable_balance = get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=asset_address,
+                    asset_address=asset_address,
                     address=wallet.safes[ledger_config.chain],
                 )
                 to_transfer = max(
@@ -1984,12 +1984,24 @@ class ServiceManager:
             if service_safe and chain in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
+                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=service_safe,
                 )
 
             # Compute refill requirements of Master Safe and Master EOA
             refill_requirements[chain] = {}
+
+            if master_safe:
+                olas_address = OLAS[Chain(chain)]
+                balances[chain][master_safe][olas_address] = get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=OLAS[Chain(chain)],
+                    address=master_safe,
+                )
+                refill_requirements[chain].setdefault(master_safe, {})[
+                    olas_address
+                ] = self._compute_olas_requirements(service_config_id, chain)
+
             for (
                 asset_address,
                 fund_requirements,
@@ -2065,6 +2077,64 @@ class ServiceManager:
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
+
+    def _compute_olas_requirements(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str
+    ) -> int:
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        user_params = chain_config.chain_data.user_params
+
+        # TODO fix this
+        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+
+        if not user_params.use_staking:
+            return 0
+
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        staking_params = sftxb.get_staking_params(
+            staking_contract=STAKING[ledger_config.chain][
+                user_params.staking_program_id
+            ],
+        )
+
+        required_olas = (
+            staking_params["min_staking_deposit"]
+            + staking_params["min_staking_deposit"]  # bond = staking
+        )
+
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+        master_safe = wallet.safes[Chain(chain)]
+        available_olas = get_asset_balance(
+            ledger_api=ledger_api,
+            asset_address=OLAS[Chain(chain)],
+            address=master_safe,
+        )
+
+        service_id = chain_config.chain_data.token
+        if service_id == NON_EXISTENT_TOKEN:
+            return max(required_olas - available_olas, 0)
+
+        service_owner = registry_contracts.service_registry.get_service_owner(
+            ledger_api=ledger_api,
+            contract_address=staking_params["service_registry"],
+            service_id=service_id,
+        ).get("service_owner", "")
+
+        if service_owner.lower() == master_safe.lower():
+            return max(required_olas - available_olas, 0)
+
+        current_agent_bond = sftxb.get_agent_bond(
+            service_id=service_id, agent_id=staking_params["agent_ids"][0]
+        )
+        current_security_deposit = current_agent_bond
+
+        available_olas += current_security_deposit
+        available_olas += current_agent_bond
+
+        return max(required_olas - available_olas, 0)
 
     @staticmethod
     def _compute_refill_requirement(
