@@ -102,6 +102,11 @@ export const WithdrawFunds = () => {
     currentStakingContractInfo: selectedStakingContractDetails,
   });
 
+  const isComingSoon = useMemo(
+    () => agentsWithWithdrawalsComingSoon.includes(selectedAgentType),
+    [selectedAgentType],
+  );
+
   const showModal = useCallback(() => {
     setIsModalVisible(true);
   }, []);
@@ -164,49 +169,48 @@ export const WithdrawFunds = () => {
     handleCancel,
   ]);
 
-  const withdrawButton = useMemo(
+  const withdrawAllButton = useMemo(
     () => (
       <Button
         onClick={showModal}
         block
         size="large"
-        disabled={!service || !isServiceStakedForMinimumDuration}
+        disabled={
+          !service || !isServiceStakedForMinimumDuration || isComingSoon
+        }
       >
         Withdraw all funds
       </Button>
     ),
-    [service, isServiceStakedForMinimumDuration, showModal],
+    [showModal, service, isServiceStakedForMinimumDuration, isComingSoon],
   );
 
-  const isComingSoon = useMemo(
-    () => agentsWithWithdrawalsComingSoon.includes(selectedAgentType),
-    [selectedAgentType],
-  );
+  const withdrawAllTooltip = useMemo(() => {
+    if (isComingSoon) {
+      return 'Available soon!';
+    }
 
-  const buttonText = useMemo(() => {
+    // countdown to withdrawal
+    if (!isServiceStakedForMinimumDuration) {
+      return `${minDurationMessage} ${countdownDisplay}`;
+    }
+
+    return null;
+  }, [countdownDisplay, isComingSoon, isServiceStakedForMinimumDuration]);
+
+  const modalButtonText = useMemo(() => {
     if (isWithdrawalLoading) return 'Loading';
-    if (isComingSoon) return 'Coming soon';
     return 'Proceed';
-  }, [isComingSoon, isWithdrawalLoading]);
+  }, [isWithdrawalLoading]);
 
   const isWithdrawFundsEnabled = useFeatureFlag('withdraw-funds');
   if (!isWithdrawFundsEnabled) return <FeatureNotEnabled />;
 
   return (
     <>
-      {isServiceStakedForMinimumDuration ? (
-        withdrawButton
-      ) : (
-        <Tooltip
-          title={
-            <Text className="text-sm">
-              {minDurationMessage} {countdownDisplay}.
-            </Text>
-          }
-        >
-          {withdrawButton}
-        </Tooltip>
-      )}
+      <Tooltip title={<Text className="text-sm">{withdrawAllTooltip}</Text>}>
+        {withdrawAllButton}
+      </Tooltip>
 
       {!isServiceRunning && <ServiceNotRunning />}
 
@@ -237,14 +241,14 @@ export const WithdrawFunds = () => {
           <CompatibleMessage />
 
           <Button
-            disabled={!withdrawAddress || isComingSoon}
+            disabled={!withdrawAddress}
             loading={isWithdrawalLoading}
             onClick={handleProceed}
             block
             type="primary"
             className="text-base"
           >
-            {buttonText}
+            {modalButtonText}
           </Button>
         </Flex>
       </Modal>

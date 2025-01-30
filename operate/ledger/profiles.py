@@ -85,19 +85,28 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "pearl_beta_3": "0xBd59Ff0522aA773cB6074ce83cD1e4a05A457bc1",
         "pearl_beta_4": "0x3052451e1eAee78e62E169AfdF6288F8791F2918",
         "pearl_beta_5": "0x4Abe376Fda28c2F43b84884E5f822eA775DeA9F4",
+        "pearl_beta_6": "0x6C6D01e8eA8f806eF0c22F0ef7ed81D868C1aB39",
         "pearl_beta_mech_marketplace": "0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA",
     },
     Chain.OPTIMISTIC: {
         "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
     },
     Chain.ETHEREUM: {},
-    Chain.BASE: {"meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA"},
+    Chain.BASE: {
+        "meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA",
+        "meme_base_beta": "0x6011E09e7c095e76980b22498d69dF18EB62BeD8",
+        "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
+        "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
+    },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
     },
     Chain.MODE: {
         "optimus_alpha": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91",
         "modius_alpha": "0x534C0A05B6d4d28d5f3630D6D74857B253cf8332",
+        "modius_alpha_2": "0xeC013E68FE4B5734643499887941eC197fd757D0",
+        "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
+        "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
     },
 }
 
