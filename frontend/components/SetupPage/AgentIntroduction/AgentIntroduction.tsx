@@ -1,5 +1,5 @@
 import { Divider, Flex, Typography } from 'antd';
-import { FC, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
@@ -63,7 +63,7 @@ const Introduction = ({ steps, onOnboardingComplete }: IntroductionProps) => {
 /**
  * Display the introduction (onboarding) of the selected agent.
  */
-export const AgentIntroduction: FC = () => {
+export const AgentIntroduction = () => {
   const { goto } = useSetup();
   const { selectedAgentType, selectedAgentConfig } = useServices();
 
@@ -76,6 +76,12 @@ export const AgentIntroduction: FC = () => {
   }, [selectedAgentType]);
 
   const onComplete = useCallback(() => {
+    // if agent is "coming soon" should be redirected to EARLY ACCESS PAGE
+    if (selectedAgentConfig.isComingSoon) {
+      goto(SetupScreen.EarlyAccessOnly);
+      return;
+    }
+
     // if the selected type requires setting up an agent,
     // should be redirected to setup screen.
     if (selectedAgentConfig.requiresSetup) {
@@ -83,7 +89,7 @@ export const AgentIntroduction: FC = () => {
     } else {
       goto(SetupScreen.SetupEoaFunding);
     }
-  }, [goto, selectedAgentConfig.requiresSetup]);
+  }, [goto, selectedAgentConfig]);
 
   return (
     <>
