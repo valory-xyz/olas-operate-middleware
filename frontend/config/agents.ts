@@ -37,7 +37,7 @@ export const AGENT_CONFIG: {
   },
   [AgentType.Memeooorr]: {
     isAgentEnabled: true,
-    isComingSoon: false,
+    isComingSoon: true,
     requiresSetup: true,
     name: 'Agents.fun agent',
     evmHomeChainId: EvmChainId.Base,
@@ -50,8 +50,8 @@ export const AGENT_CONFIG: {
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
   },
   [AgentType.Modius]: {
-    isAgentEnabled: false,
-    isComingSoon: false,
+    isAgentEnabled: true,
+    isComingSoon: true,
     requiresSetup: true,
     name: 'Modius agent',
     evmHomeChainId: EvmChainId.Mode,
