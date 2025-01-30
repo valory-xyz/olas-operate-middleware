@@ -10,6 +10,7 @@ import { SetupCreateSafe } from './Create/SetupCreateSafe';
 import { SetupEoaFunding } from './Create/SetupEoaFunding';
 import { SetupPassword } from './Create/SetupPassword';
 import { SetupSeedPhrase } from './Create/SetupSeedPhrase';
+import { EarlyAccessOnly } from './EarlyAccessOnly';
 import {
   SetupRestoreMain,
   SetupRestoreSetPassword,
@@ -48,6 +49,8 @@ export const Setup = () => {
         return <AgentSelection showSelected={false} />;
       case SetupScreen.AgentIntroduction:
         return <AgentIntroduction />;
+      case SetupScreen.EarlyAccessOnly:
+        return <EarlyAccessOnly />;
       case SetupScreen.SetupYourAgent:
         return <SetupYourAgent />;
 
