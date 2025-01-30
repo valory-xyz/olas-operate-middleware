@@ -2092,6 +2092,7 @@ class ServiceManager:
         if not user_params.use_staking:
             return 0
 
+        # First, compute required OLAS
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         staking_params = sftxb.get_staking_params(
             staking_contract=STAKING[ledger_config.chain][
@@ -2104,6 +2105,7 @@ class ServiceManager:
             + staking_params["min_staking_deposit"]  # bond = staking
         )
 
+        # Second, compute available OLAS in wallet + in current staking contract
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
         master_safe = wallet.safes[Chain(chain)]
@@ -2126,6 +2128,10 @@ class ServiceManager:
         if service_owner.lower() == master_safe.lower():
             return max(required_olas - available_olas, 0)
 
+        # If the service owner is not the master safe, assume it's staked
+        # and get current bond on the contract. Assume current security
+        # deposit = current agent bond
+        # TODO this only works for 1 agent
         current_agent_bond = sftxb.get_agent_bond(
             service_id=service_id, agent_id=staking_params["agent_ids"][0]
         )
