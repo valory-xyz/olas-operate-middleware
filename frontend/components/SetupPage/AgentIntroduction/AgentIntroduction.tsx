@@ -1,5 +1,5 @@
 import { Divider, Flex, Typography } from 'antd';
-import { FC, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useServices } from '@/hooks/useServices';
@@ -63,7 +63,7 @@ const Introduction = ({ steps, onOnboardingComplete }: IntroductionProps) => {
 /**
  * Display the introduction (onboarding) of the selected agent.
  */
-export const AgentIntroduction: FC = () => {
+export const AgentIntroduction = () => {
   const { goto } = useSetup();
   const { selectedAgentType, selectedAgentConfig } = useServices();
 

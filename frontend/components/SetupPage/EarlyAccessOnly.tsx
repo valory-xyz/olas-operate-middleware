@@ -1,6 +1,6 @@
 import { IdcardOutlined } from '@ant-design/icons';
 import { Button, Typography } from 'antd';
-import { FC, useCallback } from 'react';
+import { useCallback } from 'react';
 
 import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
@@ -11,7 +11,7 @@ import { CardFlex } from '../styled/CardFlex';
 
 const { Title, Paragraph } = Typography;
 
-export const EarlyAccessOnly: FC = () => {
+export const EarlyAccessOnly = () => {
   const { goto } = useSetup();
 
   const onGoBack = useCallback(() => {

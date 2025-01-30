@@ -16,7 +16,7 @@ export type AgentConfig = {
   displayName: string;
   description: string;
   isAgentEnabled: boolean;
-  /** Whether the agent is coming soon and see a coming soon message. */
+  /** If agent is enabled but not yet available to use */
   isComingSoon?: boolean;
   /**
    * Whether the agent requires setup before it can be used.
