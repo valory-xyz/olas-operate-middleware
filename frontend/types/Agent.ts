@@ -16,6 +16,8 @@ export type AgentConfig = {
   displayName: string;
   description: string;
   isAgentEnabled: boolean;
+  /** Whether the agent is coming soon and see a coming soon message. */
+  isComingSoon?: boolean;
   /**
    * Whether the agent requires setup before it can be used.
    * (e.g. Persona for memeooorr)

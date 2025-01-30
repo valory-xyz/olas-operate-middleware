@@ -24,7 +24,6 @@ export const AGENT_CONFIG: {
   [key in AgentType]: AgentConfig;
 } = {
   [AgentType.PredictTrader]: {
-    isAgentEnabled: true,
     name: 'Predict Trader',
     evmHomeChainId: EvmChainId.Gnosis,
     middlewareHomeChainId: MiddlewareChain.GNOSIS,
@@ -34,9 +33,9 @@ export const AGENT_CONFIG: {
     displayName: 'Prediction agent',
     description: 'Participates in prediction markets.',
     requiresSetup: false,
+    isAgentEnabled: true,
   },
   [AgentType.Memeooorr]: {
-    isAgentEnabled: true,
     name: 'Agents.fun agent',
     evmHomeChainId: EvmChainId.Base,
     middlewareHomeChainId: MiddlewareChain.BASE,
@@ -47,6 +46,8 @@ export const AGENT_CONFIG: {
     description:
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
     requiresSetup: true,
+    isAgentEnabled: true,
+    isComingSoon: true,
   },
   [AgentType.Modius]: {
     name: 'Modius agent',
@@ -68,8 +69,9 @@ export const AGENT_CONFIG: {
     displayName: 'Modius agent',
     description:
       'Invests crypto assets on your behalf and grows your portfolio.',
-    isAgentEnabled: true,
     requiresSetup: true,
+    isAgentEnabled: true,
+    isComingSoon: true,
   },
   // TODO: celo (check each key)
   [AgentType.AgentsFunCelo]: {
