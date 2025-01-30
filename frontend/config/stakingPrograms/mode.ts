@@ -42,7 +42,7 @@ export const MODE_STAKING_PROGRAMS: StakingProgramMap = {
   },
   [StakingProgramId.ModiusAlpha2]: {
     chainId: EvmChainId.Mode,
-    name: 'Modius Alpha 2',
+    name: 'Modius Alpha II',
     agentsSupported: [AgentType.Modius],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 100,
@@ -56,7 +56,7 @@ export const MODE_STAKING_PROGRAMS: StakingProgramMap = {
   },
   [StakingProgramId.ModiusAlpha3]: {
     chainId: EvmChainId.Mode,
-    name: 'Modius Alpha 3',
+    name: 'Modius Alpha III',
     agentsSupported: [AgentType.Modius],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 1000,
@@ -70,7 +70,7 @@ export const MODE_STAKING_PROGRAMS: StakingProgramMap = {
   },
   [StakingProgramId.ModiusAlpha4]: {
     chainId: EvmChainId.Mode,
-    name: 'Modius Alpha 4',
+    name: 'Modius Alpha IV',
     agentsSupported: [AgentType.Modius],
     stakingRequirements: {
       [TokenSymbol.OLAS]: 5000,
