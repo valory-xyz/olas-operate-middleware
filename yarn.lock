@@ -1058,43 +1058,6 @@
     rc-resize-observer "^1.3.1"
     rc-util "^5.38.0"
 
-"@roamhq/wrtc-darwin-arm64@0.8.0":
-  version "0.8.0"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc-darwin-arm64/-/wrtc-darwin-arm64-0.8.0.tgz#15057e6b8f57e4d1b7008a9d848b6f2036adbb24"
-  integrity sha512-OtV2KWO7zOG3L8TF3KCt9aucynVCD/ww2xeXXgg+FLkya3ca0uzehN8EQJ3BL4tkInksbFJ2ssyu9cehfJ3ZuA==
-
-"@roamhq/wrtc-darwin-x64@0.8.0":
-  version "0.8.0"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc-darwin-x64/-/wrtc-darwin-x64-0.8.0.tgz#e09137b5a7edf2c2412bc63f1da1893dcaa211fd"
-  integrity sha512-VY7Vzt/SDDDCpW//h8GW9bOZrOr8gWXPZVD9473ypl4jyBIoO57yyLbHzd1G0vBUkS6szsHlQCz1WwpI30YL+g==
-
-"@roamhq/wrtc-linux-arm64@0.8.1":
-  version "0.8.1"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc-linux-arm64/-/wrtc-linux-arm64-0.8.1.tgz#9a5f3297de44fcec86713d0baefa0594658ab71e"
-  integrity sha512-FBJLLazlWkGQUXaokC/rTbrUQbb0CNFYry52fZGstufrGLTWu+g4HcwXdVvxh1tnVtVMvkQGk+mlOL52sCxw0A==
-
-"@roamhq/wrtc-linux-x64@0.8.1":
-  version "0.8.1"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc-linux-x64/-/wrtc-linux-x64-0.8.1.tgz#3c5b60ca6cc6ebf5c2389d852f4a101135031da2"
-  integrity sha512-I9oWG7b4uvWO1IOR/aF34n+ID6TKVuSs0jd19h5KdhfRtw7FFh9xxuwN9rONPxLVa6fS0q+MCZgAf8Scz89L8Q==
-
-"@roamhq/wrtc-win32-x64@0.8.0":
-  version "0.8.0"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc-win32-x64/-/wrtc-win32-x64-0.8.0.tgz#582e2478df48201d5757b60dcd4b4dcc40a054b7"
-  integrity sha512-R2fxl41BLWPiP4eaTHGLzbbVvRjx1mV/OsgINCvawO7Hwz5Zx9I45+Fhrw3hd4n5amIeSG9VIF7Kz8eeTFXTGQ==
-
-"@roamhq/wrtc@^0.8.0":
-  version "0.8.0"
-  resolved "https://registry.npmjs.org/@roamhq/wrtc/-/wrtc-0.8.0.tgz#03c8c64c3b6a1e6e8965ec6496fa7e97571ae04b"
-  integrity sha512-C0V/nqc4/2xzORI5qa4mIeN/8UO3ywN1kInrJ9u6GljFx0D18JMUJEqe8yYHa61RrEeoWN3PKdW++k8TocSx/A==
-  optionalDependencies:
-    "@roamhq/wrtc-darwin-arm64" "0.8.0"
-    "@roamhq/wrtc-darwin-x64" "0.8.0"
-    "@roamhq/wrtc-linux-arm64" "0.8.1"
-    "@roamhq/wrtc-linux-x64" "0.8.1"
-    "@roamhq/wrtc-win32-x64" "0.8.0"
-    domexception "^4.0.0"
-
 "@scure/base@~1.1.0":
   version "1.1.7"
   resolved "https://registry.yarnpkg.com/@scure/base/-/base-1.1.7.tgz#fe973311a5c6267846aa131bc72e96c5d40d2b30"
@@ -1425,12 +1388,11 @@ agent-base@^7.0.2, agent-base@^7.1.0:
   dependencies:
     debug "^4.3.4"
 
-agent-twitter-client@^0.0.18:
-  version "0.0.18"
-  resolved "https://registry.npmjs.org/agent-twitter-client/-/agent-twitter-client-0.0.18.tgz#9cb66321e0ccb3d3130cf4971ceb0c7f90863fe4"
-  integrity sha512-HncH5mlFcGYLEl5wNEkwtdolcmdxqEMIsqO4kTqiTp5P19O25Zr4P6LNJZz1UTjPRyXDxj+BLmmk/Ou7O0QzEg==
+agent-twitter-client@^0.0.16:
+  version "0.0.16"
+  resolved "https://registry.npmjs.org/agent-twitter-client/-/agent-twitter-client-0.0.16.tgz#c800047b668c111d4d07c7fdcad3237a2a34f29f"
+  integrity sha512-Clgb/N2LXoGMlId6GDUaaR05eJ0PqSifM6wikl/FiQ2+3+6I2ZhZB7KRulc8R4xvYFe6h0wNWe6FZiF48r124w==
   dependencies:
-    "@roamhq/wrtc" "^0.8.0"
     "@sinclair/typebox" "^0.32.20"
     headers-polyfill "^3.1.2"
     json-stable-stringify "^1.0.2"
@@ -1440,8 +1402,6 @@ agent-twitter-client@^0.0.18:
     tough-cookie "^4.1.2"
     tslib "^2.5.2"
     twitter-api-v2 "^1.18.2"
-    undici "^7.1.1"
-    ws "^8.18.0"
 
 agentkeepalive@^4.2.1:
   version "4.5.0"
@@ -2522,13 +2482,6 @@ doctrine@^3.0.0:
   integrity sha512-yS+Q5i3hBf7GBkd4KG8a7eBNNWNGLTaEwwYWUijIYM7zrlYDM0BFXHjjPWlWZ1Rg7UaddZeIDmi9jF3HmqiQ2w==
   dependencies:
     esutils "^2.0.2"
-
-domexception@^4.0.0:
-  version "4.0.0"
-  resolved "https://registry.npmjs.org/domexception/-/domexception-4.0.0.tgz#4ad1be56ccadc86fc76d033353999a8037d03673"
-  integrity sha512-A2is4PLG+eeSfoTMA95/s4pvAoSo2mKtiM5jlHkAVewmiO8ISFTFKZjH7UAM1Atli/OT/7JHOrJRJiMKUZKYBw==
-  dependencies:
-    webidl-conversions "^7.0.0"
 
 dot-prop@^6.0.1:
   version "6.0.1"
@@ -6138,11 +6091,6 @@ undici@^5.14.0:
   dependencies:
     "@fastify/busboy" "^2.0.0"
 
-undici@^7.1.1:
-  version "7.3.0"
-  resolved "https://registry.npmjs.org/undici/-/undici-7.3.0.tgz#87e48cc9728f3d09bf7b34635e9b63886873ac3e"
-  integrity sha512-Qy96NND4Dou5jKoSJ2gm8ax8AJM/Ey9o9mz7KN1bb9GP+G0l20Zw8afxTnY2f4b7hmhn/z8aC2kfArVQlAhFBw==
-
 unique-filename@^2.0.0:
   version "2.0.1"
   resolved "https://registry.npmjs.org/unique-filename/-/unique-filename-2.0.1.tgz#e785f8675a9a7589e0ac77e0b5c34d2eaeac6da2"
@@ -6257,11 +6205,6 @@ webidl-conversions@^3.0.0:
   resolved "https://registry.yarnpkg.com/webidl-conversions/-/webidl-conversions-3.0.1.tgz#24534275e2a7bc6be7bc86611cc16ae0a5654871"
   integrity sha512-2JAn3z8AR6rjK8Sm8orRC0h/bcl/DqL7tRPdGZ4I1CjdF+EaMLmYxBHyXuKL849eucPFhvBoxMsflfOb8kxaeQ==
 
-webidl-conversions@^7.0.0:
-  version "7.0.0"
-  resolved "https://registry.npmjs.org/webidl-conversions/-/webidl-conversions-7.0.0.tgz#256b4e1882be7debbf01d05f0aa2039778ea080a"
-  integrity sha512-VwddBukDzu71offAQR975unBIGqfKZpM+8ZX6ySk8nYhVoo5CYaZyzt3YBvYtRtO+aoGlqxPg/B87NGVZ/fu6g==
-
 whatwg-url@^5.0.0:
   version "5.0.0"
   resolved "https://registry.yarnpkg.com/whatwg-url/-/whatwg-url-5.0.0.tgz#966454e8765462e37644d3626f6742ce8b70965d"
@@ -6352,11 +6295,6 @@ ws@^7.4.6:
   version "7.5.10"
   resolved "https://registry.yarnpkg.com/ws/-/ws-7.5.10.tgz#58b5c20dc281633f6c19113f39b349bd8bd558d9"
   integrity sha512-+dbF1tHwZpXcbOJdVOkzLDxZP1ailvSxM6ZweXTegylPny803bFhA+vqBYw4s31NSAk4S2Qz+AKXK9a4wkdjcQ==
-
-ws@^8.18.0:
-  version "8.18.0"
-  resolved "https://registry.npmjs.org/ws/-/ws-8.18.0.tgz#0d7505a6eafe2b0e712d232b42279f53bc289bbc"
-  integrity sha512-8VbfWfHLbbwu3+N6OKsOMpBdT4kXPDDB9cJk2bJ6mh9ucxdlnNvH1e+roYkKmN9Nxw2yjz7VzeO9oOz2zJ04Pw==
 
 xmlbuilder@>=11.0.1, xmlbuilder@^15.1.1:
   version "15.1.1"
