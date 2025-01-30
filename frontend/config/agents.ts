@@ -36,7 +36,7 @@ export const AGENT_CONFIG: {
     description: 'Participates in prediction markets.',
   },
   [AgentType.Memeooorr]: {
-    isAgentEnabled: true,
+    isAgentEnabled: false,
     isComingSoon: false,
     requiresSetup: true,
     name: 'Agents.fun agent',
@@ -50,7 +50,7 @@ export const AGENT_CONFIG: {
       'Autonomously posts to Twitter, creates and trades memecoins, and interacts with other agents. Agent is operating on Base chain.',
   },
   [AgentType.Modius]: {
-    isAgentEnabled: false,
+    isAgentEnabled: true,
     isComingSoon: false,
     requiresSetup: true,
     name: 'Modius agent',
