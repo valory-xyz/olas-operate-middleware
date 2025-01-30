@@ -92,7 +92,12 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
     },
     Chain.ETHEREUM: {},
-    Chain.BASE: {"meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA"},
+    Chain.BASE: {
+        "meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA",
+        "meme_base_beta": "0x6011E09e7c095e76980b22498d69dF18EB62BeD8",
+        "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
+        "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
+    },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
     },
