@@ -12,6 +12,7 @@ import { SetupScreen } from '@/enums/SetupScreen';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
+import { useSharedContext } from '@/hooks/useSharedContext';
 import { useMasterWalletContext } from '@/hooks/useWallet';
 import { AgentConfig } from '@/types/Agent';
 import { delayInSeconds } from '@/utils/delay';
@@ -56,6 +57,7 @@ const EachAgent = memo(
   ({ showSelected, agentType, agentConfig }: EachAgentProps) => {
     const { goto: gotoSetup } = useSetup();
     const { goto: gotoPage } = usePageState();
+    const { updateOnboardingStep } = useSharedContext();
     const {
       isLoading: isServicesLoading,
       services,
@@ -71,6 +73,7 @@ const EachAgent = memo(
 
     const handleSelectAgent = useCallback(async () => {
       updateAgentType(agentType);
+      updateOnboardingStep(0); // Reset onboarding step
 
       // DO NOTE REMOVE THIS DELAY
       // NOTE: the delay is added so that agentType is updated in electron store
@@ -103,26 +106,9 @@ const EachAgent = memo(
         return;
       }
 
-      // Neither service nor safe is created
-      if (
-        agentType === AgentType.Memeooorr ||
-        agentType === AgentType.Modius ||
-        agentType === AgentType.AgentsFunCelo
-      ) {
-        // if the selected type requires setting up an agent - should redirect to SetupYourAgent first
-        // TODO: can have this as a boolean flag in agentConfig?
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupYourAgent);
-        return;
-      }
-
-      if (agentType === AgentType.PredictTrader) {
-        gotoPage(Pages.Setup);
-        gotoSetup(SetupScreen.SetupEoaFunding);
-        return;
-      }
-
-      throw new Error('Invalid agent type');
+      // If service is NOT created, then go to agent introduction
+      gotoPage(Pages.Setup);
+      gotoSetup(SetupScreen.AgentIntroduction);
     }, [
       services,
       agentType,
@@ -130,6 +116,7 @@ const EachAgent = memo(
       gotoSetup,
       masterSafes,
       updateAgentType,
+      updateOnboardingStep,
     ]);
 
     return (
@@ -182,7 +169,7 @@ export const AgentSelection = ({
   showSelected = true,
   onPrev,
 }: AgentSelectionProps) => (
-  <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }}>
+  <CardFlex gap={10} styles={{ body: { padding: '12px 24px' } }} noBorder>
     <SetupCreateHeader prev={onPrev} />
     <Title level={3}>Select your agent</Title>
 

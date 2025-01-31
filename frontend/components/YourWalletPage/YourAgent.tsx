@@ -8,6 +8,7 @@ import { MiddlewareChain } from '@/client';
 import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
 import { BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { AgentType } from '@/enums/Agent';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -74,14 +75,27 @@ const SafeAddress = ({ address }: { address: Address }) => {
 
 const AgentTitle = ({ address }: { address: Address }) => {
   const { middlewareChain } = useYourWallet();
+  const { selectedAgentType, selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
 
   const agentProfileLink = useMemo(() => {
     if (!address) return null;
-    if (middlewareChain === MiddlewareChain.GNOSIS) {
+    // gnosis predict trader
+    if (
+      middlewareChain === MiddlewareChain.GNOSIS &&
+      selectedAgentType === AgentType.PredictTrader
+    ) {
       return `https://predict.olas.network/agents/${address}`;
     }
-    return null;
-  }, [address, middlewareChain]);
+
+    // base memeooorr
+    if (
+      middlewareChain === MiddlewareChain.BASE &&
+      selectedAgentType === AgentType.Memeooorr &&
+      service?.env_variables?.TWIKIT_USERNAME?.value
+    )
+      return `https://www.agents.fun/services/${service.env_variables.TWIKIT_USERNAME.value}`;
+  }, [address, middlewareChain, selectedAgentType, service]);
 
   return (
     <Flex vertical gap={12}>

@@ -66,7 +66,8 @@ export const SetupCreateSafe = () => {
     isFetched: isWalletsFetched,
   } = useMasterWalletContext();
 
-  const { allBackupAddresses } = useMultisigs(masterSafes);
+  const { allBackupAddresses, masterSafesOwnersIsLoading } =
+    useMultisigs(masterSafes);
 
   const { backupSigner } = useSetup();
 
@@ -132,7 +133,7 @@ export const SetupCreateSafe = () => {
       // backup address is not loaded yet.
       // Note: the only case when it can be null forever is when the user closed the app
       // after entering the backup wallet but before creating a first safe
-      !backupSignerAddress
+      masterSafesOwnersIsLoading
     )
       return;
 
@@ -179,6 +180,7 @@ export const SetupCreateSafe = () => {
     isFailed,
     isWalletsFetched,
     masterSafes,
+    masterSafesOwnersIsLoading,
     serviceTemplate,
     setUserLoggedIn,
   ]);

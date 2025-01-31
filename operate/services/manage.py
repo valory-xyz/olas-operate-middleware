@@ -506,6 +506,7 @@ class ServiceManager:
 
         self.logger.info(f"_deploy_service_onchain_from_safe {chain=}")
         service = self.load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -515,6 +516,7 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
+
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -1903,7 +1905,9 @@ class ServiceManager:
         :param delete: Delete local deployment.
         :return: Deployment instance
         """
-        deployment = self.load(service_config_id=service_config_id).deployment
+        service = self.load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
+        deployment = service.deployment
         deployment.stop(use_docker)
         if delete:
             deployment.delete()
