@@ -708,13 +708,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
-        return JSONResponse(
-            content=operate.service_manager()
-            .load(
-                service_config_id=service_config_id,
-            )
-            .deployment.json
-        )
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+        deployment_json = service.deployment.json
+        deployment_json["healthcheck"] = service.get_latest_healthcheck()
+        return JSONResponse(content=deployment_json)
 
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
@@ -838,11 +836,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        deployment = (
-            operate.service_manager()
-            .load(service_config_id=service_config_id)
-            .deployment
-        )
+        service = operate.service_manager().load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
+        deployment = service.deployment
         health_checker.stop_for_service(service_config_id=service_config_id)
 
         await run_in_executor(deployment.stop)

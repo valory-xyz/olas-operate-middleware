@@ -4,11 +4,13 @@ import { SetupContext } from '@/context/SetupProvider';
 import { SetupScreen } from '@/enums/SetupScreen';
 
 import { AgentSelection } from '../AgentSelection';
+import { AgentIntroduction } from './AgentIntroduction/AgentIntroduction';
 import { SetupBackupSigner } from './Create/SetupBackupSigner';
 import { SetupCreateSafe } from './Create/SetupCreateSafe';
 import { SetupEoaFunding } from './Create/SetupEoaFunding';
 import { SetupPassword } from './Create/SetupPassword';
 import { SetupSeedPhrase } from './Create/SetupSeedPhrase';
+import { EarlyAccessOnly } from './EarlyAccessOnly';
 import {
   SetupRestoreMain,
   SetupRestoreSetPassword,
@@ -45,6 +47,10 @@ export const Setup = () => {
         return <SetupCreateSafe />;
       case SetupScreen.AgentSelection:
         return <AgentSelection showSelected={false} />;
+      case SetupScreen.AgentIntroduction:
+        return <AgentIntroduction />;
+      case SetupScreen.EarlyAccessOnly:
+        return <EarlyAccessOnly />;
       case SetupScreen.SetupYourAgent:
         return <SetupYourAgent />;
 

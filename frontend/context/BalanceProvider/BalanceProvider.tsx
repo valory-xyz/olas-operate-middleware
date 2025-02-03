@@ -70,23 +70,25 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
 
   const totalEthBalance = useMemo(() => {
     if (!isLoaded) return 0;
-    return walletBalances.reduce((acc, { isNative, balance }) => {
-      return isNative ? acc + balance : acc;
-    }, 0);
+    return walletBalances.reduce(
+      (acc, { isNative, balance }) => (isNative ? acc + balance : acc),
+      0,
+    );
   }, [isLoaded, walletBalances]);
 
   const totalOlasBalance = useMemo(() => {
     if (!isLoaded) return 0;
-    return walletBalances.reduce((acc, { symbol, balance }) => {
-      return symbol === TokenSymbol.OLAS ? acc + balance : acc;
-    }, 0);
+    return walletBalances.reduce(
+      (acc, { symbol, balance }) =>
+        symbol === TokenSymbol.OLAS ? acc + balance : acc,
+      0,
+    );
   }, [isLoaded, walletBalances]);
 
   const totalStakedOlasBalance = useMemo(() => {
     return stakedBalances
       .filter(
-        (walletBalance) =>
-          walletBalance.evmChainId === selectedAgentConfig.evmHomeChainId,
+        ({ evmChainId }) => evmChainId === selectedAgentConfig.evmHomeChainId,
       )
       .reduce((acc, balance) => {
         return sum([acc, balance.olasBondBalance, balance.olasDepositBalance]);
@@ -94,42 +96,43 @@ export const BalanceProvider = ({ children }: PropsWithChildren) => {
   }, [selectedAgentConfig.evmHomeChainId, stakedBalances]);
 
   const updateBalances = useCallback(async () => {
-    if (!isNil(masterWallets) && !isEmpty(masterWallets) && !isNil(services)) {
-      setIsUpdatingBalances(true);
+    if (isNil(masterWallets) || isEmpty(masterWallets)) return;
+    if (isNil(services)) return;
 
-      try {
-        const masterSafes = masterWallets.filter(
-          (masterWallet) => masterWallet.type === WalletType.Safe,
-        ) as MasterSafe[];
+    setIsUpdatingBalances(true);
 
-        const [walletBalancesResult, stakedBalancesResult] =
-          await Promise.allSettled([
-            getCrossChainWalletBalances([
-              ...masterWallets,
-              ...(serviceWallets || []),
-            ]),
-            getCrossChainStakedBalances(services, masterSafes),
-          ]);
+    try {
+      const masterSafes = masterWallets.filter(
+        (masterWallet) => masterWallet.type === WalletType.Safe,
+      ) as MasterSafe[];
 
-        // parse the results
-        const walletBalances =
-          walletBalancesResult.status === 'fulfilled'
-            ? walletBalancesResult.value
-            : [];
+      const [walletBalancesResult, stakedBalancesResult] =
+        await Promise.allSettled([
+          getCrossChainWalletBalances([
+            ...masterWallets,
+            ...(serviceWallets || []),
+          ]),
+          getCrossChainStakedBalances(services, masterSafes),
+        ]);
 
-        const stakedBalances =
-          stakedBalancesResult.status === 'fulfilled'
-            ? stakedBalancesResult.value
-            : [];
+      // parse the results
+      const walletBalances =
+        walletBalancesResult.status === 'fulfilled'
+          ? walletBalancesResult.value
+          : [];
 
-        setWalletBalances(walletBalances);
-        setStakedBalances(stakedBalances);
-        setIsLoaded(true);
-      } catch (error) {
-        console.error('Error updating balances:', error);
-      } finally {
-        setIsUpdatingBalances(false);
-      }
+      const stakedBalances =
+        stakedBalancesResult.status === 'fulfilled'
+          ? stakedBalancesResult.value
+          : [];
+
+      setWalletBalances(walletBalances);
+      setStakedBalances(stakedBalances);
+      setIsLoaded(true);
+    } catch (error) {
+      console.error('Error updating balances:', error);
+    } finally {
+      setIsUpdatingBalances(false);
     }
   }, [masterWallets, services, serviceWallets]);
 

@@ -8,6 +8,7 @@ import { MiddlewareChain } from '@/client';
 import { OLAS_CONTRACTS } from '@/config/olasContracts';
 import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
 import { BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { AgentType } from '@/enums/Agent';
 import { ContractType } from '@/enums/Contract';
 import { TokenSymbol } from '@/enums/Token';
 import {
@@ -27,7 +28,12 @@ import { truncateAddress } from '@/utils/truncate';
 import { AddressLink } from '../AddressLink';
 import { InfoBreakdownList } from '../InfoBreakdown';
 import { Container, infoBreakdownParentStyle } from './styles';
-import { OlasTitle, OwnershipNftTitle, ServiceNftIdTitle } from './Titles';
+import {
+  OlasTitle,
+  OwnershipNftTitle,
+  ServiceNftIdTitle,
+  SignerTitle,
+} from './Titles';
 import { useYourWallet } from './useYourWallet';
 import { WithdrawFunds } from './WithdrawFunds';
 
@@ -69,14 +75,27 @@ const SafeAddress = ({ address }: { address: Address }) => {
 
 const AgentTitle = ({ address }: { address: Address }) => {
   const { middlewareChain } = useYourWallet();
+  const { selectedAgentType, selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
 
   const agentProfileLink = useMemo(() => {
     if (!address) return null;
-    if (middlewareChain === MiddlewareChain.GNOSIS) {
+    // gnosis predict trader
+    if (
+      middlewareChain === MiddlewareChain.GNOSIS &&
+      selectedAgentType === AgentType.PredictTrader
+    ) {
       return `https://predict.olas.network/agents/${address}`;
     }
-    return null;
-  }, [address, middlewareChain]);
+
+    // base memeooorr
+    if (
+      middlewareChain === MiddlewareChain.BASE &&
+      selectedAgentType === AgentType.Memeooorr &&
+      service?.env_variables?.TWIKIT_USERNAME?.value
+    )
+      return `https://www.agents.fun/services/${service.env_variables.TWIKIT_USERNAME.value}`;
+  }, [address, middlewareChain, selectedAgentType, service]);
 
   return (
     <Flex vertical gap={12}>
@@ -258,9 +277,9 @@ const YourAgentWalletBreakdown = () => {
     [serviceSafeBalances, evmHomeChainId],
   );
 
-  const serviceEoaNativeBalances = useMemo(
+  const serviceEoaNativeBalance = useMemo(
     () =>
-      serviceEoaBalances?.filter(
+      serviceEoaBalances?.find(
         ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
       ),
     [serviceEoaBalances, evmHomeChainId],
@@ -288,11 +307,11 @@ const YourAgentWalletBreakdown = () => {
         )}
 
         {(!isNil(serviceSafeNativeBalances) ||
-          !isNil(serviceEoaNativeBalances)) && (
+          !isNil(serviceEoaNativeBalance)) && (
           <Flex vertical gap={8}>
             {isArray(serviceSafeNativeBalances) && (
               <InfoBreakdownList
-                list={serviceSafeNativeBalances.map(({ symbol, balance }) => ({
+                list={serviceSafeNativeBalances.map(({ balance, symbol }) => ({
                   left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
                   right: `${balanceFormat(balance, 4)} ${symbol}`,
@@ -302,10 +321,10 @@ const YourAgentWalletBreakdown = () => {
             )}
             {isArray(serviceSafeErc20Balances) && (
               <InfoBreakdownList
-                list={serviceSafeErc20Balances.map((balance) => ({
-                  left: <strong>{balance.symbol}</strong>,
+                list={serviceSafeErc20Balances.map(({ balance, symbol }) => ({
+                  left: <strong>{symbol}</strong>,
                   leftClassName: 'text-sm',
-                  right: `${balanceFormat(balance.balance, 2)} ${balance.symbol}`,
+                  right: `${balanceFormat(balance, 4)} ${symbol}`,
                 }))}
                 parentStyle={infoBreakdownParentStyle}
               />
@@ -314,15 +333,14 @@ const YourAgentWalletBreakdown = () => {
               <InfoBreakdownList
                 list={[
                   {
-                    left: 'Signer',
-                    leftClassName: 'text-sm',
-                    right: (
-                      <AddressLink
-                        address={serviceEoa.address}
+                    left: serviceEoa.address && middlewareChain && (
+                      <SignerTitle
+                        signerAddress={serviceEoa.address}
                         middlewareChain={middlewareChain}
                       />
                     ),
-                    rightClassName: 'font-normal text-sm',
+                    leftClassName: 'text-sm',
+                    right: `${balanceFormat(serviceEoaNativeBalance?.balance, 4)} ${serviceEoaNativeBalance?.symbol}`,
                   },
                 ]}
                 parentStyle={infoBreakdownParentStyle}

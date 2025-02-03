@@ -105,10 +105,10 @@ export const StakingProgramProvider = ({ children }: PropsWithChildren) => {
     );
   }, [selectedAgentConfig]);
 
-  const serviceNftTokenId = !isNil(selectedService?.chain_configs)
-    ? selectedService?.chain_configs?.[selectedService?.home_chain]?.chain_data
-        ?.token
-    : null;
+  const serviceNftTokenId = isNil(selectedService?.chain_configs)
+    ? null
+    : selectedService.chain_configs?.[selectedService?.home_chain]?.chain_data
+        ?.token;
 
   const { isLoading, data: activeStakingProgramId } =
     useGetActiveStakingProgramId(serviceNftTokenId);

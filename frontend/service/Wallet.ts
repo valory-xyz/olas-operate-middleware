@@ -29,7 +29,7 @@ const createSafe = async (chain: MiddlewareChain, backup_owner?: string) =>
     headers: {
       ...CONTENT_TYPE_JSON_UTF8,
     },
-    body: JSON.stringify({ chain, backup_owner }),
+    body: JSON.stringify({ chain, backup_owner, fund_amount: 0 }),
   }).then((res) => {
     if (res.ok) return res.json();
     throw new Error('Failed to create safe');

@@ -31,6 +31,13 @@ A cross-platform desktop application used to run autonomous agents powered by th
 
 - [RPC Setup Guide](docs/dev/rpcs.md)
 
+#### Customizing the service hash
+
+If you want to use a specific service hash, for testing purposes, follow these steps:
+
+1. `./frontend/constants/serviceTemplates.ts`: Ensure that the hash you want to use is correctly referenced in the appropriate service template `hash`.
+2. `./frontend/config/agents.ts`: Ensure that the corresponding service has `isAgentEnabled: true`.
+
 ## Project Dependencies
 
 There are three parts to the project: the Electron app (CommonJS), the NextJS frontend (TypeScript), and the Python backend/middleware.

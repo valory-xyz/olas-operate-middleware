@@ -3,32 +3,49 @@ import { Button, Flex, Tooltip, Typography } from 'antd';
 import { useCallback } from 'react';
 
 import { MiddlewareDeploymentStatus } from '@/client';
+import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { Pages } from '@/enums/Pages';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { usePageState } from '@/hooks/usePageState';
 import { useRewardContext } from '@/hooks/useRewardContext';
 import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
 import { ServicesService } from '@/service/Services';
 
 import { LastTransaction } from '../LastTransaction';
-import { WhatIsAgentDoing } from '../WhatIsAgentDoing';
 
-const { Paragraph, Text } = Typography;
+const { Text } = Typography;
 
 const IdleTooltip = () => (
   <Tooltip
     placement="bottom"
     arrow={false}
+    overlayInnerStyle={{ lineHeight: 'normal' }}
     title={
-      <Paragraph className="text-sm m-0">
+      <Text className="text-sm">
         Your agent earned rewards for this epoch, so decided to stop working
         until the next epoch.
-      </Paragraph>
+      </Text>
     }
   >
     <InfoCircleOutlined />
   </Tooltip>
 );
+
+const WhatIsAgentDoing = () => {
+  const { goto } = usePageState();
+  return (
+    <Button
+      type="link"
+      className="p-0 text-xs"
+      style={{ height: 'auto', border: 'none' }}
+      onClick={() => goto(Pages.AgentActivity)}
+    >
+      What&apos;s my agent doing?
+    </Button>
+  );
+};
 
 export const AgentRunningButton = () => {
   const [isLastTransactionEnabled, isAgentActivityEnabled] = useFeatureFlag([
@@ -36,6 +53,7 @@ export const AgentRunningButton = () => {
     'agent-activity',
   ]);
   const { showNotification } = useElectronApi();
+  const { isPageLoadedAndOneMinutePassed } = usePageState();
   const { isEligibleForRewards } = useRewardContext();
 
   const {
@@ -70,27 +88,41 @@ export const AgentRunningButton = () => {
     }
   }, [overrideSelectedServiceStatus, service, setPaused, showNotification]);
 
+  // Do not show the last transaction if the delay is not reached
+  const canShowLastTransaction =
+    isLastTransactionEnabled && isPageLoadedAndOneMinutePassed;
+
   return (
-    <Flex gap={10} align="center">
+    <Flex gap={8} align="center">
       <Button type="default" size="large" onClick={handlePause}>
         Pause
       </Button>
 
       <Flex vertical align="start">
-        {isEligibleForRewards ? (
-          <Text type="secondary" className="text-sm">
-            Agent is idle&nbsp;
-            <IdleTooltip />
-          </Text>
-        ) : (
-          <Text type="secondary" className="text-sm loading-ellipses">
-            Agent is working
-          </Text>
-        )}
+        <Flex>
+          {isEligibleForRewards ? (
+            <Text type="secondary" className="text-xs">
+              <IdleTooltip />
+              &nbsp;Idle
+            </Text>
+          ) : (
+            <Text
+              type="secondary"
+              className={`text-xs ${canShowLastTransaction ? '' : 'loading-ellipses '}`}
+            >
+              Working
+            </Text>
+          )}
 
-        {isLastTransactionEnabled && (
-          <LastTransaction serviceConfigId={serviceConfigId} />
-        )}
+          {canShowLastTransaction && (
+            <>
+              <Text style={{ lineHeight: 1 }}>
+                &nbsp;{UNICODE_SYMBOLS.SMALL_BULLET}&nbsp;
+              </Text>
+              <LastTransaction serviceConfigId={serviceConfigId} />
+            </>
+          )}
+        </Flex>
 
         {isAgentActivityEnabled && <WhatIsAgentDoing />}
       </Flex>

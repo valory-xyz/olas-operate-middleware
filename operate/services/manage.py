@@ -506,6 +506,7 @@ class ServiceManager:
 
         self.logger.info(f"_deploy_service_onchain_from_safe {chain=}")
         service = self.load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
@@ -515,6 +516,7 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
+
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -531,9 +533,8 @@ class ServiceManager:
 
         if user_params.use_staking:
             staking_params = sftxb.get_staking_params(
-                staking_contract=STAKING[ledger_config.chain][
-                    user_params.staking_program_id
-                ],
+                chain=ledger_config.chain,
+                program_id=user_params.staking_program_id,
             )
         else:
             staking_params = dict(  # nosec
@@ -647,6 +648,12 @@ class ServiceManager:
                     "DB_PATH": str(db_path),
                 }
             )
+
+        # TODO yet another computed variable for modius
+        if "optimus" in service.name.lower():
+            store_path = service.path / "persistent_data"
+            store_path.mkdir(parents=True, exist_ok=True)
+            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
 
         service.update_env_variables_values(env_var_to_value)
 
@@ -1968,7 +1975,9 @@ class ServiceManager:
         :param delete: Delete local deployment.
         :return: Deployment instance
         """
-        deployment = self.load(service_config_id=service_config_id).deployment
+        service = self.load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
+        deployment = service.deployment
         deployment.stop(use_docker)
         if delete:
             deployment.delete()
@@ -2149,7 +2158,7 @@ class ServiceManager:
                         asset_address
                     ] = recommended_refill
 
-                    if any(
+                    if asset_address == ZERO_ADDRESS and any(
                         balances[chain][master_safe][asset_address] == 0
                         and balances[chain][address][asset_address] == 0
                         and asset_funding_values[address]["threshold"] > 0

@@ -33,7 +33,11 @@ tmp/
 temp/
 
 !operate/data
+
+# electron cache/temp
 electron/.next
+electron/public/*.png
+electron/public/*.svg
 
 dist/
 build/

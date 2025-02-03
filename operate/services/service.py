@@ -416,6 +416,13 @@ class Deployment(LocalResource):
         """Load a service"""
         return super().load(path)  # type: ignore
 
+    def copy_previous_agent_run_logs(self) -> None:
+        """Copy previous agent logs."""
+        source_path = self.path / DEPLOYMENT / "agent" / "log.txt"
+        destination_path = self.path / "prev_log.txt"
+        if source_path.exists():
+            shutil.copy(source_path, destination_path)
+
     def _build_docker(
         self,
         force: bool = True,
@@ -434,6 +441,7 @@ class Deployment(LocalResource):
         if build.exists() and not force:
             return
         if build.exists() and force:
+            self.copy_previous_agent_run_logs()
             shutil.rmtree(build)
         mkdirs(build_dir=build)
 
@@ -539,6 +547,7 @@ class Deployment(LocalResource):
             try:
                 # sleep needed to ensure all processes closed/killed otherwise it will block directory removal on windows
                 time.sleep(3)
+                self.copy_previous_agent_run_logs()
                 shutil.rmtree(build)
             except:  # noqa  # pylint: disable=bare-except
                 # sleep and try again. exception if fails
@@ -668,7 +677,8 @@ class Deployment(LocalResource):
 
     def delete(self) -> None:
         """Delete the deployment."""
-        shutil.rmtree(self.path / "deployment")
+        build = self.path / DEPLOYMENT
+        shutil.rmtree(build)
         self.status = DeploymentStatus.DELETED
         self.store()
 
@@ -1010,6 +1020,29 @@ class Service(LocalResource):
             new_path = path.parent / service_config_id
             if not new_path.exists():
                 return service_config_id
+
+    def get_latest_healthcheck(self) -> t.Dict:
+        """Return the latest stored healthcheck.json"""
+        healthcheck_json_path = self.path / "healthcheck.json"
+
+        if not healthcheck_json_path.exists():
+            return {}
+
+        try:
+            with open(healthcheck_json_path, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except (IOError, json.JSONDecodeError) as e:
+            return {"error": f"Error reading healthcheck.json: {e}"}
+
+    def remove_latest_healthcheck(self) -> None:
+        """Remove the latest healthcheck.json, if it exists"""
+        healthcheck_json_path = self.path / "healthcheck.json"
+
+        if healthcheck_json_path.exists():
+            try:
+                healthcheck_json_path.unlink()
+            except Exception as e:  # pylint: disable=broad-except
+                print(f"Exception deleting {healthcheck_json_path}: {e}")
 
     def update(
         self,

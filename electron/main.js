@@ -33,6 +33,24 @@ const { Scraper } = require('agent-twitter-client');
 // TODO: only reintroduce once refactor completed
 // validateEnv();
 
+// Add devtools extension in Dev mode
+if (isDev) {
+  const {
+    default: installExtension,
+    REACT_DEVELOPER_TOOLS,
+  } = require('electron-devtools-installer');
+  app.whenReady().then(() => {
+    installExtension([REACT_DEVELOPER_TOOLS], {
+      loadExtensionOptions: { allowFileAccess: true },
+      forceDownload: false,
+    })
+      .then(([react]) => console.log(`Added Extensions: ${react.name}`))
+      .catch((e) =>
+        console.log('An error occurred on loading extensions: ', e),
+      );
+  });
+}
+
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
 if (!singleInstanceLock) {
@@ -99,9 +117,6 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 
 function showNotification(title, body) {
   new Notification({ title, body }).show();
-}
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function setAppAutostart(is_set) {
@@ -206,7 +221,7 @@ async function beforeQuit(event) {
 
   if (nextApp) {
     // attempt graceful close of prod next app
-    await nextApp.close().catch((e) => {
+    await nextApp.close().catch(() => {
       logger.electron("Couldn't close NextApp gracefully:");
     });
     // electron will kill next service on exit
@@ -215,7 +230,7 @@ async function beforeQuit(event) {
   app.quit();
 }
 
-const APP_WIDTH = 460;
+const APP_WIDTH = 480;
 
 /**
  * Creates the splash window
@@ -302,19 +317,24 @@ const createMainWindow = async () => {
 
   // Handle twitter login
   ipcMain.handle('validate-twitter-login', async (_event, credentials) => {
-    const scraper = new Scraper();
-
     const { username, password, email } = credentials;
+
+    logger.electron('Validating X login:', { username });
     if (!username || !password || !email) {
+      logger.electron('Missing credentials for X login');
       return { success: false, error: 'Missing credentials' };
     }
 
     try {
+      const scraper = new Scraper();
+
       await scraper.login(username, password, email);
       const cookies = await scraper.getCookies();
+      logger.electron('X login successful!');
       return { success: true, cookies };
     } catch (error) {
-      console.error('Twitter login error:', error);
+      logger.electron('X login failed:', error);
+      console.error('X login error:', error);
       return { success: false, error: error.message };
     }
   });
@@ -734,6 +754,8 @@ ipcMain.handle('save-logs', async (_, data) => {
     OS Release: ${os.release()}
     Total Memory: ${os.totalmem()}
     Free Memory: ${os.freemem()}
+    Available Parallelism: ${os.availableParallelism()}
+    CPUs: ${JSON.stringify(os.cpus())}
   `;
   const osInfoFilePath = path.join(paths.osPearlTempDir, 'os_info.txt');
   fs.writeFileSync(osInfoFilePath, osInfo);
@@ -771,23 +793,41 @@ ipcMain.handle('save-logs', async (_, data) => {
 
   // Agent logs
   try {
-    fs.readdirSync(paths.servicesDir).map((serviceDirName) => {
+    fs.readdirSync(paths.servicesDir).forEach((serviceDirName) => {
       const servicePath = path.join(paths.servicesDir, serviceDirName);
       if (!fs.existsSync(servicePath)) return;
       if (!fs.statSync(servicePath).isDirectory()) return;
 
-      const agentLogFilePath = path.join(
-        servicePath,
-        'deployment',
-        'agent',
-        'log.txt',
-      );
-      if (!fs.existsSync(agentLogFilePath)) return;
+      // Most recent log
+      try {
+        const agentLogFilePath = path.join(
+          servicePath,
+          'deployment',
+          'agent',
+          'log.txt',
+        );
+        if (fs.existsSync(agentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_agent.log`,
+            filePath: agentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
 
-      return sanitizeLogs({
-        name: `${serviceDirName}_agent.log`,
-        filePath: agentLogFilePath,
-      });
+      // Previous log
+      try {
+        const prevAgentLogFilePath = path.join(servicePath, 'prev_log.txt');
+        if (fs.existsSync(prevAgentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_prev_agent.log`,
+            filePath: prevAgentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
     });
   } catch (e) {
     logger.electron(e);

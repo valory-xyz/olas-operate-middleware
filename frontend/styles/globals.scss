@@ -11,7 +11,7 @@ body {
 }
 
 body {
-  max-width: 460px;
+  max-width: 480px;
   border-radius: 8px;
   user-select: none;
   scroll-behavior: smooth;
@@ -185,6 +185,10 @@ textarea,
 
 .pr-16 {
   padding-right: 16px !important;
+}
+
+.p-24 {
+  padding: 24px;
 }
 
 .mx-auto {
