@@ -3,7 +3,11 @@ import { Button, Card, Flex, message, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { FAQ_URL, SUPPORT_URL } from '@/constants/urls';
+import {
+  FAQ_URL,
+  SUPPORT_URL,
+  TERMS_AND_CONDITIONS_URL,
+} from '@/constants/urls';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useLogs } from '@/hooks/useLogs';
 
@@ -84,8 +88,11 @@ export const HelpAndSupport = () => {
         <Title level={5} className="m-0 mb-16 text-base">
           Frequently asked questions
         </Title>
-        <a target="_blank" href={FAQ_URL}>
+        <a target="_blank" href={FAQ_URL} className="mb-8">
           Read FAQ {UNICODE_SYMBOLS.EXTERNAL_LINK}
+        </a>
+        <a target="_blank" href={TERMS_AND_CONDITIONS_URL}>
+          Terms and Conditions {UNICODE_SYMBOLS.EXTERNAL_LINK}
         </a>
       </CardSection>
 
