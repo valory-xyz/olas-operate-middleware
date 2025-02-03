@@ -34,7 +34,7 @@ export const EarlyAccessOnly = () => {
       </Paragraph>
       <Button
         type="link"
-        href="https://example.com"
+        href="https://mailchi.mp/a95a68faaac8/olas-mailing-list"
         target="_blank"
         rel="noopener noreferrer"
       >
