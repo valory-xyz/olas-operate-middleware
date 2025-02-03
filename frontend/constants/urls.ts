@@ -20,6 +20,7 @@ const SWAP_CELO_URL: Url =
 // olas.network
 export const OPERATE_URL: Url = 'https://olas.network/operate';
 export const FAQ_URL: Url = 'https://olas.network/operate#faq';
+export const TERMS_AND_CONDITIONS_URL: Url = 'https://olas.network/pearl-terms';
 export const DOWNLOAD_URL: Url = 'https://olas.network/operate#download';
 
 // thegraph
