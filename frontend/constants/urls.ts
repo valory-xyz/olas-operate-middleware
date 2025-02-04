@@ -51,6 +51,12 @@ const BASE_EXPLORER_URL: Url = 'https://basescan.org';
 const MODE_EXPLORER_URL: Url = 'https://modescan.io';
 const CELO_EXPLORER_URL: Url = 'https://celoscan.io';
 
+// others
+export const TENDERLY_URL: string = 'https://tenderly.co';
+export const COINGECKO_URL: string = 'https://www.coingecko.com';
+export const COINGECKO_DEMO_API_KEY: string =
+  'https://support.coingecko.com/hc/en-us/articles/21880397454233-User-Guide-How-to-sign-up-for-CoinGecko-Demo-API-and-generate-an-API-key';
+
 export const EXPLORER_URL_BY_MIDDLEWARE_CHAIN: Record<
   string | MiddlewareChain,
   Url
