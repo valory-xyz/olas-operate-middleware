@@ -29,14 +29,14 @@ export const SetupSeedPhrase = () => {
   const [hasCopied, setHasCopied] = useState(false);
   const [modal, contextHolder] = Modal.useModal();
 
-  const onCopy = useCallback(() => {
+  const handleCopy = useCallback(() => {
     copyToClipboard(mnemonic.join(' ')).then(() => {
       message.success('Seed phrase is copied!');
       setHasCopied(true);
     });
   }, [mnemonic]);
 
-  const onContinue = useCallback(() => {
+  const handleContinue = useCallback(() => {
     modal.confirm({
       title: 'Did you back up your seed phrase securely?',
       content: (
@@ -82,12 +82,12 @@ export const SetupSeedPhrase = () => {
         </Flex>
 
         <Flex gap={16} vertical>
-          <Button size="large" onClick={onCopy} block>
+          <Button size="large" onClick={handleCopy} block>
             <CopyOutlined /> Copy to clipboard
           </Button>
           <Button
             disabled={!hasCopied}
-            onClick={onContinue}
+            onClick={handleContinue}
             block
             type="primary"
             size="large"
