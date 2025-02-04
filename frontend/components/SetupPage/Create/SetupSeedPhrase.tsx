@@ -59,7 +59,7 @@ export const SetupSeedPhrase = () => {
   }, [goto, modal]);
 
   return (
-    <Card>
+    <Card style={{ border: 'none' }}>
       <SetupCreateHeader />
       <Title level={3}>Back up seed phrase</Title>
 
@@ -70,7 +70,7 @@ export const SetupSeedPhrase = () => {
         </Text>
         <SeedPhraseAlert />
 
-        <Flex gap={10} wrap="wrap" style={{ marginBottom: 8 }}>
+        <Flex gap={8} wrap="wrap" style={{ marginBottom: 8 }}>
           {mnemonic.map((word: string) => (
             <Tag
               key={word}
