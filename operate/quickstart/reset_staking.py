@@ -80,17 +80,28 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         staking_contract=STAKING[service.chain_configs[config.principal_chain].ledger_config.chain][current_program],
     )
 
-    if can_unstake:
-        if not ask_yes_or_no("Service can be unstaked. Would you like to unstake it now?"):
-            print("Cancelled.")
-            return
-
-        manager.unstake_service_on_chain_from_safe(
-            service_config_id=service.service_config_id,
-            chain=config.principal_chain,
-            staking_program_id=current_program,
+    if not can_unstake:
+        print_section("Cannot Reset Staking Preference")
+        print(
+            "Your service cannot be unstaked at this time. This could be due to:\n"
+            "- Minimum staking period not elapsed\n"
+            "- Active service operations\n"
+            "- Other contract conditions not met\n\n"
+            "Please try again once the staking conditions allow unstaking."
         )
-        print_section("Service has been unstaked successfully")
+        return
+
+    if not ask_yes_or_no("Service can be unstaked. Would you like to proceed with unstaking and reset?"):
+        print("Cancelled.")
+        return
+
+    # Unstake the service
+    manager.unstake_service_on_chain_from_safe(
+        service_config_id=service.service_config_id,
+        chain=config.principal_chain,
+        staking_program_id=current_program,
+    )
+    print_section("Service has been unstaked successfully")
 
     # Update local config and service template
     config.staking_vars = None
