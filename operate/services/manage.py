@@ -398,7 +398,7 @@ class ServiceManager:
             )
         )
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, ocm  # type: ignore  # FIXME
+            service, chain
         )
 
         self.logger.info(f"{current_staking_program=}")
@@ -731,7 +731,7 @@ class ServiceManager:
             )
         )
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service, chain
         )
 
         self.logger.info(f"{chain_data.token=}")
@@ -1070,7 +1070,7 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service, chain,
         )
         is_staked = current_staking_program is not None
 
@@ -1181,22 +1181,28 @@ class ServiceManager:
             )
             self.logger.info(f"{service.name} signer drained")
 
-    @staticmethod
     def _get_current_staking_program(
-        chain_data: OnChainData, ledger_config: LedgerConfig, sftxb: EthSafeTxBuilder
+        self, service: Service, chain: str
     ) -> t.Optional[str]:
-        if chain_data.token == NON_EXISTENT_TOKEN:
+
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        service_id = chain_config.chain_data.token
+
+        if service_id == NON_EXISTENT_TOKEN:
             return None
 
-        current_staking_program = None
-        for staking_program in STAKING[ledger_config.chain]:
+        for staking_program_id, staking_program_address in STAKING[ledger_config.chain].items():
             state = sftxb.staking_status(
-                service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][staking_program],
+                service_id=service_id,
+                staking_contract=staking_program_address,
             )
+
             if state in (StakingState.STAKED, StakingState.EVICTED):
-                current_staking_program = staking_program
-        return current_staking_program
+                return staking_program_id
+
+        return None
 
     def unbond_service_on_chain(
         self, service_config_id: str, chain: t.Optional[str] = None
@@ -1256,7 +1262,7 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service, chain,
         )
         is_staked = current_staking_program is not None
         current_staking_contract = (
@@ -1338,7 +1344,7 @@ class ServiceManager:
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
         on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service, chain,
         )
 
         self.logger.info(
@@ -1378,7 +1384,7 @@ class ServiceManager:
             service.store()
 
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service, chain,
         )
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
