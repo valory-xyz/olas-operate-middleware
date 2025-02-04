@@ -465,3 +465,4 @@ def run_service(operate: "OperateApp", config_path: str) -> None:
     manager.deploy_service_locally(service_config_id=service.service_config_id, use_docker=True)
 
     print_section(f"Starting the {template['name']}")
+    
