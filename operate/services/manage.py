@@ -397,9 +397,7 @@ class ServiceManager:
                 or on_chain_description != service.description
             )
         )
-        current_staking_program = self._get_current_staking_program(
-            service, chain
-        )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
@@ -730,9 +728,7 @@ class ServiceManager:
                 or on_chain_description != service.description
             )
         )
-        current_staking_program = self._get_current_staking_program(
-            service, chain
-        )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{current_staking_program=}")
@@ -1070,7 +1066,8 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            service, chain,
+            service,
+            chain,
         )
         is_staked = current_staking_program is not None
 
@@ -1184,7 +1181,6 @@ class ServiceManager:
     def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
@@ -1193,7 +1189,9 @@ class ServiceManager:
         if service_id == NON_EXISTENT_TOKEN:
             return None
 
-        for staking_program_id, staking_program_address in STAKING[ledger_config.chain].items():
+        for staking_program_id, staking_program_address in STAKING[
+            ledger_config.chain
+        ].items():
             state = sftxb.staking_status(
                 service_id=service_id,
                 staking_contract=staking_program_address,
@@ -1262,7 +1260,8 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            service, chain,
+            service,
+            chain,
         )
         is_staked = current_staking_program is not None
         current_staking_contract = (
@@ -1344,7 +1343,8 @@ class ServiceManager:
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
         on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
-            service, chain,
+            service,
+            chain,
         )
 
         self.logger.info(
@@ -1384,7 +1384,8 @@ class ServiceManager:
             service.store()
 
         current_staking_program = self._get_current_staking_program(
-            service, chain,
+            service,
+            chain,
         )
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
