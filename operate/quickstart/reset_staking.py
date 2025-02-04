@@ -25,6 +25,7 @@ from operate.constants import OPERATE_HOME
 from operate.quickstart.run_service import ask_password_if_needed, configure_local_config, ensure_enough_funds, get_service
 from operate.utils.common import ask_yes_or_no, print_section, print_title
 from operate.ledger.profiles import STAKING
+from operate.operate_types import Chain
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -56,10 +57,6 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         "However, your agent might not be able to switch between staking contracts "
         "until it has been staked for a minimum staking period in the current program.\n"
     )
-    
-    if not ask_yes_or_no("Do you want to reset your staking program preference?"):
-        print("Cancelled.")
-        return
 
     if not ask_yes_or_no(
         "Please, ensure that your service is stopped (./stop_service.sh) before proceeding. "
@@ -77,7 +74,7 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     sftxb = manager.get_eth_safe_tx_builder(ledger_config=service.chain_configs[config.principal_chain].ledger_config)
     can_unstake = sftxb.can_unstake(
         service_id=service.chain_configs[config.principal_chain].chain_data.token,
-        staking_contract=STAKING[service.chain_configs[config.principal_chain].ledger_config.chain][current_program],
+        staking_contract=STAKING[getattr(Chain, config.principal_chain.upper())][current_program]    
     )
 
     if not can_unstake:
@@ -85,8 +82,7 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         print(
             "Your service cannot be unstaked at this time. This could be due to:\n"
             "- Minimum staking period not elapsed\n"
-            "- Active service operations\n"
-            "- Other contract conditions not met\n\n"
+            "- Available rewards pending\n\n"
             "Please try again once the staking conditions allow unstaking."
         )
         return
