@@ -528,8 +528,10 @@ def drain_eoa(
             transaction=tx,
             raise_on_try=True,
         )
+        l1_fee = ledger_api.get_l1_data_fee(tx)
+        l2_fee = tx["gas"] * tx["maxFeePerGas"]
         tx["value"] = (
-            ledger_api.get_balance(crypto.address) - tx["gas"] * tx["maxFeePerGas"]
+            ledger_api.get_balance(crypto.address) - l1_fee - l2_fee
         )
         if tx["value"] <= 0:
             logger.warning(f"No balance to drain from wallet: {crypto.address}")
