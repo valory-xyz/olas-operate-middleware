@@ -2,64 +2,57 @@ import { RightOutlined } from '@ant-design/icons';
 import { Button, Flex, Skeleton, Typography } from 'antd';
 import { useMemo } from 'react';
 
-import { DeploymentStatus } from '@/client';
-import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
-import { Pages } from '@/enums/PageState';
+import { NA } from '@/constants/symbols';
+import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
-import { useStakingContractContext } from '@/hooks/useStakingContractInfo';
+import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
 
-export const StakingContractUpdate = () => {
+export const StakingContractSection = () => {
   const { goto } = usePageState();
-  const {
-    isActiveStakingProgramLoaded,
-    activeStakingProgramMeta,
-    defaultStakingProgramId,
-  } = useStakingProgram();
+  const { isActiveStakingProgramLoaded, selectedStakingProgramMeta } =
+    useStakingProgram();
 
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
-  const { serviceStatus } = useServices();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
+  const { selectedService } = useServices();
 
-  const serviceIsTransitioning = useMemo(
-    () =>
-      serviceStatus === DeploymentStatus.DEPLOYING ||
-      serviceStatus === DeploymentStatus.STOPPING,
-    [serviceStatus],
+  const { isServiceTransitioning } = useService(
+    selectedService?.service_config_id,
   );
-
-  const stakingContractName = useMemo(() => {
-    if (activeStakingProgramMeta) return activeStakingProgramMeta.name;
-    return STAKING_PROGRAM_META[defaultStakingProgramId].name;
-  }, [activeStakingProgramMeta, defaultStakingProgramId]);
 
   const gotoManageStakingButton = useMemo(() => {
     if (!isActiveStakingProgramLoaded) return <Skeleton.Input />;
+
     return (
       <Button
         type="link"
         className="p-0"
         onClick={() => goto(Pages.ManageStaking)}
-        disabled={!isStakingContractInfoRecordLoaded || serviceIsTransitioning}
+        disabled={
+          !isAllStakingContractDetailsRecordLoaded || isServiceTransitioning
+        }
       >
-        {stakingContractName}
+        {selectedStakingProgramMeta?.name || NA}
         <RightOutlined />
       </Button>
     );
   }, [
-    goto,
     isActiveStakingProgramLoaded,
-    isStakingContractInfoRecordLoaded,
-    serviceIsTransitioning,
-    stakingContractName,
+    isAllStakingContractDetailsRecordLoaded,
+    isServiceTransitioning,
+    selectedStakingProgramMeta?.name,
+    goto,
   ]);
 
   return (
-    <CardSection bordertop="true" padding="16px 24px">
+    <CardSection padding="16px 24px">
       <Flex
         gap={16}
         justify="space-between"

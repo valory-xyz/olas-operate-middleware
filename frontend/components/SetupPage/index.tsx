@@ -3,11 +3,14 @@ import { useContext, useMemo } from 'react';
 import { SetupContext } from '@/context/SetupProvider';
 import { SetupScreen } from '@/enums/SetupScreen';
 
+import { AgentSelection } from '../AgentSelection';
+import { AgentIntroduction } from './AgentIntroduction/AgentIntroduction';
 import { SetupBackupSigner } from './Create/SetupBackupSigner';
 import { SetupCreateSafe } from './Create/SetupCreateSafe';
 import { SetupEoaFunding } from './Create/SetupEoaFunding';
 import { SetupPassword } from './Create/SetupPassword';
 import { SetupSeedPhrase } from './Create/SetupSeedPhrase';
+import { EarlyAccessOnly } from './EarlyAccessOnly';
 import {
   SetupRestoreMain,
   SetupRestoreSetPassword,
@@ -15,13 +18,20 @@ import {
   SetupRestoreViaSeed,
 } from './SetupRestore';
 import { SetupWelcome } from './SetupWelcome';
+import { SetupYourAgent } from './SetupYourAgent/SetupYourAgent';
+
+const UnexpectedError = () => (
+  <div style={{ height: 400 }}>Something went wrong!</div>
+);
 
 export const Setup = () => {
   const { setupObject } = useContext(SetupContext);
+
   const setupScreen = useMemo(() => {
     switch (setupObject.state) {
       case SetupScreen.Welcome:
         return <SetupWelcome />;
+
       // Create account
       case SetupScreen.SetupPassword:
         return <SetupPassword />;
@@ -32,9 +42,18 @@ export const Setup = () => {
       case SetupScreen.SetupEoaFunding:
         return <SetupEoaFunding />;
       case SetupScreen.SetupEoaFundingIncomplete:
-        return <SetupEoaFunding isIncomplete />;
+        return <SetupEoaFunding />;
       case SetupScreen.SetupCreateSafe:
         return <SetupCreateSafe />;
+      case SetupScreen.AgentSelection:
+        return <AgentSelection showSelected={false} />;
+      case SetupScreen.AgentIntroduction:
+        return <AgentIntroduction />;
+      case SetupScreen.EarlyAccessOnly:
+        return <EarlyAccessOnly />;
+      case SetupScreen.SetupYourAgent:
+        return <SetupYourAgent />;
+
       // Restore account
       case SetupScreen.Restore:
         return <SetupRestoreMain />;
@@ -45,7 +64,7 @@ export const Setup = () => {
       case SetupScreen.RestoreViaBackup:
         return <SetupRestoreViaBackup />;
       default:
-        return <>Error</>;
+        return <UnexpectedError />;
     }
   }, [setupObject.state]);
 

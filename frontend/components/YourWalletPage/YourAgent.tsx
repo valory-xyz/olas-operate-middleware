@@ -1,15 +1,26 @@
 import { Card, Flex, Skeleton, Tooltip, Typography } from 'antd';
+import { find, groupBy, isArray, isEmpty, isNil } from 'lodash';
 import Image from 'next/image';
 import { useMemo } from 'react';
 import styled from 'styled-components';
 
-import { Chain } from '@/client';
-import { SERVICE_REGISTRY_L2_CONTRACT_ADDRESS } from '@/constants/contractAddresses';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { useAddress } from '@/hooks/useAddress';
-import { useBalance } from '@/hooks/useBalance';
-import { useReward } from '@/hooks/useReward';
+import { MiddlewareChain } from '@/client';
+import { OLAS_CONTRACTS } from '@/config/olasContracts';
+import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
+import { BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import { AgentType } from '@/enums/Agent';
+import { ContractType } from '@/enums/Contract';
+import { TokenSymbol } from '@/enums/Token';
+import {
+  useBalanceContext,
+  useServiceBalances,
+} from '@/hooks/useBalanceContext';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { useRewardContext } from '@/hooks/useRewardContext';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
+import { Address } from '@/types/Address';
+import { WalletBalance } from '@/types/Balance';
 import { generateName } from '@/utils/agentName';
 import { balanceFormat } from '@/utils/numberFormatters';
 import { truncateAddress } from '@/utils/truncate';
@@ -20,10 +31,10 @@ import { Container, infoBreakdownParentStyle } from './styles';
 import {
   OlasTitle,
   OwnershipNftTitle,
-  ServiceIdTitle,
+  ServiceNftIdTitle,
   SignerTitle,
-  XdaiTitle,
 } from './Titles';
+import { useYourWallet } from './useYourWallet';
 import { WithdrawFunds } from './WithdrawFunds';
 
 const { Text, Paragraph } = Typography;
@@ -37,8 +48,8 @@ const NftCard = styled(Card)`
   }
 `;
 
-const SafeAddress = () => {
-  const { multisigAddress } = useAddress();
+const SafeAddress = ({ address }: { address: Address }) => {
+  const { middlewareChain } = useYourWallet();
 
   return (
     <Flex vertical gap={8}>
@@ -47,7 +58,12 @@ const SafeAddress = () => {
           {
             left: 'Wallet Address',
             leftClassName: 'text-light text-sm',
-            right: <AddressLink address={multisigAddress} />,
+            right: (
+              <AddressLink
+                address={address}
+                middlewareChain={middlewareChain}
+              />
+            ),
             rightClassName: 'font-normal text-sm',
           },
         ]}
@@ -57,13 +73,29 @@ const SafeAddress = () => {
   );
 };
 
-const AgentTitle = () => {
-  const { multisigAddress: agentSafeAddress } = useAddress();
+const AgentTitle = ({ address }: { address: Address }) => {
+  const { middlewareChain } = useYourWallet();
+  const { selectedAgentType, selectedService } = useServices();
+  const { service } = useService(selectedService?.service_config_id);
 
-  const agentName = useMemo(
-    () => (agentSafeAddress ? generateName(agentSafeAddress) : '--'),
-    [agentSafeAddress],
-  );
+  const agentProfileLink = useMemo(() => {
+    if (!address) return null;
+    // gnosis predict trader
+    if (
+      middlewareChain === MiddlewareChain.GNOSIS &&
+      selectedAgentType === AgentType.PredictTrader
+    ) {
+      return `https://predict.olas.network/agents/${address}`;
+    }
+
+    // base memeooorr
+    if (
+      middlewareChain === MiddlewareChain.BASE &&
+      selectedAgentType === AgentType.Memeooorr &&
+      service?.env_variables?.TWIKIT_USERNAME?.value
+    )
+      return `https://www.agents.fun/services/${service.env_variables.TWIKIT_USERNAME.value}`;
+  }, [address, middlewareChain, selectedAgentType, service]);
 
   return (
     <Flex vertical gap={12}>
@@ -84,21 +116,19 @@ const AgentTitle = () => {
               arrow={false}
               title={
                 <Paragraph className="text-sm m-0">
-                  This is your agent’s unique name
+                  This is your agent&apos;s unique name
                 </Paragraph>
               }
               placement="top"
             >
-              <Text strong>{agentName}</Text>
+              <Text strong>{address ? generateName(address) : NA}</Text>
             </Tooltip>
 
-            <a
-              href={`https://predict.olas.network/agents/${agentSafeAddress}`}
-              target="_blank"
-              className="text-sm"
-            >
-              Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
-            </a>
+            {agentProfileLink && (
+              <a href={agentProfileLink} target="_blank" className="text-sm">
+                Agent profile {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              </a>
+            )}
           </Flex>
         </Flex>
       </Flex>
@@ -106,10 +136,14 @@ const AgentTitle = () => {
   );
 };
 
-const ServiceAndNftDetails = () => {
-  const { serviceId } = useServices();
-  const serviceAddress =
-    SERVICE_REGISTRY_L2_CONTRACT_ADDRESS[`${Chain.GNOSIS}`];
+type ServiceAndNftDetailsProps = { serviceNftTokenId: number };
+const ServiceAndNftDetails = ({
+  serviceNftTokenId,
+}: ServiceAndNftDetailsProps) => {
+  const { middlewareChain, evmHomeChainId } = useYourWallet();
+
+  const serviceRegistryL2ContractAddress =
+    OLAS_CONTRACTS[evmHomeChainId][ContractType.ServiceRegistryL2].address;
 
   return (
     <NftCard>
@@ -126,20 +160,21 @@ const ServiceAndNftDetails = () => {
           <Flex vertical>
             <OwnershipNftTitle />
             <a
-              href={`https://gnosis.blockscout.com/token/${serviceAddress}/instance/${serviceId}`}
+              href={`${BLOCKSCOUT_URL_BY_MIDDLEWARE_CHAIN[middlewareChain]}/token/${serviceRegistryL2ContractAddress}/instance/${serviceNftTokenId}`}
               target="_blank"
             >
-              {truncateAddress(serviceAddress)} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              {truncateAddress(serviceRegistryL2ContractAddress as Address)}{' '}
+              {UNICODE_SYMBOLS.EXTERNAL_LINK}
             </a>
           </Flex>
 
           <Flex vertical>
-            <ServiceIdTitle />
+            <ServiceNftIdTitle />
             <a
-              href={`https://registry.olas.network/gnosis/services/${serviceId}`}
+              href={`https://registry.olas.network/${middlewareChain}/services/${serviceNftTokenId}`}
               target="_blank"
             >
-              {serviceId} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              {serviceNftTokenId} {UNICODE_SYMBOLS.EXTERNAL_LINK}
             </a>
           </Flex>
         </Flex>
@@ -149,25 +184,45 @@ const ServiceAndNftDetails = () => {
 };
 
 const YourAgentWalletBreakdown = () => {
-  const { isBalanceLoaded, agentSafeBalance, agentEoaBalance } = useBalance();
+  const { isLoaded } = useBalanceContext();
+  const { selectedService } = useServices();
+  const { serviceNftTokenId, serviceEoa } = useService(
+    selectedService?.service_config_id,
+  );
+  const { serviceSafeBalances, serviceEoaBalances } = useServiceBalances(
+    selectedService?.service_config_id,
+  );
+  const { serviceSafe, middlewareChain, evmHomeChainId } = useYourWallet();
+
   const {
     availableRewardsForEpochEth,
     isEligibleForRewards,
     accruedServiceStakingRewards,
-  } = useReward();
-  const { instanceAddress: agentEoaAddress } = useAddress();
+  } = useRewardContext();
 
   const reward = useMemo(() => {
-    if (!isBalanceLoaded) return <Skeleton.Input size="small" active />;
-    if (!isEligibleForRewards) return 'Not yet earned';
-    return `~${balanceFormat(availableRewardsForEpochEth, 2)} OLAS`;
-  }, [isBalanceLoaded, isEligibleForRewards, availableRewardsForEpochEth]);
+    if (!isLoaded) return <Skeleton.Input size="small" active />;
+    if (isEligibleForRewards) {
+      return `~${balanceFormat(availableRewardsForEpochEth, 2)} OLAS`;
+    }
 
-  const olasBalances = useMemo(() => {
-    return [
+    return 'Not yet earned';
+  }, [isLoaded, isEligibleForRewards, availableRewardsForEpochEth]);
+
+  const serviceSafeOlas = useMemo(
+    () =>
+      serviceSafeBalances?.find(
+        ({ symbol, evmChainId }) =>
+          symbol === TokenSymbol.OLAS && evmChainId === evmHomeChainId,
+      ),
+    [serviceSafeBalances, evmHomeChainId],
+  );
+
+  const serviceSafeRewards = useMemo(
+    () => [
       {
         title: 'Claimed rewards',
-        value: `${balanceFormat(agentSafeBalance?.OLAS, 2)} OLAS`,
+        value: `${balanceFormat(serviceSafeOlas?.balance ?? 0, 2)} OLAS`,
       },
       {
         title: 'Unclaimed rewards',
@@ -177,66 +232,138 @@ const YourAgentWalletBreakdown = () => {
         title: 'Current epoch rewards',
         value: reward,
       },
-    ];
-  }, [agentSafeBalance?.OLAS, accruedServiceStakingRewards, reward]);
+    ],
+    [accruedServiceStakingRewards, reward, serviceSafeOlas],
+  );
+
+  const serviceSafeNativeBalances = useMemo(() => {
+    if (!serviceSafeBalances) return null;
+
+    const nativeBalances = serviceSafeBalances.filter(
+      ({ evmChainId }) => evmChainId === evmHomeChainId,
+    );
+
+    /**
+     * Native balances with wrapped token balances
+     * @example { xDai: 100, Wrapped xDai: 50 } => { xDai: 150 }
+     */
+    const groupedNativeBalances = Object.entries(
+      groupBy(nativeBalances, 'walletAddress'),
+    ).map(([address, items]) => {
+      const nativeTokenBalance = find(items, { isNative: true })?.balance || 0;
+      const wrappedBalance =
+        find(items, { isWrappedToken: true })?.balance || 0;
+      const totalBalance = nativeTokenBalance + wrappedBalance;
+
+      return {
+        ...items[0],
+        walletAddress: address,
+        balance: totalBalance,
+      } as WalletBalance;
+    });
+
+    return groupedNativeBalances;
+  }, [serviceSafeBalances, evmHomeChainId]);
+
+  const serviceSafeErc20Balances = useMemo(
+    () =>
+      serviceSafeBalances?.filter(
+        ({ isNative, symbol, evmChainId, isWrappedToken }) =>
+          !isNative &&
+          symbol !== TokenSymbol.OLAS &&
+          !isWrappedToken &&
+          evmChainId === evmHomeChainId,
+      ),
+    [serviceSafeBalances, evmHomeChainId],
+  );
+
+  const serviceEoaNativeBalance = useMemo(
+    () =>
+      serviceEoaBalances?.find(
+        ({ isNative, evmChainId }) => isNative && evmChainId === evmHomeChainId,
+      ),
+    [serviceEoaBalances, evmHomeChainId],
+  );
+
+  if (!serviceSafe) return null;
 
   return (
-    <Card title={<AgentTitle />}>
+    <Card title={<AgentTitle address={serviceSafe.address} />}>
       <Container>
-        <SafeAddress />
+        <SafeAddress address={serviceSafe.address} />
 
-        <Flex vertical gap={8}>
-          <OlasTitle />
-          <InfoBreakdownList
-            list={olasBalances.map((item) => ({
-              left: item.title,
-              leftClassName: 'text-light text-sm',
-              right: item.value,
-            }))}
-            parentStyle={infoBreakdownParentStyle}
-          />
-        </Flex>
-
-        <Flex vertical gap={8}>
-          <InfoBreakdownList
-            list={[
-              {
-                left: <XdaiTitle />,
+        {!isEmpty(serviceSafeRewards) && (
+          <Flex vertical gap={8}>
+            <OlasTitle />
+            <InfoBreakdownList
+              list={serviceSafeRewards.map((item) => ({
+                left: item.title,
                 leftClassName: 'text-light text-sm',
-                right: `${balanceFormat(agentSafeBalance?.ETH, 2)} XDAI`,
-              },
-            ]}
-            parentStyle={infoBreakdownParentStyle}
-          />
-        </Flex>
+                right: item.value,
+              }))}
+              parentStyle={infoBreakdownParentStyle}
+            />
+          </Flex>
+        )}
 
-        <Flex vertical gap={8}>
-          <InfoBreakdownList
-            list={[
-              {
-                left: (
-                  <SignerTitle
-                    signerText="Agent's wallet signer address:"
-                    signerAddress={agentEoaAddress}
-                  />
-                ),
-                leftClassName: 'text-light text-sm',
-                right: `${balanceFormat(agentEoaBalance?.ETH, 2)} XDAI`,
-              },
-            ]}
-            parentStyle={infoBreakdownParentStyle}
-          />
-        </Flex>
+        {(!isNil(serviceSafeNativeBalances) ||
+          !isNil(serviceEoaNativeBalance)) && (
+          <Flex vertical gap={8}>
+            {isArray(serviceSafeNativeBalances) && (
+              <InfoBreakdownList
+                list={serviceSafeNativeBalances.map(({ balance, symbol }) => ({
+                  left: <strong>{symbol}</strong>,
+                  leftClassName: 'text-sm',
+                  right: `${balanceFormat(balance, 4)} ${symbol}`,
+                }))}
+                parentStyle={infoBreakdownParentStyle}
+              />
+            )}
+            {isArray(serviceSafeErc20Balances) && (
+              <InfoBreakdownList
+                list={serviceSafeErc20Balances.map(({ balance, symbol }) => ({
+                  left: <strong>{symbol}</strong>,
+                  leftClassName: 'text-sm',
+                  right: `${balanceFormat(balance, 4)} ${symbol}`,
+                }))}
+                parentStyle={infoBreakdownParentStyle}
+              />
+            )}
+            {!isNil(serviceEoa) && (
+              <InfoBreakdownList
+                list={[
+                  {
+                    left: serviceEoa.address && middlewareChain && (
+                      <SignerTitle
+                        signerAddress={serviceEoa.address}
+                        middlewareChain={middlewareChain}
+                      />
+                    ),
+                    leftClassName: 'text-sm',
+                    right: `${balanceFormat(serviceEoaNativeBalance?.balance, 4)} ${serviceEoaNativeBalance?.symbol}`,
+                  },
+                ]}
+                parentStyle={infoBreakdownParentStyle}
+              />
+            )}
+          </Flex>
+        )}
 
-        <ServiceAndNftDetails />
+        {!isNil(serviceNftTokenId) && (
+          <ServiceAndNftDetails serviceNftTokenId={serviceNftTokenId} />
+        )}
       </Container>
     </Card>
   );
 };
 
-export const YourAgentWallet = () => (
-  <>
-    <YourAgentWalletBreakdown />
-    <WithdrawFunds />
-  </>
-);
+export const YourAgentWallet = () => {
+  const isWithdrawFundsEnabled = useFeatureFlag('withdraw-funds');
+
+  return (
+    <>
+      <YourAgentWalletBreakdown />
+      {isWithdrawFundsEnabled && <WithdrawFunds />}
+    </>
+  );
+};

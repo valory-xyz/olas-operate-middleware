@@ -2,98 +2,197 @@ import { Card, message, Typography } from 'antd';
 import Image from 'next/image';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { Chain } from '@/client';
+import { MiddlewareChain } from '@/client';
 import { CardSection } from '@/components/styled/CardSection';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
-import { Pages } from '@/enums/PageState';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+import { EvmChainName } from '@/enums/Chain';
+import { Pages } from '@/enums/Pages';
+import { useMultisigs } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useSetup } from '@/hooks/useSetup';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { WalletService } from '@/service/Wallet';
 import { delayInSeconds } from '@/utils/delay';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
+
+const { Text } = Typography;
+
+const YouWillBeRedirected = ({ text }: { text: string }) => (
+  <>
+    <Image src="/onboarding-robot.svg" alt="logo" width={80} height={80} />
+    <Typography.Title
+      level={4}
+      className="m-0 mt-12 loading-ellipses"
+      style={{ width: '230px' }}
+    >
+      {text}
+    </Typography.Title>
+    <Text type="secondary">
+      You will be redirected once the account is created.
+    </Text>
+  </>
+);
+
+const CreationError = () => (
+  <>
+    <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
+    <Text type="secondary" className="mt-12">
+      Error, please restart the app and try again.
+    </Text>
+    <Text style={{ fontSize: 'small' }}>
+      If the issue persists,{' '}
+      <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
+        contact Olas community support {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      </a>
+      .
+    </Text>
+  </>
+);
 
 export const SetupCreateSafe = () => {
-  const { goto } = usePageState();
-  const { updateWallets } = useWallet();
-  const { updateMasterSafeOwners, masterSafeAddress, backupSafeAddress } =
-    useMasterSafe();
+  const { goto, setUserLoggedIn } = usePageState();
+
+  const { selectedAgentType } = useServices();
+  const serviceTemplate = SERVICE_TEMPLATES.find(
+    (template) => template.agentType === selectedAgentType,
+  );
+
+  const {
+    masterSafes,
+    refetch: updateWallets,
+    isFetched: isWalletsFetched,
+  } = useMasterWalletContext();
+
+  const { allBackupAddresses, masterSafesOwnersIsLoading } =
+    useMultisigs(masterSafes);
+
   const { backupSigner } = useSetup();
 
+  const masterSafeAddress = useMemo(() => {
+    if (!masterSafes) return;
+    return masterSafes.find(
+      (safe) => safe.evmChainId === asEvmChainId(serviceTemplate?.home_chain),
+    );
+  }, [masterSafes, serviceTemplate?.home_chain]);
+
   const [isCreatingSafe, setIsCreatingSafe] = useState(false);
-  const [isCreateSafeSuccessful, setIsCreateSafeSuccessful] = useState(false);
-  const [failed, setFailed] = useState(false);
+
+  const [isFailed, setIsFailed] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  const backupSignerAddress = backupSigner ?? allBackupAddresses[0];
 
   const createSafeWithRetries = useCallback(
-    async (retries: number) => {
-      setIsCreatingSafe(true);
+    async (middlewareChain: MiddlewareChain, retries: number) => {
+      for (let attempt = retries; attempt > 0; attempt--) {
+        try {
+          // Attempt to create the safe
+          await WalletService.createSafe(middlewareChain, backupSignerAddress);
 
-      // If we have retried too many times, set failed
-      if (retries <= 0) {
-        setFailed(true);
-        setIsCreatingSafe(false);
-        setIsCreateSafeSuccessful(false);
-        return;
-      }
-
-      // Try to create the safe
-      WalletService.createSafe(Chain.GNOSIS, backupSigner)
-        .then(async () => {
-          // Backend returned success
-          message.success('Account created');
-
-          // Attempt wallet and master safe updates before proceeding
-          try {
-            await updateWallets();
-            await updateMasterSafeOwners();
-          } catch (e) {
-            console.error(e);
-          }
-
-          // Set states for successful creation
-          setIsCreatingSafe(false);
-          setIsCreateSafeSuccessful(true);
-          setFailed(false);
-        })
-        .catch(async (e) => {
+          // Update wallets and handle successful creation
+          await updateWallets?.();
+          setIsFailed(false);
+          setIsSuccess(true);
+          break; // Exit the loop once successful
+        } catch (e) {
           console.error(e);
-          // Wait for 5 seconds before retrying
-          await delayInSeconds(5);
-          // Retry
-          const newRetries = retries - 1;
-          if (newRetries <= 0) {
-            message.error('Failed to create account');
+          if (attempt === 1) {
+            setIsFailed(true);
+            setIsSuccess(false);
+            throw new Error(`Failed to create safe on ${middlewareChain}`);
           } else {
-            message.error('Failed to create account, retrying in 5 seconds');
+            // Retry delay
+            message.error(
+              `Failed to create account, retrying in 5 seconds... (${attempt - 1} retries left)`,
+            );
+            await delayInSeconds(5);
           }
-          createSafeWithRetries(newRetries);
-        });
+        }
+      }
     },
-    [backupSigner, updateMasterSafeOwners, updateWallets],
+    [backupSignerAddress, updateWallets],
   );
 
   const creationStatusText = useMemo(() => {
-    if (isCreatingSafe) return 'Creating account';
-    if (masterSafeAddress && backupSafeAddress) return 'Account created';
+    if (isCreatingSafe) return 'Creating accounts';
+    if (isSuccess) return 'Account created';
     return 'Account creation in progress';
-  }, [backupSafeAddress, isCreatingSafe, masterSafeAddress]);
+  }, [isCreatingSafe, isSuccess]);
 
   useEffect(() => {
-    if (failed || isCreatingSafe || isCreateSafeSuccessful) return;
-    createSafeWithRetries(3);
+    if (
+      /**
+       * Avoid creating safes if any of the following conditions are met:
+       */
+      isFailed || // creation failed - it's retried in background
+      isCreatingSafe || // already creating a safe
+      !isWalletsFetched || // wallets are not loaded yet
+      // backup address is not loaded yet.
+      // Note: the only case when it can be null forever is when the user closed the app
+      // after entering the backup wallet but before creating a first safe
+      masterSafesOwnersIsLoading
+    )
+      return;
+
+    const chainsToCreateSafesFor = serviceTemplate
+      ? Object.keys(serviceTemplate.configurations)
+      : null;
+
+    const safeCreationsRequired = chainsToCreateSafesFor
+      ? chainsToCreateSafesFor.reduce((acc, chain) => {
+          const safeAddressAlreadyExists = masterSafes?.find(
+            (safe) => safe.evmChainId === asEvmChainId(chain),
+          );
+          if (!safeAddressAlreadyExists) {
+            const middlewareChain = chain as MiddlewareChain;
+            acc.push(middlewareChain);
+          }
+          return acc;
+        }, [] as MiddlewareChain[])
+      : [];
+
+    (async () => {
+      for (const middlewareChain of safeCreationsRequired) {
+        setIsCreatingSafe(true);
+        try {
+          await createSafeWithRetries(middlewareChain, 3);
+          message.success(
+            `${EvmChainName[asEvmChainId(middlewareChain)]} account created`,
+          );
+        } catch (e) {
+          message.warning(
+            `Failed to create ${EvmChainName[asEvmChainId(middlewareChain)]} account`,
+          );
+          console.error(e);
+        }
+      }
+    })().then(() => {
+      setIsCreatingSafe(false);
+      setUserLoggedIn();
+    });
   }, [
-    backupSigner,
+    backupSignerAddress,
     createSafeWithRetries,
-    failed,
-    isCreateSafeSuccessful,
     isCreatingSafe,
+    isFailed,
+    isWalletsFetched,
+    masterSafes,
+    masterSafesOwnersIsLoading,
+    serviceTemplate,
+    setUserLoggedIn,
   ]);
 
+  // Only progress is the safe is created and accessible via context (updates on timeout)
   useEffect(() => {
-    // Only progress is the safe is created and accessible via context (updates on interval)
-    if (masterSafeAddress) goto(Pages.Main);
-  }, [backupSafeAddress, goto, masterSafeAddress]);
+    if (masterSafeAddress) {
+      delayInSeconds(2).then(() => {
+        goto(Pages.Main);
+      });
+    }
+  }, [masterSafeAddress, goto]);
 
   return (
     <Card bordered={false}>
@@ -104,39 +203,10 @@ export const SetupCreateSafe = () => {
         padding="80px 24px"
         gap={12}
       >
-        {failed ? (
-          <>
-            <Image src="/broken-robot.svg" alt="logo" width={80} height={80} />
-            <Typography.Text type="secondary" className="mt-12">
-              Error, please restart the app and try again.
-            </Typography.Text>
-            <Typography.Text style={{ fontSize: 'small' }}>
-              If the issue persists,{' '}
-              <a href={SUPPORT_URL} target="_blank" rel="noreferrer">
-                contact Olas community support {UNICODE_SYMBOLS.EXTERNAL_LINK}
-              </a>
-              .
-            </Typography.Text>
-          </>
+        {isFailed ? (
+          <CreationError />
         ) : (
-          <>
-            <Image
-              src="/onboarding-robot.svg"
-              alt="logo"
-              width={80}
-              height={80}
-            />
-            <Typography.Title
-              level={4}
-              className="m-0 mt-12 loading-ellipses"
-              style={{ width: '220px' }}
-            >
-              {creationStatusText}
-            </Typography.Title>
-            <Typography.Text type="secondary">
-              You will be redirected once the account is created
-            </Typography.Text>
-          </>
+          <YouWillBeRedirected text={creationStatusText} />
         )}
       </CardSection>
     </Card>

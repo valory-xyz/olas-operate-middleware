@@ -17,9 +17,11 @@ export const SetupBackupSigner = () => {
   const [form] = Form.useForm();
 
   const handleFinish = (values: { 'backup-signer': string }) => {
+    // important to lowercase the address before check summing, invalid checksums will cause ethers to throw
+    // returns null if invalid, ethers type is incorrect...
     const checksummedAddress = getAddress(
-      values['backup-signer'].toLowerCase(), // important to lowercase the address before checksumming, invalid checksums will cause ethers to throw
-    ) as Address | null; // returns null if invalid, ethers type is incorrect...
+      values['backup-signer'].toLowerCase(),
+    ) as Address | null;
 
     // If the address is invalid, show an error message
     if (!checksummedAddress) {
@@ -29,7 +31,7 @@ export const SetupBackupSigner = () => {
     }
 
     setBackupSigner(checksummedAddress);
-    goto(SetupScreen.SetupEoaFunding);
+    goto(SetupScreen.AgentSelection);
   };
 
   return (
@@ -62,20 +64,22 @@ export const SetupBackupSigner = () => {
           <Button type="primary" size="large" htmlType="submit">
             Add backup wallet and continue
           </Button>
-          {/* Commented to protect users from skipping backup wallet setup during Alpha testing          
-          <Button
-            type="link"
-            size="large"
-            onClick={() => goto(SetupScreen.SetupEoaFunding)}
-          >
-            Skip for now
-          </Button>
-          <Typography.Text type="secondary" className="text-sm">
-            Note that in the current version of the app, you will not be able to
-            set up a backup wallet afterward. This functionality is coming soon.
-          </Typography.Text> 
+          {/* 
+            Commented to protect users from skipping backup wallet setup during Alpha testing          
+            <Button
+              type="link"
+              size="large"
+              onClick={() => goto(SetupScreen.SetupEoaFunding)}
+            >
+              Skip for now
+            </Button> 
           */}
         </FormFlex>
+
+        <Typography.Text type="secondary" className="text-sm">
+          Note that in the current version of the app, you will not be able to
+          set up a backup wallet afterward. This functionality is coming soon.
+        </Typography.Text>
       </Flex>
     </CardFlex>
   );

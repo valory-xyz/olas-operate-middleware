@@ -1,6 +1,8 @@
 import { get } from 'lodash';
 import { createContext, PropsWithChildren } from 'react';
 
+import { AgentHealthCheck } from '@/types/Agent';
+import { XCookie } from '@/types/Cookies';
 import { ElectronStore, ElectronTrayIconStatus } from '@/types/ElectronApi';
 
 type ElectronApiContextProps = {
@@ -32,6 +34,18 @@ type ElectronApiContextProps = {
     debugData?: Record<string, unknown>;
   }) => Promise<{ success: true; dirPath: string } | { success?: false }>;
   openPath?: (filePath: string) => void;
+  validateTwitterLogin?: ({
+    username,
+    password,
+    email,
+  }: {
+    username: string;
+    password: string;
+    email: string;
+  }) => Promise<{ success: boolean; cookies?: XCookie[] }>;
+  healthCheck?: () => Promise<
+    { response: AgentHealthCheck | null } | { error: string }
+  >;
 };
 
 export const ElectronApiContext = createContext<ElectronApiContextProps>({
@@ -55,6 +69,8 @@ export const ElectronApiContext = createContext<ElectronApiContextProps>({
   setAppHeight: () => {},
   saveLogs: async () => ({ success: false }),
   openPath: () => {},
+  validateTwitterLogin: async () => ({ success: false }),
+  healthCheck: async () => ({ response: null }),
 });
 
 export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
@@ -95,6 +111,8 @@ export const ElectronApiProvider = ({ children }: PropsWithChildren) => {
         showNotification: getElectronApiFunction('showNotification'),
         saveLogs: getElectronApiFunction('saveLogs'),
         openPath: getElectronApiFunction('openPath'),
+        validateTwitterLogin: getElectronApiFunction('validateTwitterLogin'),
+        healthCheck: getElectronApiFunction('healthCheck'),
       }}
     >
       {children}

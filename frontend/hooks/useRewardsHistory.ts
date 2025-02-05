@@ -1,19 +1,22 @@
 import { useQuery } from '@tanstack/react-query';
 import { ethers } from 'ethers';
+import { Maybe } from 'graphql/jsutils/Maybe';
 import { gql, request } from 'graphql-request';
-import { groupBy } from 'lodash';
-import { useEffect, useMemo } from 'react';
+import { groupBy, isEmpty, isNil } from 'lodash';
+import { useCallback, useEffect, useMemo } from 'react';
 import { z } from 'zod';
 
-import { GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
-import { GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL } from '@/constants/urls';
+import { STAKING_PROGRAM_ADDRESS } from '@/config/stakingPrograms';
+import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { REWARDS_HISTORY_SUBGRAPH_URLS_BY_EVM_CHAIN } from '@/constants/urls';
+import { EvmChainId } from '@/enums/Chain';
 import { Address } from '@/types/Address';
-import { getStakingProgramIdByAddress } from '@/utils/service';
+import { Nullable } from '@/types/Util';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
+import { ONE_DAY_IN_MS } from '@/utils/time';
 
+import { useService } from './useService';
 import { useServices } from './useServices';
-
-const ONE_DAY_IN_S = 24 * 60 * 60;
-const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
 
 const CheckpointGraphResponseSchema = z.object({
   epoch: z.string({
@@ -41,18 +44,18 @@ const CheckpointGraphResponseSchema = z.object({
 const CheckpointsGraphResponseSchema = z.array(CheckpointGraphResponseSchema);
 type CheckpointResponse = z.infer<typeof CheckpointGraphResponseSchema>;
 
-const supportedStakingContracts = Object.values(
-  GNOSIS_SERVICE_STAKING_CONTRACT_ADDRESSES,
-).map((address) => `"${address}"`);
+const fetchRewardsQuery = (chainId: EvmChainId) => {
+  const supportedStakingContracts = Object.values(
+    STAKING_PROGRAM_ADDRESS[chainId],
+  ).map((address) => `"${address}"`);
 
-const fetchRewardsQuery = gql`
+  return gql`
   {
     checkpoints(
       orderBy: epoch
       orderDirection: desc
       first: 1000
       where: {
-        serviceIds_not: []
         contractAddress_in: [${supportedStakingContracts}]
       }
     ) {
@@ -68,6 +71,7 @@ const fetchRewardsQuery = gql`
     }
   }
 `;
+};
 
 export type Checkpoint = {
   epoch: string;
@@ -77,68 +81,79 @@ export type Checkpoint = {
   transactionHash: string;
   epochLength: string;
   contractAddress: string;
-  contractName?: string;
+  contractName: Nullable<string>;
   epochEndTimeStamp: number;
   epochStartTimeStamp: number;
   reward: number;
   earned: boolean;
 };
 
-const transformCheckpoints = (
-  checkpoints: CheckpointResponse[],
-  serviceId: number,
-  timestampToIgnore?: null | number,
-): Checkpoint[] => {
-  if (!checkpoints || checkpoints.length === 0) return [];
-  if (!serviceId) return [];
+const useTransformCheckpoints = () => {
+  const { selectedAgentConfig } = useServices();
+  const { serviceApi: agent, evmHomeChainId: chainId } = selectedAgentConfig;
 
-  return checkpoints
-    .map((checkpoint: CheckpointResponse, index: number) => {
-      const serviceIdIndex =
-        checkpoint.serviceIds?.findIndex((id) => Number(id) === serviceId) ??
-        -1;
+  return useCallback(
+    (
+      serviceId: number,
+      checkpoints: CheckpointResponse[],
+      timestampToIgnore?: null | number,
+    ) => {
+      if (!checkpoints || checkpoints.length === 0) return [];
+      if (!serviceId) return [];
 
-      let reward = '0';
+      return checkpoints
+        .map((checkpoint: CheckpointResponse, index: number) => {
+          const serviceIdIndex =
+            checkpoint.serviceIds?.findIndex(
+              (id) => Number(id) === serviceId,
+            ) ?? -1;
 
-      if (serviceIdIndex !== -1) {
-        const currentReward = checkpoint.rewards?.[serviceIdIndex];
-        const isRewardFinite = isFinite(Number(currentReward));
-        reward = isRewardFinite ? currentReward ?? '0' : '0';
-      }
+          let reward = '0';
 
-      // If the epoch is 0, it means it's the first epoch else,
-      // the start time of the epoch is the end time of the previous epoch
-      const epochStartTimeStamp =
-        checkpoint.epoch === '0'
-          ? Number(checkpoint.blockTimestamp) - Number(checkpoint.epochLength)
-          : checkpoints[index + 1]?.blockTimestamp ?? 0;
+          if (serviceIdIndex !== -1) {
+            const currentReward = checkpoint.rewards?.[serviceIdIndex];
+            const isRewardFinite = isFinite(Number(currentReward));
+            reward = isRewardFinite ? currentReward ?? '0' : '0';
+          }
 
-      const stakingContractId = getStakingProgramIdByAddress(
-        checkpoint.contractAddress as Address,
-      );
+          // If the epoch is 0, it means it's the first epoch else,
+          // the start time of the epoch is the end time of the previous epoch
+          const epochStartTimeStamp =
+            checkpoint.epoch === '0'
+              ? Number(checkpoint.blockTimestamp) -
+                Number(checkpoint.epochLength)
+              : checkpoints[index + 1]?.blockTimestamp ?? 0;
 
-      return {
-        ...checkpoint,
-        epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
-        epochStartTimeStamp: Number(epochStartTimeStamp),
-        reward: Number(ethers.utils.formatUnits(reward, 18)),
-        earned: serviceIdIndex !== -1,
-        contractName: stakingContractId,
-      };
-    })
-    .filter((checkpoint) => {
-      // If the contract has been switched to new contract,
-      // ignore the rewards from the old contract of the same epoch,
-      // as the rewards are already accounted in the new contract.
-      // Example: If contract was switched on September 1st, 2024,
-      // ignore the rewards before that date in the old contract.
-      if (!timestampToIgnore) return true;
+          const stakingContractId = agent.getStakingProgramIdByAddress(
+            chainId,
+            checkpoint.contractAddress as Address,
+          );
 
-      if (!checkpoint) return false;
-      if (!checkpoint.epochEndTimeStamp) return false;
+          return {
+            ...checkpoint,
+            epochEndTimeStamp: Number(checkpoint.blockTimestamp ?? Date.now()),
+            epochStartTimeStamp: Number(epochStartTimeStamp),
+            reward: Number(ethers.utils.formatUnits(reward, 18)),
+            earned: serviceIdIndex !== -1,
+            contractName: stakingContractId,
+          };
+        })
+        .filter((checkpoint) => {
+          // If the contract has been switched to new contract,
+          // ignore the rewards from the old contract of the same epoch,
+          // as the rewards are already accounted in the new contract.
+          // Example: If contract was switched on September 1st, 2024,
+          // ignore the rewards before that date in the old contract.
+          if (!timestampToIgnore) return true;
 
-      return checkpoint.epochEndTimeStamp < timestampToIgnore;
-    });
+          if (!checkpoint) return false;
+          if (!checkpoint.epochEndTimeStamp) return false;
+
+          return checkpoint.epochEndTimeStamp < timestampToIgnore;
+        });
+    },
+    [agent, chainId],
+  );
 };
 
 type CheckpointsResponse = { checkpoints: CheckpointResponse[] };
@@ -146,17 +161,18 @@ type CheckpointsResponse = { checkpoints: CheckpointResponse[] };
 /**
  * hook to fetch rewards history for all contracts
  */
-const useContractCheckpoints = () => {
-  const { serviceId } = useServices();
+const useContractCheckpoints = (
+  chainId: EvmChainId,
+  serviceId: Maybe<number>,
+) => {
+  const transformCheckpoints = useTransformCheckpoints();
 
   return useQuery({
-    queryKey: [],
-    async queryFn() {
-      if (!serviceId) return [];
-
+    queryKey: REACT_QUERY_KEYS.REWARDS_HISTORY_KEY(chainId, serviceId!),
+    queryFn: async () => {
       const checkpointsResponse = await request<CheckpointsResponse>(
-        GNOSIS_REWARDS_HISTORY_SUBGRAPH_URL,
-        fetchRewardsQuery,
+        REWARDS_HISTORY_SUBGRAPH_URLS_BY_EVM_CHAIN[chainId],
+        fetchRewardsQuery(chainId),
       );
 
       const parsedCheckpoints = CheckpointsGraphResponseSchema.safeParse(
@@ -172,7 +188,7 @@ const useContractCheckpoints = () => {
     },
     select: (checkpoints): { [contractAddress: string]: Checkpoint[] } => {
       if (!serviceId) return {};
-      if (!checkpoints) return {};
+      if (isNil(checkpoints) || isEmpty(checkpoints)) return {};
 
       // group checkpoints by contract address (staking program)
       const checkpointsByContractAddress = groupBy(
@@ -201,29 +217,36 @@ const useContractCheckpoints = () => {
 
         // transform the checkpoints, includes epoch start and end time, rewards, etc
         const transformedCheckpoints = transformCheckpoints(
-          checkpoints,
           serviceId,
+          checkpoints,
           null,
         );
 
         return { ...acc, [stakingContractAddress]: transformedCheckpoints };
       }, {});
     },
-    refetchOnWindowFocus: false,
-    refetchInterval: ONE_DAY_IN_MS,
     enabled: !!serviceId,
+    refetchInterval: ONE_DAY_IN_MS,
+    refetchOnWindowFocus: false,
   });
 };
 
 export const useRewardsHistory = () => {
-  const { serviceId } = useServices();
+  const { selectedService, selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const serviceConfigId = selectedService?.service_config_id;
+  const { service } = useService(serviceConfigId);
+
+  const serviceNftTokenId =
+    service?.chain_configs?.[asMiddlewareChain(homeChainId)]?.chain_data?.token;
+
   const {
     isError,
     isLoading,
-    isFetching,
+    isFetched,
     refetch,
     data: contractCheckpoints,
-  } = useContractCheckpoints();
+  } = useContractCheckpoints(homeChainId, serviceNftTokenId);
 
   const epochSortedCheckpoints = useMemo<Checkpoint[]>(
     () =>
@@ -234,7 +257,7 @@ export const useRewardsHistory = () => {
   );
 
   const latestRewardStreak = useMemo<number>(() => {
-    if (isLoading || isFetching) return 0;
+    if (isLoading || !isFetched) return 0;
     if (!contractCheckpoints) return 0;
 
     // remove all histories that are not earned
@@ -270,22 +293,22 @@ export const useRewardsHistory = () => {
       const previous = earnedCheckpoints[i - 1];
       const epochGap = previous.epochStartTimeStamp - current.epochEndTimeStamp;
 
-      if (current.earned && Number(current.epochLength) > epochGap) {
+      if (current.earned && epochGap <= Number(current.epochLength)) {
         return streakCount + 1;
       }
 
       isStreakBroken = true;
       return streakCount;
     }, 0);
-  }, [isLoading, isFetching, epochSortedCheckpoints, contractCheckpoints]);
+  }, [isLoading, isFetched, contractCheckpoints, epochSortedCheckpoints]);
 
   useEffect(() => {
-    serviceId && refetch();
-  }, [refetch, serviceId]);
+    serviceNftTokenId && refetch();
+  }, [refetch, serviceNftTokenId]);
 
   return {
     isError,
-    isFetching,
+    isFetched,
     isLoading,
     latestRewardStreak,
     refetch,

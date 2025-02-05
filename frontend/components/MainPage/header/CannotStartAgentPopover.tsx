@@ -5,10 +5,10 @@ import { COLOR } from '@/constants/colors';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
 import { SUPPORT_URL } from '@/constants/urls';
 import {
-  useActiveStakingContractInfo,
+  useActiveStakingContractDetails,
   useStakingContractContext,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { formatToShortDateTime } from '@/utils/time';
 
@@ -50,11 +50,12 @@ export const CannotStartAgentDueToUnexpectedError = () => (
 const evictedDescription =
   "You didn't run your agent enough and it missed its targets multiple times. You can run the agent again when the eviction period ends.";
 const AgentEvictedPopover = () => {
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
-  const { evictionExpiresAt } = useActiveStakingContractInfo();
+  const { evictionExpiresAt } = useActiveStakingContractDetails();
 
-  if (!isStakingContractInfoRecordLoaded) return null;
+  if (!isAllStakingContractDetailsRecordLoaded) return null;
 
   return (
     <Popover
@@ -118,19 +119,18 @@ const NoJobsAvailablePopover = () => (
 );
 
 export const CannotStartAgentPopover = () => {
-  const { isStakingContractInfoRecordLoaded } = useStakingContractContext();
+  const { isAllStakingContractDetailsRecordLoaded } =
+    useStakingContractContext();
 
-  const { activeStakingProgramId, defaultStakingProgramId } =
-    useStakingProgram();
+  const { activeStakingProgramId } = useStakingProgram();
 
   const { isAgentEvicted, isEligibleForStaking } =
-    useActiveStakingContractInfo();
+    useActiveStakingContractDetails();
 
-  const { hasEnoughServiceSlots, isRewardsAvailable } = useStakingContractInfo(
-    activeStakingProgramId ?? defaultStakingProgramId,
-  );
+  const { hasEnoughServiceSlots, isRewardsAvailable } =
+    useStakingContractDetails(activeStakingProgramId);
 
-  if (!isStakingContractInfoRecordLoaded) return null;
+  if (!isAllStakingContractDetailsRecordLoaded) return null;
   if (isEligibleForStaking) return null;
   if (!hasEnoughServiceSlots) return <NoJobsAvailablePopover />;
   if (!isRewardsAvailable) return <NoRewardsAvailablePopover />;

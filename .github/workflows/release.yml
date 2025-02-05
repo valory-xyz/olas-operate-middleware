@@ -64,16 +64,15 @@ jobs:
           echo $trader_version
           make ./dist/aea_bin
         #instead of this one mwe use make; mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
-
+        
+      # -- old optimus getter
+      # optimus_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/optimus.yaml')); print(config['service_version'])")
+      #     echo $optimus_version
+      #     mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/optimus/releases/download/${$optimus_version}/optimus_bin_${{ env.OS_ARCH }}"
       - name: Build with PyInstaller
         run: |
           poetry run pyinstaller operate/services/utils/tendermint.py --onefile
           cp dist/tendermint dist/tendermint_bin
-
-          # patch open aea in place
-          rm -fr ./open-aea
-          git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding
-          poetry run pip install ./open-aea/
 
           poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py  --onefile --name pearl_${{ env.OS_ARCH }}
 
@@ -170,6 +169,14 @@ jobs:
       - name: Add exec permissions
         run: chmod +x electron/bins/*
 
+      # Cache electron-builder downloads
+      - name: Restore electron-builder cache
+        id: cache-electron-builder
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/electron-builder
+          key: electron-builder-cache-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('yarn.lock') }}
+
       # Cache electron node_modules with unique key for each environment and architecture
       - name: Restore electron node_modules cache
         id: cache-electron-node-modules
@@ -201,10 +208,14 @@ jobs:
         if: matrix.env == 'production'
         run: yarn build:frontend
         env:
-          NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          NODE_ENV: ${{ matrix.env }}          
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
+          CELO_RPC: https://forno.celo.org
 
       # Build frontend for development
       - name: Build frontend for development
@@ -212,9 +223,13 @@ jobs:
         run: yarn build:frontend
         env:
           NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://virtual.base.rpc.tenderly.co/f4a92b26-8193-4686-b464-7c1990144659
+          GNOSIS_RPC: https://virtual.gnosis.rpc.tenderly.co/b8bd81f7-0126-49ca-8a2d-11aa03dc7ccf
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://virtual.mode.rpc.tenderly.co/df18cdf5-748b-436d-a676-4649ca19fb2e
+          CELO_RPC: https://forno.celo.org
 
       # Run the build and notarization process for production
       - name: Build, notarize, and publish (Production)
@@ -228,9 +243,23 @@ jobs:
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ env.OS_ARCH }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-        run: node build.js
+          ELECTRON_BUILDER_CACHE: ~/.cache/electron-builder
+          ELECTRON_BUILDER_DOWNLOAD_RETRY: 10
+          ELECTRON_BUILDER_DOWNLOAD_TIMEOUT: 120000
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/
+          BASE_RPC: https://rpc-gate.autonolas.tech/base-rpc/
+          GNOSIS_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://mainnet.mode.network
+          CELO_RPC: https://forno.celo.org
+        run: |
+          echo "OPTIMISM_RPC=https://rpc-gate.autonolas.tech/optimism-rpc/" >> .env
+          echo "BASE_RPC=https://rpc-gate.autonolas.tech/base-rpc/" >> .env
+          echo "GNOSIS_RPC=https://rpc-gate.autonolas.tech/gnosis-rpc/" >> .env
+          echo "ETHEREUM_RPC=https://rpc-gate.autonolas.tech/ethereum-rpc/" >> .env
+          echo "MODE_RPC=https://mainnet.mode.network" >> .env
+          echo "CELO_RPC=https://forno.celo.org" >> .env
+          node build.js
 
       # Run the build and notarization process for development
       - name: Build, notarize, and publish (Development)
@@ -244,9 +273,20 @@ jobs:
           GH_TOKEN: ${{ secrets.github_token }}
           NODE_ENV: ${{ matrix.env }}
           ARCH: ${{ env.OS_ARCH }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
+          ELECTRON_BUILDER_CACHE: ~/.cache/electron-builder
+          ELECTRON_BUILDER_DOWNLOAD_RETRY: 10
+          ELECTRON_BUILDER_DOWNLOAD_TIMEOUT: 120000
+          OPTIMISM_RPC: https://rpc-gate.autonolas.tech/optimism-rpc/          
+          BASE_RPC: https://virtual.base.rpc.tenderly.co/f4a92b26-8193-4686-b464-7c1990144659
+          GNOSIS_RPC: https://virtual.gnosis.rpc.tenderly.co/b8bd81f7-0126-49ca-8a2d-11aa03dc7ccf
+          ETHEREUM_RPC: https://rpc-gate.autonolas.tech/ethereum-rpc/
+          MODE_RPC: https://virtual.mode.rpc.tenderly.co/df18cdf5-748b-436d-a676-4649ca19fb2e
+          CELO_RPC: https://forno.celo.org
         run: |
-          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
-          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
+          echo "OPTIMISM_RPC=https://rpc-gate.autonolas.tech/optimism-rpc/" >> .env
+          echo "BASE_RPC=https://virtual.base.rpc.tenderly.co/f4a92b26-8193-4686-b464-7c1990144659" >> .env
+          echo "GNOSIS_RPC=https://virtual.gnosis.rpc.tenderly.co/b8bd81f7-0126-49ca-8a2d-11aa03dc7ccf" >> .env
+          echo "ETHEREUM_RPC=https://rpc-gate.autonolas.tech/ethereum-rpc/" >> .env
+          echo "MODE_RPC=https://virtual.mode.rpc.tenderly.co/df18cdf5-748b-436d-a676-4649ca19fb2e" >> .env
+          echo "CELO_RPC=https://forno.celo.org" >> .env
           node build.js

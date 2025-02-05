@@ -1,24 +1,25 @@
 import { Button, Flex, Typography } from 'antd';
 
-import { Pages } from '@/enums/PageState';
-import { StakingProgramId } from '@/enums/StakingProgram';
+import { Pages } from '@/enums/Pages';
 import { usePageState } from '@/hooks/usePageState';
-import { useStakingProgram } from '@/hooks/useStakingProgram';
 
 import { CustomAlert } from '../../../Alert';
 
 const { Text } = Typography;
 
+// TODO: need to figure out how to understand if there are new staking contracts
+// To show this alert; also need to hide it, when a use clicks "review"
 export const NewStakingProgramAlert = () => {
   const { goto } = usePageState();
-  const { activeStakingProgramId, isActiveStakingProgramLoaded } =
-    useStakingProgram();
+  // const { activeStakingProgramId, isActiveStakingProgramLoaded } =
+  //   useStakingProgram();
 
-  if (
-    !isActiveStakingProgramLoaded ||
-    activeStakingProgramId !== StakingProgramId.Alpha
-  )
-    return null;
+  // // TODO: remove single staking program check
+  // if (
+  //   !isActiveStakingProgramLoaded ||
+  //   activeStakingProgramId !== StakingProgramId.OptimusAlpha
+  // )
+  //   return null;
 
   return (
     <CustomAlert

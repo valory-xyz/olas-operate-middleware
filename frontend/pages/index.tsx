@@ -1,5 +1,7 @@
 import { useEffect, useMemo } from 'react';
 
+import { AgentActivityPage } from '@/components/AgentActivity';
+import { AgentSelection } from '@/components/AgentSelection';
 import { Main } from '@/components/MainPage';
 import { ManageStakingPage } from '@/components/ManageStakingPage';
 import { AddBackupWalletViaSafePage } from '@/components/Pages/AddBackupWalletViaSafePage';
@@ -7,15 +9,16 @@ import { HelpAndSupport } from '@/components/Pages/HelpAndSupportPage';
 import { RewardsHistory } from '@/components/RewardsHistory/RewardsHistory';
 import { Settings } from '@/components/SettingsPage';
 import { Setup } from '@/components/SetupPage';
+import { UpdateAgentPage } from '@/components/UpdateAgentPage';
 import { YourWalletPage } from '@/components/YourWalletPage';
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { usePageState } from '@/hooks/usePageState';
 
 const DEFAULT_APP_HEIGHT = 700;
 
 export default function Home() {
-  const { pageState } = usePageState();
+  const { pageState, goto } = usePageState();
   const electronApi = useElectronApi();
 
   useEffect(() => {
@@ -46,22 +49,28 @@ export default function Home() {
         return <Setup />;
       case Pages.Main:
         return <Main />;
+      case Pages.SwitchAgent:
+        return <AgentSelection onPrev={() => goto(Pages.Main)} />;
       case Pages.Settings:
         return <Settings />;
       case Pages.HelpAndSupport:
         return <HelpAndSupport />;
       case Pages.ManageStaking:
         return <ManageStakingPage />;
-      case Pages.YourWalletBreakdown:
+      case Pages.ManageWallet:
         return <YourWalletPage />;
       case Pages.RewardsHistory:
         return <RewardsHistory />;
       case Pages.AddBackupWalletViaSafe:
         return <AddBackupWalletViaSafePage />;
+      case Pages.AgentActivity:
+        return <AgentActivityPage />;
+      case Pages.UpdateAgentTemplate:
+        return <UpdateAgentPage />;
       default:
         return <Main />;
     }
-  }, [pageState]);
+  }, [pageState, goto]);
 
   return page;
 }

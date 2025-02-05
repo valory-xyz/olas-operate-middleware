@@ -5,10 +5,17 @@ import { useEffect, useMemo, useState } from 'react';
 import styled from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
-import { useBalance } from '@/hooks/useBalance';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
+import {
+  useBalanceContext,
+  useMasterBalances,
+  useServiceBalances,
+} from '@/hooks/useBalanceContext';
 import { useElectronApi } from '@/hooks/useElectronApi';
+import { useServices } from '@/hooks/useServices';
 import { useStore } from '@/hooks/useStore';
-import { useWallet } from '@/hooks/useWallet';
+import { useMasterWalletContext } from '@/hooks/useWallet';
+import { asMiddlewareChain } from '@/utils/middlewareHelpers';
 
 import { CardSection } from '../../styled/CardSection';
 
@@ -34,48 +41,71 @@ const FineDot = styled(Dot)`
 `;
 
 const BalanceStatus = () => {
-  const { isBalanceLoaded, isLowBalance } = useBalance();
+  const { isLoaded: isBalanceLoaded } = useBalanceContext();
+  const {
+    isFetched: isServicesLoaded,
+    selectedAgentType,
+    selectedService,
+  } = useServices();
+
   const { storeState } = useStore();
   const { showNotification } = useElectronApi();
+
+  const { isMasterSafeLowOnNativeGas } = useMasterBalances();
+  const { isServiceSafeLowOnNativeGas } = useServiceBalances(
+    selectedService?.service_config_id,
+  );
 
   const [isLowBalanceNotificationShown, setIsLowBalanceNotificationShown] =
     useState(false);
 
+  /**
+   * If the master safe is low on native gas and the service safe balance is below the threshold,
+   */
+  const isLowFunds = useMemo(() => {
+    if (isNil(isMasterSafeLowOnNativeGas)) return false;
+    if (isNil(isServiceSafeLowOnNativeGas)) return false;
+
+    return isMasterSafeLowOnNativeGas && isServiceSafeLowOnNativeGas;
+  }, [isMasterSafeLowOnNativeGas, isServiceSafeLowOnNativeGas]);
+
   // show notification if balance is too low
   useEffect(() => {
-    if (!isBalanceLoaded) return;
+    if (!isBalanceLoaded || !isServicesLoaded) return;
     if (!showNotification) return;
-    if (!storeState?.isInitialFunded) return;
+    if (!storeState?.[selectedAgentType]?.isInitialFunded) return;
 
-    if (isLowBalance && !isLowBalanceNotificationShown) {
-      showNotification('Trading balance is too low.');
+    if (isLowFunds && !isLowBalanceNotificationShown) {
+      showNotification('Operating balance is too low.');
       setIsLowBalanceNotificationShown(true);
     }
 
     // If it has already been shown and the balance has increased,
     // should show the notification again if it goes below the threshold.
-    if (!isLowBalance && isLowBalanceNotificationShown) {
+    if (!isLowFunds && isLowBalanceNotificationShown) {
       setIsLowBalanceNotificationShown(false);
     }
   }, [
     isBalanceLoaded,
     isLowBalanceNotificationShown,
-    isLowBalance,
+    isLowFunds,
+    isServicesLoaded,
+    selectedAgentType,
     showNotification,
-    storeState?.isInitialFunded,
+    storeState,
   ]);
 
   const status = useMemo(() => {
-    if (isNil(isLowBalance)) {
+    if (!isBalanceLoaded || !isServicesLoaded) {
       return { statusName: 'Loading...', StatusComponent: EmptyDot };
     }
 
-    if (isLowBalance) {
+    if (isLowFunds) {
       return { statusName: 'Too low', StatusComponent: EmptyDot };
     }
 
     return { statusName: 'Fine', StatusComponent: FineDot };
-  }, [isLowBalance]);
+  }, [isBalanceLoaded, isLowFunds, isServicesLoaded]);
 
   const { statusName, StatusComponent } = status;
   return (
@@ -95,8 +125,32 @@ const TooltipContent = styled.div`
 `;
 
 export const GasBalanceSection = () => {
-  const { masterSafeAddress } = useWallet();
-  const { isBalanceLoaded } = useBalance();
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const { masterSafes } = useMasterWalletContext();
+  const { isLoaded: isBalancesLoaded } = useBalanceContext();
+
+  const masterSafe = useMemo(() => {
+    if (isNil(masterSafes)) return;
+
+    return masterSafes.find((wallet) => wallet.evmChainId === homeChainId);
+  }, [homeChainId, masterSafes]);
+
+  const activityLink = useMemo(() => {
+    if (!masterSafe) return;
+
+    const link =
+      EXPLORER_URL_BY_MIDDLEWARE_CHAIN[asMiddlewareChain(homeChainId)] +
+      '/address/' +
+      masterSafe.address;
+
+    return (
+      <a href={link} target="_blank">
+        Track activity on blockchain explorer{' '}
+        <ArrowUpOutlined style={{ rotate: '45deg' }} />
+      </a>
+    );
+  }, [masterSafe, homeChainId]);
 
   return (
     <CardSection
@@ -106,20 +160,14 @@ export const GasBalanceSection = () => {
       padding="16px 24px"
     >
       <Text type="secondary">
-        Trading balance&nbsp;
-        {masterSafeAddress && (
+        Operating balance&nbsp;
+        {masterSafe && (
           <Tooltip
             title={
               <TooltipContent>
-                Your agent uses this balance to fund trading activity on-chain.
+                Your agent uses this balance to fund on-chain activity.
                 <br />
-                <a
-                  href={'https://gnosisscan.io/address/' + masterSafeAddress}
-                  target="_blank"
-                >
-                  Track activity on blockchain explorer{' '}
-                  <ArrowUpOutlined style={{ rotate: '45deg' }} />
-                </a>
+                {activityLink}
               </TooltipContent>
             }
           >
@@ -128,7 +176,7 @@ export const GasBalanceSection = () => {
         )}
       </Text>
 
-      {isBalanceLoaded ? (
+      {isBalancesLoaded ? (
         <Text strong>
           <BalanceStatus />
         </Text>

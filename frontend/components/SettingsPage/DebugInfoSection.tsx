@@ -1,169 +1,92 @@
-import { CopyOutlined } from '@ant-design/icons';
-import {
-  Button,
-  Col,
-  Flex,
-  message,
-  Row,
-  Spin,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { Button, Flex, Typography } from 'antd';
+import { isNil } from 'lodash';
 import { useCallback, useMemo, useState } from 'react';
-import styled from 'styled-components';
 
-import { COLOR } from '@/constants/colors';
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
+import { NA } from '@/constants/symbols';
 import { MODAL_WIDTH } from '@/constants/width';
-import { Token } from '@/enums/Token';
-import { useAddress } from '@/hooks/useAddress';
-import { useBalance } from '@/hooks/useBalance';
-import { useWallet } from '@/hooks/useWallet';
-import { WalletAddressNumberRecord } from '@/types/Records';
-import { copyToClipboard } from '@/utils/copyToClipboard';
-import { balanceFormat } from '@/utils/numberFormatters';
-import { truncateAddress } from '@/utils/truncate';
+import { useServices } from '@/hooks/useServices';
+import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
+import { StakingState } from '@/types/Autonolas';
+import { formatDate } from '@/utils/dateFormatter';
 
 import { CardSection } from '../styled/CardSection';
 import { CustomModal } from '../styled/CustomModal';
 
-const { Text, Title } = Typography;
+const { Text } = Typography;
 
-const Card = styled.div`
-  padding: 16px 24px;
-  border-bottom: 1px solid ${COLOR.BORDER_GRAY};
-`;
+const AgentStakingInfo = () => {
+  const { selectedAgentConfig } = useServices();
+  const { selectedStakingContractDetails } = useStakingContractContext();
 
-const ICON_STYLE = { color: '#606F85' };
+  const agentName = selectedAgentConfig?.displayName;
 
-const getItemData = (
-  walletBalances: WalletAddressNumberRecord,
-  address: `0x${string}`,
-) => ({
-  balance: {
-    OLAS: balanceFormat(walletBalances[address]?.OLAS, 2),
-    ETH: balanceFormat(walletBalances[address]?.ETH, 2),
-  },
-  address: address,
-  truncatedAddress: address ? truncateAddress(address) : '',
-});
+  // agent status
+  const agentStatus = selectedStakingContractDetails?.serviceStakingState;
+  const agentStakingState = useMemo(() => {
+    if (agentStatus === StakingState.Evicted) return 'Evicted';
+    if (agentStatus === StakingState.Staked) return 'Staked';
+    if (agentStatus === StakingState.NotStaked) return 'Not Staked';
+    return null;
+  }, [agentStatus]);
 
-const DebugItem = ({
-  item,
-}: {
-  item: {
-    title: string;
-    balance: Record<Token.ETH | Token.OLAS, string>;
-    address: `0x${string}`;
-    truncatedAddress: string;
-    link?: { title: string; href: string };
-  };
-}) => {
-  const onCopyToClipboard = useCallback(
-    () =>
-      copyToClipboard(item.address).then(() =>
-        message.success('Address copied!'),
-      ),
-    [item.address],
-  );
+  // last staked time
+  const lastStakedTime =
+    selectedStakingContractDetails?.serviceStakingStartTime;
+  const lastStaked = lastStakedTime ? formatDate(lastStakedTime * 1000) : null;
+
+  // time remaining until it can be unstaked
+  const timeRemainingToUnstake = useMemo(() => {
+    if (lastStakedTime === 0) return null; // If never staked, return null
+    if (!selectedStakingContractDetails) return null;
+
+    const timeRemaining =
+      (selectedStakingContractDetails?.serviceStakingStartTime ?? 0) +
+      (selectedStakingContractDetails?.minimumStakingDuration ?? 0);
+
+    return formatDate(timeRemaining * 1000);
+  }, [lastStakedTime, selectedStakingContractDetails]);
+
+  const info = useMemo(() => {
+    return [
+      { key: 'Name', value: agentName ?? NA },
+      { key: 'Status', value: agentStakingState ?? NA },
+      { key: 'Last staked', value: lastStaked ?? NA, column: true },
+      {
+        key: 'Can be unstaked at',
+        value: isNil(timeRemainingToUnstake) ? NA : timeRemainingToUnstake,
+        column: true,
+      },
+    ];
+  }, [agentName, agentStakingState, lastStaked, timeRemainingToUnstake]);
 
   return (
-    <Card>
-      <Title level={5} className="m-0 mb-8 text-base">
-        {item.title}
-      </Title>
-      <Row>
-        <Col span={12}>
-          <Flex vertical gap={4} align="flex-start">
+    <Flex vertical style={{ padding: '16px 24px' }} gap={8}>
+      <Text>Agent staking details:</Text>
+      {selectedAgentConfig ? (
+        info.map(({ key, value, column }) => (
+          <Flex
+            key={key}
+            gap={column ? 2 : 8}
+            vertical={!!column}
+            align={column ? 'start' : 'center'}
+          >
             <Text type="secondary" className="text-sm">
-              Balance
+              {key}:
             </Text>
-            <Text>{item.balance.OLAS} OLAS</Text>
-            <Text>{item.balance.ETH} XDAI</Text>
+            <Text strong>{value}</Text>
           </Flex>
-        </Col>
-
-        <Col span={12}>
-          <Flex vertical gap={4} align="flex-start">
-            <Text type="secondary" className="text-sm">
-              Address
-            </Text>
-            <Flex gap={12}>
-              <a
-                target="_blank"
-                href={`https://gnosisscan.io/address/${item.address}`}
-              >
-                {item.truncatedAddress}
-              </a>
-              <Tooltip title="Copy to clipboard">
-                <CopyOutlined style={ICON_STYLE} onClick={onCopyToClipboard} />
-              </Tooltip>
-            </Flex>
-          </Flex>
-        </Col>
-      </Row>
-      {item.link ? (
-        <Row className="mt-8">
-          <a target="_blank" href={item.link.href}>
-            {item.link.title} {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </a>
-        </Row>
-      ) : null}
-    </Card>
+        ))
+      ) : (
+        <Text type="secondary">No agent staking info available.</Text>
+      )}
+    </Flex>
   );
 };
 
 export const DebugInfoSection = () => {
-  const { wallets, masterEoaAddress, masterSafeAddress } = useWallet();
-  const { instanceAddress, multisigAddress } = useAddress();
-  const { walletBalances } = useBalance();
-
   const [isModalOpen, setIsModalOpen] = useState(false);
   const showModal = useCallback(() => setIsModalOpen(true), []);
   const handleCancel = useCallback(() => setIsModalOpen(false), []);
-
-  const data = useMemo(() => {
-    if (!wallets?.length) return null;
-
-    const result = [];
-
-    if (masterEoaAddress) {
-      result.push({
-        title: 'Master EOA',
-        ...getItemData(walletBalances, masterEoaAddress),
-      });
-    }
-
-    if (masterSafeAddress) {
-      result.push({
-        title: 'Master Safe',
-        ...getItemData(walletBalances, masterSafeAddress),
-      });
-    }
-
-    if (instanceAddress) {
-      result.push({
-        title: 'Agent Instance EOA',
-        ...getItemData(walletBalances, instanceAddress!),
-      });
-    }
-
-    if (multisigAddress) {
-      result.push({
-        title: 'Agent Safe',
-        ...getItemData(walletBalances, multisigAddress),
-      });
-    }
-
-    return result;
-  }, [
-    masterEoaAddress,
-    masterSafeAddress,
-    instanceAddress,
-    multisigAddress,
-    walletBalances,
-    wallets?.length,
-  ]);
 
   return (
     <CardSection vertical gap={8} align="start" padding="24px">
@@ -177,14 +100,9 @@ export const DebugInfoSection = () => {
         footer={null}
         width={MODAL_WIDTH}
         onCancel={handleCancel}
+        destroyOnClose
       >
-        {data ? (
-          data.map((item) => <DebugItem key={item.address} item={item} />)
-        ) : (
-          <Flex justify="center" align="center" flex="auto">
-            <Spin size="large" />
-          </Flex>
-        )}
+        <AgentStakingInfo />
       </CustomModal>
     </CardSection>
   );

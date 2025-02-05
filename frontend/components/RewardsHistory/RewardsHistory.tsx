@@ -1,6 +1,5 @@
 import {
   ApiOutlined,
-  CloseOutlined,
   HistoryOutlined,
   InfoCircleOutlined,
 } from '@ant-design/icons';
@@ -19,21 +18,29 @@ import {
 import { CSSProperties, ReactNode, useMemo } from 'react';
 import styled from 'styled-components';
 
-import { Chain } from '@/client';
 import { CardTitle } from '@/components/Card/CardTitle';
 import { CardFlex } from '@/components/styled/CardFlex';
+import {
+  STAKING_PROGRAM_ADDRESS,
+  STAKING_PROGRAMS,
+} from '@/config/stakingPrograms';
 import { COLOR } from '@/constants/colors';
-import { SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES } from '@/constants/contractAddresses';
-import { STAKING_PROGRAM_META } from '@/constants/stakingProgramMeta';
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { Pages } from '@/enums/PageState';
+import { EXPLORER_URL_BY_MIDDLEWARE_CHAIN } from '@/constants/urls';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { usePageState } from '@/hooks/usePageState';
+import { useRewardContext } from '@/hooks/useRewardContext';
+import { useService } from '@/hooks/useService';
 import { useServices } from '@/hooks/useServices';
+import { AgentConfig } from '@/types/Agent';
 import { balanceFormat } from '@/utils/numberFormatters';
-import { formatToMonthDay, formatToShortDateTime } from '@/utils/time';
+import {
+  formatToMonthDay,
+  formatToShortDateTime,
+  ONE_DAY_IN_S,
+} from '@/utils/time';
 
 import { Checkpoint, useRewardsHistory } from '../../hooks/useRewardsHistory';
+import { GoToMainPageButton } from '../Pages/GoToMainPageButton';
 import { EpochDetails } from './types';
 
 const { Text, Title } = Typography;
@@ -56,6 +63,9 @@ const EpochRow = styled(Row)`
   border-bottom: 1px solid ${COLOR.BORDER_GRAY};
 `;
 
+const formatReward = (reward?: number) =>
+  reward ? `~${balanceFormat(reward ?? 0, 2)} OLAS` : '0 OLAS';
+
 const EarnedTag = () => (
   <Tag color="success" className="m-0">
     Earned
@@ -65,6 +75,12 @@ const EarnedTag = () => (
 const NotEarnedTag = () => (
   <Tag color="red" className="m-0">
     Not earned
+  </Tag>
+);
+
+const NotYetEarnedTag = () => (
+  <Tag color="processing" className="m-0">
+    Not yet earned
   </Tag>
 );
 
@@ -101,20 +117,31 @@ const ErrorLoadingHistory = ({ refetch }: { refetch: () => void }) => (
   </Container>
 );
 
-const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
+type EpochTimeProps = Pick<
+  EpochDetails,
+  'epochStartTimeStamp' | 'epochEndTimeStamp'
+>;
+const EpochTime = ({
+  epochEndTimeStamp,
+  epochStartTimeStamp,
+  transactionHash,
+}: EpochTimeProps & Partial<Pick<EpochDetails, 'transactionHash'>>) => {
+  const { selectedAgentConfig } = useServices();
+  const { middlewareHomeChainId } = selectedAgentConfig;
+
   const timePeriod = useMemo(() => {
-    if (epoch.epochStartTimeStamp && epoch.epochEndTimeStamp) {
-      return `${formatToShortDateTime(epoch.epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epoch.epochEndTimeStamp * 1000)} (UTC)`;
+    if (epochStartTimeStamp && epochEndTimeStamp) {
+      return `${formatToShortDateTime(epochStartTimeStamp * 1000)} - ${formatToShortDateTime(epochEndTimeStamp * 1000)} (UTC)`;
     }
-    if (epoch.epochStartTimeStamp) {
-      return `${formatToMonthDay(epoch.epochStartTimeStamp * 1000)} (UTC)`;
+    if (epochStartTimeStamp) {
+      return `${formatToMonthDay(epochStartTimeStamp * 1000)} (UTC)`;
     }
     return 'NA';
-  }, [epoch]);
+  }, [epochStartTimeStamp, epochEndTimeStamp]);
 
   return (
     <Text type="secondary">
-      {formatToMonthDay(epoch.epochEndTimeStamp * 1000)}
+      {formatToMonthDay(epochEndTimeStamp * 1000)}
       &nbsp;
       <Popover
         arrow={false}
@@ -127,12 +154,14 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
             <Text type="secondary" className="text-sm m-0">
               {timePeriod}
             </Text>
-            <a
-              href={`https://gnosisscan.io/tx/${epoch.transactionHash}`}
-              target="_blank"
-            >
-              End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
-            </a>
+            {transactionHash && (
+              <a
+                href={`${EXPLORER_URL_BY_MIDDLEWARE_CHAIN[middlewareHomeChainId]}/tx/${transactionHash}`}
+                target="_blank"
+              >
+                End of epoch transaction {UNICODE_SYMBOLS.EXTERNAL_LINK}
+              </a>
+            )}
           </Flex>
         }
       >
@@ -142,51 +171,87 @@ const EpochTime = ({ epoch }: { epoch: EpochDetails }) => {
   );
 };
 
+type RewardRowProps = { date: ReactNode; reward: string; earned: ReactNode };
+const RewardRow = ({ date, reward, earned }: RewardRowProps) => (
+  <EpochRow>
+    <Col span={6}>{date}</Col>
+    <Col span={11} className="text-right pr-16">
+      <Text type="secondary">{reward}</Text>
+    </Col>
+    <Col span={7} className="text-center pl-16">
+      {earned}
+    </Col>
+  </EpochRow>
+);
+
 type ContractRewardsProps = {
   stakingProgramId: StakingProgramId;
   checkpoints: Checkpoint[];
+  selectedAgentConfig: AgentConfig;
 };
 
 const ContractRewards = ({
-  stakingProgramId,
   checkpoints,
-}: ContractRewardsProps) => (
-  <Flex vertical>
-    <ContractName>
-      <Text strong>{STAKING_PROGRAM_META[stakingProgramId].name}</Text>
-    </ContractName>
+  stakingProgramId,
+  selectedAgentConfig,
+}: ContractRewardsProps) => {
+  const stakingProgramMeta =
+    STAKING_PROGRAMS[selectedAgentConfig.evmHomeChainId][stakingProgramId];
+  const { availableRewardsForEpochEth: reward, isEligibleForRewards } =
+    useRewardContext();
 
-    {checkpoints.map((checkpoint) => {
-      const currentEpochReward = checkpoint.reward
-        ? `~${balanceFormat(checkpoint.reward ?? 0, 2)} OLAS`
-        : '0 OLAS';
+  return (
+    <Flex vertical>
+      <ContractName>
+        <Text strong>{stakingProgramMeta.name}</Text>
+      </ContractName>
 
-      return (
-        <EpochRow key={checkpoint.epochEndTimeStamp}>
-          <Col span={6}>
-            <EpochTime epoch={checkpoint} />
-          </Col>
-          <Col span={11} className="text-right pr-16">
-            <Text type="secondary">{currentEpochReward}</Text>
-          </Col>
-          <Col span={7} className="text-center pl-16">
-            {checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
-          </Col>
-        </EpochRow>
-      );
-    })}
-  </Flex>
-);
+      {/* Today's rewards */}
+      <RewardRow
+        date={
+          <EpochTime
+            epochStartTimeStamp={
+              checkpoints[0].epochStartTimeStamp + ONE_DAY_IN_S
+            }
+            epochEndTimeStamp={checkpoints[0].epochEndTimeStamp + ONE_DAY_IN_S}
+          />
+        }
+        reward={formatReward(reward)}
+        earned={isEligibleForRewards ? <EarnedTag /> : <NotYetEarnedTag />}
+      />
 
+      {checkpoints.map((checkpoint) => {
+        return (
+          <RewardRow
+            key={checkpoint.epochEndTimeStamp}
+            date={
+              <EpochTime
+                epochStartTimeStamp={checkpoint.epochStartTimeStamp}
+                epochEndTimeStamp={checkpoint.epochEndTimeStamp}
+                transactionHash={checkpoint.transactionHash}
+              />
+            }
+            reward={formatReward(checkpoint.reward)}
+            earned={checkpoint.earned ? <EarnedTag /> : <NotEarnedTag />}
+          />
+        );
+      })}
+    </Flex>
+  );
+};
+
+/**
+ * TODO: Refactor, only supports a single service for now
+ * */
 export const RewardsHistory = () => {
-  const { contractCheckpoints, isError, isLoading, isFetching, refetch } =
+  const { contractCheckpoints, isError, isFetched, refetch } =
     useRewardsHistory();
-  const { goto } = usePageState();
-  const { serviceId } = useServices();
+  const { selectedService, selectedAgentConfig } = useServices();
+  const { serviceNftTokenId } = useService(selectedService?.service_config_id);
 
   const history = useMemo(() => {
-    if (isLoading || isFetching || !serviceId) return <Loading />;
-    if (isError) return <ErrorLoadingHistory refetch={refetch} />;
+    if (!isFetched || !selectedService?.service_config_id) return <Loading />;
+    if (isError) return <ErrorLoadingHistory refetch={refetch} />; // TODO: don't do this
     if (!contractCheckpoints) return <NoRewardsHistory />;
     if (Object.keys(contractCheckpoints).length === 0) {
       return <NoRewardsHistory />;
@@ -197,7 +262,7 @@ export const RewardsHistory = () => {
       .flat()
       .sort((a, b) => b.epochEndTimeStamp - a.epochEndTimeStamp)
       .find((checkpoint) =>
-        checkpoint.serviceIds.includes(`${serviceId}`),
+        checkpoint.serviceIds.includes(`${serviceNftTokenId}`),
       )?.contractAddress;
 
     // most recent transaction staking contract at the top of the list
@@ -209,12 +274,14 @@ export const RewardsHistory = () => {
       },
     );
 
+    if (!selectedAgentConfig.evmHomeChainId) return null;
+
     return (
       <Flex vertical gap={16}>
         {latestContractAddresses.map((contractAddress: string) => {
           const checkpoints = contractCheckpoints[contractAddress];
           const [stakingProgramId] = Object.entries(
-            SERVICE_STAKING_TOKEN_MECH_USAGE_CONTRACT_ADDRESSES[Chain.GNOSIS],
+            STAKING_PROGRAM_ADDRESS[selectedAgentConfig.evmHomeChainId],
           ).find((entry) => {
             const [, stakingProxyAddress] = entry;
             return (
@@ -230,12 +297,21 @@ export const RewardsHistory = () => {
               key={contractAddress}
               stakingProgramId={stakingProgramId as StakingProgramId}
               checkpoints={checkpoints}
+              selectedAgentConfig={selectedAgentConfig}
             />
           );
         })}
       </Flex>
     );
-  }, [isLoading, isFetching, isError, serviceId, contractCheckpoints, refetch]);
+  }, [
+    isFetched,
+    selectedService?.service_config_id,
+    isError,
+    refetch,
+    contractCheckpoints,
+    selectedAgentConfig,
+    serviceNftTokenId,
+  ]);
 
   return (
     <ConfigProvider theme={yourWalletTheme}>
@@ -243,13 +319,7 @@ export const RewardsHistory = () => {
         bordered={false}
         title={<CardTitle title="Staking rewards history" />}
         noBodyPadding="true"
-        extra={
-          <Button
-            size="large"
-            icon={<CloseOutlined />}
-            onClick={() => goto(Pages.Main)}
-          />
-        }
+        extra={<GoToMainPageButton />}
       >
         {history}
       </CardFlex>

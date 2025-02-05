@@ -1,26 +1,18 @@
-import {
-  CopyOutlined,
-  // QrcodeOutlined,
-} from '@ant-design/icons';
-import {
-  Button,
-  Flex,
-  message,
-  // QRCode,
-  Tooltip,
-  Typography,
-} from 'antd';
+import { CopyOutlined } from '@ant-design/icons';
+import { Button, Flex, message, Tooltip, Typography } from 'antd';
 import Link from 'next/link';
 import { forwardRef, useCallback, useMemo, useRef, useState } from 'react';
 
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { COW_SWAP_GNOSIS_XDAI_OLAS_URL } from '@/constants/urls';
-import { useWallet } from '@/hooks/useWallet';
+import { CustomAlert } from '@/components/Alert';
+import { CHAIN_CONFIG } from '@/config/chains';
+import { NA, UNICODE_SYMBOLS } from '@/constants/symbols';
+import { SWAP_URL_BY_EVM_CHAIN } from '@/constants/urls';
+import { useServices } from '@/hooks/useServices';
+import { useMasterWalletContext } from '@/hooks/useWallet';
 import { copyToClipboard } from '@/utils/copyToClipboard';
 import { delayInSeconds } from '@/utils/delay';
 import { truncateAddress } from '@/utils/truncate';
 
-import { CustomAlert } from '../../Alert';
 import { CardSection } from '../../styled/CardSection';
 
 const { Text } = Typography;
@@ -55,55 +47,29 @@ export const AddFundsSection = () => {
   );
 };
 
-export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
-  const { masterSafeAddress } = useWallet();
-
-  const truncatedFundingAddress: string | undefined = useMemo(
-    () => masterSafeAddress && truncateAddress(masterSafeAddress),
-    [masterSafeAddress],
-  );
-
-  const handleCopyAddress = useCallback(
-    () =>
-      masterSafeAddress &&
-      copyToClipboard(masterSafeAddress).then(() =>
-        message.success('Copied successfully!'),
-      ),
-    [masterSafeAddress],
-  );
+const AddFundsWarningAlertSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
   return (
-    <Flex vertical ref={ref}>
-      <AddFundsWarningAlertSection />
-      <AddFundsAddressSection
-        truncatedFundingAddress={truncatedFundingAddress}
-        fundingAddress={masterSafeAddress}
-        handleCopy={handleCopyAddress}
+    <CardSection>
+      <CustomAlert
+        type="warning"
+        fullWidth
+        showIcon
+        message={
+          <Flex vertical gap={2.5}>
+            <Text className="text-base" strong>
+              Only send funds on {CHAIN_CONFIG[homeChainId].name} Chain!
+            </Text>
+            <Text className="text-base">
+              You will lose any assets you send on other chains.
+            </Text>
+          </Flex>
+        }
       />
-      <AddFundsGetTokensSection />
-    </Flex>
+    </CardSection>
   );
-});
-OpenAddFundsSection.displayName = 'OpenAddFundsSection';
-
-const AddFundsWarningAlertSection = () => (
-  <CardSection>
-    <CustomAlert
-      type="warning"
-      fullWidth
-      showIcon
-      message={
-        <Flex vertical gap={2.5}>
-          <Text className="text-base" strong>
-            Only send funds on Gnosis Chain!
-          </Text>
-          <Text className="text-base">
-            You will lose any assets you send on other chains.
-          </Text>
-        </Flex>
-      }
-    />
-  </CardSection>
-);
+};
 
 const AddFundsAddressSection = ({
   fundingAddress,
@@ -118,33 +84,68 @@ const AddFundsAddressSection = ({
     <Tooltip
       title={
         <span className="can-select-text flex">
-          {fundingAddress ?? 'Error loading address'}
+          {fundingAddress ?? 'Unable to load address'}
         </span>
       }
     >
-      <Text title={fundingAddress}>GNO: {truncatedFundingAddress ?? '--'}</Text>
+      <Text title={fundingAddress}>{truncatedFundingAddress ?? NA}</Text>
     </Tooltip>
 
     <Button onClick={handleCopy} icon={<CopyOutlined />} size="large" />
-
-    {/* <Popover
-      title="Scan QR code"
-      content={
-        <QRCode
-          size={250}
-          value={`https://metamask.app.link/send/${fundingAddress}@${100}`}
-        />
-      }
-    >
-      <Button icon={<QrcodeOutlined />} size="large" />
-    </Popover> */}
   </CardSection>
 );
 
-const AddFundsGetTokensSection = () => (
-  <CardSection justify="center" bordertop="true" padding="16px 24px">
-    <Link target="_blank" href={COW_SWAP_GNOSIS_XDAI_OLAS_URL}>
-      Get OLAS + XDAI on Gnosis Chain {UNICODE_SYMBOLS.EXTERNAL_LINK}
-    </Link>
-  </CardSection>
-);
+const AddFundsGetTokensSection = () => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+
+  return (
+    <CardSection justify="center" bordertop="true" padding="16px 24px">
+      <Link target="_blank" href={SWAP_URL_BY_EVM_CHAIN[homeChainId]}>
+        Get OLAS + {CHAIN_CONFIG[homeChainId].nativeToken.symbol} on{' '}
+        {CHAIN_CONFIG[homeChainId].name} {UNICODE_SYMBOLS.EXTERNAL_LINK}
+      </Link>
+    </CardSection>
+  );
+};
+
+/**
+ * Add funds section
+ */
+export const OpenAddFundsSection = forwardRef<HTMLDivElement>((_, ref) => {
+  const { selectedAgentConfig } = useServices();
+  const { evmHomeChainId: homeChainId } = selectedAgentConfig;
+  const { masterSafes } = useMasterWalletContext();
+  const masterSafeAddress = useMemo(
+    () =>
+      masterSafes?.find((wallet) => wallet.evmChainId === homeChainId)?.address,
+    [homeChainId, masterSafes],
+  );
+
+  const truncatedFundingAddress: string | undefined = useMemo(
+    () => masterSafeAddress && truncateAddress(masterSafeAddress, 4),
+    [masterSafeAddress],
+  );
+
+  const handleCopyAddress = useCallback(
+    () =>
+      masterSafeAddress &&
+      copyToClipboard(masterSafeAddress).then(() =>
+        message.success('Copied successfully!'),
+      ),
+    [masterSafeAddress],
+  );
+
+  return (
+    <Flex vertical ref={ref}>
+      <AddFundsWarningAlertSection />
+      <AddFundsAddressSection
+        truncatedFundingAddress={truncatedFundingAddress}
+        fundingAddress={masterSafeAddress}
+        handleCopy={handleCopyAddress}
+      />
+      <AddFundsGetTokensSection />
+    </Flex>
+  );
+});
+OpenAddFundsSection.displayName = 'OpenAddFundsSection';

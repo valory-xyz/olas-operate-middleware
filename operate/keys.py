@@ -73,6 +73,7 @@ class KeysManager:
 
     def get(self, key: str) -> Key:
         """Get key object."""
+        KeysManager.migrate_format(self.path / key)
         return Key.from_json(  # type: ignore
             obj=json.loads(
                 (self.path / key).read_text(
@@ -104,3 +105,21 @@ class KeysManager:
     def delete(self, key: str) -> None:
         """Delete key."""
         os.remove(self.path / key)
+
+    @classmethod
+    def migrate_format(cls, path: Path) -> bool:
+        """Migrate the JSON file format if needed."""
+        with open(path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        old_to_new_ledgers = {0: "ethereum", 1: "solana"}
+
+        migrated = False
+        if data.get("ledger") in old_to_new_ledgers:
+            data["ledger"] = old_to_new_ledgers.get(data["ledger"])
+            migrated = True
+
+        with open(path, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+
+        return migrated

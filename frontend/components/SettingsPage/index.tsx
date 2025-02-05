@@ -1,20 +1,24 @@
-import { CloseOutlined, SettingOutlined } from '@ant-design/icons';
-import { Button, Card, Flex, Typography } from 'antd';
-import Link from 'next/link';
+import { SettingOutlined } from '@ant-design/icons';
+import { Card, Flex, Skeleton, Typography } from 'antd';
+import { isEmpty, isNil } from 'lodash';
 import { useMemo } from 'react';
 
-import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { Pages } from '@/enums/PageState';
+import { Pages } from '@/enums/Pages';
 import { SettingsScreen } from '@/enums/SettingsScreen';
-import { useMasterSafe } from '@/hooks/useMasterSafe';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
+import { useMultisig } from '@/hooks/useMultisig';
 import { usePageState } from '@/hooks/usePageState';
+import { useServices } from '@/hooks/useServices';
 import { useSettings } from '@/hooks/useSettings';
-import { truncateAddress } from '@/utils/truncate';
+import { useMasterWalletContext } from '@/hooks/useWallet';
+import { Address } from '@/types/Address';
+import { Optional } from '@/types/Util';
 
+import { AddressLink } from '../AddressLink';
 import { CustomAlert } from '../Alert';
 import { CardTitle } from '../Card/CardTitle';
+import { GoToMainPageButton } from '../Pages/GoToMainPageButton';
 import { CardSection } from '../styled/CardSection';
-import { AddBackupWalletPage } from './AddBackupWalletPage';
 import { DebugInfoSection } from './DebugInfoSection';
 
 const { Text, Paragraph } = Typography;
@@ -69,8 +73,6 @@ export const Settings = () => {
     switch (screen) {
       case SettingsScreen.Main:
         return <SettingsMain />;
-      case SettingsScreen.AddBackupWallet:
-        return <AddBackupWalletPage />;
       default:
         return null;
     }
@@ -80,32 +82,55 @@ export const Settings = () => {
 };
 
 const SettingsMain = () => {
-  const { backupSafeAddress } = useMasterSafe();
-  const { goto } = usePageState();
+  const isBackupViaSafeEnabled = useFeatureFlag('backup-via-safe');
+  const { selectedAgentConfig } = useServices();
+  const { masterEoa, masterSafes } = useMasterWalletContext();
 
-  const truncatedBackupSafeAddress: string | undefined = useMemo(() => {
-    if (backupSafeAddress) {
-      return truncateAddress(backupSafeAddress);
-    }
-  }, [backupSafeAddress]);
+  const masterSafe = masterSafes?.find(
+    ({ evmChainId: chainId }) => selectedAgentConfig.evmHomeChainId === chainId,
+  );
+
+  const { owners, ownersIsFetched } = useMultisig(masterSafe);
+
+  const masterSafeBackupAddresses = useMemo<Optional<Address[]>>(() => {
+    if (!ownersIsFetched) return;
+    if (!masterEoa) return;
+    if (isNil(owners) || isEmpty(owners)) return [];
+
+    // TODO: handle edge cases where there are multiple owners due to middleware failure, or user interaction via safe.global
+    return owners.filter(
+      (owner) => owner.toLowerCase() !== masterEoa.address.toLowerCase(),
+    );
+  }, [ownersIsFetched, owners, masterEoa]);
+
+  const masterSafeBackupAddress = useMemo<Optional<Address>>(() => {
+    if (isNil(masterSafeBackupAddresses)) return;
+
+    return masterSafeBackupAddresses[0];
+  }, [masterSafeBackupAddresses]);
+
+  const walletBackup = useMemo(() => {
+    if (!ownersIsFetched) return <Skeleton.Input />;
+    if (!masterSafeBackupAddress) return <NoBackupWallet />;
+
+    return (
+      <AddressLink
+        address={masterSafeBackupAddress}
+        middlewareChain={selectedAgentConfig.middlewareHomeChainId}
+      />
+    );
+  }, [
+    masterSafeBackupAddress,
+    ownersIsFetched,
+    selectedAgentConfig.middlewareHomeChainId,
+  ]);
 
   return (
     <Card
       title={<SettingsTitle />}
       bordered={false}
-      styles={{
-        body: {
-          paddingTop: 0,
-          paddingBottom: 0,
-        },
-      }}
-      extra={
-        <Button
-          size="large"
-          icon={<CloseOutlined />}
-          onClick={() => goto(Pages.Main)}
-        />
-      }
+      styles={{ body: { paddingTop: 0, paddingBottom: 0 } }}
+      extra={<GoToMainPageButton />}
     >
       {/* Password */}
       <CardSection
@@ -120,26 +145,21 @@ const SettingsMain = () => {
         </Flex>
       </CardSection>
 
-      {/* Wallet backup */}
-      <CardSection
-        padding="24px"
-        borderbottom={backupSafeAddress ? 'true' : 'false'}
-        vertical
-        gap={8}
-      >
-        <Text strong>Backup wallet</Text>
-        {backupSafeAddress ? (
-          <Link
-            type="link"
-            target="_blank"
-            href={`https://gnosisscan.io/address/${backupSafeAddress}`}
-          >
-            {truncatedBackupSafeAddress} {UNICODE_SYMBOLS.EXTERNAL_LINK}
-          </Link>
-        ) : (
-          <NoBackupWallet />
-        )}
-      </CardSection>
+      {/* Wallet backup 
+        If there's no backup address and adding it
+        via safe is disabled - hide the section
+      */}
+      {!isBackupViaSafeEnabled && !masterSafeBackupAddress ? null : (
+        <CardSection
+          padding="24px"
+          borderbottom={masterSafeBackupAddress ? 'true' : 'false'}
+          vertical
+          gap={8}
+        >
+          <Text strong>Backup wallet</Text>
+          {walletBackup}
+        </CardSection>
+      )}
 
       {/* Debug info */}
       <DebugInfoSection />

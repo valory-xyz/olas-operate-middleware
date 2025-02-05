@@ -14,14 +14,21 @@ const icons = {
   error: <ExclamationCircleOutlined />,
 };
 
+type CustomAlertProps = {
+  type: AlertType;
+  fullWidth?: boolean;
+  className?: string;
+} & Omit<AlertProps, 'type'>;
+
 export const CustomAlert = ({
   type,
   fullWidth,
+  className,
   ...rest
-}: { type: AlertType; fullWidth?: boolean } & Omit<AlertProps, 'type'>) => (
+}: CustomAlertProps) => (
   <AlertAntd
     type={type === 'primary' ? undefined : type}
-    className={`custom-alert custom-alert--${type} ${fullWidth ? 'custom-alert--full-width' : ''}`}
+    className={`custom-alert custom-alert--${type} ${fullWidth ? 'custom-alert--full-width' : ''} ${className}`}
     icon={rest.showIcon ? icons[type] : undefined}
     {...rest}
   />

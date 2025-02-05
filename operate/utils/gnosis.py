@@ -20,6 +20,7 @@
 """Safe helpers."""
 
 import binascii
+import itertools
 import secrets
 import time
 import typing as t
@@ -37,6 +38,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
+    ZERO_ADDRESS,
 )
 
 
@@ -207,11 +209,9 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=(
-                [crypto.address]
-                if backup_owner is None
-                else [crypto.address, backup_owner]
-            ),
+            owners=[crypto.address]
+            if backup_owner is None
+            else [crypto.address, backup_owner],
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -495,7 +495,7 @@ def transfer_erc20_from_safe(
     )
 
 
-def drain_signer(
+def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
     withdrawal_address: str,
@@ -532,10 +532,12 @@ def drain_signer(
             ledger_api.get_balance(crypto.address) - tx["gas"] * tx["maxFeePerGas"]
         )
         if tx["value"] <= 0:
-            logger.warning(f"No balance to drain from signer key: {crypto.address}")
+            logger.warning(f"No balance to drain from wallet: {crypto.address}")
             raise ChainInteractionError("Insufficient balance")
 
-        logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
+        logger.info(
+            f"Draining {tx['value']} native units from wallet: {crypto.address}"
+        )
 
         return tx
 
@@ -544,3 +546,47 @@ def drain_signer(
         ledger_api=ledger_api,
         build_and_send_tx=lambda: tx_helper.transact(lambda x: x, "", kwargs={}),
     )
+
+
+def get_asset_balance(
+    ledger_api: LedgerApi,
+    contract_address: str,
+    address: str,
+) -> int:
+    """
+    Get the balance of a native asset or ERC20 token.
+
+    If contract address is a zero address, return the native balance.
+    """
+    if contract_address == ZERO_ADDRESS:
+        return ledger_api.get_balance(address)
+    return (
+        registry_contracts.erc20.get_instance(
+            ledger_api=ledger_api,
+            contract_address=contract_address,
+        )
+        .functions.balanceOf(address)
+        .call()
+    )
+
+
+def get_assets_balances(
+    ledger_api: LedgerApi,
+    asset_addresses: t.Set[str],
+    addresses: t.Set[str],
+) -> t.Dict[str, t.Dict[str, int]]:
+    """
+    Get the balances of a list of native assets or ERC20 tokens.
+
+    If asset address is a zero address, return the native balance.
+    """
+    output: t.Dict[str, t.Dict[str, int]] = {}
+
+    for asset, address in itertools.product(asset_addresses, addresses):
+        output.setdefault(address, {})[asset] = get_asset_balance(
+            ledger_api=ledger_api,
+            contract_address=asset,
+            address=address,
+        )
+
+    return output

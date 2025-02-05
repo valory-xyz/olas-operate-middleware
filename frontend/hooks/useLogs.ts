@@ -1,43 +1,71 @@
 import { useMemo } from 'react';
 
-import { DeploymentStatus } from '@/client';
+import { Eoa, WalletType } from '@/enums/Wallet';
+import { Address } from '@/types/Address';
+import { Service } from '@/types/Service';
+import { Optional } from '@/types/Util';
 
-import { useBalance } from './useBalance';
-import { useMasterSafe } from './useMasterSafe';
+import { useBalanceContext } from './useBalanceContext';
+import { useMultisigs } from './useMultisig';
 import { useServices } from './useServices';
 import { useStore } from './useStore';
-import { useWallet } from './useWallet';
+import { useMasterWalletContext } from './useWallet';
 
 const useAddressesLogs = () => {
-  const { wallets, masterEoaAddress, masterSafeAddress } = useWallet();
+  const {
+    masterSafes,
+    masterEoa,
+    isFetched: masterWalletsIsFetched,
+  } = useMasterWalletContext();
 
-  const { backupSafeAddress, masterSafeOwners } = useMasterSafe();
+  const { masterSafesOwners, masterSafesOwnersIsFetched } =
+    useMultisigs(masterSafes);
+
+  const backupEoas = useMemo<Optional<Eoa[]>>(() => {
+    if (!masterEoa) return;
+    if (!masterSafesOwners) return;
+
+    const result = masterSafesOwners
+      .map((masterSafeOwners) => {
+        const { owners, safeAddress, evmChainId } = masterSafeOwners;
+        return owners
+          .filter((owner): owner is Address => owner !== masterEoa.address)
+          .map<Eoa>((address) => ({
+            address,
+            type: WalletType.EOA,
+            safeAddress,
+            evmChainId,
+          }));
+      })
+      .flat();
+
+    return result;
+  }, [masterSafesOwners, masterEoa]);
 
   return {
-    isLoaded: wallets?.length !== 0 && !!masterSafeOwners,
+    isLoaded: masterWalletsIsFetched && masterSafesOwnersIsFetched,
     data: [
-      { backupSafeAddress: backupSafeAddress ?? 'undefined' },
-      { masterSafeAddress: masterSafeAddress ?? 'undefined' },
-      { masterEoaAddress: masterEoaAddress ?? 'undefined' },
-      { masterSafeOwners: masterSafeOwners ?? 'undefined' },
+      { masterEoa: masterEoa ?? 'undefined' },
+      { masterSafe: masterSafes ?? 'undefined' },
+      { masterSafeBackups: backupEoas ?? 'undefined' },
     ],
   };
 };
 
 const useBalancesLogs = () => {
+  const { masterWallets } = useMasterWalletContext();
   const {
-    isBalanceLoaded,
+    isLoaded: isBalanceLoaded,
     totalEthBalance,
     totalOlasBalance,
-    wallets,
     walletBalances,
-    totalOlasStakedBalance,
-  } = useBalance();
+    totalStakedOlasBalance: totalOlasStakedBalance,
+  } = useBalanceContext();
 
   return {
     isLoaded: isBalanceLoaded,
     data: [
-      { wallets: wallets ?? 'undefined' },
+      { masterWallets: masterWallets ?? 'undefined' },
       { walletBalances: walletBalances ?? 'undefined' },
       { totalOlasStakedBalance: totalOlasStakedBalance ?? 'undefined' },
       { totalEthBalance: totalEthBalance ?? 'undefined' },
@@ -47,20 +75,26 @@ const useBalancesLogs = () => {
 };
 
 const useServicesLogs = () => {
-  const { serviceStatus, services, hasInitialLoaded } = useServices();
+  const { services, isFetched: isLoaded, selectedService } = useServices();
+
+  const formattedServices = useMemo(() => {
+    return services?.map((item: Service) => {
+      const isSameService =
+        selectedService?.service_config_id === item.service_config_id;
+
+      return {
+        ...item,
+        keys: item.keys.map((key) => key.address),
+        deploymentStatus: isSameService
+          ? selectedService.deploymentStatus
+          : item.deploymentStatus,
+      };
+    });
+  }, [services, selectedService]);
 
   return {
-    isLoaded: hasInitialLoaded,
-    data: {
-      serviceStatus: serviceStatus
-        ? DeploymentStatus[serviceStatus]
-        : 'undefined',
-      services:
-        services?.map((item) => ({
-          ...item,
-          keys: item.keys.map((key) => key.address),
-        })) ?? 'undefined',
-    },
+    isLoaded,
+    data: { services: formattedServices ?? 'undefined' },
   };
 };
 
@@ -75,11 +109,7 @@ export const useLogs = () => {
     if (isServicesLoaded && isBalancesLoaded && isAddressesLoaded) {
       return {
         store: storeState,
-        debugData: {
-          services,
-          addresses,
-          balances,
-        },
+        debugData: { services, addresses, balances },
       };
     }
   }, [
