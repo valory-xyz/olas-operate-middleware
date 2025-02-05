@@ -1995,7 +1995,7 @@ class ServiceManager:
 
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
-            if service_safe and chain in WRAPPED_NATIVE_ASSET:
+            if service_safe and Chain(chain) in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                     ledger_api=ledger_api,
                     asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
