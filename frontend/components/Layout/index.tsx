@@ -53,17 +53,20 @@ export const Layout = ({
   useSystemLevelNotifications();
 
   useEffect(() => {
-    let messageKey;
+    const onlineMessageKey = 'online-message';
     if (!isOnline) {
-      messageKey = message.error({
+      message.error({
         content: 'Network connection is unstable',
         duration: 0,
         icon: <WifiOutlined />,
+        key: onlineMessageKey,
       });
     } else {
-      message.destroy(messageKey);
+      message.destroy(onlineMessageKey);
     }
   }, [isOnline]);
+
+  console.log('Layout', { isOnline });
 
   return (
     <Container $blur={!isOnline}>
