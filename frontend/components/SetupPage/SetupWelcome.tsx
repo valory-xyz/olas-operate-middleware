@@ -40,6 +40,7 @@ const SetupLoader = () => (
     <Spin />
   </Flex>
 );
+
 const SetupError = () => (
   <Flex justify="center" style={{ margin: '32px 0', textAlign: 'center' }}>
     <Typography.Text>
@@ -133,9 +134,8 @@ const SetupWelcomeLogin = () => {
     if (!selectedAgentConfig) return false;
 
     return services.some(
-      (service) =>
-        service.home_chain ===
-        asMiddlewareChain(selectedAgentConfig.evmHomeChainId),
+      ({ home_chain }) =>
+        home_chain === asMiddlewareChain(selectedAgentConfig.evmHomeChainId),
     );
   }, [isServicesFetched, services, selectedService, selectedAgentConfig]);
 
@@ -227,6 +227,9 @@ const SetupWelcomeLogin = () => {
   );
 };
 
+/**
+ * Setup screen for creating or logging into an account
+ */
 export const SetupWelcome = () => {
   const electronApi = useElectronApi();
   const [isSetup, setIsSetup] = useState<MiddlewareAccountIsSetup | null>(null);

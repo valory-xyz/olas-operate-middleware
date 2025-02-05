@@ -44,29 +44,25 @@ const useSystemLevelNotifications = () => {
   useNotifyOnNewEpoch();
 };
 
-export const Layout = ({
-  children,
-}: PropsWithChildren & { vertical?: boolean }) => {
+export const Layout = ({ children }: PropsWithChildren) => {
   const { isOnline } = useOnlineStatusContext();
 
   // all the app level notifications
   useSystemLevelNotifications();
 
   useEffect(() => {
-    const onlineMessageKey = 'online-message';
+    const onlineStatusMessageKey = 'online-status-message';
     if (!isOnline) {
       message.error({
         content: 'Network connection is unstable',
         duration: 0,
         icon: <WifiOutlined />,
-        key: onlineMessageKey,
+        key: onlineStatusMessageKey,
       });
     } else {
-      message.destroy(onlineMessageKey);
+      message.destroy(onlineStatusMessageKey);
     }
   }, [isOnline]);
-
-  console.log('Layout', { isOnline });
 
   return (
     <Container $blur={!isOnline}>
