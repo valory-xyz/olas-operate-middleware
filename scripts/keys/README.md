@@ -1,1 +1,0 @@
-### This folder contains keys taken from hardhat nodes.
