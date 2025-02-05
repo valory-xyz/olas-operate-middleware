@@ -262,7 +262,7 @@ class StakingManager(OnChainHelper):
         )
         return instance.functions.serviceRegistryTokenUtility().call()
 
-    def min_staking_deposit(self, staking_contract: str) -> str:
+    def min_staking_deposit(self, staking_contract: str) -> int:
         """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -603,17 +603,6 @@ class _ChainUtil:
             self.contracts["service_manager"],
         )
         return instance
-
-    def owner_of(self, token_id: int) -> str:
-        """Get owner of a service."""
-        self._patch()
-        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
-            chain_type=self.chain_type
-        )
-        owner = registry_contracts.service_manager.owner_of(
-            ledger_api=ledger_api, token_id=token_id
-        ).get("owner", "")
-        return owner
 
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""

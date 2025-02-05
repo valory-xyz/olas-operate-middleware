@@ -550,7 +550,7 @@ def drain_eoa(
 
 def get_asset_balance(
     ledger_api: LedgerApi,
-    contract_address: str,
+    asset_address: str,
     address: str,
 ) -> int:
     """
@@ -558,12 +558,12 @@ def get_asset_balance(
 
     If contract address is a zero address, return the native balance.
     """
-    if contract_address == ZERO_ADDRESS:
+    if asset_address == ZERO_ADDRESS:
         return ledger_api.get_balance(address)
     return (
         registry_contracts.erc20.get_instance(
             ledger_api=ledger_api,
-            contract_address=contract_address,
+            contract_address=asset_address,
         )
         .functions.balanceOf(address)
         .call()
@@ -585,7 +585,7 @@ def get_assets_balances(
     for asset, address in itertools.product(asset_addresses, addresses):
         output.setdefault(address, {})[asset] = get_asset_balance(
             ledger_api=ledger_api,
-            contract_address=asset,
+            asset_address=asset,
             address=address,
         )
 
