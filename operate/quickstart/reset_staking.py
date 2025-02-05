@@ -22,8 +22,10 @@ import json
 from typing import TYPE_CHECKING
 
 from operate.constants import OPERATE_HOME
-from operate.quickstart.run_service import configure_local_config, get_service
-from operate.utils.common import ask_yes_or_no, print_title
+from operate.quickstart.run_service import ask_password_if_needed, configure_local_config, ensure_enough_funds, get_service
+from operate.utils.common import ask_yes_or_no, print_section, print_title
+from operate.ledger.profiles import STAKING
+from operate.operate_types import Chain
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -43,18 +45,61 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         return
 
     config = configure_local_config(template)
-    manager = operate.service_manager()
+    current_program = config.staking_vars.get('STAKING_PROGRAM') if config.staking_vars else None
 
-    print(f"Your current staking program preference is set to '{config.staking_vars['STAKING_PROGRAM']}'.")
+    if not current_program:
+        print("No staking program preference found. Exiting.")
+        return
+
+    print(f"Your current staking program preference is set to '{current_program}'.\n")
     print(
         "You can reset your preference. "
         "However, your agent might not be able to switch between staking contracts "
-        "until it has been staked for a minimum staking period in the current program."
+        "until it has been staked for a minimum staking period in the current program.\n"
     )
-    if not ask_yes_or_no("Do you want to reset your staking program preference?"):
+
+    if not ask_yes_or_no(
+        "Please, ensure that your service is stopped (./stop_service.sh) before proceeding. "
+        "Do you want to continue?"
+    ):
         print("Cancelled.")
         return
 
+    ask_password_if_needed(operate, config)
+    manager = operate.service_manager()
+    service = get_service(manager, template)
+    ensure_enough_funds(operate, service)
+
+    # Check if service can be unstaked from current program
+    sftxb = manager.get_eth_safe_tx_builder(ledger_config=service.chain_configs[config.principal_chain].ledger_config)
+    can_unstake = sftxb.can_unstake(
+        service_id=service.chain_configs[config.principal_chain].chain_data.token,
+        staking_contract=STAKING[getattr(Chain, config.principal_chain.upper())][current_program]    
+    )
+
+    if not can_unstake:
+        print_section("Cannot Reset Staking Preference")
+        print(
+            "Your service cannot be unstaked at this time. This could be due to:\n"
+            "- Minimum staking period not elapsed\n"
+            "- Available rewards pending\n\n"
+            "Please try again once the staking conditions allow unstaking."
+        )
+        return
+
+    if not ask_yes_or_no("Service can be unstaked. Would you like to proceed with unstaking and reset?"):
+        print("Cancelled.")
+        return
+
+    # Unstake the service
+    manager.unstake_service_on_chain_from_safe(
+        service_config_id=service.service_config_id,
+        chain=config.principal_chain,
+        staking_program_id=current_program,
+    )
+    print_section("Service has been unstaked successfully")
+
+    # Update local config and service template
     config.staking_vars = None
     config.store()
     config = configure_local_config(template)
@@ -62,3 +107,4 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         service_config_id=manager.json[0]["service_config_id"],
         service_template=template,
     )
+    print("\nStaking preference has been reset successfully.")
