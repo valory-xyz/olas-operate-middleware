@@ -1,20 +1,21 @@
 import { WifiOutlined } from '@ant-design/icons';
 import { message } from 'antd';
-import { PropsWithChildren, useContext, useEffect } from 'react';
+import { PropsWithChildren, useEffect } from 'react';
 import styled, { css } from 'styled-components';
 
 import { COLOR } from '@/constants/colors';
-import { OnlineStatusContext } from '@/context/OnlineStatusProvider';
+import { APP_HEIGHT } from '@/constants/width';
 import { useNotifyOnNewEpoch } from '@/hooks/useNotifyOnNewEpoch';
+import { useOnlineStatusContext } from '@/hooks/useOnlineStatus';
 
 import { TopBar } from './TopBar';
 
-const Container = styled.div<{ blur: 'true' | 'false' }>`
+const Container = styled.div<{ $blur: boolean }>`
   background-color: ${COLOR.WHITE};
   border-radius: 8px;
 
   ${(props) =>
-    props.blur === 'true' &&
+    props.$blur &&
     css`
       filter: blur(2px);
       position: relative;
@@ -34,8 +35,7 @@ const Container = styled.div<{ blur: 'true' | 'false' }>`
 `;
 
 const Body = styled.div`
-  // check main.js for the height of the app ie, 700px
-  max-height: calc(700px - 45px);
+  max-height: calc(${APP_HEIGHT}px - 45px);
   padding-top: 45px;
   overflow-y: auto;
 `;
@@ -47,7 +47,7 @@ const useSystemLevelNotifications = () => {
 export const Layout = ({
   children,
 }: PropsWithChildren & { vertical?: boolean }) => {
-  const { isOnline } = useContext(OnlineStatusContext);
+  const { isOnline } = useOnlineStatusContext();
 
   // all the app level notifications
   useSystemLevelNotifications();
@@ -66,7 +66,7 @@ export const Layout = ({
   }, [isOnline]);
 
   return (
-    <Container blur={isOnline ? 'false' : 'true'}>
+    <Container $blur={!isOnline}>
       <TopBar />
       <Body>{children}</Body>
     </Container>
