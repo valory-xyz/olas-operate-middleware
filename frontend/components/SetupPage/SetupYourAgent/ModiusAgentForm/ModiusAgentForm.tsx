@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { useUnmount } from 'usehooks-ts';
 
 import { ServiceTemplate } from '@/client';
-import { TENDERLY_URL } from '@/constants/urls';
+import { COINGECKO_URL, TENDERLY_URL } from '@/constants/urls';
 import { SetupScreen } from '@/enums/SetupScreen';
 import { useSetup } from '@/hooks/useSetup';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
@@ -26,7 +26,7 @@ const SetupHeader = () => (
       Tenderly
     </a>{' '}
     project for simulating bridge and swap routes, and swap routes and provide a{' '}
-    <a target="_blank" href={TENDERLY_URL}>
+    <a target="_blank" href={COINGECKO_URL}>
       CoinGecko API key
     </a>{' '}
     as a price source.
