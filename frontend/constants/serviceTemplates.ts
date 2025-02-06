@@ -98,7 +98,7 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
   ServiceTemplate,
   'env_variables' | 'hash' | 'image' | 'description' | 'service_version'
 > = {
-  hash: 'bafybeihokbwvtkapycqle3fi4ew76t2yuyaaf7jozf3sjmjdowile3xy2e',
+  hash: 'bafybeid6hkq7xgvwtx3temw3ilsoo75j5ygxqyttwtw33jy4lwdxs6aiqe',
   image:
     'https://gateway.autonolas.tech/ipfs/QmQYDGMg8m91QQkTWSSmANs5tZwKrmvUCawXZfXVVWQPcu',
   description: 'Memeooorr @twitter_handle', // should be overwritten with twitter username
@@ -183,6 +183,18 @@ const AGENTS_FUN_COMMON_TEMPLATE: Pick<
       value: 'persistent_data/twikit_cookies.json',
       provision_type: EnvProvisionType.COMPUTED,
     },
+    STAKING_CONTRACT_ADDRESS: {
+      name: 'Staking contract address',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
+    ACTIVITY_CHECKER_CONTRACT_ADDRESS: {
+      name: 'Activity checker contract address',
+      description: '',
+      value: '',
+      provision_type: EnvProvisionType.COMPUTED,
+    },
   },
 };
 
@@ -246,7 +258,7 @@ export const AGENTS_FUN_CELO_TEMPLATE: ServiceTemplate = {
 export const MODIUS_SERVICE_TEMPLATE: ServiceTemplate = {
   agentType: AgentType.Modius,
   name: 'Optimus', // Should be unique across all services and not be updated
-  hash: 'bafybeigze75dsdbqb3uf5mutdaquvh2lxaga25ybvf7npmkome3gvxqqcu',
+  hash: 'bafybeiaurdb4qe7wgnpepfhxrmx7q3moa33rpqmdogvdn4jsexnrahanum',
   description: 'Optimus',
   image:
     'https://gateway.autonolas.tech/ipfs/bafybeiaakdeconw7j5z76fgghfdjmsr6tzejotxcwnvmp3nroaw3glgyve',
