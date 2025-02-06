@@ -260,13 +260,13 @@ typecheck = ["mypy"]
 
 [[package]]
 name = "beautifulsoup4"
-version = "4.13.2"
+version = "4.13.3"
 description = "Screen-scraping library"
 optional = false
 python-versions = ">=3.7.0"
 files = [
-    {file = "beautifulsoup4-4.13.2-py3-none-any.whl", hash = "sha256:b0ebbcecbfbed2f28e07fb8d004494dfb3030711874a034551ac52008b87a1d1"},
-    {file = "beautifulsoup4-4.13.2.tar.gz", hash = "sha256:da9184389e6848818cf31c970ba3cbe6f33c2b8fbabd70d5bd4a2bfa0c1c4272"},
+    {file = "beautifulsoup4-4.13.3-py3-none-any.whl", hash = "sha256:99045d7d3f08f91f0d656bc9b7efbae189426cd913d830294a15eefa0ea4df16"},
+    {file = "beautifulsoup4-4.13.3.tar.gz", hash = "sha256:1bd32405dacc920b42b83ba01644747ed77456a65760e285fbc47633ceddaf8b"},
 ]
 
 [package.dependencies]
@@ -2339,13 +2339,13 @@ open-aea-ledger-ethereum = ">=1.63.0,<1.64.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.19.1"
+version = "0.19.2"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.8"
 files = [
-    {file = "open_autonomy-0.19.1-py3-none-any.whl", hash = "sha256:d69f432269be722755b5d6a2513b848fcfde28e74563bef6e189329a90bcf7c0"},
-    {file = "open_autonomy-0.19.1.tar.gz", hash = "sha256:34f88a8b23982fd560dc41219afbeb872a871f487d9010eb16191ff9011328a3"},
+    {file = "open_autonomy-0.19.2-py3-none-any.whl", hash = "sha256:2ce08e72ebe141dc60b6e81497618c47f6db945fe574c450c6c6f617fb2d1687"},
+    {file = "open_autonomy-0.19.2.tar.gz", hash = "sha256:be282f2b9fd22a8d9e26ef56656c22d21126f0dc2c3b822df02dec571ab595dd"},
 ]
 
 [package.dependencies]
@@ -3941,4 +3941,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "<3.12,>=3.9"
-content-hash = "ac6878b68f285dc3bc2c09456e54466d6c2d511cc222114a5f65f5b1994b93a9"
+content-hash = "1704dd1f155362746dcedb88d168633d6209eb4dcf80aa0b1c97bfee554eab33"
