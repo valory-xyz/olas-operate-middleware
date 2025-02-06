@@ -1,20 +1,21 @@
 import { CardSection } from '@/components/styled/CardSection';
+import { useFeatureFlag } from '@/hooks/useFeatureFlag';
 
 import { AddBackupWalletAlert } from './AddBackupWalletAlert';
 import { AvoidSuspensionAlert } from './AvoidSuspensionAlert';
-import { LowTradingBalanceAlert } from './LowTradingBalanceAlert';
-import { NewStakingProgramAlert } from './NewStakingProgramAlert';
+import { LowFunds } from './LowFunds/LowFunds';
 import { NoAvailableSlotsOnTheContract } from './NoAvailableSlotsOnTheContract';
 import { UpdateAvailableAlert } from './UpdateAvailableAlert';
 
 export const AlertSections = () => {
+  const isBackupViaSafeEnabled = useFeatureFlag('backup-via-safe');
   return (
     <CardSection vertical>
       <UpdateAvailableAlert />
-      <AddBackupWalletAlert />
-      <NewStakingProgramAlert />
+      {isBackupViaSafeEnabled && <AddBackupWalletAlert />}
+      {/* <NewStakingProgramAlert /> */}
       <AvoidSuspensionAlert />
-      <LowTradingBalanceAlert />
+      <LowFunds />
       <NoAvailableSlotsOnTheContract />
     </CardSection>
   );

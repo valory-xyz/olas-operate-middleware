@@ -12,10 +12,20 @@ jobs:
       matrix:
         include:
           - env: "production"
-            rpc: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+            OPTIMISM_RPC: "https://rpc-gate.autonolas.tech/optimism-rpc/"
+            BASE_RPC: "https://rpc-gate.autonolas.tech/base-rpc/"
+            GNOSIS_RPC: "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"
+            MODE_RPC: "https://mainnet.mode.network"
+            CELO_RPC: "https://forno.celo.org"
             arch: "x64"
           - env: "development"
-            rpc: "https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0"
+            OPTIMISM_RPC: "https://rpc-gate.autonolas.tech/optimism-rpc/"
+            BASE_RPC: "https://virtual.base.rpc.tenderly.co/f4a92b26-8193-4686-b464-7c1990144659"
+            GNOSIS_RPC: "https://virtual.gnosis.rpc.tenderly.co/b8bd81f7-0126-49ca-8a2d-11aa03dc7ccf"
+            ETHEREUM_RPC: "https://rpc-gate.autonolas.tech/ethereum-rpc/"  
+            MODE_RPC: "https://virtual.mode.rpc.tenderly.co/df18cdf5-748b-436d-a676-4649ca19fb2e"
+            CELO_RPC: "https://forno.celo.org"          
             arch: "x64"
     defaults:
       run:
@@ -94,18 +104,55 @@ jobs:
         run: yarn install:frontend
         
 
+      - name: Setup Certificate 
+        run: | 
+          echo "${{secrets.SM_CLIENT_CERT_FILE_B64 }}" | base64 --decode > /d/Certificate_pkcs12.p12 
+        shell: bash             
+
+      - name: Set variables 
+        id: variables 
+        run: | 
+          echo "::set-output name=version::${GITHUB_REF#refs/tags/v}" 
+          echo "SM_HOST=${{ secrets.SM_HOST }}" >> "$GITHUB_ENV" 
+          echo "SM_API_KEY=${{ secrets.SM_API_KEY }}" >> "$GITHUB_ENV" 
+          echo "SM_KEY_PAIR_ALIAS=${{ secrets.SM_KEY_PAIR_ALIAS }}" >> "$GITHUB_ENV" 
+          echo "SM_CLIENT_CERT_FILE=D:\\Certificate_pkcs12.p12" >> "$GITHUB_ENV" 
+          echo "SM_CLIENT_CERT_PASSWORD=${{ secrets.SM_CLIENT_CERT_PASSWORD }}" >> "$GITHUB_ENV" 
+          echo "C:\Program Files (x86)\Windows Kits\10\App Certification Kit" >> $GITHUB_PATH 
+          echo "C:\Program Files (x86)\Microsoft SDKs\Windows\v10.0A\bin\NETFX 4.8 Tools" >> $GITHUB_PATH 
+          echo "C:\Program Files\DigiCert\DigiCert One Signing Manager Tools" >> $GITHUB_PATH 
+        shell: bash  
+
+      - name: Setup SSM KSP on windows latest 
+        run: | 
+          curl -X GET  https://one.digicert.com/signingmanager/api-ui/v1/releases/smtools-windows-x64.msi/download -H "x-api-key:%SM_API_KEY%" -o smtools-windows-x64.msi 
+          msiexec /i smtools-windows-x64.msi /quiet /qn 
+          smksp_registrar.exe list 
+          smctl.exe keypair ls 
+          C:\Windows\System32\certutil.exe -csp "DigiCert Signing Manager KSP" -key -user 
+          smksp_cert_sync.exe 
+
+        shell: cmd 
       - name: set env vars to prod.env
         env:
-          NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: ${{ matrix.rpc }}
+          NODE_ENV: ${{ matrix.env }}          
+          GNOSIS_RPC: ${{ matrix.GNOSIS_RPC }}
+          BASE_RPC: ${{ matrix.BASE_RPC }}
+          ETHEREUM_RPC: ${{ matrix.ETHEREUM_RPC }}
+          OPTIMISM_RPC: ${{ matrix.OPTIMISM_RPC }}
+          MODE_RPC: ${{ matrix.MODE_RPC }}
+          CELO_RPC: ${{ matrix.CELO_RPC }}
           IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: ${{ matrix.rpc }}
           GH_TOKEN: ${{ secrets.github_token}}
         run: |
           echo NODE_ENV=$NODE_ENV >> prod.env
-          echo DEV_RPC=$DEV_RPC >> prod.env
           echo IS_STAGING=$IS_STAGING >> prod.env
-          echo FORK_URL=$FORK_URL >> prod.env
+          echo OPTIMISM_RPC=$OPTIMISM_RPC >> prod.env
+          echo BASE_RPC=$BASE_RPC >> prod.env
+          echo ETHEREUM_RPC=$ETHEREUM_RPC >> prod.env
+          echo GNOSIS_RPC=$GNOSIS_RPC >> prod.env
+          echo MODE_RPC=$MODE_RPC >> prod.env
+          echo CELO_RPC=$CELO_RPC >> prod.env
           cat prod.env
           echo GH_TOKEN=$GH_TOKEN >> prod.env
       - run: rm -rf /dist

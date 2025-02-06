@@ -1,5 +1,8 @@
 import { isNumber } from 'lodash';
 
+export const ONE_DAY_IN_S = 24 * 60 * 60;
+export const ONE_DAY_IN_MS = ONE_DAY_IN_S * 1000;
+
 export const getTimeAgo = (timestampInSeconds: number) => {
   if (!isNumber(timestampInSeconds)) return null;
 
@@ -64,4 +67,32 @@ export const formatToShortDateTime = (timeInMs?: number) => {
     hour12: true,
     timeZone: 'UTC',
   });
+};
+
+/**
+ *
+ * @param totalSeconds - total seconds to be formatted
+ * @returns formatted string in the format of 'X days X hours X minutes X seconds'
+ * @example 100000 => '1 day 3 hours 46 minutes 40 seconds'
+ */
+export const formatCountdownDisplay = (totalSeconds: number) => {
+  const days = Math.floor(totalSeconds / (24 * 3600));
+  totalSeconds %= 24 * 3600;
+
+  const hours = Math.floor(totalSeconds / 3600);
+  totalSeconds %= 3600;
+
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  // Ensure double digits for hours, minutes, and seconds
+  const formattedHours = String(hours).padStart(2, '0');
+  const formattedMinutes = String(minutes).padStart(2, '0');
+  const formattedSeconds = String(seconds).padStart(2, '0');
+
+  const daysInWords = `${days} day${days !== 1 ? 's' : ''}`;
+  const hoursInWords = `${formattedHours} hour${hours !== 1 ? 's' : ''}`;
+  const minutesInWords = `${formattedMinutes} minute${minutes !== 1 ? 's' : ''}`;
+  const secondsInWords = `${formattedSeconds} second${seconds !== 1 ? 's' : ''}`;
+  return `${daysInWords} ${hoursInWords} ${minutesInWords} ${secondsInWords}`.trim();
 };

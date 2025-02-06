@@ -1,16 +1,19 @@
-import { CloseOutlined, QuestionCircleOutlined } from '@ant-design/icons';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import { Button, Card, Flex, message, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 
 import { UNICODE_SYMBOLS } from '@/constants/symbols';
-import { FAQ_URL, SUPPORT_URL } from '@/constants/urls';
-import { Pages } from '@/enums/PageState';
+import {
+  FAQ_URL,
+  SUPPORT_URL,
+  TERMS_AND_CONDITIONS_URL,
+} from '@/constants/urls';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useLogs } from '@/hooks/useLogs';
-import { usePageState } from '@/hooks/usePageState';
 
 import { CardTitle } from '../../Card/CardTitle';
 import { CardSection } from '../../styled/CardSection';
+import { GoToMainPageButton } from '../GoToMainPageButton';
 
 const { Title, Paragraph } = Typography;
 
@@ -37,7 +40,6 @@ const LogsSavedMessage = ({ onClick }: { onClick: () => void }) => {
 };
 
 export const HelpAndSupport = () => {
-  const { goto } = usePageState();
   const { openPath, saveLogs } = useElectronApi();
 
   const logs = useLogs();
@@ -80,20 +82,17 @@ export const HelpAndSupport = () => {
           paddingBottom: 0,
         },
       }}
-      extra={
-        <Button
-          size="large"
-          icon={<CloseOutlined />}
-          onClick={() => goto(Pages.Main)}
-        />
-      }
+      extra={<GoToMainPageButton />}
     >
       <CardSection borderbottom="true" padding="16px 24px 24px" vertical>
         <Title level={5} className="m-0 mb-16 text-base">
           Frequently asked questions
         </Title>
-        <a target="_blank" href={FAQ_URL}>
+        <a target="_blank" href={FAQ_URL} className="mb-8">
           Read FAQ {UNICODE_SYMBOLS.EXTERNAL_LINK}
+        </a>
+        <a target="_blank" href={TERMS_AND_CONDITIONS_URL}>
+          Terms and Conditions {UNICODE_SYMBOLS.EXTERNAL_LINK}
         </a>
       </CardSection>
 

@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useElectronApi } from '@/hooks/useElectronApi';
 import { useServices } from '@/hooks/useServices';
 
-import { useActiveStakingContractInfo } from './useStakingContractInfo';
+import { useService } from './useService';
+import { useActiveStakingContractDetails } from './useStakingContractDetails';
 
 type EpochStatusNotification = {
   lastEpoch: number;
@@ -16,21 +17,24 @@ type EpochStatusNotification = {
  */
 export const useNotifyOnNewEpoch = () => {
   const { showNotification } = useElectronApi();
-  const { isServiceNotRunning } = useServices();
+  const { selectedService } = useServices();
+  const { isServiceRunning } = useService(selectedService?.service_config_id);
 
-  const { activeStakingContractInfo, isActiveStakingContractInfoLoaded } =
-    useActiveStakingContractInfo();
-  const epoch = activeStakingContractInfo?.epochCounter;
+  const {
+    selectedStakingContractDetails: activeStakingContractDetails,
+    isSelectedStakingContractDetailsLoading,
+  } = useActiveStakingContractDetails();
+  const epoch = activeStakingContractDetails?.epochCounter;
 
   const [epochStatusNotification, setEpochStatusNotification] =
     useState<EpochStatusNotification | null>(null);
 
   useEffect(() => {
-    //  if active staking contract info is not loaded yet, return
-    if (!isActiveStakingContractInfoLoaded) return;
+    // if active staking contract info is still loading, return
+    if (isSelectedStakingContractDetailsLoading) return;
 
     // if agent is running, no need to show notification
-    if (!isServiceNotRunning) return;
+    if (isServiceRunning) return;
 
     // latest epoch is not loaded yet
     if (!epoch) return;
@@ -53,10 +57,10 @@ export const useNotifyOnNewEpoch = () => {
       setEpochStatusNotification({ lastEpoch: epoch, isNotified: true });
     }
   }, [
-    isServiceNotRunning,
     epochStatusNotification,
     epoch,
-    isActiveStakingContractInfoLoaded,
+    isSelectedStakingContractDetailsLoading,
     showNotification,
+    isServiceRunning,
   ]);
 };

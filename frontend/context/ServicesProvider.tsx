@@ -1,123 +1,263 @@
-import { message } from 'antd';
+import { QueryObserverBaseResult, useQuery } from '@tanstack/react-query';
+import { noop } from 'lodash';
 import {
   createContext,
-  Dispatch,
   PropsWithChildren,
-  SetStateAction,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from 'react';
-import { useInterval } from 'usehooks-ts';
 
-import { DeploymentStatus, Service } from '@/client';
-import { CHAINS } from '@/constants/chains';
+import {
+  MiddlewareChain,
+  MiddlewareDeploymentStatus,
+  MiddlewareServiceResponse,
+} from '@/client';
+import { AGENT_CONFIG } from '@/config/agents';
 import { FIVE_SECONDS_INTERVAL } from '@/constants/intervals';
+import { REACT_QUERY_KEYS } from '@/constants/react-query-keys';
+import { AgentType } from '@/enums/Agent';
+import {
+  AgentEoa,
+  AgentSafe,
+  AgentWallets,
+  WalletOwnerType,
+  WalletType,
+} from '@/enums/Wallet';
+import { useElectronApi } from '@/hooks/useElectronApi';
+import { UsePause, usePause } from '@/hooks/usePause';
+import { useStore } from '@/hooks/useStore';
 import { ServicesService } from '@/service/Services';
-import { Address } from '@/types/Address';
+import { AgentConfig } from '@/types/Agent';
+import { Service } from '@/types/Service';
+import { Maybe, Nullable, Optional } from '@/types/Util';
+import { isNilOrEmpty } from '@/utils/lodashExtensions';
+import { asEvmChainId } from '@/utils/middlewareHelpers';
 
 import { OnlineStatusContext } from './OnlineStatusProvider';
 
-type ServicesContextProps = {
-  services?: Service[];
-  serviceAddresses?: Address[];
-  setServices: Dispatch<SetStateAction<Service[] | undefined>>;
-  serviceStatus: DeploymentStatus | undefined;
-  setServiceStatus: Dispatch<SetStateAction<DeploymentStatus | undefined>>;
-  updateServicesState: () => Promise<void>;
-  updateServiceStatus: () => Promise<void>;
-  hasInitialLoaded: boolean;
-  setHasInitialLoaded: Dispatch<SetStateAction<boolean>>;
-  setIsPaused: Dispatch<SetStateAction<boolean>>;
-};
+type ServicesResponse = Pick<
+  QueryObserverBaseResult<MiddlewareServiceResponse[]>,
+  'isLoading' | 'refetch' | 'isFetched'
+>;
 
-export const ServicesContext = createContext<ServicesContextProps>({
-  services: undefined,
-  serviceAddresses: undefined,
-  setServices: () => {},
-  serviceStatus: undefined,
-  setServiceStatus: () => {},
-  updateServicesState: async () => {},
-  updateServiceStatus: async () => {},
-  hasInitialLoaded: false,
-  setHasInitialLoaded: () => {},
-  setIsPaused: () => {},
+type ServicesContextType = {
+  services?: MiddlewareServiceResponse[];
+  serviceWallets?: AgentWallets;
+  selectedService?: Service;
+  selectedServiceStatusOverride?: Maybe<MiddlewareDeploymentStatus>;
+  isSelectedServiceDeploymentStatusLoading: boolean;
+  selectedAgentConfig: AgentConfig;
+  selectedAgentType: AgentType;
+  updateAgentType: (agentType: AgentType) => void;
+  overrideSelectedServiceStatus: (
+    status?: Maybe<MiddlewareDeploymentStatus>,
+  ) => void;
+} & Partial<ServicesResponse> &
+  UsePause;
+
+export const ServicesContext = createContext<ServicesContextType>({
+  isFetched: false,
+  paused: false,
+  setPaused: noop,
+  togglePaused: noop,
+  isSelectedServiceDeploymentStatusLoading: true,
+  selectedAgentConfig: AGENT_CONFIG[AgentType.PredictTrader],
+  selectedAgentType: AgentType.PredictTrader,
+  updateAgentType: noop,
+  overrideSelectedServiceStatus: noop,
 });
 
+/**
+ * Polls for available services via the middleware API globally
+ */
 export const ServicesProvider = ({ children }: PropsWithChildren) => {
   const { isOnline } = useContext(OnlineStatusContext);
+  const { store } = useElectronApi();
+  const { paused, setPaused, togglePaused } = usePause();
+  const { storeState } = useStore();
 
-  const [services, setServices] = useState<Service[]>();
+  const agentTypeFromStore = storeState?.lastSelectedAgentType;
 
-  const [serviceStatus, setServiceStatus] = useState<
-    DeploymentStatus | undefined
-  >();
-  const [hasInitialLoaded, setHasInitialLoaded] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
+  // set the agent type from the store on load
+  const selectedAgentType = useMemo(() => {
+    if (!agentTypeFromStore) return AgentType.PredictTrader;
+    return agentTypeFromStore;
+  }, [agentTypeFromStore]);
 
-  const serviceAddresses = useMemo(
-    () =>
-      services?.reduce<Address[]>((acc, service: Service) => {
-        const instances =
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.instances;
-        if (instances) {
-          acc.push(...instances);
-        }
+  // user selected service identifier
+  const [selectedServiceConfigId, setSelectedServiceConfigId] =
+    useState<Nullable<string>>(null);
 
-        const multisig =
-          service.chain_configs[CHAINS.GNOSIS.chainId].chain_data.multisig;
-        if (multisig) {
-          acc.push(multisig);
-        }
-        return acc;
-      }, []),
-    [services],
+  const {
+    data: services,
+    isLoading: isServicesLoading,
+    refetch,
+  } = useQuery<MiddlewareServiceResponse[]>({
+    queryKey: REACT_QUERY_KEYS.SERVICES_KEY,
+    queryFn: ServicesService.getServices,
+    enabled: isOnline && !paused,
+    refetchInterval: FIVE_SECONDS_INTERVAL,
+  });
+
+  const {
+    data: selectedServiceStatus,
+    isLoading: isSelectedServiceDeploymentStatusLoading,
+  } = useQuery({
+    queryKey: REACT_QUERY_KEYS.SERVICE_DEPLOYMENT_STATUS_KEY(
+      selectedServiceConfigId,
+    ),
+    queryFn: () =>
+      ServicesService.getDeployment(selectedServiceConfigId as string),
+    enabled: !!selectedServiceConfigId,
+    refetchInterval: FIVE_SECONDS_INTERVAL,
+  });
+
+  const [selectedServiceStatusOverride, setSelectedServiceStatusOverride] =
+    useState<Maybe<MiddlewareDeploymentStatus>>();
+
+  const selectedService = useMemo<Service | undefined>(() => {
+    if (!services) return;
+
+    return services.find(
+      (service) => service.service_config_id === selectedServiceConfigId,
+    );
+  }, [selectedServiceConfigId, services]);
+
+  const selectedServiceWithStatus = useMemo<Service | undefined>(() => {
+    if (!selectedService) return;
+    return {
+      ...selectedService,
+      deploymentStatus:
+        selectedServiceStatusOverride ?? selectedServiceStatus?.status,
+    };
+  }, [
+    selectedService,
+    selectedServiceStatus?.status,
+    selectedServiceStatusOverride,
+  ]);
+
+  const updateAgentType = useCallback(
+    (agentType: AgentType) => {
+      store?.set?.('lastSelectedAgentType', agentType);
+    },
+    [store],
   );
 
-  const updateServicesState = useCallback(
-    async (): Promise<void> =>
-      ServicesService.getServices()
-        .then((data: Service[]) => {
-          if (!Array.isArray(data)) return;
-          setServices(data);
-          setHasInitialLoaded(true);
-        })
-        .catch((e) => {
-          console.error(e);
-          // message.error(e.message); Commented out to avoid showing error message; need to handle "isAuthenticated" in a better way
-        }),
-    [],
-  );
+  const selectedAgentConfig = useMemo(() => {
+    const config: Maybe<AgentConfig> = AGENT_CONFIG[selectedAgentType];
 
-  const updateServiceStatus = useCallback(async () => {
-    if (!services?.[0]) return;
-    const serviceStatus = await ServicesService.getDeployment(services[0].hash);
-    setServiceStatus(serviceStatus.status);
-  }, [services]);
+    if (!config) {
+      throw new Error(`Agent config not found for ${selectedAgentType}`);
+    }
+    return config;
+  }, [selectedAgentType]);
 
-  // Update service state
-  useInterval(
-    () =>
-      updateServicesState()
-        .then(() => updateServiceStatus())
-        .catch((e) => message.error(e.message)),
-    isOnline && !isPaused ? FIVE_SECONDS_INTERVAL : null,
-  );
+  const serviceWallets: Optional<AgentWallets> = useMemo(() => {
+    if (isServicesLoading) return;
+    if (isNilOrEmpty(services)) return [];
+
+    return services.reduce<AgentWallets>(
+      (acc, service: MiddlewareServiceResponse) => {
+        return [
+          ...acc,
+          ...Object.keys(service.chain_configs).reduce(
+            (acc: AgentWallets, middlewareChain: string) => {
+              const chainConfig =
+                service.chain_configs[middlewareChain as MiddlewareChain];
+
+              if (!chainConfig) return acc;
+
+              const instances = chainConfig.chain_data.instances;
+              const multisig = chainConfig.chain_data.multisig;
+
+              if (instances) {
+                acc.push(
+                  ...instances.map(
+                    (instance: string) =>
+                      ({
+                        address: instance,
+                        type: WalletType.EOA,
+                        owner: WalletOwnerType.Agent,
+                      }) as AgentEoa,
+                  ),
+                );
+              }
+
+              if (multisig) {
+                acc.push({
+                  address: multisig,
+                  type: WalletType.Safe,
+                  owner: WalletOwnerType.Agent,
+                  evmChainId: asEvmChainId(middlewareChain),
+                } as AgentSafe);
+              }
+
+              return acc;
+            },
+            [],
+          ),
+        ];
+      },
+      [],
+    );
+  }, [isServicesLoading, services]);
+
+  /**
+   * Select the first service by default
+   */
+  useEffect(() => {
+    if (!selectedAgentConfig) return;
+    if (isSelectedServiceDeploymentStatusLoading) return;
+    if (isNilOrEmpty(services)) return;
+
+    const currentService = services.find(
+      ({ home_chain }) =>
+        home_chain === selectedAgentConfig.middlewareHomeChainId,
+    );
+    if (!currentService) {
+      setSelectedServiceConfigId(null);
+      return;
+    }
+
+    setSelectedServiceConfigId(currentService.service_config_id);
+  }, [
+    isSelectedServiceDeploymentStatusLoading,
+    selectedServiceConfigId,
+    services,
+    selectedAgentConfig,
+  ]);
 
   return (
     <ServicesContext.Provider
       value={{
         services,
-        serviceAddresses,
-        setServices,
-        updateServicesState,
-        updateServiceStatus,
-        hasInitialLoaded,
-        serviceStatus,
-        setServiceStatus,
-        setHasInitialLoaded,
-        setIsPaused,
+        serviceWallets,
+        isFetched: !isServicesLoading,
+        isLoading: isServicesLoading,
+        refetch,
+
+        // pause
+        paused,
+        setPaused,
+        togglePaused,
+
+        // selected service info
+        selectedService: selectedServiceWithStatus,
+        selectedServiceStatusOverride,
+        isSelectedServiceDeploymentStatusLoading,
+        selectedAgentConfig,
+        selectedAgentType,
+
+        // others
+        updateAgentType,
+        overrideSelectedServiceStatus: (
+          status: Maybe<MiddlewareDeploymentStatus>,
+        ) => {
+          setSelectedServiceStatusOverride(status);
+        },
       }}
     >
       {children}

@@ -3,23 +3,25 @@ import { useMemo } from 'react';
 
 import { InfoBreakdownList } from '@/components/InfoBreakdown';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useStakingContractContext } from '@/hooks/useStakingContractInfo';
+import { useStakingContractContext } from '@/hooks/useStakingContractDetails';
 
 export const StakingContractDetails = ({
   stakingProgramId,
 }: {
   stakingProgramId: StakingProgramId;
 }) => {
-  const { stakingContractInfoRecord, isStakingContractInfoRecordLoaded } =
-    useStakingContractContext();
+  const {
+    allStakingContractDetailsRecord,
+    isAllStakingContractDetailsRecordLoaded,
+  } = useStakingContractContext();
 
   const list = useMemo(() => {
-    if (!isStakingContractInfoRecordLoaded) return;
-    if (!stakingContractInfoRecord) return;
+    if (!isAllStakingContractDetailsRecordLoaded) return;
+    if (!allStakingContractDetailsRecord) return;
     if (!stakingProgramId) return;
-    if (!stakingContractInfoRecord?.[stakingProgramId]) return;
+    if (!allStakingContractDetailsRecord?.[stakingProgramId]) return;
 
-    const details = stakingContractInfoRecord[stakingProgramId];
+    const details = allStakingContractDetailsRecord[stakingProgramId];
 
     return [
       {
@@ -41,16 +43,26 @@ export const StakingContractDetails = ({
       },
     ];
   }, [
-    isStakingContractInfoRecordLoaded,
-    stakingContractInfoRecord,
+    isAllStakingContractDetailsRecordLoaded,
+    allStakingContractDetailsRecord,
     stakingProgramId,
   ]);
 
-  if (!isStakingContractInfoRecordLoaded) {
+  if (!isAllStakingContractDetailsRecordLoaded) {
     return <Skeleton active />;
   }
 
-  if (!stakingContractInfoRecord || !list || list.length === 0) {
+  if (!allStakingContractDetailsRecord || !list || list.length === 0) {
+    return (
+      <Alert
+        message="No staking information available."
+        type="error"
+        showIcon
+      />
+    );
+  }
+
+  if (!list || list.length === 0) {
     return (
       <Alert
         message="No staking information available."

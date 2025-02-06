@@ -30,7 +30,6 @@ from pathlib import Path
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
-from autonomy.chain.base import registry_contracts
 from clea import group, params, run
 from compose.project import ProjectError
 from docker.errors import APIError
@@ -44,11 +43,9 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE, SERVICES
-from operate.ledger import get_ledger_type_from_chain_type
-from operate.ledger.profiles import OLAS
-from operate.operate_types import ChainType, DeploymentStatus
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
+from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.services.health_checker import HealthChecker
-from operate.utils.gnosis import drain_signer, transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -61,10 +58,10 @@ USER_NOT_LOGGED_IN_ERROR = JSONResponse(
 )
 
 
-def service_not_found_error(service: str) -> JSONResponse:
+def service_not_found_error(service_config_id: str) -> JSONResponse:
     """Service not found error response"""
     return JSONResponse(
-        content={"error": f"Service {service} not found"}, status_code=404
+        content={"error": f"Service {service_config_id} not found"}, status_code=404
     )
 
 
@@ -156,8 +153,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
-        logger.warning("healthchecker is off!!!")
+        logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
+
+    operate.service_manager().log_directories()
+    logger.info("Migrating service configs...")
+    operate.service_manager().migrate_service_configs()
+    logger.info("Migrating service configs done.")
+    operate.service_manager().log_directories()
+
+    logger.info("Migrating wallet configs...")
+    operate.wallet_manager.migrate_wallet_configs()
+    logger.info("Migrating wallet configs done.")
+
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails
@@ -179,39 +187,39 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return res
 
     def schedule_funding_job(
-        service: str,
+        service_config_id: str,
         from_safe: bool = True,
     ) -> None:
         """Schedule a funding job."""
-        logger.info(f"Starting funding job for {service}")
-        if service in funding_jobs:
-            logger.info(f"Cancelling existing funding job for {service}")
-            cancel_funding_job(service=service)
+        logger.info(f"Starting funding job for {service_config_id}")
+        if service_config_id in funding_jobs:
+            logger.info(f"Cancelling existing funding job for {service_config_id}")
+            cancel_funding_job(service_config_id=service_config_id)
 
         loop = asyncio.get_running_loop()
-        funding_jobs[service] = loop.create_task(
+        funding_jobs[service_config_id] = loop.create_task(
             operate.service_manager().funding_job(
-                hash=service,
+                service_config_id=service_config_id,
                 loop=loop,
                 from_safe=from_safe,
             )
         )
 
     def schedule_healthcheck_job(
-        service: str,
+        service_config_id: str,
     ) -> None:
         """Schedule a healthcheck job."""
         if not HEALTH_CHECKER_OFF:
             # dont start health checker if it's switched off
-            health_checker.start_for_service(service)
+            health_checker.start_for_service(service_config_id)
 
-    def cancel_funding_job(service: str) -> None:
+    def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
-        if service not in funding_jobs:
+        if service_config_id not in funding_jobs:
             return
-        status = funding_jobs[service].cancel()
+        status = funding_jobs[service_config_id].cancel()
         if not status:
-            logger.info(f"Funding job cancellation for {service} failed")
+            logger.info(f"Funding job cancellation for {service_config_id} failed")
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
@@ -219,19 +227,28 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
-        service_hashes = [i["hash"] for i in operate.service_manager().json]
+        service_config_ids = [
+            i["service_config_id"] for i in operate.service_manager().json
+        ]
 
-        for service in service_hashes:
-            if not operate.service_manager().exists(service=service):
+        for service_config_id in service_config_ids:
+            logger.info(f"Stopping service {service_config_id=}")
+            if not operate.service_manager().exists(
+                service_config_id=service_config_id
+            ):
                 continue
-            deployment = operate.service_manager().load_or_create(service).deployment
+            deployment = (
+                operate.service_manager()
+                .load(service_config_id=service_config_id)
+                .deployment
+            )
             if deployment.status == DeploymentStatus.DELETED:
                 continue
-            logger.info(f"stopping service {service}")
+            logger.info(f"stopping service {service_config_id}")
             deployment.stop(force=True)
-            logger.info(f"Cancelling funding job for {service}")
-            cancel_funding_job(service=service)
-            health_checker.stop_for_service(service=service)
+            logger.info(f"Cancelling funding job for {service_config_id}")
+            cancel_funding_job(service_config_id=service_config_id)
+            health_checker.stop_for_service(service_config_id=service_config_id)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
         logger.info("Stopping services on exit...")
@@ -249,7 +266,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     )
 
     def with_retries(f: t.Callable) -> t.Callable:
@@ -297,12 +314,23 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         await asyncio.sleep(0.3)
         return {"stopped": True}
 
+    @app.post("/api/v2/services/stop")
     @app.get("/stop_all_services")
     async def _stop_all_services(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
-        logger.info("Stopping services on demand...")
-        pause_all_services()
-        logger.info("Stopping services on demand done.")
+
+        # No authentication required to stop services.
+
+        try:
+            logger.info("Stopping services on demand...")
+            pause_all_services()
+            logger.info("Stopping services on demand done.")
+            return JSONResponse(content={"message": "Services stopped."})
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=500,
+            )
 
     @app.get("/api")
     @with_retries
@@ -391,9 +419,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_wallet_by_chain(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        ledger_type = get_ledger_type_from_chain_type(
-            chain=ChainType.from_string(request.path_params["chain"])
-        )
+        ledger_type = Chain.from_string(request.path_params["chain"]).ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -421,8 +447,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        ledger_type = LedgerType(data["ledger_type"])
         manager = operate.wallet_manager
         if manager.exists(ledger_type=ledger_type):
             return JSONResponse(
@@ -434,31 +459,46 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         wallet, mnemonic = manager.create(ledger_type=ledger_type)
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
 
+    @app.get("/api/extended/wallet")
+    @with_retries
+    async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
+        """Get wallets."""
+        wallets = []
+        for wallet in operate.wallet_manager:
+            wallets.append(wallet.extended_json)
+        return JSONResponse(content=wallets)
+
     @app.get("/api/wallet/safe")
     @with_retries
     async def _get_safes(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        safes = []
+        all_safes = []
         for wallet in operate.wallet_manager:
-            safes.append({wallet.ledger_type: wallet.safe})
-        return JSONResponse(content=safes)
+            safes = []
+            if wallet.safes is not None:
+                safes = list(wallet.safes.values())
+            all_safes.append({wallet.ledger_type: safes})
+        return JSONResponse(content=all_safes)
 
     @app.get("/api/wallet/safe/{chain}")
     @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
-        ledger_type = get_ledger_type_from_chain_type(
-            chain=ChainType.from_string(request.path_params["chain"])
-        )
+        chain = Chain.from_string(request.path_params["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
                 content={"error": "Wallet does not exist"},
                 status_code=404,
             )
+        safes = manager.load(ledger_type=ledger_type).safes
+        if safes is None or safes.get(chain) is None:
+            return JSONResponse(content={"error": "No safes found"})
+
         return JSONResponse(
             content={
-                "safe": manager.load(ledger_type=ledger_type).safe,
+                "safe": safes[chain],
             },
         )
 
@@ -479,38 +519,46 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chain = Chain(data["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(content={"error": "Wallet does not exist"})
 
         wallet = manager.load(ledger_type=ledger_type)
-        if wallet.safe is not None:
+        if wallet.safes is not None and wallet.safes.get(chain) is not None:
             return JSONResponse(
-                content={"safe": wallet.safe, "message": "Safe already exists!"}
+                content={
+                    "safe": wallet.safes.get(chain),
+                    "message": f"Safe already exists {chain=}.",
+                }
             )
 
-        ledger_api = wallet.ledger_api(chain_type=chain_type)
+        ledger_api = wallet.ledger_api(chain=chain)
+        safes = t.cast(t.Dict[Chain, str], wallet.safes)
+
+        backup_owner = data.get("backup_owner")
+        if backup_owner:
+            backup_owner = ledger_api.api.to_checksum_address(backup_owner)
+
         wallet.create_safe(  # pylint: disable=no-member
-            chain_type=chain_type,
-            backup_owner=ledger_api.api.to_checksum_address(
-                data.get("backup_owner", data.get("owner"))
-            ),  # TODO: 'owner' kept for backwards compatibility
+            chain=chain,
+            backup_owner=backup_owner,
         )
         wallet.transfer(
-            to=t.cast(str, wallet.safe),
-            amount=int(1e18),
-            chain_type=chain_type,
+            to=t.cast(str, safes.get(chain)),
+            amount=int(data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])),
+            chain=chain,
             from_safe=False,
         )
-        return JSONResponse(content={"safe": wallet.safe, "message": "Safe created!"})
+        return JSONResponse(
+            content={"safe": safes.get(chain), "message": "Safe created!"}
+        )
 
-    @app.put("/api/wallet/safe")
+    @app.post("/api/wallet/safes")
     @with_retries
-    async def _update_safe(request: Request) -> t.List[t.Dict]:
-        """Create wallet safe"""
-        # TODO: Extract login check as decorator
+    async def _create_safes(request: Request) -> t.List[t.Dict]:
+        """Create wallet safes"""
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Cannot create safe; User account does not exist!"},
@@ -524,169 +572,286 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-        chain_type = ChainType(data["chain_type"])
-        ledger_type = get_ledger_type_from_chain_type(chain=chain_type)
+        chains = [Chain(chain_str) for chain_str in data["chains"]]
+        # check that all chains are supported
+        for chain in chains:
+            ledger_type = chain.ledger_type
+            manager = operate.wallet_manager
+            if not manager.exists(ledger_type=ledger_type):
+                return JSONResponse(
+                    content={
+                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
+                    }
+                )
+
+        # mint the safes
+        for chain in chains:
+            ledger_type = chain.ledger_type
+            manager = operate.wallet_manager
+
+            wallet = manager.load(ledger_type=ledger_type)
+            if wallet.safes is not None and wallet.safes.get(chain) is not None:
+                logger.info(f"Safe already exists for chain {chain}")
+                continue
+
+            safes = t.cast(t.Dict[Chain, str], wallet.safes)
+            wallet.create_safe(  # pylint: disable=no-member
+                chain=chain,
+                owner=data.get("backup_owner"),
+            )
+            wallet.transfer(
+                to=t.cast(str, safes.get(chain)),
+                amount=int(
+                    data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
+                ),
+                chain=chain,
+                from_safe=False,
+            )
+
+        return JSONResponse(content={"safes": safes, "message": "Safes created."})
+
+    @app.put("/api/wallet/safe")
+    @with_retries
+    async def _update_safe(request: Request) -> t.List[t.Dict]:
+        """Update wallet safe"""
+        # TODO: Extract login check as decorator
+        if operate.user_account is None:
+            return JSONResponse(
+                content={"error": "Cannot update safe; User account does not exist!"},
+                status_code=400,
+            )
+
+        if operate.password is None:
+            return JSONResponse(
+                content={"error": "You need to login before updating a safe."},
+                status_code=401,
+            )
+
+        data = await request.json()
+
+        if "chain" not in data:
+            return JSONResponse(
+                content={"error": "You need to specify a chain to updae a safe."},
+                status_code=401,
+            )
+
+        chain = Chain(data["chain"])
+        ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
-            return JSONResponse(content={"error": "Wallet does not exist"})
+            return JSONResponse(
+                content={"error": "Wallet does not exist"},
+                status_code=401,
+            )
 
         wallet = manager.load(ledger_type=ledger_type)
-        ledger_api = wallet.ledger_api(chain_type=chain_type)
-        wallet.update_backup_owner(
-            chain_type=chain_type,
-            backup_owner=ledger_api.api.to_checksum_address(
-                data.get("backup_owner", data.get("owner"))
-            ),  # TODO: 'owner' kept for backwards compatibility
-        )
-        return JSONResponse(content=wallet.json)
+        ledger_api = wallet.ledger_api(chain=chain)
 
-    @app.get("/api/services")
+        backup_owner = data.get("backup_owner")
+        if backup_owner:
+            backup_owner = ledger_api.api.to_checksum_address(backup_owner)
+
+        backup_owner_updated = wallet.update_backup_owner(
+            chain=chain,
+            backup_owner=backup_owner,  # Optional value, it's fine to provide 'None' (set no backup owner/remove backup owner)
+        )
+        message = (
+            "Backup owner updated."
+            if backup_owner_updated
+            else "No changes on backup owner. The backup owner provided matches the current one."
+        )
+        return JSONResponse(
+            content={
+                "wallet": wallet.json,
+                "chain": chain.value,
+                "backup_owner_updated": backup_owner_updated,
+                "message": message,
+            }
+        )
+
+    @app.get("/api/v2/services")
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
-        """Get available services."""
+        """Get all services."""
         return JSONResponse(content=operate.service_manager().json)
 
-    @app.post("/api/services")
+    @app.get("/api/v2/service/{service_config_id}")
     @with_retries
-    async def _create_services(request: Request) -> JSONResponse:
+    async def _get_service(request: Request) -> JSONResponse:
+        """Get a service."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+        return JSONResponse(
+            content=(
+                operate.service_manager()
+                .load(
+                    service_config_id=service_config_id,
+                )
+                .json
+            )
+        )
+
+    @app.get("/api/v2/service/{service_config_id}/deployment")
+    @with_retries
+    async def _get_service_deployment(request: Request) -> JSONResponse:
+        """Get a service deployment."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+        deployment_json = service.deployment.json
+        deployment_json["healthcheck"] = service.get_latest_healthcheck()
+        return JSONResponse(content=deployment_json)
+
+    @app.get("/api/v2/service/{service_config_id}/refill_requirements")
+    @with_retries
+    async def _get_refill_requirements(request: Request) -> JSONResponse:
+        """Get the service balances."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().refill_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
+    @app.post("/api/v2/service")
+    @with_retries
+    async def _create_services_v2(request: Request) -> JSONResponse:
         """Create a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
         manager = operate.service_manager()
-        if len(manager.json) > 0:
-            old_hash = manager.json[0]["hash"]
-            if old_hash == template["hash"]:
-                logger.info(f'Loading service {template["hash"]}')
-                service = manager.load_or_create(
-                    hash=template["hash"],
-                    service_template=template,
-                )
-            else:
-                logger.info(f"Updating service from {old_hash} to " + template["hash"])
-                service = manager.update_service(
-                    old_hash=old_hash,
-                    new_hash=template["hash"],
-                    service_template=template,
-                )
-        else:
-            logger.info(f'Creating service {template["hash"]}')
-            service = manager.load_or_create(
-                hash=template["hash"],
-                service_template=template,
-            )
+        output = manager.create(service_template=template)
 
-        if template.get("deploy", False):
+        return JSONResponse(content=output.json)
 
-            def _fn() -> None:
-                # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-                manager.deploy_service_onchain_from_safe(hash=service.hash)
-                manager.fund_service(hash=service.hash)
-                manager.deploy_service_locally(hash=service.hash)
-
-            await run_in_executor(_fn)
-            schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
-
-        return JSONResponse(
-            content=operate.service_manager().load_or_create(hash=service.hash).json
-        )
-
-    @app.put("/api/services")
+    @app.post("/api/v2/service/{service_config_id}")
     @with_retries
-    async def _update_services(request: Request) -> JSONResponse:
-        """Create a service."""
+    async def _deploy_and_run_service(request: Request) -> JSONResponse:
+        """Deploy a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
-        template = await request.json()
-        service = operate.service_manager().update_service(
-            old_hash=template["old_service_hash"],
-            new_hash=template["new_service_hash"],
-        )
-        if template.get("deploy", False):
-            manager = operate.service_manager()
 
+        pause_all_services()
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        def _fn() -> None:
             # deploy_service_onchain_from_safe includes stake_service_on_chain_from_safe
-            manager.deploy_service_onchain_from_safe(hash=service.hash)
-            manager.fund_service(hash=service.hash)
-            manager.deploy_service_locally(hash=service.hash)
-            schedule_funding_job(service=service.hash)
-            schedule_healthcheck_job(service=service.hash)
+            manager.deploy_service_onchain_from_safe(
+                service_config_id=service_config_id
+            )
+            manager.fund_service(service_config_id=service_config_id)
+            manager.deploy_service_locally(service_config_id=service_config_id)
 
-        return JSONResponse(content=service.json)
+        await run_in_executor(_fn)
+        schedule_funding_job(service_config_id=service_config_id)
+        schedule_healthcheck_job(service_config_id=service_config_id)
 
-    @app.get("/api/services/{service}")
-    @with_retries
-    async def _get_service(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
         return JSONResponse(
             content=(
-                operate.service_manager()
-                .load_or_create(
-                    hash=request.path_params["service"],
-                )
-                .json
+                operate.service_manager().load(service_config_id=service_config_id).json
             )
         )
 
-    # TODO this endpoint is possibly not used
-    @app.post("/api/services/{service}/onchain/deploy")
+    @app.put("/api/v2/service/{service_config_id}")
+    @app.patch("/api/v2/service/{service_config_id}")
     @with_retries
-    async def _deploy_service_onchain(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
+    async def _update_service(request: Request) -> JSONResponse:
+        """Update a service."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
-        operate.service_manager().deploy_service_onchain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().stake_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load_or_create(hash=request.path_params["service"])
-                .json
-            )
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        template = await request.json()
+        allow_different_service_public_id = template.get(
+            "allow_different_service_public_id", False
         )
 
-    @app.post("/api/services/{service}/onchain/stop")
+        if request.method == "PUT":
+            partial_update = False
+        else:
+            partial_update = True
+
+        logger.info(
+            f"_update_service {partial_update=} {allow_different_service_public_id=}"
+        )
+
+        output = manager.update(
+            service_config_id=service_config_id,
+            service_template=template,
+            allow_different_service_public_id=allow_different_service_public_id,
+            partial_update=partial_update,
+        )
+
+        return JSONResponse(content=output.json)
+
+    @app.put("/api/v2/services")
     @with_retries
-    async def _stop_service_onchain(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
+    async def _update_all_services(request: Request) -> JSONResponse:
+        """Update all services of matching the public id referenced in the hash."""
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
-        operate.service_manager().terminate_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().unbond_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        operate.service_manager().unstake_service_on_chain(
-            hash=request.path_params["service"]
-        )
-        return JSONResponse(
-            content=(
-                operate.service_manager()
-                .load_or_create(hash=request.path_params["service"])
-                .json
-            )
-        )
 
-    @app.post("/api/services/{service}/onchain/withdraw")
+        manager = operate.service_manager()
+        template = await request.json()
+        updated_services = manager.update_all_matching(service_template=template)
+
+        return JSONResponse(content=updated_services)
+
+    @app.post("/api/v2/service/{service_config_id}/deployment/stop")
+    @with_retries
+    async def _stop_service_locally(request: Request) -> JSONResponse:
+        """Stop a service deployment."""
+
+        # No authentication required to stop services.
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+        service.remove_latest_healthcheck()
+        deployment = service.deployment
+        health_checker.stop_for_service(service_config_id=service_config_id)
+
+        await run_in_executor(deployment.stop)
+        logger.info(f"Cancelling funding job for {service_config_id}")
+        cancel_funding_job(service_config_id=service_config_id)
+        return JSONResponse(content=deployment.json)
+
+    @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
     @with_retries
     async def _withdraw_onchain(request: Request) -> JSONResponse:
         """Withdraw all the funds from a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
+
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
 
         withdrawal_address = (await request.json()).get("withdrawal_address")
         if withdrawal_address is None:
@@ -696,68 +861,41 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
-            service_manager = operate.service_manager()
-            service = service_manager.load_or_create(
-                hash=request.path_params["service"]
-            )
+            pause_all_services()
+            service = service_manager.load(service_config_id=service_config_id)
 
-            chain_config = service.chain_configs[service.home_chain_id]
-            ledger_config = chain_config.ledger_config
+            # terminate the service on chain
+            for chain in service.chain_configs:
+                service_manager.terminate_service_on_chain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    withdrawal_address=withdrawal_address,
+                )
+
+            # drain the master safe and master signer for the home chain
+            chain = Chain(service.home_chain)
             master_wallet = service_manager.wallet_manager.load(
-                ledger_type=ledger_config.type
+                ledger_type=chain.ledger_type
             )
-            ledger_api = master_wallet.ledger_api(
-                chain_type=ledger_config.chain, rpc=ledger_config.rpc
-            )
-            withdrawal_address = ledger_api.api.to_checksum_address(withdrawal_address)
 
-            service_manager.terminate_service_on_chain_from_safe(
-                hash=request.path_params["service"],
-                chain_id=service.home_chain_id,
+            # drain the master safe
+            logger.info(
+                f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
+            )
+            master_wallet.drain(
                 withdrawal_address=withdrawal_address,
+                chain=chain,
+                from_safe=True,
             )
 
-            # drain OLAS from the master safe
-            token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ledger_api,
-                contract_address=OLAS[ledger_config.chain],
+            # drain the master signer
+            logger.info(
+                f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
             )
-            balance = token_instance.functions.balanceOf(master_wallet.safe).call()
-            if balance == 0:
-                logger.info(f"No OLAS to drain from master safe: {master_wallet.safe}")
-            else:
-                logger.info(
-                    f"Draining {balance} OLAS out of master safe: {master_wallet.safe}"
-                )
-                transfer_erc20_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=master_wallet.crypto,
-                    safe=t.cast(str, master_wallet.safe),
-                    token=OLAS[ledger_config.chain],
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-
-            # drain xDAI from the master safe
-            balance = ledger_api.get_balance(master_wallet.safe)
-            if balance == 0:
-                logger.info(f"No xDAI to drain from master safe: {master_wallet.safe}")
-            else:
-                logger.info(
-                    f"Draining {balance} xDAI out of master safe: {master_wallet.safe}"
-                )
-                master_wallet.transfer(
-                    to=withdrawal_address,
-                    amount=balance,
-                    chain_type=ledger_config.chain,
-                )
-
-            # drain xDAI from the master signer
-            drain_signer(
-                ledger_api=ledger_api,
-                crypto=master_wallet.crypto,
+            master_wallet.drain(
                 withdrawal_address=withdrawal_address,
-                chain_id=ledger_config.chain.id,
+                chain=chain,
+                from_safe=False,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(traceback.format_exc())
@@ -767,93 +905,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         return JSONResponse(content={"error": None})
-
-    @app.get("/api/services/{service}/deployment")
-    @with_retries
-    async def _get_service_deployment(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        return JSONResponse(
-            content=operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment.json
-        )
-
-    @app.post("/api/services/{service}/deployment/build")
-    @with_retries
-    async def _build_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        # TODO: add support for chain id.
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        deployment = (
-            operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment
-        )
-
-        def _fn() -> None:
-            deployment.build(force=True)
-
-        await run_in_executor(_fn)
-        return JSONResponse(content=deployment.json)
-
-    @app.post("/api/services/{service}/deployment/start")
-    @with_retries
-    async def _start_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        service = request.path_params["service"]
-        manager = operate.service_manager()
-
-        def _fn() -> None:
-            manager.deploy_service_onchain(hash=service)
-            manager.stake_service_on_chain(hash=service)
-            manager.fund_service(hash=service)
-            manager.deploy_service_locally(hash=service, force=True)
-
-        await run_in_executor(_fn)
-        schedule_funding_job(service=service)
-        schedule_healthcheck_job(service=service.hash)
-        return JSONResponse(content=manager.load_or_create(service).deployment)
-
-    @app.post("/api/services/{service}/deployment/stop")
-    @with_retries
-    async def _stop_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        service = request.path_params["service"]
-        deployment = operate.service_manager().load_or_create(service).deployment
-        health_checker.stop_for_service(service=service)
-
-        await run_in_executor(deployment.stop)
-        logger.info(f"Cancelling funding job for {service}")
-        cancel_funding_job(service=service)
-        return JSONResponse(content=deployment.json)
-
-    @app.post("/api/services/{service}/deployment/delete")
-    @with_retries
-    async def _delete_service_locally(request: Request) -> JSONResponse:
-        """Create a service."""
-        if not operate.service_manager().exists(service=request.path_params["service"]):
-            return service_not_found_error(service=request.path_params["service"])
-        # TODO: Drain safe before deleting service
-        deployment = (
-            operate.service_manager()
-            .load_or_create(
-                request.path_params["service"],
-            )
-            .deployment
-        )
-        deployment.delete()
-        return JSONResponse(content=deployment.json)
 
     return app
 
@@ -872,7 +923,6 @@ def _daemon(
     ] = None,
 ) -> None:
     """Launch operate daemon."""
-
     app = create_app(home=home)
 
     server = Server(

@@ -33,12 +33,17 @@ const main = async () => {
       win: {
         publish: publishOptions,
         icon: 'electron/assets/icons/splash-robot-head-dock.png',
+        signtoolOptions: { sign: "./customSign.js", },
       },
       extraResources: [
         {
           from: 'electron/bins',
           to: 'bins',
           filter: ['**/*'],
+        },
+        {
+          from: '.env',
+          to: '.env'
         },
       ],
 

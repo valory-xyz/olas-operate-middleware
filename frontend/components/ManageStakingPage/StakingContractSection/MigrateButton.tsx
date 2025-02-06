@@ -1,94 +1,86 @@
-import { Button, Flex, Popover, Typography } from 'antd';
+import { Button, Popover } from 'antd';
 import { isNil } from 'lodash';
 import { useMemo } from 'react';
 
-import { DeploymentStatus } from '@/client';
-import { POPOVER_WIDTH_LARGE } from '@/constants/width';
-import { Pages } from '@/enums/PageState';
+import { MiddlewareDeploymentStatus, ServiceTemplate } from '@/client';
+import { SERVICE_TEMPLATES } from '@/constants/serviceTemplates';
+import { Pages } from '@/enums/Pages';
 import { StakingProgramId } from '@/enums/StakingProgram';
-import { useBalance } from '@/hooks/useBalance';
+import { useBalanceContext } from '@/hooks/useBalanceContext';
 import { useModals } from '@/hooks/useModals';
 import { usePageState } from '@/hooks/usePageState';
 import { useServices } from '@/hooks/useServices';
-import { useServiceTemplates } from '@/hooks/useServiceTemplates';
-import { useStakingContractCountdown } from '@/hooks/useStakingContractCountdown';
 import {
-  useActiveStakingContractInfo,
-  useStakingContractInfo,
-} from '@/hooks/useStakingContractInfo';
+  useActiveStakingContractDetails,
+  useStakingContractDetails,
+} from '@/hooks/useStakingContractDetails';
 import { useStakingProgram } from '@/hooks/useStakingProgram';
 import { ServicesService } from '@/service/Services';
-import { StakingContractInfo } from '@/types/Autonolas';
+import { DeepPartial } from '@/types/Util';
 
+import { CountdownUntilMigration } from './CountdownUntilMigration';
 import { CantMigrateReason, useMigrate } from './useMigrate';
-
-const { Text } = Typography;
-
-export const CountdownUntilMigration = ({
-  currentStakingContractInfo,
-}: {
-  currentStakingContractInfo: Partial<StakingContractInfo>;
-}) => {
-  const countdownDisplay = useStakingContractCountdown(
-    currentStakingContractInfo,
-  );
-
-  return (
-    <Flex vertical gap={1} style={{ maxWidth: POPOVER_WIDTH_LARGE }}>
-      <Text strong>Can&apos;t switch because you unstaked too recently.</Text>
-      <Text>This may be because your agent was suspended.</Text>
-      <Text>Keep running your agent and you&apos;ll be able to switch in</Text>
-      <Text>{countdownDisplay}</Text>
-    </Flex>
-  );
-};
 
 type MigrateButtonProps = {
   stakingProgramId: StakingProgramId;
 };
-export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
+export const MigrateButton = ({
+  stakingProgramId: stakingProgramIdToMigrateTo,
+}: MigrateButtonProps) => {
   const { goto } = usePageState();
-  const { serviceTemplate } = useServiceTemplates();
   const {
-    setIsServicePollingPaused,
-    setServiceStatus,
-    updateServiceStatus,
-    hasInitialLoaded: isServicesLoaded,
-    service,
+    setPaused: setIsServicePollingPaused,
+    isFetched: isServicesLoaded,
+    selectedService,
+    selectedAgentType,
+    overrideSelectedServiceStatus,
   } = useServices();
+  const serviceConfigId =
+    isServicesLoaded && selectedService
+      ? selectedService.service_config_id
+      : '';
+  const serviceTemplate = useMemo<ServiceTemplate | undefined>(
+    () =>
+      SERVICE_TEMPLATES.find(
+        (template) => template.agentType === selectedAgentType,
+      ),
+    [selectedAgentType],
+  );
+
+  const { setIsPaused: setIsBalancePollingPaused } = useBalanceContext();
 
   const { defaultStakingProgramId, setDefaultStakingProgramId } =
     useStakingProgram();
-
-  const { setIsPaused: setIsBalancePollingPaused } = useBalance();
-  const { updateActiveStakingProgramId } = useStakingProgram();
-
-  const { activeStakingContractInfo, isActiveStakingContractInfoLoaded } =
-    useActiveStakingContractInfo();
+  const {
+    selectedStakingContractDetails,
+    isSelectedStakingContractDetailsLoading,
+  } = useActiveStakingContractDetails();
   const { stakingContractInfo: defaultStakingContractInfo } =
-    useStakingContractInfo(defaultStakingProgramId);
+    useStakingContractDetails(defaultStakingProgramId);
 
   const currentStakingContractInfo = useMemo(() => {
-    if (!isActiveStakingContractInfoLoaded) return;
-    if (activeStakingContractInfo) return activeStakingContractInfo;
+    if (isSelectedStakingContractDetailsLoading) return;
+    if (selectedStakingContractDetails) return selectedStakingContractDetails;
     return defaultStakingContractInfo;
   }, [
-    activeStakingContractInfo,
+    selectedStakingContractDetails,
     defaultStakingContractInfo,
-    isActiveStakingContractInfoLoaded,
+    isSelectedStakingContractDetailsLoading,
   ]);
 
   const { setMigrationModalOpen } = useModals();
 
-  const { migrateValidation, firstDeployValidation } =
-    useMigrate(stakingProgramId);
+  const { migrateValidation, firstDeployValidation } = useMigrate(
+    stakingProgramIdToMigrateTo,
+  );
 
   // if false, user is migrating, not running for first time
   const isFirstDeploy = useMemo(() => {
     if (!isServicesLoaded) return false;
-    if (service) return false;
+    if (selectedService) return false;
+
     return true;
-  }, [isServicesLoaded, service]);
+  }, [isServicesLoaded, selectedService]);
 
   const validation = isFirstDeploy ? firstDeployValidation : migrateValidation;
 
@@ -116,31 +108,66 @@ export const MigrateButton = ({ stakingProgramId }: MigrateButtonProps) => {
         size="large"
         disabled={!validation.canMigrate}
         onClick={async () => {
+          if (!serviceTemplate) return;
+
           setIsServicePollingPaused(true);
           setIsBalancePollingPaused(true);
-          setDefaultStakingProgramId(stakingProgramId);
+          setDefaultStakingProgramId(stakingProgramIdToMigrateTo);
+
+          // TODO: we should not get the default staking program id
+          // from the context, we should get it from the service
+          // setDefaultStakingProgramId(stakingProgramId);
 
           try {
-            setServiceStatus(DeploymentStatus.DEPLOYING);
+            overrideSelectedServiceStatus(MiddlewareDeploymentStatus.DEPLOYING);
             goto(Pages.Main);
 
-            await ServicesService.createService({
-              stakingProgramId,
-              serviceTemplate,
-              deploy: true,
-              useMechMarketplace:
-                stakingProgramId === StakingProgramId.BetaMechMarketplace,
-            });
+            if (selectedService) {
+              // update service
+              await ServicesService.updateService({
+                serviceConfigId,
+                partialServiceTemplate: {
+                  configurations: {
+                    ...Object.entries(serviceTemplate.configurations).reduce(
+                      (acc, [middlewareChain]) => {
+                        acc[middlewareChain] = {
+                          staking_program_id: stakingProgramIdToMigrateTo,
+                          use_mech_marketplace:
+                            stakingProgramIdToMigrateTo ===
+                            StakingProgramId.PearlBetaMechMarketplace,
+                        };
+                        return acc;
+                      },
+                      {} as DeepPartial<typeof serviceTemplate.configurations>,
+                    ),
+                  },
+                },
+              });
+            } else {
+              // create service if it doesn't exist
 
-            await updateActiveStakingProgramId();
+              const serviceConfigParams = {
+                stakingProgramId: stakingProgramIdToMigrateTo,
+                serviceTemplate,
+                deploy: true,
+                useMechMarketplace:
+                  stakingProgramIdToMigrateTo ===
+                  StakingProgramId.PearlBetaMechMarketplace,
+              };
+
+              await ServicesService.createService(serviceConfigParams);
+            }
+
+            // start service after updating or creating
+            await ServicesService.startService(serviceConfigId);
 
             setMigrationModalOpen(true);
           } catch (error) {
             console.error(error);
           } finally {
+            overrideSelectedServiceStatus(null);
             setIsServicePollingPaused(false);
             setIsBalancePollingPaused(false);
-            updateServiceStatus();
           }
         }}
       >

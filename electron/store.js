@@ -1,27 +1,74 @@
 const Store = require('electron-store');
-// set schema to validate store data
+
+const defaultInitialAgentSettings = {
+  isInitialFunded: false,
+};
+
+// Schema for validating store data
 const schema = {
-  isInitialFunded: { type: 'boolean', default: false }, // TODO: reconsider this default, can be problematic if user has already funded prior to implementation
+  // Global settings
+  environmentName: { type: 'string', default: '' },
+  lastSelectedAgentType: { type: 'string', default: 'trader' },
+
+  // First time user settings
   firstStakingRewardAchieved: { type: 'boolean', default: false },
   firstRewardNotificationShown: { type: 'boolean', default: false },
   agentEvictionAlertShown: { type: 'boolean', default: false },
 
-  environmentName: { type: 'string', default: '' },
-  currentStakingProgram: { type: 'string', default: '' },
+  // Each agent has its own settings
+  trader: { type: 'object', default: defaultInitialAgentSettings },
+  memeooorr: { type: 'object', default: defaultInitialAgentSettings },
+  modius: { type: 'object', default: defaultInitialAgentSettings },
+  agentsFunCelo: { type: 'object', default: defaultInitialAgentSettings },
 };
 
 /**
  * Sets up the IPC communication and initializes the Electron store with default values and schema.
  * @param {Electron.IpcMain} ipcMain - The IPC channel for communication.
  * @param {Electron.BrowserWindow} mainWindow - The main Electron browser window.
- * @returns {Promise<void>} - A promise that resolves once the store is set up.
  */
-const setupStoreIpc = async (ipcMain, mainWindow) => {
+const setupStoreIpc = (ipcMain, mainWindow) => {
   const store = new Store({ schema });
 
+  /**
+   * agent: trader Migration
+   *
+   * Initially the store was setup with only trader agent settings.
+   * The following code migrates the old store to the new store schema.
+   */
+  const traderAgent = store.get('trader') || {};
+
+  if (store.has('isInitialFunded')) {
+    store.set('trader', {
+      ...traderAgent,
+      isInitialFunded: store.get('isInitialFunded') || false,
+    });
+    store.delete('isInitialFunded');
+  } else if (store.has('isInitialFunded_trader')) {
+    store.set('trader', {
+      ...traderAgent,
+      isInitialFunded: store.get('isInitialFunded_trader') || false,
+    });
+    store.delete('isInitialFunded_trader');
+  }
+
+  /**
+   * agent: memeooorr Migration
+   */
+  if (store.has('isInitialFunded_memeooorr')) {
+    const memeooorrAgent = store.get('memeooorr') || {};
+    store.set('memeooorr', {
+      ...memeooorrAgent,
+      isInitialFunded: store.get('isInitialFunded_memeooorr') || false,
+    });
+    store.delete('isInitialFunded_memeooorr');
+  }
+
+  // Notify renderer process when store changes
   store.onDidAnyChange((data) => {
-    if (mainWindow?.webContents)
+    if (mainWindow?.webContents) {
       mainWindow.webContents.send('store-changed', data);
+    }
   });
 
   // exposed to electron browser window

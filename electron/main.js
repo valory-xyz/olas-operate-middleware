@@ -1,3 +1,4 @@
+require('dotenv').config();
 const {
   app,
   BrowserWindow,
@@ -24,6 +25,31 @@ const { setupStoreIpc } = require('./store');
 const { logger } = require('./logger');
 const { isDev } = require('./constants');
 const { PearlTray } = require('./components/PearlTray');
+const { Scraper } = require('agent-twitter-client');
+
+// Validates environment variables required for Pearl
+// kills the app/process if required environment variables are unavailable
+// mostly RPC URLs and NODE_ENV
+// TODO: only reintroduce once refactor completed
+// validateEnv();
+
+// Add devtools extension in Dev mode
+if (isDev) {
+  const {
+    default: installExtension,
+    REACT_DEVELOPER_TOOLS,
+  } = require('electron-devtools-installer');
+  app.whenReady().then(() => {
+    installExtension([REACT_DEVELOPER_TOOLS], {
+      loadExtensionOptions: { allowFileAccess: true },
+      forceDownload: false,
+    })
+      .then(([react]) => console.log(`Added Extensions: ${react.name}`))
+      .catch((e) =>
+        console.log('An error occurred on loading extensions: ', e),
+      );
+  });
+}
 
 // Attempt to acquire the single instance lock
 const singleInstanceLock = app.requestSingleInstanceLock();
@@ -92,12 +118,9 @@ const getActiveWindow = () => splashWindow ?? mainWindow;
 function showNotification(title, body) {
   new Notification({ title, body }).show();
 }
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 function setAppAutostart(is_set) {
-  logger.electron("Set app autostart: " + is_set);
+  logger.electron('Set app autostart: ' + is_set);
   app.setLoginItemSettings({ openAtLogin: is_set });
 }
 
@@ -107,7 +130,7 @@ function handleAppSettings() {
   try {
     if (!fs.existsSync(app_settings_file)) {
       logger.electron('Create app settings file');
-      let obj = { "app_auto_start": true };
+      let obj = { app_auto_start: true };
       fs.writeFileSync(app_settings_file, JSON.stringify(obj));
     }
     let data = JSON.parse(fs.readFileSync(app_settings_file));
@@ -118,46 +141,44 @@ function handleAppSettings() {
   }
 }
 
-
 let isBeforeQuitting = false;
 let appRealClose = false;
 
 async function beforeQuit(event) {
-  if ((typeof event.preventDefault === 'function') && !appRealClose) {
+  if (typeof event.preventDefault === 'function' && !appRealClose) {
     event.preventDefault();
     logger.electron('onquit event.preventDefault');
   }
 
-
   if (isBeforeQuitting) return;
   isBeforeQuitting = true;
-
 
   // destroy all ui components for immediate feedback
   tray?.destroy();
   splashWindow?.destroy();
   mainWindow?.destroy();
 
-
-  logger.electron("Stop backend gracefully:");
+  logger.electron('Stop backend gracefully:');
   try {
-    logger.electron(`Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
     logger.electron(
-      'Killed backend server by shutdown endpoint!'
+      `Killing backend server by shutdown endpoint: http://localhost:${appConfig.ports.prod.operate}/shutdown`,
     );
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron('Killed backend server by shutdown endpoint!');
     logger.electron(
-      'Killed backend server by shutdown endpoint! result:' + JSON.stringify(result)
+      'Killed backend server by shutdown endpoint! result:' +
+        JSON.stringify(result),
     );
   } catch (err) {
     logger.electron('Backend stopped with error!');
-    logger.electron('Backend stopped with error, result: ' + JSON.stringify(err));
+    logger.electron(
+      'Backend stopped with error, result: ' + JSON.stringify(err),
+    );
   }
 
-
-
   if (operateDaemon || operateDaemonPid) {
-
     // clean-up via pid first*
     // may have dangling subprocesses
     try {
@@ -200,16 +221,16 @@ async function beforeQuit(event) {
 
   if (nextApp) {
     // attempt graceful close of prod next app
-    await nextApp.close().catch((e) => {
+    await nextApp.close().catch(() => {
       logger.electron("Couldn't close NextApp gracefully:");
     });
     // electron will kill next service on exit
   }
   appRealClose = true;
-  app.quit()
+  app.quit();
 }
 
-const APP_WIDTH = 460;
+const APP_WIDTH = 480;
 
 /**
  * Creates the splash window
@@ -294,6 +315,50 @@ const createMainWindow = async () => {
 
   ipcMain.handle('app-version', () => app.getVersion());
 
+  // Handle twitter login
+  ipcMain.handle('validate-twitter-login', async (_event, credentials) => {
+    const { username, password, email } = credentials;
+
+    logger.electron('Validating X login:', { username });
+    if (!username || !password || !email) {
+      logger.electron('Missing credentials for X login');
+      return { success: false, error: 'Missing credentials' };
+    }
+
+    try {
+      const scraper = new Scraper();
+
+      await scraper.login(username, password, email);
+      const cookies = await scraper.getCookies();
+      logger.electron('X login successful!');
+      return { success: true, cookies };
+    } catch (error) {
+      logger.electron('X login failed:', error);
+      console.error('X login error:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // Get the agent's current state
+  ipcMain.handle('health-check', async (_event) => {
+    try {
+      const response = await fetch('http://127.0.0.1:8716/healthcheck', {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch health check');
+      }
+
+      const data = await response.json();
+      return { response: data };
+    } catch (error) {
+      console.error('Health check error:', error);
+      return { error: error.message };
+    }
+  });
+
   mainWindow.webContents.on('did-fail-load', () => {
     mainWindow.webContents.reloadIgnoringCache();
   });
@@ -315,11 +380,10 @@ const createMainWindow = async () => {
 
   try {
     logger.electron('Setting up store IPC');
-    await setupStoreIpc(ipcMain, mainWindow);
+    setupStoreIpc(ipcMain, mainWindow);
   } catch (e) {
     logger.electron('Store IPC failed:', JSON.stringify(e));
   }
-
   if (isDev) {
     mainWindow.webContents.openDevTools();
   }
@@ -346,14 +410,18 @@ async function launchDaemon() {
     logger.electron('Backend not running!' + JSON.stringify(err, null, 2));
   }
 
-
   try {
     logger.electron('Killing backend server by shutdown endpoint!');
-    let result = await fetch(`http://localhost:${appConfig.ports.prod.operate}/shutdown`);
-    logger.electron('Backend stopped with result: ' + JSON.stringify(result, null, 2));
-
+    let result = await fetch(
+      `http://localhost:${appConfig.ports.prod.operate}/shutdown`,
+    );
+    logger.electron(
+      'Backend stopped with result: ' + JSON.stringify(result, null, 2),
+    );
   } catch (err) {
-    logger.electron('Backend stopped with error: ' + JSON.stringify(err, null, 2));
+    logger.electron(
+      'Backend stopped with error: ' + JSON.stringify(err, null, 2),
+    );
   }
 
   const check = new Promise(function (resolve, _reject) {
@@ -686,6 +754,8 @@ ipcMain.handle('save-logs', async (_, data) => {
     OS Release: ${os.release()}
     Total Memory: ${os.totalmem()}
     Free Memory: ${os.freemem()}
+    Available Parallelism: ${os.availableParallelism()}
+    CPUs: ${JSON.stringify(os.cpus())}
   `;
   const osInfoFilePath = path.join(paths.osPearlTempDir, 'os_info.txt');
   fs.writeFileSync(osInfoFilePath, osInfo);
@@ -698,31 +768,66 @@ ipcMain.handle('save-logs', async (_, data) => {
     });
 
   // Other debug data: balances, addresses, etc.
-  if (data.debugData)
+  if (data.debugData) {
+    const clonedDebugData = JSON.parse(JSON.stringify(data.debugData)); // TODO: deep clone with better method
+    const servicesData = clonedDebugData.services;
+    if (servicesData && Array.isArray(servicesData.services)) {
+      Object.entries(servicesData.services).forEach(([_, eachService]) => {
+        if (eachService && eachService.env_variables) {
+          Object.entries(eachService.env_variables).forEach(([_, envVar]) => {
+            if (envVar.provision_type === 'user') {
+              envVar.value = '*****';
+            }
+          });
+        }
+      });
+    }
+
+    clonedDebugData.services = servicesData;
+
     sanitizeLogs({
       name: 'debug_data.txt',
-      data: JSON.stringify(data.debugData, null, 2),
+      data: JSON.stringify(clonedDebugData, null, 2),
     });
+  }
 
   // Agent logs
   try {
-    fs.readdirSync(paths.servicesDir).map((serviceDirName) => {
+    fs.readdirSync(paths.servicesDir).forEach((serviceDirName) => {
       const servicePath = path.join(paths.servicesDir, serviceDirName);
       if (!fs.existsSync(servicePath)) return;
       if (!fs.statSync(servicePath).isDirectory()) return;
 
-      const agentLogFilePath = path.join(
-        servicePath,
-        'deployment',
-        'agent',
-        'log.txt',
-      );
-      if (!fs.existsSync(agentLogFilePath)) return;
+      // Most recent log
+      try {
+        const agentLogFilePath = path.join(
+          servicePath,
+          'deployment',
+          'agent',
+          'log.txt',
+        );
+        if (fs.existsSync(agentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_agent.log`,
+            filePath: agentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
 
-      return sanitizeLogs({
-        name: `${serviceDirName}_agent.log`,
-        filePath: agentLogFilePath,
-      });
+      // Previous log
+      try {
+        const prevAgentLogFilePath = path.join(servicePath, 'prev_log.txt');
+        if (fs.existsSync(prevAgentLogFilePath)) {
+          sanitizeLogs({
+            name: `${serviceDirName}_prev_agent.log`,
+            filePath: prevAgentLogFilePath,
+          });
+        }
+      } catch (e) {
+        logger.electron(e);
+      }
     });
   } catch (e) {
     logger.electron(e);
