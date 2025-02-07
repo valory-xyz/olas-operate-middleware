@@ -839,8 +839,9 @@ class _ChainUtil:
         # TODO Read from activity checker contract. Read remaining variables for marketplace.
         if (
             staking_contract
-            == STAKING[operate.operate_types.Chain.GNOSIS][
-                "pearl_beta_mech_marketplace"
+            in [
+                STAKING[operate.operate_types.Chain.GNOSIS]["pearl_beta_mech_marketplace"],
+                STAKING[operate.operate_types.Chain.GNOSIS]["pearl_beta_6"]
             ]
         ):
             agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
