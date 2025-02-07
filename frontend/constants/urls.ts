@@ -26,12 +26,13 @@ export const DOWNLOAD_URL: Url = 'https://olas.network/operate#download';
 // thegraph
 export const REWARDS_HISTORY_SUBGRAPH_URLS_BY_EVM_CHAIN = {
   [EvmChainId.Gnosis]:
-    'https://api.studio.thegraph.com/query/81371/gnosis-pearl-rewards-history/version/latest',
+    'https://gateway.thegraph.com/api/5c035877a4af18d178c96afe55ed41ae/subgraphs/id/F3iqL2iw5UTrP1qbb4S694pGEkBwzoxXp1TRikB2K4e',
   [EvmChainId.Base]:
-    'https://api.studio.thegraph.com/query/67875/olas-base-staking-rewards-history/version/latest',
+    'https://api.studio.thegraph.com/query/67875/olas-base-staking/version/latest',
   [EvmChainId.Mode]:
-    'https://api.studio.thegraph.com/query/67875/olas-mode-staking-rewards-history/version/latest',
-  [EvmChainId.Celo]: '', // TODO: celo
+    'https://api.studio.thegraph.com/query/67875/olas-mode-staking/version/latest',
+  [EvmChainId.Celo]:
+    'https://api.studio.thegraph.com/query/67875/olas-celo-staking/version/latest',
 };
 
 // discord
