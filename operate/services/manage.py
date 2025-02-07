@@ -552,6 +552,9 @@ class ServiceManager:
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
+
+            use_mech_marketplace = str(user_params.staking_program_id in ["pearl_beta_mech_marketplace", "pearl_beta_6"])
+
             env_var_to_value.update(
                 {
                     "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
@@ -580,12 +583,7 @@ class ServiceManager:
                     ),
                     "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
                     "MECH_REQUEST_PRICE": "10000000000000000",
-                    "USE_MECH_MARKETPLACE": str(
-                        "mech_marketplace"
-                        in service.chain_configs[
-                            service.home_chain
-                        ].chain_data.user_params.staking_program_id
-                    ),
+                    "USE_MECH_MARKETPLACE": use_mech_marketplace,
                     "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
                         "staking_contract"
                     ),

@@ -83,7 +83,7 @@ def settle_raw_transaction(
         try:
             digest_or_receipt = build_and_send_tx()
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Error sending the safe tx: {e}")
+            logger.error(f"Error sending the transaction: {e}")
             digest_or_receipt = None
 
         if isinstance(digest_or_receipt, str):  # it's a digest
@@ -537,7 +537,7 @@ def drain_eoa(
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
         if tx["value"] <= 0:
             logger.warning(f"No balance to drain from wallet: {crypto.address}")
-            raise ChainInteractionError("Insufficient balance")
+            raise ChainInteractionError(f"No balance to drain from wallet: {crypto.address}")
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"
