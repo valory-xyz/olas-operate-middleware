@@ -42,7 +42,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   },
   [AgentType.Memeooorr]: {
     'manage-wallet': true,
-    'withdraw-funds': false,
+    'withdraw-funds': true,
     'last-transactions': true,
     'rewards-streak': true,
     'staking-contract-section': true,
@@ -64,7 +64,7 @@ const FEATURES_CONFIG = FeaturesConfigSchema.parse({
   },
   [AgentType.Modius]: {
     'manage-wallet': true,
-    'withdraw-funds': false,
+    'withdraw-funds': true,
     'last-transactions': true,
     'rewards-streak': true,
     'staking-contract-section': true,
