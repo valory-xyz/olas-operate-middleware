@@ -132,7 +132,7 @@ export const GNOSIS_STAKING_PROGRAMS: StakingProgramMap = {
       [TokenSymbol.OLAS]: 5000,
     },
     mechType: MechType.Agent,
-    mech: MECHS[EvmChainId.Gnosis][MechType.Agent].contract,
+    mech: MECHS[EvmChainId.Gnosis][MechType.Marketplace].contract,
     activityChecker:
       GNOSIS_STAKING_PROGRAMS_ACTIVITY_CHECKERS[StakingProgramId.PearlBeta6],
     contract: new MulticallContract(
