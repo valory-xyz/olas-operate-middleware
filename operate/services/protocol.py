@@ -836,18 +836,6 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-        # TODO Read from activity checker contract. Read remaining variables for marketplace.
-        if (
-            staking_contract
-            in [
-                STAKING[operate.operate_types.Chain.GNOSIS]["pearl_beta_mech_marketplace"],
-                STAKING[operate.operate_types.Chain.GNOSIS]["pearl_beta_6"]
-            ]
-        ):
-            agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
-        else:
-            agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
-
         return dict(
             staking_contract=staking_contract,
             agent_ids=agent_ids,
@@ -856,7 +844,6 @@ class _ChainUtil:
             service_registry_token_utility=service_registry_token_utility,
             min_staking_deposit=min_staking_deposit,
             activity_checker=activity_checker,
-            agent_mech=agent_mech,
         )
 
 

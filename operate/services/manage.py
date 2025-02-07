@@ -44,6 +44,8 @@ from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, USDC, WRAPPED_NATIVE_ASSET
 from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
+from operate.data.contracts.mech_activity.contract import MechActivityContract
+
 from operate.services.service import (
     ChainConfig,
     DELETE_PREFIX,
@@ -546,12 +548,28 @@ class ServiceManager:
                 service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
                 min_staking_deposit=20000000000000000000,
                 activity_checker=NULL_ADDRESS,  # nosec
-                agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
+
+            agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
+
+            try:
+                mech_activity_contract = t.cast(
+                    MechActivityContract,
+                    MechActivityContract.from_dir(
+                        directory=str(DATA_DIR / "contracts" / "mech_activity")
+                    ),
+                )
+
+                agent_mech = mech_activity_contract.get_instance(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=staking_params["activity_checker"],
+                ).functions.agentMech().call()
+            except Exception:
+                pass
 
             use_mech_marketplace = str(user_params.staking_program_id in ["pearl_beta_mech_marketplace", "pearl_beta_6"])
 
@@ -569,7 +587,7 @@ class ServiceManager:
                     ),
                     "MECH_MARKETPLACE_CONFIG": (
                         f'{{"mech_marketplace_address":"0x4554fE75c1f5576c1d7F765B2A036c199Adae329",'
-                        f'"priority_mech_address":"{staking_params.get("agent_mech")}",'
+                        f'"priority_mech_address":"{agent_mech}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
                         f'"priority_mech_service_id":975,'
                         f'"requester_staking_instance_address":"{staking_params.get("staking_contract")}",'
@@ -581,13 +599,13 @@ class ServiceManager:
                     "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
                         "activity_checker"
                     ),
-                    "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+                    "MECH_CONTRACT_ADDRESS": agent_mech,
                     "MECH_REQUEST_PRICE": "10000000000000000",
                     "USE_MECH_MARKETPLACE": use_mech_marketplace,
                     "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
                         "staking_contract"
                     ),
-                    "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+                    "PRIORITY_MECH_ADDRESS": agent_mech,
                 }
             )
 
