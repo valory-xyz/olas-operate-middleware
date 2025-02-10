@@ -33,6 +33,7 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -79,7 +80,7 @@ def settle_raw_transaction(
     """
     retries = 0
     deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-    while retries < ON_CHAIN_INTERACT_RETRIES and datetime.now().timestamp() < deadline:
+    while retries < ON_CHAIN_INTERACT_RETRIES or datetime.now().timestamp() < deadline:
         try:
             digest_or_receipt = build_and_send_tx()
         except Exception as e:  # pylint: disable=broad-except
@@ -88,13 +89,22 @@ def settle_raw_transaction(
 
         if isinstance(digest_or_receipt, str):  # it's a digest
             logger.info(f"Transaction hash: {digest_or_receipt}")
-            receipt = ledger_api.api.eth.wait_for_transaction_receipt(digest_or_receipt)
+            try:
+                receipt = ledger_api.api.eth.wait_for_transaction_receipt(
+                    digest_or_receipt
+                )
+            except TimeExhausted:
+                receipt = None
+
         else:
             receipt = digest_or_receipt
 
         if receipt is not None and receipt["status"] != 0:
             return receipt
+
         time.sleep(ON_CHAIN_INTERACT_SLEEP)
+        retries += 1
+
     raise RuntimeError("Timeout while waiting for safe transaction to go through")
 
 
@@ -531,7 +541,11 @@ def drain_eoa(
         )
 
         chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (Chain.ARBITRUM_ONE, Chain.BASE, Chain.OPTIMISTIC):
+        if Chain.from_id(chain_id) in (
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISTIC,
+        ):
             chain_fee += ledger_api.get_l1_data_fee(tx)
 
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
