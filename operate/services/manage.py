@@ -620,53 +620,9 @@ class ServiceManager:
                 "TWIKIT_COOKIES_PATH",
             ]
         ):
-            # TODO: This is possibly not a good idea: we are setting up a computed variable based on
-            # the value passed in the template.
-            db_path = (
-                service.path
-                / "persistent_data"
-                / service.env_variables["TWIKIT_USERNAME"]["value"]
-                / "memeooorr.db"
-            )
-            cookies_path = (
-                service.path
-                / "persistent_data"
-                / service.env_variables["TWIKIT_USERNAME"]["value"]
-                / "twikit_cookies.json"
-            )
-
-            # Patch: Move existing configurations to the new location
-            old_db_path = service.path / "persistent_data" / "memeooorr.db"
-            old_cookies_path = service.path / "persistent_data" / "twikit_cookies.json"
-
-            for old_path, new_path in [
-                (old_db_path, db_path),
-                (old_cookies_path, cookies_path),
-            ]:
-                if old_path.exists():
-                    self.logger.info(f"Moving {old_path} -> {new_path}")
-                    new_path.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        os.rename(old_path, new_path)
-                    except OSError:
-                        self.logger.info("Fallback to shutil.move")
-                        shutil.move(str(old_path), str(new_path))
-                        time.sleep(3)
-            # End patch
-
-            env_var_to_value.update(
-                {
-                    "TWIKIT_COOKIES": get_twitter_cookies(
-                        username=service.env_variables["TWIKIT_USERNAME"]["value"],
-                        email=service.env_variables["TWIKIT_EMAIL"]["value"],
-                        password=service.env_variables["TWIKIT_PASSWORD"]["value"],
-                        cookies=service.env_variables["TWIKIT_COOKIES"]["value"],
-                        cookies_path=cookies_path,
-                    ),
-                    "TWIKIT_COOKIES_PATH": str(cookies_path),
-                    "DB_PATH": str(db_path),
-                }
-            )
+            store_path = service.path / "persistent_data"
+            store_path.mkdir(parents=True, exist_ok=True)
+            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
 
         # TODO yet another computed variable for modius
         if "optimus" in service.name.lower():
