@@ -90,7 +90,9 @@ def settle_raw_transaction(
         if isinstance(digest_or_receipt, str):  # it's a digest
             logger.info(f"Transaction hash: {digest_or_receipt}")
             try:
-                receipt = ledger_api.api.eth.wait_for_transaction_receipt(digest_or_receipt)
+                receipt = ledger_api.api.eth.wait_for_transaction_receipt(
+                    digest_or_receipt
+                )
             except TimeExhausted:
                 receipt = None
 
@@ -539,7 +541,11 @@ def drain_eoa(
         )
 
         chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (Chain.ARBITRUM_ONE, Chain.BASE, Chain.OPTIMISTIC):
+        if Chain.from_id(chain_id) in (
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISTIC,
+        ):
             chain_fee += ledger_api.get_l1_data_fee(tx)
 
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
