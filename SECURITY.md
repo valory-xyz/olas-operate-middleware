@@ -1,10 +1,10 @@
 # Security Policy
 
-This document outlines security procedures and general policies for the `olas-operate-app` project.
+This document outlines security procedures and general policies for the `olas-operate-middleware` project.
 
 ## Supported Versions
 
-The following table shows which versions of `olas-operate-app` are currently being supported with security updates.
+The following table shows which versions of `olas-operate-middleware` are currently being supported with security updates.
 
 | Version         | Supported          |
 |-----------------|--------------------|
@@ -13,7 +13,7 @@ The following table shows which versions of `olas-operate-app` are currently bei
 
 ## Reporting a Vulnerability
 
-The `olas-operate-app` team and community take all security bugs in `olas-operate-app` seriously. Thank you for improving the security of `olas-operate-app`. We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your contributions.
+The `olas-operate-middleware` team and community take all security bugs in `olas-operate-middleware` seriously. Thank you for improving the security of `olas-operate-middleware`. We appreciate your efforts and responsible disclosure and will make every effort to acknowledge your contributions.
 
 Report security bugs by emailing `info@valory.xyz`.
 
