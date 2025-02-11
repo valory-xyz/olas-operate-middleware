@@ -56,7 +56,6 @@ from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
 
-import operate.operate_types
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -64,7 +63,6 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -836,17 +834,6 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-        # TODO Read from activity checker contract. Read remaining variables for marketplace.
-        if (
-            staking_contract
-            == STAKING[operate.operate_types.Chain.GNOSIS][
-                "pearl_beta_mech_marketplace"
-            ]
-        ):
-            agent_mech = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"  # nosec
-        else:
-            agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
-
         return dict(
             staking_contract=staking_contract,
             agent_ids=agent_ids,
@@ -855,7 +842,6 @@ class _ChainUtil:
             service_registry_token_utility=service_registry_token_utility,
             min_staking_deposit=min_staking_deposit,
             activity_checker=activity_checker,
-            agent_mech=agent_mech,
         )
 
 
