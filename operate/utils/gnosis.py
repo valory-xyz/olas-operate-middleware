@@ -531,13 +531,19 @@ def drain_eoa(
         )
 
         chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (Chain.ARBITRUM_ONE, Chain.BASE, Chain.OPTIMISTIC):
+        if Chain.from_id(chain_id) in (
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISTIC,
+        ):
             chain_fee += ledger_api.get_l1_data_fee(tx)
 
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
         if tx["value"] <= 0:
             logger.warning(f"No balance to drain from wallet: {crypto.address}")
-            raise ChainInteractionError(f"No balance to drain from wallet: {crypto.address}")
+            raise ChainInteractionError(
+                f"No balance to drain from wallet: {crypto.address}"
+            )
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"
