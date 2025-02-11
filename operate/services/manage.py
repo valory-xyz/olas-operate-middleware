@@ -2126,6 +2126,10 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+
+        if Chain(chain) not in wallet.safes:
+            return 0
+
         master_safe = wallet.safes[Chain(chain)]
 
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
