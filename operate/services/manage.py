@@ -656,8 +656,6 @@ class ServiceManager:
                 "TWIKIT_USERNAME",
                 "TWIKIT_EMAIL",
                 "TWIKIT_PASSWORD",
-                "TWIKIT_COOKIES",
-                "TWIKIT_COOKIES_PATH",
             ]
         ):
             store_path = service.path / "persistent_data"
