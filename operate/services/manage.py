@@ -562,11 +562,6 @@ class ServiceManager:
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
-            agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
-            use_mech_marketplace = False
-            mech_marketplace_address = ZERO_ADDRESS
-            priority_mech_address = ZERO_ADDRESS
-
             # Try if activity checker is a MechActivityChecker contract
             try:
                 mech_activity_contract = t.cast(
@@ -588,7 +583,7 @@ class ServiceManager:
                 mech_marketplace_address = ZERO_ADDRESS
                 priority_mech_address = ZERO_ADDRESS
 
-            except Exception:  # pylint: disable=broad-exception-caught
+            except Exception:  # pylint: disable=broad-except
                 # Try if activity checker is a RequesterActivityChecker contract
                 try:
                     requester_activity_checker = t.cast(
@@ -613,8 +608,14 @@ class ServiceManager:
                     agent_mech = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
                     priority_mech_address = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
 
-                except Exception:  # pylint: disable=broad-exception-caught
-                    pass
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.warning(
+                        "Cannot determine type of activity checker contract. Using default parameters."
+                    )
+                    agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
+                    use_mech_marketplace = False
+                    mech_marketplace_address = ZERO_ADDRESS
+                    priority_mech_address = ZERO_ADDRESS
 
             env_var_to_value.update(
                 {
