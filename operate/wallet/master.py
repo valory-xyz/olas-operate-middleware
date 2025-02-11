@@ -451,7 +451,7 @@ class EthereumMasterWallet(MasterWallet):
         for asset in assets:
             balance = get_asset_balance(
                 ledger_api=ledger_api,
-                contract_address=asset,
+                asset_address=asset,
                 address=self.safes[chain] if from_safe else self.crypto.address,
             )
             self.transfer_asset(

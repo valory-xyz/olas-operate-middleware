@@ -12,7 +12,7 @@ A cross-platform desktop application used to run autonomous agents powered by th
 
 **Note:** The release pages also contain Source Code `.zip` files and `dev-` prefixed builds. These are not intended for general use. Ignore them unless you're a developer!
 
-- Go to the [Releases](https://github.com/valory-xyz/olas-operate-app/releases) page.
+- Go to the [Releases](https://github.com/valory-xyz/olas-operate-middleware/releases) page.
 - Download the latest release for your operating system.
   - If you're on Windows, download the `.exe` file.
   - If you're on MacOS, download the `.dmg` file.

@@ -39,9 +39,21 @@ from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 
 from operate.constants import ZERO_ADDRESS
+from operate.data import DATA_DIR
+from operate.data.contracts.mech_activity.contract import MechActivityContract
+from operate.data.contracts.requester_activity_checker.contract import (
+    RequesterActivityCheckerContract,
+)
 from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS, get_currency_denom
-from operate.ledger.profiles import CONTRACTS, OLAS, STAKING, USDC, WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import (
+    CONTRACTS,
+    DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
+    OLAS,
+    STAKING,
+    USDC,
+    WRAPPED_NATIVE_ASSET,
+)
 from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
@@ -56,7 +68,6 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.services.utils.memeooorr import get_twitter_cookies
 from operate.utils.gnosis import (
     NULL_ADDRESS,
     drain_eoa,
@@ -395,9 +406,7 @@ class ServiceManager:
                 or on_chain_description != service.description
             )
         )
-        current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, ocm  # type: ignore  # FIXME
-        )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
@@ -545,12 +554,66 @@ class ServiceManager:
                 service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
                 min_staking_deposit=20000000000000000000,
                 activity_checker=NULL_ADDRESS,  # nosec
-                agent_mech="0x77af31De935740567Cf4fF1986D04B2c964A786a",  # nosec
             )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
+            # Try if activity checker is a MechActivityChecker contract
+            try:
+                mech_activity_contract = t.cast(
+                    MechActivityContract,
+                    MechActivityContract.from_dir(
+                        directory=str(DATA_DIR / "contracts" / "mech_activity")
+                    ),
+                )
+
+                agent_mech = (
+                    mech_activity_contract.get_instance(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=staking_params["activity_checker"],
+                    )
+                    .functions.agentMech()
+                    .call()
+                )
+                use_mech_marketplace = False
+                mech_marketplace_address = ZERO_ADDRESS
+                priority_mech_address = ZERO_ADDRESS
+
+            except Exception:  # pylint: disable=broad-except
+                # Try if activity checker is a RequesterActivityChecker contract
+                try:
+                    requester_activity_checker = t.cast(
+                        RequesterActivityCheckerContract,
+                        RequesterActivityCheckerContract.from_dir(
+                            directory=str(
+                                DATA_DIR / "contracts" / "requester_activity_checker"
+                            )
+                        ),
+                    )
+
+                    mech_marketplace_address = (
+                        requester_activity_checker.get_instance(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=staking_params["activity_checker"],
+                        )
+                        .functions.mechMarketplace()
+                        .call()
+                    )
+
+                    use_mech_marketplace = True
+                    agent_mech = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
+                    priority_mech_address = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
+
+                except Exception:  # pylint: disable=broad-except
+                    self.logger.warning(
+                        "Cannot determine type of activity checker contract. Using default parameters."
+                    )
+                    agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
+                    use_mech_marketplace = False
+                    mech_marketplace_address = ZERO_ADDRESS
+                    priority_mech_address = ZERO_ADDRESS
+
             env_var_to_value.update(
                 {
                     "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
@@ -565,28 +628,22 @@ class ServiceManager:
                         "staking_contract"
                     ),
                     "MECH_MARKETPLACE_CONFIG": (
-                        f'{{"mech_marketplace_address":"0x4554fE75c1f5576c1d7F765B2A036c199Adae329",'
-                        f'"priority_mech_address":"{staking_params.get("agent_mech")}",'
+                        f'{{"mech_marketplace_address":"{mech_marketplace_address}",'
+                        f'"priority_mech_address":"{priority_mech_address}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
                         f'"priority_mech_service_id":975,'
                         f'"requester_staking_instance_address":"{staking_params.get("staking_contract")}",'
                         f'"response_timeout":300}}'
                     ),
+                    "ACTIVITY_CHECKER_CONTRACT_ADDRESS": staking_params.get(
+                        "activity_checker"
+                    ),
                     "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
                         "activity_checker"
                     ),
-                    "MECH_CONTRACT_ADDRESS": staking_params.get("agent_mech"),
+                    "MECH_CONTRACT_ADDRESS": agent_mech,
                     "MECH_REQUEST_PRICE": "10000000000000000",
-                    "USE_MECH_MARKETPLACE": str(
-                        "mech_marketplace"
-                        in service.chain_configs[
-                            service.home_chain
-                        ].chain_data.user_params.staking_program_id
-                    ),
-                    "REQUESTER_STAKING_INSTANCE_ADDRESS": staking_params.get(
-                        "staking_contract"
-                    ),
-                    "PRIORITY_MECH_ADDRESS": staking_params.get("agent_mech"),
+                    "USE_MECH_MARKETPLACE": use_mech_marketplace,
                 }
             )
 
@@ -601,53 +658,9 @@ class ServiceManager:
                 "TWIKIT_COOKIES_PATH",
             ]
         ):
-            # TODO: This is possibly not a good idea: we are setting up a computed variable based on
-            # the value passed in the template.
-            db_path = (
-                service.path
-                / "persistent_data"
-                / service.env_variables["TWIKIT_USERNAME"]["value"]
-                / "memeooorr.db"
-            )
-            cookies_path = (
-                service.path
-                / "persistent_data"
-                / service.env_variables["TWIKIT_USERNAME"]["value"]
-                / "twikit_cookies.json"
-            )
-
-            # Patch: Move existing configurations to the new location
-            old_db_path = service.path / "persistent_data" / "memeooorr.db"
-            old_cookies_path = service.path / "persistent_data" / "twikit_cookies.json"
-
-            for old_path, new_path in [
-                (old_db_path, db_path),
-                (old_cookies_path, cookies_path),
-            ]:
-                if old_path.exists():
-                    self.logger.info(f"Moving {old_path} -> {new_path}")
-                    new_path.parent.mkdir(parents=True, exist_ok=True)
-                    try:
-                        os.rename(old_path, new_path)
-                    except OSError:
-                        self.logger.info("Fallback to shutil.move")
-                        shutil.move(str(old_path), str(new_path))
-                        time.sleep(3)
-            # End patch
-
-            env_var_to_value.update(
-                {
-                    "TWIKIT_COOKIES": get_twitter_cookies(
-                        username=service.env_variables["TWIKIT_USERNAME"]["value"],
-                        email=service.env_variables["TWIKIT_EMAIL"]["value"],
-                        password=service.env_variables["TWIKIT_PASSWORD"]["value"],
-                        cookies=service.env_variables["TWIKIT_COOKIES"]["value"],
-                        cookies_path=cookies_path,
-                    ),
-                    "TWIKIT_COOKIES_PATH": str(cookies_path),
-                    "DB_PATH": str(db_path),
-                }
-            )
+            store_path = service.path / "persistent_data"
+            store_path.mkdir(parents=True, exist_ok=True)
+            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
 
         # TODO yet another computed variable for modius
         if "optimus" in service.name.lower():
@@ -669,7 +682,9 @@ class ServiceManager:
             ):
                 required_olas = (
                     staking_params["min_staking_deposit"]
-                    + staking_params["min_staking_deposit"]  # bond = staking
+                    + staking_params[
+                        "min_staking_deposit"
+                    ]  # operator security deposit = max agent bond
                 )
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
                 required_olas = staking_params["min_staking_deposit"]
@@ -723,9 +738,7 @@ class ServiceManager:
                 or on_chain_description != service.description
             )
         )
-        current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
-        )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{current_staking_program=}")
@@ -1093,7 +1106,8 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service,
+            chain,
         )
         is_staked = current_staking_program is not None
 
@@ -1204,22 +1218,29 @@ class ServiceManager:
             )
             self.logger.info(f"{service.name} signer drained")
 
-    @staticmethod
     def _get_current_staking_program(
-        chain_data: OnChainData, ledger_config: LedgerConfig, sftxb: EthSafeTxBuilder
+        self, service: Service, chain: str
     ) -> t.Optional[str]:
-        if chain_data.token == NON_EXISTENT_TOKEN:
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        service_id = chain_config.chain_data.token
+
+        if service_id == NON_EXISTENT_TOKEN:
             return None
 
-        current_staking_program = None
-        for staking_program in STAKING[ledger_config.chain]:
+        for staking_program_id, staking_program_address in STAKING[
+            ledger_config.chain
+        ].items():
             state = sftxb.staking_status(
-                service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][staking_program],
+                service_id=service_id,
+                staking_contract=staking_program_address,
             )
+
             if state in (StakingState.STAKED, StakingState.EVICTED):
-                current_staking_program = staking_program
-        return current_staking_program
+                return staking_program_id
+
+        return None
 
     def unbond_service_on_chain(
         self, service_config_id: str, chain: t.Optional[str] = None
@@ -1279,7 +1300,8 @@ class ServiceManager:
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service,
+            chain,
         )
         is_staked = current_staking_program is not None
         current_staking_contract = (
@@ -1361,7 +1383,8 @@ class ServiceManager:
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
         on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service,
+            chain,
         )
 
         self.logger.info(
@@ -1401,7 +1424,8 @@ class ServiceManager:
             service.store()
 
         current_staking_program = self._get_current_staking_program(
-            chain_data, ledger_config, sftxb
+            service,
+            chain,
         )
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
@@ -1580,7 +1604,7 @@ class ServiceManager:
             for key in service.keys:
                 agent_balance = get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=asset_address,
+                    asset_address=asset_address,
                     address=key.address,
                 )
                 self.logger.info(
@@ -1599,7 +1623,7 @@ class ServiceManager:
                         )
                         transferable_balance = get_asset_balance(
                             ledger_api=ledger_api,
-                            contract_address=asset_address,
+                            asset_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
                         to_transfer = max(
@@ -1619,14 +1643,14 @@ class ServiceManager:
 
             safe_balance = get_asset_balance(
                 ledger_api=ledger_api,
-                contract_address=asset_address,
+                asset_address=asset_address,
                 address=chain_data.multisig,
             )
             if asset_address == ZERO_ADDRESS and chain in WRAPPED_NATIVE_ASSET:
                 # also count the balance of the wrapped native asset
                 safe_balance += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
+                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=chain_data.multisig,
                 )
 
@@ -1648,7 +1672,7 @@ class ServiceManager:
                 )
                 transferable_balance = get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=asset_address,
+                    asset_address=asset_address,
                     address=wallet.safes[ledger_config.chain],
                 )
                 to_transfer = max(
@@ -2005,6 +2029,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
+        bonded_olas: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
 
@@ -2034,7 +2059,8 @@ class ServiceManager:
             balances[chain] = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses=addresses,
-                asset_addresses=set(chain_data.user_params.fund_requirements),
+                asset_addresses=set(chain_data.user_params.fund_requirements)
+                | {OLAS[Chain(chain)]},
             )
 
             if not service_safe:
@@ -2044,15 +2070,38 @@ class ServiceManager:
 
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
-            if service_safe and chain in WRAPPED_NATIVE_ASSET:
+            if service_safe and Chain(chain) in WRAPPED_NATIVE_ASSET:
                 balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
                     ledger_api=ledger_api,
-                    contract_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
+                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
                     address=service_safe,
                 )
 
             # Compute refill requirements of Master Safe and Master EOA
             refill_requirements[chain] = {}
+            bonded_olas[chain] = self._compute_bonded_olas(service_config_id, chain)
+
+            if master_safe:
+                olas_requirements = self._compute_olas_requirements(
+                    service_config_id, chain
+                )
+                olas_address = OLAS[Chain(chain)]
+                master_safe_olas = balances[chain][master_safe][olas_address]
+
+                service_safe_olas = 0
+                if service_safe:
+                    service_safe_olas = balances[chain][service_safe][olas_address]
+
+                refill_requirements[chain].setdefault(master_safe, {})[
+                    olas_address
+                ] = max(
+                    olas_requirements
+                    - bonded_olas[chain]
+                    - master_safe_olas
+                    - service_safe_olas,
+                    0,
+                )
+
             for (
                 asset_address,
                 fund_requirements,
@@ -2124,10 +2173,116 @@ class ServiceManager:
 
         return {
             "balances": balances,
+            "bonded_olas": bonded_olas,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
+
+    def _compute_bonded_olas(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str
+    ) -> int:
+        """Computes the bonded olas: current agent bonds and current security deposit"""
+
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        user_params = chain_config.chain_data.user_params
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        master_safe = wallet.safes[Chain(chain)]
+
+        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+
+        service_id = chain_config.chain_data.token
+        if service_id == NON_EXISTENT_TOKEN:
+            return 0
+
+        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        staking_params = sftxb.get_staking_params(
+            staking_contract=STAKING[ledger_config.chain][
+                user_params.staking_program_id
+            ],
+        )
+        service_registry_address = staking_params["service_registry"]
+        service_registry_token_utility_address = staking_params[
+            "service_registry_token_utility"
+        ]
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=ledger_api,
+            contract_address=service_registry_address,
+        )
+        service_registry_token_utility = (
+            registry_contracts.service_registry_token_utility.get_instance(
+                ledger_api=ledger_api,
+                contract_address=service_registry_token_utility_address,
+            )
+        )
+
+        service_owner = service_registry.functions.ownerOf(service_id).call()
+
+        # If master safe is service owner, the service is not staked
+        if service_owner.lower() == master_safe.lower():
+            return 0
+
+        service_info = service_registry.functions.getService(service_id).call()
+        agent_ids = service_info[7]
+
+        agent_bonds = 0
+        for agent_id in agent_ids:
+            num_agent_instances = service_registry.functions.getInstancesForAgentId(
+                service_id, agent_id
+            ).call()[0]
+            agent_bond = service_registry_token_utility.functions.getAgentBond(
+                service_id, agent_id
+            ).call()
+            agent_bonds += num_agent_instances * agent_bond
+
+        security_deposit = 0
+        service_state = service_info[6]
+        if (
+            OnChainState.ACTIVE_REGISTRATION
+            <= service_state
+            < OnChainState.TERMINATED_BONDED
+        ):
+            security_deposit = (
+                service_registry_token_utility.functions.mapServiceIdTokenDeposit(
+                    service_id
+                ).call()[1]
+            )
+
+        return agent_bonds + security_deposit
+
+    def _compute_olas_requirements(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str
+    ) -> int:
+        """Computes OLAS requirements to stake the service in the target staking contract"""
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        user_params = chain_config.chain_data.user_params
+
+        if not user_params.use_staking:
+            return 0
+
+        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        staking_params = sftxb.get_staking_params(
+            staking_contract=STAKING[ledger_config.chain][
+                user_params.staking_program_id
+            ],
+        )
+
+        # This computation assumes the service will be/has been minted with these
+        # parameters. Otherwise, these values should be retrieved on-chain as follows:
+        # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
+        #   and ServiceRegistryTokenUtility .getAgentBond
+        # - security_deposit: as the maximum agent bond.
+        number_of_agents = service.helper.config.number_of_agents
+        agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
+        security_deposit = staking_params["min_staking_deposit"]
+
+        return agent_bonds + security_deposit
 
     @staticmethod
     def _compute_refill_requirement(
