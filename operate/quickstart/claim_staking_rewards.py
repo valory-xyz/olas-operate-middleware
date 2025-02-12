@@ -38,8 +38,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     """Claim staking rewards."""
-    attended = os.environ.get("ATTENDED", "true").lower() == "true"
-
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
 
@@ -56,7 +54,7 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         "accrued in the current staking contract and transfer them to your service safe."
     )
 
-    if attended and not ask_yes_or_no("Do you want to continue?"):
+    if not ask_yes_or_no("Do you want to continue?"):
        print("Cancelled.")
        return
 

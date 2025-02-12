@@ -949,12 +949,6 @@ def qs_start(
     attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
 ) -> None:
     """Quickstart."""
-    
-    # Validate boolean value
-    if attended.lower() not in ["true", "false"]:
-        print("Error: --attended only accepts true/false values")
-        return
-        
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
@@ -977,11 +971,6 @@ def qs_terminate(
     attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
 ) -> None:
     """Terminate service."""
-    
-    if attended.lower() not in ["true", "false"]:
-        print("Error: --attended only accepts true/false values")
-        return
-        
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
@@ -994,11 +983,6 @@ def qs_claim(
     attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
 ) -> None:
     """Quickclaim staking rewards."""
-    
-    if attended.lower() not in ["true", "false"]:
-        print("Error: --attended only accepts true/false values")
-        return
-        
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
@@ -1011,11 +995,6 @@ def qs_reset_staking(
     attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
 ) -> None:
     """Reset staking."""
-    
-    if attended.lower() not in ["true", "false"]:
-        print("Error: --attended only accepts true/false values")
-        return
-        
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
@@ -1027,11 +1006,6 @@ def qs_reset_password(
     attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
 ) -> None:
     """Reset password."""
-    
-    if attended.lower() not in ["true", "false"]:
-        print("Error: --attended only accepts true/false values")
-        return
-        
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()

@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 
 
+import os
 import requests
 from decimal import ROUND_UP, Decimal
 from halo import Halo
@@ -174,6 +175,9 @@ def wei_to_token(wei: int, chain:str, token_address: str = ZERO_ADDRESS) -> str:
 
 def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
+    if os.environ.get("ATTENDED", "true").lower() != "true":
+        return True
+        
     response = (
         input(f"{question} (yes/no): ")
         .strip()

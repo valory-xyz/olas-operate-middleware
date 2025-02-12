@@ -90,23 +90,28 @@ class QuickstartConfig(LocalResource):
             kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
         return cls(**kwargs)
 
+def ask_or_get_from_env(prompt: str, is_pass: bool, env_var_name: str, raise_if_missing: bool = True) -> str:
+    """Get user input either interactively or from environment variables."""
+    if os.getenv("ATTENDED", "true").lower() == "true":
+        if is_pass:
+            return getpass.getpass(prompt)
+        return input(prompt)
+    elif env_var_name in os.environ:
+        return os.environ[env_var_name]
+    elif raise_if_missing:
+        raise ValueError(f"{env_var_name} env var required in unattended mode")
+    return ""
+
 def ask_confirm_password() -> str:
     """Get password from user input or environment."""
     if os.getenv("ATTENDED", "true").lower() == "true":
         while True:
-            password = getpass.getpass("Please input your password (or press enter): ")
-            confirm_password = getpass.getpass("Please confirm your password: ")
-
+            password = ask_or_get_from_env("Please input your password (or press enter): ", True, "OPERATE_PASSWORD")
+            confirm_password = ask_or_get_from_env("Please confirm your password: ", True, "OPERATE_PASSWORD")
             if password == confirm_password:
                 return password
-            else:
-                print("Passwords do not match!")
-    else:
-        # In unattended mode, get password from environment
-        password = os.getenv("OPERATE_PASSWORD")
-        if not password:
-            raise ValueError("OPERATE_PASSWORD environment variable must be set in unattended mode")
-        return password
+            print("Passwords do not match!")
+    return ask_or_get_from_env("", True, "OPERATE_PASSWORD")
 
 def load_local_config() -> QuickstartConfig:
     """Load the local quickstart configuration."""
@@ -127,16 +132,11 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
 
     for chain in template["configurations"]:
         while not check_rpc(config.rpc.get(chain)):
-            if attended:
-                config.rpc[chain] = getpass.getpass(
-                    f"Enter a {CHAIN_TO_METADATA[chain]['name']} RPC that supports eth_newFilter [hidden input]: "
-                )
-            else:
-                rpc_env = f"{chain.upper()}_LEDGER_RPC"
-                if not os.getenv(rpc_env):
-                    raise ValueError(f"{rpc_env} environment variable must be set in unattended mode")
-                config.rpc[chain] = os.getenv(rpc_env)
-        
+            config.rpc[chain] = ask_or_get_from_env(
+                f"Enter a {CHAIN_TO_METADATA[chain]['name']} RPC that supports eth_newFilter [hidden input]: ",
+                True,
+                f"{chain.upper()}_LEDGER_RPC"
+            )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
 
     if config.password_migrated is None:
@@ -169,7 +169,11 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                     }
             while True:
                 try:
-                    choice = int(input(f"Enter your choice (1 - {len(ids)}): "))
+                    choice = int(ask_or_get_from_env(
+                        f"Enter your choice (1 - {len(ids)}): ",
+                        False,
+                        "STAKING_PROGRAM"
+                    ))
                     if choice not in available_choices:
                         print("\nPlease select a program with available slots:") 
                         for idx, prog in available_choices.items():
@@ -183,9 +187,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 except ValueError:
                     print(f"Please enter a valid option (1 - {len(ids)}).")
         else:
-            program_id = os.getenv("STAKING_PROGRAM")
-            if not program_id:
-                raise ValueError("STAKING_PROGRAM environment variable must be set in unattended mode")
+            program_id = ask_or_get_from_env("", False, "STAKING_PROGRAM")
             config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
 
     if config.principal_chain is None:
@@ -229,13 +231,13 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                     print(f"Description: {env_var_data['description']}")
                     if env_var_data["value"]:
                         print(f"Example: {env_var_data['value']}")
-                    config.user_provided_args[env_var_name] = input(f"Please enter {env_var_data['name']}: ")
+                config.user_provided_args[env_var_name] = ask_or_get_from_env(
+                    f"Please enter {env_var_data['name']}: ",
+                    False,
+                    env_var_name
+                )
+                if attended:
                     print()
-                else:
-                    env_value = os.getenv(env_var_name)
-                    if not env_value:
-                        raise ValueError(f"{env_var_name} environment variable must be set in unattended mode")
-                    config.user_provided_args[env_var_name] = env_value
 
             template["env_variables"][env_var_name]["value"] = config.user_provided_args[env_var_name]
 
@@ -287,12 +289,11 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig):
     else:
         password = handle_password_migration(operate, config)
         while password is None:
-            if attended:
-                password = getpass.getpass("\nEnter local user account password [hidden input]: ")
-            else:
-                password = os.getenv("OPERATE_PASSWORD")
-                if not password:
-                    raise ValueError("OPERATE_PASSWORD environment variable must be set in unattended mode")
+            password = ask_or_get_from_env(
+                "\nEnter local user account password [hidden input]: ",
+                is_pass=True,
+                env_var_name="OPERATE_PASSWORD"
+            )
             
             if operate.user_account.is_valid(password=password):
                 break
@@ -437,12 +438,14 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 print(f"[{chain_name}] Creating Master Safe")
                 wallet_manager = operate.wallet_manager
                 wallet = wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
-                if attended:
-                    backup_owner = input("Please input your backup owner (leave empty to skip): ")
-                else:
-                    backup_owner = os.getenv("BACKUP_OWNER", "")
-                    if backup_owner != "":
-                        print(f"[{chain_name}] Linking Backup Owner:{backup_owner}")
+                backup_owner = ask_or_get_from_env(
+                    "Please input your backup owner (leave empty to skip): ",
+                    False,
+                    "BACKUP_OWNER",
+                    raise_if_missing=False
+                )
+                if backup_owner and not attended:
+                    print(f"[{chain_name}] Linking Backup Owner:{backup_owner}")
 
                 wallet.create_safe(
                     chain=chain,
