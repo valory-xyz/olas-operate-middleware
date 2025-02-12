@@ -1,50 +1,20 @@
 <h1 align="center">
-<b>Pearl</b>
+<b>Olas Operate Middleware</b>
 </h1>
 
-A cross-platform desktop application used to run autonomous agents powered by the OLAS Network.
+A cross-platform python package used to run autonomous agents powered by the OLAS Network.
 
 ## Getting Started
 
-### For Users
+Install using
+```
+pip install olas-operate-middleware
+```
 
-#### Downloading the latest release
-
-**Note:** The release pages also contain Source Code `.zip` files and `dev-` prefixed builds. These are not intended for general use. Ignore them unless you're a developer!
-
-- Go to the [Releases](https://github.com/valory-xyz/olas-operate-middleware/releases) page.
-- Download the latest release for your operating system.
-  - If you're on Windows, download the `.exe` file.
-  - If you're on MacOS, download the `.dmg` file.
-    - Both Intel x64 and Apple Silicon ARM64 builds are available.
-- Install the application by running the downloaded file.
-
-### For Developers
-
-#### Setting up your development environment
-
-- [Ubuntu Setup Guide](docs/dev/ubuntu-setup.md)
-- [MacOS Setup Guide](docs/dev/macos-setup.md)
-- [Windows Setup Guide](docs/dev/windows-setup.md)
-
-#### Setting up a development RPC endpoint
-
-- [RPC Setup Guide](docs/dev/rpcs.md)
-
-#### Customizing the service hash
-
-If you want to use a specific service hash, for testing purposes, follow these steps:
-
-1. `./frontend/constants/serviceTemplates.ts`: Ensure that the hash you want to use is correctly referenced in the appropriate service template `hash`.
-2. `./frontend/config/agents.ts`: Ensure that the corresponding service has `isAgentEnabled: true`.
-
-## Project Dependencies
-
-There are three parts to the project: the Electron app (CommonJS), the NextJS frontend (TypeScript), and the Python backend/middleware.
-
-- [Electron dependencies](package.json)
-- [Frontend dependencies](package.json)
-- [Backend dependencies](backend/pyproject.toml)
+Start the daemon service using
+```
+python -m operate.cli daemon
+```
 
 ## License
 
