@@ -283,7 +283,9 @@ class ServiceManager:
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         info = sftxb.info(token_id=chain_data.token)
         config_hash = info["config_hash"]
-        res = requests.get(f"{IPFS_GATEWAY}f01701220{config_hash}", timeout=30)
+        url = f"{IPFS_GATEWAY}f01701220{config_hash}"
+        self.logger.info(f"Fetching {url=}...")
+        res = requests.get(url, timeout=30)
         if res.status_code == 200:
             return res.json()
         raise ValueError(
