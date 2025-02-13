@@ -489,7 +489,7 @@ class Deployment(LocalResource):
                     service_builder=builder,
                     build_dir=build.resolve(),
                     use_tm_testnet_setup=True,
-                    image_author = builder.service.author
+                    image_author=builder.service.author,
                 )
                 .generate()
                 .generate_config_tendermint()

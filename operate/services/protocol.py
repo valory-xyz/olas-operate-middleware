@@ -33,7 +33,6 @@ from typing import Optional, Union, cast
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
-from aea_ledger_ethereum import HTTPProvider, Web3
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
@@ -64,7 +63,6 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -819,10 +817,9 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-    def get_staking_params(self, chain: str, program_id: str) -> t.Dict:
+    def get_staking_params(self, staking_contract: str) -> t.Dict:
         """Get agent IDs for the staking contract"""
         self._patch()
-        staking_contract = STAKING[chain][program_id]
         staking_manager = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
