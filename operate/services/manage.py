@@ -284,7 +284,9 @@ class ServiceManager:
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         info = sftxb.info(token_id=chain_data.token)
         config_hash = info["config_hash"]
-        res = requests.get(f"{IPFS_GATEWAY}f01701220{config_hash}", timeout=30)
+        url = f"{IPFS_GATEWAY}f01701220{config_hash}"
+        self.logger.info(f"Fetching {url=}...")
+        res = requests.get(url, timeout=30)
         if res.status_code == 200:
             return res.json()
         raise ValueError(
@@ -655,8 +657,6 @@ class ServiceManager:
                 "TWIKIT_USERNAME",
                 "TWIKIT_EMAIL",
                 "TWIKIT_PASSWORD",
-                "TWIKIT_COOKIES",
-                "TWIKIT_COOKIES_PATH",
             ]
         ):
             store_path = service.path / "persistent_data"
@@ -2199,6 +2199,10 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+
+        if Chain(chain) not in wallet.safes:
+            return 0
+
         master_safe = wallet.safes[Chain(chain)]
 
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
