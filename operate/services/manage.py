@@ -957,7 +957,7 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                cost_of_bond = 1
+                cost_of_bond = 1 * len(instances)
 
             self.logger.info(
                 f"Registering agent instances: {chain_data.token} -> {instances}"
