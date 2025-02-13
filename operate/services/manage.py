@@ -970,7 +970,7 @@ class ServiceManager:
             )
 
             if native_balance < cost_of_bond:
-                message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
+                message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
                 self.logger.error(message)
                 raise ValueError(message)
 
