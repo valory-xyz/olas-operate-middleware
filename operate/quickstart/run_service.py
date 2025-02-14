@@ -105,7 +105,8 @@ def ask_confirm_password() -> str:
 
         if password == confirm_password:
             return password
-        print("Passwords do not match!")
+        else:
+            print("Passwords do not match!")
 
 
 def load_local_config() -> QuickstartConfig:
