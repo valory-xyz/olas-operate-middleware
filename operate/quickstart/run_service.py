@@ -179,9 +179,10 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 if choice not in available_choices:
                     print("\nPlease select a program with available slots:")
                     for idx, prog in available_choices.items():
-                        print(f"{idx}) {prog['name']} : available slots {prog['slots']}")
+                        print(
+                            f"{idx}) {prog['name']} : available slots {prog['slots']}"
+                        )
                     continue
-                    
                 selected_program = available_choices[choice]
                 program_id = selected_program["program_id"]
                 print(f"Selected staking program: {selected_program['name']}")
