@@ -127,9 +127,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     },
 }
 
-PRIORITY_MECH_ADDRESS: t.Dict[Chain, str] = {
-    Chain.GNOSIS: "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
-}
+DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"
 
 DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, int] = {
     Chain.GNOSIS: 1e18,

@@ -1,11 +1,32 @@
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2023-2025 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+"""Quickstart script to run log analysis."""
+
+
 import json
 import os
-import subprocess
+import subprocess  # nosec
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import List, TYPE_CHECKING, Union
 
 from operate.constants import DEPLOYMENT
+
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -25,42 +46,47 @@ def find_build_directory(config_file: Path, operate: "OperateApp") -> Path:
                 print(f"{config.get('name')} not deployed.")
                 sys.exit(1)
             return build_dir
-    
+
     print(f"{config.get('name')} not found.")
     sys.exit(1)
 
 
-def run_analysis(logs_dir, **kwargs):
+def run_analysis(logs_dir: Path, **kwargs: str) -> None:
     """Run the log analysis command."""
-    command = [
-        "poetry", "run", "autonomy", "analyse", "logs",
-        "--from-dir", logs_dir,
+    command: List[Union[str, Path]] = [
+        "poetry",
+        "run",
+        "autonomy",
+        "analyse",
+        "logs",
+        "--from-dir",
+        logs_dir,
     ]
-    if kwargs.get("agent"):
-        command.extend(["--agent", kwargs.get("agent")])
-    if kwargs.get("reset_db"):
+    if "agent" in kwargs:
+        command.extend(["--agent", kwargs["agent"]])
+    if "reset_db" in kwargs:
         command.extend(["--reset-db"])
-    if kwargs.get("start_time"):
-        command.extend(["--start-time", kwargs.get("start_time")])
-    if kwargs.get("end_time"):
-        command.extend(["--end-time", kwargs.get("end_time")])
-    if kwargs.get("log_level"):
-        command.extend(["--log-level", kwargs.get("log_level")])
-    if kwargs.get("period"):
-        command.extend(["--period", kwargs.get("period")])
-    if kwargs.get("round"):
-        command.extend(["--round", kwargs.get("round")])
-    if kwargs.get("behaviour"):
-        command.extend(["--behaviour", kwargs.get("behaviour")])
-    if kwargs.get("fsm"):
+    if "start_time" in kwargs:
+        command.extend(["--start-time", kwargs["start_time"]])
+    if "end_time" in kwargs:
+        command.extend(["--end-time", kwargs["end_time"]])
+    if "log_level" in kwargs:
+        command.extend(["--log-level", kwargs["log_level"]])
+    if "period" in kwargs:
+        command.extend(["--period", kwargs["period"]])
+    if "round" in kwargs:
+        command.extend(["--round", kwargs["round"]])
+    if "behaviour" in kwargs:
+        command.extend(["--behaviour", kwargs["behaviour"]])
+    if "fsm" in kwargs:
         command.extend(["--fsm"])
-    if kwargs.get("include_regex"):
-        command.extend(["--include-regex", kwargs.get("include_regex")])
-    if kwargs.get("exclude_regex"):
-        command.extend(["--exclude-regex", kwargs.get("exclude_regex")])
+    if "include_regex" in kwargs:
+        command.extend(["--include-regex", kwargs["include_regex"]])
+    if "exclude_regex" in kwargs:
+        command.extend(["--exclude-regex", kwargs["exclude_regex"]])
 
     try:
-        subprocess.run(command, check=True)
+        subprocess.run(command, check=True)  # nosec
         print("Analysis completed successfully.")
     except subprocess.CalledProcessError as e:
         print(f"Command failed with exit code {e.returncode}")
@@ -71,11 +97,11 @@ def run_analysis(logs_dir, **kwargs):
 
 
 def analyse_logs(
-        operate: "OperateApp",
-        config_path: str,
-        **kwargs
-):
-
+    operate: "OperateApp",
+    config_path: str,
+    **kwargs: str,
+) -> None:
+    """Run the log analysis command."""
     config_file = Path(config_path)
     if not config_file.exists():
         print(f"Config file '{config_file}' not found.")
@@ -83,7 +109,7 @@ def analyse_logs(
 
     # Auto-detect the logs directory
     build_dir = find_build_directory(config_file, operate)
-    logs_dir = os.path.join(build_dir, "persistent_data", "logs")
+    logs_dir = build_dir / "persistent_data" / "logs"
     if not os.path.exists(logs_dir):
         print(f"Logs directory '{logs_dir}' not found.")
         sys.exit(1)

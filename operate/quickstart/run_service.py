@@ -25,30 +25,31 @@ import time
 import typing as t
 import warnings
 from dataclasses import dataclass
-from halo import Halo
 from pathlib import Path
 
-warnings.filterwarnings("ignore", category=UserWarning)
+from aea_ledger_ethereum import LedgerApi
+from halo import Halo  # type: ignore[import]
 
 from aea_ledger_cosmos import LedgerApi
 from operate.utils.common import CHAIN_TO_METADATA, ask_or_get_from_env
 from operate.account.user import UserAccount
 from operate.constants import OPERATE_HOME, ZERO_ADDRESS
-from operate.resource import LocalResource, deserialize
-from operate.services.manage import ServiceManager
-from operate.services.service import Service, NON_EXISTENT_MULTISIG
 from operate.operate_types import (
     LedgerType,
+    OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
-    OnChainState,
 )
 from operate.quickstart.choose_staking import (
     NO_STAKING_PROGRAM_ID,
     StakingHandler,
     StakingVariables,
 )
+from operate.resource import LocalResource, deserialize
+from operate.services.manage import ServiceManager
+from operate.services.service import NON_EXISTENT_MULTISIG, Service
 from operate.utils.common import (
+    CHAIN_TO_METADATA,
     check_rpc,
     print_box,
     print_section,
@@ -56,6 +57,10 @@ from operate.utils.common import (
     wei_to_token,
 )
 from operate.utils.gnosis import get_asset_balance
+
+
+warnings.filterwarnings("ignore", category=UserWarning)
+
 
 if t.TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -81,7 +86,9 @@ class QuickstartConfig(LocalResource):
                 continue
 
             # allow for optional types
-            is_optional_type = t.get_origin(ptype) is t.Union and type(None) in t.get_args(ptype)
+            is_optional_type = t.get_origin(ptype) is t.Union and type(
+                None
+            ) in t.get_args(ptype)
             value = obj.get(pname, None)
             if is_optional_type and value is None:
                 continue
@@ -100,6 +107,7 @@ def ask_confirm_password() -> str:
             return password
         print("Passwords do not match!")
 
+
 def load_local_config() -> QuickstartConfig:
     """Load the local quickstart configuration."""
     path = OPERATE_HOME / "local_config.json"
@@ -108,7 +116,8 @@ def load_local_config() -> QuickstartConfig:
     else:
         config = QuickstartConfig(path)
 
-    return config
+    return config  # type: ignore[return-value]
+
 
 def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     """Configure local quickstart configuration."""
@@ -141,14 +150,18 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
         available_choices = {}
         
         for index, program_id in enumerate(ids):
-            metadata = staking_handler.get_staking_contract_metadata(program_id=program_id)
+            metadata = staking_handler.get_staking_contract_metadata(
+                program_id=program_id
+            )
             name = metadata["name"]
             description = metadata["description"]
             available_slots = metadata["available_staking_slots"]
             wrapped_description = textwrap.fill(
                 description, width=80, initial_indent="   ", subsequent_indent="   "
             )
-            print(f"{index + 1}) {name}\t(available slots : {available_slots})\n{wrapped_description}\n")
+            print(
+                f"{index + 1}) {name}\t(available slots : {available_slots})\n{wrapped_description}\n"
+            )
             if available_slots != 0:
                 available_choices[index + 1] = {
                     "program_id": program_id,
@@ -183,7 +196,9 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
         config.principal_chain = template["home_chain"]
 
     # set chain configs in the service template
-    no_staking_vars = staking_handler.get_staking_env_variables(program_id=NO_STAKING_PROGRAM_ID)
+    no_staking_vars = staking_handler.get_staking_env_variables(
+        program_id=NO_STAKING_PROGRAM_ID
+    )
     for chain in template["configurations"]:
         if chain == config.principal_chain:
             template["configurations"][chain] |= {
@@ -227,38 +242,26 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 )
                 print()
 
-            template["env_variables"][env_var_name]["value"] = config.user_provided_args[env_var_name]
+            template["env_variables"][env_var_name][
+                "value"
+            ] = config.user_provided_args[env_var_name]
 
         # TODO: Handle it in a more generic way
         if (
-            template["env_variables"][env_var_name]["provision_type"] == ServiceEnvProvisionType.COMPUTED and
-            "SUBGRAPH_API_KEY" in config.user_provided_args and
-            "{SUBGRAPH_API_KEY}" in template["env_variables"][env_var_name]["value"]
+            template["env_variables"][env_var_name]["provision_type"]
+            == ServiceEnvProvisionType.COMPUTED
+            and "SUBGRAPH_API_KEY" in config.user_provided_args
+            and "{SUBGRAPH_API_KEY}" in template["env_variables"][env_var_name]["value"]
         ):
-            template["env_variables"][env_var_name]["value"] = template["env_variables"][env_var_name]["value"].format(
+            template["env_variables"][env_var_name]["value"] = template[
+                "env_variables"
+            ][env_var_name]["value"].format(
                 SUBGRAPH_API_KEY=config.user_provided_args["SUBGRAPH_API_KEY"],
             )
 
     config.store()
     return config
 
-def handle_password_migration(operate: "OperateApp", config: QuickstartConfig) -> t.Optional[str]:
-    """Handle password migration."""
-    if not config.password_migrated:
-        print("Add password...")
-        old_password, new_password = "12345", ask_confirm_password()
-        operate.user_account.update(old_password, new_password)
-        if operate.wallet_manager.exists(LedgerType.ETHEREUM):
-            operate.password = old_password
-            wallet = operate.wallet_manager.load(LedgerType.ETHEREUM)
-            wallet.crypto.dump(str(wallet.key_path), password=new_password)
-            wallet.password = new_password
-            wallet.store()
-
-        config.password_migrated = True
-        config.store()
-        return new_password
-    return None
 
 def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> None:
     """Ask password if needed."""
@@ -289,7 +292,9 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> N
 
     operate.password = password
 
+
 def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
+    """Get service."""
     if len(manager.json) > 0:
         old_hash = manager.json[0]["hash"]
         if old_hash == template["hash"]:
@@ -315,40 +320,52 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
 
     return service
 
+
 def ask_funds_in_address(
     ledger_api: LedgerApi,
     required_balance: int,
     asset_address: str,
     recipient_name: str,
     recipient_address: str,
-    chain: str
+    chain: str,
 ) -> None:
     """Ask for funds in address."""
-    if required_balance > get_asset_balance(ledger_api, asset_address, recipient_address):
+    if required_balance > get_asset_balance(
+        ledger_api, asset_address, recipient_address
+    ):
         print(
             f"[{chain}] Please make sure {recipient_name} {recipient_address} "
             f"has at least {wei_to_token(required_balance, chain, asset_address)}",
         )
-        waiting_for_amount = required_balance - get_asset_balance(ledger_api, asset_address, recipient_address)
+        waiting_for_amount = required_balance - get_asset_balance(
+            ledger_api, asset_address, recipient_address
+        )
         spinner = Halo(
             text=f"[{chain}] Waiting for at least {wei_to_token(waiting_for_amount, chain, asset_address)}...",
-            spinner="dots"
+            spinner="dots",
         )
         spinner.start()
 
         while True:
             time.sleep(1)
-            updated_balance = get_asset_balance(ledger_api, asset_address, recipient_address)
+            updated_balance = get_asset_balance(
+                ledger_api, asset_address, recipient_address
+            )
             if updated_balance >= required_balance:
                 break
 
-        spinner.succeed(f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}.")
+        spinner.succeed(
+            f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}."
+        )
+
 
 def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
     """Ensure enough funds."""
     if not operate.wallet_manager.exists(ledger_type=LedgerType.ETHEREUM):
         print("Creating the Master EOA...")
-        wallet, mnemonic = operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        wallet, mnemonic = operate.wallet_manager.create(
+            ledger_type=LedgerType.ETHEREUM
+        )
         wallet.password = operate.password
         print_box(
             f"Please save the mnemonic phrase for the Master EOA:\n{', '.join(mnemonic)}",
@@ -519,13 +536,19 @@ def run_service(operate: "OperateApp", config_path: str) -> None:
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")
     print_section(f"Deploying on-chain service on {config.principal_chain}...")
-    print("Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n")
-    manager.deploy_service_onchain_from_safe(service_config_id=service.service_config_id)
+    print(
+        "Cancelling the on-chain service update prematurely could lead to an inconsistent state of the Safe or the on-chain service state, which may require manual intervention to resolve.\n"
+    )
+    manager.deploy_service_onchain_from_safe(
+        service_config_id=service.service_config_id
+    )
 
     print_section("Funding the service")
     manager.fund_service(service_config_id=service.service_config_id)
 
     print_section("Deploying the service")
-    manager.deploy_service_locally(service_config_id=service.service_config_id, use_docker=True)
+    manager.deploy_service_locally(
+        service_config_id=service.service_config_id, use_docker=True
+    )
 
     print_section(f"Starting the {template['name']}")

@@ -1,0 +1,23 @@
+name: requester_activity_checker
+author: valory
+version: 0.1.0
+type: contract
+description: Requester activity checker contract
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeihibyzldqy5ecqvxdhnpejol5hkophsu53slyfmtpobts55zvyoba
+  build/RequesterActivityChecker.json: bafybeiaaklcnrqr3tmxq3vdf3hqqbodknqaa2xfx7ltnp22bcjcfaj2yku
+  contract.py: bafybeigfitqtrcoyicp5rjlkyvqxfcfqyms4sp6rgqr37kov4rqhx4lbim
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: RequesterActivityCheckerContract
+contract_interface_paths:
+  ethereum: build/RequesterActivityChecker.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: ==1.60.0
+  open-aea-test-autonomy:
+    version: ==0.18.3
+  web3:
+    version: <7,>=6.0.0

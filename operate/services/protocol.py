@@ -33,7 +33,6 @@ from typing import Optional, Union, cast
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
-from aea_ledger_ethereum import HTTPProvider, Web3
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
@@ -57,7 +56,6 @@ from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
 
-import operate.operate_types
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -65,7 +63,6 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import PRIORITY_MECH_ADDRESS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -263,7 +260,7 @@ class StakingManager(OnChainHelper):
         )
         return instance.functions.serviceRegistryTokenUtility().call()
 
-    def min_staking_deposit(self, staking_contract: str) -> str:
+    def min_staking_deposit(self, staking_contract: str) -> int:
         """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -615,17 +612,6 @@ class _ChainUtil:
         )
         return instance
 
-    def owner_of(self, token_id: int) -> str:
-        """Get owner of a service."""
-        self._patch()
-        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
-            chain_type=self.chain_type
-        )
-        owner = registry_contracts.service_manager.owner_of(
-            ledger_api=ledger_api, token_id=token_id
-        ).get("owner", "")
-        return owner
-
     def info(self, token_id: int) -> t.Dict:
         """Get service info."""
         self._patch()
@@ -831,10 +817,9 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-    def get_staking_params(self, chain: str, program_id: str) -> t.Dict:
+    def get_staking_params(self, staking_contract: str) -> t.Dict:
         """Get agent IDs for the staking contract"""
         self._patch()
-        staking_contract = STAKING[chain][program_id]
         staking_manager = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
@@ -859,21 +844,6 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-        w3 = Web3(HTTPProvider(self.rpc))
-        if "mech_marketplace" in program_id:
-            agent_mech = PRIORITY_MECH_ADDRESS[chain]
-        else:
-            agent_mech = w3.eth.contract(
-                address=activity_checker,
-                abi=[{
-                    "inputs": [],
-                    "name": "agentMech",
-                    "outputs": [{"internalType": "address", "name": "", "type": "address"}],
-                    "stateMutability": "view",
-                    "type": "function"
-                }]
-            ).functions.agentMech().call()
-
         return dict(
             staking_contract=staking_contract,
             agent_ids=agent_ids,
@@ -882,7 +852,6 @@ class _ChainUtil:
             service_registry_token_utility=service_registry_token_utility,
             min_staking_deposit=min_staking_deposit,
             activity_checker=activity_checker,
-            agent_mech=agent_mech,
         )
 
 
