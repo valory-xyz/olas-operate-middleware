@@ -185,11 +185,12 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 selected_program = available_choices[choice]
                 program_id = selected_program["program_id"]
                 print(f"Selected staking program: {selected_program['name']}")
-                config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
+                config.staking_vars = staking_handler.get_staking_env_variables(
+                    program_id=program_id
+                )
                 break
             except ValueError:
-                program_id = ask_or_get_from_env("", False, "STAKING_PROGRAM")
-                config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
+                print(f"Please enter a valid option (1 - {len(ids)}).")
                 break
 
     if config.principal_chain is None:
