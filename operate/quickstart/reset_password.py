@@ -54,10 +54,8 @@ def reset_password(operate: "OperateApp") -> None:
         print("Invalid password!")
         sys.exit(1)
 
-
     print_section("Update local user account")
     new_password = ask_confirm_password()
-
     print("Resetting password of user account...")
     UserAccount.new(
         password=old_password,

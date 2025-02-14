@@ -169,28 +169,28 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                     "name": name,
                 }
                 
-        # Get the staking choice input
-        choice_str = ask_or_get_from_env(
-            f"Enter your choice (1 - {len(ids)}): ",
-            False,
-            "STAKING_PROGRAM"
-        )
-        
-        try:
-            choice = int(choice_str)
-            if choice not in available_choices:
-                raise ValueError(f"Invalid choice {choice}. Please select a program with available slots.")
-            
-            selected_program = available_choices[choice]
-            program_id = selected_program["program_id"]
-            print(f"Selected staking program: {selected_program['name']}")
-            config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
-        except ValueError as e:
-            # In unattended mode, try to use the choice_str directly as a program_id
-            if os.getenv("ATTENDED", "true").lower() != "true":
-                config.staking_vars = staking_handler.get_staking_env_variables(program_id=choice_str)
-            else:
-                raise ValueError(f"Please enter a valid option (1 - {len(ids)}).") from e
+        while True:
+            try:
+                choice = int(ask_or_get_from_env(
+                    f"Enter your choice (1 - {len(ids)}): ",
+                    False,
+                    "STAKING_PROGRAM"
+                ))
+                if choice not in available_choices:
+                    print("\nPlease select a program with available slots:")
+                    for idx, prog in available_choices.items():
+                        print(f"{idx}) {prog['name']} : available slots {prog['slots']}")
+                    continue
+                    
+                selected_program = available_choices[choice]
+                program_id = selected_program["program_id"]
+                print(f"Selected staking program: {selected_program['name']}")
+                config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
+                break
+            except ValueError:
+                program_id = ask_or_get_from_env("", False, "STAKING_PROGRAM")
+                config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
+                break
 
     if config.principal_chain is None:
         config.principal_chain = template["home_chain"]

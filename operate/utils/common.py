@@ -181,12 +181,7 @@ def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
     if os.environ.get("ATTENDED", "true").lower() != "true":
         return True
-        
-    response = (
-        input(f"{question} (yes/no): ")
-        .strip()
-        .lower()
-    )
+    response = input(f"{question} (yes/no): ").strip().lower()
     return response in ["yes", "y"]
 
 def ask_or_get_from_env(prompt: str, is_pass: bool, env_var_name: str, raise_if_missing: bool = True) -> str:
