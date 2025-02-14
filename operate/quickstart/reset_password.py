@@ -18,14 +18,15 @@
 # ------------------------------------------------------------------------------
 """Reset password."""
 
-import os
+import sys
 from typing import TYPE_CHECKING
 
 from operate.account.user import UserAccount
 from operate.operate_types import LedgerType
-from operate.quickstart.run_service import ask_or_get_from_env, ask_confirm_password
-from operate.utils.common import print_section, print_title
+from operate.quickstart.run_service import ask_confirm_password
+from operate.utils.common import print_section, print_title, ask_or_get_from_env
 from operate.wallet.master import EthereumMasterWallet
+
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -33,8 +34,6 @@ if TYPE_CHECKING:
 
 def reset_password(operate: "OperateApp") -> None:
     """Reset password."""
-    attended = os.environ.get("ATTENDED", "true").lower() == "true"
-
     print_title("Reset your password")
 
     # check if agent was started before
@@ -49,15 +48,16 @@ def reset_password(operate: "OperateApp") -> None:
             True,
             "OLD_OPERATE_PASSWORD"
         )
-        
         if operate.user_account.is_valid(password=old_password):
             break
         old_password = None
-        if attended:
-            print("Invalid password!")    
+        print("Invalid password!")
+        sys.exit(1)
+
 
     print_section("Update local user account")
     new_password = ask_confirm_password()
+
     print("Resetting password of user account...")
     UserAccount.new(
         password=old_password,
@@ -70,7 +70,9 @@ def reset_password(operate: "OperateApp") -> None:
     print('Resetting password of "ethereum" wallet...')
     operate.password = old_password
     operate.wallet_manager.password = old_password
-    wallet: EthereumMasterWallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+    wallet: EthereumMasterWallet = operate.wallet_manager.load(
+        ledger_type=LedgerType.ETHEREUM
+    )
     wallet.update_password(password=new_password)
 
     print_section("Password reset done!")

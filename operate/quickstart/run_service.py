@@ -18,7 +18,6 @@
 # ------------------------------------------------------------------------------
 """Agent Quickstart script."""
 
-import getpass
 import json
 import os
 import textwrap
@@ -32,7 +31,7 @@ from pathlib import Path
 warnings.filterwarnings("ignore", category=UserWarning)
 
 from aea_ledger_cosmos import LedgerApi
-from operate.utils.common import CHAIN_TO_METADATA
+from operate.utils.common import CHAIN_TO_METADATA, ask_or_get_from_env
 from operate.account.user import UserAccount
 from operate.constants import OPERATE_HOME, ZERO_ADDRESS
 from operate.resource import LocalResource, deserialize
@@ -90,28 +89,16 @@ class QuickstartConfig(LocalResource):
             kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
         return cls(**kwargs)
 
-def ask_or_get_from_env(prompt: str, is_pass: bool, env_var_name: str, raise_if_missing: bool = True) -> str:
-    """Get user input either interactively or from environment variables."""
-    if os.getenv("ATTENDED", "true").lower() == "true":
-        if is_pass:
-            return getpass.getpass(prompt)
-        return input(prompt)
-    elif env_var_name in os.environ:
-        return os.environ[env_var_name]
-    elif raise_if_missing:
-        raise ValueError(f"{env_var_name} env var required in unattended mode")
-    return ""
 
 def ask_confirm_password() -> str:
-    """Get password from user input or environment."""
-    if os.getenv("ATTENDED", "true").lower() == "true":
-        while True:
-            password = ask_or_get_from_env("Please input your password (or press enter): ", True, "OPERATE_PASSWORD")
-            confirm_password = ask_or_get_from_env("Please confirm your password: ", True, "OPERATE_PASSWORD")
-            if password == confirm_password:
-                return password
-            print("Passwords do not match!")
-    return ask_or_get_from_env("", True, "OPERATE_PASSWORD")
+    """Ask for password confirmation."""
+    while True:
+        password = ask_or_get_from_env("Please input your password (or press enter): ", True, "OPERATE_PASSWORD")
+        confirm_password = ask_or_get_from_env("Please confirm your password: ", True, "OPERATE_PASSWORD")
+
+        if password == confirm_password:
+            return password
+        print("Passwords do not match!")
 
 def load_local_config() -> QuickstartConfig:
     """Load the local quickstart configuration."""
@@ -126,7 +113,7 @@ def load_local_config() -> QuickstartConfig:
 def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     """Configure local quickstart configuration."""
     config = load_local_config()
-    attended = os.getenv("ATTENDED", "true").lower() == "true"
+
     if config.rpc is None:
         config.rpc = {}
 
@@ -147,48 +134,50 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
         rpc=config.rpc[template["home_chain"]],
         default_agent_id=template["agent_id"],
     )
+    
     if config.staking_vars is None:
-        if attended:
-            print_section("Please, select your staking program preference")
-            ids = list(template["staking_programs"].keys())
-            available_choices = {}
-            for index, program_id in enumerate(ids):
-                metadata = staking_handler.get_staking_contract_metadata(program_id=program_id)
-                name = metadata["name"]
-                description = metadata["description"]
-                available_slots = metadata["available_staking_slots"] 
-                wrapped_description = textwrap.fill(
-                    description, width=80, initial_indent="   ", subsequent_indent="   "
-                )
-                print(f"{index + 1}) {name}\t(available slots : {available_slots})\n{wrapped_description}\n")
-                if available_slots != 0:
-                    available_choices[index + 1] = {
-                        "program_id": program_id,
-                        "slots": available_slots,
-                        "name": name
-                    }
-            while True:
-                try:
-                    choice = int(ask_or_get_from_env(
-                        f"Enter your choice (1 - {len(ids)}): ",
-                        False,
-                        "STAKING_PROGRAM"
-                    ))
-                    if choice not in available_choices:
-                        print("\nPlease select a program with available slots:") 
-                        for idx, prog in available_choices.items():
-                            print(f"{idx}) {prog['name']} : available slots {prog['slots']}")
-                        continue
-                    selected_program = available_choices[choice]
-                    program_id = selected_program["program_id"]
-                    print(f"Selected staking program: {selected_program['name']}")
-                    config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
-                    break
-                except ValueError:
-                    print(f"Please enter a valid option (1 - {len(ids)}).")
-        else:
-            program_id = ask_or_get_from_env("", False, "STAKING_PROGRAM")
+        print_section("Please, select your staking program preference")
+        ids = list(template["staking_programs"].keys())
+        available_choices = {}
+        
+        for index, program_id in enumerate(ids):
+            metadata = staking_handler.get_staking_contract_metadata(program_id=program_id)
+            name = metadata["name"]
+            description = metadata["description"]
+            available_slots = metadata["available_staking_slots"]
+            wrapped_description = textwrap.fill(
+                description, width=80, initial_indent="   ", subsequent_indent="   "
+            )
+            print(f"{index + 1}) {name}\t(available slots : {available_slots})\n{wrapped_description}\n")
+            if available_slots != 0:
+                available_choices[index + 1] = {
+                    "program_id": program_id,
+                    "slots": available_slots,
+                    "name": name,
+                }
+                
+        # Get the staking choice input
+        choice_str = ask_or_get_from_env(
+            f"Enter your choice (1 - {len(ids)}): ",
+            False,
+            "STAKING_PROGRAM"
+        )
+        
+        try:
+            choice = int(choice_str)
+            if choice not in available_choices:
+                raise ValueError(f"Invalid choice {choice}. Please select a program with available slots.")
+            
+            selected_program = available_choices[choice]
+            program_id = selected_program["program_id"]
+            print(f"Selected staking program: {selected_program['name']}")
             config.staking_vars = staking_handler.get_staking_env_variables(program_id=program_id)
+        except ValueError as e:
+            # In unattended mode, try to use the choice_str directly as a program_id
+            if os.getenv("ATTENDED", "true").lower() != "true":
+                config.staking_vars = staking_handler.get_staking_env_variables(program_id=choice_str)
+            else:
+                raise ValueError(f"Please enter a valid option (1 - {len(ids)}).") from e
 
     if config.principal_chain is None:
         config.principal_chain = template["home_chain"]
@@ -216,28 +205,27 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     if config.user_provided_args is None:
         config.user_provided_args = {}
 
-    if attended and any(
+    if any(
         (
             env_var_data["provision_type"] == ServiceEnvProvisionType.USER
             and env_var_name not in config.user_provided_args
-        ) for env_var_name, env_var_data in template["env_variables"].items()
+        )
+        for env_var_name, env_var_data in template["env_variables"].items()
     ):
         print_section("Please enter the arguments that will be used by the service.")
 
     for env_var_name, env_var_data in template["env_variables"].items():
         if env_var_data["provision_type"] == ServiceEnvProvisionType.USER:
             if env_var_name not in config.user_provided_args:
-                if attended:
-                    print(f"Description: {env_var_data['description']}")
-                    if env_var_data["value"]:
-                        print(f"Example: {env_var_data['value']}")
+                print(f"Description: {env_var_data['description']}")
+                if env_var_data["value"]:
+                    print(f"Example: {env_var_data['value']}")
                 config.user_provided_args[env_var_name] = ask_or_get_from_env(
                     f"Please enter {env_var_data['name']}: ",
                     False,
                     env_var_name
                 )
-                if attended:
-                    print()
+                print()
 
             template["env_variables"][env_var_name]["value"] = config.user_provided_args[env_var_name]
 
@@ -272,13 +260,11 @@ def handle_password_migration(operate: "OperateApp", config: QuickstartConfig) -
         return new_password
     return None
 
-def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig):
-    attended = os.getenv("ATTENDED", "true").lower() == "true"
-    
+def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> None:
+    """Ask password if needed."""
     if operate.user_account is None:
-        if attended:
-            print_section("Set up local user account")
-            print("Creating a new local user account...")
+        print_section("Set up local user account")
+        print("Creating a new local user account...")
         password = ask_confirm_password()
         UserAccount.new(
             password=password,
@@ -287,19 +273,19 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig):
         config.password_migrated = True
         config.store()
     else:
-        password = handle_password_migration(operate, config)
-        while password is None:
-            password = ask_or_get_from_env(
+        _password = None
+        while _password is None:
+            _password = ask_or_get_from_env(
                 "\nEnter local user account password [hidden input]: ",
-                is_pass=True,
-                env_var_name="OPERATE_PASSWORD"
+                True,
+                "OPERATE_PASSWORD"
             )
-            
-            if operate.user_account.is_valid(password=password):
+            if operate.user_account.is_valid(password=_password):
                 break
-            password = None
-            if attended:
-                print("Invalid password!")
+            _password = None
+            print("Invalid password!")
+
+        password = _password
 
     operate.password = password
 
@@ -359,17 +345,17 @@ def ask_funds_in_address(
         spinner.succeed(f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}.")
 
 def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
-    attended = os.getenv("ATTENDED", "true").lower() == "true"
-
+    """Ensure enough funds."""
     if not operate.wallet_manager.exists(ledger_type=LedgerType.ETHEREUM):
         print("Creating the Master EOA...")
         wallet, mnemonic = operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
         wallet.password = operate.password
-        if attended:
-            print_box(f"Please save the mnemonic phrase for the Master EOA:\n{', '.join(mnemonic)}", 0, '-')
-            input("Press enter to continue...")
-        else:
-            print(f"Mnemonic phrase for Master EOA:\n{', '.join(mnemonic)}")
+        print_box(
+            f"Please save the mnemonic phrase for the Master EOA:\n{', '.join(mnemonic)}",
+            0,
+            "-",
+        )
+        ask_or_get_from_env("Press enter to continue...", False, "CONTINUE", raise_if_missing=False)
     else:
         wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
@@ -389,39 +375,70 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             rpc=chain_config.ledger_config.rpc,
         )
 
-        for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items():
+        for (
+            asset_address,
+            fund_requirements,
+        ) in chain_config.chain_data.user_params.fund_requirements.items():
             gas_fund_req = 0
             agent_fund_requirement = fund_requirements.agent
             safe_fund_requirement = fund_requirements.safe
             service_state = manager._get_on_chain_state(service, chain_name)
             if asset_address == ZERO_ADDRESS:
-                gas_fund_req = chain_metadata.get("gasFundReq")
-                if service_state in (OnChainState.NON_EXISTENT, OnChainState.PRE_REGISTRATION, OnChainState.ACTIVE_REGISTRATION):
-                    agent_fund_requirement += 2  # for 1 wei in msg.value during registration and activation
+                gas_fund_req = t.cast(int, chain_metadata.get("gasFundReq"))
+                if service_state in (
+                    OnChainState.NON_EXISTENT,
+                    OnChainState.PRE_REGISTRATION,
+                    OnChainState.ACTIVE_REGISTRATION,
+                ):
+                    agent_fund_requirement += (
+                        2  # for 1 wei in msg.value during registration and activation
+                    )
 
             # print the master EOA balance that was created above
-            balance_str = wei_to_token(get_asset_balance(ledger_api, asset_address, wallet.crypto.address), chain_name, asset_address)
-            print(f"[{chain_name}] Master EOA balance: {balance_str}",)
+            balance_str = wei_to_token(
+                get_asset_balance(ledger_api, asset_address, wallet.crypto.address),
+                chain_name,
+                asset_address,
+            )
+            print(
+                f"[{chain_name}] Master EOA balance: {balance_str}",
+            )
 
             # if master safe exists print its balance
             safe_exists = wallet.safes.get(chain) is not None
             if safe_exists:
-                balance_str = wei_to_token(get_asset_balance(ledger_api, asset_address, wallet.safes[chain]), chain_name, asset_address)
+                balance_str = wei_to_token(
+                    get_asset_balance(ledger_api, asset_address, wallet.safes[chain]),
+                    chain_name,
+                    asset_address,
+                )
                 print(f"[{chain_name}] Master safe balance: {balance_str}")
 
             # if service safe exists print its balance
             if chain_config.chain_data.multisig != NON_EXISTENT_MULTISIG:
-                service_save_balance = get_asset_balance(ledger_api, asset_address, chain_config.chain_data.multisig)
-                print(f"[{chain_name}] Service safe balance: {wei_to_token(service_save_balance, chain_name, asset_address)}")
+                service_save_balance = get_asset_balance(
+                    ledger_api, asset_address, chain_config.chain_data.multisig
+                )
+                print(
+                    f"[{chain_name}] Service safe balance: {wei_to_token(service_save_balance, chain_name, asset_address)}"
+                )
                 if service_save_balance >= safe_fund_requirement:
-                    safe_fund_requirement = 0  # no need to fund the service safe if it has enough funds
+                    safe_fund_requirement = (
+                        0  # no need to fund the service safe if it has enough funds
+                    )
 
             # if agent EOA exists print its balance
             if len(service.keys) > 0:
-                agent_eoa_balance = get_asset_balance(ledger_api, asset_address, service.keys[0].address)
-                print(f"[{chain_name}] Agent EOA balance: {wei_to_token(agent_eoa_balance, chain_name, asset_address)}")
+                agent_eoa_balance = get_asset_balance(
+                    ledger_api, asset_address, service.keys[0].address
+                )
+                print(
+                    f"[{chain_name}] Agent EOA balance: {wei_to_token(agent_eoa_balance, chain_name, asset_address)}"
+                )
                 if agent_eoa_balance >= agent_fund_requirement:
-                    agent_fund_requirement = 0  # no need to fund the agent EOA if it has enough funds
+                    agent_fund_requirement = (
+                        0  # no need to fund the agent EOA if it has enough funds
+                    )
 
             # ask for enough funds in master EOA for gas fees
             ask_funds_in_address(
@@ -430,7 +447,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 asset_address=asset_address,
                 recipient_name="Master EOA",
                 recipient_address=wallet.crypto.address,
-                chain=chain_name
+                chain=chain_name,
             )
 
             # if master safe does not exist, create it
@@ -444,8 +461,6 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                     "BACKUP_OWNER",
                     raise_if_missing=False
                 )
-                if backup_owner and not attended:
-                    print(f"[{chain_name}] Linking Backup Owner:{backup_owner}")
 
                 wallet.create_safe(
                     chain=chain,
@@ -460,11 +475,12 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 asset_address=asset_address,
                 recipient_name="Master Safe",
                 recipient_address=wallet.safes[chain],
-                chain=chain_name
+                chain=chain_name,
             )
 
         # if staking, ask for the required OLAS for it
         if chain_config.chain_data.user_params.use_staking:
+            assert config.staking_vars is not None, "Staking vars not found"  # nosec
             if service_state in (
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
@@ -481,9 +497,8 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 asset_address=config.staking_vars["CUSTOM_OLAS_ADDRESS"],
                 recipient_name="Master Safe",
                 recipient_address=wallet.safes[chain],
-                chain=chain_name
+                chain=chain_name,
             )
-
 
 def run_service(operate: "OperateApp", config_path: str) -> None:
     """Run service."""
