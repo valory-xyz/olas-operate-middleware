@@ -519,6 +519,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 chain=chain_name,
             )
 
+
 def run_service(operate: "OperateApp", config_path: str) -> None:
     """Run service."""
 
