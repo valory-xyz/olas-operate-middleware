@@ -461,7 +461,6 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
-            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -575,7 +574,6 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
-            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -624,9 +622,17 @@ class Deployment(LocalResource):
         :return: Deployment object
         """
         # TODO: Maybe remove usage of chain and use home_chain always?
+        original_env = os.environ.copy()
+        service = Service.load(path=self.path)
+        service.consume_env_variables()
+
         if use_docker:
-            return self._build_docker(force=force, chain=chain)
-        return self._build_host(force=force, chain=chain)
+            self._build_docker(force=force, chain=chain)
+        else:
+            self._build_host(force=force, chain=chain)
+
+        os.environ.clear()
+        os.environ.update(original_env)
 
     def start(self, use_docker: bool = False) -> None:
         """Start the service"""
@@ -1142,7 +1148,10 @@ class Service(LocalResource):
         self.store()
 
     def consume_env_variables(self) -> None:
-        """Consume (apply) environment variables."""
+        """Consume (apply) environment variables.
+
+        Note that this method modifies os.environ. Consider if you need a backup of os.environ before using this method.
+        """
         for env_var, attributes in self.env_variables.items():
             os.environ[env_var] = str(attributes["value"])
 
