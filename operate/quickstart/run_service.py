@@ -446,10 +446,12 @@ def run_service(operate: "OperateApp", config_path: str) -> None:
     config = configure_local_config(template)
     manager = operate.service_manager()
     service = get_service(manager, template)
+    manager.config_file = template
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()
+    manager.config_file = template
     config = load_local_config()
     ensure_enough_funds(operate, service)
 

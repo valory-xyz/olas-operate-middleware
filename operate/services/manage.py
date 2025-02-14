@@ -50,7 +50,6 @@ from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
     OLAS,
-    STAKING,
     USDC,
     WRAPPED_NATIVE_ASSET,
 )
@@ -105,6 +104,7 @@ class ServiceManager:
         path: Path,
         keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
+        config_file: t.Optional[dict] = None,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """
@@ -118,6 +118,7 @@ class ServiceManager:
         self.path = path
         self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
+        self.config_file = config_file
         self.logger = logger or setup_logger(name="operate.manager")
 
     def setup(self) -> None:
@@ -171,7 +172,18 @@ class ServiceManager:
             rpc=ledger_config.rpc,
             wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
             contracts=CONTRACTS[ledger_config.chain],
+            get_staking_contract_fn=self.get_staking_contract
         )
+        
+    def get_staking_contract(self, staking_program_id: str) -> str:
+        """Get staking contract address from config."""
+        self.logger.info(f"Staking Choice Selected {staking_program_id}")
+        if not self.config_file or "staking_programs" not in self.config_file:
+            raise ValueError("Config file missing staking programs")
+        if staking_program_id not in self.config_file["staking_programs"]:
+            raise ValueError(f"Staking program {staking_program_id} not found")
+        return self.config_file["staking_programs"][staking_program_id]
+    
 
     def load_or_create(
         self,
@@ -338,9 +350,7 @@ class ServiceManager:
 
         if user_params.use_staking:
             staking_params = ocm.get_staking_params(
-                staking_contract=STAKING[ledger_config.chain][
-                    user_params.staking_program_id
-                ],
+                staking_contract=self.get_staking_contract(user_params.staking_program_id),
             )
         else:  # TODO fix this - using pearl beta params
             staking_params = dict(  # nosec
@@ -805,9 +815,7 @@ class ServiceManager:
             == OnChainState.NON_EXISTENT
         ):
             if user_params.use_staking and not sftxb.staking_slots_available(
-                staking_contract=STAKING[ledger_config.chain][
-                    user_params.staking_program_id
-                ]
+                staking_contract=self.get_staking_contract(chain_data.user_params.staking_program_id)
             ):
                 raise ValueError("No staking slots available")
 
@@ -1115,7 +1123,7 @@ class ServiceManager:
         if current_staking_program is not None:
             can_unstake = sftxb.can_unstake(
                 service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][current_staking_program],
+                staking_contract= self.get_staking_contract(current_staking_program),
             )
 
         # Cannot unstake, terminate flow.
@@ -1229,9 +1237,9 @@ class ServiceManager:
         if service_id == NON_EXISTENT_TOKEN:
             return None
 
-        for staking_program_id, staking_program_address in STAKING[
-            ledger_config.chain
-        ].items():
+        for staking_program_id, staking_program_address in self.config_file["staking_programs"].items():
+            print(f"staking_program_id :{staking_program_id}")
+            print(f"staking_program_address :{staking_program_address}")
             state = sftxb.staking_status(
                 service_id=service_id,
                 staking_contract=staking_program_address,
@@ -1292,7 +1300,7 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         user_params = chain_data.user_params
         target_staking_program = user_params.staking_program_id
-        target_staking_contract = STAKING[ledger_config.chain][target_staking_program]
+        target_staking_contract = self.get_staking_contract(target_staking_program)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
 
         # TODO fixme
@@ -1305,7 +1313,7 @@ class ServiceManager:
         )
         is_staked = current_staking_program is not None
         current_staking_contract = (
-            STAKING[ledger_config.chain][current_staking_program]
+            self.get_staking_contract(current_staking_program)
             if current_staking_program is not None
             else None
         )
@@ -1447,7 +1455,7 @@ class ServiceManager:
 
         state = ocm.staking_status(
             service_id=chain_data.token,
-            staking_contract=STAKING[ledger_config.chain],  # type: ignore  # TODO fix mypy
+            staking_contract=self.get_staking_contract(chain_data.user_params.staking_program_id)
         )
         self.logger.info(f"Staking status for service {chain_data.token}: {state}")
         if state not in {StakingState.STAKED, StakingState.EVICTED}:
@@ -1459,7 +1467,7 @@ class ServiceManager:
         self.logger.info(f"Unstaking service: {chain_data.token}")
         ocm.unstake(
             service_id=chain_data.token,
-            staking_contract=STAKING[ledger_config.chain],  # type: ignore  # TODO fix mypy
+            staking_contract=self.get_staking_contract(chain_data.user_params.staking_program_id)
         )
         chain_data.staked = False
         service.store()
@@ -1492,7 +1500,7 @@ class ServiceManager:
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         state = sftxb.staking_status(
             service_id=chain_data.token,
-            staking_contract=STAKING[ledger_config.chain][staking_program_id],
+            staking_contract=self.get_staking_contract(staking_program_id)
         )
         self.logger.info(f"Staking status for service {chain_data.token}: {state}")
         if state not in {StakingState.STAKED, StakingState.EVICTED}:
@@ -1505,7 +1513,7 @@ class ServiceManager:
         sftxb.new_tx().add(
             sftxb.get_unstaking_data(
                 service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][staking_program_id],
+                staking_contract=self.get_staking_contract(staking_program_id),
                 force=force,
             )
         ).settle()
@@ -1532,7 +1540,7 @@ class ServiceManager:
             f"OLAS Balance on service Safe {chain_data.multisig}: "
             f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_data.multisig)}"
         )
-        if staking_program_id not in STAKING[ledger_config.chain]:
+        if staking_program_id not in self.config_file["staking_programs"]:
             raise RuntimeError(
                 "No staking contract found for the current staking_program_id: "
                 f"{staking_program_id}. Not claiming the rewards."
@@ -1542,7 +1550,7 @@ class ServiceManager:
         receipt = sftxb.new_tx().add(
             sftxb.get_claiming_data(
                 service_id=chain_data.token,
-                staking_contract=STAKING[ledger_config.chain][staking_program_id],
+                staking_contract=self.get_staking_contract(staking_program_id)
             )
         ).settle()
         return receipt['transactionHash']
@@ -2200,9 +2208,7 @@ class ServiceManager:
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
+                staking_contract=self.get_staking_contract(user_params.staking_program_id)
         )
         service_registry_address = staking_params["service_registry"]
         service_registry_token_utility_address = staking_params[
@@ -2268,9 +2274,7 @@ class ServiceManager:
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
+            staking_contract=self.get_staking_contract(user_params.staking_program_id)
         )
 
         # This computation assumes the service will be/has been minted with these

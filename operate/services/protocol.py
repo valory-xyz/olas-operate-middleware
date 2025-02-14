@@ -64,7 +64,6 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -552,12 +551,14 @@ class _ChainUtil:
         rpc: str,
         wallet: MasterWallet,
         contracts: ContractAddresses,
+        get_staking_contract_fn: t.Optional[t.Callable[[str], str]] = None,
         chain_type: t.Optional[ChainType] = None,
     ) -> None:
         """On chain manager."""
         self.rpc = rpc
         self.wallet = wallet
         self.contracts = contracts
+        self.get_staking_contract = get_staking_contract_fn
         self.chain_type = chain_type or ChainType.CUSTOM
 
     def _patch(self) -> None:
@@ -822,7 +823,11 @@ class _ChainUtil:
     def get_staking_params(self, chain: str, program_id: str) -> t.Dict:
         """Get agent IDs for the staking contract"""
         self._patch()
-        staking_contract = STAKING[chain][program_id]
+        if not self.get_staking_contract:
+            raise ValueError("Staking contract lookup function not provided")
+            
+        staking_contract = self.get_staking_contract(program_id)
+        print(f"staking_contract :{staking_contract}")
         staking_manager = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
@@ -1074,6 +1079,22 @@ class OnChainManager(_ChainUtil):
 
 class EthSafeTxBuilder(_ChainUtil):
     """Safe Transaction builder."""
+    def __init__(
+        self,
+        rpc: str,
+        wallet: MasterWallet,
+        contracts: ContractAddresses,
+        get_staking_contract_fn: t.Optional[t.Callable[[str], str]] = None,
+        chain_type: t.Optional[ChainType] = None,
+    ) -> None:
+        """Initialize the Safe Transaction builder."""
+        super().__init__(
+            rpc=rpc,
+            wallet=wallet,
+            contracts=contracts,
+            get_staking_contract_fn=get_staking_contract_fn,
+            chain_type=chain_type
+        )
 
     def new_tx(self) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""

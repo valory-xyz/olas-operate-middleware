@@ -24,8 +24,6 @@ from typing import TYPE_CHECKING
 from operate.constants import OPERATE_HOME
 from operate.quickstart.run_service import ask_password_if_needed, configure_local_config, ensure_enough_funds, get_service
 from operate.utils.common import ask_yes_or_no, print_section, print_title
-from operate.ledger.profiles import STAKING
-from operate.operate_types import Chain
 
 if TYPE_CHECKING:
     from operate.cli import OperateApp
@@ -74,7 +72,7 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     sftxb = manager.get_eth_safe_tx_builder(ledger_config=service.chain_configs[config.principal_chain].ledger_config)
     can_unstake = sftxb.can_unstake(
         service_id=service.chain_configs[config.principal_chain].chain_data.token,
-        staking_contract=STAKING[getattr(Chain, config.principal_chain.upper())][current_program]    
+        staking_contract=manager.get_staking_contract(current_program)
     )
 
     if not can_unstake:

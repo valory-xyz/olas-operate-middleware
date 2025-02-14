@@ -77,56 +77,6 @@ CONTRACTS: t.Dict[Chain, ContractAddresses] = {
     ),
 }
 
-STAKING: t.Dict[Chain, t.Dict[str, str]] = {
-    Chain.GNOSIS: {
-        "pearl_alpha": "0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A",
-        "pearl_beta": "0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d",
-        "pearl_beta_2": "0x1c2F82413666d2a3fD8bC337b0268e62dDF67434",
-        "pearl_beta_3": "0xBd59Ff0522aA773cB6074ce83cD1e4a05A457bc1",
-        "pearl_beta_4": "0x3052451e1eAee78e62E169AfdF6288F8791F2918",
-        "pearl_beta_5": "0x4Abe376Fda28c2F43b84884E5f822eA775DeA9F4",
-        "pearl_beta_6": "0x6C6D01e8eA8f806eF0c22F0ef7ed81D868C1aB39",
-        "pearl_beta_mech_marketplace": "0xDaF34eC46298b53a3d24CBCb431E84eBd23927dA",
-        "quickstart_beta_hobbyist": "0x389B46c259631Acd6a69Bde8B6cEe218230bAE8C",
-        "quickstart_beta_hobbyist_2": "0x238EB6993b90a978ec6AAD7530d6429c949C08DA",
-        "quickstart_beta_expert": "0x5344B7DD311e5d3DdDd46A4f71481bD7b05AAA3e",
-        "quickstart_beta_expert_2": "0xb964e44c126410df341ae04B13aB10A985fE3513",
-        "quickstart_beta_expert_3": "0x80faD33Cadb5F53f9D29F02Db97D682E8b101618",
-        "quickstart_beta_expert_4": "0xaD9d891134443B443D7F30013c7e14Fe27F2E029",
-        "quickstart_beta_expert_5": "0xE56dF1E563De1B10715cB313D514af350D207212",
-        "quickstart_beta_expert_6": "0x2546214aEE7eEa4bEE7689C81231017CA231Dc93",
-        "quickstart_beta_expert_7": "0xD7A3C8b975f71030135f1a66e9e23164d54fF455",
-        "quickstart_beta_expert_8": "0x356C108D49C5eebd21c84c04E9162de41933030c",
-        "quickstart_beta_expert_9": "0x17dBAe44BC5618Cc254055b386A29576b4F87015",
-        "quickstart_beta_expert_10": "0xB0ef657b8302bd2c74B6E6D9B2b4b39145b19c6f",
-        "quickstart_beta_expert_11": "0x3112c1613eAC3dBAE3D4E38CeF023eb9E2C91CF7",
-        "quickstart_beta_expert_12": "0xF4a75F476801B3fBB2e7093aCDcc3576593Cc1fc",
-        "quickstart_beta_expert_15_mech_marketplace": "0x88eB38FF79fBa8C19943C0e5Acfa67D5876AdCC1",
-        "quickstart_beta_expert_16_mech_marketplace": "0x6c65430515c70a3f5E62107CC301685B7D46f991",
-        "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
-    },
-    Chain.OPTIMISTIC: {
-        "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
-    },
-    Chain.ETHEREUM: {},
-    Chain.BASE: {
-        "meme_base_alpha_2": "0xc653622FD75026a020995a1d8c8651316cBBc4dA",
-        "meme_base_beta": "0x6011E09e7c095e76980b22498d69dF18EB62BeD8",
-        "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
-        "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
-    },
-    Chain.CELO: {
-        "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
-    },
-    Chain.MODE: {
-        "optimus_alpha": "0x5fc25f50E96857373C64dC0eDb1AbCBEd4587e91",
-        "modius_alpha": "0x534C0A05B6d4d28d5f3630D6D74857B253cf8332",
-        "modius_alpha_2": "0xeC013E68FE4B5734643499887941eC197fd757D0",
-        "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
-        "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
-    },
-}
-
 DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"
 
 DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, int] = {
