@@ -52,7 +52,6 @@ def reset_password(operate: "OperateApp") -> None:
             break
         old_password = None
         print("Invalid password!")
-        sys.exit(1)
 
     print_section("Update local user account")
     new_password = ask_confirm_password()
