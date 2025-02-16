@@ -19,11 +19,12 @@
 """Common utilities."""
 
 
-from decimal import Decimal, ROUND_UP
-from typing import Optional
-
+import os
 import requests
-from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
+from decimal import ROUND_UP, Decimal
+from halo import Halo
+from typing import Optional
+import getpass
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
@@ -178,9 +179,22 @@ def wei_to_token(wei: int, chain: str, token_address: str = ZERO_ADDRESS) -> str
 
 def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
+    if os.environ.get("ATTENDED", "true").lower() != "true":
+        return True
     response = input(f"{question} (yes/no): ").strip().lower()
     return response in ["yes", "y"]
 
+def ask_or_get_from_env(prompt: str, is_pass: bool, env_var_name: str, raise_if_missing: bool = True) -> str:
+    """Get user input either interactively or from environment variables."""
+    if os.getenv("ATTENDED", "true").lower() == "true":
+        if is_pass:
+            return getpass.getpass(prompt)
+        return input(prompt)
+    elif env_var_name in os.environ:
+        return os.environ[env_var_name]
+    elif raise_if_missing:
+        raise ValueError(f"{env_var_name} env var required in unattended mode")
+    return ""
 
 def check_rpc(rpc_url: Optional[str] = None) -> bool:
     """Check RPC."""

@@ -33,7 +33,7 @@ from operate.quickstart.run_service import (
     get_service,
     load_local_config,
 )
-from operate.utils.common import print_section, print_title
+from operate.utils.common import ask_yes_or_no, print_section, print_title
 
 
 if TYPE_CHECKING:
@@ -44,7 +44,6 @@ warnings.filterwarnings("ignore", category=UserWarning)
 
 def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     """Claim staking rewards."""
-
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
 
@@ -60,10 +59,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         "This script will claim the OLAS staking rewards "
         "accrued in the current staking contract and transfer them to your service safe."
     )
-    _continue = input("Do you want to continue (yes/no)? ").strip().lower()
 
-    if _continue not in ("y", "yes"):
-        sys.exit(0)
+    if not ask_yes_or_no("Do you want to continue?"):
+       print("Cancelled.")
+       return
 
     print("")
 

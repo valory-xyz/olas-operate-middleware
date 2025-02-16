@@ -18,13 +18,13 @@
 # ------------------------------------------------------------------------------
 """Reset password."""
 
-from getpass import getpass
+import sys
 from typing import TYPE_CHECKING
 
 from operate.account.user import UserAccount
 from operate.operate_types import LedgerType
 from operate.quickstart.run_service import ask_confirm_password
-from operate.utils.common import print_section, print_title
+from operate.utils.common import print_section, print_title, ask_or_get_from_env
 from operate.wallet.master import EthereumMasterWallet
 
 
@@ -43,7 +43,11 @@ def reset_password(operate: "OperateApp") -> None:
 
     old_password = None
     while old_password is None:
-        old_password = getpass("\nEnter local user account password [hidden input]: ")
+        old_password = ask_or_get_from_env(
+            "\nEnter local user account password [hidden input]: ",
+            True,
+            "OLD_OPERATE_PASSWORD"
+        )
         if operate.user_account.is_valid(password=old_password):
             break
         old_password = None
