@@ -30,8 +30,6 @@ from pathlib import Path
 from aea_ledger_ethereum import LedgerApi
 from halo import Halo  # type: ignore[import]
 
-from aea_ledger_cosmos import LedgerApi
-from operate.utils.common import CHAIN_TO_METADATA, ask_or_get_from_env
 from operate.account.user import UserAccount
 from operate.constants import OPERATE_HOME, ZERO_ADDRESS
 from operate.operate_types import (
@@ -50,6 +48,7 @@ from operate.services.manage import ServiceManager
 from operate.services.service import NON_EXISTENT_MULTISIG, Service
 from operate.utils.common import (
     CHAIN_TO_METADATA,
+    ask_or_get_from_env,
     check_rpc,
     print_box,
     print_section,
@@ -100,8 +99,12 @@ class QuickstartConfig(LocalResource):
 def ask_confirm_password() -> str:
     """Ask for password confirmation."""
     while True:
-        password = ask_or_get_from_env("Please input your password (or press enter): ", True, "OPERATE_PASSWORD")
-        confirm_password = ask_or_get_from_env("Please confirm your password: ", True, "OPERATE_PASSWORD")
+        password = ask_or_get_from_env(
+            "Please input your password (or press enter): ", True, "OPERATE_PASSWORD"
+        )
+        confirm_password = ask_or_get_from_env(
+            "Please confirm your password: ", True, "OPERATE_PASSWORD"
+        )
 
         if password == confirm_password:
             return password
@@ -132,7 +135,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
             config.rpc[chain] = ask_or_get_from_env(
                 f"Enter a {CHAIN_TO_METADATA[chain]['name']} RPC that supports eth_newFilter [hidden input]: ",
                 True,
-                f"{chain.upper()}_LEDGER_RPC"
+                f"{chain.upper()}_LEDGER_RPC",
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
 
@@ -144,12 +147,12 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
         rpc=config.rpc[template["home_chain"]],
         default_agent_id=template["agent_id"],
     )
-    
+
     if config.staking_vars is None:
         print_section("Please, select your staking program preference")
         ids = list(template["staking_programs"].keys())
         available_choices = {}
-        
+
         for index, program_id in enumerate(ids):
             metadata = staking_handler.get_staking_contract_metadata(
                 program_id=program_id
@@ -169,13 +172,11 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                     "slots": available_slots,
                     "name": name,
                 }
-                
+
         while True:
             try:
                 input_value = ask_or_get_from_env(
-                    f"Enter your choice (1 - {len(ids)}): ",
-                    False,
-                    "STAKING_PROGRAM"
+                    f"Enter your choice (1 - {len(ids)}): ", False, "STAKING_PROGRAM"
                 )
                 try:
                     choice = int(input_value)
@@ -195,7 +196,9 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                     break
                 except ValueError:
                     try:
-                        config.staking_vars = staking_handler.get_staking_env_variables(program_id=input_value)
+                        config.staking_vars = staking_handler.get_staking_env_variables(
+                            program_id=input_value
+                        )
                         break
                     except Exception as e:
                         print(f"Error in staking program selection: {str(e)}")
@@ -248,9 +251,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 if env_var_data["value"]:
                     print(f"Example: {env_var_data['value']}")
                 config.user_provided_args[env_var_name] = ask_or_get_from_env(
-                    f"Please enter {env_var_data['name']}: ",
-                    False,
-                    env_var_name
+                    f"Please enter {env_var_data['name']}: ", False, env_var_name
                 )
                 print()
 
@@ -293,7 +294,7 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> N
             _password = ask_or_get_from_env(
                 "\nEnter local user account password [hidden input]: ",
                 True,
-                "OPERATE_PASSWORD"
+                "OPERATE_PASSWORD",
             )
             if operate.user_account.is_valid(password=_password):
                 break
@@ -384,7 +385,9 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             0,
             "-",
         )
-        ask_or_get_from_env("Press enter to continue...", False, "CONTINUE", raise_if_missing=False)
+        ask_or_get_from_env(
+            "Press enter to continue...", False, "CONTINUE", raise_if_missing=False
+        )
     else:
         wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
@@ -488,7 +491,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                     "Please input your backup owner (leave empty to skip): ",
                     False,
                     "BACKUP_OWNER",
-                    raise_if_missing=False
+                    raise_if_missing=False,
                 )
 
                 wallet.create_safe(
