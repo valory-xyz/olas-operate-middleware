@@ -969,7 +969,9 @@ def qs_stop(
 @_operate.command(name="terminate")
 def qs_terminate(
     config: Annotated[str, params.String(help="Quickstart config file path")],
-    attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
     """Terminate service."""
     os.environ["ATTENDED"] = attended.lower()
@@ -981,7 +983,9 @@ def qs_terminate(
 @_operate.command(name="claim")
 def qs_claim(
     config: Annotated[str, params.String(help="Quickstart config file path")],
-    attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
     """Quickclaim staking rewards."""
     os.environ["ATTENDED"] = attended.lower()
@@ -993,7 +997,9 @@ def qs_claim(
 @_operate.command(name="reset-staking")
 def qs_reset_staking(
     config: Annotated[str, params.String(help="Quickstart config file path")],
-    attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
     """Reset staking."""
     os.environ["ATTENDED"] = attended.lower()
@@ -1004,7 +1010,9 @@ def qs_reset_staking(
 
 @_operate.command(name="reset-password")
 def qs_reset_password(
-    attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
     """Reset password."""
     os.environ["ATTENDED"] = attended.lower()

@@ -21,7 +21,6 @@
 import json
 import logging
 import os
-import sys
 import warnings
 from typing import TYPE_CHECKING
 
@@ -61,8 +60,8 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     )
 
     if not ask_yes_or_no("Do you want to continue?"):
-       print("Cancelled.")
-       return
+        print("Cancelled.")
+        return
 
     print("")
 
