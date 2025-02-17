@@ -196,7 +196,6 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                 except ValueError:
                     try:
                         config.staking_vars = staking_handler.get_staking_env_variables(program_id=input_value)
-                        print(f"Please enter a valid option (1 - {len(ids)}).")
                         break
                     except Exception as e:
                         print(f"Error in staking program selection: {str(e)}")
