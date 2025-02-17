@@ -1910,6 +1910,7 @@ class ServiceManager:
         force: bool = True,
         chain: t.Optional[str] = None,
         use_docker: bool = False,
+        build_only: bool= False
     ) -> Deployment:
         """
         Deploy service locally
@@ -1926,6 +1927,8 @@ class ServiceManager:
         deployment.build(
             use_docker=use_docker, force=force, chain=chain or service.home_chain
         )
+        if build_only:
+            return deployment
         deployment.start(use_docker=use_docker)
         return deployment
 

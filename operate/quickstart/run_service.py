@@ -530,7 +530,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             )
 
 
-def run_service(operate: "OperateApp", config_path: str) -> None:
+def run_service(operate: "OperateApp", config_path: str, build_only: bool = False) -> None:
     """Run service."""
 
     with open(config_path, "r") as config_file:
@@ -561,7 +561,9 @@ def run_service(operate: "OperateApp", config_path: str) -> None:
 
     print_section("Deploying the service")
     manager.deploy_service_locally(
-        service_config_id=service.service_config_id, use_docker=True
+        service_config_id=service.service_config_id, use_docker=True, build_only=build_only
     )
-
-    print_section(f"Starting the {template['name']}")
+    if build_only:
+        print_section(f"Build-only done.")
+    else:
+        print_section(f"Starting the {template['name']}")

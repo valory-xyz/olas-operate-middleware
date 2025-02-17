@@ -58,6 +58,7 @@ from autonomy.deploy.constants import (
     VENVS_DIR,
 )
 from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerator
+from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
@@ -428,7 +429,7 @@ class Deployment(LocalResource):
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
-        """Build docker deployment."""
+        """Build docker deployment and kubernetes manifest."""
         service = Service.load(path=self.path)
         # Remove network from cache if exists, this will raise an error
         # if the service is still running so we can do an early exit
@@ -438,12 +439,16 @@ class Deployment(LocalResource):
         )
 
         build = self.path / DEPLOYMENT
+        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
         if build.exists() and not force:
             return
         if build.exists() and force:
             self.copy_previous_agent_run_logs()
             shutil.rmtree(build)
+        if k8s_build.exists() and force:
+            shutil.rmtree(k8s_build)
         mkdirs(build_dir=build)
+        mkdirs(build_dir=k8s_build)
 
         keys_file = self.path / KEYS_JSON
         keys_file.write_text(
@@ -496,8 +501,28 @@ class Deployment(LocalResource):
                 .write_config()
                 .populate_private_keys()
             )
+            print(f"Docker Compose deployment built on {build.resolve()} \n")
+
+            # Generate Kubernetes deployment
+            builder.deplopyment_type = KubernetesGenerator.deployment_type
+            (
+                KubernetesGenerator(
+                    service_builder=builder,
+                    build_dir=k8s_build.resolve(),
+                    use_tm_testnet_setup=True,
+                    image_author=builder.service.author,
+                )
+                .generate()
+                .generate_config_tendermint()
+                .write_config()
+                .populate_private_keys()
+            )
+            print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
+
         except Exception as e:
             shutil.rmtree(build)
+            if k8s_build.exists():
+                shutil.rmtree(k8s_build)
             raise e
 
         with (build / DOCKER_COMPOSE_YAML).open("r", encoding="utf-8") as stream:
