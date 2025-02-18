@@ -1464,6 +1464,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def can_unstake(self, service_id: int, staking_contract: str) -> bool:
         """Can unstake the service?"""
+        self._patch()
         try:
             StakingManager(
                 key=self.wallet.key_path,

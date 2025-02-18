@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 from operate.account.user import UserAccount
 from operate.operate_types import LedgerType
 from operate.quickstart.run_service import ask_confirm_password
-from operate.utils.common import ask_or_get_from_env, print_section, print_title
+from operate.quickstart.utils import ask_or_get_from_env, print_section, print_title
 from operate.wallet.master import EthereumMasterWallet
 
 

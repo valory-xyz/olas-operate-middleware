@@ -241,13 +241,11 @@ class ServiceTemplate(TypedDict, total=False):
     """Service template."""
 
     name: str
-    agent_id: int
     hash: str
     image: str
     description: str
     service_version: str
     home_chain: str
-    staking_programs: t.Dict[str, str]
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
 

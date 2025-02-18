@@ -1180,7 +1180,6 @@ class ServiceManager:
                 self.logger.info("Service funded for safe swap")
                 self.fund_service(
                     service_config_id=service_config_id,
-                    rpc=ledger_config.rpc,
                     funding_values={
                         ZERO_ADDRESS: {
                             "agent": {
@@ -1560,7 +1559,6 @@ class ServiceManager:
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         service_config_id: str,
-        rpc: t.Optional[str] = None,
         funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
     ) -> None:
@@ -1571,7 +1569,6 @@ class ServiceManager:
             self.logger.info(f"Funding {chain=}")
             self.fund_service_single_chain(
                 service_config_id=service_config_id,
-                rpc=rpc,
                 funding_values=funding_values,
                 from_safe=from_safe,
                 chain=chain,
@@ -1869,7 +1866,6 @@ class ServiceManager:
         loop = loop or asyncio.get_event_loop()
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
-        ledger_config = chain_config.ledger_config
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1877,7 +1873,6 @@ class ServiceManager:
                         executor,
                         self.fund_service,
                         service_config_id,  # Service id
-                        PUBLIC_RPCS[ledger_config.chain],  # RPC
                         {
                             asset_address: {
                                 "agent": {

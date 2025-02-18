@@ -32,7 +32,7 @@ from operate.quickstart.run_service import (
     get_service,
     load_local_config,
 )
-from operate.utils.common import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
 
 
 if TYPE_CHECKING:
