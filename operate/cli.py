@@ -42,9 +42,16 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.constants import KEY, KEYS, OPERATE, SERVICES
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.quickstart.analyse_logs import analyse_logs
+from operate.quickstart.claim_staking_rewards import claim_staking_rewards
+from operate.quickstart.reset_password import reset_password
+from operate.quickstart.reset_staking import reset_staking
+from operate.quickstart.run_service import run_service
+from operate.quickstart.stop_service import stop_service
+from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
 from operate.wallet.master import MasterWalletManager
 
@@ -75,7 +82,7 @@ class OperateApp:
     ) -> None:
         """Initialize object."""
         super().__init__()
-        self._path = (home or (Path.cwd() / OPERATE)).resolve()
+        self._path = (home or OPERATE_HOME).resolve()
         self._services = self._path / SERVICES
         self._keys = self._path / KEYS
         self._master_key = self._path / KEY
@@ -934,6 +941,157 @@ def _daemon(
     )
     app._server = server  # pylint: disable=protected-access
     server.run()
+
+
+@_operate.command(name="quickstart")
+def qs_start(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Quickstart."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    run_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="quickstop")
+def qs_stop(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+) -> None:
+    """Quickstart."""
+    operate = OperateApp()
+    operate.setup()
+    stop_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="terminate")
+def qs_terminate(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Terminate service."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    terminate_service(operate=operate, config_path=config)
+
+
+@_operate.command(name="claim")
+def qs_claim(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Quickclaim staking rewards."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    claim_staking_rewards(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-staking")
+def qs_reset_staking(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Reset staking."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    reset_staking(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-password")
+def qs_reset_password(
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Reset password."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    reset_password(operate=operate)
+
+
+@_operate.command(name="analyse-logs")
+def qs_analyse_logs(  # pylint: disable=too-many-arguments
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    from_dir: Annotated[
+        str,
+        params.String(
+            help="Path to the logs directory. If not provided, it is auto-detected.",
+            default="",
+        ),
+    ],
+    agent: Annotated[
+        str,
+        params.String(
+            help="The agent name to analyze (default: 'aea_0').", default="aea_0"
+        ),
+    ],
+    reset_db: Annotated[
+        bool,
+        params.Boolean(
+            help="Use this flag to disable resetting the log database.", default=False
+        ),
+    ],
+    start_time: Annotated[
+        str,
+        params.String(help="Start time in `YYYY-MM-DD H:M:S,MS` format.", default=""),
+    ],
+    end_time: Annotated[
+        str, params.String(help="End time in `YYYY-MM-DD H:M:S,MS` format.", default="")
+    ],
+    log_level: Annotated[
+        str,
+        params.String(
+            help="Logging level. (INFO, DEBUG, WARNING, ERROR, CRITICAL)",
+            default="INFO",
+        ),
+    ],
+    period: Annotated[int, params.Integer(help="Period ID.", default="")],
+    round: Annotated[  # pylint: disable=redefined-builtin
+        str, params.String(help="Round name.", default="")
+    ],
+    behaviour: Annotated[str, params.String(help="Behaviour name filter.", default="")],
+    fsm: Annotated[
+        bool, params.Boolean(help="Print only the FSM execution path.", default=False)
+    ],
+    include_regex: Annotated[
+        str, params.String(help="Regex pattern to include in the result.", default="")
+    ],
+    exclude_regex: Annotated[
+        str, params.String(help="Regex pattern to exclude from the result.", default="")
+    ],
+) -> None:
+    """Analyse the logs of an agent."""
+    operate = OperateApp()
+    operate.setup()
+    analyse_logs(
+        operate=operate,
+        config_path=config,
+        from_dir=from_dir,
+        agent=agent,
+        reset_db=reset_db,
+        start_time=start_time,
+        end_time=end_time,
+        log_level=log_level,
+        period=period,
+        round=round,
+        behaviour=behaviour,
+        fsm=fsm,
+        include_regex=include_regex,
+        exclude_regex=exclude_regex,
+    )
 
 
 def main() -> None:

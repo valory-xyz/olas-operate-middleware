@@ -67,6 +67,7 @@ from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
     Service,
 )
+from operate.services.utils.mech import deploy_mech
 from operate.utils.gnosis import (
     NULL_ADDRESS,
     drain_eoa,
@@ -326,9 +327,6 @@ class ServiceManager:
 
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        os.environ[
-            "OPEN_AUTONOMY_SUBGRAPH_URL"
-        ] = "https://subgraph.autonolas.tech/subgraphs/name/autonolas-staging"
 
         current_agent_id = None
         if chain_data.token > -1:
@@ -627,6 +625,7 @@ class ServiceManager:
                     "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
                     "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
                     "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
+                    f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
                     "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
                         "staking_contract"
@@ -993,6 +992,43 @@ class ServiceManager:
         chain_data.multisig = info["multisig"]
         chain_data.on_chain_state = OnChainState(info["service_state"])
 
+        # TODO: yet another agent specific logic for mech, which should be abstracted
+        if all(
+            var in service.env_variables
+            for var in [
+                "AGENT_ID",
+                "MECH_TO_CONFIG",
+                "ON_CHAIN_SERVICE_ID",
+                "GNOSIS_RPC_0",
+            ]
+        ):
+            if (
+                not service.env_variables["AGENT_ID"]["value"]
+                or not service.env_variables["MECH_TO_CONFIG"]["value"]
+            ):
+                mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
+                service.update_env_variables_values(
+                    {
+                        "AGENT_ID": agent_id,
+                        "MECH_TO_CONFIG": json.dumps(
+                            {
+                                mech_address: {
+                                    "use_dynamic_pricing": False,
+                                    "is_marketplace_mech": True,
+                                }
+                            },
+                            separators=(",", ":"),
+                        ),
+                    }
+                )
+
+            service.update_env_variables_values(
+                {
+                    "ON_CHAIN_SERVICE_ID": chain_data.token,
+                    "GNOSIS_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"]["value"],
+                }
+            )
+
         # TODO: this is a patch for modius, to be standardized
         staking_chain = None
         for chain_, config in service.chain_configs.items():
@@ -1144,7 +1180,6 @@ class ServiceManager:
                 self.logger.info("Service funded for safe swap")
                 self.fund_service(
                     service_config_id=service_config_id,
-                    rpc=ledger_config.rpc,
                     funding_values={
                         ZERO_ADDRESS: {
                             "agent": {
@@ -1484,10 +1519,46 @@ class ServiceManager:
         chain_data.staked = False
         service.store()
 
+    def claim_on_chain_from_safe(
+        self,
+        service_config_id: str,
+        chain: str,
+    ) -> str:
+        """Claim rewards from Safe and returns transaction hash"""
+        self.logger.info("claim_on_chain_from_safe")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        ledger_config = chain_config.ledger_config
+        chain_data = chain_config.chain_data
+        staking_program_id = chain_data.user_params.staking_program_id
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+        print(
+            f"OLAS Balance on service Safe {chain_data.multisig}: "
+            f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_data.multisig)}"
+        )
+        if staking_program_id not in STAKING[ledger_config.chain]:
+            raise RuntimeError(
+                "No staking contract found for the current staking_program_id: "
+                f"{staking_program_id}. Not claiming the rewards."
+            )
+
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        receipt = (
+            sftxb.new_tx()
+            .add(
+                sftxb.get_claiming_data(
+                    service_id=chain_data.token,
+                    staking_contract=STAKING[ledger_config.chain][staking_program_id],
+                )
+            )
+            .settle()
+        )
+        return receipt["transactionHash"]
+
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         service_config_id: str,
-        rpc: t.Optional[str] = None,
         funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
     ) -> None:
@@ -1498,7 +1569,6 @@ class ServiceManager:
             self.logger.info(f"Funding {chain=}")
             self.fund_service_single_chain(
                 service_config_id=service_config_id,
-                rpc=rpc,
                 funding_values=funding_values,
                 from_safe=from_safe,
                 chain=chain,
@@ -1796,7 +1866,6 @@ class ServiceManager:
         loop = loop or asyncio.get_event_loop()
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
-        ledger_config = chain_config.ledger_config
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1804,7 +1873,6 @@ class ServiceManager:
                         executor,
                         self.fund_service,
                         service_config_id,  # Service id
-                        PUBLIC_RPCS[ledger_config.chain],  # RPC
                         {
                             asset_address: {
                                 "agent": {

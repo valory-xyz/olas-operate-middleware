@@ -109,7 +109,7 @@ class MasterWallet(LocalResource):
     ) -> LedgerApi:
         """Get ledger api object."""
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain == Chain.BASE:
+        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISTIC):
             gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
                 5, GWEI
             )
@@ -496,6 +496,20 @@ class EthereumMasterWallet(MasterWallet):
         wallet.store()
         wallet.password = password
         return wallet, mnemonic.split()
+
+    def update_password(self, password: str) -> None:
+        """Update password."""
+        self._crypto = None
+        (self.path / self._key).write_text(
+            data=json.dumps(
+                Account.encrypt(
+                    private_key=self.crypto.private_key,  # pylint: disable=protected-access
+                    password=password,
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
 
     def create_safe(
         self,

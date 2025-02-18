@@ -488,6 +488,7 @@ class Deployment(LocalResource):
                     service_builder=builder,
                     build_dir=build.resolve(),
                     use_tm_testnet_setup=True,
+                    image_author=builder.service.author,
                 )
                 .generate()
                 .generate_config_tendermint()
@@ -520,6 +521,14 @@ class Deployment(LocalResource):
         for node in deployment["services"]:
             if "abci" in node:
                 deployment["services"][node]["volumes"].extend(_volumes)
+                new_mappings = []
+                for mapping in deployment["services"][node]["volumes"]:
+                    if mapping.startswith("./data"):
+                        mapping = "." + mapping
+
+                    new_mappings.append(mapping)
+
+                deployment["services"][node]["volumes"] = new_mappings
 
         with (build / DOCKER_COMPOSE_YAML).open("w", encoding="utf-8") as stream:
             yaml_dump(data=deployment, stream=stream)
@@ -865,7 +874,6 @@ class Service(LocalResource):
                     }
 
                 new_chain_configs[chain] = chain_data  # type: ignore
-
             data["chain_configs"] = new_chain_configs
 
         data["version"] = SERVICE_CONFIG_VERSION
