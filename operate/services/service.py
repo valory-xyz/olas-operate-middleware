@@ -477,23 +477,22 @@ class Deployment(LocalResource):
             shutil.rmtree(k8s_build)
         mkdirs(build_dir=build)
 
+        keys_file = self.path / KEYS_JSON
+        keys_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "address": key.address,
+                        "private_key": key.private_key,
+                        "ledger": key.ledger.name.lower(),
+                    }
+                    for key in service.keys
+                ],
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
         try:
-            keys_file = self.path / KEYS_JSON
-            keys_file.write_text(
-                json.dumps(
-                    [
-                        {
-                            "address": key.address,
-                            "private_key": key.private_key,
-                            "ledger": key.ledger.name.lower(),
-                        }
-                        for key in service.keys
-                    ],
-                    indent=4,
-                ),
-                encoding="utf-8",
-            )
-
             service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
