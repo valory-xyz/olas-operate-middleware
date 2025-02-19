@@ -424,6 +424,34 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
+    def _build_kubernetes(self, force: bool = True) -> None:
+        """Build kubernetes deployment."""
+        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
+        if k8s_build.exists() and force:
+            shutil.rmtree(k8s_build)
+        mkdirs(build_dir=k8s_build)
+
+        service = Service.load(path=self.path)
+        builder = ServiceBuilder.from_dir(
+            path=service.service_path,
+            keys_file=self.path / KEYS_JSON,
+            number_of_agents=len(service.keys),
+        )
+        builder.deplopyment_type = KubernetesGenerator.deployment_type
+        (
+            KubernetesGenerator(
+                service_builder=builder,
+                build_dir=k8s_build.resolve(),
+                use_tm_testnet_setup=True,
+                image_author=builder.service.author,
+            )
+            .generate()
+            .generate_config_tendermint()
+            .write_config()
+            .populate_private_keys()
+        )
+        print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
+
     def _build_docker(
         self,
         force: bool = True,
@@ -448,24 +476,24 @@ class Deployment(LocalResource):
         if k8s_build.exists() and force:
             shutil.rmtree(k8s_build)
         mkdirs(build_dir=build)
-        mkdirs(build_dir=k8s_build)
 
-        keys_file = self.path / KEYS_JSON
-        keys_file.write_text(
-            json.dumps(
-                [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
-                ],
-                indent=4,
-            ),
-            encoding="utf-8",
-        )
         try:
+            keys_file = self.path / KEYS_JSON
+            keys_file.write_text(
+                json.dumps(
+                    [
+                        {
+                            "address": key.address,
+                            "private_key": key.private_key,
+                            "ledger": key.ledger.name.lower(),
+                        }
+                        for key in service.keys
+                    ],
+                    indent=4,
+                ),
+                encoding="utf-8",
+            )
+
             service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
@@ -488,7 +516,7 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            # build deployment
+            # build docker-compose deployment
             (
                 DockerComposeGenerator(
                     service_builder=builder,
@@ -502,22 +530,6 @@ class Deployment(LocalResource):
                 .populate_private_keys()
             )
             print(f"Docker Compose deployment built on {build.resolve()} \n")
-
-            # Generate Kubernetes deployment
-            builder.deplopyment_type = KubernetesGenerator.deployment_type
-            (
-                KubernetesGenerator(
-                    service_builder=builder,
-                    build_dir=k8s_build.resolve(),
-                    use_tm_testnet_setup=True,
-                    image_author=builder.service.author,
-                )
-                .generate()
-                .generate_config_tendermint()
-                .write_config()
-                .populate_private_keys()
-            )
-            print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
 
         except Exception as e:
             shutil.rmtree(build)
@@ -646,6 +658,7 @@ class Deployment(LocalResource):
     def build(
         self,
         use_docker: bool = False,
+        use_kubernetes: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -653,13 +666,17 @@ class Deployment(LocalResource):
         Build a deployment
 
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
+        :param use_kubernetes: Build Kubernetes deployment (only used in quickstart).
         :param force: Remove existing deployment and build a new one
         :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :return: Deployment object
         """
         # TODO: Maybe remove usage of chain and use home_chain always?
         if use_docker:
-            return self._build_docker(force=force, chain=chain)
+            self._build_docker(force=force, chain=chain)
+            if use_kubernetes:
+                self._build_kubernetes(force=force)
+            return None
         return self._build_host(force=force, chain=chain)
 
     def start(self, use_docker: bool = False) -> None:

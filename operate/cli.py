@@ -946,10 +946,15 @@ def _daemon(
 @_operate.command(name="quickstart")
 def qs_start(
     config: Annotated[str, params.String(help="Quickstart config file path")],
-    attended: Annotated[str, params.String(help="Run in attended/unattended mode (default: true")] = "true",
-    build_only: Annotated[bool, params.Boolean(help="Only build the service without running it")] = False,
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+    build_only: Annotated[
+        bool, params.Boolean(help="Only build the service without running it")
+    ] = False,
 ) -> None:
     """Quickstart."""
+    print(f"attended :{attended}")
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
