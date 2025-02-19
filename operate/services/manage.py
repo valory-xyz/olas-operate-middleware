@@ -37,6 +37,7 @@ from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
+from autonomy.chain.config import ChainType
 
 from operate.constants import ZERO_ADDRESS
 from operate.data import DATA_DIR
@@ -171,6 +172,7 @@ class ServiceManager:
             rpc=ledger_config.rpc,
             wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
             contracts=CONTRACTS[ledger_config.chain],
+            chain_type=ChainType(ledger_config.chain.value),
         )
 
     def load_or_create(
