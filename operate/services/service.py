@@ -666,8 +666,9 @@ class Deployment(LocalResource):
         :return: Deployment object
         """
         # TODO: Maybe remove usage of chain and use home_chain always?
-        if use_docker:
-            self._build_docker(force=force, chain=chain)
+        if use_docker or use_kubernetes:
+            if use_docker:
+                self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
             return None

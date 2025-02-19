@@ -1911,9 +1911,10 @@ class ServiceManager:
         Deploy service locally
 
         :param hash: Service hash
-        :param force: Remove previous deployment and start a new one.
         :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
+        :param use_kubernetes: Use Kubernetes for deployment
+        :param build_only: Only build the deployment without starting it
         :return: Deployment instance
         """
         service = self.load(service_config_id=service_config_id)
