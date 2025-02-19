@@ -62,27 +62,27 @@ def run_analysis(logs_dir: Path, **kwargs: str) -> None:
         "--from-dir",
         logs_dir,
     ]
-    if "agent" in kwargs:
+    if "agent" in kwargs and kwargs["agent"]:
         command.extend(["--agent", kwargs["agent"]])
-    if "reset_db" in kwargs:
+    if "reset_db" in kwargs and kwargs["reset_db"]:
         command.extend(["--reset-db"])
-    if "start_time" in kwargs:
+    if "start_time" in kwargs and kwargs["start_time"]:
         command.extend(["--start-time", kwargs["start_time"]])
-    if "end_time" in kwargs:
+    if "end_time" in kwargs and kwargs["end_time"]:
         command.extend(["--end-time", kwargs["end_time"]])
-    if "log_level" in kwargs:
+    if "log_level" in kwargs and kwargs["log_level"]:
         command.extend(["--log-level", kwargs["log_level"]])
-    if "period" in kwargs:
+    if "period" in kwargs and kwargs["period"]:
         command.extend(["--period", kwargs["period"]])
-    if "round" in kwargs:
+    if "round" in kwargs and kwargs["round"]:
         command.extend(["--round", kwargs["round"]])
-    if "behaviour" in kwargs:
+    if "behaviour" in kwargs and kwargs["behaviour"]:
         command.extend(["--behaviour", kwargs["behaviour"]])
-    if "fsm" in kwargs:
+    if "fsm" in kwargs and kwargs["fsm"]:
         command.extend(["--fsm"])
-    if "include_regex" in kwargs:
+    if "include_regex" in kwargs and kwargs["include_regex"]:
         command.extend(["--include-regex", kwargs["include_regex"]])
-    if "exclude_regex" in kwargs:
+    if "exclude_regex" in kwargs and kwargs["exclude_regex"]:
         command.extend(["--exclude-regex", kwargs["exclude_regex"]])
 
     try:
