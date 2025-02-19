@@ -19,18 +19,20 @@
 """Reset staking."""
 
 import json
+import os
 from typing import TYPE_CHECKING
 
 from operate.constants import OPERATE_HOME
 from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain
 from operate.quickstart.run_service import (
+    NO_STAKING_PROGRAM_ID,
     ask_password_if_needed,
     configure_local_config,
     ensure_enough_funds,
     get_service,
 )
-from operate.utils.common import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
 
 
 if TYPE_CHECKING:
@@ -54,15 +56,14 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     assert (  # nosec
         config.principal_chain is not None
     ), "Principal chain not set in quickstart config"
-    current_program = (
-        config.staking_vars.get("STAKING_PROGRAM") if config.staking_vars else None
-    )
 
-    if not current_program:
+    if not config.staking_program_id:
         print("No staking program preference found. Exiting.")
         return
 
-    print(f"Your current staking program preference is set to '{current_program}'.\n")
+    print(
+        f"Your current staking program preference is set to '{config.staking_program_id}'.\n"
+    )
     print(
         "You can reset your preference. "
         "However, your agent might not be able to switch between staking contracts "
@@ -82,14 +83,20 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     ensure_enough_funds(operate, service)
 
     # Check if service can be unstaked from current program
+    os.environ["CUSTOM_CHAIN_RPC"] = service.chain_configs[
+        config.principal_chain
+    ].ledger_config.rpc
     sftxb = manager.get_eth_safe_tx_builder(
         ledger_config=service.chain_configs[config.principal_chain].ledger_config
     )
-    can_unstake = sftxb.can_unstake(
-        service_id=service.chain_configs[config.principal_chain].chain_data.token,
-        staking_contract=STAKING[getattr(Chain, config.principal_chain.upper())][
-            current_program
-        ],
+    can_unstake = (
+        config.staking_program_id is not NO_STAKING_PROGRAM_ID
+        and sftxb.can_unstake(
+            service_id=service.chain_configs[config.principal_chain].chain_data.token,
+            staking_contract=STAKING[Chain.from_string(config.principal_chain)][
+                config.staking_program_id
+            ],
+        )
     )
 
     if not can_unstake:
@@ -112,12 +119,12 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     manager.unstake_service_on_chain_from_safe(
         service_config_id=service.service_config_id,
         chain=config.principal_chain,
-        staking_program_id=current_program,
+        staking_program_id=config.staking_program_id,
     )
     print_section("Service has been unstaked successfully")
 
     # Update local config and service template
-    config.staking_vars = None
+    config.staking_program_id = NO_STAKING_PROGRAM_ID
     config.store()
     config = configure_local_config(template)
     manager.update(

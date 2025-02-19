@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 
 from operate.constants import OPERATE_HOME
 from operate.quickstart.run_service import configure_local_config, get_service
-from operate.utils.common import print_section, print_title
+from operate.quickstart.utils import print_section, print_title
 
 
 if TYPE_CHECKING:

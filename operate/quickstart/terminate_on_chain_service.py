@@ -28,7 +28,7 @@ from operate.quickstart.run_service import (
     ensure_enough_funds,
     get_service,
 )
-from operate.utils.common import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
 
 
 if TYPE_CHECKING:

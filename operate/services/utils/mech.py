@@ -26,9 +26,9 @@ from aea_ledger_ethereum import Web3
 
 from operate.constants import MECH_AGENT_FACTORY_JSON_URL
 from operate.operate_types import Chain
+from operate.quickstart.utils import print_section, unit_to_wei
 from operate.services.protocol import EthSafeTxBuilder
 from operate.services.service import Service
-from operate.utils.common import print_section, unit_to_wei
 from operate.utils.gnosis import SafeOperation
 
 

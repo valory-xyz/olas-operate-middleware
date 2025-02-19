@@ -27,26 +27,25 @@ import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
+import requests
+from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import LedgerApi
 from halo import Halo  # type: ignore[import]
+from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import OPERATE_HOME, ZERO_ADDRESS
+from operate.constants import IPFS_ADDRESS, OPERATE_HOME, ZERO_ADDRESS
+from operate.data import DATA_DIR
+from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger.profiles import STAKING
 from operate.operate_types import (
+    Chain,
     LedgerType,
     OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
-from operate.quickstart.choose_staking import (
-    NO_STAKING_PROGRAM_ID,
-    StakingHandler,
-    StakingVariables,
-)
-from operate.resource import LocalResource, deserialize
-from operate.services.manage import ServiceManager
-from operate.services.service import NON_EXISTENT_MULTISIG, Service
-from operate.utils.common import (
+from operate.quickstart.utils import (
     CHAIN_TO_METADATA,
     ask_or_get_from_env,
     check_rpc,
@@ -55,6 +54,9 @@ from operate.utils.common import (
     print_title,
     wei_to_token,
 )
+from operate.resource import LocalResource, deserialize
+from operate.services.manage import ServiceManager
+from operate.services.service import NON_EXISTENT_MULTISIG, Service
 from operate.utils.gnosis import get_asset_balance
 
 
@@ -64,6 +66,46 @@ warnings.filterwarnings("ignore", category=UserWarning)
 if t.TYPE_CHECKING:
     from operate.cli import OperateApp
 
+NO_STAKING_PROGRAM_ID = "no_staking"
+NO_STAKING_PROGRAM_METADATA = {
+    "name": "No staking",
+    "description": "Your Olas Predict agent will still actively participate in prediction\
+        markets, but it will not be staked within any staking program.",
+    "available_staking_slots": "∞",
+}
+QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
+    Chain.GNOSIS: {
+        "quickstart_beta_hobbyist": 25,
+        "quickstart_beta_hobbyist_2": 25,
+        "quickstart_beta_expert": 25,
+        "quickstart_beta_expert_2": 25,
+        "quickstart_beta_expert_3": 25,
+        "quickstart_beta_expert_4": 25,
+        "quickstart_beta_expert_5": 25,
+        "quickstart_beta_expert_6": 25,
+        "quickstart_beta_expert_7": 25,
+        "quickstart_beta_expert_8": 25,
+        "quickstart_beta_expert_9": 25,
+        "quickstart_beta_expert_10": 25,
+        "quickstart_beta_expert_11": 25,
+        "quickstart_beta_expert_12": 25,
+        "quickstart_beta_expert_15_mech_marketplace": 25,
+        "quickstart_beta_expert_16_mech_marketplace": 25,
+        "mech_marketplace": 37,
+    },
+    Chain.OPTIMISTIC: {
+        "optimus_alpha": 40,
+    },
+    Chain.ETHEREUM: {},
+    Chain.BASE: {
+        "meme_base_alpha_2": 43,
+    },
+    Chain.CELO: {},
+    Chain.MODE: {
+        "optimus_alpha": 40,
+    },
+}
+
 
 @dataclass
 class QuickstartConfig(LocalResource):
@@ -72,7 +114,7 @@ class QuickstartConfig(LocalResource):
     path: Path
     rpc: t.Optional[t.Dict[str, str]] = None
     password_migrated: t.Optional[bool] = None
-    staking_vars: t.Optional[StakingVariables] = None
+    staking_program_id: t.Optional[str] = None
     principal_chain: t.Optional[str] = None
     user_provided_args: t.Optional[t.Dict[str, str]] = None
 
@@ -142,21 +184,67 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     if config.password_migrated is None:
         config.password_migrated = False
 
-    staking_handler = StakingHandler(
-        staking_programs=template["staking_programs"],
-        rpc=config.rpc[template["home_chain"]],
-        default_agent_id=template["agent_id"],
+    if config.principal_chain is None:
+        config.principal_chain = template["home_chain"]
+
+    agent_id = template["configurations"][config.principal_chain]["agent_id"]
+    home_chain = Chain.from_string(config.principal_chain)
+    staking_ctr = t.cast(
+        StakingTokenContract,
+        StakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "staking_token")
+        ),
+    )
+    ledger_api = make_ledger_api(
+        LedgerType.ETHEREUM.lower(),
+        address=config.rpc[config.principal_chain],
+        chain_id=home_chain.id,
     )
 
-    if config.staking_vars is None:
+    if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
-        ids = list(template["staking_programs"].keys())
         available_choices = {}
+        ids = [NO_STAKING_PROGRAM_ID] + [
+            id
+            for id in STAKING[home_chain]
+            if id in QS_STAKING_PROGRAMS[home_chain]
+            and QS_STAKING_PROGRAMS[home_chain][id] == agent_id
+        ]
 
         for index, program_id in enumerate(ids):
-            metadata = staking_handler.get_staking_contract_metadata(
-                program_id=program_id
-            )
+            if program_id == NO_STAKING_PROGRAM_ID:
+                metadata = NO_STAKING_PROGRAM_METADATA
+            else:
+                instance = staking_ctr.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=STAKING[home_chain][program_id],
+                )
+                try:
+                    metadata_hash = instance.functions.metadataHash().call().hex()
+                    ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
+                    response = requests.get(ipfs_address)
+                    if response.status_code != 200:
+                        raise requests.RequestException(
+                            f"Failed to fetch data from {ipfs_address}: {response.status_code}"
+                        )
+                    metadata = response.json()
+                except (Web3Exception, requests.RequestException):
+                    metadata = {
+                        "name": program_id,
+                        "description": program_id,
+                        "available_staking_slots": "?",
+                    }
+
+                # Add staking slots count to successful response
+                try:
+                    max_services = instance.functions.maxNumServices().call()
+                    current_services = instance.functions.getServiceIds().call()
+                    metadata["available_staking_slots"] = max_services - len(
+                        current_services
+                    )
+                except Web3Exception:
+                    metadata["available_staking_slots"] = "?"
+
             name = metadata["name"]
             description = metadata["description"]
             available_slots = metadata["available_staking_slots"]
@@ -188,48 +276,43 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
                             )
                         continue
                     selected_program = available_choices[choice]
-                    program_id = selected_program["program_id"]
+                    config.staking_program_id = selected_program["program_id"]
                     print(f"Selected staking program: {selected_program['name']}")
-                    config.staking_vars = staking_handler.get_staking_env_variables(
-                        program_id=program_id
-                    )
                     break
                 except ValueError:
-                    try:
-                        config.staking_vars = staking_handler.get_staking_env_variables(
-                            program_id=input_value
-                        )
+                    if input_value in ids:
+                        config.staking_program_id = input_value
                         break
-                    except Exception as e:
-                        print(f"Error in staking program selection: {str(e)}")
-                        raise
+                    else:
+                        raise ValueError(f"STAKING_PROGRAM must be one of {ids}")
             except Exception as e:
                 print(f"Error in getting input: {str(e)}")
                 raise
 
-    if config.principal_chain is None:
-        config.principal_chain = template["home_chain"]
-
     # set chain configs in the service template
-    no_staking_vars = staking_handler.get_staking_env_variables(
-        program_id=NO_STAKING_PROGRAM_ID
-    )
     for chain in template["configurations"]:
         if chain == config.principal_chain:
+            if config.staking_program_id == NO_STAKING_PROGRAM_ID:
+                min_staking_deposit = 1
+            else:
+                instance = staking_ctr.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=STAKING[home_chain][config.staking_program_id],
+                )
+                min_staking_deposit = int(instance.functions.minStakingDeposit().call())
+
             template["configurations"][chain] |= {
-                "staking_program_id": config.staking_vars["STAKING_PROGRAM"],
+                "staking_program_id": config.staking_program_id,
                 "rpc": config.rpc[chain],
-                "agent_id": int(config.staking_vars["AGENT_ID"]),
-                "use_staking": config.staking_vars["USE_STAKING"],
-                "cost_of_bond": int(config.staking_vars["MIN_STAKING_BOND_OLAS"]),
+                "use_staking": config.staking_program_id != NO_STAKING_PROGRAM_ID,
+                "cost_of_bond": min_staking_deposit,
             }
         else:
             template["configurations"][chain] |= {
-                "staking_program_id": no_staking_vars["STAKING_PROGRAM"],
+                "staking_program_id": NO_STAKING_PROGRAM_ID,
                 "rpc": config.rpc[chain],
-                "agent_id": int(no_staking_vars["AGENT_ID"]),
-                "use_staking": no_staking_vars["USE_STAKING"],
-                "cost_of_bond": int(no_staking_vars["MIN_STAKING_BOND_OLAS"]),
+                "use_staking": False,
+                "cost_of_bond": 1,
             }
 
     if config.user_provided_args is None:
@@ -512,21 +595,31 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
         # if staking, ask for the required OLAS for it
         if chain_config.chain_data.user_params.use_staking:
-            assert config.staking_vars is not None, "Staking vars not found"  # nosec
+            assert (  # nosec
+                config.staking_program_id is not None
+            ), "Staking vars not found"  # nosec
             if service_state in (
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                required_olas = 2 * config.staking_vars["MIN_STAKING_BOND_OLAS"]
+                required_olas = 2 * chain_config.chain_data.user_params.cost_of_bond
             elif service_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = config.staking_vars["MIN_STAKING_BOND_OLAS"]
+                required_olas = chain_config.chain_data.user_params.cost_of_bond
             else:
                 required_olas = 0
 
+            sftxb = manager.get_eth_safe_tx_builder(
+                ledger_config=chain_config.ledger_config
+            )
+            staking_contract = STAKING[chain_config.ledger_config.chain][
+                config.staking_program_id
+            ]
             ask_funds_in_address(
                 ledger_api=ledger_api,
                 required_balance=required_olas,
-                asset_address=config.staking_vars["CUSTOM_OLAS_ADDRESS"],
+                asset_address=sftxb.get_staking_params(staking_contract)[
+                    "staking_token"
+                ],
                 recipient_name="Master Safe",
                 recipient_address=wallet.safes[chain],
                 chain=chain_name,
