@@ -457,7 +457,7 @@ class Deployment(LocalResource):
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
-        """Build docker deployment and kubernetes manifest."""
+        """Build docker deployment."""
         service = Service.load(path=self.path)
         # Remove network from cache if exists, this will raise an error
         # if the service is still running so we can do an early exit
