@@ -1,222 +1,42 @@
-name: Release
+name: Release Flow
 
-# Triggered on pushing a tag
+# Controls when the action will run.
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types: [published]
+  workflow_dispatch:  # TODO: Remove after testing
 
 jobs:
-  # PyInstaller job for both x64 and arm64 binaries
-  build-macos-pyinstaller:
-    runs-on: ${{ matrix.os }}
+  publish-pip-packages:
+    name: Publish the package on PyPi
     strategy:
       matrix:
-        os: [macos-14, macos-14-large]
-
+        os: [ubuntu-latest]
+        python-version: ["3.10"]
+    runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v3
-
-      # Set up Python with setup-python action and add it to PATH
-      - uses: actions/setup-python@v5
-        id: setup-python
+      - uses: actions/checkout@master
+      - uses: actions/setup-python@v3
         with:
-          python-version: "3.10"
-
-      # Install Poetry and its dependencies
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1
-        with:
-          version: "1.4.0"
-          virtualenvs-create: true
-          virtualenvs-in-project: false
-          virtualenvs-path: ~/my-custom-path
-          installer-parallel: true
-
-      # Set OS_ARCH env
-      - name: Set architecture environment variable
-        run: |
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
-            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
-          else 
-            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
-          fi
-
-      # Cache Poetry dependencies with unique key for each environment and architecture
-      - name: Cache Poetry dependencies
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/pypoetry
-            ~/.cache/pip
-            ~/.venv
-          key: poetry-${{ env.OS_ARCH }}-${{ hashFiles('**/poetry.lock') }}
-          restore-keys: |
-            poetry-${{ env.OS_ARCH }}-
-
+          python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: poetry install
-
-      # Download and build with PyInstaller
-      - name: Get trader bin
         run: |
-          trader_version=$(poetry run python -c "import yaml; config = yaml.safe_load(open('templates/trader.yaml')); print(config['service_version'])")
-          echo $trader_version
-          make ./dist/aea_bin
-        #instead of this one mwe use make; mkdir dist && curl -L -o dist/aea_bin "https://github.com/valory-xyz/trader/releases/download/${trader_version}/trader_bin_${{ env.OS_ARCH }}"
+          sudo apt-get update --fix-missing
+          sudo apt-get autoremove
+          sudo apt-get autoclean
+          python -m pip install --upgrade pip
+          poetry install
+          python --version
 
-      - name: Build with PyInstaller
+      - name: Build wheels and source tarball
         run: |
-          poetry run pyinstaller operate/services/utils/tendermint.py --onefile --name tendermint_mac
+          echo Processing olas-operate-middleware
+          poetry run python -m build
 
-          # patch open aea in place
-          rm -fr ./open-aea
-          git clone https://github.com/valory-xyz/open-aea.git -b fix/1.5.2_encoding
-          poetry run pip install ./open-aea/
-
-          poetry run pyinstaller --collect-data eth_account --collect-all aea --collect-all autonomy --collect-all operate --collect-all aea_ledger_ethereum --collect-all aea_ledger_cosmos --collect-all aea_ledger_ethereum_flashbots --hidden-import aea_ledger_ethereum --hidden-import aea_ledger_cosmos --hidden-import aea_ledger_ethereum_flashbots operate/pearl.py --add-binary dist/aea_bin:. --add-binary dist/tendermint_mac:. --onefile --name pearl_${{ env.OS_ARCH }}
-
-      - name: Upload Release Assets
-        uses: actions/upload-artifact@v4
+      - name: Publish olas-operate-middleware Framework to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          name: pearl_${{ env.OS_ARCH }}
-          path: dist/pearl_${{ env.OS_ARCH }}
-
-  # Jobs for production and development, running separately for x64 and arm64
-  build-release:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        env: [production, development]
-        os: [macos-14, macos-14-large]
-
-    needs: build-macos-pyinstaller
-
-    steps:
-      - uses: actions/checkout@v3
-      
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "20.x"
-          registry-url: "https://registry.npmjs.org"
-
-      # Configure Yarn network settings for timeout, retries, and reduced concurrency
-      - name: Configure Yarn network settings
-        run: |
-              yarn config set network-timeout 60000         # Set network timeout to 1 minute
-              yarn config set network-retries 10             # Retry up to 10 times
-              yarn config set network-concurrency 2          # Reduce concurrency to 2 connections
-    
-      # Set OS_ARCH env
-      - name: Set architecture environment variable
-        run: |
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
-            echo "OS_ARCH=x64" >> $GITHUB_ENV; 
-          else 
-            echo "OS_ARCH=arm64" >> $GITHUB_ENV; 
-          fi
-      # Download the appropriate architecture artifact
-      - name: Download Pearl binary for architecture
-        uses: actions/download-artifact@v4
-        with:
-          name: pearl_${{ env.OS_ARCH }}
-          path: electron/bins/
-
-      # download TM
-      - name: Set architecture environment variable
-        run: |
-          
-          if [ "${{ matrix.os }}" == "macos-14-large" ]; then 
-            export TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_amd64.tar.gz
-          else 
-            export TM_DOWNLOAD_URL=https://github.com/tendermint/tendermint/releases/download/v0.34.19/tendermint_0.34.19_darwin_arm64.tar.gz
-          fi
-          curl $TM_DOWNLOAD_URL -L -o tendermint.tar.gz
-          tar -xvf tendermint.tar.gz
-          cp ./tendermint electron/bins/tendermint
-          chmod +x electron/bins/tendermint
-
-      # Add execution permissions to the binaries
-      - name: Add exec permissions
-        run: chmod +x electron/bins/pearl_${{ env.OS_ARCH }}
-
-      # Cache electron node_modules with unique key for each environment and architecture
-      - name: Restore electron node_modules cache
-        id: cache-electron-node-modules
-        uses: actions/cache@v3
-        with:
-          path: node_modules
-          key: electron-node-modules-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('yarn.lock') }}
-
-      # Install electron dependencies if cache miss
-      - name: Install electron dependencies
-        if: steps.cache-electron-node-modules.outputs.cache-hit != 'true'
-        run: yarn install
-
-      # Cache frontend node_modules with unique key for each environment and architecture
-      - name: Restore frontend node_modules cache
-        id: cache-frontend-node-modules
-        uses: actions/cache@v3
-        with:
-          path: frontend/node_modules
-          key: frontend-node-modules-${{ runner.os }}-${{ env.OS_ARCH }}-${{ matrix.env }}-${{ hashFiles('frontend/yarn.lock') }}
-
-      # Install frontend dependencies if cache miss
-      - name: Install frontend dependencies
-        if: steps.cache-frontend-node-modules.outputs.cache-hit != 'true'
-        run: yarn install:frontend
-
-      # Build frontend for production
-      - name: Build frontend for production
-        if: matrix.env == 'production'
-        run: yarn build:frontend
-        env:
-          NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-          IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-
-      # Build frontend for development
-      - name: Build frontend for development
-        if: matrix.env == 'development'
-        run: yarn build:frontend
-        env:
-          NODE_ENV: ${{ matrix.env }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-          IS_STAGING: ${{ github.ref != 'refs/heads/main' && 'true' || 'false' }}
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-
-      # Run the build and notarization process for production
-      - name: Build, notarize, and publish (Production)
-        if: matrix.env == 'production'
-        env:
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-          APPLE_ID: ${{ secrets.APPLEID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          GH_TOKEN: ${{ secrets.github_token }}
-          NODE_ENV: ${{ matrix.env }}
-          ARCH: ${{ env.OS_ARCH }}
-          DEV_RPC: https://rpc-gate.autonolas.tech/gnosis-rpc/
-          FORK_URL: https://rpc-gate.autonolas.tech/gnosis-rpc/
-        run: node build.js
-
-      # Run the build and notarization process for development
-      - name: Build, notarize, and publish (Development)
-        if: matrix.env == 'development'
-        env:
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLEIDPASS }}
-          APPLE_ID: ${{ secrets.APPLEID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLETEAMID }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          GH_TOKEN: ${{ secrets.github_token }}
-          NODE_ENV: ${{ matrix.env }}
-          ARCH: ${{ env.OS_ARCH }}
-          DEV_RPC: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-          FORK_URL: https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0
-        run: |
-          echo "DEV_RPC=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
-          echo "FORK_URL=https://virtual.gnosis.rpc.tenderly.co/80ff70d1-71fd-4c9e-9402-913f0c4c58b0" >> .env
-          node build.js
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
+          packages_dir: dist/

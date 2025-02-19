@@ -20,6 +20,7 @@
 """Safe helpers."""
 
 import binascii
+import itertools
 import secrets
 import time
 import typing as t
@@ -32,12 +33,15 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
+    ZERO_ADDRESS,
 )
+from operate.operate_types import Chain
 
 
 logger = setup_logger(name="operate.manager")
@@ -76,22 +80,31 @@ def settle_raw_transaction(
     """
     retries = 0
     deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-    while retries < ON_CHAIN_INTERACT_RETRIES and datetime.now().timestamp() < deadline:
+    while retries < ON_CHAIN_INTERACT_RETRIES or datetime.now().timestamp() < deadline:
         try:
             digest_or_receipt = build_and_send_tx()
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Error sending the safe tx: {e}")
+            logger.error(f"Error sending the transaction: {e}")
             digest_or_receipt = None
 
         if isinstance(digest_or_receipt, str):  # it's a digest
             logger.info(f"Transaction hash: {digest_or_receipt}")
-            receipt = ledger_api.api.eth.wait_for_transaction_receipt(digest_or_receipt)
+            try:
+                receipt = ledger_api.api.eth.wait_for_transaction_receipt(
+                    digest_or_receipt
+                )
+            except TimeExhausted:
+                receipt = None
+
         else:
             receipt = digest_or_receipt
 
         if receipt is not None and receipt["status"] != 0:
             return receipt
+
         time.sleep(ON_CHAIN_INTERACT_SLEEP)
+        retries += 1
+
     raise RuntimeError("Timeout while waiting for safe transaction to go through")
 
 
@@ -207,11 +220,9 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=(
-                [crypto.address]
-                if backup_owner is None
-                else [crypto.address, backup_owner]
-            ),
+            owners=[crypto.address]
+            if backup_owner is None
+            else [crypto.address, backup_owner],
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -495,7 +506,7 @@ def transfer_erc20_from_safe(
     )
 
 
-def drain_signer(
+def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
     withdrawal_address: str,
@@ -528,14 +539,25 @@ def drain_signer(
             transaction=tx,
             raise_on_try=True,
         )
-        tx["value"] = (
-            ledger_api.get_balance(crypto.address) - tx["gas"] * tx["maxFeePerGas"]
-        )
-        if tx["value"] <= 0:
-            logger.warning(f"No balance to drain from signer key: {crypto.address}")
-            raise ChainInteractionError("Insufficient balance")
 
-        logger.info(f"Draining {tx['value']} xDAI out of signer key: {crypto.address}")
+        chain_fee = tx["gas"] * tx["maxFeePerGas"]
+        if Chain.from_id(chain_id) in (
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISTIC,
+        ):
+            chain_fee += ledger_api.get_l1_data_fee(tx)
+
+        tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
+        if tx["value"] <= 0:
+            logger.warning(f"No balance to drain from wallet: {crypto.address}")
+            raise ChainInteractionError(
+                f"No balance to drain from wallet: {crypto.address}"
+            )
+
+        logger.info(
+            f"Draining {tx['value']} native units from wallet: {crypto.address}"
+        )
 
         return tx
 
@@ -544,3 +566,47 @@ def drain_signer(
         ledger_api=ledger_api,
         build_and_send_tx=lambda: tx_helper.transact(lambda x: x, "", kwargs={}),
     )
+
+
+def get_asset_balance(
+    ledger_api: LedgerApi,
+    asset_address: str,
+    address: str,
+) -> int:
+    """
+    Get the balance of a native asset or ERC20 token.
+
+    If contract address is a zero address, return the native balance.
+    """
+    if asset_address == ZERO_ADDRESS:
+        return ledger_api.get_balance(address)
+    return (
+        registry_contracts.erc20.get_instance(
+            ledger_api=ledger_api,
+            contract_address=asset_address,
+        )
+        .functions.balanceOf(address)
+        .call()
+    )
+
+
+def get_assets_balances(
+    ledger_api: LedgerApi,
+    asset_addresses: t.Set[str],
+    addresses: t.Set[str],
+) -> t.Dict[str, t.Dict[str, int]]:
+    """
+    Get the balances of a list of native assets or ERC20 tokens.
+
+    If asset address is a zero address, return the native balance.
+    """
+    output: t.Dict[str, t.Dict[str, int]] = {}
+
+    for asset, address in itertools.product(asset_addresses, addresses):
+        output.setdefault(address, {})[asset] = get_asset_balance(
+            ledger_api=ledger_api,
+            asset_address=asset,
+            address=address,
+        )
+
+    return output
