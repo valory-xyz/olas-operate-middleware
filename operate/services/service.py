@@ -467,14 +467,11 @@ class Deployment(LocalResource):
         )
 
         build = self.path / DEPLOYMENT
-        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
         if build.exists() and not force:
             return
         if build.exists() and force:
             self.copy_previous_agent_run_logs()
             shutil.rmtree(build)
-        if k8s_build.exists() and force:
-            shutil.rmtree(k8s_build)
         mkdirs(build_dir=build)
 
         keys_file = self.path / KEYS_JSON
