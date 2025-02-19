@@ -954,7 +954,6 @@ def qs_start(
     ] = False,
 ) -> None:
     """Quickstart."""
-    print(f"attended :{attended}")
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
