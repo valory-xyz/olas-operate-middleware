@@ -1902,7 +1902,6 @@ class ServiceManager:
     def deploy_service_locally(
         self,
         service_config_id: str,
-        force: bool = True,
         chain: t.Optional[str] = None,
         use_docker: bool = False,
         use_kubernetes: bool = False,
@@ -1921,7 +1920,10 @@ class ServiceManager:
 
         deployment = service.deployment
         deployment.build(
-            use_docker=use_docker, use_kubernetes=use_kubernetes, force=force, chain=chain or service.home_chain
+            use_docker=use_docker,
+            use_kubernetes=use_kubernetes,
+            force=True,
+            chain=chain or service.home_chain,
         )
         if build_only:
             return deployment
