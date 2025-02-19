@@ -529,8 +529,6 @@ class Deployment(LocalResource):
 
         except Exception as e:
             shutil.rmtree(build)
-            if k8s_build.exists():
-                shutil.rmtree(k8s_build)
             raise e
 
         with (build / DOCKER_COMPOSE_YAML).open("r", encoding="utf-8") as stream:
