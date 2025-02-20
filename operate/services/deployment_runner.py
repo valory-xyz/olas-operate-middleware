@@ -19,6 +19,7 @@
 # ------------------------------------------------------------------------------
 """Source code to run and stop deployments created."""
 import json
+import multiprocessing
 import os
 import platform
 import shutil  # nosec
@@ -95,12 +96,33 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
 
-    def _run_aea(self, *args: str, cwd: Path) -> Any:
+    def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        # TODO: Patch for Windows failing hash (add -s). Revert once it's fixed on OpenAutonomy / OpenAEA
-        # The fix is also implemented in PyInstallerHostDeploymentRunner._start_agent and
-        # on HostPythonHostDeploymentRunner._start_agent
-        return self._run_cmd(args=[self._aea_bin, "-s", *args], cwd=cwd)
+        cmd = " ".join(args)
+        print("Runnin aea command: ", cmd, " at ", str(cwd))
+        p = multiprocessing.Process(
+            target=self.__class__._call_aea_command,
+            args=(cwd, args),
+        )
+        p.start()
+        p.join()
+        if p.exitcode != 0:
+            raise RuntimeError(
+                f"aea command `{cmd}`execution failed with exit code: {p.exitcode}"
+            )
+
+    @staticmethod
+    def _call_aea_command(cwd, args):
+        try:
+            import os
+
+            os.chdir(cwd)
+            from aea.cli.core import cli as call_aea
+
+            call_aea(args, standalone_mode=False)
+        except:
+            print_exc()
+            raise
 
     @staticmethod
     def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
@@ -159,7 +181,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         working_dir = self._work_directory
         env = self._prepare_agent_env()
 
-        self._run_aea(
+        self._run_aea_command(
             "init",
             "--reset",
             "--author",
@@ -171,7 +193,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             cwd=working_dir,
         )
 
-        self._run_aea("fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir)
+        self._run_aea_command(
+            "fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir
+        )
 
         # Add keys
         shutil.copy(
@@ -179,9 +203,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             working_dir / "agent" / "ethereum_private_key.txt",
         )
 
-        self._run_aea("add-key", "ethereum", cwd=working_dir / "agent")
+        self._run_aea_command("add-key", "ethereum", cwd=working_dir / "agent")
 
-        self._run_aea("issue-certificates", cwd=working_dir / "agent")
+        self._run_aea_command("issue-certificates", cwd=working_dir / "agent")
 
     def start(self) -> None:
         """Start the deployment."""
@@ -229,7 +253,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     @property
     @abstractmethod
-    def _aea_bin(self) -> str:
+    def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
         raise NotImplementedError
 
@@ -238,7 +262,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     """Deployment runner within pyinstaller env."""
 
     @property
-    def _aea_bin(self) -> str:
+    def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
         abin = str(Path(os.path.dirname(sys.executable)) / "aea_bin")  # type: ignore # pylint: disable=protected-access
         return abin
@@ -256,7 +280,11 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
+            args=[
+                self._agent_runner_bin,
+                "-s",
+                "run",
+            ],  # TODO: Patch for Windows failing hash
             cwd=working_dir / "agent",
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -313,7 +341,7 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
 
     @property
-    def _aea_bin(self) -> str:
+    def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
         abin = str(Path(os.path.dirname(sys.executable)) / "aea_win.exe")  # type: ignore # pylint: disable=protected-access
         return abin
@@ -328,7 +356,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
     """Deployment runner for host installed python."""
 
     @property
-    def _aea_bin(self) -> str:
+    def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
         return str(self._venv_dir / "bin" / "aea")
 
@@ -340,7 +368,11 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self._aea_bin, "-s", "run"],  # TODO: Patch for Windows failing hash
+            args=[
+                self._agent_runner_bin,
+                "-s",
+                "run",
+            ],  # TODO: Patch for Windows failing hash
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
             creationflags=(
@@ -413,7 +445,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         self._setup_venv()
         super()._setup_agent()
         # Install agent dependencies
-        self._run_aea(
+        self._run_aea_command(
             "-v",
             "debug",
             "install",

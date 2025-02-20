@@ -19,9 +19,12 @@
 
 """Operate app CLI module."""
 import asyncio
+import contextlib
 import logging
+import multiprocessing
 import os
 import signal
+import sys
 import traceback
 import typing as t
 import uuid
@@ -1182,6 +1185,8 @@ def qs_analyse_logs(  # pylint: disable=too-many-arguments
 
 def main() -> None:
     """CLI entry point."""
+    if "freeze_support" in multiprocessing.__dict__:
+        multiprocessing.freeze_support()
     run(cli=_operate)
 
 
