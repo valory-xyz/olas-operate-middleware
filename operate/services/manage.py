@@ -1358,13 +1358,9 @@ class ServiceManager:
             ):
                 self.logger.info(
                     f"There are no rewards available, service {chain_config.chain_data.token} "
-                    f"is already staked and can be unstaked. Unstaking..."
+                    "is already staked and can be unstaked."
                 )
-                self.unstake_service_on_chain_from_safe(
-                    service_config_id=service_config_id,
-                    chain=chain,
-                    staking_program_id=current_staking_program,
-                )
+                self.logger.info("Skipping unstaking for no rewards available.")
 
             if (
                 staking_state == StakingState.STAKED
