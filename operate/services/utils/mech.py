@@ -21,7 +21,6 @@
 from typing import Tuple
 
 import requests
-import web3
 from aea_ledger_ethereum import Web3
 
 from operate.constants import MECH_MARKETPLACE_JSON_URL
@@ -57,7 +56,6 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     mech_type = service.env_variables.get("MECH_TYPE", {}).get("value", "Native")
 
     abi = requests.get(MECH_MARKETPLACE_JSON_URL).json()["abi"]
-    instance = web3.Web3()
     chain = Chain.from_string(service.home_chain)
     mech_marketplace_address = CHAIN_TO_MARKETPLACE[chain]
     # Get factory address based on mech type
@@ -73,7 +71,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     # 0.01xDAI hardcoded for price
     # better to be configurable and part of local config
     mech_request_price = unit_to_wei(0.01)
-    contract = instance.eth.contract(
+    contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
     data = contract.encodeABI(
@@ -92,10 +90,6 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     }
     receipt = sftxb.new_tx().add(tx_dict).settle()
     event = contract.events.CreateMech().process_receipt(receipt)[0]
-    mech_address, service_id = event["args"]["mech"], event["args"]["serviceId"]
-    service_info = sftxb.info(token_id=service_id)
-    agent_id = service_info["canonical_agents"][0]
-    print(f"Mech address: {mech_address}")
-    print(f"Agent ID: {agent_id}")
-
+    mech_address = event["args"]["mech"]
+    agent_id = sftxb.info(token_id=event["args"]["serviceId"])["canonical_agents"][0]
     return mech_address, agent_id
