@@ -24,6 +24,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import tempfile
 import typing as t
 from enum import Enum
@@ -557,13 +558,11 @@ class _ChainUtil:
         self.wallet = wallet
         self.contracts = contracts
         self.chain_type = chain_type or ChainType.CUSTOM
+        os.environ[f"{chain_type.name}_CHAIN_RPC"] = self.rpc
 
     def _patch(self) -> None:
         """Patch contract and chain config."""
         ChainConfigs.get(self.chain_type).rpc = self.rpc
-        if self.chain_type != ChainType.CUSTOM:
-            return
-
         for name, address in self.contracts.items():
             ContractConfigs.get(name=name).contracts[self.chain_type] = address
 
@@ -593,12 +592,10 @@ class _ChainUtil:
     def ledger_api(self) -> LedgerApi:
         """Load ledger api object."""
         self._patch()
-        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
-            chain_type=self.chain_type,
-            key=self.wallet.key_path,
-            password=self.wallet.password,
+        return self.wallet.ledger_api(
+            chain=OperateChain.from_string(self.chain_type.value),
+            rpc=self.rpc,
         )
-        return ledger_api
 
     @property
     def service_manager_instance(self) -> Contract:
@@ -1075,7 +1072,10 @@ class EthSafeTxBuilder(_ChainUtil):
     def new_tx(self) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
-            ledger_api=self.ledger_api,
+            ledger_api=self.wallet.ledger_api(
+                chain=OperateChain.from_string(self.chain_type.value),
+                rpc=self.rpc,
+            ),
             crypto=self.crypto,
             chain_type=self.chain_type,
             safe=t.cast(str, self.safe),

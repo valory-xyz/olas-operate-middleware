@@ -949,12 +949,15 @@ def qs_start(
     attended: Annotated[
         str, params.String(help="Run in attended/unattended mode (default: true")
     ] = "true",
+    build_only: Annotated[
+        bool, params.Boolean(help="Only build the service without running it")
+    ] = False,
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
-    run_service(operate=operate, config_path=config)
+    run_service(operate=operate, config_path=config, build_only=build_only)
 
 
 @_operate.command(name="quickstop")
