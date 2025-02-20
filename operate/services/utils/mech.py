@@ -21,10 +21,9 @@
 from typing import Tuple
 
 import requests
-import web3
 from aea_ledger_ethereum import Web3
 
-from operate.constants import MECH_AGENT_FACTORY_JSON_URL
+from operate.constants import MECH_MARKETPLACE_JSON_URL
 from operate.operate_types import Chain
 from operate.quickstart.utils import print_section, unit_to_wei
 from operate.services.protocol import EthSafeTxBuilder
@@ -33,48 +32,64 @@ from operate.utils.gnosis import SafeOperation
 
 
 CHAIN_TO_MARKETPLACE = {
-    Chain.GNOSIS.value: "0x4554fE75c1f5576c1d7F765B2A036c199Adae329",
+    Chain.GNOSIS: "0xad380C51cd5297FbAE43494dD5D407A2a3260b58",
 }
 
-CHAIN_TO_AGENT_FACTORY = {
-    Chain.GNOSIS.value: "0x6D8CbEbCAD7397c63347D44448147Db05E7d17B0",
+CHAIN_TO_NATIVE_MECH_FACTORY = {
+    Chain.GNOSIS: "0x42f43be9E5E50df51b86C5c6427223ff565f40C6",
+}
+
+CHAIN_TO_TOKEN_MECH_FACTORY = {
+    Chain.GNOSIS: "0x161b862568E900Dd9d8c64364F3B83a43792e50f",
+}
+
+CHAIN_TO_NVM_MECH_FACTORY = {
+    Chain.GNOSIS: "0xCB26B91B0E21ADb04FFB6e5f428f41858c64936A",
 }
 
 
 def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     """Deploy the Mech service."""
     print_section("Creating a new Mech On Chain")
-    abi = requests.get(MECH_AGENT_FACTORY_JSON_URL).json()["abi"]
-    instance = web3.Web3()
 
-    mech_marketplace_address = CHAIN_TO_MARKETPLACE[service.home_chain]
+    # Get the mech type from service config
+    mech_type = service.env_variables.get("MECH_TYPE", {}).get("value", "Native")
+
+    abi = requests.get(MECH_MARKETPLACE_JSON_URL).json()["abi"]
+    chain = Chain.from_string(service.home_chain)
+    mech_marketplace_address = CHAIN_TO_MARKETPLACE[chain]
+    # Get factory address based on mech type
+    if mech_type == "Native":
+        mech_factory_address = CHAIN_TO_NATIVE_MECH_FACTORY[chain]
+    elif mech_type == "Token":
+        mech_factory_address = CHAIN_TO_TOKEN_MECH_FACTORY[chain]
+    elif mech_type == "Nevermined":
+        mech_factory_address = CHAIN_TO_NVM_MECH_FACTORY[chain]
+    else:
+        raise ValueError(f"Unsupported mech type: {mech_type}")
+
     # 0.01xDAI hardcoded for price
     # better to be configurable and part of local config
     mech_request_price = unit_to_wei(0.01)
-    contract = instance.eth.contract(
+    contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
     data = contract.encodeABI(
         "create",
         args=[
-            service.chain_configs[service.home_chain].chain_data.multisig,
-            bytes.fromhex(
-                service.env_variables["METADATA_HASH"]["value"].replace("f01701220", "")
-            ),
-            mech_request_price,
-            mech_marketplace_address,
+            service.chain_configs[service.home_chain].chain_data.token,
+            Web3.to_checksum_address(mech_factory_address),
+            mech_request_price.to_bytes(32, byteorder="big"),
         ],
     )
     tx_dict = {
-        "to": CHAIN_TO_AGENT_FACTORY[service.home_chain],
+        "to": mech_marketplace_address,
         "data": data,
         "value": 0,
         "operation": SafeOperation.CALL,
     }
     receipt = sftxb.new_tx().add(tx_dict).settle()
     event = contract.events.CreateMech().process_receipt(receipt)[0]
-    mech_address, agent_id = event["args"]["mech"], event["args"]["agentId"]
-    print(f"Mech address: {mech_address}")
-    print(f"Agent ID: {agent_id}")
-
+    mech_address = event["args"]["mech"]
+    agent_id = sftxb.info(token_id=event["args"]["serviceId"])["canonical_agents"][0]
     return mech_address, agent_id
