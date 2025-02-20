@@ -58,6 +58,7 @@ from autonomy.deploy.constants import (
     VENVS_DIR,
 )
 from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerator
+from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
@@ -423,6 +424,34 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
+    def _build_kubernetes(self, force: bool = True) -> None:
+        """Build kubernetes deployment."""
+        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
+        if k8s_build.exists() and force:
+            shutil.rmtree(k8s_build)
+        mkdirs(build_dir=k8s_build)
+
+        service = Service.load(path=self.path)
+        builder = ServiceBuilder.from_dir(
+            path=service.service_path,
+            keys_file=self.path / KEYS_JSON,
+            number_of_agents=len(service.keys),
+        )
+        builder.deplopyment_type = KubernetesGenerator.deployment_type
+        (
+            KubernetesGenerator(
+                service_builder=builder,
+                build_dir=k8s_build.resolve(),
+                use_tm_testnet_setup=True,
+                image_author=builder.service.author,
+            )
+            .generate()
+            .generate_config_tendermint()
+            .write_config()
+            .populate_private_keys()
+        )
+        print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
+
     def _build_docker(
         self,
         force: bool = True,
@@ -482,7 +511,7 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            # build deployment
+            # build docker-compose deployment
             (
                 DockerComposeGenerator(
                     service_builder=builder,
@@ -495,6 +524,8 @@ class Deployment(LocalResource):
                 .write_config()
                 .populate_private_keys()
             )
+            print(f"Docker Compose deployment built on {build.resolve()} \n")
+
         except Exception as e:
             shutil.rmtree(build)
             raise e
@@ -619,13 +650,15 @@ class Deployment(LocalResource):
     def build(
         self,
         use_docker: bool = False,
+        use_kubernetes: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
         """
         Build a deployment
 
-        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
+        :param use_docker: Use a Docker Compose deployment. If True, then no host deployment.
+        :param use_kubernetes: Build Kubernetes deployment. If True, then no host deployment.
         :param force: Remove existing deployment and build a new one
         :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :return: Deployment object
@@ -635,8 +668,11 @@ class Deployment(LocalResource):
         service = Service.load(path=self.path)
         service.consume_env_variables()
 
-        if use_docker:
-            self._build_docker(force=force, chain=chain)
+        if use_docker or use_kubernetes:
+            if use_docker:
+                self._build_docker(force=force, chain=chain)
+            if use_kubernetes:
+                self._build_kubernetes(force=force)
         else:
             self._build_host(force=force, chain=chain)
 

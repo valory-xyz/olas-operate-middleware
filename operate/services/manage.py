@@ -1902,25 +1902,32 @@ class ServiceManager:
     def deploy_service_locally(
         self,
         service_config_id: str,
-        force: bool = True,
         chain: t.Optional[str] = None,
         use_docker: bool = False,
+        use_kubernetes: bool = False,
+        build_only: bool = False,
     ) -> Deployment:
         """
         Deploy service locally
 
         :param hash: Service hash
-        :param force: Remove previous deployment and start a new one.
         :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
+        :param use_kubernetes: Use Kubernetes for deployment
+        :param build_only: Only build the deployment without starting it
         :return: Deployment instance
         """
         service = self.load(service_config_id=service_config_id)
 
         deployment = service.deployment
         deployment.build(
-            use_docker=use_docker, force=force, chain=chain or service.home_chain
+            use_docker=use_docker,
+            use_kubernetes=use_kubernetes,
+            force=True,
+            chain=chain or service.home_chain,
         )
+        if build_only:
+            return deployment
         deployment.start(use_docker=use_docker)
         return deployment
 
