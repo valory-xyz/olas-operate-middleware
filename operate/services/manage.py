@@ -898,6 +898,18 @@ class ServiceManager:
                 cost_of_bond = 1
 
             self.logger.info("Activating service")
+
+            native_balance = get_asset_balance(
+                ledger_api=sftxb.ledger_api,
+                asset_address=ZERO_ADDRESS,
+                address=safe,
+            )
+
+            if native_balance < cost_of_bond:
+                message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
+                self.logger.error(message)
+                raise ValueError(message)
+
             sftxb.new_tx().add(
                 sftxb.get_activate_data(
                     service_id=chain_data.token,
@@ -947,11 +959,23 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                cost_of_bond = 1
+                cost_of_bond = 1 * len(instances)
 
             self.logger.info(
                 f"Registering agent instances: {chain_data.token} -> {instances}"
             )
+
+            native_balance = get_asset_balance(
+                ledger_api=sftxb.ledger_api,
+                asset_address=ZERO_ADDRESS,
+                address=safe,
+            )
+
+            if native_balance < cost_of_bond:
+                message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
+                self.logger.error(message)
+                raise ValueError(message)
+
             sftxb.new_tx().add(
                 sftxb.get_register_instances_data(
                     service_id=chain_data.token,
