@@ -58,6 +58,7 @@ from autonomy.deploy.constants import (
     VENVS_DIR,
 )
 from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerator
+from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
@@ -423,6 +424,34 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
+    def _build_kubernetes(self, force: bool = True) -> None:
+        """Build kubernetes deployment."""
+        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
+        if k8s_build.exists() and force:
+            shutil.rmtree(k8s_build)
+        mkdirs(build_dir=k8s_build)
+
+        service = Service.load(path=self.path)
+        builder = ServiceBuilder.from_dir(
+            path=service.service_path,
+            keys_file=self.path / KEYS_JSON,
+            number_of_agents=len(service.keys),
+        )
+        builder.deplopyment_type = KubernetesGenerator.deployment_type
+        (
+            KubernetesGenerator(
+                service_builder=builder,
+                build_dir=k8s_build.resolve(),
+                use_tm_testnet_setup=True,
+                image_author=builder.service.author,
+            )
+            .generate()
+            .generate_config_tendermint()
+            .write_config()
+            .populate_private_keys()
+        )
+        print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
+
     def _build_docker(
         self,
         force: bool = True,
@@ -461,7 +490,6 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
-            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -483,18 +511,21 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            # build deployment
+            # build docker-compose deployment
             (
                 DockerComposeGenerator(
                     service_builder=builder,
                     build_dir=build.resolve(),
                     use_tm_testnet_setup=True,
+                    image_author=builder.service.author,
                 )
                 .generate()
                 .generate_config_tendermint()
                 .write_config()
                 .populate_private_keys()
             )
+            print(f"Docker Compose deployment built on {build.resolve()} \n")
+
         except Exception as e:
             shutil.rmtree(build)
             raise e
@@ -521,6 +552,14 @@ class Deployment(LocalResource):
         for node in deployment["services"]:
             if "abci" in node:
                 deployment["services"][node]["volumes"].extend(_volumes)
+                new_mappings = []
+                for mapping in deployment["services"][node]["volumes"]:
+                    if mapping.startswith("./data"):
+                        mapping = "." + mapping
+
+                    new_mappings.append(mapping)
+
+                deployment["services"][node]["volumes"] = new_mappings
 
         with (build / DOCKER_COMPOSE_YAML).open("w", encoding="utf-8") as stream:
             yaml_dump(data=deployment, stream=stream)
@@ -575,7 +614,6 @@ class Deployment(LocalResource):
             encoding="utf-8",
         )
         try:
-            service.consume_env_variables()
             builder = ServiceBuilder.from_dir(
                 path=service.service_path,
                 keys_file=keys_file,
@@ -612,21 +650,34 @@ class Deployment(LocalResource):
     def build(
         self,
         use_docker: bool = False,
+        use_kubernetes: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
         """
         Build a deployment
 
-        :param use_docker: Use a Docker Compose deployment (True) or Host deployment (False).
+        :param use_docker: Use a Docker Compose deployment. If True, then no host deployment.
+        :param use_kubernetes: Build Kubernetes deployment. If True, then no host deployment.
         :param force: Remove existing deployment and build a new one
         :param chain: Chain to set runtime parameters on the deployment (home_chain if not provided).
         :return: Deployment object
         """
         # TODO: Maybe remove usage of chain and use home_chain always?
-        if use_docker:
-            return self._build_docker(force=force, chain=chain)
-        return self._build_host(force=force, chain=chain)
+        original_env = os.environ.copy()
+        service = Service.load(path=self.path)
+        service.consume_env_variables()
+
+        if use_docker or use_kubernetes:
+            if use_docker:
+                self._build_docker(force=force, chain=chain)
+            if use_kubernetes:
+                self._build_kubernetes(force=force)
+        else:
+            self._build_host(force=force, chain=chain)
+
+        os.environ.clear()
+        os.environ.update(original_env)
 
     def start(self, use_docker: bool = False) -> None:
         """Start the service"""
@@ -859,7 +910,6 @@ class Service(LocalResource):
                     }
 
                 new_chain_configs[chain] = chain_data  # type: ignore
-
             data["chain_configs"] = new_chain_configs
 
         data["version"] = SERVICE_CONFIG_VERSION
@@ -1142,7 +1192,10 @@ class Service(LocalResource):
         self.store()
 
     def consume_env_variables(self) -> None:
-        """Consume (apply) environment variables."""
+        """Consume (apply) environment variables.
+
+        Note that this method modifies os.environ. Consider if you need a backup of os.environ before using this method.
+        """
         for env_var, attributes in self.env_variables.items():
             os.environ[env_var] = str(attributes["value"])
 

@@ -24,6 +24,7 @@ import contextlib
 import io
 import json
 import logging
+import os
 import tempfile
 import typing as t
 from enum import Enum
@@ -474,6 +475,16 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
+    def get_claim_tx_data(self, service_id: int, staking_contract: str) -> bytes:
+        """Claim rewards for the service"""
+        return self.staking_ctr.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=staking_contract,
+        ).encodeABI(
+            fn_name="claim",
+            args=[service_id],
+        )
+
     def get_forced_unstake_tx_data(
         self, service_id: int, staking_contract: str
     ) -> bytes:
@@ -547,13 +558,11 @@ class _ChainUtil:
         self.wallet = wallet
         self.contracts = contracts
         self.chain_type = chain_type or ChainType.CUSTOM
+        os.environ[f"{self.chain_type.name}_CHAIN_RPC"] = self.rpc
 
     def _patch(self) -> None:
         """Patch contract and chain config."""
         ChainConfigs.get(self.chain_type).rpc = self.rpc
-        if self.chain_type != ChainType.CUSTOM:
-            return
-
         for name, address in self.contracts.items():
             ContractConfigs.get(name=name).contracts[self.chain_type] = address
 
@@ -583,12 +592,10 @@ class _ChainUtil:
     def ledger_api(self) -> LedgerApi:
         """Load ledger api object."""
         self._patch()
-        ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
-            chain_type=self.chain_type,
-            key=self.wallet.key_path,
-            password=self.wallet.password,
+        return self.wallet.ledger_api(
+            chain=OperateChain.from_string(self.chain_type.value),
+            rpc=self.rpc,
         )
-        return ledger_api
 
     @property
     def service_manager_instance(self) -> Contract:
@@ -1065,7 +1072,10 @@ class EthSafeTxBuilder(_ChainUtil):
     def new_tx(self) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
-            ledger_api=self.ledger_api,
+            ledger_api=self.wallet.ledger_api(
+                chain=OperateChain.from_string(self.chain_type.value),
+                rpc=self.rpc,
+            ),
             crypto=self.crypto,
             chain_type=self.chain_type,
             safe=t.cast(str, self.safe),
@@ -1418,6 +1428,29 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
+    def get_claiming_data(
+        self,
+        service_id: int,
+        staking_contract: str,
+    ) -> t.Dict:
+        """Get claiming tx data"""
+        self._patch()
+        staking_manager = StakingManager(
+            key=self.wallet.key_path,
+            password=self.wallet.password,
+            chain_type=self.chain_type,
+        )
+        txd = staking_manager.get_claim_tx_data(
+            service_id=service_id,
+            staking_contract=staking_contract,
+        )
+        return {
+            "to": staking_contract,
+            "data": txd[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
     def staking_slots_available(self, staking_contract: str) -> bool:
         """Stake service."""
         self._patch()
@@ -1431,6 +1464,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def can_unstake(self, service_id: int, staking_contract: str) -> bool:
         """Can unstake the service?"""
+        self._patch()
         try:
             StakingManager(
                 key=self.wallet.key_path,
