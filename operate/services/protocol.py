@@ -558,7 +558,7 @@ class _ChainUtil:
         self.wallet = wallet
         self.contracts = contracts
         self.chain_type = chain_type or ChainType.CUSTOM
-        os.environ[f"{chain_type.name}_CHAIN_RPC"] = self.rpc
+        os.environ[f"{self.chain_type.name}_CHAIN_RPC"] = self.rpc
 
     def _patch(self) -> None:
         """Patch contract and chain config."""

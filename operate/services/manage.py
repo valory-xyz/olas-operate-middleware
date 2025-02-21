@@ -164,6 +164,7 @@ class ServiceManager:
             rpc=ledger_config.rpc,
             wallet=self.wallet_manager.load(ledger_config.chain.ledger_type),
             contracts=CONTRACTS[ledger_config.chain],
+            chain_type=ChainType(ledger_config.chain.value),
         )
 
     def get_eth_safe_tx_builder(self, ledger_config: LedgerConfig) -> EthSafeTxBuilder:
