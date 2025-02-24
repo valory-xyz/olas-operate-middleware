@@ -640,7 +640,7 @@ def run_service(
     operate.service_manager().migrate_service_configs()
     operate.service_manager().log_directories()
     operate.wallet_manager.migrate_wallet_configs()
-    
+
     config = configure_local_config(template)
     manager = operate.service_manager()
     service = get_service(manager, template)
