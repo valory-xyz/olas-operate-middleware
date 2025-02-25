@@ -1628,8 +1628,9 @@ class ServiceManager:
                     if chain_data.user_params.use_staking:
                         on_chain_operations_buffer = 1 + len(service.keys)
                     else:
-                        on_chain_operations_buffer = chain_data.user_params.cost_of_bond * (
-                            1 + len(service.keys)
+                        on_chain_operations_buffer = (
+                            chain_data.user_params.cost_of_bond
+                            * (1 + len(service.keys))
                         )
 
             asset_funding_values = (
@@ -2166,16 +2167,18 @@ class ServiceManager:
                 asset_address,
                 fund_requirements,
             ) in chain_data.user_params.fund_requirements.items():
-                
                 on_chain_operations_buffer = 0
                 if asset_address == ZERO_ADDRESS:
-                    on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+                    on_chain_state = self._get_on_chain_state(
+                        service=service, chain=chain
+                    )
                     if on_chain_state != OnChainState.DEPLOYED:
                         if chain_data.user_params.use_staking:
                             on_chain_operations_buffer = 1 + len(service.keys)
                         else:
-                            on_chain_operations_buffer = chain_data.user_params.cost_of_bond * (
-                                1 + len(service.keys)
+                            on_chain_operations_buffer = (
+                                chain_data.user_params.cost_of_bond
+                                * (1 + len(service.keys))
                             )
 
                 # Master Safe
@@ -2202,7 +2205,7 @@ class ServiceManager:
                     asset_funding_values[master_safe] = {
                         "topup": on_chain_operations_buffer,
                         "threshold": on_chain_operations_buffer,
-                        "balance": balances[chain][address][asset_address]
+                        "balance": balances[chain][address][asset_address],
                     }
 
                     recommended_refill = self._compute_refill_requirement(
