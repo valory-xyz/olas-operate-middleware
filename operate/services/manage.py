@@ -2167,24 +2167,30 @@ class ServiceManager:
                 asset_address,
                 fund_requirements,
             ) in chain_data.user_params.fund_requirements.items():
-                on_chain_operations_buffer = 0
-                if asset_address == ZERO_ADDRESS:
-                    on_chain_state = self._get_on_chain_state(
-                        service=service, chain=chain
-                    )
-                    if on_chain_state != OnChainState.DEPLOYED:
-                        if chain_data.user_params.use_staking:
-                            on_chain_operations_buffer = 1 + len(service.keys)
-                        else:
-                            on_chain_operations_buffer = (
-                                chain_data.user_params.cost_of_bond
-                                * (1 + len(service.keys))
-                            )
-
                 # Master Safe
                 if not master_safe:
                     allow_start_agent = False
                 else:
+                    on_chain_operations_buffer = 0
+                    if asset_address == ZERO_ADDRESS:
+                        on_chain_state = self._get_on_chain_state(
+                            service=service, chain=chain
+                        )
+                        if on_chain_state != OnChainState.DEPLOYED:
+                            if chain_data.user_params.use_staking:
+                                on_chain_operations_buffer = 1 + len(service.keys)
+                            else:
+                                on_chain_operations_buffer = (
+                                    chain_data.user_params.cost_of_bond
+                                    * (1 + len(service.keys))
+                                )
+
+                            if (
+                                balances[chain][master_safe][asset_address]
+                                < on_chain_operations_buffer
+                            ):
+                                allow_start_agent = False
+
                     asset_funding_values = {
                         address: {
                             "topup": fund_requirements.agent,
