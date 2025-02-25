@@ -160,6 +160,8 @@ DEFAULT_TRADER_ENV_VARS = {
     },
 }
 
+AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
+
 
 def mkdirs(build_dir: Path) -> None:
     """Build necessary directories."""
@@ -750,6 +752,18 @@ class Service(LocalResource):
 
     _file = "config.json"
 
+    @staticmethod
+    def _determine_agent_id(service_name: str) -> int:
+        """Determine the appropriate agent ID based on service name."""
+        service_name_lower = service_name.lower()
+        if "mech" in service_name_lower:
+            return AGENT_TYPE_IDS["mech"]
+        if "optimus" in service_name_lower:
+            return AGENT_TYPE_IDS["optimus"]
+        if "modius" in service_name_lower:
+            return AGENT_TYPE_IDS["modius"]
+        return AGENT_TYPE_IDS["trader"]
+
     @classmethod
     def migrate_format(cls, path: Path) -> bool:  # pylint: disable=too-many-statements
         """Migrate the JSON file format if needed."""
@@ -852,9 +866,11 @@ class Service(LocalResource):
                 chain_data.setdefault("chain_data", {}).setdefault(
                     "user_params", {}
                 ).setdefault("use_mech_marketplace", False)
-                chain_data.setdefault("chain_data", {}).setdefault(
-                    "user_params", {}
-                ).setdefault("agent_id", 14)
+                service_name = data.get("name", "")
+                agent_id = cls._determine_agent_id(service_name)
+                chain_data.setdefault("chain_data", {}).setdefault("user_params", {})[
+                    "agent_id"
+                ] = agent_id
 
             data["description"] = data.setdefault("description", data.get("name"))
             data["hash_history"] = data.setdefault(

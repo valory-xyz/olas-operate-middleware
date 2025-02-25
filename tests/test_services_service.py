@@ -45,7 +45,7 @@ DEFAULT_CONFIG_KWARGS = {
     "on_chain_state": 4,
     "staking_program_id": "staking_program_1",
     "threshold": 1,
-    "agent_id": 14,
+    "agent_id": 25,
     "cost_of_bond": 10000000000000000,
     "fund_requirements_agent": 100000000000000000,
     "fund_requirements_safe": 5000000000000000000,
