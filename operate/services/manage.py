@@ -55,12 +55,7 @@ from operate.ledger.profiles import (
     USDC,
     WRAPPED_NATIVE_ASSET,
 )
-from operate.operate_types import (
-    Chain,
-    FundingValues,
-    LedgerConfig,
-    ServiceTemplate,
-)
+from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -1688,6 +1683,10 @@ class ServiceManager:
                             from_safe=from_safe,
                             rpc=rpc or ledger_config.rpc,
                         )
+
+            if chain_data.multisig == NON_EXISTENT_MULTISIG:
+                self.logger.info(f"[FUNDING_JOB] Service Safe not deployed")
+                continue
 
             safe_balance = get_asset_balance(
                 ledger_api=ledger_api,
