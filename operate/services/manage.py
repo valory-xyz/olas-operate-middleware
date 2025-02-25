@@ -1628,7 +1628,12 @@ class ServiceManager:
                 asset_address == ZERO_ADDRESS
                 and on_chain_state != OnChainState.DEPLOYED
             ):
-                on_chain_operations_buffer = 1 + len(service.keys)
+                if chain_data.user_params.use_staking:
+                    on_chain_operations_buffer = 1 + len(service.keys)
+                else:
+                    on_chain_operations_buffer = chain_data.user_params.cost_of_bond * (
+                        1 + len(service.keys)
+                    )
 
             asset_funding_values = (
                 funding_values.get(asset_address)
@@ -1666,8 +1671,8 @@ class ServiceManager:
                             asset_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
-                        available_balance = (
-                            available_balance - on_chain_operations_buffer
+                        available_balance = min(
+                            available_balance - on_chain_operations_buffer, 0
                         )
                         to_transfer = max(
                             min(available_balance, target_balance - agent_balance), 0
@@ -1722,7 +1727,9 @@ class ServiceManager:
                     asset_address=asset_address,
                     address=wallet.safes[ledger_config.chain],
                 )
-                available_balance = available_balance - on_chain_operations_buffer
+                available_balance = min(
+                    available_balance - on_chain_operations_buffer, 0
+                )
                 to_transfer = max(
                     min(available_balance, target_balance - safe_balance), 0
                 )
