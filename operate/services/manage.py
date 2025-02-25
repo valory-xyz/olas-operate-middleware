@@ -2083,7 +2083,7 @@ class ServiceManager:
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
 
-    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements
+    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
         self, service_config_id: str
     ) -> t.Dict:
         """Get user refill requirements for a service."""
