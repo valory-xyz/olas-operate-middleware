@@ -55,7 +55,7 @@ from operate.ledger.profiles import (
     USDC,
     WRAPPED_NATIVE_ASSET,
 )
-from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
+from operate.operate_types import Chain, DeployedNodes, FundingValues, LedgerConfig, ServiceTemplate
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -1584,12 +1584,13 @@ class ServiceManager:
         service_config_id: str,
         funding_values: t.Optional[FundingValues] = None,
         from_safe: bool = True,
+        task_id: t.Optional[str] = None,
     ) -> None:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
 
         for chain in service.chain_configs.keys():
-            self.logger.info(f"Funding {chain=}")
+            self.logger.info(f"[FUNDING_JOB] [{task_id=}] Funding {chain=}")
             self.fund_service_single_chain(
                 service_config_id=service_config_id,
                 funding_values=funding_values,
@@ -1616,10 +1617,17 @@ class ServiceManager:
             chain=ledger_config.chain, rpc=rpc or ledger_config.rpc
         )
 
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+
         for (
             asset_address,
             fund_requirements,
         ) in chain_data.user_params.fund_requirements.items():
+            
+            on_chain_operations_buffer = 0
+            if asset_address == ZERO_ADDRESS and on_chain_state != OnChainState.DEPLOYED:
+                on_chain_operations_buffer = 1 + len(service.keys)
+
             asset_funding_values = (
                 funding_values.get(asset_address)
                 if funding_values is not None
@@ -1645,22 +1653,23 @@ class ServiceManager:
                         f"[FUNDING_JOB] Required balance: {agent_fund_threshold}"
                     )
                     if agent_balance < agent_fund_threshold:
-                        self.logger.info("[FUNDING_JOB] Funding agents")
+                        self.logger.info(f"[FUNDING_JOB] Funding agent {key.address}")
                         target_balance = (
                             asset_funding_values["agent"]["topup"]
                             if asset_funding_values is not None
                             else fund_requirements.agent
                         )
-                        transferable_balance = get_asset_balance(
+                        available_balance = get_asset_balance(
                             ledger_api=ledger_api,
                             asset_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
+                        available_balance = available_balance - on_chain_operations_buffer
                         to_transfer = max(
-                            min(transferable_balance, target_balance - agent_balance), 0
+                            min(available_balance, target_balance - agent_balance), 0
                         )
                         self.logger.info(
-                            f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {key.address}"
+                            f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {key.address}"
                         )
                         wallet.transfer_asset(
                             asset=asset_address,
@@ -1700,24 +1709,25 @@ class ServiceManager:
                     if asset_funding_values is not None
                     else fund_requirements.safe
                 )
-                transferable_balance = get_asset_balance(
+                available_balance = get_asset_balance(
                     ledger_api=ledger_api,
                     asset_address=asset_address,
                     address=wallet.safes[ledger_config.chain],
                 )
+                available_balance = available_balance - on_chain_operations_buffer
                 to_transfer = max(
-                    min(transferable_balance, target_balance - safe_balance), 0
+                    min(available_balance, target_balance - safe_balance), 0
                 )
 
                 # TODO Possibly remove this logging
-                self.logger.info(f"{transferable_balance=}")
+                self.logger.info(f"{available_balance=}")
                 self.logger.info(f"{target_balance=}")
                 self.logger.info(f"{safe_balance=}")
                 self.logger.info(f"{to_transfer=}")
 
                 if to_transfer > 0:
                     self.logger.info(
-                        f"[FUNDING_JOB] Transferring {to_transfer} asset ({asset_address}) to {chain_data.multisig}"
+                        f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to {chain_data.multisig}"
                     )
                     # TODO: This is a temporary fix
                     # we avoid the error here because there is a seperate prompt on the UI
@@ -1889,6 +1899,8 @@ class ServiceManager:
         loop = loop or asyncio.get_event_loop()
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[service.home_chain]
+        task = asyncio.current_task()
+        task_id = id(task) if task else "Unknown task_id"
         with ThreadPoolExecutor() as executor:
             while True:
                 try:
@@ -1915,6 +1927,7 @@ class ServiceManager:
                             for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
                         },
                         from_safe,
+                        task_id,
                     )
                 except Exception:  # pylint: disable=broad-except
                     logging.info(
