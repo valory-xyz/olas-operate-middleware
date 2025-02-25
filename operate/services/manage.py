@@ -55,7 +55,12 @@ from operate.ledger.profiles import (
     USDC,
     WRAPPED_NATIVE_ASSET,
 )
-from operate.operate_types import Chain, DeployedNodes, FundingValues, LedgerConfig, ServiceTemplate
+from operate.operate_types import (
+    Chain,
+    FundingValues,
+    LedgerConfig,
+    ServiceTemplate,
+)
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -1623,9 +1628,11 @@ class ServiceManager:
             asset_address,
             fund_requirements,
         ) in chain_data.user_params.fund_requirements.items():
-            
             on_chain_operations_buffer = 0
-            if asset_address == ZERO_ADDRESS and on_chain_state != OnChainState.DEPLOYED:
+            if (
+                asset_address == ZERO_ADDRESS
+                and on_chain_state != OnChainState.DEPLOYED
+            ):
                 on_chain_operations_buffer = 1 + len(service.keys)
 
             asset_funding_values = (
@@ -1664,7 +1671,9 @@ class ServiceManager:
                             asset_address=asset_address,
                             address=wallet.safes[ledger_config.chain],
                         )
-                        available_balance = available_balance - on_chain_operations_buffer
+                        available_balance = (
+                            available_balance - on_chain_operations_buffer
+                        )
                         to_transfer = max(
                             min(available_balance, target_balance - agent_balance), 0
                         )
