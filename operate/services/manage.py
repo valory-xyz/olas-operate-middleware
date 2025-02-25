@@ -1598,7 +1598,7 @@ class ServiceManager:
                 chain=chain,
             )
 
-    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals
+    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
@@ -1688,7 +1688,7 @@ class ServiceManager:
                         )
 
             if chain_data.multisig == NON_EXISTENT_MULTISIG:
-                self.logger.info(f"[FUNDING_JOB] Service Safe not deployed")
+                self.logger.info("[FUNDING_JOB] Service Safe not deployed")
                 continue
 
             safe_balance = get_asset_balance(
@@ -2083,7 +2083,7 @@ class ServiceManager:
                     f"Renamed invalid service: {path.name} to {invalid_path.name}"
                 )
 
-    def refill_requirements(  # pylint: disable=too-many-locals
+    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements
         self, service_config_id: str
     ) -> t.Dict:
         """Get user refill requirements for a service."""
@@ -2205,7 +2205,7 @@ class ServiceManager:
                     asset_funding_values[master_safe] = {
                         "topup": on_chain_operations_buffer,
                         "threshold": on_chain_operations_buffer,
-                        "balance": balances[chain][address][asset_address],
+                        "balance": balances[chain][master_safe][asset_address],
                     }
 
                     recommended_refill = self._compute_refill_requirement(
