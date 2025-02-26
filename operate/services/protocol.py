@@ -1113,7 +1113,7 @@ class EthSafeTxBuilder(_ChainUtil):
             .load_metadata()
             .set_metadata_fields(description=metadata_description)
             .verify_nft(nft=nft)
-            .verify_service_dependencies(agent_id=agent_id)
+            #.verify_service_dependencies(agent_id=agent_id)
             .publish_metadata()
         )
 
