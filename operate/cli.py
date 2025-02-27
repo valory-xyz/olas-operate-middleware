@@ -103,6 +103,37 @@ class OperateApp:
             path=self._path / "user.json",
         )
 
+    def update_password(self, old_password: str, new_password: str) -> None:
+        """Updates current password"""
+
+        if not new_password:
+            raise ValueError("You must provide a new password.")
+
+        if not (
+            self.user_account.is_valid(old_password)
+            and self.wallet_manager.is_password_valid(old_password)
+        ):
+            raise ValueError("Password is not valid.")
+
+        wallet_manager = self.wallet_manager
+        wallet_manager.password = old_password
+        wallet_manager.update_password(new_password)
+        self.user_account.update(old_password, new_password)
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates current password using the mnemonic"""
+
+        if not new_password:
+            raise ValueError("You must provide a new password.")
+
+        mnemonic = mnemonic.strip().lower()
+        if not self.wallet_manager.is_mnemonic_valid(mnemonic):
+            raise ValueError("Seed phrase is not valid.")
+
+        wallet_manager = self.wallet_manager
+        wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
+        self.user_account.force_update(new_password)
+
     def service_manager(self) -> services.manage.ServiceManager:
         """Load service manager."""
         return services.manage.ServiceManager(
@@ -369,22 +400,58 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.put("/api/account")
     @with_retries
-    async def _update_password(request: Request) -> t.Dict:
+    async def _update_password(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.Dict:
         """Update password."""
         if operate.user_account is None:
             return JSONResponse(
-                content={"error": "Account does not exist"},
+                content={"error": "Account does not exist."},
                 status_code=400,
             )
 
         data = await request.json()
-        try:
-            operate.user_account.update(
-                old_password=data["old_password"],
-                new_password=data["new_password"],
+        old_password = data.get("old_password")
+        new_password = data.get("new_password")
+        mnemonic = data.get("mnemonic")
+
+        if not old_password and not mnemonic:
+            return JSONResponse(
+                content={
+                    "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase).",
+                },
+                status_code=400,
             )
-            return JSONResponse(content={"error": None})
+
+        if old_password and mnemonic:
+            return JSONResponse(
+                content={
+                    "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
+                },
+                status_code=400,
+            )
+
+        try:
+            if old_password:
+                operate.update_password(old_password, new_password)
+                return JSONResponse(
+                    content={"error": None, "message": "Password updated."}
+                )
+            if mnemonic:
+                operate.update_password_with_mnemonic(mnemonic, new_password)
+                return JSONResponse(
+                    content={
+                        "error": None,
+                        "message": "Password updated using seed phrase.",
+                    }
+                )
+
+            return JSONResponse(
+                content={"error": None, "message": "Password not updated."}
+            )
         except ValueError as e:
+            return JSONResponse(content={"error": str(e)}, status_code=400)
+        except Exception as e:  # pylint: disable=broad-except
             return JSONResponse(
                 content={"error": str(e), "traceback": traceback.format_exc()},
                 status_code=400,

@@ -93,15 +93,24 @@ Create a local user account.
 
 ### `PUT /api/account`
 
-Update account password.
+Update account password by providing either current password or BIP-39 seed phrase.
 
 <details>
   <summary>Request</summary>
 
 ```json
 {
-  "old_password": "Hello,World!",
-  "new_password": "Hello,World",
+  "old_password": "1234567890",
+  "new_password": "0987654321",
+}
+```
+
+or
+
+```json
+{
+  "mnemonic": "cousin weather coil range obey hungry",
+  "new_password": "0987654321",
 }
 ```
 
@@ -110,22 +119,39 @@ Update account password.
 <details>
   <summary>Response</summary>
 
-- If old password is valid:
-
-  ```json
-  {
-    "error": null
-  }
-  ```
-
 - If old password is not valid:
 
   ```json
   {
-    "error": "Old password is not valid",
-    "traceback": "..."
+    "error": "Password is not valid.",
   }
   ```
+
+- If old password is valid:
+
+  ```json
+  {
+    "error": null,
+    "message": "Password updated."
+  }
+  ```
+
+- If seed phrase is not valid:
+
+  ```json
+  {
+    "error": "Seed phrase is not valid.",
+  }
+  ```
+
+- If seed phrase is valid:
+
+```json
+{
+  "error": null,
+  "message": "Password updated using seed phrase."
+}
+```
 
 </details>
 

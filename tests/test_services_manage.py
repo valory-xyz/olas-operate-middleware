@@ -35,7 +35,7 @@ from .test_services_service import DEFAULT_CONFIG_KWARGS
 
 
 ROOT_PATH = Path(__file__).resolve().parent
-OPERATE_HOME = ROOT_PATH / ".operate_test"
+OPERATE = ".operate_test"
 
 
 @pytest.fixture
@@ -113,7 +113,7 @@ class TestServiceManager:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / ".operate_test",
+            home=tmp_path / OPERATE,
         )
         operate.setup()
         password = random_string
@@ -205,7 +205,7 @@ class TestServiceManager:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / ".operate_test",
+            home=tmp_path / OPERATE,
         )
         operate.setup()
         password = random_string
