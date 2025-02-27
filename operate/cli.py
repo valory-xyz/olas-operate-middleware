@@ -415,13 +415,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if old_password and mnemonic:
             return JSONResponse(
-                content={"error": None, "message": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both."},
-                status_code=400,
-            )
-
-        if not new_password:
-            return JSONResponse(
-                content={"error": None, "message": "You must provide a new password'."},
+                content={
+                    "error": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both.",
+                },
                 status_code=400,
             )
 
@@ -441,7 +437,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 )
         except ValueError as e:
             return JSONResponse(content={"error": str(e)}, status_code=400)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             return JSONResponse(
                 content={"error": str(e), "traceback": traceback.format_exc()},
                 status_code=400,
