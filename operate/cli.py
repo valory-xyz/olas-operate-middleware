@@ -421,7 +421,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if not new_password:
             return JSONResponse(
-                content={"error": None, "message": "You must provide 'new_password'."},
+                content={"error": None, "message": "You must provide a new password'."},
                 status_code=400,
             )
 
