@@ -93,7 +93,7 @@ Create a local user account.
 
 ### `PUT /api/account`
 
-Update account password by providing either current password or BIP-39 recovery phrase.
+Update account password by providing either current password or BIP-39 seed phrase.
 
 <details>
   <summary>Request</summary>
@@ -127,11 +127,11 @@ or
   }
   ```
 
-- If recovery phrase is not valid:
+- If seed phrase is not valid:
 
   ```json
   {
-    "error": "Recovery phrase is not valid.",
+    "error": "Seed phrase is not valid.",
     "traceback": "..."
   }
   ```
@@ -145,12 +145,12 @@ or
   }
   ```
 
-- If recovery phrase is valid:
+- If seed phrase is valid:
 
 ```json
 {
   "error": null,
-  "message": "Password updated using recovery phrase."
+  "message": "Password updated using seed phrase."
 }
 ```
 

@@ -103,6 +103,37 @@ class OperateApp:
             path=self._path / "user.json",
         )
 
+    def update_password(self, old_password: str, new_password: str) -> None:
+        """Updates current password"""
+
+        if not new_password:
+            raise ValueError("You must provide a new password.")
+
+        if not (
+            self.user_account.is_valid(old_password)
+            and self.wallet_manager.is_password_valid(old_password)
+        ):
+            raise ValueError("Password is not valid.")
+
+        wallet_manager = self.wallet_manager
+        wallet_manager.password = old_password
+        wallet_manager.update_password(new_password)
+        self.user_account.update(old_password, new_password)
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates current password using the mnemonic"""
+
+        if not new_password:
+            raise ValueError("You must provide a new password.")
+
+        mnemonic = mnemonic.strip().lower()
+        if not self.wallet_manager.is_mnemonic_valid(mnemonic):
+            raise ValueError("Seed phrase is not valid.")
+
+        wallet_manager = self.wallet_manager
+        wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
+        self.user_account.force_update(new_password)
+
     def service_manager(self) -> services.manage.ServiceManager:
         """Load service manager."""
         return services.manage.ServiceManager(
@@ -383,51 +414,33 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         new_password = data.get("new_password")
         mnemonic = data.get("mnemonic")
 
+        if old_password and mnemonic:
+            return JSONResponse(
+                content={"error": None, "message": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both."}
+            )
+
         if not new_password:
             return JSONResponse(
-                content={"error": "You must provide a new password."},
-                status_code=401,
+                content={"error": None, "message": "You must provide a new password."}
             )
-
-        if old_password and not (
-            operate.user_account.is_valid(old_password)
-            and operate.wallet_manager.is_password_valid(old_password)
-        ):
-            return JSONResponse(
-                content={"error": "Password is not valid."},
-                status_code=401,
-            )
-
-        if mnemonic:
-            mnemonic = mnemonic.strip().lower()
-            if not operate.wallet_manager.is_mnemonic_valid(mnemonic):
-                return JSONResponse(
-                    content={"error": "Recovery phrase is not valid."},
-                    status_code=401,
-                )
 
         try:
-            message = "Password not updated."
             if old_password:
-                wallet_manager = operate.wallet_manager
-                wallet_manager.password = old_password
-                wallet_manager.update_password(new_password)
-                operate.user_account.update(
-                    old_password=data["old_password"],
-                    new_password=data["new_password"],
+                operate.update_password(old_password, new_password)
+                return JSONResponse(
+                    content={"error": None, "message": "Password updated."}
                 )
-                message = "Password updated."
-            elif mnemonic:
-                wallet_manager = operate.wallet_manager
-                wallet_manager.password = old_password
-                wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
-                operate.user_account.force_update(
-                    new_password=data["new_password"],
+            if mnemonic:
+                operate.update_password_with_mnemonic(mnemonic, new_password)
+                return JSONResponse(
+                    content={
+                        "error": None,
+                        "message": "Password updated using seed phrase.",
+                    }
                 )
-                message = "Password updated using recovery phrase."
-
-            return JSONResponse(content={"error": None, "message": message})
         except ValueError as e:
+            return JSONResponse(content={"error": str(e)}, status_code=400)
+        except Exception as e:
             return JSONResponse(
                 content={"error": str(e), "traceback": traceback.format_exc()},
                 status_code=400,
