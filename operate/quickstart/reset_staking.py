@@ -20,9 +20,8 @@
 
 import json
 import os
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from operate.constants import OPERATE_HOME
 from operate.ledger.profiles import STAKING
 from operate.operate_types import Chain
 from operate.quickstart.run_service import (
@@ -31,6 +30,7 @@ from operate.quickstart.run_service import (
     configure_local_config,
     ensure_enough_funds,
     get_service,
+    load_local_config,
 )
 from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
 
@@ -47,12 +47,14 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     print_title("Reset your staking program preference")
 
     # check if agent was started before
-    path = OPERATE_HOME / "local_config.json"
-    if not path.exists():
+    config = load_local_config(
+        operate=operate, service_name=cast(str, template["name"])
+    )
+    if not config.path.exists():
         print("No previous agent setup found. Exiting.")
         return
 
-    config = configure_local_config(template)
+    config = configure_local_config(template, operate)
     assert (  # nosec
         config.principal_chain is not None
     ), "Principal chain not set in quickstart config"
@@ -126,7 +128,7 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     # Update local config and service template
     config.staking_program_id = NO_STAKING_PROGRAM_ID
     config.store()
-    config = configure_local_config(template)
+    config = configure_local_config(template, operate)
     manager.update(
         service_config_id=manager.json[0]["service_config_id"],
         service_template=template,

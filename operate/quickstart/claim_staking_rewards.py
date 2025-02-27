@@ -22,9 +22,9 @@ import json
 import logging
 import os
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from operate.constants import OPERATE_HOME, SAFE_WEBAPP_URL
+from operate.constants import SAFE_WEBAPP_URL
 from operate.operate_types import LedgerType
 from operate.quickstart.run_service import (
     ask_password_if_needed,
@@ -49,8 +49,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     print_section(f"Claim staking rewards for {template['name']}")
 
     # check if agent was started before
-    path = OPERATE_HOME / "local_config.json"
-    if not path.exists():
+    config = load_local_config(
+        operate=operate, service_name=cast(str, template["name"])
+    )
+    if not config.path.exists():
         print("No previous agent setup found. Exiting.")
         return
 
@@ -65,14 +67,14 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print("")
 
-    config = configure_local_config(template)
+    config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()
-    config = load_local_config()
+    config = load_local_config(operate=operate, service_name=cast(str, service.name))
     assert (  # nosec
         config.principal_chain is not None
     ), "Principal chain not set in quickstart config"
