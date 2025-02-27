@@ -400,7 +400,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.put("/api/account")
     @with_retries
-    async def _update_password(request: Request) -> t.Dict:
+    async def _update_password(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.Dict:
         """Update password."""
         if operate.user_account is None:
             return JSONResponse(
@@ -413,10 +415,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         new_password = data.get("new_password")
         mnemonic = data.get("mnemonic")
 
-        if old_password and mnemonic:
+        if (old_password and mnemonic) or (not old_password and not mnemonic):
             return JSONResponse(
                 content={
-                    "error": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both.",
+                    "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
                 },
                 status_code=400,
             )
@@ -435,6 +437,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                         "message": "Password updated using seed phrase.",
                     }
                 )
+
+            return JSONResponse(
+                content={"error": None, "message": "Password not updated."}
+            )
         except ValueError as e:
             return JSONResponse(content={"error": str(e)}, status_code=400)
         except Exception as e:  # pylint: disable=broad-except
