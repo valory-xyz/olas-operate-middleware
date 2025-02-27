@@ -373,17 +373,60 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Update password."""
         if operate.user_account is None:
             return JSONResponse(
-                content={"error": "Account does not exist"},
+                content={"error": "Account does not exist."},
                 status_code=400,
             )
 
         data = await request.json()
-        try:
-            operate.user_account.update(
-                old_password=data["old_password"],
-                new_password=data["new_password"],
+
+        old_password = data.get("old_password")
+        new_password = data.get("new_password")
+        mnemonic = data.get("mnemonic")
+
+        if not new_password:
+            return JSONResponse(
+                content={"error": "You must provide a new password."},
+                status_code=401,
             )
-            return JSONResponse(content={"error": None})
+
+        if old_password and not (
+            operate.user_account.is_valid(old_password)
+            and operate.wallet_manager.is_password_valid(old_password)
+        ):
+            return JSONResponse(
+                content={"error": "Password is not valid."},
+                status_code=401,
+            )
+
+        if mnemonic:
+            mnemonic = mnemonic.strip().lower()
+            if not operate.wallet_manager.is_mnemonic_valid(mnemonic):
+                return JSONResponse(
+                    content={"error": "Recovery phrase is not valid."},
+                    status_code=401,
+                )
+
+        try:
+            message = "Password not updated."
+            if old_password:
+                wallet_manager = operate.wallet_manager
+                wallet_manager.password = old_password
+                wallet_manager.update_password(new_password)
+                operate.user_account.update(
+                    old_password=data["old_password"],
+                    new_password=data["new_password"],
+                )
+                message = "Password updated."
+            elif mnemonic:
+                wallet_manager = operate.wallet_manager
+                wallet_manager.password = old_password
+                wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
+                operate.user_account.force_update(
+                    new_password=data["new_password"],
+                )
+                message = "Password updated using recovery phrase."
+
+            return JSONResponse(content={"error": None, "message": message})
         except ValueError as e:
             return JSONResponse(
                 content={"error": str(e), "traceback": traceback.format_exc()},
