@@ -33,9 +33,9 @@ from operate.operate_types import LedgerType
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE = ".operate_test"
 
-MSG_NEW_PASSWORD_MISSING = "You must provide a new password"
-MSG_INVALID_PASSWORD = "Password is not valid"
-MSG_INVALID_MNEMONIC = "Seed phrase is not valid"
+MSG_NEW_PASSWORD_MISSING = "You must provide a new password"  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid"  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid"  # nosec
 
 
 def random_string(length: int = 8) -> str:
