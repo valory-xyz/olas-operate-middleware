@@ -415,7 +415,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         new_password = data.get("new_password")
         mnemonic = data.get("mnemonic")
 
-        if (old_password and mnemonic) or (not old_password and not mnemonic):
+        if not old_password and not mnemonic:
+            return JSONResponse(
+                content={
+                    "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase).",
+                },
+                status_code=400,
+            )
+
+        if old_password and mnemonic:
             return JSONResponse(
                 content={
                     "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
