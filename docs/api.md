@@ -106,6 +106,7 @@ Update account password by providing either current password or BIP-39 seed phra
 ```
 
 or
+
 ```json
 {
   "mnemonic": "cousin weather coil range obey hungry",
@@ -123,16 +124,6 @@ or
   ```json
   {
     "error": "Password is not valid.",
-    "traceback": "..."
-  }
-  ```
-
-- If seed phrase is not valid:
-
-  ```json
-  {
-    "error": "Seed phrase is not valid.",
-    "traceback": "..."
   }
   ```
 
@@ -142,6 +133,14 @@ or
   {
     "error": null,
     "message": "Password updated."
+  }
+  ```
+
+- If seed phrase is not valid:
+
+  ```json
+  {
+    "error": "Seed phrase is not valid.",
   }
   ```
 
