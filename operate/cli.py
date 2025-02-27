@@ -409,19 +409,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
-
         old_password = data.get("old_password")
         new_password = data.get("new_password")
         mnemonic = data.get("mnemonic")
 
         if old_password and mnemonic:
             return JSONResponse(
-                content={"error": None, "message": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both."}
+                content={"error": None, "message": "You must provide either 'old_password' or 'mnemonic' (seed phrase), but not both."},
+                status_code=400,
             )
 
         if not new_password:
             return JSONResponse(
-                content={"error": None, "message": "You must provide a new password."}
+                content={"error": None, "message": "You must provide 'new_password'."},
+                status_code=400,
             )
 
         try:
