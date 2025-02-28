@@ -1092,6 +1092,7 @@ class EthSafeTxBuilder(_ChainUtil):
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
         metadata_description: t.Optional[str] = None,
+        skip_depencency_check: t.Optional[bool] = False
     ) -> t.Dict:
         """Build mint transaction."""
         # TODO: Support for update
@@ -1106,16 +1107,22 @@ class EthSafeTxBuilder(_ChainUtil):
             sleep=ON_CHAIN_INTERACT_SLEEP,
         )
         # Prepare for minting
-        (
-            manager.load_package_configuration(
-                package_path=package_path, package_type=PackageType.SERVICE
-            )
-            .load_metadata()
-            .set_metadata_fields(description=metadata_description)
-            .verify_nft(nft=nft)
-            #.verify_service_dependencies(agent_id=agent_id)
-            .publish_metadata()
+        
+        mintHelper = manager.load_package_configuration(
+            package_path=package_path, package_type=PackageType.SERVICE
+        ).load_metadata(
+        ).set_metadata_fields(
+            description=metadata_description
+        ).verify_nft(
+            nft=nft
         )
+
+        if skip_depencency_check == False:
+            logging.info(f"[WARNING] Skipping depencencies check")
+            mintHelper.verify_service_dependencies(agent_id=agent_id)
+        
+        mintHelper.publish_metadata()
+        
 
         instance = self.service_manager_instance
         if update_token is None:
