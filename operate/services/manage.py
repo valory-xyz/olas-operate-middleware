@@ -107,6 +107,7 @@ class ServiceManager:
         keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
+        skip_dependency_check: t.Optional[bool] = False,
     ) -> None:
         """
         Initialze service manager
@@ -120,6 +121,7 @@ class ServiceManager:
         self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.manager")
+        self.skip_depencency_check = skip_dependency_check
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -442,6 +444,7 @@ class ServiceManager:
                         OLAS[ledger_config.chain] if user_params.use_staking else None
                     ),
                     metadata_description=service.description,
+                    skip_dependency_check=self.skip_depencency_check,
                 ).get("token"),
             )
             chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
@@ -787,6 +790,7 @@ class ServiceManager:
                                 else None
                             ),
                             metadata_description=service.description,
+                            skip_depencency_check=self.skip_depencency_check,
                         )
                     )
                     .settle()
@@ -837,6 +841,7 @@ class ServiceManager:
                             else None
                         ),
                         metadata_description=service.description,
+                        skip_depencency_check=self.skip_depencency_check,
                     )
                 )
                 .settle()
