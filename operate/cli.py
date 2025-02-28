@@ -134,7 +134,9 @@ class OperateApp:
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
         self.user_account.force_update(new_password)
 
-    def service_manager(self, skip_dependency_check: t.Optional[bool] = False) -> services.manage.ServiceManager:
+    def service_manager(
+        self, skip_dependency_check: t.Optional[bool] = False
+    ) -> services.manage.ServiceManager:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
