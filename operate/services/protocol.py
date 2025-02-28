@@ -866,7 +866,7 @@ class OnChainManager(_ChainUtil):
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
         metadata_description: t.Optional[str] = None,
-        skip_dependency_check: t.Optional[bool] = False
+        skip_dependency_check: t.Optional[bool] = False,
     ) -> t.Dict:
         """Mint service."""
         # TODO: Support for update
