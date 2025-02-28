@@ -107,7 +107,7 @@ class ServiceManager:
         keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
-        skip_dependency_check: t.Optional[bool] = False
+        skip_dependency_check: t.Optional[bool] = False,
     ) -> None:
         """
         Initialze service manager
@@ -789,7 +789,7 @@ class ServiceManager:
                                 else None
                             ),
                             metadata_description=service.description,
-                            skip_depencency_check=self.skip_depencency_check
+                            skip_depencency_check=self.skip_depencency_check,
                         )
                     )
                     .settle()
@@ -840,7 +840,7 @@ class ServiceManager:
                             else None
                         ),
                         metadata_description=service.description,
-                        skip_depencency_check=self.skip_depencency_check
+                        skip_depencency_check=self.skip_depencency_check,
                     )
                 )
                 .settle()

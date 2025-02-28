@@ -627,7 +627,10 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
 
 def run_service(
-    operate: "OperateApp", config_path: str, build_only: bool = False, skip_dependency_check: bool = False
+    operate: "OperateApp",
+    config_path: str,
+    build_only: bool = False,
+    skip_dependency_check: bool = False,
 ) -> None:
     """Run service."""
 
