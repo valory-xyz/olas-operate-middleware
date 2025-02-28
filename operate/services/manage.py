@@ -1475,9 +1475,6 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
-        if not chain_data.user_params.use_staking:
-            self.logger.info("Cannot unstake service, `use_staking` is set to false")
-            return
 
         state = ocm.staking_status(
             service_id=chain_data.token,
@@ -1517,10 +1514,6 @@ class ServiceManager:
             self.logger.info(
                 "Cannot unstake service, `staking_program_id` is set to None"
             )
-            return
-
-        if not chain_data.user_params.use_staking:
-            self.logger.info("Cannot unstake service, `use_staking` is set to false")
             return
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)

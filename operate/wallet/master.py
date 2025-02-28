@@ -35,7 +35,7 @@ from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
-from web3 import Account
+from web3 import Account, Web3
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -47,6 +47,7 @@ from operate.ledger import get_default_rpc
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
+from operate.utils import create_backup
 from operate.utils.gnosis import NULL_ADDRESS, add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
@@ -188,6 +189,26 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> bool:
         """Update backup owner."""
+        raise NotImplementedError()
+
+    def is_password_valid(self, password: str) -> bool:
+        """Verifies if the provided password is valid."""
+        try:
+            self._crypto_cls(self.path / self._key, password)
+            return True
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+    def update_password(self, new_password: str) -> None:
+        """Update password."""
+        raise NotImplementedError()
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Is mnemonic valid."""
+        raise NotImplementedError()
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
         raise NotImplementedError()
 
     # TODO move to resource.py if used in more resources similarly
@@ -497,19 +518,58 @@ class EthereumMasterWallet(MasterWallet):
         wallet.password = password
         return wallet, mnemonic.split()
 
-    def update_password(self, password: str) -> None:
-        """Update password."""
+    def update_password(self, new_password: str) -> None:
+        """Updates password."""
+        create_backup(self.path / self._key)
         self._crypto = None
         (self.path / self._key).write_text(
             data=json.dumps(
                 Account.encrypt(
                     private_key=self.crypto.private_key,  # pylint: disable=protected-access
-                    password=password,
+                    password=new_password,
                 ),
                 indent=2,
             ),
             encoding="utf-8",
         )
+        self.password = new_password
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Verifies if the provided BIP-39 mnemonic is valid."""
+        try:
+            w3 = Web3()
+            w3.eth.account.enable_unaudited_hdwallet_features()
+            new_account = w3.eth.account.from_mnemonic(mnemonic)
+            keystore_data = json.loads(
+                Path(self.path / self._key).read_text(encoding="utf-8")
+            )
+            stored_address = keystore_data["address"].removeprefix("0x").lower()
+            return stored_address == new_account.address.removeprefix("0x").lower()
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
+        if not self.is_mnemonic_valid(mnemonic):
+            raise ValueError("The provided mnemonic is not valid")
+
+        path = self.path / EthereumMasterWallet._key
+        create_backup(path)
+
+        w3 = Web3()
+        w3.eth.account.enable_unaudited_hdwallet_features()
+        crypto = Web3().eth.account.from_mnemonic(mnemonic)
+        (path).write_text(
+            data=json.dumps(
+                Account.encrypt(
+                    private_key=crypto._private_key,  # pylint: disable=protected-access
+                    password=new_password,
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.password = new_password
 
     def create_safe(
         self,
@@ -783,6 +843,36 @@ class MasterWalletManager:
             raise ValueError(f"{ledger_type} is not supported.")
         wallet.password = self.password
         return wallet
+
+    def is_password_valid(self, password: str) -> bool:
+        """Verifies if the provided password is valid."""
+        for wallet in self:
+            if not wallet.is_password_valid(password):
+                return False
+
+        return True
+
+    def update_password(self, new_password: str) -> None:
+        """Updates password of manager and wallets."""
+        for wallet in self:
+            wallet.password = self.password
+            wallet.update_password(new_password)
+
+        self.password = new_password
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Verifies if the provided BIP-39 mnemonic is valid."""
+        for wallet in self:
+            if not wallet.is_mnemonic_valid(mnemonic):
+                return False
+        return True
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
+        for wallet in self:
+            wallet.update_password_with_mnemonic(mnemonic, new_password)
+
+        self.password = new_password
 
     def __iter__(self) -> t.Iterator[MasterWallet]:
         """Iterate over master wallets."""

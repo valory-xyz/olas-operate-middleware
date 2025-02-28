@@ -18,3 +18,30 @@
 # ------------------------------------------------------------------------------
 
 """Helper utilities."""
+
+import shutil
+import time
+from pathlib import Path
+
+
+def create_backup(path: Path) -> Path:
+    """Creates a backup of the specified path.
+
+    This function creates a backup of a file or directory by copying it and appending
+    the current UNIX timestamp followed by the '.bak' suffix.
+    """
+
+    path = path.resolve()
+
+    if not path.exists():
+        raise FileNotFoundError(f"{path} does not exist")
+
+    timestamp = int(time.time())
+    backup_path = path.with_name(f"{path.name}.{timestamp}.bak")
+
+    if path.is_dir():
+        shutil.copytree(path, backup_path)
+    else:
+        shutil.copy2(path, backup_path)
+
+    return backup_path

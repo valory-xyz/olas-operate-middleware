@@ -65,3 +65,8 @@ class UserAccount(LocalResource):
             raise ValueError("Old password is not valid")
         self.password_sha = sha256(string=new_password)
         self.store()
+
+    def force_update(self, new_password: str) -> None:
+        """Force update current password."""
+        self.password_sha = sha256(string=new_password)
+        self.store()

@@ -20,12 +20,11 @@
 
 import json
 import os
+import shutil
 import textwrap
 import time
 import typing as t
 import warnings
-from dataclasses import dataclass
-from pathlib import Path
 
 import requests
 from aea.crypto.registries import make_ledger_api
@@ -47,6 +46,7 @@ from operate.operate_types import (
 )
 from operate.quickstart.utils import (
     CHAIN_TO_METADATA,
+    QuickstartConfig,
     ask_or_get_from_env,
     check_rpc,
     print_box,
@@ -54,7 +54,6 @@ from operate.quickstart.utils import (
     print_title,
     wei_to_token,
 )
-from operate.resource import LocalResource, deserialize
 from operate.services.manage import ServiceManager
 from operate.services.service import NON_EXISTENT_MULTISIG, Service
 from operate.utils.gnosis import get_asset_balance
@@ -107,37 +106,6 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
 }
 
 
-@dataclass
-class QuickstartConfig(LocalResource):
-    """Local configuration."""
-
-    path: Path
-    rpc: t.Optional[t.Dict[str, str]] = None
-    password_migrated: t.Optional[bool] = None
-    staking_program_id: t.Optional[str] = None
-    principal_chain: t.Optional[str] = None
-    user_provided_args: t.Optional[t.Dict[str, str]] = None
-
-    @classmethod
-    def from_json(cls, obj: t.Dict) -> "LocalResource":
-        """Load LocalResource from json."""
-        kwargs = {}
-        for pname, ptype in cls.__annotations__.items():
-            if pname.startswith("_"):
-                continue
-
-            # allow for optional types
-            is_optional_type = t.get_origin(ptype) is t.Union and type(
-                None
-            ) in t.get_args(ptype)
-            value = obj.get(pname, None)
-            if is_optional_type and value is None:
-                continue
-
-            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
-        return cls(**kwargs)
-
-
 def ask_confirm_password() -> str:
     """Ask for password confirmation."""
     while True:
@@ -154,20 +122,64 @@ def ask_confirm_password() -> str:
             print("Passwords do not match!")
 
 
-def load_local_config() -> QuickstartConfig:
+def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartConfig:
     """Load the local quickstart configuration."""
-    path = OPERATE_HOME / "local_config.json"
-    if path.exists():
-        config = QuickstartConfig.load(path)
+    old_path = OPERATE_HOME / "local_config.json"
+    if old_path.exists():  # Migrate to new naming scheme
+        config = t.cast(QuickstartConfig, QuickstartConfig.load(old_path))
+        service_manager = operate.service_manager()
+        services = service_manager.json
+        if config.staking_program_id == NO_STAKING_PROGRAM_ID:
+            for service in services:
+                if service["name"] == service_name:
+                    config.path = (
+                        config.path.parent / f"{service_name}-quickstart-config.json"
+                    )
+                    shutil.move(old_path, config.path)
+                    break
+        else:
+            for staking_program, agent_id in QS_STAKING_PROGRAMS[
+                Chain.from_string(config.principal_chain)
+            ].items():
+                if staking_program == config.staking_program_id:
+                    staking_agent_id = agent_id
+                    break
+            else:
+                raise ValueError(
+                    f"Staking program {config.staking_program_id} not found in {QS_STAKING_PROGRAMS[config.principal_chain]}.\n"
+                    "Please resolve manually!"
+                )
+
+            for service in services:
+                if (
+                    staking_agent_id
+                    == service["chain_configs"][config.principal_chain]["chain_data"][
+                        "user_params"
+                    ]["agent_id"]
+                ):
+                    config.path = (
+                        config.path.parent / f"{service['name']}-quickstart-config.json"
+                    )
+                    shutil.move(old_path, config.path)
+                    break
+
+    for qs_config in OPERATE_HOME.glob("*-quickstart-config.json"):
+        if f"{service_name}-quickstart-config.json" == qs_config.name:
+            config = t.cast(QuickstartConfig, QuickstartConfig.load(qs_config))
+            break
     else:
-        config = QuickstartConfig(path)
+        config = QuickstartConfig(
+            OPERATE_HOME / f"{service_name}-quickstart-config.json"
+        )
 
-    return config  # type: ignore[return-value]
+    return config
 
 
-def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
+def configure_local_config(
+    template: ServiceTemplate, operate: "OperateApp"
+) -> QuickstartConfig:
     """Configure local quickstart configuration."""
-    config = load_local_config()
+    config = load_local_config(operate=operate, service_name=template["name"])
 
     if config.rpc is None:
         config.rpc = {}
@@ -184,8 +196,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     if config.password_migrated is None:
         config.password_migrated = False
 
-    if config.principal_chain is None:
-        config.principal_chain = template["home_chain"]
+    config.principal_chain = template["home_chain"]
 
     agent_id = template["configurations"][config.principal_chain]["agent_id"]
     home_chain = Chain.from_string(config.principal_chain)
@@ -197,7 +208,7 @@ def configure_local_config(template: ServiceTemplate) -> QuickstartConfig:
     )
     ledger_api = make_ledger_api(
         LedgerType.ETHEREUM.lower(),
-        address=config.rpc[config.principal_chain],
+        address=config.rpc[config.principal_chain],  # type: ignore[index]
         chain_id=home_chain.id,
     )
 
@@ -391,22 +402,25 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> N
 
 def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     """Get service."""
-    if len(manager.json) > 0:
-        old_hash = manager.json[0]["hash"]
-        if old_hash == template["hash"]:
-            print(f'Loading service {template["hash"]}')
-            service = manager.load(
-                service_config_id=manager.json[0]["service_config_id"],
-            )
-        else:
-            print(f"Updating service from {old_hash} to " + template["hash"])
-            service = manager.update(
-                service_config_id=manager.json[0]["service_config_id"],
-                service_template=template,
-            )
+    for service in manager.json:
+        if service["name"] == template["name"]:
+            old_hash = service["hash"]
+            if old_hash == template["hash"]:
+                print(f'Loading service {template["hash"]}')
+                service = manager.load(
+                    service_config_id=service["service_config_id"],
+                )
+            else:
+                print(f"Updating service from {old_hash} to " + template["hash"])
+                service = manager.update(
+                    service_config_id=service["service_config_id"],
+                    service_template=template,
+                )
 
-        service.env_variables = template["env_variables"]
-        service.store()
+            service.env_variables = template["env_variables"]
+            service.update_user_params_from_template(service_template=template)
+            service.store()
+            break
     else:
         print(f'Creating service {template["hash"]}')
         service = manager.load_or_create(
@@ -475,7 +489,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
         wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
     manager = operate.service_manager()
-    config = load_local_config()
+    config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
 
     for chain_name, chain_config in service.chain_configs.items():
         print_section(f"[{chain_name}] Set up the service in the Olas Protocol")
@@ -639,19 +653,17 @@ def run_service(
 
     print_title(f"{template['name']} quickstart")
 
-    operate.service_manager().log_directories()
     operate.service_manager().migrate_service_configs()
-    operate.service_manager().log_directories()
     operate.wallet_manager.migrate_wallet_configs()
 
-    config = configure_local_config(template)
+    config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
-    config = load_local_config()
+    config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
     ensure_enough_funds(operate, service)
 
     print_box("PLEASE, DO NOT INTERRUPT THIS PROCESS.")

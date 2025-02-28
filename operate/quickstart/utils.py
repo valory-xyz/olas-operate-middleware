@@ -21,8 +21,10 @@
 
 import getpass
 import os
+from dataclasses import dataclass
 from decimal import Decimal, ROUND_UP
-from typing import Optional
+from pathlib import Path
+from typing import Dict, Optional, Union, get_args, get_origin
 
 import requests
 from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
@@ -30,6 +32,10 @@ from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain
+from operate.resource import LocalResource, deserialize
+
+
+MAX_QUICKSTART_VERSION = 1
 
 
 def print_box(text: str, margin: int = 1, character: str = "=") -> None:
@@ -259,3 +265,34 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
         spinner.fail("Terminating script.")
 
     return False
+
+
+@dataclass
+class QuickstartConfig(LocalResource):
+    """Local configuration."""
+
+    path: Path
+    rpc: Optional[Dict[str, str]] = None
+    password_migrated: Optional[bool] = None
+    staking_program_id: Optional[str] = None
+    principal_chain: Optional[str] = None
+    user_provided_args: Optional[Dict[str, str]] = None
+
+    @classmethod
+    def from_json(cls, obj: Dict) -> "LocalResource":
+        """Load LocalResource from json."""
+        kwargs = {}
+        for pname, ptype in cls.__annotations__.items():
+            if pname.startswith("_"):
+                continue
+
+            # allow for optional types
+            is_optional_type = get_origin(ptype) is Union and type(None) in get_args(
+                ptype
+            )
+            value = obj.get(pname, None)
+            if is_optional_type and value is None:
+                continue
+
+            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
+        return cls(**kwargs)
