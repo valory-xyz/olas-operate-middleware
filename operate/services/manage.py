@@ -444,6 +444,7 @@ class ServiceManager:
                         OLAS[ledger_config.chain] if user_params.use_staking else None
                     ),
                     metadata_description=service.description,
+                    skip_dependency_check=self.skip_depencency_check,
                 ).get("token"),
             )
             chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
