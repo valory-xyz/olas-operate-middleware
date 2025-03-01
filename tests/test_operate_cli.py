@@ -21,8 +21,6 @@
 
 import hashlib
 import json
-import random
-import string
 from pathlib import Path
 
 import pytest
@@ -33,6 +31,8 @@ from web3 import Web3
 from operate.cli import OperateApp
 from operate.constants import OPERATE_HOME
 from operate.operate_types import LedgerType
+
+from tests.conftest import random_string
 
 
 ROOT_PATH = Path(__file__).resolve().parent
@@ -143,6 +143,8 @@ class TestOperateApp:
         tmp_path: Path,
         password: str,
     ) -> None:
+        """Test operate.user_account.is_valid(password) and MigrationManager.migrate_account_user()"""
+
         operate_home_path = tmp_path / OPERATE_HOME
         operate = OperateApp(
             home=operate_home_path,

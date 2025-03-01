@@ -26,7 +26,7 @@ from pathlib import Path
 
 
 class MigrationManager:
-    """FormatMigrator"""
+    """MigrationManager"""
 
     # TODO Backport here migration for services/config.json, etc.
 
