@@ -34,12 +34,12 @@ import pytest
 
 
 def random_string(length: int = 8) -> str:
-    """random_string"""
+    """Random string"""
     chars = string.ascii_letters + string.digits
     return "".join(random.choices(chars, k=length))  # nosec B311
 
 
 @pytest.fixture
 def password() -> str:
-    """password fixture"""
+    """Password fixture"""
     return random_string(16)
