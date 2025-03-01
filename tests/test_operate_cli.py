@@ -143,7 +143,7 @@ class TestOperateApp:
         tmp_path: Path,
         password: str,
     ) -> None:
-        """Test operate.user_account.is_valid(password) and MigrationManager.migrate_account_user()"""
+        """Test operate.user_account.is_valid(password) and MigrationManager.migrate_user_account()"""
 
         operate_home_path = tmp_path / OPERATE_HOME
         operate = OperateApp(

@@ -33,7 +33,7 @@ import string
 import pytest
 
 
-def random_string(length: int = 8) -> str:
+def random_string(length: int = 16) -> str:
     """Random string"""
     chars = string.ascii_letters + string.digits
     return "".join(random.choices(chars, k=length))  # nosec B311

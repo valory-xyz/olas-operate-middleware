@@ -97,7 +97,7 @@ class OperateApp:
         self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
 
         mm = MigrationManager(self._path, self.logger)
-        mm.migrate_account_user()
+        mm.migrate_user_account()
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""

@@ -40,7 +40,7 @@ class MigrationManager:
         self._path = home
         self.logger = logger
 
-    def migrate_account_user(self) -> None:
+    def migrate_user_account(self) -> None:
         """Migrates user.json"""
 
         path = self._path / "user.json"
