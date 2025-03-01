@@ -25,7 +25,7 @@ import logging
 from pathlib import Path
 
 
-class FormatMigrator:
+class MigrationManager:
     """FormatMigrator"""
 
     # TODO Backport here migration for services/config.json, etc.
@@ -40,11 +40,10 @@ class FormatMigrator:
         self._path = home
         self.logger = logger
 
-    def migrate_user_json(self) -> None:
+    def migrate_account_user(self) -> None:
         """Migrates user.json"""
-        self.logger.info("[FORMAT MIGRATOR] Migrating user.json")
-        path = self._path / "user.json"
 
+        path = self._path / "user.json"
         if not path.exists():
             return
 
@@ -57,3 +56,5 @@ class FormatMigrator:
         new_data = {"password_hash": data["password_sha"]}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(new_data, f, indent=4)
+
+        self.logger.info("[MIGRATION MANAGER] Migrated user.json.")

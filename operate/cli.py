@@ -44,7 +44,7 @@ from operate import services
 from operate.account.user import UserAccount
 from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
-from operate.migration import FormatMigrator
+from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
@@ -96,8 +96,8 @@ class OperateApp:
         )
         self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
 
-        fm = FormatMigrator(self._path, self.logger)
-        fm.migrate_user_json()
+        mm = MigrationManager(self._path, self.logger)
+        mm.migrate_account_user()
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
