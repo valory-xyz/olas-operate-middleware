@@ -23,9 +23,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import argon2
 import pytest
-from argon2 import PasswordHasher, Type
-from argon2.exceptions import InvalidHashError
 from web3 import Web3
 
 from operate.cli import OperateApp
@@ -168,8 +167,8 @@ class TestOperateApp:
         assert "password_hash" in data
         assert "password_sha" not in data
         assert password_sha == data["password_hash"]
-        ph = PasswordHasher(type=Type.ID)
-        with pytest.raises(InvalidHashError):
+        ph = argon2.PasswordHasher()
+        with pytest.raises(argon2.exceptions.InvalidHashError):
             ph.verify(data["password_hash"], password)
 
         operate.user_account.is_valid(password)
@@ -180,5 +179,5 @@ class TestOperateApp:
         assert "password_hash" in data
         assert "password_sha" not in data
         assert password_sha != data["password_hash"]
-        ph = PasswordHasher(type=Type.ID)
+        ph = argon2.PasswordHasher()
         assert ph.verify(data["password_hash"], password)

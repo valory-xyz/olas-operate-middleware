@@ -23,15 +23,14 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
-from argon2 import PasswordHasher, Type
-from argon2.exceptions import InvalidHashError, VerificationError
+import argon2
 
 from operate.resource import LocalResource
 
 
 def argon2id(string: str) -> str:
     """Get Argon2id hexdigest of a string."""
-    ph = PasswordHasher(type=Type.ID)
+    ph = argon2.PasswordHasher()  # Defaults to Argon2id
     return ph.hash(string)
 
 
@@ -60,11 +59,11 @@ class UserAccount(LocalResource):
     def is_valid(self, password: str) -> bool:
         """Check if a password string is valid."""
         try:
-            ph = PasswordHasher(type=Type.ID)
+            ph = argon2.PasswordHasher()
             return ph.verify(self.password_hash, password)
-        except VerificationError:
+        except argon2.exceptions.VerificationError:
             return False
-        except InvalidHashError:
+        except argon2.exceptions.InvalidHashError:
             # Verifies legacy password hash and updates to Argon2id if valid
             sha256 = hashlib.sha256()
             sha256.update(password.encode())
