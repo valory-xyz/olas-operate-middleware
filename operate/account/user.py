@@ -19,10 +19,12 @@
 
 """User account implementation."""
 
-from argon2 import PasswordHasher, Type
-from argon2.exceptions import VerificationError
+import hashlib
 from dataclasses import dataclass
 from pathlib import Path
+
+from argon2 import PasswordHasher, Type
+from argon2.exceptions import InvalidHashError, VerificationError
 
 from operate.resource import LocalResource
 
@@ -61,6 +63,16 @@ class UserAccount(LocalResource):
             ph = PasswordHasher(type=Type.ID)
             return ph.verify(self.password_hash, password)
         except VerificationError:
+            return False
+        except InvalidHashError:
+            # Verifies legacy password hash and updates to Argon2id if valid
+            sha256 = hashlib.sha256()
+            sha256.update(password.encode())
+            if sha256.hexdigest() == self.password_hash:
+                self.password_hash = argon2id(string=password)
+                self.store()
+                return True
+
             return False
 
     def update(self, old_password: str, new_password: str) -> None:
