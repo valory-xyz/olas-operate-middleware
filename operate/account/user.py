@@ -64,7 +64,7 @@ class UserAccount(LocalResource):
         except argon2.exceptions.VerificationError:
             return False
         except argon2.exceptions.InvalidHashError:
-            # Verifies legacy password hash and updates to Argon2id if valid
+            # Verify legacy password hash and update it to Argon2id if valid
             sha256 = hashlib.sha256()
             sha256.update(password.encode())
             if sha256.hexdigest() == self.password_hash:
