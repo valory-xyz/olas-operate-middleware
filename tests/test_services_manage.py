@@ -272,10 +272,18 @@ class TestServiceManager:
 
     @pytest.mark.parametrize(
         (
-            "topup1", "threshold1", "balance1",
-            "topup2", "threshold2", "balance2",
-            "topup3", "threshold3", "balance3",
-            "sender_balance", "minimum_refill_required", "recommended_refill_required"
+            "topup1",
+            "threshold1",
+            "balance1",
+            "topup2",
+            "threshold2",
+            "balance2",
+            "topup3",
+            "threshold3",
+            "balance3",
+            "sender_balance",
+            "minimum_refill_required",
+            "recommended_refill_required",
         ),
         [
             (10, 5, 1, 0, 0, 0, 0, 0, 0, 1, 3, 8),
@@ -286,7 +294,7 @@ class TestServiceManager:
             (10, 5, 2, 20, 10, 7, 0, 0, 0, 4, 2, 17),
             (10, 5, 2, 20, 10, 3, 0, 0, 0, 4, 6, 21),
             (15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 5, 5),
-        ]
+        ],
     )
     def test_service_manager_compute_refill_requirements(
         self,
