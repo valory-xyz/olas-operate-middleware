@@ -28,10 +28,10 @@ import argon2
 from operate.resource import LocalResource
 
 
-def argon2id(string: str) -> str:
-    """Get Argon2id hexdigest of a string."""
+def argon2id(password: str) -> str:
+    """Get Argon2id digest of a password."""
     ph = argon2.PasswordHasher()  # Defaults to Argon2id
-    return ph.hash(string)
+    return ph.hash(password)
 
 
 @dataclass
@@ -50,7 +50,7 @@ class UserAccount(LocalResource):
     def new(cls, password: str, path: Path) -> "UserAccount":
         """Create a new user."""
         user = UserAccount(
-            password_hash=argon2id(string=password),
+            password_hash=argon2id(password=password),
             path=path,
         )
         user.store()
@@ -60,7 +60,13 @@ class UserAccount(LocalResource):
         """Check if a password string is valid."""
         try:
             ph = argon2.PasswordHasher()
-            return ph.verify(self.password_hash, password)
+            valid = ph.verify(self.password_hash, password)
+
+            if valid and ph.check_needs_rehash(self.password_hash):
+                self.password_hash = argon2id(password)
+                self.store()
+
+            return valid
         except argon2.exceptions.VerificationError:
             return False
         except argon2.exceptions.InvalidHashError:
@@ -68,7 +74,7 @@ class UserAccount(LocalResource):
             sha256 = hashlib.sha256()
             sha256.update(password.encode())
             if sha256.hexdigest() == self.password_hash:
-                self.password_hash = argon2id(string=password)
+                self.password_hash = argon2id(password=password)
                 self.store()
                 return True
 
@@ -78,10 +84,10 @@ class UserAccount(LocalResource):
         """Update current password."""
         if not self.is_valid(password=old_password):
             raise ValueError("Old password is not valid")
-        self.password_hash = argon2id(string=new_password)
+        self.password_hash = argon2id(password=new_password)
         self.store()
 
     def force_update(self, new_password: str) -> None:
         """Force update current password."""
-        self.password_hash = argon2id(string=new_password)
+        self.password_hash = argon2id(password=new_password)
         self.store()
