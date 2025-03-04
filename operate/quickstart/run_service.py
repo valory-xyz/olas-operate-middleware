@@ -70,7 +70,6 @@ NO_STAKING_PROGRAM_METADATA = {
     "name": "No staking",
     "description": "Your Olas Predict agent will still actively participate in prediction\
         markets, but it will not be staked within any staking program.",
-    "available_staking_slots": "∞",
 }
 QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.GNOSIS: {
@@ -258,13 +257,15 @@ def configure_local_config(
 
             name = metadata["name"]
             description = metadata["description"]
-            available_slots = metadata["available_staking_slots"]
+            available_slots = (
+                f"(available slots : {metadata['available_staking_slots']})"
+                if "available_staking_slots" in metadata
+                else ""
+            )
             wrapped_description = textwrap.fill(
                 description, width=80, initial_indent="   ", subsequent_indent="   "
             )
-            print(
-                f"{index + 1}) {name}\t(available slots : {available_slots})\n{wrapped_description}\n"
-            )
+            print(f"{index + 1}) {name}\t{available_slots}\n{wrapped_description}\n")
             if available_slots != 0:
                 available_choices[index + 1] = {
                     "program_id": program_id,
