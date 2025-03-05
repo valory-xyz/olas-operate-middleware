@@ -1174,23 +1174,23 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_olas_approval_data(
+    def get_erc20_approval_data(
         self,
         spender: str,
         amount: int,
-        olas_contract: str,
+        erc20_contract: str,
     ) -> t.Dict:
         """Get activate tx data."""
         instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=olas_contract,
+            contract_address=erc20_contract,
         )
         txd = instance.encodeABI(
             fn_name="approve",
             args=[spender, amount],
         )
         return {
-            "to": olas_contract,
+            "to": erc20_contract,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
