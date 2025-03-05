@@ -1941,13 +1941,14 @@ class ServiceManager:
                     )
                 await asyncio.sleep(60)
 
-    def deploy_service_locally(
+    def deploy_service_locally(  # pylint: disable=too-many-arguments
         self,
         service_config_id: str,
         chain: t.Optional[str] = None,
         use_docker: bool = False,
         use_kubernetes: bool = False,
         build_only: bool = False,
+        custom_binary: t.Optional[str] = None,
     ) -> Deployment:
         """
         Deploy service locally
@@ -1967,14 +1968,19 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
+            use_binary=custom_binary is not None,
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker)
+        deployment.start(use_docker=use_docker, custom_binary=custom_binary)
         return deployment
 
     def stop_service_locally(
-        self, service_config_id: str, delete: bool = False, use_docker: bool = False
+        self,
+        service_config_id: str,
+        delete: bool = False,
+        use_docker: bool = False,
+        custom_binary: t.Optional[str] = None,
     ) -> Deployment:
         """
         Stop service locally
@@ -1986,7 +1992,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker)
+        deployment.stop(use_docker, custom_binary=custom_binary)
         if delete:
             deployment.delete()
         return deployment
