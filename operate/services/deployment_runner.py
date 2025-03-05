@@ -40,6 +40,8 @@ from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
 
+from .agent_runner import get_agent_runner_path
+
 
 class AbstractDeploymentRunner(ABC):
     """Abstract deployment runner."""
@@ -194,7 +196,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         )
 
         self._run_aea_command(
-            "fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir
+            "-s", "fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir
         )
 
         # Add keys
@@ -203,9 +205,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             working_dir / "agent" / "ethereum_private_key.txt",
         )
 
-        self._run_aea_command("add-key", "ethereum", cwd=working_dir / "agent")
+        self._run_aea_command("-s", "add-key", "ethereum", cwd=working_dir / "agent")
 
-        self._run_aea_command("issue-certificates", cwd=working_dir / "agent")
+        self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
 
     def start(self) -> None:
         """Start the deployment."""
@@ -264,8 +266,17 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     @property
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        abin = str(Path(os.path.dirname(sys.executable)) / "aea_bin")  # type: ignore # pylint: disable=protected-access
-        return abin
+        env = json.loads(
+            (self._work_directory / "agent.json").read_text(encoding="utf-8")
+        )
+
+        agent_publicid_str = env["AEA_AGENT"]
+        service_dir = self._work_directory.parent
+
+        agent_runner_bin = get_agent_runner_path(
+            service_dir=service_dir, agent_public_id_str=agent_publicid_str
+        )
+        return str(agent_runner_bin)
 
     @property
     def _tendermint_bin(self) -> str:
@@ -339,12 +350,6 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
-
-    @property
-    def _agent_runner_bin(self) -> str:
-        """Return aea_bin path."""
-        abin = str(Path(os.path.dirname(sys.executable)) / "aea_win.exe")  # type: ignore # pylint: disable=protected-access
-        return abin
 
     @property
     def _tendermint_bin(self) -> str:
