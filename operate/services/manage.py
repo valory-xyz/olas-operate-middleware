@@ -684,30 +684,23 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                required_olas = (
-                    staking_params["min_staking_deposit"]
-                    + staking_params[
-                        "min_staking_deposit"
-                    ]  # operator security deposit = max agent bond
-                )
+                required_tokens = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = staking_params["min_staking_deposit"]
+                required_tokens = staking_params["min_staking_deposit"]
             else:
-                required_olas = 0
+                required_tokens = {}
 
-            balance = (
-                registry_contracts.erc20.get_instance(
+            for asset_address, required_amount in required_tokens.items():
+                balance = get_asset_balance(
                     ledger_api=sftxb.ledger_api,
-                    contract_address=OLAS[ledger_config.chain],
+                    asset_address=asset_address,
+                    address=safe,
                 )
-                .functions.balanceOf(safe)
-                .call()
-            )
-            if balance < required_olas:
-                raise ValueError(
-                    "You don't have enough olas to stake, "
-                    f"address: {safe}; required olas: {required_olas}; your balance: {balance}"
-                )
+                if balance < required_amount:
+                    raise ValueError(
+                        f"Address {safe} has insufficient balance for staking token {asset_address}: "
+                        f"required {required_amount}, available {balance}."
+                    )
 
         # TODO Handle this in a more graceful way.
         agent_id = (
@@ -2083,16 +2076,24 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        bonded_olas: t.Dict = {}
+        bonded_tokens: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
             chain_data = chain_config.chain_data
+            user_params = chain_data.user_params
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
             ledger_api = wallet.ledger_api(
                 chain=ledger_config.chain, rpc=ledger_config.rpc
+            )
+            os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+            sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+            staking_params = sftxb.get_staking_params(
+                staking_contract=STAKING[ledger_config.chain][
+                    user_params.staking_program_id
+                ],
             )
 
             agent_addresses = {key.address for key in service.keys}
@@ -2114,7 +2115,7 @@ class ServiceManager:
                 ledger_api=ledger_api,
                 addresses=addresses,
                 asset_addresses=set(chain_data.user_params.fund_requirements)
-                | {OLAS[Chain(chain)]},
+                | set(staking_params["min_staking_deposit"].keys()),
             )
 
             if not service_safe:
@@ -2133,28 +2134,29 @@ class ServiceManager:
 
             # Compute refill requirements of Master Safe and Master EOA
             refill_requirements[chain] = {}
-            bonded_olas[chain] = self._compute_bonded_olas(service_config_id, chain)
+            bonded_tokens[chain] = self._compute_bonded_tokens(service_config_id, chain, staking_params)
 
+            # TODO check if this if is required here.
             if master_safe:
-                olas_requirements = self._compute_olas_requirements(
-                    service_config_id, chain
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
                 )
-                olas_address = OLAS[Chain(chain)]
-                master_safe_olas = balances[chain][master_safe][olas_address]
 
-                service_safe_olas = 0
-                if service_safe:
-                    service_safe_olas = balances[chain][service_safe][olas_address]
+                for token, required_amount in staking_token_requirements.items():
+                    master_safe_token_amount = balances[chain][master_safe].get(token, 0)
+                    service_safe_token_amount = 0
+                    if service_safe:
+                        service_safe_token_amount = balances[chain][service_safe].get(token, 0)
 
-                refill_requirements[chain].setdefault(master_safe, {})[
-                    olas_address
-                ] = max(
-                    olas_requirements
-                    - bonded_olas[chain]
-                    - master_safe_olas
-                    - service_safe_olas,
-                    0,
-                )
+                    refill_requirements[chain].setdefault(master_safe, {})[
+                        token
+                    ] = max(
+                        required_amount
+                        - bonded_tokens[chain].get(token, 0)   # TODO fix
+                        - master_safe_token_amount
+                        - service_safe_token_amount,
+                        0,
+                    )
 
             for (
                 asset_address,
@@ -2252,25 +2254,24 @@ class ServiceManager:
 
         return {
             "balances": balances,
-            "bonded_olas": bonded_olas,
+            "bonded_olas": bonded_tokens,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
 
-    def _compute_bonded_olas(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes the bonded olas: current agent bonds and current security deposit"""
+    def _compute_bonded_tokens(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str, staking_params: dict
+    ) -> t.Dict:
+        """Computes the bonded tokens: current agent bonds and current security deposit"""
 
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
-        user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
 
         if Chain(chain) not in wallet.safes:
-            return 0
+            return {}
 
         master_safe = wallet.safes[Chain(chain)]
 
@@ -2278,15 +2279,9 @@ class ServiceManager:
 
         service_id = chain_config.chain_data.token
         if service_id == NON_EXISTENT_TOKEN:
-            return 0
+            return {}
 
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
-        )
         service_registry_address = staking_params["service_registry"]
         service_registry_token_utility_address = staking_params[
             "service_registry_token_utility"
@@ -2306,7 +2301,7 @@ class ServiceManager:
 
         # If master safe is service owner, the service is not staked
         if service_owner.lower() == master_safe.lower():
-            return 0
+            return {}
 
         service_info = service_registry.functions.getService(service_id).call()
         agent_ids = service_info[7]
@@ -2334,38 +2329,35 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        return agent_bonds + security_deposit
+        # TODO fix - add second token and get olas from staking contract.
+        return {
+            OLAS[Chain(chain)]: agent_bonds + security_deposit
+        }
 
-    def _compute_olas_requirements(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes OLAS requirements to stake the service in the target staking contract"""
+    def _compute_staking_token_requirements(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str, staking_params: dict
+    ) -> t.Dict:
+        """Computes staking token requirements to stake the service in the target staking contract"""
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
 
         if not user_params.use_staking:
-            return 0
-
-        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
-        )
+            return {}
 
         # This computation assumes the service will be/has been minted with these
         # parameters. Otherwise, these values should be retrieved on-chain as follows:
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
         #   and ServiceRegistryTokenUtility .getAgentBond
         # - security_deposit: as the maximum agent bond.
+        output = {}
         number_of_agents = service.helper.config.number_of_agents
-        agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
-        security_deposit = staking_params["min_staking_deposit"]
+        for token, amount in staking_params["min_staking_deposit"].items():
+            agent_bonds = amount * number_of_agents
+            security_deposit = amount
+            output[token] = agent_bonds + security_deposit
 
-        return agent_bonds + security_deposit
+        return output
 
     @staticmethod
     def _compute_refill_requirement(
