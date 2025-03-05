@@ -677,11 +677,19 @@ def run_service(
     manager.fund_service(service_config_id=service.service_config_id)
 
     print_section("Deploying the service")
+    binary_path = template.get("binary_path")
+    if binary_path:
+        use_docker = False
+        use_k8s = False
+    else:
+        use_docker = True
+        use_k8s = True
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=True,
-        use_kubernetes=True,
+        use_docker=use_docker,
+        use_kubernetes=use_k8s,
         build_only=build_only,
+        custom_binary=binary_path,
     )
     if build_only:
         print_section(f"Built the {template['name']}")
