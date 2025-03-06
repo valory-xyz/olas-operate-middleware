@@ -1441,7 +1441,7 @@ class ServiceManager:
         self.logger.info(f"{staking_slots_available=}")
 
         if (
-            chain_config.chain_data.user_params.use_staking
+            chain_config.chain_data.user_params.use_staking  # pylint: disable=too-many-boolean-expressions
             and staking_state == StakingState.UNSTAKED
             and target_program_staking_state == StakingState.UNSTAKED
             and staking_rewards_available
@@ -1457,7 +1457,7 @@ class ServiceManager:
                 )
             ).settle()
 
-            # APPROVE additional_staking_tokens.
+            # Approve additional_staking_tokens.
             staking_params = sftxb.get_staking_params(
                 staking_contract=target_staking_contract
             )
