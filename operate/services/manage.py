@@ -684,10 +684,17 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                staking_token_requirements = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
+                )
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                staking_token_requirements = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
-                staking_token_requirements[staking_params["staking_token"]] = staking_params["min_staking_deposit"] * service.helper.config.number_of_agents
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
+                )
+                staking_token_requirements[staking_params["staking_token"]] = (
+                    staking_params["min_staking_deposit"]
+                    * service.helper.config.number_of_agents
+                )
             else:
                 staking_token_requirements = {}
 
@@ -1322,7 +1329,7 @@ class ServiceManager:
         target_staking_program = user_params.staking_program_id
         target_staking_contract = STAKING[ledger_config.chain][target_staking_program]
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
- 
+
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -1437,18 +1444,14 @@ class ServiceManager:
                 )
             ).settle()
 
-            # APPROVE 2nd token if there is a 2nd token.
-            # Spender = dual_staking_contract
-            # amount = dual_staking_contract.second_token_amount()
+            # APPROVE additional_staking_tokens.
             staking_params = sftxb.get_staking_params(
                 staking_contract=target_staking_contract
             )
 
-            from icecream import ic
-            ic(staking_params)
-
-            # TODO fixme - only second token
-            for token_contract, min_staking_amount in staking_params["additional_staking_tokens"].items():
+            for token_contract, min_staking_amount in staking_params[
+                "additional_staking_tokens"
+            ].items():
                 sftxb.new_tx().add(
                     sftxb.get_erc20_approval_data(
                         spender=target_staking_contract,
@@ -2111,7 +2114,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        bonded_tokens: t.Dict = {}
+        bonded_assets: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
 
@@ -2143,13 +2146,17 @@ class ServiceManager:
             addresses = agent_addresses | {wallet.address}
             addresses.add(service_safe or "service_safe")
             addresses.add(master_safe or "master_safe")
-            asset_addresses = set(chain_data.user_params.fund_requirements) | {staking_params["staking_token"]} | set(staking_params["additional_staking_tokens"].keys())
+            asset_addresses = (
+                set(chain_data.user_params.fund_requirements)
+                | {staking_params["staking_token"]}
+                | set(staking_params["additional_staking_tokens"].keys())
+            )
 
             balances[chain] = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses=addresses,
                 asset_addresses=asset_addresses,
-                raise_on_invalid_address=False
+                raise_on_invalid_address=False,
             )
 
             # TODO this is a patch to count the balance of the wrapped native asset as
@@ -2163,7 +2170,9 @@ class ServiceManager:
 
             # Compute refill requirements of Master Safe and Master EOA
             refill_requirements[chain] = {}
-            bonded_tokens[chain] = self._compute_bonded_tokens(service_config_id, chain, staking_params)
+            bonded_assets[chain] = self._compute_bonded_assets(
+                service_config_id, chain, staking_params
+            )
 
             # TODO check if this if is required here.
             if master_safe:
@@ -2172,16 +2181,18 @@ class ServiceManager:
                 )
 
                 for token, amount in staking_token_requirements.items():
-                    master_safe_token_amount = balances[chain][master_safe].get(token, 0)
+                    master_safe_token_amount = balances[chain][master_safe].get(
+                        token, 0
+                    )
                     service_safe_token_amount = 0
                     if service_safe:
-                        service_safe_token_amount = balances[chain][service_safe].get(token, 0)
+                        service_safe_token_amount = balances[chain][service_safe].get(
+                            token, 0
+                        )
 
-                    refill_requirements[chain].setdefault(master_safe, {})[
-                        token
-                    ] = max(
+                    refill_requirements[chain].setdefault(master_safe, {})[token] = max(
                         amount
-                        - bonded_tokens[chain].get(token, 0)   # TODO fix
+                        - bonded_assets[chain].get(token, 0)  # TODO fix
                         - master_safe_token_amount
                         - service_safe_token_amount,
                         0,
@@ -2283,13 +2294,13 @@ class ServiceManager:
 
         return {
             "balances": balances,
-            "bonded_tokens": bonded_tokens,
+            "bonded_assets": bonded_assets,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
 
-    def _compute_bonded_tokens(  # pylint: disable=too-many-locals
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str, staking_params: dict
     ) -> t.Dict:
         """Computes the bonded tokens: current agent bonds and current security deposit"""
@@ -2358,9 +2369,7 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        output = {
-            staking_params["staking_token"]: agent_bonds + security_deposit
-        }
+        output = {staking_params["staking_token"]: agent_bonds + security_deposit}
 
         for token, amount in staking_params["additional_staking_tokens"].items():
             output[token] = amount

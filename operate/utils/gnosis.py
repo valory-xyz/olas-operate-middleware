@@ -33,8 +33,8 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
-from web3.exceptions import TimeExhausted
 from web3 import Web3
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,

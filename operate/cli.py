@@ -827,12 +827,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
-            # manager.fund_service(service_config_id=service_config_id)
-            # manager.deploy_service_locally(service_config_id=service_config_id)
+            manager.fund_service(service_config_id=service_config_id)
+            manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
-        # schedule_funding_job(service_config_id=service_config_id)
-        # schedule_healthcheck_job(service_config_id=service_config_id)
+        schedule_funding_job(service_config_id=service_config_id)
+        schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
             content=(

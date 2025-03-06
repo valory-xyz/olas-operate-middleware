@@ -64,8 +64,8 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
 )
 from operate.data import DATA_DIR
-from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
+from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -857,14 +857,16 @@ class _ChainUtil:
             "service_registry_token_utility": service_registry_token_utility,
             "min_staking_deposit": min_staking_deposit,
             "activity_checker": activity_checker,
-            "additional_staking_tokens": {}
+            "additional_staking_tokens": {},
         }
         try:
             instance = staking_manager.dual_staking_ctr.get_instance(
                 ledger_api=self.ledger_api,
                 contract_address=staking_contract,
             )
-            output["additional_staking_tokens"][instance.functions.secondToken().call()] = instance.functions.secondTokenAmount().call()
+            output["additional_staking_tokens"][
+                instance.functions.secondToken().call()
+            ] = instance.functions.secondTokenAmount().call()
         except ContractLogicError:
             # Contract is not a dual staking contract
             pass
