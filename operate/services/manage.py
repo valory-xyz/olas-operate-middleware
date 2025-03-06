@@ -1333,12 +1333,18 @@ class ServiceManager:
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+        if on_chain_state != OnChainState.DEPLOYED:
+            self.logger.info(
+                f"Cannot perform staking operations. Service {chain_config.chain_data.token} is not on DEPLOYED state"
+            )
+            return
+
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
         )
-        is_staked = current_staking_program is not None
         current_staking_contract = (
             STAKING[ledger_config.chain][current_staking_program]
             if current_staking_program is not None
@@ -1346,9 +1352,10 @@ class ServiceManager:
         )
 
         # perform the unstaking flow if necessary
-        if is_staked:
+        staking_state = StakingState.UNSTAKED
+        if current_staking_program is not None:
             can_unstake = sftxb.can_unstake(
-                chain_config.chain_data.token, current_staking_contract  # type: ignore  # TODO fix mypy
+                chain_config.chain_data.token, current_staking_contract
             )
             if not chain_config.chain_data.user_params.use_staking and can_unstake:
                 self.logger.info(
@@ -1364,7 +1371,7 @@ class ServiceManager:
             chain_config.chain_data.on_chain_state = OnChainState(info["service_state"])
             staking_state = sftxb.staking_status(
                 service_id=chain_data.token,
-                staking_contract=current_staking_contract,  # type: ignore  # TODO fix mypy
+                staking_contract=current_staking_contract,
             )
 
             if staking_state == StakingState.EVICTED and can_unstake:
@@ -1380,7 +1387,7 @@ class ServiceManager:
             if (
                 staking_state == StakingState.STAKED
                 and can_unstake
-                and not sftxb.staking_rewards_available(current_staking_contract)  # type: ignore  # TODO fix mypy
+                and not sftxb.staking_rewards_available(current_staking_contract)
             ):
                 self.logger.info(
                     f"There are no rewards available, service {chain_config.chain_data.token} "
@@ -1402,7 +1409,12 @@ class ServiceManager:
                     staking_program_id=current_staking_program,
                 )
 
-        staking_state = sftxb.staking_status(
+            staking_state = sftxb.staking_status(
+                service_id=chain_config.chain_data.token,
+                staking_contract=current_staking_contract,
+            )
+
+        target_program_staking_state = sftxb.staking_status(
             service_id=chain_config.chain_data.token,
             staking_contract=target_staking_contract,
         )
@@ -1412,7 +1424,6 @@ class ServiceManager:
             target_staking_contract
         )
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
-        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
@@ -1421,16 +1432,18 @@ class ServiceManager:
         self.logger.info(
             f"use_staking={chain_config.chain_data.user_params.use_staking}"
         )
-        self.logger.info(f"{staking_state=}")
-        self.logger.info(f"{staking_rewards_available=}")
-        self.logger.info(f"{staking_slots_available=}")
         self.logger.info(f"{on_chain_state=}")
         self.logger.info(f"{current_staking_program=}")
+        self.logger.info(f"{staking_state=}")
         self.logger.info(f"{target_staking_program=}")
+        self.logger.info(f"{target_program_staking_state=}")
+        self.logger.info(f"{staking_rewards_available=}")
+        self.logger.info(f"{staking_slots_available=}")
 
         if (
             chain_config.chain_data.user_params.use_staking
             and staking_state == StakingState.UNSTAKED
+            and target_program_staking_state == StakingState.UNSTAKED
             and staking_rewards_available
             and staking_slots_available
             and on_chain_state == OnChainState.DEPLOYED
