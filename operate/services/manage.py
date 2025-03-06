@@ -2143,22 +2143,16 @@ class ServiceManager:
 
             # Collect relevant addresses to display balances
             addresses = agent_addresses | {wallet.address}
-            if service_safe:
-                addresses.add(service_safe)
-            if master_safe:
-                addresses.add(master_safe)
+            addresses.add(service_safe or "service_safe")
+            addresses.add(master_safe or "master_safe")
+            asset_addresses = set(chain_data.user_params.fund_requirements) | {staking_params["staking_token"]} | set(staking_params["additional_staking_tokens"].keys())
 
             balances[chain] = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses=addresses,
-                asset_addresses=set(chain_data.user_params.fund_requirements)
-                | {staking_params["staking_token"]} | set(staking_params["additional_staking_tokens"].keys()),
+                asset_addresses=asset_addresses,
+                raise_on_invalid_address=False
             )
-
-            if not service_safe:
-                balances[chain]["service_safe"] = {}
-                for address in set(chain_data.user_params.fund_requirements):
-                    balances[chain]["service_safe"][address] = 0
 
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
@@ -2291,7 +2285,7 @@ class ServiceManager:
 
         return {
             "balances": balances,
-            "bonded_olas": bonded_tokens,
+            "bonded_tokens": bonded_tokens,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
