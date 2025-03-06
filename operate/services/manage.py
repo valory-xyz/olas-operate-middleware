@@ -684,22 +684,23 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                required_tokens = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
+                staking_token_requirements = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                required_tokens = staking_params["min_staking_deposit"]
+                staking_token_requirements = self._compute_staking_token_requirements(service_config_id, chain, staking_params)
+                staking_token_requirements[staking_params["staking_token"]] = staking_params["min_staking_deposit"] * service.helper.config.number_of_agents
             else:
-                required_tokens = {}
+                staking_token_requirements = {}
 
-            for asset_address, required_amount in required_tokens.items():
+            for token, amount in staking_token_requirements.items():
                 balance = get_asset_balance(
                     ledger_api=sftxb.ledger_api,
-                    asset_address=asset_address,
+                    asset_address=token,
                     address=safe,
                 )
-                if balance < required_amount:
+                if balance < amount:
                     raise ValueError(
-                        f"Address {safe} has insufficient balance for staking token {asset_address}: "
-                        f"required {required_amount}, available {balance}."
+                        f"Address {safe} has insufficient balance for staking token {token}: "
+                        f"required {amount}, available {balance}."
                     )
 
         # TODO Handle this in a more graceful way.
@@ -1447,10 +1448,7 @@ class ServiceManager:
             ic(staking_params)
 
             # TODO fixme - only second token
-            for token_contract, min_staking_amount in staking_params["min_staking_deposit"].items():
-                if token_contract == OLAS[Chain(chain)]:
-                    continue
-
+            for token_contract, min_staking_amount in staking_params["additional_staking_tokens"].items():
                 sftxb.new_tx().add(
                     sftxb.get_erc20_approval_data(
                         spender=target_staking_contract,
@@ -1470,7 +1468,7 @@ class ServiceManager:
                     .call()
                 )
                 self.logger.info(
-                    f"Approved {staking_contract_allowance} OLAS from {sftxb.safe} to {target_staking_contract}"
+                    f"Approved {staking_contract_allowance} (token {token_contract}) from {sftxb.safe} to {target_staking_contract}"
                 )
 
             self.logger.info(f"Staking service: {chain_config.chain_data.token}")
@@ -2173,7 +2171,7 @@ class ServiceManager:
                     service_config_id, chain, staking_params
                 )
 
-                for token, required_amount in staking_token_requirements.items():
+                for token, amount in staking_token_requirements.items():
                     master_safe_token_amount = balances[chain][master_safe].get(token, 0)
                     service_safe_token_amount = 0
                     if service_safe:
@@ -2182,7 +2180,7 @@ class ServiceManager:
                     refill_requirements[chain].setdefault(master_safe, {})[
                         token
                     ] = max(
-                        required_amount
+                        amount
                         - bonded_tokens[chain].get(token, 0)   # TODO fix
                         - master_safe_token_amount
                         - service_safe_token_amount,
@@ -2360,10 +2358,14 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        # TODO MISSING additional tokens
-        return {
-            OLAS[Chain(chain)]: agent_bonds + security_deposit
+        output = {
+            staking_params["staking_token"]: agent_bonds + security_deposit
         }
+
+        for token, amount in staking_params["additional_staking_tokens"].items():
+            output[token] = amount
+
+        return output
 
     def _compute_staking_token_requirements(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str, staking_params: dict
