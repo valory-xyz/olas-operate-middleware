@@ -26,7 +26,6 @@ import json
 import logging
 import os
 import tempfile
-import traceback
 import typing as t
 from enum import Enum
 from pathlib import Path
@@ -270,27 +269,13 @@ class StakingManager(OnChainHelper):
         )
         return instance.functions.serviceRegistryTokenUtility().call()
 
-    def min_staking_deposit(self, staking_contract: str) -> t.Dict:
+    def min_staking_deposit(self, staking_contract: str) -> int:
         """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
         )
-
-        output = {}
-        output[instance.functions.stakingToken().call()] = instance.functions.minStakingDeposit().call()
-
-        try:
-            instance = self.dual_staking_ctr.get_instance(
-                ledger_api=self.ledger_api,
-                contract_address=staking_contract,
-            )
-            output[instance.functions.secondToken().call()] = instance.functions.secondTokenAmount().call()
-        except ContractLogicError:
-            # Contract is not a dual staking contract
-            pass
-
-        return output
+        return instance.functions.minStakingDeposit().call()
 
     def activity_checker(self, staking_contract: str) -> str:
         """Retrieve the activity checker address for the staking contract."""
@@ -864,15 +849,27 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-        return dict(
-            staking_contract=staking_contract,
-            agent_ids=agent_ids,
-            service_registry=service_registry,
-            staking_token=staking_token,
-            service_registry_token_utility=service_registry_token_utility,
-            min_staking_deposit=min_staking_deposit,
-            activity_checker=activity_checker,
-        )
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": {}
+        }
+        try:
+            instance = staking_manager.dual_staking_ctr.get_instance(
+                ledger_api=self.ledger_api,
+                contract_address=staking_contract,
+            )
+            output["additional_staking_tokens"][instance.functions.secondToken().call()] = instance.functions.secondTokenAmount().call()
+        except ContractLogicError:
+            # Contract is not a dual staking contract
+            pass
+
+        return output
 
 
 class OnChainManager(_ChainUtil):

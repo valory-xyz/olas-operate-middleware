@@ -749,13 +749,6 @@ class ServiceManager:
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
-
-
-
-        is_update = False
-
-
-
         if is_update:
             self.terminate_service_on_chain_from_safe(
                 service_config_id=service_config_id, chain=chain
@@ -824,10 +817,10 @@ class ServiceManager:
                         agent_id=agent_id,
                         number_of_slots=service.helper.config.number_of_agents,
                         cost_of_bond=(
-                            staking_params["min_staking_deposit"][staking_params["staking_token"]]
+                            staking_params["min_staking_deposit"]
                             if user_params.use_staking
                             else user_params.cost_of_bond
-                        ),  # ALEKS -> Add Olas
+                        ),
                         threshold=user_params.threshold,
                         nft=IPFSHash(user_params.nft),
                         update_token=None,
@@ -861,9 +854,6 @@ class ServiceManager:
             # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
-
-                # ------------------------
-                # TODO Extract to a method
                 token_utility = staking_params["service_registry_token_utility"]
                 olas_token = staking_params["staking_token"]
                 self.logger.info(
@@ -898,8 +888,6 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                # ------------------------
-
                 cost_of_bond = 1
 
             self.logger.info("Activating service")
@@ -930,9 +918,6 @@ class ServiceManager:
         ):
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
-
-                # ------------------------
-                # TODO Extract to a method
                 token_utility = staking_params["service_registry_token_utility"]
                 olas_token = staking_params["staking_token"]
                 self.logger.info(
@@ -967,8 +952,6 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                # ------------------------
-
                 cost_of_bond = 1 * len(instances)
 
             self.logger.info(
@@ -2169,7 +2152,7 @@ class ServiceManager:
                 ledger_api=ledger_api,
                 addresses=addresses,
                 asset_addresses=set(chain_data.user_params.fund_requirements)
-                | set(staking_params["min_staking_deposit"].keys()),
+                | {staking_params["staking_token"]} | set(staking_params["additional_staking_tokens"].keys()),
             )
 
             if not service_safe:
@@ -2383,7 +2366,7 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        # TODO fix - add second token and get olas from staking contract.
+        # TODO MISSING additional tokens
         return {
             OLAS[Chain(chain)]: agent_bonds + security_deposit
         }
@@ -2406,10 +2389,13 @@ class ServiceManager:
         # - security_deposit: as the maximum agent bond.
         output = {}
         number_of_agents = service.helper.config.number_of_agents
-        for token, amount in staking_params["min_staking_deposit"].items():
-            agent_bonds = amount * number_of_agents
-            security_deposit = amount
-            output[token] = agent_bonds + security_deposit
+        agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
+        security_deposit = staking_params["min_staking_deposit"]
+
+        output[staking_params["staking_token"]] = agent_bonds + security_deposit
+
+        for token, amount in staking_params["additional_staking_tokens"].items():
+            output[token] = amount
 
         return output
 
