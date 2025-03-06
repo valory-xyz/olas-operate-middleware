@@ -684,30 +684,31 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                required_olas = (
-                    staking_params["min_staking_deposit"]
-                    + staking_params[
-                        "min_staking_deposit"
-                    ]  # operator security deposit = max agent bond
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
                 )
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = staking_params["min_staking_deposit"]
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
+                )
+                staking_token_requirements[staking_params["staking_token"]] = (
+                    staking_params["min_staking_deposit"]
+                    * service.helper.config.number_of_agents
+                )
             else:
-                required_olas = 0
+                staking_token_requirements = {}
 
-            balance = (
-                registry_contracts.erc20.get_instance(
+            for token, amount in staking_token_requirements.items():
+                balance = get_asset_balance(
                     ledger_api=sftxb.ledger_api,
-                    contract_address=OLAS[ledger_config.chain],
+                    asset_address=token,
+                    address=safe,
                 )
-                .functions.balanceOf(safe)
-                .call()
-            )
-            if balance < required_olas:
-                raise ValueError(
-                    "You don't have enough olas to stake, "
-                    f"address: {safe}; required olas: {required_olas}; your balance: {balance}"
-                )
+                if balance < amount:
+                    raise ValueError(
+                        f"Address {safe} has insufficient balance for staking token {token}: "
+                        f"required {amount}, available {balance}."
+                    )
 
         # TODO Handle this in a more graceful way.
         agent_id = (
@@ -875,10 +876,10 @@ class ServiceManager:
                     ).get("bond")
                 )
                 sftxb.new_tx().add(
-                    sftxb.get_olas_approval_data(
+                    sftxb.get_erc20_approval_data(
                         spender=token_utility,
                         amount=cost_of_bond,
-                        olas_contract=olas_token,
+                        erc20_contract=olas_token,
                     )
                 ).settle()
                 token_utility_allowance = (
@@ -939,10 +940,10 @@ class ServiceManager:
                     ).get("bond")
                 )
                 sftxb.new_tx().add(
-                    sftxb.get_olas_approval_data(
+                    sftxb.get_erc20_approval_data(
                         spender=token_utility,
                         amount=cost_of_bond,
-                        olas_contract=olas_token,
+                        erc20_contract=olas_token,
                     )
                 ).settle()
                 token_utility_allowance = (
@@ -1319,7 +1320,7 @@ class ServiceManager:
         self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
-
+        self.logger.info("stake_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
@@ -1332,12 +1333,18 @@ class ServiceManager:
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+        if on_chain_state != OnChainState.DEPLOYED:
+            self.logger.info(
+                f"Cannot perform staking operations. Service {chain_config.chain_data.token} is not on DEPLOYED state"
+            )
+            return
+
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
         )
-        is_staked = current_staking_program is not None
         current_staking_contract = (
             STAKING[ledger_config.chain][current_staking_program]
             if current_staking_program is not None
@@ -1345,9 +1352,10 @@ class ServiceManager:
         )
 
         # perform the unstaking flow if necessary
-        if is_staked:
+        staking_state = StakingState.UNSTAKED
+        if current_staking_program is not None:
             can_unstake = sftxb.can_unstake(
-                chain_config.chain_data.token, current_staking_contract  # type: ignore  # TODO fix mypy
+                chain_config.chain_data.token, current_staking_contract
             )
             if not chain_config.chain_data.user_params.use_staking and can_unstake:
                 self.logger.info(
@@ -1363,7 +1371,7 @@ class ServiceManager:
             chain_config.chain_data.on_chain_state = OnChainState(info["service_state"])
             staking_state = sftxb.staking_status(
                 service_id=chain_data.token,
-                staking_contract=current_staking_contract,  # type: ignore  # TODO fix mypy
+                staking_contract=current_staking_contract,
             )
 
             if staking_state == StakingState.EVICTED and can_unstake:
@@ -1379,7 +1387,7 @@ class ServiceManager:
             if (
                 staking_state == StakingState.STAKED
                 and can_unstake
-                and not sftxb.staking_rewards_available(current_staking_contract)  # type: ignore  # TODO fix mypy
+                and not sftxb.staking_rewards_available(current_staking_contract)
             ):
                 self.logger.info(
                     f"There are no rewards available, service {chain_config.chain_data.token} "
@@ -1401,7 +1409,12 @@ class ServiceManager:
                     staking_program_id=current_staking_program,
                 )
 
-        staking_state = sftxb.staking_status(
+            staking_state = sftxb.staking_status(
+                service_id=chain_config.chain_data.token,
+                staking_contract=current_staking_contract,
+            )
+
+        target_program_staking_state = sftxb.staking_status(
             service_id=chain_config.chain_data.token,
             staking_contract=target_staking_contract,
         )
@@ -1411,7 +1424,6 @@ class ServiceManager:
             target_staking_contract
         )
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
-        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
@@ -1420,16 +1432,18 @@ class ServiceManager:
         self.logger.info(
             f"use_staking={chain_config.chain_data.user_params.use_staking}"
         )
-        self.logger.info(f"{staking_state=}")
-        self.logger.info(f"{staking_rewards_available=}")
-        self.logger.info(f"{staking_slots_available=}")
         self.logger.info(f"{on_chain_state=}")
         self.logger.info(f"{current_staking_program=}")
+        self.logger.info(f"{staking_state=}")
         self.logger.info(f"{target_staking_program=}")
+        self.logger.info(f"{target_program_staking_state=}")
+        self.logger.info(f"{staking_rewards_available=}")
+        self.logger.info(f"{staking_slots_available=}")
 
         if (
-            chain_config.chain_data.user_params.use_staking
+            chain_config.chain_data.user_params.use_staking  # pylint: disable=too-many-boolean-expressions
             and staking_state == StakingState.UNSTAKED
+            and target_program_staking_state == StakingState.UNSTAKED
             and staking_rewards_available
             and staking_slots_available
             and on_chain_state == OnChainState.DEPLOYED
@@ -1442,6 +1456,36 @@ class ServiceManager:
                     staking_contract=target_staking_contract,
                 )
             ).settle()
+
+            # Approve additional_staking_tokens.
+            staking_params = sftxb.get_staking_params(
+                staking_contract=target_staking_contract
+            )
+
+            for token_contract, min_staking_amount in staking_params[
+                "additional_staking_tokens"
+            ].items():
+                sftxb.new_tx().add(
+                    sftxb.get_erc20_approval_data(
+                        spender=target_staking_contract,
+                        amount=min_staking_amount,
+                        erc20_contract=token_contract,
+                    )
+                ).settle()
+                staking_contract_allowance = (
+                    registry_contracts.erc20.get_instance(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_contract,
+                    )
+                    .functions.allowance(
+                        sftxb.safe,
+                        target_staking_contract,
+                    )
+                    .call()
+                )
+                self.logger.info(
+                    f"Approved {staking_contract_allowance} (token {token_contract}) from {sftxb.safe} to {target_staking_contract}"
+                )
 
             self.logger.info(f"Staking service: {chain_config.chain_data.token}")
             sftxb.new_tx().add(
@@ -2083,16 +2127,24 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        bonded_olas: t.Dict = {}
+        bonded_assets: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
             chain_data = chain_config.chain_data
+            user_params = chain_data.user_params
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
             ledger_api = wallet.ledger_api(
                 chain=ledger_config.chain, rpc=ledger_config.rpc
+            )
+            os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+            sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+            staking_params = sftxb.get_staking_params(
+                staking_contract=STAKING[ledger_config.chain][
+                    user_params.staking_program_id
+                ],
             )
 
             agent_addresses = {key.address for key in service.keys}
@@ -2105,22 +2157,20 @@ class ServiceManager:
 
             # Collect relevant addresses to display balances
             addresses = agent_addresses | {wallet.address}
-            if service_safe:
-                addresses.add(service_safe)
-            if master_safe:
-                addresses.add(master_safe)
+            addresses.add(service_safe or "service_safe")
+            addresses.add(master_safe or "master_safe")
+            asset_addresses = (
+                set(chain_data.user_params.fund_requirements)
+                | {staking_params["staking_token"]}
+                | set(staking_params["additional_staking_tokens"].keys())
+            )
 
             balances[chain] = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses=addresses,
-                asset_addresses=set(chain_data.user_params.fund_requirements)
-                | {OLAS[Chain(chain)]},
+                asset_addresses=asset_addresses,
+                raise_on_invalid_address=False,
             )
-
-            if not service_safe:
-                balances[chain]["service_safe"] = {}
-                for address in set(chain_data.user_params.fund_requirements):
-                    balances[chain]["service_safe"][address] = 0
 
             # TODO this is a patch to count the balance of the wrapped native asset as
             # native assets for the service safe
@@ -2133,28 +2183,33 @@ class ServiceManager:
 
             # Compute refill requirements of Master Safe and Master EOA
             refill_requirements[chain] = {}
-            bonded_olas[chain] = self._compute_bonded_olas(service_config_id, chain)
+            bonded_assets[chain] = self._compute_bonded_assets(
+                service_config_id, chain, staking_params
+            )
 
+            # TODO check if this if is required here.
             if master_safe:
-                olas_requirements = self._compute_olas_requirements(
-                    service_config_id, chain
+                staking_token_requirements = self._compute_staking_token_requirements(
+                    service_config_id, chain, staking_params
                 )
-                olas_address = OLAS[Chain(chain)]
-                master_safe_olas = balances[chain][master_safe][olas_address]
 
-                service_safe_olas = 0
-                if service_safe:
-                    service_safe_olas = balances[chain][service_safe][olas_address]
+                for token, amount in staking_token_requirements.items():
+                    master_safe_token_amount = balances[chain][master_safe].get(
+                        token, 0
+                    )
+                    service_safe_token_amount = 0
+                    if service_safe:
+                        service_safe_token_amount = balances[chain][service_safe].get(
+                            token, 0
+                        )
 
-                refill_requirements[chain].setdefault(master_safe, {})[
-                    olas_address
-                ] = max(
-                    olas_requirements
-                    - bonded_olas[chain]
-                    - master_safe_olas
-                    - service_safe_olas,
-                    0,
-                )
+                    refill_requirements[chain].setdefault(master_safe, {})[token] = max(
+                        amount
+                        - bonded_assets[chain].get(token, 0)  # TODO fix
+                        - master_safe_token_amount
+                        - service_safe_token_amount,
+                        0,
+                    )
 
             for (
                 asset_address,
@@ -2252,25 +2307,24 @@ class ServiceManager:
 
         return {
             "balances": balances,
-            "bonded_olas": bonded_olas,
+            "bonded_assets": bonded_assets,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
 
-    def _compute_bonded_olas(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes the bonded olas: current agent bonds and current security deposit"""
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str, staking_params: dict
+    ) -> t.Dict:
+        """Computes the bonded tokens: current agent bonds and current security deposit"""
 
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
-        user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
 
         if Chain(chain) not in wallet.safes:
-            return 0
+            return {}
 
         master_safe = wallet.safes[Chain(chain)]
 
@@ -2278,15 +2332,9 @@ class ServiceManager:
 
         service_id = chain_config.chain_data.token
         if service_id == NON_EXISTENT_TOKEN:
-            return 0
+            return {}
 
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
-        )
         service_registry_address = staking_params["service_registry"]
         service_registry_token_utility_address = staking_params[
             "service_registry_token_utility"
@@ -2306,7 +2354,7 @@ class ServiceManager:
 
         # If master safe is service owner, the service is not staked
         if service_owner.lower() == master_safe.lower():
-            return 0
+            return {}
 
         service_info = service_registry.functions.getService(service_id).call()
         agent_ids = service_info[7]
@@ -2334,38 +2382,40 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        return agent_bonds + security_deposit
+        output = {staking_params["staking_token"]: agent_bonds + security_deposit}
 
-    def _compute_olas_requirements(  # pylint: disable=too-many-locals
-        self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes OLAS requirements to stake the service in the target staking contract"""
+        for token, amount in staking_params["additional_staking_tokens"].items():
+            output[token] = amount
+
+        return output
+
+    def _compute_staking_token_requirements(  # pylint: disable=too-many-locals
+        self, service_config_id: str, chain: str, staking_params: dict
+    ) -> t.Dict:
+        """Computes staking token requirements to stake the service in the target staking contract"""
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
 
         if not user_params.use_staking:
-            return 0
-
-        os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(
-            staking_contract=STAKING[ledger_config.chain][
-                user_params.staking_program_id
-            ],
-        )
+            return {}
 
         # This computation assumes the service will be/has been minted with these
         # parameters. Otherwise, these values should be retrieved on-chain as follows:
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
         #   and ServiceRegistryTokenUtility .getAgentBond
         # - security_deposit: as the maximum agent bond.
+        output = {}
         number_of_agents = service.helper.config.number_of_agents
         agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
         security_deposit = staking_params["min_staking_deposit"]
 
-        return agent_bonds + security_deposit
+        output[staking_params["staking_token"]] = agent_bonds + security_deposit
+
+        for token, amount in staking_params["additional_staking_tokens"].items():
+            output[token] = amount
+
+        return output
 
     @staticmethod
     def _compute_refill_requirement(
