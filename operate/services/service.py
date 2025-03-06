@@ -97,7 +97,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 5
+SERVICE_CONFIG_VERSION = 6
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = "0xm"
@@ -649,10 +649,24 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
+    def _build_binary(self, force: bool = False) -> None:
+        """Build a deployment directory to run the agent with binary."""
+        build = self.path / DEPLOYMENT
+        if build.exists() and not force:
+            return
+
+        if build.exists() and force:
+            shutil.rmtree(build)
+
+        build.mkdir(exist_ok=True)
+        self.status = DeploymentStatus.BUILT
+        self.store()
+
     def build(
         self,
         use_docker: bool = False,
         use_kubernetes: bool = False,
+        use_binary: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -675,13 +689,19 @@ class Deployment(LocalResource):
                 self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
+        elif use_binary:
+            self._build_binary(force=force)
         else:
             self._build_host(force=force, chain=chain)
 
         os.environ.clear()
         os.environ.update(original_env)
 
-    def start(self, use_docker: bool = False) -> None:
+    def start(
+        self,
+        use_docker: bool = False,
+        custom_binary: t.Optional[str] = None,
+    ) -> None:
         """Start the service"""
         if self.status != DeploymentStatus.BUILT:
             raise NotAllowed(
@@ -693,9 +713,11 @@ class Deployment(LocalResource):
 
         try:
             if use_docker:
-                run_deployment(build_dir=self.path / "deployment", detach=True)
+                run_deployment(build_dir=self.path / DEPLOYMENT, detach=True)
             else:
-                run_host_deployment(build_dir=self.path / "deployment")
+                run_host_deployment(
+                    build_dir=self.path / DEPLOYMENT, custom_binary=custom_binary
+                )
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -704,7 +726,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.DEPLOYED
         self.store()
 
-    def stop(self, use_docker: bool = False, force: bool = False) -> None:
+    def stop(
+        self,
+        use_docker: bool = False,
+        force: bool = False,
+        custom_binary: t.Optional[str] = None,
+    ) -> None:
         """Stop the deployment."""
         if self.status != DeploymentStatus.DEPLOYED and not force:
             return
@@ -713,9 +740,11 @@ class Deployment(LocalResource):
         self.store()
 
         if use_docker:
-            stop_deployment(build_dir=self.path / "deployment")
+            stop_deployment(build_dir=self.path / DEPLOYMENT)
         else:
-            stop_host_deployment(build_dir=self.path / "deployment")
+            stop_host_deployment(
+                build_dir=self.path / DEPLOYMENT, custom_binary=custom_binary
+            )
 
         self.status = DeploymentStatus.BUILT
         self.store()
@@ -736,6 +765,7 @@ class Service(LocalResource):
     service_config_id: str
     hash: str
     hash_history: t.Dict[int, str]
+    binary_path: t.Optional[str]
     keys: Keys
     home_chain: str
     chain_configs: ChainConfigs
@@ -928,6 +958,9 @@ class Service(LocalResource):
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
 
+        if version < 6:
+            data["binary_path"] = None
+
         data["version"] = SERVICE_CONFIG_VERSION
 
         # Redownload service path
@@ -1021,6 +1054,7 @@ class Service(LocalResource):
             keys=keys,
             home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
+            binary_path=service_template.get("binary_path"),
             chain_configs=chain_configs,
             path=service_path.parent,
             service_path=service_path,
@@ -1134,6 +1168,7 @@ class Service(LocalResource):
         self.home_chain = service_template.get("home_chain", self.home_chain)
         self.description = service_template.get("description", self.description)
         self.name = service_template.get("name", self.name)
+        self.binary_path = service_template.get("binary_path")
 
         shutil.rmtree(self.service_path)
         service_path = Path(
