@@ -145,7 +145,7 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
                     break
             else:
                 raise ValueError(
-                    f"Staking program {config.staking_program_id} not found in {QS_STAKING_PROGRAMS[config.principal_chain]}.\n"
+                    f"Staking program {config.staking_program_id} not found in {QS_STAKING_PROGRAMS[Chain.from_string(config.principal_chain)]}.\n"
                     "Please resolve manually!"
                 )
 

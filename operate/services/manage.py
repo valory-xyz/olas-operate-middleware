@@ -1027,6 +1027,7 @@ class ServiceManager:
                 "MECH_TO_CONFIG",
                 "ON_CHAIN_SERVICE_ID",
                 "GNOSIS_RPC_0",
+                "MECH_MARKETPLACE_ADDRESS",
             ]
         ):
             if (
