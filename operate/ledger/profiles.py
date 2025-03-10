@@ -24,6 +24,8 @@ import typing as t
 from operate.operate_types import Chain, ContractAddresses
 
 
+NO_STAKING_PROGRAM_ID = "no_staking"
+
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {
     Chain.GNOSIS: ContractAddresses(
         {
@@ -169,3 +171,16 @@ WRAPPED_NATIVE_ASSET = {
 }
 
 ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+
+
+def get_staking_contract(
+    chain: str, staking_program_id: t.Optional[str]
+) -> t.Optional[str]:
+    """Get staking contract based on the config and the staking program."""
+    if staking_program_id == NO_STAKING_PROGRAM_ID or staking_program_id is None:
+        return None
+
+    return STAKING[Chain(chain)].get(
+        staking_program_id,
+        staking_program_id,
+    )

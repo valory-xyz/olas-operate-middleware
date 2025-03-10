@@ -22,10 +22,8 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from operate.ledger.profiles import STAKING
-from operate.operate_types import Chain
+from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, get_staking_contract
 from operate.quickstart.run_service import (
-    NO_STAKING_PROGRAM_ID,
     ask_password_if_needed,
     configure_local_config,
     ensure_enough_funds,
@@ -95,9 +93,10 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         config.staking_program_id is not NO_STAKING_PROGRAM_ID
         and sftxb.can_unstake(
             service_id=service.chain_configs[config.principal_chain].chain_data.token,
-            staking_contract=STAKING[Chain.from_string(config.principal_chain)][
-                config.staking_program_id
-            ],
+            staking_contract=get_staking_contract(
+                chain=config.principal_chain,
+                staking_program_id=config.staking_program_id,
+            ),
         )
     )
 
