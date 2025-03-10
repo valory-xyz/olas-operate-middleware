@@ -348,7 +348,7 @@ class TestServiceManager:
             asset_funding_values=asset_funding_values,
             sender_topup=sender_topup,
             sender_threshold=sender_threshold,
-            sender_balance=sender_balance
+            sender_balance=sender_balance,
         )
 
         diff = DeepDiff(result, expected_result)
@@ -402,16 +402,10 @@ class TestServiceManager:
             "threshold": threshold3,
             "balance": balance3,
         }
-
-        expected_result = {
-            "minimum_refill": minimum_refill_required,
-            "recommended_refill": recommended_refill_required,
-        }
         with pytest.raises(ValueError):
             ServiceManager._compute_refill_requirement(
                 asset_funding_values=asset_funding_values,
                 sender_topup=sender_topup,
                 sender_threshold=sender_threshold,
-                sender_balance=sender_balance
+                sender_balance=sender_balance,
             )
-
