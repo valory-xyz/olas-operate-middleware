@@ -2131,6 +2131,7 @@ class ServiceManager:
         protocol_asset_requirements: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
+        is_refill_required = False
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
@@ -2159,6 +2160,7 @@ class ServiceManager:
             protocol_asset_requirements[
                 chain
             ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Bonded assets
             bonded_assets[chain] = self._compute_bonded_assets(service_config_id, chain)
@@ -2166,8 +2168,8 @@ class ServiceManager:
             # Balances
             addresses = agent_addresses | {service_safe, master_eoa, master_safe}
             asset_addresses = (
-                set(ZERO_ADDRESS)
-                | chain_data.user_params.fund_requirements.keys()
+                {ZERO_ADDRESS}
+                | service_asset_requirements.keys()
                 | protocol_asset_requirements[chain].keys()
                 | bonded_assets[chain].keys()
             )
@@ -2192,7 +2194,6 @@ class ServiceManager:
 
             # Refill requirements
             refill_requirements[chain] = {}
-            service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Refill requirements for Master Safe
             for asset_address in (
@@ -2217,9 +2218,7 @@ class ServiceManager:
                         "threshold": int(
                             fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
                         ),  # TODO make threshold configurable
-                        "balance": balances[chain]
-                        .get(service_safe, {})
-                        .get(asset_address, 0),
+                        "balance": balances[chain][service_safe][asset_address]
                     }
 
                 recommended_refill = self._compute_refill_requirement(
@@ -2230,7 +2229,7 @@ class ServiceManager:
                     sender_threshold=protocol_asset_requirements[chain].get(
                         asset_address, 0
                     ),
-                    sender_balance=balances[chain][master_safe].get(asset_address, 0)
+                    sender_balance=balances[chain][master_safe][asset_address]
                     + bonded_assets[chain].get(asset_address, 0),
                 )["recommended_refill"]
 
@@ -2245,6 +2244,9 @@ class ServiceManager:
                     for address in agent_asset_funding_values
                 ):
                     allow_start_agent = False
+
+            # Remove placeholder value
+            refill_requirements[chain].pop("master_safe", None)
 
             # Refill requirements for Master EOA
             eoa_funding_values = self._get_master_eoa_native_funding_values(
@@ -2263,9 +2265,6 @@ class ServiceManager:
             refill_requirements[chain].setdefault(master_eoa, {})[
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
-
-            # Remove placeholder value
-            refill_requirements[chain].pop("master_safe", None)
 
         is_refill_required = any(
             amount > 0
