@@ -56,6 +56,7 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
+from web3.exceptions import ContractLogicError
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -63,6 +64,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
 )
 from operate.data import DATA_DIR
+from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
@@ -187,6 +189,12 @@ class StakingManager(OnChainHelper):
             StakingTokenContract,
             StakingTokenContract.from_dir(
                 directory=str(DATA_DIR / "contracts" / "staking_token")
+            ),
+        )
+        self.dual_staking_ctr = t.cast(
+            DualStakingTokenContract,
+            DualStakingTokenContract.from_dir(
+                directory=str(DATA_DIR / "contracts" / "dual_staking_token")
             ),
         )
 
@@ -841,15 +849,29 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-        return dict(
-            staking_contract=staking_contract,
-            agent_ids=agent_ids,
-            service_registry=service_registry,
-            staking_token=staking_token,
-            service_registry_token_utility=service_registry_token_utility,
-            min_staking_deposit=min_staking_deposit,
-            activity_checker=activity_checker,
-        )
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": {},
+        }
+        try:
+            instance = staking_manager.dual_staking_ctr.get_instance(
+                ledger_api=self.ledger_api,
+                contract_address=staking_contract,
+            )
+            output["additional_staking_tokens"][
+                instance.functions.secondToken().call()
+            ] = instance.functions.secondTokenAmount().call()
+        except ContractLogicError:
+            # Contract is not a dual staking contract
+            pass
+
+        return output
 
 
 class OnChainManager(_ChainUtil):
@@ -1151,23 +1173,23 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_olas_approval_data(
+    def get_erc20_approval_data(
         self,
         spender: str,
         amount: int,
-        olas_contract: str,
+        erc20_contract: str,
     ) -> t.Dict:
         """Get activate tx data."""
         instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=olas_contract,
+            contract_address=erc20_contract,
         )
         txd = instance.encodeABI(
             fn_name="approve",
             args=[spender, amount],
         )
         return {
-            "to": olas_contract,
+            "to": erc20_contract,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
