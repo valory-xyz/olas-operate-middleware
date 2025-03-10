@@ -684,21 +684,21 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                service_asset_requirements = self._compute_service_asset_requirements(
+                protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                service_asset_requirements = self._compute_service_asset_requirements(
+                protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
-                service_asset_requirements[staking_params["staking_token"]] = (
+                protocol_asset_requirements[staking_params["staking_token"]] = (
                     staking_params["min_staking_deposit"]
                     * service.helper.config.number_of_agents
                 )
             else:
-                service_asset_requirements = {}
+                protocol_asset_requirements = {}
 
-            for asset, amount in service_asset_requirements.items():
+            for asset, amount in protocol_asset_requirements.items():
                 balance = get_asset_balance(
                     ledger_api=sftxb.ledger_api,
                     asset_address=asset,
@@ -2128,7 +2128,7 @@ class ServiceManager:
 
         balances: t.Dict = {}
         bonded_assets: t.Dict = {}
-        service_asset_requirements: t.Dict = {}
+        protocol_asset_requirements: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
 
@@ -2155,10 +2155,10 @@ class ServiceManager:
             if not master_safe_exists:
                 allow_start_agent = False
 
-            # Service asset requiremtns
-            service_asset_requirements[
+            # Protocol asset requirements
+            protocol_asset_requirements[
                 chain
-            ] = self._compute_service_asset_requirements(service_config_id, chain)
+            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
 
             # Bonded assets
             bonded_assets[chain] = self._compute_bonded_assets(service_config_id, chain)
@@ -2167,7 +2167,7 @@ class ServiceManager:
             addresses = agent_addresses | {service_safe, master_eoa, master_safe}
             asset_addresses = (
                 chain_data.user_params.fund_requirements.keys()
-                | service_asset_requirements[chain].keys()
+                | protocol_asset_requirements[chain].keys()
                 | bonded_assets[chain].keys()
             )
 
@@ -2191,16 +2191,16 @@ class ServiceManager:
 
             # Refill requirements
             refill_requirements[chain] = {}
-            agent_asset_requirements = chain_data.user_params.fund_requirements
+            service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Refill requirements for Master Safe
             for asset_address in (
-                agent_asset_requirements.keys()
-                | service_asset_requirements[chain].keys()
+                service_asset_requirements.keys()
+                | protocol_asset_requirements[chain].keys()
             ):
                 agent_asset_funding_values = {}
-                if asset_address in agent_asset_requirements:
-                    fund_requirements = agent_asset_requirements[asset_address]
+                if asset_address in service_asset_requirements:
+                    fund_requirements = service_asset_requirements[asset_address]
                     agent_asset_funding_values = {
                         address: {
                             "topup": fund_requirements.agent,
@@ -2223,10 +2223,10 @@ class ServiceManager:
 
                 recommended_refill = self._compute_refill_requirement(
                     asset_funding_values=agent_asset_funding_values,
-                    sender_topup=service_asset_requirements[chain].get(
+                    sender_topup=protocol_asset_requirements[chain].get(
                         asset_address, 0
                     ),
-                    sender_threshold=service_asset_requirements[chain].get(
+                    sender_threshold=protocol_asset_requirements[chain].get(
                         asset_address, 0
                     ),
                     sender_balance=balances[chain][master_safe].get(asset_address, 0)
@@ -2277,7 +2277,7 @@ class ServiceManager:
             "balances": balances,
             "bonded_assets": bonded_assets,
             "refill_requirements": refill_requirements,
-            "service_asset_requirements": service_asset_requirements,
+            "service_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
@@ -2385,10 +2385,10 @@ class ServiceManager:
 
         return dict(bonded_assets)
 
-    def _compute_service_asset_requirements(  # pylint: disable=too-many-locals
+    def _compute_protocol_asset_requirements(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str
     ) -> t.Dict:
-        """Computes the service asset requirement to deploy on-chain and stake (if necessary)"""
+        """Computes the protocol asset requirements to deploy on-chain and stake (if necessary)"""
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         user_params = chain_config.chain_data.user_params
