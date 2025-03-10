@@ -2166,7 +2166,8 @@ class ServiceManager:
             # Balances
             addresses = agent_addresses | {service_safe, master_eoa, master_safe}
             asset_addresses = (
-                chain_data.user_params.fund_requirements.keys()
+                set(ZERO_ADDRESS)
+                | chain_data.user_params.fund_requirements.keys()
                 | protocol_asset_requirements[chain].keys()
                 | bonded_assets[chain].keys()
             )
@@ -2329,7 +2330,7 @@ class ServiceManager:
         ).call()
         bonded_assets[ZERO_ADDRESS] += operator_balance
 
-        # Determine bonded token amount - staking programs
+        # Determine bonded token amount for staking programs
         current_staking_program = self._get_current_staking_program(service, chain)
 
         if not current_staking_program:
@@ -2439,7 +2440,7 @@ class ServiceManager:
         sender_balance: int = 0,
     ) -> t.Dict:
         """
-        Compute user fund requirements.
+        Compute refill requirement.
 
         The `asset_funding_values` dictionary specifies the funding obligations the sender must cover for other parties.
         The `sender_topup` and `sender_threshold` define the sender's own funding needs, with `sender_topup` typically
