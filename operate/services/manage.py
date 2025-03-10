@@ -2142,16 +2142,16 @@ class ServiceManager:
             )
             os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+            master_eoa = wallet.address
+            master_safe_exists = wallet.safes.get(Chain(chain)) is not None
+            master_safe = wallet.safes.get(Chain(chain), "master_safe")
+
             agent_addresses = {key.address for key in service.keys}
             service_safe = (
                 chain_data.multisig
                 if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
                 else "service_safe"
             )
-
-            master_safe_exists = wallet.safes.get(Chain(chain)) is not None
-            master_eoa = wallet.address
-            master_safe = wallet.safes.get(Chain(chain), "master_safe")
 
             if not master_safe_exists:
                 allow_start_agent = False
@@ -2218,7 +2218,7 @@ class ServiceManager:
                         "threshold": int(
                             fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
                         ),  # TODO make threshold configurable
-                        "balance": balances[chain][service_safe][asset_address]
+                        "balance": balances[chain][service_safe][asset_address],
                     }
 
                 recommended_refill = self._compute_refill_requirement(
