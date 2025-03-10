@@ -642,7 +642,10 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
 
 def run_service(
-    operate: "OperateApp", config_path: str, build_only: bool = False
+    operate: "OperateApp",
+    config_path: str,
+    build_only: bool = False,
+    skip_dependency_check: bool = False,
 ) -> None:
     """Run service."""
 
@@ -660,7 +663,7 @@ def run_service(
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
-    manager = operate.service_manager()
+    manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
     ensure_enough_funds(operate, service)
 
