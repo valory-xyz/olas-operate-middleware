@@ -1401,7 +1401,6 @@ class ServiceManager:
             service,
             chain,
         )
-        is_staked = current_staking_program is not None
         current_staking_contract = get_staking_contract(
             chain=ledger_config.chain,
             staking_program_id=current_staking_program,
@@ -2367,6 +2366,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
+        user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         bonded_assets: defaultdict = defaultdict(int)
 
