@@ -105,6 +105,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_expert_12": "0xF4a75F476801B3fBB2e7093aCDcc3576593Cc1fc",
         "quickstart_beta_expert_15_mech_marketplace": "0x88eB38FF79fBa8C19943C0e5Acfa67D5876AdCC1",
         "quickstart_beta_expert_16_mech_marketplace": "0x6c65430515c70a3f5E62107CC301685B7D46f991",
+        "quickstart_beta_expert_17_mech_marketplace": "0x1430107A785C3A36a0C1FC0ee09B9631e2E72aFf",
+        "quickstart_beta_expert_18_mech_marketplace": "0x041e679d04Fc0D4f75Eb937Dea729Df09a58e454",
         "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
     },
     Chain.OPTIMISTIC: {
