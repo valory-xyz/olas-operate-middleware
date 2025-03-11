@@ -2353,7 +2353,7 @@ class ServiceManager:
             "balances": balances,
             "bonded_assets": bonded_assets,
             "refill_requirements": refill_requirements,
-            "service_asset_requirements": protocol_asset_requirements,
+            "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
