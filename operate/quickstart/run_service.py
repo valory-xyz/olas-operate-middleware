@@ -89,6 +89,8 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
         "quickstart_beta_expert_12": 25,
         "quickstart_beta_expert_15_mech_marketplace": 25,
         "quickstart_beta_expert_16_mech_marketplace": 25,
+        "quickstart_beta_expert_17_mech_marketplace": 25,
+        "quickstart_beta_expert_18_mech_marketplace": 25,
         "mech_marketplace": 37,
     },
     Chain.OPTIMISTIC: {
