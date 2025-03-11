@@ -334,8 +334,10 @@ def configure_local_config(
                         print(f"Found {available_slots} available staking slots.")
                         break
                     else:
-                        print("No available staking slots found. Please enter another address.")
-                except Exception as e:
+                        print(
+                            "No available staking slots found. Please enter another address."
+                        )
+                except Exception:
                     print("This address is not a valid staking contract address.")
 
     # set chain configs in the service template
