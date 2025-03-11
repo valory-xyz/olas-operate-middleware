@@ -423,6 +423,41 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         )
 
 
+class CustomBinaryDeploymentRunner(AbstractDeploymentRunner):
+    """Deployment runner for custom binary."""
+
+    def __init__(self, work_directory: Path, agent_binary: Path) -> None:
+        """Init the deployment runner."""
+        super().__init__(work_directory=work_directory)
+        self.agent_binary = agent_binary
+
+    def start(self) -> None:
+        """Start agent process."""
+        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
+            args=[self.agent_binary],
+            cwd=str(self._work_directory),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            env=os.environ,
+            creationflags=(
+                0x00000008 if platform.system() == "Windows" else 0
+            ),  # Detach process from the main process
+        )
+        print(f"Agent process started with pid: {process.pid}")
+        (self._work_directory / "agent.pid").write_text(
+            data=str(process.pid),
+            encoding="utf-8",
+        )
+
+    def stop(self) -> None:
+        """Stop agent process."""
+        pid = self._work_directory / "agent.pid"
+        print(f"Stopping agent with pid: {pid.read_text()}")
+        if not pid.exists():
+            return
+        kill_process(int(pid.read_text(encoding="utf-8")))
+
+
 def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     """Return depoyment runner according to running env."""
     deployment_runner: BaseDeploymentRunner
@@ -440,13 +475,31 @@ def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     return deployment_runner
 
 
-def run_host_deployment(build_dir: Path) -> None:
+def run_host_deployment(build_dir: Path, custom_binary: t.Optional[str] = None) -> None:
     """Run host deployment."""
+    if custom_binary is not None:
+        deployment_runner: AbstractDeploymentRunner = CustomBinaryDeploymentRunner(
+            work_directory=build_dir,
+            agent_binary=Path(custom_binary),
+        )
+        deployment_runner.start()
+        return
+
     deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
     deployment_runner.start()
 
 
-def stop_host_deployment(build_dir: Path) -> None:
+def stop_host_deployment(
+    build_dir: Path, custom_binary: t.Optional[str] = None
+) -> None:
     """Stop host deployment."""
+    if custom_binary is not None:
+        deployment_runner: AbstractDeploymentRunner = CustomBinaryDeploymentRunner(
+            work_directory=build_dir,
+            agent_binary=Path(custom_binary),
+        )
+        deployment_runner.stop()
+        return
+
     deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
     deployment_runner.stop()
