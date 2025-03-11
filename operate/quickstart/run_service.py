@@ -316,11 +316,29 @@ def configure_local_config(
                 raise
 
         if config.staking_program_id == CUSTOM_PROGRAM_ID:
-            config.staking_program_id = ask_or_get_from_env(
-                "Enter the staking contract address: ",
-                False,
-                "STAKING_CONTRACT_ADDRESS",
-            )
+            while True:
+                try:
+                    config.staking_program_id = ask_or_get_from_env(
+                        "Enter the staking contract address: ",
+                        False,
+                        "STAKING_CONTRACT_ADDRESS",
+                    )
+                    instance = staking_ctr.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=config.staking_program_id,
+                    )
+                    max_services = instance.functions.maxNumServices().call()
+                    current_services = instance.functions.getServiceIds().call()
+                    available_slots = max_services - len(current_services)
+                    if available_slots > 0:
+                        print(f"Found {available_slots} available staking slots.")
+                        break
+                    else:
+                        print(
+                            "No available staking slots found. Please enter another address."
+                        )
+                except Exception:
+                    print("This address is not a valid staking contract address.")
 
     # set chain configs in the service template
     for chain in template["configurations"]:
@@ -664,7 +682,10 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
 
 def run_service(
-    operate: "OperateApp", config_path: str, build_only: bool = False
+    operate: "OperateApp",
+    config_path: str,
+    build_only: bool = False,
+    skip_dependency_check: bool = False,
 ) -> None:
     """Run service."""
 
@@ -682,7 +703,7 @@ def run_service(
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
-    manager = operate.service_manager()
+    manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
     ensure_enough_funds(operate, service)
 

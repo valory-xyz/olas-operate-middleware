@@ -18,3 +18,8 @@
 # ------------------------------------------------------------------------------
 
 """Operate app."""
+
+import logging
+
+
+logging.getLogger("aea").setLevel(logging.ERROR)

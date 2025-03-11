@@ -866,6 +866,7 @@ class OnChainManager(_ChainUtil):
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
         metadata_description: t.Optional[str] = None,
+        skip_dependency_check: t.Optional[bool] = False,
     ) -> t.Dict:
         """Mint service."""
         # TODO: Support for update
@@ -888,9 +889,13 @@ class OnChainManager(_ChainUtil):
             .load_metadata()
             .set_metadata_fields(description=metadata_description)
             .verify_nft(nft=nft)
-            .verify_service_dependencies(agent_id=agent_id)
-            .publish_metadata()
         )
+
+        if skip_dependency_check is False:
+            logging.warning("Skipping depencencies check")
+            manager.verify_service_dependencies(agent_id=agent_id)
+
+        manager.publish_metadata()
 
         with tempfile.TemporaryDirectory() as temp, contextlib.redirect_stdout(
             io.StringIO()
@@ -1092,6 +1097,7 @@ class EthSafeTxBuilder(_ChainUtil):
         update_token: t.Optional[int] = None,
         token: t.Optional[str] = None,
         metadata_description: t.Optional[str] = None,
+        skip_depencency_check: t.Optional[bool] = False,
     ) -> t.Dict:
         """Build mint transaction."""
         # TODO: Support for update
@@ -1106,6 +1112,7 @@ class EthSafeTxBuilder(_ChainUtil):
             sleep=ON_CHAIN_INTERACT_SLEEP,
         )
         # Prepare for minting
+
         (
             manager.load_package_configuration(
                 package_path=package_path, package_type=PackageType.SERVICE
@@ -1113,9 +1120,13 @@ class EthSafeTxBuilder(_ChainUtil):
             .load_metadata()
             .set_metadata_fields(description=metadata_description)
             .verify_nft(nft=nft)
-            .verify_service_dependencies(agent_id=agent_id)
-            .publish_metadata()
         )
+
+        if skip_depencency_check is False:
+            logging.warning("Skipping depencencies check")
+            manager.verify_service_dependencies(agent_id=agent_id)
+
+        manager.publish_metadata()
 
         instance = self.service_manager_instance
         if update_token is None:
