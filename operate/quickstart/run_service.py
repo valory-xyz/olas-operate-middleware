@@ -316,11 +316,27 @@ def configure_local_config(
                 raise
 
         if config.staking_program_id == CUSTOM_PROGRAM_ID:
-            config.staking_program_id = ask_or_get_from_env(
-                "Enter the staking contract address: ",
-                False,
-                "STAKING_CONTRACT_ADDRESS",
-            )
+            while True:
+                try:
+                    config.staking_program_id = ask_or_get_from_env(
+                        "Enter the staking contract address: ",
+                        False,
+                        "STAKING_CONTRACT_ADDRESS",
+                    )
+                    instance = staking_ctr.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=config.staking_program_id,
+                    )
+                    max_services = instance.functions.maxNumServices().call()
+                    current_services = instance.functions.getServiceIds().call()
+                    available_slots = max_services - len(current_services)
+                    if available_slots > 0:
+                        print(f"Found {available_slots} available staking slots.")
+                        break
+                    else:
+                        print("No available staking slots found. Please enter another address.")
+                except Exception as e:
+                    print("This address is not a valid staking contract address.")
 
     # set chain configs in the service template
     for chain in template["configurations"]:

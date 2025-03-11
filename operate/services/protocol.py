@@ -892,7 +892,7 @@ class OnChainManager(_ChainUtil):
         )
 
         if skip_dependency_check is False:
-            logging.info("[WARNING] Skipping depencencies check")
+            logging.warning("Skipping depencencies check")
             manager.verify_service_dependencies(agent_id=agent_id)
 
         manager.publish_metadata()
@@ -1123,7 +1123,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
 
         if skip_depencency_check is False:
-            logging.info("[WARNING] Skipping depencencies check")
+            logging.warning("Skipping depencencies check")
             manager.verify_service_dependencies(agent_id=agent_id)
 
         manager.publish_metadata()
