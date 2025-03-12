@@ -2523,16 +2523,17 @@ class ServiceManager:
         Compute refill requirement.
 
         The `asset_funding_values` dictionary specifies the funding obligations the sender must cover for other parties.
-        The `sender_topup` and `sender_threshold` define the sender's own funding needs, with `sender_topup` typically
-        equal to `sender_threshold`. These values generally represent assets reserved for protocol operations.
+        Additionally, the sender must ensure its own balance remains above `sender_threshold` (minimum required balance)
+        and ideally reaches `sender_topup` (recommended balance). If no funding is required for the sender after covering
+        the obligations for other parties, set `sender_topup = sender_threshold = 0`.
 
         Args:
-            asset_funding_values (dict): Maps addresses to their funding details:
-                - "topup": Required total funding for the address.
-                - "threshold": Minimum balance threshold for the address.
-                - "balance": Current balance of the address.
-            sender_topup (int): Required total funding for the sender after satysfying `asset_funding_values`.
-            sender_threshold (int): Minimum balance threshold for the sender after satisfying `asset_funding_values`.
+            asset_funding_values (dict): Maps parties (identifiers) to their funding details:
+                - "topup": Recommended funding balance.
+                - "threshold": Minimum required balance.
+                - "balance": Current balance.
+            sender_topup (int): Recommended balance for the sender after meeting obligations.
+            sender_threshold (int): Minimum balance required for the sender after meeting obligations.
             sender_balance (int): Sender's current balance.
 
         Returns:
