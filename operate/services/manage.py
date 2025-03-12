@@ -2550,8 +2550,8 @@ class ServiceManager:
                 f"Argument 'sender_balance' must be >= 0 ({sender_balance=})."
             )
 
-        total_minimum_shortfall = 0
-        total_recommended_shortfall = 0
+        minimum_obligations_shortfall = 0
+        recommended_obligations_shortfall = 0
 
         for address, requirements in asset_funding_values.items():
             topup = requirements["topup"]
@@ -2568,17 +2568,23 @@ class ServiceManager:
                 )
 
             if balance < threshold:
-                total_minimum_shortfall += threshold - balance
-                total_recommended_shortfall += topup - balance
+                minimum_obligations_shortfall += threshold - balance
+                recommended_obligations_shortfall += topup - balance
 
-        if sender_balance - total_minimum_shortfall < sender_threshold:
-            total_minimum_shortfall += sender_threshold
+        # Compute sender's remaining balance after covering obligations
+        remaining_balance_minimum = sender_balance - minimum_obligations_shortfall
+        remaining_balance_recommended = (
+            sender_balance - recommended_obligations_shortfall
+        )
 
-        if sender_balance - total_recommended_shortfall < sender_threshold:
-            total_recommended_shortfall += sender_topup
+        # Determine if the sender needs additional refill
+        minimum_refill = 0
+        recommended_refill = 0
+        if remaining_balance_minimum < sender_threshold:
+            minimum_refill = sender_threshold - remaining_balance_minimum
 
-        minimum_refill = max(total_minimum_shortfall - sender_balance, 0)
-        recommended_refill = max(total_recommended_shortfall - sender_balance, 0)
+        if remaining_balance_recommended < sender_threshold:
+            recommended_refill = sender_topup - remaining_balance_recommended
 
         return {
             "minimum_refill": minimum_refill,
