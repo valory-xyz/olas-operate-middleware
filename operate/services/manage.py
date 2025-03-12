@@ -2564,19 +2564,21 @@ class ServiceManager:
                 )
             if 0 > balance:
                 raise ValueError(
-                    f"Argument 'balance' must be >= 0 ({address=}, {sender_balance=})."
+                    f"Argument 'balance' must be >= 0 ({address=}, {balance=})."
                 )
 
             if balance < threshold:
                 total_minimum_shortfall += threshold - balance
                 total_recommended_shortfall += topup - balance
 
-        minimum_refill = max(
-            total_minimum_shortfall + sender_threshold - sender_balance, 0
-        )
-        recommended_refill = max(
-            total_recommended_shortfall + sender_topup - sender_balance, 0
-        )
+        if sender_balance - total_minimum_shortfall < sender_threshold:
+            total_minimum_shortfall += sender_threshold
+
+        if sender_balance - total_recommended_shortfall < sender_threshold:
+            total_recommended_shortfall += sender_topup
+
+        minimum_refill = max(total_minimum_shortfall - sender_balance, 0)
+        recommended_refill = max(total_recommended_shortfall - sender_balance, 0)
 
         return {
             "minimum_refill": minimum_refill,
@@ -2594,8 +2596,8 @@ class ServiceManager:
                     "threshold": 10000000000000000,
                 },
                 Chain.GNOSIS: {
-                    "topup": 100000000000000000,
-                    "threshold": 50000000000000000,
+                    "topup": 1500000000000000000,
+                    "threshold": 750000000000000000,
                 },
                 Chain.OPTIMISTIC: {
                     "topup": 5000000000000000,
