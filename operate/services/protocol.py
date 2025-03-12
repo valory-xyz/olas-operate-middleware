@@ -873,7 +873,7 @@ class _ChainUtil:
             output["additional_staking_tokens"][
                 instance.functions.secondToken().call()
             ] = instance.functions.secondTokenAmount().call()
-        except Exception:  # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except # nosec
             # Contract is not a dual staking contract
             pass
 
