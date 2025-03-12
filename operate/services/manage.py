@@ -33,7 +33,6 @@ from contextlib import suppress
 from pathlib import Path
 
 import requests
-import web3
 from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
@@ -1298,7 +1297,7 @@ class ServiceManager:
                 .functions.getStakingState(service_id)
                 .call()
             )
-        except web3.exceptions.ContractLogicError:
+        except Exception:  # pylint: disable=broad-except
             # Service owner is not a staking contract
             return None
 

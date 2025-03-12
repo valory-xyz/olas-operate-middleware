@@ -56,7 +56,6 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
-from web3.exceptions import ContractLogicError
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -867,7 +866,7 @@ class _ChainUtil:
             output["additional_staking_tokens"][
                 instance.functions.secondToken().call()
             ] = instance.functions.secondTokenAmount().call()
-        except ContractLogicError:
+        except Exception:  # pylint: disable=broad-except
             # Contract is not a dual staking contract
             pass
 
