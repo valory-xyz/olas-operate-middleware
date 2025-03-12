@@ -553,6 +553,8 @@ class MintManager(MintHelper):
 class _ChainUtil:
     """On chain service management."""
 
+    _cache = {}
+
     def __init__(
         self,
         rpc: str,
@@ -823,6 +825,11 @@ class _ChainUtil:
 
     def get_staking_params(self, staking_contract: str) -> t.Dict:
         """Get agent IDs for the staking contract"""
+
+        cache = _ChainUtil._cache
+        if staking_contract in cache.setdefault("get_staking_params", {}):
+            return cache["get_staking_params"][staking_contract]
+
         self._patch()
         staking_manager = StakingManager(
             key=self.wallet.key_path,
@@ -869,6 +876,8 @@ class _ChainUtil:
         except Exception:  # pylint: disable=broad-except
             # Contract is not a dual staking contract
             pass
+
+        cache["get_staking_params"][staking_contract] = output
 
         return output
 
