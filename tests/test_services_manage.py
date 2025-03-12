@@ -314,6 +314,10 @@ class TestServiceManager:
             (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 3, 2, 7),
             (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 7, 0, 0),
             (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 11, 0, 0),
+            (10, 5, 2, 0, 0, 0, 0, 0, 0, 10, 5, 1, 7, 17),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 1, 34, 89),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 7, 28, 83),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 11, 24, 79),
         ],
     )
     def test_service_manager_compute_refill_requirements(
@@ -370,13 +374,15 @@ class TestServiceManager:
         assert not diff, "Failed to compute refill requirements."
 
     @pytest.mark.parametrize(
-        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_topup, sender_threshold, sender_balance, minimum_refill_required, recommended_refill_required",
+        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_topup, sender_threshold, sender_balance",
         [
-            (5, 10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 8),
-            (10, 5, 1, 5, 10, 8, 0, 0, 0, 0, 0, 1, 3, 8),
-            (10, 5, 8, 10, 5, 1, 0, 0, 0, 5, 10, 1, 3, 8),
-            (10, 5, 8, 10, 5, 1, 2, 5, 1, 0, 0, 1, 7, 17),
-            (10, 5, 6, 10, 5, 6, 0, 0, 0, 9, 10, 1, 0, 0),
+            (5, 10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+            (10, 5, 1, 5, 10, 8, 0, 0, 0, 0, 0, 1),
+            (10, 5, 8, 10, 5, 1, 0, 0, 0, 5, 10, 1),
+            (10, 5, 8, 10, 5, 1, 2, 5, 1, 0, 0, 1),
+            (10, 5, 6, 10, 5, 6, 0, 0, 0, 9, 10, 1),
+            (10, 5, 8, 10, 5, -1, 10, 5, 1, 0, 0, 1),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 0, 0, -1),
         ],
     )
     def test_service_manager_compute_refill_requirements_raise(
@@ -393,8 +399,6 @@ class TestServiceManager:
         sender_topup: int,
         sender_threshold: int,
         sender_balance: int,
-        minimum_refill_required: int,
-        recommended_refill_required: int,
     ) -> None:
         """Test operate.service_manager()._compute_refill_requirements()"""
 
