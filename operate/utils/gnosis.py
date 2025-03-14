@@ -33,6 +33,7 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
+from web3 import Web3
 from web3.exceptions import TimeExhausted
 
 from operate.constants import (
@@ -572,12 +573,18 @@ def get_asset_balance(
     ledger_api: LedgerApi,
     asset_address: str,
     address: str,
+    raise_on_invalid_address: bool = True,
 ) -> int:
     """
     Get the balance of a native asset or ERC20 token.
 
     If contract address is a zero address, return the native balance.
     """
+    if not Web3.is_address(address):
+        if raise_on_invalid_address:
+            raise ValueError(f"Invalid address: {address}")
+        return 0
+
     if asset_address == ZERO_ADDRESS:
         return ledger_api.get_balance(address)
     return (
@@ -594,6 +601,7 @@ def get_assets_balances(
     ledger_api: LedgerApi,
     asset_addresses: t.Set[str],
     addresses: t.Set[str],
+    raise_on_invalid_address: bool = True,
 ) -> t.Dict[str, t.Dict[str, int]]:
     """
     Get the balances of a list of native assets or ERC20 tokens.
@@ -607,6 +615,7 @@ def get_assets_balances(
             ledger_api=ledger_api,
             asset_address=asset,
             address=address,
+            raise_on_invalid_address=raise_on_invalid_address,
         )
 
     return output

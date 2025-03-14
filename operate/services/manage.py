@@ -27,18 +27,17 @@ import shutil
 import time
 import traceback
 import typing as t
-from collections import Counter
+from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from pathlib import Path
 
 import requests
-import web3
 from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.config import ChainType
+from autonomy.chain.config import CHAIN_PROFILES, ChainType
 
 from operate.constants import ZERO_ADDRESS
 from operate.data import DATA_DIR
@@ -692,30 +691,31 @@ class ServiceManager:
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
-                required_olas = (
-                    staking_params["min_staking_deposit"]
-                    + staking_params[
-                        "min_staking_deposit"
-                    ]  # operator security deposit = max agent bond
+                protocol_asset_requirements = self._compute_protocol_asset_requirements(
+                    service_config_id, chain
                 )
             elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = staking_params["min_staking_deposit"]
+                protocol_asset_requirements = self._compute_protocol_asset_requirements(
+                    service_config_id, chain
+                )
+                protocol_asset_requirements[staking_params["staking_token"]] = (
+                    staking_params["min_staking_deposit"]
+                    * service.helper.config.number_of_agents
+                )
             else:
-                required_olas = 0
+                protocol_asset_requirements = {}
 
-            balance = (
-                registry_contracts.erc20.get_instance(
+            for asset, amount in protocol_asset_requirements.items():
+                balance = get_asset_balance(
                     ledger_api=sftxb.ledger_api,
-                    contract_address=OLAS[ledger_config.chain],
+                    asset_address=asset,
+                    address=safe,
                 )
-                .functions.balanceOf(safe)
-                .call()
-            )
-            if balance < required_olas:
-                raise ValueError(
-                    "You don't have enough olas to stake, "
-                    f"address: {safe}; required olas: {required_olas}; your balance: {balance}"
-                )
+                if balance < amount:
+                    raise ValueError(
+                        f"Address {safe} has insufficient balance for asset {asset}: "
+                        f"required {amount}, available {balance}."
+                    )
 
         # TODO Handle this in a more graceful way.
         agent_id = (
@@ -886,10 +886,10 @@ class ServiceManager:
                     ).get("bond")
                 )
                 sftxb.new_tx().add(
-                    sftxb.get_olas_approval_data(
+                    sftxb.get_erc20_approval_data(
                         spender=token_utility,
                         amount=cost_of_bond,
-                        olas_contract=olas_token,
+                        erc20_contract=olas_token,
                     )
                 ).settle()
                 token_utility_allowance = (
@@ -950,10 +950,10 @@ class ServiceManager:
                     ).get("bond")
                 )
                 sftxb.new_tx().add(
-                    sftxb.get_olas_approval_data(
+                    sftxb.get_erc20_approval_data(
                         spender=token_utility,
                         amount=cost_of_bond,
-                        olas_contract=olas_token,
+                        erc20_contract=olas_token,
                     )
                 ).settle()
                 token_utility_allowance = (
@@ -1302,7 +1302,7 @@ class ServiceManager:
                 .functions.getStakingState(service_id)
                 .call()
             )
-        except web3.exceptions.ContractLogicError:
+        except Exception:  # pylint: disable=broad-except
             # Service owner is not a staking contract
             return None
 
@@ -1377,7 +1377,7 @@ class ServiceManager:
         self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
-
+        self.logger.info("stake_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
@@ -1393,21 +1393,28 @@ class ServiceManager:
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
+        if on_chain_state != OnChainState.DEPLOYED:
+            self.logger.info(
+                f"Cannot perform staking operations. Service {chain_config.chain_data.token} is not on DEPLOYED state"
+            )
+            return
+
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
         )
-        is_staked = current_staking_program is not None
         current_staking_contract = get_staking_contract(
             chain=ledger_config.chain,
             staking_program_id=current_staking_program,
         )
 
         # perform the unstaking flow if necessary
-        if is_staked:
+        staking_state = StakingState.UNSTAKED
+        if current_staking_program is not None:
             can_unstake = sftxb.can_unstake(
-                chain_config.chain_data.token, current_staking_contract  # type: ignore  # TODO fix mypy
+                chain_config.chain_data.token, current_staking_contract
             )
             if not chain_config.chain_data.user_params.use_staking and can_unstake:
                 self.logger.info(
@@ -1423,7 +1430,7 @@ class ServiceManager:
             chain_config.chain_data.on_chain_state = OnChainState(info["service_state"])
             staking_state = sftxb.staking_status(
                 service_id=chain_data.token,
-                staking_contract=current_staking_contract,  # type: ignore  # TODO fix mypy
+                staking_contract=current_staking_contract,
             )
 
             if staking_state == StakingState.EVICTED and can_unstake:
@@ -1439,7 +1446,7 @@ class ServiceManager:
             if (
                 staking_state == StakingState.STAKED
                 and can_unstake
-                and not sftxb.staking_rewards_available(current_staking_contract)  # type: ignore  # TODO fix mypy
+                and not sftxb.staking_rewards_available(current_staking_contract)
             ):
                 self.logger.info(
                     f"There are no rewards available, service {chain_config.chain_data.token} "
@@ -1461,7 +1468,12 @@ class ServiceManager:
                     staking_program_id=current_staking_program,
                 )
 
-        staking_state = sftxb.staking_status(
+            staking_state = sftxb.staking_status(
+                service_id=chain_config.chain_data.token,
+                staking_contract=current_staking_contract,
+            )
+
+        target_program_staking_state = sftxb.staking_status(
             service_id=chain_config.chain_data.token,
             staking_contract=target_staking_contract,
         )
@@ -1471,7 +1483,6 @@ class ServiceManager:
             target_staking_contract
         )
         staking_slots_available = sftxb.staking_slots_available(target_staking_contract)
-        on_chain_state = self._get_on_chain_state(service=service, chain=chain)
         current_staking_program = self._get_current_staking_program(
             service,
             chain,
@@ -1480,16 +1491,18 @@ class ServiceManager:
         self.logger.info(
             f"use_staking={chain_config.chain_data.user_params.use_staking}"
         )
-        self.logger.info(f"{staking_state=}")
-        self.logger.info(f"{staking_rewards_available=}")
-        self.logger.info(f"{staking_slots_available=}")
         self.logger.info(f"{on_chain_state=}")
         self.logger.info(f"{current_staking_program=}")
+        self.logger.info(f"{staking_state=}")
         self.logger.info(f"{target_staking_program=}")
+        self.logger.info(f"{target_program_staking_state=}")
+        self.logger.info(f"{staking_rewards_available=}")
+        self.logger.info(f"{staking_slots_available=}")
 
         if (
-            chain_config.chain_data.user_params.use_staking
+            chain_config.chain_data.user_params.use_staking  # pylint: disable=too-many-boolean-expressions
             and staking_state == StakingState.UNSTAKED
+            and target_program_staking_state == StakingState.UNSTAKED
             and staking_rewards_available
             and staking_slots_available
             and on_chain_state == OnChainState.DEPLOYED
@@ -1502,6 +1515,36 @@ class ServiceManager:
                     staking_contract=target_staking_contract,
                 )
             ).settle()
+
+            # Approve additional_staking_tokens.
+            staking_params = sftxb.get_staking_params(
+                staking_contract=target_staking_contract
+            )
+
+            for token_contract, min_staking_amount in staking_params[
+                "additional_staking_tokens"
+            ].items():
+                sftxb.new_tx().add(
+                    sftxb.get_erc20_approval_data(
+                        spender=target_staking_contract,
+                        amount=min_staking_amount,
+                        erc20_contract=token_contract,
+                    )
+                ).settle()
+                staking_contract_allowance = (
+                    registry_contracts.erc20.get_instance(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=token_contract,
+                    )
+                    .functions.allowance(
+                        sftxb.safe,
+                        target_staking_contract,
+                    )
+                    .call()
+                )
+                self.logger.info(
+                    f"Approved {staking_contract_allowance} (token {token_contract}) from {sftxb.safe} to {target_staking_contract}"
+                )
 
             self.logger.info(f"Staking service: {chain_config.chain_data.token}")
             sftxb.new_tx().add(
@@ -2164,9 +2207,11 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
 
         balances: t.Dict = {}
-        bonded_olas: t.Dict = {}
+        bonded_assets: t.Dict = {}
+        protocol_asset_requirements: t.Dict = {}
         refill_requirements: t.Dict = {}
         allow_start_agent = True
+        is_refill_required = False
 
         for chain, chain_config in service.chain_configs.items():
             ledger_config = chain_config.ledger_config
@@ -2175,183 +2220,162 @@ class ServiceManager:
             ledger_api = wallet.ledger_api(
                 chain=ledger_config.chain, rpc=ledger_config.rpc
             )
+            os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+
+            master_eoa = wallet.address
+            master_safe_exists = wallet.safes.get(Chain(chain)) is not None
+            master_safe = wallet.safes.get(Chain(chain), "master_safe")
 
             agent_addresses = {key.address for key in service.keys}
             service_safe = (
                 chain_data.multisig
                 if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
-                else None
+                else "service_safe"
             )
-            master_safe = wallet.safes.get(Chain(chain))
 
-            # Collect relevant addresses to display balances
-            addresses = agent_addresses | {wallet.address}
-            if service_safe:
-                addresses.add(service_safe)
-            if master_safe:
-                addresses.add(master_safe)
+            if not master_safe_exists:
+                allow_start_agent = False
+
+            # Protocol asset requirements
+            protocol_asset_requirements[
+                chain
+            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            service_asset_requirements = chain_data.user_params.fund_requirements
+
+            # Bonded assets
+            bonded_assets[chain] = self._compute_bonded_assets(service_config_id, chain)
+
+            # Balances
+            addresses = agent_addresses | {service_safe, master_eoa, master_safe}
+            asset_addresses = (
+                {ZERO_ADDRESS}
+                | service_asset_requirements.keys()
+                | protocol_asset_requirements[chain].keys()
+                | bonded_assets[chain].keys()
+            )
 
             balances[chain] = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses=addresses,
-                asset_addresses=set(chain_data.user_params.fund_requirements)
-                | {OLAS[Chain(chain)]},
+                asset_addresses=asset_addresses,
+                raise_on_invalid_address=False,
             )
 
-            if not service_safe:
-                balances[chain]["service_safe"] = {}
-                for address in set(chain_data.user_params.fund_requirements):
-                    balances[chain]["service_safe"][address] = 0
-
-            # TODO this is a patch to count the balance of the wrapped native asset as
+            # TODO this is a balances patch to count wrapped native asset as
             # native assets for the service safe
-            if service_safe and Chain(chain) in WRAPPED_NATIVE_ASSET:
-                balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
-                    ledger_api=ledger_api,
-                    asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
-                    address=service_safe,
-                )
+            if Chain(chain) in WRAPPED_NATIVE_ASSET:
+                if WRAPPED_NATIVE_ASSET[Chain(chain)] not in asset_addresses:
+                    balances[chain][service_safe][ZERO_ADDRESS] += get_asset_balance(
+                        ledger_api=ledger_api,
+                        asset_address=WRAPPED_NATIVE_ASSET[Chain(chain)],
+                        address=service_safe,
+                        raise_on_invalid_address=False,
+                    )
 
-            # Compute refill requirements of Master Safe and Master EOA
+            # Refill requirements
             refill_requirements[chain] = {}
-            bonded_olas[chain] = self._compute_bonded_olas(service_config_id, chain)
 
-            if master_safe:
-                olas_requirements = self._compute_olas_requirements(
-                    service_config_id, chain
-                )
-                olas_address = OLAS[Chain(chain)]
-                master_safe_olas = balances[chain][master_safe][olas_address]
-
-                service_safe_olas = 0
-                if service_safe:
-                    service_safe_olas = balances[chain][service_safe][olas_address]
-
-                refill_requirements[chain].setdefault(master_safe, {})[
-                    olas_address
-                ] = max(
-                    olas_requirements
-                    - bonded_olas[chain]
-                    - master_safe_olas
-                    - service_safe_olas,
-                    0,
-                )
-
-            for (
-                asset_address,
-                fund_requirements,
-            ) in chain_data.user_params.fund_requirements.items():
-                # Master Safe
-                if not master_safe:
-                    allow_start_agent = False
-                else:
-                    on_chain_operations_buffer = 0
-                    if asset_address == ZERO_ADDRESS:
-                        on_chain_state = self._get_on_chain_state(
-                            service=service, chain=chain
-                        )
-                        if on_chain_state != OnChainState.DEPLOYED:
-                            if chain_data.user_params.use_staking:
-                                on_chain_operations_buffer = 1 + len(service.keys)
-                            else:
-                                on_chain_operations_buffer = (
-                                    chain_data.user_params.cost_of_bond
-                                    * (1 + len(service.keys))
-                                )
-
-                            if (
-                                balances[chain][master_safe][asset_address]
-                                < on_chain_operations_buffer
-                            ):
-                                allow_start_agent = False
-
-                    asset_funding_values = {
+            # Refill requirements for Master Safe
+            for asset_address in (
+                service_asset_requirements.keys()
+                | protocol_asset_requirements[chain].keys()
+            ):
+                agent_asset_funding_values = {}
+                if asset_address in service_asset_requirements:
+                    fund_requirements = service_asset_requirements[asset_address]
+                    agent_asset_funding_values = {
                         address: {
                             "topup": fund_requirements.agent,
-                            "threshold": fund_requirements.agent
-                            * DEFAULT_TOPUP_THRESHOLD,  # TODO make threshold configurable
+                            "threshold": int(
+                                fund_requirements.agent * DEFAULT_TOPUP_THRESHOLD
+                            ),  # TODO make threshold configurable
                             "balance": balances[chain][address][asset_address],
                         }
                         for address in agent_addresses
                     }
-                    asset_funding_values[service_safe or "service_safe"] = {
+                    agent_asset_funding_values[service_safe] = {
                         "topup": fund_requirements.safe,
-                        "threshold": fund_requirements.safe
-                        * DEFAULT_TOPUP_THRESHOLD,  # TODO make threshold configurable
-                        "balance": balances[chain]
-                        .get(service_safe, {})
-                        .get(asset_address, 0),
-                    }
-                    asset_funding_values[master_safe] = {
-                        "topup": on_chain_operations_buffer,
-                        "threshold": on_chain_operations_buffer,
-                        "balance": balances[chain][master_safe][asset_address],
-                    }
-
-                    recommended_refill = self._compute_refill_requirement(
-                        asset_funding_values=asset_funding_values,
-                        sender_balance=balances[chain][master_safe][asset_address],
-                    )["recommended_refill"]
-
-                    refill_requirements[chain].setdefault(master_safe, {})[
-                        asset_address
-                    ] = recommended_refill
-
-                    if asset_address == ZERO_ADDRESS and any(
-                        balances[chain][master_safe][asset_address] == 0
-                        and balances[chain][address][asset_address] == 0
-                        and asset_funding_values[address]["threshold"] > 0
-                        for address in asset_funding_values
-                    ):
-                        allow_start_agent = False
-
-                # Master EOA
-                asset_funding_values = {}
-                if asset_address == ZERO_ADDRESS:
-                    asset_funding_values = {
-                        wallet.address: self._get_master_eoa_native_funding_values(
-                            master_safe is not None,
-                            Chain(chain),
-                            balances[chain][wallet.address][asset_address],
-                        )
+                        "threshold": int(
+                            fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
+                        ),  # TODO make threshold configurable
+                        "balance": balances[chain][service_safe][asset_address],
                     }
 
                 recommended_refill = self._compute_refill_requirement(
-                    asset_funding_values=asset_funding_values, sender_balance=0
+                    asset_funding_values=agent_asset_funding_values,
+                    sender_topup=protocol_asset_requirements[chain].get(
+                        asset_address, 0
+                    ),
+                    sender_threshold=protocol_asset_requirements[chain].get(
+                        asset_address, 0
+                    ),
+                    sender_balance=balances[chain][master_safe][asset_address]
+                    + bonded_assets[chain].get(asset_address, 0),
                 )["recommended_refill"]
 
-                refill_requirements[chain].setdefault(wallet.address, {})[
+                refill_requirements[chain].setdefault(master_safe, {})[
                     asset_address
                 ] = recommended_refill
 
+                if asset_address == ZERO_ADDRESS and any(
+                    balances[chain][master_safe][asset_address] == 0
+                    and balances[chain][address][asset_address] == 0
+                    and agent_asset_funding_values[address]["threshold"] > 0
+                    for address in agent_asset_funding_values
+                ):
+                    allow_start_agent = False
+
+            # Remove placeholder value
+            refill_requirements[chain].pop("master_safe", None)
+
+            # Refill requirements for Master EOA
+            eoa_funding_values = self._get_master_eoa_native_funding_values(
+                master_safe_exists=master_safe_exists,
+                chain=Chain(chain),
+                balance=balances[chain][master_eoa][ZERO_ADDRESS],
+            )
+
+            eoa_recommended_refill = self._compute_refill_requirement(
+                asset_funding_values={},
+                sender_topup=eoa_funding_values["topup"],
+                sender_threshold=eoa_funding_values["threshold"],
+                sender_balance=balances[chain][master_eoa][ZERO_ADDRESS],
+            )["recommended_refill"]
+
+            refill_requirements[chain].setdefault(master_eoa, {})[
+                ZERO_ADDRESS
+            ] = eoa_recommended_refill
+
         is_refill_required = any(
-            fund_requirement > 0
-            for chain_requirements in refill_requirements.values()
-            for asset_requirements in chain_requirements.values()
-            for fund_requirement in asset_requirements.values()
+            amount > 0
+            for chain in refill_requirements.values()
+            for asset in chain.values()
+            for amount in asset.values()
         )
 
         return {
             "balances": balances,
-            "bonded_olas": bonded_olas,
+            "bonded_assets": bonded_assets,
             "refill_requirements": refill_requirements,
+            "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
         }
 
-    def _compute_bonded_olas(  # pylint: disable=too-many-locals
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes the bonded olas: current agent bonds and current security deposit"""
+    ) -> t.Dict:
+        """Computes the bonded tokens: current agent bonds and current security deposit"""
 
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        bonded_assets: defaultdict = defaultdict(int)
 
         if Chain(chain) not in wallet.safes:
-            return 0
+            return dict(bonded_assets)
 
         master_safe = wallet.safes[Chain(chain)]
 
@@ -2359,9 +2383,39 @@ class ServiceManager:
 
         service_id = chain_config.chain_data.token
         if service_id == NON_EXISTENT_TOKEN:
-            return 0
+            return dict(bonded_assets)
 
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
+
+        # Determine bonded native amount
+        service_registry_address = CHAIN_PROFILES[chain]["service_registry"]
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=ledger_api,
+            contract_address=service_registry_address,
+        )
+        service_info = service_registry.functions.getService(service_id).call()
+        security_deposit = service_info[0]
+        service_state = service_info[6]
+        agent_ids = service_info[7]
+
+        if (
+            OnChainState.ACTIVE_REGISTRATION
+            <= service_state
+            < OnChainState.TERMINATED_BONDED
+        ):
+            bonded_assets[ZERO_ADDRESS] += security_deposit
+
+        operator_balance = service_registry.functions.getOperatorBalance(
+            master_safe, service_id
+        ).call()
+        bonded_assets[ZERO_ADDRESS] += operator_balance
+
+        # Determine bonded token amount for staking programs
+        current_staking_program = self._get_current_staking_program(service, chain)
+
+        if not current_staking_program:
+            return dict(bonded_assets)
+
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         staking_params = sftxb.get_staking_params(
             staking_contract=get_staking_contract(
@@ -2369,29 +2423,15 @@ class ServiceManager:
                 staking_program_id=user_params.staking_program_id,
             ),
         )
-        service_registry_address = staking_params["service_registry"]
         service_registry_token_utility_address = staking_params[
             "service_registry_token_utility"
         ]
-        service_registry = registry_contracts.service_registry.get_instance(
-            ledger_api=ledger_api,
-            contract_address=service_registry_address,
-        )
         service_registry_token_utility = (
             registry_contracts.service_registry_token_utility.get_instance(
                 ledger_api=ledger_api,
                 contract_address=service_registry_token_utility_address,
             )
         )
-
-        service_owner = service_registry.functions.ownerOf(service_id).call()
-
-        # If master safe is service owner, the service is not staked
-        if service_owner.lower() == master_safe.lower():
-            return 0
-
-        service_info = service_registry.functions.getService(service_id).call()
-        agent_ids = service_info[7]
 
         agent_bonds = 0
         for agent_id in agent_ids:
@@ -2404,7 +2444,6 @@ class ServiceManager:
             agent_bonds += num_agent_instances * agent_bond
 
         security_deposit = 0
-        service_state = service_info[6]
         if (
             OnChainState.ACTIVE_REGISTRATION
             <= service_state
@@ -2416,22 +2455,45 @@ class ServiceManager:
                 ).call()[1]
             )
 
-        return agent_bonds + security_deposit
+        bonded_assets[staking_params["staking_token"]] += agent_bonds
+        bonded_assets[staking_params["staking_token"]] += security_deposit
 
-    def _compute_olas_requirements(  # pylint: disable=too-many-locals
+        staking_state = sftxb.staking_status(
+            service_id=service_id,
+            staking_contract=staking_params["staking_contract"],
+        )
+
+        if staking_state in (StakingState.STAKED, StakingState.EVICTED):
+            for token, amount in staking_params["additional_staking_tokens"].items():
+                bonded_assets[token] += amount
+
+        return dict(bonded_assets)
+
+    def _compute_protocol_asset_requirements(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str
-    ) -> int:
-        """Computes OLAS requirements to stake the service in the target staking contract"""
+    ) -> t.Dict:
+        """Computes the protocol asset requirements to deploy on-chain and stake (if necessary)"""
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
         user_params = chain_config.chain_data.user_params
-
-        if not user_params.use_staking:
-            return 0
-
+        ledger_config = chain_config.ledger_config
+        number_of_agents = service.helper.config.number_of_agents
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        service_asset_requirements: defaultdict = defaultdict(int)
+
+        if not user_params.use_staking or not user_params.staking_program_id:
+            agent_bonds = user_params.cost_of_bond * number_of_agents
+            security_deposit = user_params.cost_of_bond
+            service_asset_requirements[ZERO_ADDRESS] += agent_bonds
+            service_asset_requirements[ZERO_ADDRESS] += security_deposit
+            return dict(service_asset_requirements)
+
+        agent_bonds = 1 * number_of_agents
+        security_deposit = 1
+        service_asset_requirements[ZERO_ADDRESS] += agent_bonds
+        service_asset_requirements[ZERO_ADDRESS] += security_deposit
+
         staking_params = sftxb.get_staking_params(
             staking_contract=get_staking_contract(
                 chain=ledger_config.chain,
@@ -2444,51 +2506,90 @@ class ServiceManager:
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
         #   and ServiceRegistryTokenUtility .getAgentBond
         # - security_deposit: as the maximum agent bond.
-        number_of_agents = service.helper.config.number_of_agents
         agent_bonds = staking_params["min_staking_deposit"] * number_of_agents
         security_deposit = staking_params["min_staking_deposit"]
+        service_asset_requirements[staking_params["staking_token"]] += agent_bonds
+        service_asset_requirements[staking_params["staking_token"]] += security_deposit
 
-        return agent_bonds + security_deposit
+        for token, amount in staking_params["additional_staking_tokens"].items():
+            service_asset_requirements[token] = amount
+
+        return dict(service_asset_requirements)
 
     @staticmethod
     def _compute_refill_requirement(
-        asset_funding_values: t.Dict, sender_balance: int
+        asset_funding_values: t.Dict,
+        sender_topup: int = 0,
+        sender_threshold: int = 0,
+        sender_balance: int = 0,
     ) -> t.Dict:
         """
-        Compute user fund requirements.
+        Compute refill requirement.
+
+        The `asset_funding_values` dictionary specifies the funding obligations the sender must cover for other parties.
+        Additionally, the sender must ensure its own balance remains above `sender_threshold` (minimum required balance)
+        and ideally reaches `sender_topup` (recommended balance). If no funding is required for the sender after covering
+        the obligations for other parties, set `sender_topup = sender_threshold = 0`.
 
         Args:
-            asset_funding_values (dict): A dictionary where each key is an address, and the value contains:
-                - "topup": The full funding requirement for the address.
-                - "threshold": The minimum balance threshold for the address.
-                - "balance": The current balance of the address.
-            sender_balance (int): The initial balance of the sender.
+            asset_funding_values (dict): Maps parties (identifiers) to their funding details:
+                - "topup": Recommended funding balance.
+                - "threshold": Minimum required balance.
+                - "balance": Current balance.
+            sender_topup (int): Recommended balance for the sender after meeting obligations.
+            sender_threshold (int): Minimum balance required for the sender after meeting obligations.
+            sender_balance (int): Sender's current balance.
 
         Returns:
-            dict: A dictionary containing:
-                - "minimum_refill": The minimum refill amount for the sender.
-                - "recommended_refill": The recommended refill amount for the sender.
-
-        Note:
-            The aim of this method is to calculate the minimum and recommended refill amounts for the sender,
-            assuming that the sender is not within asset_funding_values.
-            If asset_funding_values contains the sender, then sender_balance must be set to 0.
-            (otherwise its balance will be counted twice).
+            dict: A dictionary with:
+                - "minimum_refill": The minimum amount the sender needs to add.
+                - "recommended_refill": The suggested amount the sender should add.
         """
-        total_minimum_shortfall = 0
-        total_recommended_shortfall = 0
+        if 0 > sender_threshold or sender_threshold > sender_topup:
+            raise ValueError(
+                f"Arguments must satisfy 0 <= 'sender_threshold' <= 'sender_topup' ({sender_threshold=}, {sender_topup=})."
+            )
 
-        for _, requirements in asset_funding_values.items():
+        if 0 > sender_balance:
+            raise ValueError(
+                f"Argument 'sender_balance' must be >= 0 ({sender_balance=})."
+            )
+
+        minimum_obligations_shortfall = 0
+        recommended_obligations_shortfall = 0
+
+        for address, requirements in asset_funding_values.items():
             topup = requirements["topup"]
             threshold = requirements["threshold"]
             balance = requirements["balance"]
 
-            if balance < threshold:
-                total_minimum_shortfall += threshold - balance
-                total_recommended_shortfall += topup - balance
+            if 0 > threshold or threshold > topup:
+                raise ValueError(
+                    f"Arguments must satisfy 0 <= 'threshold' <= 'topup' ({address=}, {threshold=}, {topup=}, {balance=})."
+                )
+            if 0 > balance:
+                raise ValueError(
+                    f"Argument 'balance' must be >= 0 ({address=}, {balance=})."
+                )
 
-        minimum_refill = max(total_minimum_shortfall - sender_balance, 0)
-        recommended_refill = max(total_recommended_shortfall - sender_balance, 0)
+            if balance < threshold:
+                minimum_obligations_shortfall += threshold - balance
+                recommended_obligations_shortfall += topup - balance
+
+        # Compute sender's remaining balance after covering obligations
+        remaining_balance_minimum = sender_balance - minimum_obligations_shortfall
+        remaining_balance_recommended = (
+            sender_balance - recommended_obligations_shortfall
+        )
+
+        # Determine if the sender needs additional refill
+        minimum_refill = 0
+        recommended_refill = 0
+        if remaining_balance_minimum < sender_threshold:
+            minimum_refill = sender_threshold - remaining_balance_minimum
+
+        if remaining_balance_recommended < sender_threshold:
+            recommended_refill = sender_topup - remaining_balance_recommended
 
         return {
             "minimum_refill": minimum_refill,
@@ -2497,7 +2598,7 @@ class ServiceManager:
 
     @staticmethod
     def _get_master_eoa_native_funding_values(
-        masterSafeExists: bool, chain: Chain, balance: int
+        master_safe_exists: bool, chain: Chain, balance: int
     ) -> t.Dict:
         funding_values = {
             True: {
@@ -2506,8 +2607,8 @@ class ServiceManager:
                     "threshold": 10000000000000000,
                 },
                 Chain.GNOSIS: {
-                    "topup": 100000000000000000,
-                    "threshold": 50000000000000000,
+                    "topup": 1500000000000000000,
+                    "threshold": 750000000000000000,
                 },
                 Chain.OPTIMISTIC: {
                     "topup": 5000000000000000,
@@ -2534,6 +2635,6 @@ class ServiceManager:
             },
         }
 
-        values = funding_values[masterSafeExists][chain]
+        values = funding_values[master_safe_exists][chain]
         values["balance"] = balance
         return values
