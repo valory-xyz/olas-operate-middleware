@@ -1002,7 +1002,7 @@ class Service(LocalResource):
                     shutil.rmtree(target_path)
 
                 shutil.move(package_temp_path, target_path)
-                self.package_path = target_path.name
+                self.package_path = Path(target_path.name)
                 self.store()
 
     @staticmethod
@@ -1056,7 +1056,7 @@ class Service(LocalResource):
             hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
             path=package_absolute_path.parent,
-            package_path=package_absolute_path.name,
+            package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
         )
         service.store()
@@ -1180,7 +1180,7 @@ class Service(LocalResource):
                 target_dir=self.path,
             )
         )
-        self.package_path = package_absolute_path.name
+        self.package_path = Path(package_absolute_path.name)
 
         # env_variables
         if partial_update:
