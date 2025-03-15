@@ -993,7 +993,7 @@ class Service(LocalResource):
                 package_temp_path = Path(
                     IPFSTool().download(
                         hash_id=self.hash,
-                        target_dir=temp_dir + "/",
+                        target_dir=temp_dir,
                     )
                 )
                 target_path = self.path / package_temp_path.name
