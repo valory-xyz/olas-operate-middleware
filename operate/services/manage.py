@@ -432,7 +432,7 @@ class ServiceManager:
             chain_data.token = t.cast(
                 int,
                 ocm.mint(
-                    package_path=service.service_path,
+                    package_path=service.package_absolute_path_absolute_path,
                     agent_id=staking_params["agent_ids"][0],
                     number_of_slots=service.helper.config.number_of_agents,
                     cost_of_bond=(
@@ -778,7 +778,7 @@ class ServiceManager:
                     sftxb.new_tx()
                     .add(
                         sftxb.get_mint_tx_data(
-                            package_path=service.service_path,
+                            package_path=service.package_absolute_path,
                             agent_id=agent_id,
                             number_of_slots=service.helper.config.number_of_agents,
                             cost_of_bond=(
@@ -830,7 +830,7 @@ class ServiceManager:
                 sftxb.new_tx()
                 .add(
                     sftxb.get_mint_tx_data(
-                        package_path=service.service_path,
+                        package_path=service.package_absolute_path,
                         agent_id=agent_id,
                         number_of_slots=service.helper.config.number_of_agents,
                         cost_of_bond=(
