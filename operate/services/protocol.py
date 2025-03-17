@@ -875,6 +875,14 @@ class _ChainUtil:
             ] = instance.functions.secondTokenAmount().call()
         except Exception:  # pylint: disable=broad-except # nosec
             # Contract is not a dual staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
             pass
 
         cache["get_staking_params"][staking_contract] = output
