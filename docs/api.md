@@ -472,7 +472,7 @@ Returns the list of existing service configurations.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   },
   ...
@@ -519,7 +519,7 @@ Create a service configuration using a template.
   "keys": [...],
   "name": "valory/trader_omen_gnosis",
   "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+  "package_path": "trader_pearl",
   "version": 4
 }
 ```
@@ -567,7 +567,7 @@ The response contains an array of the services which have been updated (an empty
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   },
   ...
@@ -628,7 +628,7 @@ Returns the service configuration `service_config_id`.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   }
 
@@ -675,7 +675,7 @@ The response contains the updated service configuration following the on-chain o
   "keys": [...],
   "name": "valory/trader_omen_gnosis",
   "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+  "package_path": "trader_pearl"
 }
 
 ```
@@ -722,7 +722,7 @@ Update service configuration `service_config_id` with the provided template.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+    "package_path": "trader_pearl"
   }
 
   ```
@@ -780,7 +780,7 @@ Partial update service configuration `service_config_id` with the provided (part
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+    "package_path": "trader_pearl"
   }
 
   ```
