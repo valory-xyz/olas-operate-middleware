@@ -19,29 +19,26 @@
 
 """Tests for operate.cli module."""
 
-import random
-import string
+import hashlib
+import json
 from pathlib import Path
 
+import argon2
 import pytest
 from web3 import Web3
 
 from operate.cli import OperateApp
+from operate.constants import OPERATE_HOME
 from operate.operate_types import LedgerType
+
+from tests.conftest import random_string
 
 
 ROOT_PATH = Path(__file__).resolve().parent
-OPERATE = ".operate_test"
 
 MSG_NEW_PASSWORD_MISSING = "You must provide a new password"  # nosec
 MSG_INVALID_PASSWORD = "Password is not valid"  # nosec
 MSG_INVALID_MNEMONIC = "Seed phrase is not valid"  # nosec
-
-
-def random_string(length: int = 8) -> str:
-    """random_string"""
-    chars = string.ascii_letters + string.digits
-    return "".join(random.choices(chars, k=length))  # nosec B311
 
 
 def random_mnemonic(num_words: int = 12) -> str:
@@ -52,7 +49,7 @@ def random_mnemonic(num_words: int = 12) -> str:
     return mnemonic
 
 
-class TestOperate:
+class TestOperateApp:
     """Tests for operate.cli.OperateApp class."""
 
     def test_update_password(
@@ -62,16 +59,16 @@ class TestOperate:
         """Test operate.update_password() and operate.update_password_with_mnemonic()"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_HOME,
         )
         operate.setup()
         password1 = random_string()
         operate.create_user_account(password=password1)
         operate.password = password1
         wallet_manager = operate.wallet_manager
-        _, mnemonic = wallet_manager.create(LedgerType.ETHEREUM)
-        num_words = len(mnemonic)
-        mnemonic = " ".join(mnemonic)
+        _, mnemonic_list = wallet_manager.create(LedgerType.ETHEREUM)
+        num_words = len(mnemonic_list)
+        mnemonic = " ".join(mnemonic_list)
 
         password2 = random_string()
         password3 = "!@#Test$%^"
@@ -139,3 +136,48 @@ class TestOperate:
         invalid_mnemonic = random_mnemonic(num_words=15)
         with pytest.raises(ValueError, match=rf"^{MSG_INVALID_MNEMONIC}"):
             operate.update_password_with_mnemonic(invalid_mnemonic, password2)
+
+    def test_migrate_account(
+        self,
+        tmp_path: Path,
+        password: str,
+    ) -> None:
+        """Test operate.user_account.is_valid(password) and MigrationManager.migrate_user_account()"""
+
+        operate_home_path = tmp_path / OPERATE_HOME
+        operate = OperateApp(
+            home=operate_home_path,
+        )
+
+        # Artificially create an old-format user.json
+        sha256 = hashlib.sha256()
+        sha256.update(password.encode())
+        password_sha = sha256.hexdigest()
+        data = {"password_sha": password_sha}
+        user_json_path = operate_home_path / "user.json"
+        user_json_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        operate = OperateApp(
+            home=operate_home_path,
+        )
+
+        data = json.loads(user_json_path.read_text(encoding="utf-8"))
+
+        assert operate.user_account
+        assert "password_hash" in data
+        assert "password_sha" not in data
+        assert password_sha == data["password_hash"]
+        ph = argon2.PasswordHasher()
+        with pytest.raises(argon2.exceptions.InvalidHashError):
+            ph.verify(data["password_hash"], password)
+
+        operate.user_account.is_valid(password)
+        data = json.loads(user_json_path.read_text(encoding="utf-8"))
+
+        assert operate.user_account
+        assert operate.user_account.is_valid(password)
+        assert "password_hash" in data
+        assert "password_sha" not in data
+        assert password_sha != data["password_hash"]
+        ph = argon2.PasswordHasher()
+        assert ph.verify(data["password_hash"], password)

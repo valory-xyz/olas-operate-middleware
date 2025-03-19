@@ -19,8 +19,6 @@
 
 """Tests for services.service module."""
 
-import random
-import string
 import typing as t
 from pathlib import Path
 
@@ -36,14 +34,6 @@ from .test_services_service import DEFAULT_CONFIG_KWARGS
 
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE = ".operate_test"
-
-
-@pytest.fixture
-def random_string() -> str:
-    """random_string"""
-    length = 8
-    chars = string.ascii_letters + string.digits
-    return "".join(random.choices(chars, k=length))  # nosec B311
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:
@@ -108,7 +98,7 @@ class TestServiceManager:
         update_description: bool,
         update_hash: bool,
         tmp_path: Path,
-        random_string: str,
+        password: str,
     ) -> None:
         """Test operate.service_manager().update()"""
 
@@ -116,7 +106,6 @@ class TestServiceManager:
             home=tmp_path / OPERATE,
         )
         operate.setup()
-        password = random_string
         operate.create_user_account(password=password)
         operate.password = password
         service_manager = operate.service_manager()
@@ -200,7 +189,7 @@ class TestServiceManager:
         update_description: bool,
         update_hash: bool,
         tmp_path: Path,
-        random_string: str,
+        password: str,
     ) -> None:
         """Test operate.service_manager().update()"""
 
@@ -208,7 +197,6 @@ class TestServiceManager:
             home=tmp_path / OPERATE,
         )
         operate.setup()
-        password = random_string
         operate.create_user_account(password=password)
         operate.password = password
         service_manager = operate.service_manager()
@@ -283,7 +271,22 @@ class TestServiceManager:
         assert not diff, "Updated service does not match expected service."
 
     @pytest.mark.parametrize(
-        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_topup, sender_threshold, sender_balance, minimum_refill_required, recommended_refill_required",
+        (
+            "topup1",
+            "threshold1",
+            "balance1",
+            "topup2",
+            "threshold2",
+            "balance2",
+            "topup3",
+            "threshold3",
+            "balance3",
+            "sender_topup",
+            "sender_threshold",
+            "sender_balance",
+            "minimum_refill_required",
+            "recommended_refill_required",
+        ),
         [
             (10, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 8),
             (10, 5, 1, 10, 5, 8, 0, 0, 0, 0, 0, 1, 3, 8),
