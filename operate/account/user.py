@@ -23,21 +23,22 @@ import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
+import argon2
+
 from operate.resource import LocalResource
 
 
-def sha256(string: str) -> str:
-    """Get SHA256 hexdigest of a string."""
-    sh256 = hashlib.sha256()
-    sh256.update(string.encode())
-    return sh256.hexdigest()
+def argon2id(password: str) -> str:
+    """Get Argon2id digest of a password."""
+    ph = argon2.PasswordHasher()  # Defaults to Argon2id
+    return ph.hash(password)
 
 
 @dataclass
 class UserAccount(LocalResource):
     """User account."""
 
-    password_sha: str
+    password_hash: str
     path: Path
 
     @classmethod
@@ -49,7 +50,7 @@ class UserAccount(LocalResource):
     def new(cls, password: str, path: Path) -> "UserAccount":
         """Create a new user."""
         user = UserAccount(
-            password_sha=sha256(string=password),
+            password_hash=argon2id(password=password),
             path=path,
         )
         user.store()
@@ -57,16 +58,36 @@ class UserAccount(LocalResource):
 
     def is_valid(self, password: str) -> bool:
         """Check if a password string is valid."""
-        return sha256(string=password) == self.password_sha
+        try:
+            ph = argon2.PasswordHasher()
+            valid = ph.verify(self.password_hash, password)
+
+            if valid and ph.check_needs_rehash(self.password_hash):
+                self.password_hash = argon2id(password)
+                self.store()
+
+            return valid
+        except argon2.exceptions.VerificationError:
+            return False
+        except argon2.exceptions.InvalidHashError:
+            # Verify legacy password hash and update it to Argon2id if valid
+            sha256 = hashlib.sha256()
+            sha256.update(password.encode())
+            if sha256.hexdigest() == self.password_hash:
+                self.password_hash = argon2id(password=password)
+                self.store()
+                return True
+
+            return False
 
     def update(self, old_password: str, new_password: str) -> None:
         """Update current password."""
         if not self.is_valid(password=old_password):
             raise ValueError("Old password is not valid")
-        self.password_sha = sha256(string=new_password)
+        self.password_hash = argon2id(password=new_password)
         self.store()
 
     def force_update(self, new_password: str) -> None:
         """Force update current password."""
-        self.password_sha = sha256(string=new_password)
+        self.password_hash = argon2id(password=new_password)
         self.store()
