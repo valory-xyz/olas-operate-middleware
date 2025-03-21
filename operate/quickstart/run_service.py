@@ -36,7 +36,7 @@ from operate.account.user import UserAccount
 from operate.constants import IPFS_ADDRESS, OPERATE_HOME, ZERO_ADDRESS
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import STAKING
+from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,
@@ -65,12 +65,12 @@ warnings.filterwarnings("ignore", category=UserWarning)
 if t.TYPE_CHECKING:
     from operate.cli import OperateApp
 
-NO_STAKING_PROGRAM_ID = "no_staking"
 NO_STAKING_PROGRAM_METADATA = {
     "name": "No staking",
     "description": "Your Olas Predict agent will still actively participate in prediction\
         markets, but it will not be staked within any staking program.",
 }
+CUSTOM_PROGRAM_ID = "custom_staking"
 QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.GNOSIS: {
         "quickstart_beta_hobbyist": 25,
@@ -89,6 +89,8 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
         "quickstart_beta_expert_12": 25,
         "quickstart_beta_expert_15_mech_marketplace": 25,
         "quickstart_beta_expert_16_mech_marketplace": 25,
+        "quickstart_beta_expert_17_mech_marketplace": 25,
+        "quickstart_beta_expert_18_mech_marketplace": 25,
         "mech_marketplace": 37,
     },
     Chain.OPTIMISTIC: {
@@ -214,16 +216,25 @@ def configure_local_config(
     if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
         available_choices = {}
-        ids = [NO_STAKING_PROGRAM_ID] + [
-            id
-            for id in STAKING[home_chain]
-            if id in QS_STAKING_PROGRAMS[home_chain]
-            and QS_STAKING_PROGRAMS[home_chain][id] == agent_id
-        ]
+        ids = (
+            [NO_STAKING_PROGRAM_ID]
+            + [
+                id
+                for id in STAKING[home_chain]
+                if id in QS_STAKING_PROGRAMS[home_chain]
+                and QS_STAKING_PROGRAMS[home_chain][id] == agent_id
+            ]
+            + [CUSTOM_PROGRAM_ID]
+        )
 
         for index, program_id in enumerate(ids):
             if program_id == NO_STAKING_PROGRAM_ID:
                 metadata = NO_STAKING_PROGRAM_METADATA
+            elif program_id == CUSTOM_PROGRAM_ID:
+                metadata = {
+                    "name": "Custom Staking contract",
+                    "description": "If you choose this option, you will be asked to provide the staking contract address.",
+                }
             else:
                 instance = staking_ctr.get_instance(
                     ledger_api=ledger_api,
@@ -257,19 +268,26 @@ def configure_local_config(
 
             name = metadata["name"]
             description = metadata["description"]
-            available_slots = (
-                f"(available slots : {metadata['available_staking_slots']})"
-                if "available_staking_slots" in metadata
-                else ""
-            )
+            if "available_staking_slots" in metadata:
+                available_slots_str = (
+                    f"(available slots : {metadata['available_staking_slots']})"
+                )
+            else:
+                available_slots_str = ""
+
             wrapped_description = textwrap.fill(
                 description, width=80, initial_indent="   ", subsequent_indent="   "
             )
-            print(f"{index + 1}) {name}\t{available_slots}\n{wrapped_description}\n")
-            if available_slots != 0:
+            print(
+                f"{index + 1}) {name}\t{available_slots_str}\n{wrapped_description}\n"
+            )
+            if available_slots_str or program_id in (
+                NO_STAKING_PROGRAM_ID,
+                CUSTOM_PROGRAM_ID,
+            ):
                 available_choices[index + 1] = {
                     "program_id": program_id,
-                    "slots": available_slots,
+                    "slots": available_slots_str,
                     "name": name,
                 }
 
@@ -283,9 +301,7 @@ def configure_local_config(
                     if choice not in available_choices:
                         print("\nPlease select a program with available slots:")
                         for idx, prog in available_choices.items():
-                            print(
-                                f"{idx}) {prog['name']} : available slots {prog['slots']}"
-                            )
+                            print(f"{idx}) {prog['name']} : {prog['slots']}")
                         continue
                     selected_program = available_choices[choice]
                     config.staking_program_id = selected_program["program_id"]
@@ -301,15 +317,43 @@ def configure_local_config(
                 print(f"Error in getting input: {str(e)}")
                 raise
 
+        if config.staking_program_id == CUSTOM_PROGRAM_ID:
+            while True:
+                try:
+                    config.staking_program_id = ask_or_get_from_env(
+                        "Enter the staking contract address: ",
+                        False,
+                        "STAKING_CONTRACT_ADDRESS",
+                    )
+                    instance = staking_ctr.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=config.staking_program_id,
+                    )
+                    max_services = instance.functions.maxNumServices().call()
+                    current_services = instance.functions.getServiceIds().call()
+                    available_slots = max_services - len(current_services)
+                    if available_slots > 0:
+                        print(f"Found {available_slots} available staking slots.")
+                        break
+                    else:
+                        print(
+                            "No available staking slots found. Please enter another address."
+                        )
+                except Exception:
+                    print("This address is not a valid staking contract address.")
+
     # set chain configs in the service template
     for chain in template["configurations"]:
         if chain == config.principal_chain:
-            if config.staking_program_id == NO_STAKING_PROGRAM_ID:
+            staking_contract_address = get_staking_contract(
+                chain, config.staking_program_id
+            )
+            if staking_contract_address is None:
                 min_staking_deposit = 1
             else:
                 instance = staking_ctr.get_instance(
                     ledger_api=ledger_api,
-                    contract_address=STAKING[home_chain][config.staking_program_id],
+                    contract_address=staking_contract_address,
                 )
                 min_staking_deposit = int(instance.functions.minStakingDeposit().call())
 
@@ -610,9 +654,10 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
         # if staking, ask for the required OLAS for it
         if chain_config.chain_data.user_params.use_staking:
+            staking_contract = get_staking_contract(chain, config.staking_program_id)
             assert (  # nosec
-                config.staking_program_id is not None
-            ), "Staking vars not found"  # nosec
+                staking_contract is not None
+            ), "Staking contract not found for the chosen staking program"
             if service_state in (
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
@@ -626,9 +671,6 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             sftxb = manager.get_eth_safe_tx_builder(
                 ledger_config=chain_config.ledger_config
             )
-            staking_contract = STAKING[chain_config.ledger_config.chain][
-                config.staking_program_id
-            ]
             ask_funds_in_address(
                 ledger_api=ledger_api,
                 required_balance=required_olas,
@@ -642,7 +684,10 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
 
 
 def run_service(
-    operate: "OperateApp", config_path: str, build_only: bool = False
+    operate: "OperateApp",
+    config_path: str,
+    build_only: bool = False,
+    skip_dependency_check: bool = False,
 ) -> None:
     """Run service."""
 
@@ -660,7 +705,7 @@ def run_service(
     ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
-    manager = operate.service_manager()
+    manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
     config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
     ensure_enough_funds(operate, service)
 

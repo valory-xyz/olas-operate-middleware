@@ -832,6 +832,7 @@ The refill requirements are computed based on the fund requirements present on t
 
   ```json
   {
+    "allow_start_agent": true,
     "balances": {
       "gnosis": {
         "0x364fD50CB11B2fbc39706D4649f29508A7685538": {
@@ -852,9 +853,13 @@ The refill requirements are computed based on the fund requirements present on t
         }
       }
     },
-    "bonded_olas": {
-      "gnosis": 40000000000000000000
+    "bonded_assets": {
+      "gnosis": {
+        "0x0000000000000000000000000000000000000000": 2,
+        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+      }
     },
+    "is_refill_required": false,
     "refill_requirements": {
       "gnosis": {
         "0x28580196F52DB3C95C3d40Df88426e251d115842": {
@@ -867,8 +872,12 @@ The refill requirements are computed based on the fund requirements present on t
         }
       }
     },
-    "is_refill_required": false,
-    "allow_start_agent": true
+    "service_asset_requirements": {
+      "gnosis": {
+        "0x0000000000000000000000000000000000000000": 2,
+        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+      }
+    },
   }
   ```
 
