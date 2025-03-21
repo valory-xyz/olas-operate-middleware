@@ -70,7 +70,9 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
         )
         mech_marketplace_address = "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB"
 
-    mech_factory_address = MECH_FACTORY_ADDRESS[chain][mech_marketplace_address][mech_type]
+    mech_factory_address = MECH_FACTORY_ADDRESS[chain][mech_marketplace_address][
+        mech_type
+    ]
 
     # 0.01xDAI hardcoded for price
     # better to be configurable and part of local config
