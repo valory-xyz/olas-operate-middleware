@@ -19,6 +19,9 @@ operate = "operate.cli:main"
 
 [tool.poetry.dependencies]
 python = "<3.12,>=3.9"
+# NOTE: until https://github.com/manrajgrover/halo/issues/189 is resolved, we need to pin to a lower version
+#       of setuptools, as the halo package is not compatible with newer versions of setuptools
+setuptools = "<78"
 open-autonomy = "==0.19.4"
 open-aea-ledger-cosmos = "==1.64.0"
 open-aea-ledger-ethereum = "==1.64.0"

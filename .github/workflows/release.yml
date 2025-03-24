@@ -4,7 +4,6 @@ name: Release Flow
 on:
   release:
     types: [published]
-  workflow_dispatch:  # TODO: Remove after testing
 
 permissions:
   id-token: write
