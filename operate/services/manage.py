@@ -1037,7 +1037,8 @@ class ServiceManager:
                 "AGENT_ID",
                 "MECH_TO_CONFIG",
                 "ON_CHAIN_SERVICE_ID",
-                "GNOSIS_RPC_0",
+                "ETHEREUM_LEDGER_RPC_0",
+                "GNOSIS_LEDGER_RPC_0",
                 "MECH_MARKETPLACE_ADDRESS",
             ]
         ):
@@ -1064,7 +1065,12 @@ class ServiceManager:
             service.update_env_variables_values(
                 {
                     "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "GNOSIS_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"]["value"],
+                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
+                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
                 }
             )
 
