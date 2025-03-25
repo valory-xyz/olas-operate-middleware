@@ -377,7 +377,20 @@ class TestServiceManager:
         assert not diff, "Failed to compute refill requirements."
 
     @pytest.mark.parametrize(
-        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_topup, sender_threshold, sender_balance",
+        (
+            "topup1",
+            "threshold1",
+            "balance1",
+            "topup2",
+            "threshold2",
+            "balance2",
+            "topup3",
+            "threshold3",
+            "balance3",
+            "sender_topup",
+            "sender_threshold",
+            "sender_balance",
+        ),
         [
             (5, 10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1),
             (10, 5, 1, 5, 10, 8, 0, 0, 0, 0, 0, 1),
@@ -421,7 +434,7 @@ class TestServiceManager:
             "threshold": threshold3,
             "balance": balance3,
         }
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match=r"^Argument.*must.*"):
             ServiceManager._compute_refill_requirement(
                 asset_funding_values=asset_funding_values,
                 sender_topup=sender_topup,
