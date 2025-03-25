@@ -138,13 +138,16 @@ class OperateApp:
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
         self.user_account.force_update(new_password)
 
-    def service_manager(self) -> services.manage.ServiceManager:
+    def service_manager(
+        self, skip_dependency_check: t.Optional[bool] = False
+    ) -> services.manage.ServiceManager:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
             keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
+            skip_dependency_check=skip_dependency_check,
         )
 
     @property
@@ -1023,12 +1026,21 @@ def qs_start(
     build_only: Annotated[
         bool, params.Boolean(help="Only build the service without running it")
     ] = False,
+    skip_dependency_check: Annotated[
+        bool,
+        params.Boolean(help="Will skip the dependencies check for minting the service"),
+    ] = False,
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
-    run_service(operate=operate, config_path=config, build_only=build_only)
+    run_service(
+        operate=operate,
+        config_path=config,
+        build_only=build_only,
+        skip_dependency_check=skip_dependency_check,
+    )
 
 
 @_operate.command(name="quickstop")
