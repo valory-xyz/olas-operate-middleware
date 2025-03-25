@@ -37,6 +37,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
+from operate.bridge.bridge import BridgeManager
 from uvicorn.config import Config
 from uvicorn.server import Server
 
@@ -161,6 +162,15 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / "wallets",
             password=self.password,
+        )
+        manager.setup()
+        return manager
+
+    def bridge_manager(self) -> BridgeManager:
+        """Load master wallet."""
+        manager = BridgeManager(
+            path=self._path / "bridge",
+            wallet_manager=self.wallet_manager,
         )
         manager.setup()
         return manager
