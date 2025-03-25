@@ -432,7 +432,7 @@ class ServiceManager:
             chain_data.token = t.cast(
                 int,
                 ocm.mint(
-                    package_path=service.service_path,
+                    package_path=service.package_absolute_path_absolute_path,
                     agent_id=staking_params["agent_ids"][0],
                     number_of_slots=service.helper.config.number_of_agents,
                     cost_of_bond=(
@@ -778,7 +778,7 @@ class ServiceManager:
                     sftxb.new_tx()
                     .add(
                         sftxb.get_mint_tx_data(
-                            package_path=service.service_path,
+                            package_path=service.package_absolute_path,
                             agent_id=agent_id,
                             number_of_slots=service.helper.config.number_of_agents,
                             cost_of_bond=(
@@ -830,7 +830,7 @@ class ServiceManager:
                 sftxb.new_tx()
                 .add(
                     sftxb.get_mint_tx_data(
-                        package_path=service.service_path,
+                        package_path=service.package_absolute_path,
                         agent_id=agent_id,
                         number_of_slots=service.helper.config.number_of_agents,
                         cost_of_bond=(
@@ -1037,7 +1037,9 @@ class ServiceManager:
                 "AGENT_ID",
                 "MECH_TO_CONFIG",
                 "ON_CHAIN_SERVICE_ID",
-                "GNOSIS_RPC_0",
+                "ETHEREUM_LEDGER_RPC_0",
+                "GNOSIS_LEDGER_RPC_0",
+                "MECH_MARKETPLACE_ADDRESS",
             ]
         ):
             if (
@@ -1063,7 +1065,12 @@ class ServiceManager:
             service.update_env_variables_values(
                 {
                     "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "GNOSIS_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"]["value"],
+                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
+                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
                 }
             )
 
