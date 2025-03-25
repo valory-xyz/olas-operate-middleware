@@ -1037,7 +1037,9 @@ class ServiceManager:
                 "AGENT_ID",
                 "MECH_TO_CONFIG",
                 "ON_CHAIN_SERVICE_ID",
-                "GNOSIS_RPC_0",
+                "ETHEREUM_LEDGER_RPC_0",
+                "GNOSIS_LEDGER_RPC_0",
+                "MECH_MARKETPLACE_ADDRESS",
             ]
         ):
             if (
@@ -1063,7 +1065,12 @@ class ServiceManager:
             service.update_env_variables_values(
                 {
                     "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "GNOSIS_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"]["value"],
+                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
+                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
+                        "value"
+                    ],
                 }
             )
 
@@ -1304,6 +1311,14 @@ class ServiceManager:
             )
         except Exception:  # pylint: disable=broad-except
             # Service owner is not a staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
             return None
 
         if state == StakingState.UNSTAKED:

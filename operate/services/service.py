@@ -286,6 +286,9 @@ class ServiceHelper:
                 override["type"] == "connection"
                 and "valory/ledger" in override["public_id"]
             ):
+                if 0 in override:  # take the values from the first config
+                    override = override[0]
+
                 for _, config in override["config"]["ledger_apis"].items():
                     # TODO chain name is inferred from the chain_id. The actual id provided on service.yaml is ignored.
                     chain = Chain.from_id(chain_id=config["chain_id"])  # type: ignore
