@@ -44,7 +44,7 @@ from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_RETRIES = 3
 QUOTE_VALIDITY_PERIOD = 3 * 60
-QUOTE_BUNDLE_PREFFIX = "qb-"
+QUOTE_BUNDLE_PREFIX = "qb-"
 
 
 class Bridge:
@@ -187,7 +187,7 @@ class BridgeManagerState(Enum):
     """BridgeManagerState"""
 
     QUOTE_BUNDLE_NOT_REQUESTED = 0
-    QUOTE_BUNDLE_REQUESTED = 1
+    QUOTE_BUNDLE_UP_TO_DATE = 1
 
 
 @dataclass
@@ -229,6 +229,8 @@ class BridgeManager:
         self.data: BridgeManagerData = t.cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
+        self.data.state = BridgeManagerState.QUOTE_BUNDLE_NOT_REQUESTED
+        self.data.store()
 
     @staticmethod
     def _get_from_tokens(from_chain: Chain, to: dict) -> set:
@@ -246,14 +248,8 @@ class BridgeManager:
                     )
         return from_tokens
 
-    def bridge_refill_requirements(self, from_: dict, to: dict) -> dict:
-        """Get bridge refill requirements."""
-
-        if not isinstance(from_, dict) or len(from_) != 1:
-            raise ValueError(
-                f"[BRIDGE MANAGER] Invalid 'from_' input: Must contain exactly one chain mapping. {from_=}"
-            )
-
+    def _get_valid_quote_bundle(self, from_: dict, to: dict) -> dict:
+        """Ensures to return a valid (non expired) quote bundle for the given inputs."""
         from_chain, from_address = next(iter(from_.items()))
         from_chain = Chain(from_chain)
 
@@ -273,38 +269,59 @@ class BridgeManager:
                 f"[BRIDGE MANAGER] Invalid 'from_' input: Address does not match Master Safe nor Master EOA. {from_=}"
             )
 
-        bridge = self.bridge
-
         quote_bundle = self.data.last_requested_quote_bundle
         now = int(time.time())
 
-        refresh_quote_bundle = (
-            not quote_bundle
-            or now > quote_bundle.get("expiration_timestamp", 0)
-            or DeepDiff(quote_bundle.get("from", {}), from_)
-            or DeepDiff(quote_bundle.get("to", {}), to)
-        )
+        refresh_quote_bundle = False
+        if not quote_bundle:
+            self.logger.info("[BRIDGE MANAGER] No last_requested_quote_bundle.")
+            refresh_quote_bundle = True
+        elif DeepDiff(quote_bundle.get("from", {}), from_) or DeepDiff(
+            quote_bundle.get("to", {}), to
+        ):
+            self.logger.info(
+                "[BRIDGE MANAGER] Different quote bundle input parameters."
+            )
+            refresh_quote_bundle = True
+        elif now > quote_bundle.get("expiration_timestamp", 0):
+            self.logger.info("[BRIDGE MANAGER] Quote bundle expired.")
+            refresh_quote_bundle = True
 
         if refresh_quote_bundle:
             self.logger.info("[BRIDGE MANAGER] Requesting new quote bundle.")
             quote_bundle = {}
-            quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFFIX}{uuid.uuid4()}"
+            quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
             quote_bundle["timestamp"] = now
             quote_bundle["expiration_timestamp"] = now + QUOTE_VALIDITY_PERIOD
             quote_bundle["quotes"] = {}
             quote_bundle["from"] = from_
             quote_bundle["to"] = to
             quote_bundle["from_safe"] = from_safe
-            quote_bundle["quotes"] = bridge.get_quotes(
+            quote_bundle["quotes"] = self.bridge.get_quotes(
                 from_chain=from_chain, from_address=from_address, to=to
             )
-            quote_bundle["bridge_requirements"] = bridge.get_bridge_requirements(
+            quote_bundle["bridge_requirements"] = self.bridge.get_bridge_requirements(
                 quote_bundle["quotes"]
             )
             self.data.last_requested_quote_bundle = quote_bundle
 
-        self.data.state = BridgeManagerState.QUOTE_BUNDLE_REQUESTED
+        self.data.state = BridgeManagerState.QUOTE_BUNDLE_UP_TO_DATE
         self.data.store()
+        return quote_bundle
+
+    def bridge_refill_requirements(self, from_: dict, to: dict) -> dict:
+        """Get bridge refill requirements."""
+
+        if not isinstance(from_, dict) or len(from_) != 1:
+            raise ValueError(
+                f"[BRIDGE MANAGER] Invalid 'from_' input: Must contain exactly one chain mapping. {from_=}"
+            )
+
+        from_chain, from_address = next(iter(from_.items()))
+        from_chain = Chain(from_chain)
+        wallet = self.wallet_manager.load(from_chain.ledger_type)
+
+        quote_bundle = self._get_valid_quote_bundle(from_, to)
 
         balances = get_assets_balances(
             ledger_api=wallet.ledger_api(chain=from_chain),
@@ -315,10 +332,18 @@ class BridgeManager:
         )
 
         bridge_refill_requirements = {}
+        bridge_refill_requirements[from_address] = {}
         for from_token, amount in quote_bundle["bridge_requirements"].items():
-            bridge_refill_requirements[from_token] = max(
+            bridge_refill_requirements[from_address][from_token] = max(
                 amount - balances[from_address][from_token], 0
             )
+
+        print(bridge_refill_requirements)
+        is_refill_required = any(
+            amount > 0
+            for asset in bridge_refill_requirements.values()
+            for amount in asset.values()
+        )
 
         return {
             "id": quote_bundle["id"],
@@ -330,4 +355,30 @@ class BridgeManager:
                 from_chain.value: dict(bridge_refill_requirements)
             },
             "expiration_timestamp": quote_bundle["expiration_timestamp"],
+            "is_refill_required": is_refill_required,
         }
+
+    def execute_quote_bundle(self, quote_bundle_id: str) -> None:
+        """Execute quote bundle"""
+
+        if self.data.state != BridgeManagerState.QUOTE_BUNDLE_UP_TO_DATE:
+            raise RuntimeError(
+                "[BRIDGE MANAGER] You must retrieve a valid quote first."
+            )
+
+        if self.data.last_requested_quote_bundle["id"] != quote_bundle_id:
+            raise RuntimeError(
+                f"[BRIDGE MANAGER] Id {quote_bundle_id} does not match latest requested quote bundle id {self.data.last_requested_quote_bundle['id']}."
+            )
+
+        from_ = self.data.last_requested_quote_bundle["from"]
+        to = self.data.last_requested_quote_bundle["to"]
+
+        reqs = self.bridge_refill_requirements(from_, to)
+
+        if reqs["is_refill_required"]:
+            raise RuntimeError(
+                f"[BRIDGE MANAGER] Refill requirements not satisfied for quote bindle id {quote_bundle_id}."
+            )
+
+        print("[BRIDGE MANAGER] Executing quotes")

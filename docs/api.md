@@ -946,11 +946,14 @@ Returns the refill requirements on the source chain for bridging assets to targe
     },
     "bridge_refill_requirements": {
       "ethereum": {
-        "0x0000000000000000000000000000000000000000": 10073082159280405,
-        "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 10073082159280405,
+          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+        }
       }
     },
-    "expiration_timestamp": 1743007255
+    "expiration_timestamp": 1743007255,
+    "is_refill_required": true
   }
 ```
 
