@@ -893,6 +893,71 @@ The refill requirements are computed based on the fund requirements present on t
 
 ---
 
+## Bridge
+
+### `POST /api/bridge/bridge_refill_requirements`
+
+Returns the refill requirements on the source chain for bridging assets to target chains.
+
+<details>
+  <summary>Request</summary>
+
+```json
+  {
+    "from": {
+      "ethereum": "0xDe6B572A049B27D349e89aD0cBEF102227e31473"
+    },
+    "to": {
+      "gnosis": {
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 10000000000000000000,
+          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+        },
+        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
+          "0x0000000000000000000000000000000000000000": 10000000000000000000,
+          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 60000000000000000000
+        },
+      }
+    }
+  }
+```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+```json
+  {
+    "id": "e05509f3-d153-4b69-94cf-f82324f8c226",
+    "balances": {
+      "ethereum": {
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 0,
+          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 0
+        }
+      }
+    },
+    "bridge_requirements": {
+      "ethereum": {
+        "0x0000000000000000000000000000000000000000": 10073082159280405,
+        "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+      }
+    },
+    "bridge_refill_requirements": {
+      "ethereum": {
+        "0x0000000000000000000000000000000000000000": 10073082159280405,
+        "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+      }
+    },
+    "expiration_timestamp": 1743007255
+  }
+```
+
+</details>
+
+---
+
 ## Unused endpoints
 
 ### `POST /api/services/{service}/onchain/deploy`

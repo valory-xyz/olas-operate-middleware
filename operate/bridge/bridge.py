@@ -43,8 +43,8 @@ from operate.wallet.master import MasterWalletManager
 
 
 DEFAULT_MAX_RETRIES = 3
-BRIDGE_PATH = "bridge"
 QUOTE_VALIDITY_PERIOD = 3 * 60
+QUOTE_BUNDLE_PREFFIX = "qb-"
 
 
 class Bridge:
@@ -102,7 +102,8 @@ class Bridge:
                         to_amount=to_amount,
                     )
 
-                    quotes[quote["id"]] = quote
+                    if quote:
+                        quotes[quote["id"]] = quote
 
         return quotes
 
@@ -135,6 +136,9 @@ class LiFiBridge(Bridge):
         to_amount: int,
     ) -> dict:
         """Get bridge quote"""
+
+        if to_amount == 0:
+            return {}
 
         url = "https://li.quest/v1/quote/toAmount"
         headers = {"accept": "application/json"}
@@ -255,6 +259,7 @@ class BridgeManager:
 
         wallet = self.wallet_manager.load(from_chain.ledger_type)
 
+        from_safe = False
         if (
             wallet.safes
             and from_chain in wallet.safes
@@ -283,7 +288,7 @@ class BridgeManager:
         if refresh_quote_bundle:
             self.logger.info("[BRIDGE MANAGER] Requesting new quote bundle.")
             quote_bundle = {}
-            quote_bundle["id"] = f"{uuid.uuid4()}"
+            quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFFIX}{uuid.uuid4()}"
             quote_bundle["timestamp"] = now
             quote_bundle["expiration_timestamp"] = now + QUOTE_VALIDITY_PERIOD
             quote_bundle["quotes"] = {}
