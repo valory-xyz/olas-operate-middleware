@@ -164,7 +164,7 @@ class LiFiBridge(Bridge):
                         f"[BRIDGE MANAGER]Request quote failed with code {response.status_code} after {DEFAULT_MAX_RETRIES} attempts: {e}"
                     )
                     raise
-        return None
+        return {}
 
     def get_from_token(self, quote: dict) -> int:
         """Get the from_token of a quote"""
@@ -222,7 +222,9 @@ class BridgeManager:
             data.store()
         # End migrate
 
-        self.data = BridgeManagerData.load(path)
+        self.data: BridgeManagerData = t.cast(
+            BridgeManagerData, BridgeManagerData.load(path)
+        )
 
     @staticmethod
     def _get_from_tokens(from_chain: Chain, to: dict) -> set:
