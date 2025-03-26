@@ -33,8 +33,10 @@ from pathlib import Path
 import requests
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
+from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
+from operate.ledger import get_default_rpc
 from operate.ledger.profiles import get_target_chain_asset_address
 from operate.operate_types import Chain
 from operate.resource import LocalResource
@@ -43,12 +45,16 @@ from operate.wallet.master import MasterWalletManager
 
 
 DEFAULT_MAX_RETRIES = 3
-QUOTE_VALIDITY_PERIOD = 3 * 60
+DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
 
 class Bridge:
     """Abstract Bridge"""
+
+    def __init__(self, wallet_manager: MasterWalletManager) -> None:
+        """Initialize the bridge"""
+        self.wallet_manager = wallet_manager
 
     @abstractmethod
     def get_quote(
@@ -107,6 +113,7 @@ class Bridge:
 
         return quotes
 
+    # TODO gas fees !
     def get_bridge_requirements(self, quotes: dict) -> dict:
         """Get bridge requirements given a collection of quotes"""
         bridge_requirements: defaultdict = defaultdict(int)
@@ -120,6 +127,11 @@ class Bridge:
             bridge_requirements[ZERO_ADDRESS] += transaction_value
 
         return dict(bridge_requirements)
+
+    @abstractmethod
+    def execute_quote(self, quote: dict) -> None:
+        """Execute the quote"""
+        raise NotImplementedError()
 
 
 class LiFiBridge(Bridge):
@@ -182,6 +194,80 @@ class LiFiBridge(Bridge):
         """Get the transaction value to execute a quote"""
         return int(quote["transactionRequest"]["value"], 16)
 
+    def execute_quote(self, quote) -> None:
+        """Execute the quote"""
+
+        print("Execute_quote")
+        from_token = quote["action"]["fromToken"]["address"]
+        from_amount = int(quote["action"]["fromAmount"])
+
+        transaction_request = quote["transactionRequest"]
+        from_chain = Chain.from_id(transaction_request["chainId"])
+        wallet = self.wallet_manager.load(from_chain.ledger_type)
+
+        # TODO rewrite with framework methods
+        private_key = wallet.crypto.private_key
+        w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
+        account = w3.eth.account.from_key(private_key)
+
+        if from_token != ZERO_ADDRESS:
+            print(f"Approve transaction for token {from_token}")
+            from_token_contract = w3.eth.contract(
+                address=from_token,
+                abi=[
+                    {
+                        "constant": False,
+                        "inputs": [
+                            {"name": "spender", "type": "address"},
+                            {"name": "amount", "type": "uint256"},
+                        ],
+                        "name": "approve",
+                        "outputs": [{"name": "", "type": "bool"}],
+                        "payable": False,
+                        "stateMutability": "nonpayable",
+                        "type": "function",
+                    }
+                ],
+            )
+
+            transaction = from_token_contract.functions.approve(
+                transaction_request["to"], from_amount
+            ).build_transaction(
+                {
+                    "from": account.address,
+                    "nonce": w3.eth.get_transaction_count(account.address),
+                    "gasPrice": w3.to_wei("20", "gwei"),
+                }
+            )
+
+            gas_estimate = w3.eth.estimate_gas(transaction)
+            transaction["gas"] = gas_estimate
+            signed_transaction = w3.eth.account.sign_transaction(
+                transaction, private_key
+            )
+            tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+            print(f"Approve transaction {tx_hash=}")
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+            print(f"Approve transaction {receipt=}")
+
+        transaction = {
+            "value": w3.to_wei(int(transaction_request["value"], 16), "wei"),
+            "to": transaction_request["to"],
+            "data": bytes.fromhex(transaction_request["data"][2:]),
+            "from": account.address,
+            "gasPrice": w3.to_wei(int(transaction_request["gasPrice"], 16), "wei"),
+            "chainId": transaction_request["chainId"],
+            "nonce": w3.eth.get_transaction_count(account.address),
+        }
+
+        gas_estimate = w3.eth.estimate_gas(transaction)
+        transaction["gas"] = gas_estimate
+        signed_transaction = w3.eth.account.sign_transaction(transaction, private_key)
+        tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
+        print(f"Quote transaction {tx_hash=}")
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        print(f"Quote transaction {receipt=}")
+
 
 class BridgeManagerState(Enum):
     """BridgeManagerState"""
@@ -211,12 +297,17 @@ class BridgeManager:
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
         bridge: t.Optional[Bridge] = None,
+        quote_validity_period: t.Optional[int] = None,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.master_wallet_manager")
-        self.bridge = bridge or LiFiBridge()
+        self.bridge = bridge or LiFiBridge(wallet_manager)
+        self.quote_validity_period = (
+            quote_validity_period or DEFAULT_QUOTE_VALIDITY_PERIOD
+        )
+
         self.path.mkdir(exist_ok=True)
 
         # TODO Migrate to LocalResource
@@ -292,7 +383,7 @@ class BridgeManager:
             quote_bundle = {}
             quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
             quote_bundle["timestamp"] = now
-            quote_bundle["expiration_timestamp"] = now + QUOTE_VALIDITY_PERIOD
+            quote_bundle["expiration_timestamp"] = now + self.quote_validity_period
             quote_bundle["quotes"] = {}
             quote_bundle["from"] = from_
             quote_bundle["to"] = to
@@ -320,6 +411,8 @@ class BridgeManager:
         from_chain, from_address = next(iter(from_.items()))
         from_chain = Chain(from_chain)
         wallet = self.wallet_manager.load(from_chain.ledger_type)
+
+        # TODO Purge empty addresses on 'to'
 
         quote_bundle = self._get_valid_quote_bundle(from_, to)
 
@@ -378,7 +471,10 @@ class BridgeManager:
 
         if reqs["is_refill_required"]:
             raise RuntimeError(
-                f"[BRIDGE MANAGER] Refill requirements not satisfied for quote bindle id {quote_bundle_id}."
+                f"[BRIDGE MANAGER] Refill requirements not satisfied for quote bundle id {quote_bundle_id}."
             )
+
+        for _, quote in self.data.last_requested_quote_bundle["quotes"].items():
+            self.bridge.execute_quote(quote)
 
         print("[BRIDGE MANAGER] Executing quotes")

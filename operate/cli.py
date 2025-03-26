@@ -171,6 +171,7 @@ class OperateApp:
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
+            quote_validity_period=24 * 60 * 60,  # TODO remove
         )
         return manager
 
