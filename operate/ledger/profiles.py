@@ -118,6 +118,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "meme_base_beta": "0x6011E09e7c095e76980b22498d69dF18EB62BeD8",
         "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
         "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
+        "agents_fun_1": "0x2585e63df7BD9De8e058884D496658a030b5c6ce",        
+        "agents_fun_2": "0x26FA75ef9Ccaa60E58260226A71e9d07564C01bF",        
+        "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",        
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",

@@ -99,6 +99,9 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.ETHEREUM: {},
     Chain.BASE: {
         "meme_base_alpha_2": 43,
+        "agents_fun_1": 43,
+        "agents_fun_2": 43,
+        "agents_fun_3": 43,
     },
     Chain.CELO: {},
     Chain.MODE: {
