@@ -37,12 +37,12 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
-from operate.bridge.bridge import BridgeManager
 from uvicorn.config import Config
 from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
+from operate.bridge.bridge import BridgeManager
 from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
@@ -172,7 +172,6 @@ class OperateApp:
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
         )
-        manager.setup()
         return manager
 
     def setup(self) -> None:
@@ -797,7 +796,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
-        """Get the service balances."""
+        """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
 
         if not operate.service_manager().exists(service_config_id=service_config_id):
@@ -992,6 +991,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         return JSONResponse(content={"error": None})
+
+    @app.post("/api/bridge/bridge_refill_requirements")
+    @with_retries
+    async def _bridge_refill_requirements(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        data = await request.json()
+        return JSONResponse(
+            content=operate.bridge_manager().bridge_refill_requirements(
+                from_=data["from"], to=data["to"]
+            )
+        )
 
     return app
 

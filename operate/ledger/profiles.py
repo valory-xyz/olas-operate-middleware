@@ -190,12 +190,21 @@ def get_staking_contract(
     )
 
 
-def get_token_address_on_chain(token_address: str, target_chain: Chain) -> t.Optional[str]:
+def get_target_chain_asset_address(
+    source_chain: Chain, source_asset_address: str, target_chain: Chain
+) -> str:
     """Get the corresponding token address on the target chain."""
-    if token_address == ZERO_ADDRESS:
+    if source_asset_address == ZERO_ADDRESS:
         return ZERO_ADDRESS
 
+    target_chain_token_address = None
     for token_dict in ERC20_TOKENS:
-        if token_address in token_dict.values():
-            return token_dict.get(target_chain)
-    return None
+        if source_asset_address == token_dict.get(source_chain):
+            target_chain_token_address = token_dict.get(target_chain)
+
+    if not target_chain_token_address:
+        raise ValueError(
+            f"Token {source_asset_address=} on {source_chain=} not found for {target_chain=}."
+        )
+
+    return target_chain_token_address
