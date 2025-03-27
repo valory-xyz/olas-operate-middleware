@@ -338,7 +338,8 @@ Creates a Gnosis safe for given chain.
 
 ```js
 {
-  "chain": Chain,
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
   "fund_amount": 10000000000000000
 }
 ```
@@ -352,15 +353,8 @@ Creates a Gnosis safe for given chain.
 
   ```json
   {
-    "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "safe_chains": [
-      "gnosis"
-    ],
-    "ledger_type": 0,
-    "safes": {
-      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
-    },
-    "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+    "safe": "0x29e23F7705d849F368855947691cB133CD770752",
+    "message": "Safe created!"
   }
   ```
 
