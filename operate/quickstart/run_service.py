@@ -92,6 +92,9 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
         "quickstart_beta_expert_17_mech_marketplace": 25,
         "quickstart_beta_expert_18_mech_marketplace": 25,
         "mech_marketplace": 37,
+        "marketplace_supply_alpha": 37,
+        "marketplace_demand_alpha_1": 37,
+        "marketplace_demand_alpha_2": 37,
     },
     Chain.OPTIMISTIC: {
         "optimus_alpha": 40,
@@ -99,6 +102,9 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.ETHEREUM: {},
     Chain.BASE: {
         "meme_base_alpha_2": 43,
+        "marketplace_supply_alpha": 37,
+        "marketplace_demand_alpha_1": 37,
+        "marketplace_demand_alpha_2": 37,
     },
     Chain.CELO: {},
     Chain.MODE: {
