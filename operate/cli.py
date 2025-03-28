@@ -1003,7 +1003,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         return JSONResponse(
             content=operate.bridge_manager().bridge_refill_requirements(
-                from_=data["from"], to=data["to"]
+                quote_requests=data["quote_requests"]
             )
         )
 
