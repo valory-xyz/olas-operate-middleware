@@ -71,7 +71,7 @@ NO_STAKING_PROGRAM_METADATA = {
         markets, but it will not be staked within any staking program.",
 }
 CUSTOM_PROGRAM_ID = "custom_staking"
-QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
+QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.GNOSIS: {
         "quickstart_beta_hobbyist": "trader",
         "quickstart_beta_hobbyist_2": "trader",
@@ -145,7 +145,7 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
                     shutil.move(old_path, config.path)
                     break
         else:
-            for staking_program, agent_keyword in QS_STAKING_PROGRAMS[
+            for staking_program, _agent_keyword in QS_STAKING_PROGRAMS[
                 Chain.from_string(config.principal_chain)
             ].items():
                 if staking_program == config.staking_program_id:
@@ -157,7 +157,7 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
                 )
 
             for service in services:
-                if agent_keyword in service["name"].lower():
+                if _agent_keyword in service["name"].lower():
                     config.path = (
                         config.path.parent / f"{service['name']}-quickstart-config.json"
                     )
@@ -199,7 +199,6 @@ def configure_local_config(
 
     config.principal_chain = template["home_chain"]
 
-    agent_id = template["configurations"][config.principal_chain]["agent_id"]
     home_chain = Chain.from_string(config.principal_chain)
     staking_ctr = t.cast(
         StakingTokenContract,
