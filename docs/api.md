@@ -898,21 +898,60 @@ Returns the refill requirements on the source chain for bridging assets to targe
 
 ```json
   {
-    "from": {
-      "ethereum": "0xDe6B572A049B27D349e89aD0cBEF102227e31473"
-    },
-    "to": {
-      "gnosis": {
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-          "0x0000000000000000000000000000000000000000": 10000000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+    "bridge_requests": [
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000"
         },
-        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
-          "0x0000000000000000000000000000000000000000": 10000000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 60000000000000000000
+        "to": {
+          "chain": "gnosis",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000",
+          "amount": 10000000000000000000
         },
-      }
-    }
+      },
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000"
+        },
+        "to": {
+          "chain": "gnosis",
+          "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
+          "token": "0x0000000000000000000000000000000000000000",
+          "amount": 10000000000000000000
+        },
+      },
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0"
+        },
+        "to": {
+          "chain": "gnosis",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+          "amount": 0
+        },
+      },
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0"
+        },
+        "to": {
+          "chain": "gnosis",
+          "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
+          "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+          "amount": 60000000000000000000
+        },
+      },
+    ]
   }
 ```
 
@@ -946,8 +985,23 @@ Returns the refill requirements on the source chain for bridging assets to targe
         }
       }
     },
-    "expiration_timestamp": 1743007255,
-    "is_refill_required": true
+    "expiration_timestamp": 1743000251,
+    "is_refill_required": true,
+    "quote_response_status": [
+      {
+        "error": false,
+        "message": "",
+        "request_status": 200,
+        "timestamp": 1743000000
+      },
+      {
+        "error": false,
+        "message": "",
+        "request_status": 200,
+        "timestamp": 1743000010
+      }
+    ],
+    "errors": false
   }
 ```
 

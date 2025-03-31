@@ -21,7 +21,6 @@
 
 import typing as t
 
-from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
 
 

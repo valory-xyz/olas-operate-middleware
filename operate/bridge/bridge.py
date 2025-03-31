@@ -20,6 +20,7 @@
 """Bridge manager."""
 
 
+import json
 import logging
 import time
 import uuid
@@ -147,6 +148,7 @@ class LiFiBridge(Bridge):
             return {
                 "quote": {},
                 "metadata": {
+                    "attempts": 0,
                     "error": False,
                     "message": "Zero-amount quote requested",
                     "request_status": 0,
@@ -174,6 +176,7 @@ class LiFiBridge(Bridge):
                 return {
                     "quote": response.json(),
                     "metadata": {
+                        "attempts": attempt,
                         "error": False,
                         "message": "",
                         "request_status": response.status_code,
@@ -193,6 +196,7 @@ class LiFiBridge(Bridge):
                     return {
                         "quote": response_json,
                         "metadata": {
+                            "attempts": attempt,
                             "error": True,
                             "message": response_json["message"],
                             "request_status": response.status_code,
@@ -322,6 +326,24 @@ class BridgeManagerData(LocalResource):
 
     _file = "bridge.json"
 
+    # TODO Migrate to LocalResource?
+    @classmethod
+    def load(cls, path: Path) -> "LocalResource":
+        """Load BridgeManagerData"""
+
+        file = path / cls._file
+        if not file.exists():
+            BridgeManagerData(path=path).store()
+
+        try:
+            json.loads(file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            new_file = path / f"invalid_{int(time.time())}_{cls._file}"
+            file.rename(new_file)
+            BridgeManagerData(path=path).store()
+
+        return super().load(path)
+
 
 class BridgeManager:
     """BridgeManager"""
@@ -340,20 +362,12 @@ class BridgeManager:
         self.path = path
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
-        self.bridge = bridge or LiFiBridge(wallet_manager)
+        self.bridge = bridge or LiFiBridge(wallet_manager, logger)
         self.quote_validity_period = (
             quote_validity_period or DEFAULT_QUOTE_VALIDITY_PERIOD
         )
 
         self.path.mkdir(exist_ok=True)
-
-        # TODO Migrate to LocalResource
-        data_file = path / BridgeManagerData._file
-        if not data_file.exists():
-            data = BridgeManagerData(path=path)
-            data.store()
-        # End migrate
-
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
@@ -428,44 +442,44 @@ class BridgeManager:
                 not isinstance(request, dict)
                 or "from" not in request
                 or "to" not in request
-                or len(request["from"]) != 1
-                or len(request["to"]) != 1
             ):
                 raise ValueError(
                     "[BRIDGE MANAGER] Invalid input: All quote requests must contain exactly one 'from' and one 'to' sender."
                 )
 
-            from_chain, from_addresses = next(iter(request["from"].items()))
-            if not isinstance(from_addresses, dict) or len(from_addresses) != 1:
+            from_ = request["from"]
+            to = request["to"]
+
+            if (
+                not isinstance(from_, dict)
+                or "chain" not in from_
+                or "address" not in from_
+                or "token" not in from_
+            ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid 'from' structure: must have exactly one address mapping."
+                    "[BRIDGE MANAGER] Invalid input: 'from' must contain 'chain', 'address', and 'token'."
                 )
 
-            from_address, from_token = next(iter(from_addresses.items()))
-
-            to_chain, to_addresses = next(iter(request["to"].items()))
-            if not isinstance(to_addresses, dict) or len(to_addresses) != 1:
+            if (
+                not isinstance(to, dict)
+                or "chain" not in to
+                or "address" not in to
+                or "token" not in to
+                or "amount" not in to
+            ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid 'to' structure: must have exactly one address mapping."
+                    "[BRIDGE MANAGER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
                 )
-
-            to_address, to_tokens = next(iter(to_addresses.items()))
-            if not isinstance(to_tokens, dict) or len(to_tokens) != 1:
-                raise ValueError(
-                    "[BRIDGE MANAGER] Invalid 'to' structure: address mapping must have exactly one token entry."
-                )
-
-            to_token, to_value = next(iter(to_tokens.items()))
 
             output.append(
                 {
-                    "from_address": from_address,
-                    "from_token": from_token,
-                    "from_chain": from_chain,
-                    "to_address": to_address,
-                    "to_token": to_token,
-                    "to_chain": to_chain,
-                    "to_amount": to_value,
+                    "from_chain": from_["chain"],
+                    "from_address": from_["address"],
+                    "from_token": from_["token"],
+                    "to_chain": to["chain"],
+                    "to_address": to["address"],
+                    "to_token": to["token"],
+                    "to_amount": to["amount"],
                 }
             )
 
@@ -494,7 +508,9 @@ class BridgeManager:
         # TODO check if destination is EOA or Safe.
 
         quote_requests = self._preprocess_input(bridge_requests["bridge_requests"])
-        self.logger.info(f"[BRIDGE MANAGER] {len(quote_requests)} quotes requested.")
+        self.logger.info(
+            f"[BRIDGE MANAGER] Num. bridge requests: {len(quote_requests)}."
+        )
         quote_bundle = self._get_valid_quote_bundle(quote_requests)
 
         bridge_requirements = self.bridge.sum_quotes_requirements(
