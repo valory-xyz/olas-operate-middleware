@@ -171,7 +171,7 @@ class OperateApp:
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
-            quote_validity_period=24 * 60 * 60,  # TODO remove
+            # remove: quote_validity_period=24 * 60 * 60,  # TODO remove
         )
         return manager
 
@@ -1003,7 +1003,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         return JSONResponse(
             content=operate.bridge_manager().bridge_refill_requirements(
-                quote_requests=data["quote_requests"]
+                bridge_requests=data["bridge_requests"]
             )
         )
 

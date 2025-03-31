@@ -20,14 +20,11 @@
 """Bridge manager."""
 
 
-import json
 import logging
 import time
 import uuid
 from abc import abstractmethod
-from collections import defaultdict
 from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
 from typing import cast
 
@@ -42,11 +39,10 @@ from operate.ledger.profiles import get_target_chain_asset_address
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
-from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
 
-DEFAULT_MAX_RETRIES = 3
+DEFAULT_MAX_RETRIES = 1
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
@@ -54,9 +50,14 @@ QUOTE_BUNDLE_PREFIX = "qb-"
 class Bridge:
     """Abstract Bridge"""
 
-    def __init__(self, wallet_manager: MasterWalletManager) -> None:
+    def __init__(
+        self,
+        wallet_manager: MasterWalletManager,
+        logger: logging.Logger | None = None,
+    ) -> None:
         """Initialize the bridge"""
         self.wallet_manager = wallet_manager
+        self.logger = logger or setup_logger(name="operate.bridge.Bridge")
 
     @abstractmethod
     def get_quote(
@@ -72,12 +73,12 @@ class Bridge:
         """Get bridge quote"""
         raise NotImplementedError()
 
-    def get_quotes(self, quote_requests: list) -> dict:
+    def get_quote_responses(self, quote_requests: list) -> list:
         """Get bridge quotes (destinations specified in `to` dict)"""
-        quotes = {}
+        bridge_quote_responses = []
 
         for quote_request in quote_requests:
-            quote = self.get_quote(
+            bridge_quote_response = self.get_quote(
                 from_chain=Chain(quote_request["from_chain"]),
                 from_address=quote_request["from_address"],
                 from_token=quote_request["from_token"],
@@ -87,23 +88,27 @@ class Bridge:
                 to_amount=quote_request["to_amount"],
             )
 
-            if quote:
-                quotes[quote["id"]] = quote
+            # TODO remove 0 - transfer quotes on sanitize input?
+            bridge_quote_responses.append(bridge_quote_response)
 
-        return quotes
+        return bridge_quote_responses
 
     @abstractmethod
-    def get_quote_requirements(self, quote: dict) -> dict:
+    def get_quote_requirements(self, bridge_quote_response: dict) -> dict | None:
         """Get bridge requirements given a collection of quotes"""
         raise NotImplementedError()
 
-    def sum_quotes_requirements(self, quotes: dict) -> dict:
+    def sum_quotes_requirements(self, bridge_quote_responses: list) -> dict:
         """Get bridge requirements given a collection of quotes"""
 
-        bridge_requirements = {}
+        bridge_requirements: dict = {}
 
-        for _, quote in quotes.items():
-            req = self.get_quote_requirements(quote)
+        for bridge_quote_response in bridge_quote_responses:
+            req = self.get_quote_requirements(bridge_quote_response)
+
+            if not req:
+                continue
+
             for from_chain, from_addresses in req.items():
                 for from_address, from_tokens in from_addresses.items():
                     for from_token, from_amount in from_tokens.items():
@@ -137,8 +142,18 @@ class LiFiBridge(Bridge):
     ) -> dict:
         """Get bridge quote"""
 
+        now = int(time.time())
         if to_amount == 0:
-            return {}
+            self.logger.info("[BRIDGE] Zero-amount quote requested")
+            return {
+                "quote": {},
+                "metadata": {
+                    "error": False,
+                    "message": "Zero-amount quote requested",
+                    "request_status": 0,
+                    "timestamp": now,
+                },
+            }
 
         url = "https://li.quest/v1/quote/toAmount"
         headers = {"accept": "application/json"}
@@ -157,22 +172,48 @@ class LiFiBridge(Bridge):
                     url=url, headers=headers, params=params, timeout=30
                 )
                 response.raise_for_status()
-                return response.json()
+                return {
+                    "quote": response.json(),
+                    "metadata": {
+                        "error": False,
+                        "message": "",
+                        "request_status": response.status_code,
+                        "timestamp": now,
+                    },
+                }
             except requests.RequestException as e:
-                print(
-                    f"[BRIDGE MANAGER] Request quote failed with code {response.status_code} (attempt {attempt}/{DEFAULT_MAX_RETRIES}): {e}"
+                self.logger.warning(
+                    f"[BRIDGE] Request quote failed with code {response.status_code} (attempt {attempt}/{DEFAULT_MAX_RETRIES}): {e}"
                 )
 
                 if attempt >= DEFAULT_MAX_RETRIES:
-                    print(
-                        f"[BRIDGE MANAGER]Request quote failed with code {response.status_code} after {DEFAULT_MAX_RETRIES} attempts: {e}"
+                    self.logger.error(
+                        f"[BRIDGE]Request quote failed with code {response.status_code} after {DEFAULT_MAX_RETRIES} attempts: {e}"
                     )
-                    raise
+                    response_json = response.json()
+                    return {
+                        "quote": response_json,
+                        "metadata": {
+                            "error": True,
+                            "message": response_json["message"],
+                            "request_status": response.status_code,
+                            "timestamp": now,
+                        },
+                    }
+                else:
+                    time.sleep(2)
+
         return {}
 
     # TODO gas fees !
-    def get_quote_requirements(self, quote: dict) -> dict:
+    def get_quote_requirements(self, bridge_quote_response: dict) -> dict | None:
         """Get bridge requirements given a collection of quotes"""
+
+        quote = bridge_quote_response["quote"]
+        metadata = bridge_quote_response["metadata"]
+
+        if metadata.get("error", False) or "action" not in quote:
+            return None
 
         from_chain = Chain.from_id(quote["action"]["fromChainId"])
         from_address = quote["action"]["fromAddress"]
@@ -196,10 +237,10 @@ class LiFiBridge(Bridge):
                 }
             }
 
-    def execute_quote(self, quote) -> None:
+    def execute_quote(self, quote: dict) -> None:
         """Execute the quote"""
 
-        print("Execute_quote")
+        self.logger.info("[BRIDGE] Execute_quote")
         from_token = quote["action"]["fromToken"]["address"]
         from_amount = int(quote["action"]["fromAmount"])
 
@@ -213,7 +254,7 @@ class LiFiBridge(Bridge):
         account = w3.eth.account.from_key(private_key)
 
         if from_token != ZERO_ADDRESS:
-            print(f"Approve transaction for token {from_token}")
+            self.logger.info(f"[BRIDGE] Approve transaction for token {from_token}")
             from_token_contract = w3.eth.contract(
                 address=from_token,
                 abi=[
@@ -248,9 +289,9 @@ class LiFiBridge(Bridge):
                 transaction, private_key
             )
             tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-            print(f"Approve transaction {tx_hash=}")
+            self.logger.info(f"[BRIDGE] Approve transaction {tx_hash=}")
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-            print(f"Approve transaction {receipt=}")
+            self.logger.info(f"[BRIDGE] Approve transaction {receipt=}")
 
         transaction = {
             "value": w3.to_wei(int(transaction_request["value"], 16), "wei"),
@@ -278,12 +319,15 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     requested_quote_bundles: dict = field(default_factory=dict)
+    last_requested_quote_bundle_id: str | None = None
 
     _file = "bridge.json"
 
 
 class BridgeManager:
     """BridgeManager"""
+
+    # TODO singleton
 
     def __init__(
         self,
@@ -296,7 +340,7 @@ class BridgeManager:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
-        self.logger = logger or setup_logger(name="operate.master_wallet_manager")
+        self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
         self.bridge = bridge or LiFiBridge(wallet_manager)
         self.quote_validity_period = (
             quote_validity_period or DEFAULT_QUOTE_VALIDITY_PERIOD
@@ -331,76 +375,58 @@ class BridgeManager:
                         )
                     )
         return from_tokens
-    
-    @staticmethod
-    def _get_quote_bundle_id(quote_requests: list) -> str
-        """Generate a deterministic id based on the content of quote_requests."""
-
-        json_list = [json.dumps(obj, sort_keys=True, separators=(",", ":")) for obj in quote_requests]
-        
-        # Sort the JSON string representations
-        json_list.sort()
-
-
-
 
     def _get_valid_quote_bundle(self, quote_requests: list) -> dict:
         """Ensures to return a valid (non expired) quote bundle for the given inputs."""
-        quote_bundle = self.data.requested_quote_bundles
+
+        # TODO store only one?
+
+        quote_bundle = self.data.requested_quote_bundles.get(
+            self.data.last_requested_quote_bundle_id, {}
+        )
         now = int(time.time())
 
-        refresh_quote_bundle = False
+        create_new_quote_bundle = False
+        refresh_quotes = False
+
         if not quote_bundle:
             self.logger.info("[BRIDGE MANAGER] No last_requested_quote_bundle.")
-            refresh_quote_bundle = True
-            quote_bundle = {}
+            create_new_quote_bundle = True
+        elif DeepDiff(quote_requests, quote_bundle.get("quote_requests", [])):
+            self.logger.info("[BRIDGE MANAGER] Different quote requests.")
+            create_new_quote_bundle = True
+        elif now > quote_bundle.get("expiration_timestamp", 0):
+            self.logger.info("[BRIDGE MANAGER] Quotes expired.")
+            refresh_quotes = True
+
+        if create_new_quote_bundle:
             quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
             quote_bundle["quote_requests"] = quote_requests
-        elif DeepDiff(quote_requests, quote_bundle.get("quote_requests", {})):
-            self.logger.info("[BRIDGE MANAGER] Different quote requests.")
-            refresh_quote_bundle = True
-        elif now > quote_bundle.get("expiration_timestamp", 0):
-            self.logger.info("[BRIDGE MANAGER] Quote bundle expired.")
-            refresh_quote_bundle = True
+            quote_bundle["executions"] = []
+            quote_bundle["execution_status"] = []
+            self.data.requested_quote_bundles[quote_bundle["id"]] = quote_bundle
+            refresh_quotes = True
 
-        if refresh_quote_bundle:
+        if refresh_quotes:
             self.logger.info("[BRIDGE MANAGER] Requesting new quote bundle.")
             quote_bundle["timestamp"] = now
             quote_bundle["expiration_timestamp"] = now + self.quote_validity_period
-            quote_bundle["quotes"] = self.bridge.get_quotes(quote_requests)
-            quote_bundle["bridge_requirements"] = self.bridge.sum_quotes_requirements(
-                quote_bundle["quotes"]
+            quote_bundle["bridge_quote_responses"] = self.bridge.get_quote_responses(
+                quote_requests
             )
-            self.data.requested_quote_bundles[quote_bundle["id"]] = quote_bundle
+            quote_bundle["bridge_requirements"] = self.bridge.sum_quotes_requirements(
+                quote_bundle["bridge_quote_responses"]
+            )
 
-        self.data.state = BridgeManagerState.QUOTE_BUNDLE_UP_TO_DATE
-        self.data.store()
+        if create_new_quote_bundle or refresh_quotes:
+            self.data.last_requested_quote_bundle_id = quote_bundle["id"]
+            self.data.store()
+
         return quote_bundle
 
     @staticmethod
-    def _has_duplicates(quote_requests: list) -> bool:
-        """Check if there are duplicate quote requests (excluding to_amount value)."""
-
-        seen = set()
-        for request in quote_requests:
-            key = (
-                request["from_chain"],
-                request["from_address"],
-                request["from_token"],
-                request["to_chain"],
-                request["to_address"],
-                request["to_token"],
-            )
-
-            if key in seen:
-                return True
-            seen.add(key)
-
-        return False
-
-    @staticmethod
-    def _flatten_quote_requests(quote_requests: list) -> list:
-        """Flatten quote requests into an internal format.
+    def _preprocess_input(client_requests: list) -> list:
+        """Preprocess quote requests into an internal format.
 
         {
             from_chain: value,
@@ -412,75 +438,115 @@ class BridgeManager:
             to_amount: value
         }
         """
-        flattened = []
+        output = []
 
-        for request in quote_requests:
-            if len(request["from"]) != 1:
+        for request in client_requests:
+            if (
+                not isinstance(request, dict)
+                or "from" not in request
+                or "to" not in request
+                or len(request["from"]) != 1
+                or len(request["to"]) != 1
+            ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid input: All quote requests must contain exactly one sender and one token."
+                    "[BRIDGE MANAGER] Invalid input: All quote requests must contain exactly one 'from' and one 'to' sender."
                 )
 
             from_chain, from_addresses = next(iter(request["from"].items()))
-
-            if len(from_addresses) != 1:
+            if not isinstance(from_addresses, dict) or len(from_addresses) != 1:
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid input: All quote requests must contain exactly one sender and one token."
+                    "[BRIDGE MANAGER] Invalid 'from' structure: must have exactly one address mapping."
                 )
 
             from_address, from_token = next(iter(from_addresses.items()))
 
-            for to_chain, to_details in request["to"].items():
-                to_address, to_address_details = next(iter(to_details.items()))
-                for to_token, amount in to_address_details.items():
-                    flattened.append(
-                        {
-                            "from_address": from_address,
-                            "from_token": from_token,
-                            "from_chain": from_chain,
-                            "to_address": to_address,
-                            "to_token": to_token,
-                            "to_chain": to_chain,
-                            "to_amount": amount,
-                        }
-                    )
+            to_chain, to_addresses = next(iter(request["to"].items()))
+            if not isinstance(to_addresses, dict) or len(to_addresses) != 1:
+                raise ValueError(
+                    "[BRIDGE MANAGER] Invalid 'to' structure: must have exactly one address mapping."
+                )
 
-        return flattened
+            to_address, to_tokens = next(iter(to_addresses.items()))
+            if not isinstance(to_tokens, dict) or len(to_tokens) != 1:
+                raise ValueError(
+                    "[BRIDGE MANAGER] Invalid 'to' structure: address mapping must have exactly one token entry."
+                )
 
-    def bridge_refill_requirements(self, request: dict) -> dict:
-        """Get bridge refill requirements."""
+            to_token, to_value = next(iter(to_tokens.items()))
 
-        # TODO Purge empty addresses on 'to'
-        # TODO store flattened vs user input
-
-        quote_requests = self._flatten_quote_requests(request["quote_requests"])
-
-        if self._has_duplicates(quote_requests):
-            raise ValueError(
-                "[BRIDGE MANAGER] Input contains duplicate quote requests."
+            output.append(
+                {
+                    "from_address": from_address,
+                    "from_token": from_token,
+                    "from_chain": from_chain,
+                    "to_address": to_address,
+                    "to_token": to_token,
+                    "to_chain": to_chain,
+                    "to_amount": to_value,
+                }
             )
 
+        seen: set = set()
+        for request in output:
+            key = (
+                request["from_chain"],
+                request["from_address"],
+                request["from_token"],
+                request["to_chain"],
+                request["to_address"],
+                request["to_token"],
+            )
+
+            if key in seen:
+                raise ValueError(
+                    "[BRIDGE MANAGER] Request contains duplicate entries with same 'from' and 'to'."
+                )
+
+        return output
+
+    def bridge_refill_requirements(self, bridge_requests: dict) -> dict:
+        """Get bridge refill requirements."""
+
+        # TODO store flattened vs user input
+        # TODO check if destination is EOA or Safe.
+
+        quote_requests = self._preprocess_input(bridge_requests["bridge_requests"])
         self.logger.info(f"[BRIDGE MANAGER] {len(quote_requests)} quotes requested.")
         quote_bundle = self._get_valid_quote_bundle(quote_requests)
 
         bridge_requirements = self.bridge.sum_quotes_requirements(
-            quote_bundle["quotes"]
+            quote_bundle["bridge_quote_responses"]
         )
 
+        chains = [request["from_chain"] for request in quote_requests]
         balances = {}
-        bridge_refill_requirements = {}
+        for chain in chains:
+            ledger_api = self.wallet_manager.load(Chain(chain).ledger_type).ledger_api(
+                Chain(chain)
+            )
+            balances[chain] = get_assets_balances(
+                ledger_api=ledger_api,
+                asset_addresses={ZERO_ADDRESS}
+                | {
+                    request["from_token"]
+                    for request in quote_requests
+                    if request["from_chain"] == chain
+                },
+                addresses={
+                    request["from_address"]
+                    for request in quote_requests
+                    if request["from_chain"] == chain
+                },
+            )
+
+        bridge_refill_requirements: dict = {}
         for from_chain, from_addresses in bridge_requirements.items():
             ledger_api = self.wallet_manager.load(
                 Chain(from_chain).ledger_type
             ).ledger_api(Chain(from_chain))
             for from_address, from_tokens in from_addresses.items():
                 for from_token, from_amount in from_tokens.items():
-                    balance = get_asset_balance(
-                        ledger_api=ledger_api,
-                        address=from_address,
-                        asset_address=from_token,
-                    )
-                    balances.setdefault(from_chain, {}).setdefault(from_address, {})
-                    balances[from_chain][from_address][from_token] = balance
+                    balance = balances[from_chain][from_address][from_token]
                     bridge_refill_requirements.setdefault(from_chain, {}).setdefault(
                         from_address, {}
                     )
@@ -495,6 +561,11 @@ class BridgeManager:
             for amount in from_tokens.values()
         )
 
+        quote_response_status = [
+            response["metadata"] for response in quote_bundle["bridge_quote_responses"]
+        ]
+        errors = any(status["error"] for status in quote_response_status)
+
         return {
             "id": quote_bundle["id"],
             "balances": balances,
@@ -502,6 +573,8 @@ class BridgeManager:
             "bridge_refill_requirements": bridge_refill_requirements,
             "expiration_timestamp": quote_bundle["expiration_timestamp"],
             "is_refill_required": is_refill_required,
+            "quote_response_status": quote_response_status,
+            "errors": errors,
         }
 
     def execute_quote_bundle(self, quote_bundle_id: str) -> None:
@@ -520,6 +593,6 @@ class BridgeManager:
                 f"[BRIDGE MANAGER] Refill requirements not satisfied for quote bundle id {quote_bundle_id}."
             )
 
-        print("[BRIDGE MANAGER] Executing quotes")
-        for _, quote in self.data.requested_quote_bundles["quotes"].items():
+        self.logger.info("[BRIDGE MANAGER] Executing quotes")
+        for quote in self.data.requested_quote_bundles["bridge_quote_responses"]:
             self.bridge.execute_quote(quote)
