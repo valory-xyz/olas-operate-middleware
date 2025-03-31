@@ -41,7 +41,7 @@ from operate.services.manage import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
-DEFAULT_MAX_RETRIES = 1
+DEFAULT_MAX_RETRIES = 3
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
@@ -373,13 +373,13 @@ class BridgeManager:
         refresh_quotes = False
 
         if not quote_bundle:
-            self.logger.info("[BRIDGE MANAGER] No last_requested_quote_bundle.")
+            self.logger.info("[BRIDGE MANAGER] No last quote bundle.")
             create_new_quote_bundle = True
         elif DeepDiff(quote_requests, quote_bundle.get("quote_requests", [])):
-            self.logger.info("[BRIDGE MANAGER] Different quote requests.")
+            self.logger.info("[BRIDGE MANAGER] Different bridging requests.")
             create_new_quote_bundle = True
         elif now > quote_bundle.get("expiration_timestamp", 0):
-            self.logger.info("[BRIDGE MANAGER] Quotes expired.")
+            self.logger.info("[BRIDGE MANAGER] Quote bundle expired.")
             refresh_quotes = True
 
         if create_new_quote_bundle:
