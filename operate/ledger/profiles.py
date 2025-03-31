@@ -188,4 +188,3 @@ def get_staking_contract(
         staking_program_id,
         staking_program_id,
     )
-
