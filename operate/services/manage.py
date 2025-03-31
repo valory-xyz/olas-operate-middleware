@@ -51,6 +51,7 @@ from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
+    NO_STAKING_PROGRAM_ID,
     OLAS,
     STAKING,
     USDC,
@@ -737,6 +738,7 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.NON_EXISTENT
         )
+        current_staking_program = self._get_current_staking_program(service, chain)
 
         is_update = (
             (not is_first_mint)
@@ -748,9 +750,10 @@ class ServiceManager:
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
                 or current_agent_bond != staking_params["min_staking_deposit"]
                 or on_chain_description != service.description
+                or (current_staking_program is None)
+                ^ (user_params.staking_program_id == NO_STAKING_PROGRAM_ID)
             )
         )
-        current_staking_program = self._get_current_staking_program(service, chain)
 
         self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{current_staking_program=}")
