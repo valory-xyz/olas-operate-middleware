@@ -35,7 +35,6 @@ from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
-from operate.ledger.profiles import get_target_chain_asset_address
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
@@ -359,22 +358,6 @@ class BridgeManager:
             BridgeManagerData, BridgeManagerData.load(path)
         )
         self.data.store()
-
-    @staticmethod
-    def _get_from_tokens(from_chain: Chain, to: dict) -> set:
-        from_tokens = set()
-        for to_chain_str in to:
-            for to_address in to[to_chain_str]:
-                for to_token in to[to_chain_str][to_address]:
-                    to_chain = Chain(to_chain_str)
-                    from_tokens.add(
-                        get_target_chain_asset_address(
-                            source_chain=to_chain,
-                            source_asset_address=to_token,
-                            target_chain=from_chain,
-                        )
-                    )
-        return from_tokens
 
     def _get_valid_quote_bundle(self, quote_requests: list) -> dict:
         """Ensures to return a valid (non expired) quote bundle for the given inputs."""
