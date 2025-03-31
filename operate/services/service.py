@@ -97,7 +97,7 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 6
+SERVICE_CONFIG_VERSION = 7
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = "0xm"
@@ -286,6 +286,9 @@ class ServiceHelper:
                 override["type"] == "connection"
                 and "valory/ledger" in override["public_id"]
             ):
+                if 0 in override:  # take the values from the first config
+                    override = override[0]
+
                 for _, config in override["config"]["ledger_apis"].items():
                     # TODO chain name is inferred from the chain_id. The actual id provided on service.yaml is ignored.
                     chain = Chain.from_id(chain_id=config["chain_id"])  # type: ignore
@@ -435,7 +438,7 @@ class Deployment(LocalResource):
 
         service = Service.load(path=self.path)
         builder = ServiceBuilder.from_dir(
-            path=service.service_path,
+            path=service.package_absolute_path,
             keys_file=self.path / KEYS_JSON,
             number_of_agents=len(service.keys),
         )
@@ -493,7 +496,7 @@ class Deployment(LocalResource):
         )
         try:
             builder = ServiceBuilder.from_dir(
-                path=service.service_path,
+                path=service.package_absolute_path,
                 keys_file=keys_file,
                 number_of_agents=len(service.keys),
             )
@@ -617,7 +620,7 @@ class Deployment(LocalResource):
         )
         try:
             builder = ServiceBuilder.from_dir(
-                path=service.service_path,
+                path=service.package_absolute_path,
                 keys_file=keys_file,
                 number_of_agents=len(service.keys),
             )
@@ -773,7 +776,7 @@ class Service(LocalResource):
     env_variables: EnvVariables
 
     path: Path
-    service_path: Path
+    package_path: Path
 
     name: t.Optional[str] = None
 
@@ -958,24 +961,28 @@ class Service(LocalResource):
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
 
-        if version < 6:
+        if version < 7:
             data["binary_path"] = None
 
         data["version"] = SERVICE_CONFIG_VERSION
 
         # Redownload service path
-        service_path = path / Path(data["service_path"]).name
-        if service_path.exists() and service_path.is_dir():
-            print("EXISTS")
-            shutil.rmtree(service_path)
+        if "service_path" in data:
+            package_absolute_path = path / Path(data["service_path"]).name
+            data.pop("service_path")
+        else:
+            package_absolute_path = path / data["package_path"]
 
-        service_path = Path(
+        if package_absolute_path.exists() and package_absolute_path.is_dir():
+            shutil.rmtree(package_absolute_path)
+
+        package_absolute_path = Path(
             IPFSTool().download(
                 hash_id=data["hash"],
                 target_dir=path,
             )
         )
-        data["service_path"] = str(service_path)
+        data["package_path"] = str(package_absolute_path.name)
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
@@ -991,7 +998,7 @@ class Service(LocalResource):
     def helper(self) -> ServiceHelper:
         """Get service helper."""
         if self._helper is None:
-            self._helper = ServiceHelper(path=self.service_path)
+            self._helper = ServiceHelper(path=self.package_absolute_path)
         return t.cast(ServiceHelper, self._helper)
 
     @property
@@ -1005,6 +1012,35 @@ class Service(LocalResource):
             self._deployment = Deployment.new(path=self.path)
         return t.cast(Deployment, self._deployment)
 
+    @property
+    def package_absolute_path(self) -> Path:
+        """Get the package_absolute_path."""
+        self._ensure_package_exists()
+        package_absolute_path = self.path / self.package_path
+        return package_absolute_path
+
+    def _ensure_package_exists(self) -> None:
+        package_absolute_path = self.path / self.package_path
+        if (
+            not package_absolute_path.exists()
+            or not (package_absolute_path / "service.yaml").exists()
+        ):
+            with tempfile.TemporaryDirectory(dir=self.path) as temp_dir:
+                package_temp_path = Path(
+                    IPFSTool().download(
+                        hash_id=self.hash,
+                        target_dir=temp_dir,
+                    )
+                )
+                target_path = self.path / package_temp_path.name
+
+                if target_path.exists():
+                    shutil.rmtree(target_path)
+
+                shutil.move(package_temp_path, target_path)
+                self.package_path = Path(target_path.name)
+                self.store()
+
     @staticmethod
     def new(  # pylint: disable=too-many-locals
         keys: Keys,
@@ -1016,14 +1052,14 @@ class Service(LocalResource):
         service_config_id = Service.get_new_service_config_id(storage)
         path = storage / service_config_id
         path.mkdir()
-        service_path = Path(
+        package_absolute_path = Path(
             IPFSTool().download(
                 hash_id=service_template["hash"],
                 target_dir=path,
             )
         )
 
-        ledger_configs = ServiceHelper(path=service_path).ledger_configs()
+        ledger_configs = ServiceHelper(path=package_absolute_path).ledger_configs()
 
         chain_configs = {}
         for chain, config in service_template["configurations"].items():
@@ -1056,8 +1092,8 @@ class Service(LocalResource):
             hash_history={current_timestamp: service_template["hash"]},
             binary_path=service_template.get("binary_path"),
             chain_configs=chain_configs,
-            path=service_path.parent,
-            service_path=service_path,
+            path=package_absolute_path.parent,
+            package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
         )
         service.store()
@@ -1065,7 +1101,9 @@ class Service(LocalResource):
 
     def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""
-        with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
+        with (self.package_absolute_path / "service.yaml").open(
+            "r", encoding="utf-8"
+        ) as fp:
             service_yaml, *_ = yaml_load_all(fp)
 
         public_id = f"{service_yaml['author']}/{service_yaml['name']}"
@@ -1170,14 +1208,17 @@ class Service(LocalResource):
         self.name = service_template.get("name", self.name)
         self.binary_path = service_template.get("binary_path")
 
-        shutil.rmtree(self.service_path)
-        service_path = Path(
+        package_absolute_path = self.path / self.package_path
+        if package_absolute_path.exists():
+            shutil.rmtree(package_absolute_path)
+
+        package_absolute_path = Path(
             IPFSTool().download(
                 hash_id=self.hash,
                 target_dir=self.path,
             )
         )
-        self.service_path = service_path
+        self.package_path = Path(package_absolute_path.name)
 
         # env_variables
         if partial_update:
@@ -1189,7 +1230,7 @@ class Service(LocalResource):
         # chain_configs
         # TODO support remove chains for non-partial updates
         # TODO ensure all and only existing chains are passed for non-partial updates
-        ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
+        ledger_configs = ServiceHelper(path=self.package_absolute_path).ledger_configs()
         for chain, new_config in service_template.get("configurations", {}).items():
             if chain in self.chain_configs:
                 # The template is providing a chain configuration that already

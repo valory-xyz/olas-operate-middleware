@@ -24,6 +24,8 @@ import typing as t
 from operate.operate_types import Chain, ContractAddresses
 
 
+NO_STAKING_PROGRAM_ID = "no_staking"
+
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {
     Chain.GNOSIS: ContractAddresses(
         {
@@ -103,7 +105,12 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_expert_12": "0xF4a75F476801B3fBB2e7093aCDcc3576593Cc1fc",
         "quickstart_beta_expert_15_mech_marketplace": "0x88eB38FF79fBa8C19943C0e5Acfa67D5876AdCC1",
         "quickstart_beta_expert_16_mech_marketplace": "0x6c65430515c70a3f5E62107CC301685B7D46f991",
+        "quickstart_beta_expert_17_mech_marketplace": "0x1430107A785C3A36a0C1FC0ee09B9631e2E72aFf",
+        "quickstart_beta_expert_18_mech_marketplace": "0x041e679d04Fc0D4f75Eb937Dea729Df09a58e454",
         "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
+        "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
+        "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
+        "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
     },
     Chain.OPTIMISTIC: {
         "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
@@ -114,6 +121,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "meme_base_beta": "0x6011E09e7c095e76980b22498d69dF18EB62BeD8",
         "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
         "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
+        "marketplace_supply_alpha": "0xB14Cd66c6c601230EA79fa7Cc072E5E0C2F3A756",
+        "marketplace_demand_alpha_1": "0x38Eb3838Dab06932E7E1E965c6F922aDfE494b88",
+        "marketplace_demand_alpha_2": "0xBE6E12364B549622395999dB0dB53f163994D7AF",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
@@ -169,3 +179,16 @@ WRAPPED_NATIVE_ASSET = {
 }
 
 ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+
+
+def get_staking_contract(
+    chain: str, staking_program_id: t.Optional[str]
+) -> t.Optional[str]:
+    """Get staking contract based on the config and the staking program."""
+    if staking_program_id == NO_STAKING_PROGRAM_ID or staking_program_id is None:
+        return None
+
+    return STAKING[Chain(chain)].get(
+        staking_program_id,
+        staking_program_id,
+    )

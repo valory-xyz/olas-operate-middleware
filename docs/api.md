@@ -472,7 +472,7 @@ Returns the list of existing service configurations.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   },
   ...
@@ -519,7 +519,7 @@ Create a service configuration using a template.
   "keys": [...],
   "name": "valory/trader_omen_gnosis",
   "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+  "package_path": "trader_pearl",
   "version": 4
 }
 ```
@@ -567,7 +567,7 @@ The response contains an array of the services which have been updated (an empty
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   },
   ...
@@ -628,7 +628,7 @@ Returns the service configuration `service_config_id`.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis",
+    "package_path": "trader_pearl",
     "version": 4
   }
 
@@ -675,7 +675,7 @@ The response contains the updated service configuration following the on-chain o
   "keys": [...],
   "name": "valory/trader_omen_gnosis",
   "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+  "package_path": "trader_pearl"
 }
 
 ```
@@ -722,7 +722,7 @@ Update service configuration `service_config_id` with the provided template.
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+    "package_path": "trader_pearl"
   }
 
   ```
@@ -780,7 +780,7 @@ Partial update service configuration `service_config_id` with the provided (part
     "keys": [...],
     "name": "valory/trader_omen_gnosis",
     "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "service_path": "/home/user/.operate/services/sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39/trader_omen_gnosis"
+    "package_path": "trader_pearl"
   }
 
   ```
@@ -832,6 +832,7 @@ The refill requirements are computed based on the fund requirements present on t
 
   ```json
   {
+    "allow_start_agent": true,
     "balances": {
       "gnosis": {
         "0x364fD50CB11B2fbc39706D4649f29508A7685538": {
@@ -852,9 +853,13 @@ The refill requirements are computed based on the fund requirements present on t
         }
       }
     },
-    "bonded_olas": {
-      "gnosis": 40000000000000000000
+    "bonded_assets": {
+      "gnosis": {
+        "0x0000000000000000000000000000000000000000": 2,
+        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+      }
     },
+    "is_refill_required": false,
     "refill_requirements": {
       "gnosis": {
         "0x28580196F52DB3C95C3d40Df88426e251d115842": {
@@ -867,8 +872,12 @@ The refill requirements are computed based on the fund requirements present on t
         }
       }
     },
-    "is_refill_required": false,
-    "allow_start_agent": true
+    "service_asset_requirements": {
+      "gnosis": {
+        "0x0000000000000000000000000000000000000000": 2,
+        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+      }
+    },
   }
   ```
 
