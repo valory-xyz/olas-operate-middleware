@@ -109,6 +109,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_expert_17_mech_marketplace": "0x1430107A785C3A36a0C1FC0ee09B9631e2E72aFf",
         "quickstart_beta_expert_18_mech_marketplace": "0x041e679d04Fc0D4f75Eb937Dea729Df09a58e454",
         "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
+        "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
+        "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
+        "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
     },
     Chain.OPTIMISTIC: {
         "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
@@ -120,6 +123,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "meme_base_beta_2": "0xfb7669c3AdF673b3A545Fa5acd987dbfdA805e22",
         "meme_base_beta_3": "0xCA61633b03c54F64b6A7F1f9A9C0A6Feb231Cc4D",
         "dual_staking_testnet": "0xd64Cf67500b7d15A41E02DDeb40F3A73CB533eB5",
+        "marketplace_supply_alpha": "0xB14Cd66c6c601230EA79fa7Cc072E5E0C2F3A756",
+        "marketplace_demand_alpha_1": "0x38Eb3838Dab06932E7E1E965c6F922aDfE494b88",
+        "marketplace_demand_alpha_2": "0xBE6E12364B549622395999dB0dB53f163994D7AF",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
