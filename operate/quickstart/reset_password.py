@@ -35,6 +35,9 @@ def reset_password(operate: "OperateApp") -> None:
     """Reset password."""
     print_title("Reset your password")
 
+    operate.service_manager().migrate_service_configs()
+    operate.wallet_manager.migrate_wallet_configs()
+
     # check if agent was started before
     if not (operate._path / "user.json").exists():
         print("No previous agent setup found. Exiting.")
