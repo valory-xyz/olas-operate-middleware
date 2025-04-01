@@ -25,6 +25,7 @@ import warnings
 from typing import TYPE_CHECKING, cast
 
 from operate.constants import SAFE_WEBAPP_URL
+from operate.ledger.profiles import get_staking_contract
 from operate.operate_types import LedgerType
 from operate.quickstart.run_service import (
     ask_password_if_needed,
@@ -47,6 +48,9 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         template = json.load(config_file)
 
     print_section(f"Claim staking rewards for {template['name']}")
+
+    operate.service_manager().migrate_service_configs()
+    operate.wallet_manager.migrate_wallet_configs()
 
     # check if agent was started before
     config = load_local_config(
@@ -80,6 +84,22 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     ), "Principal chain not set in quickstart config"
     assert config.rpc is not None, "RPC not set in quickstart config"  # nosec
     os.environ["CUSTOM_CHAIN_RPC"] = config.rpc[config.principal_chain]
+
+    chain_config = service.chain_configs[config.principal_chain]
+    sftxb = manager.get_eth_safe_tx_builder(
+        ledger_config=chain_config.ledger_config,
+    )
+    staking_contract = get_staking_contract(
+        chain=config.principal_chain,
+        staking_program_id=config.staking_program_id,
+    )
+    if not staking_contract or not sftxb.staking_rewards_claimable(
+        service_id=chain_config.chain_data.token,
+        staking_contract=staking_contract,
+    ):
+        print("No rewards to claim. Exiting.")
+        return
+
     try:
         tx_hash = manager.claim_on_chain_from_safe(
             service_config_id=service.service_config_id,
@@ -94,9 +114,7 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         return
 
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
-    service_safe_address = service.chain_configs[
-        config.principal_chain
-    ].chain_data.multisig
+    service_safe_address = chain_config.chain_data.multisig
     print_title(f"Claim transaction done. Hash: {tx_hash}")
     print(f"Claimed staking transferred to your service Safe {service_safe_address}.\n")
     print(

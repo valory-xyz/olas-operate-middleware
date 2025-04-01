@@ -228,6 +228,15 @@ class StakingManager(OnChainHelper):
         available_rewards = instance.functions.availableRewards().call()
         return available_rewards
 
+    def claimable_rewards(self, staking_contract: str, service_id: int) -> int:
+        """Get the claimable staking rewards on the staking contract"""
+        instance = self.staking_ctr.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=staking_contract,
+        )
+        claimable_rewards = instance.functions.calculateStakingReward(service_id).call()
+        return claimable_rewards
+
     def service_info(self, staking_contract: str, service_id: int) -> dict:
         """Get the service onchain info"""
         return self.staking_ctr.get_service_info(
@@ -810,6 +819,19 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
         return available_rewards > 0
+
+    def staking_rewards_claimable(self, staking_contract: str, service_id: int) -> bool:
+        """Check if there are claimable staking rewards on the staking contract"""
+        self._patch()
+        claimable_rewards = StakingManager(
+            key=self.wallet.key_path,
+            password=self.wallet.password,
+            chain_type=self.chain_type,
+        ).claimable_rewards(
+            staking_contract=staking_contract,
+            service_id=service_id,
+        )
+        return claimable_rewards > 0
 
     def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
         """Stake the service"""
