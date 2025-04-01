@@ -93,7 +93,6 @@ class BridgeProvider:
                 to_amount=quote_request["to"]["amount"],
             )
 
-            # TODO remove 0 - transfer quotes on sanitize input?
             bridge_quote_responses.append(bridge_quote_response)
 
         return bridge_quote_responses
@@ -262,7 +261,9 @@ class LiFiBridgeProvider(BridgeProvider):
         account = w3.eth.account.from_key(private_key)
 
         if from_token != ZERO_ADDRESS:
-            self.logger.info(f"[LI.FI BRIDGE] Approve transaction for token {from_token}.")
+            self.logger.info(
+                f"[LI.FI BRIDGE] Approve transaction for token {from_token}."
+            )
             from_token_contract = w3.eth.contract(
                 address=from_token,
                 abi=[
@@ -452,8 +453,7 @@ class BridgeManager:
 
         return quote_bundle
 
-    @staticmethod
-    def _validate_input(bridge_requests: list) -> None:
+    def _raise_if_invalid(self, bridge_requests: list) -> None:
         """Preprocess quote requests."""
 
         seen: set = set()
@@ -492,6 +492,20 @@ class BridgeManager:
                     "[BRIDGE MANAGER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
                 )
 
+            from_chain = request["from"]["chain"]
+            from_address = request["from"]["address"]
+
+            wallet = self.wallet_manager.load(Chain(from_chain).ledger_type)
+            wallet_address = wallet.address
+            safe_address = wallet.safes.get(from_chain)
+
+            if from_address is None or not (
+                from_address == wallet_address or from_address == safe_address
+            ):
+                raise ValueError(
+                    f"[BRIDGE MANAGER] Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
+                )
+
             key = (
                 request["from"]["chain"],
                 request["from"]["address"],
@@ -509,11 +523,9 @@ class BridgeManager:
     def bridge_refill_requirements(self, client_input: dict) -> dict:
         """Get bridge refill requirements."""
 
-        # TODO check if destination is EOA or Safe.
-
         quote_requests = client_input.get("quote_requests", [])
         force_update_quotes = client_input.get("force_update_quotes", False)
-        self._validate_input(quote_requests)
+        self._raise_if_invalid(quote_requests)
         self.logger.info(
             f"[BRIDGE MANAGER] Num. quote requests: {len(quote_requests)}."
         )

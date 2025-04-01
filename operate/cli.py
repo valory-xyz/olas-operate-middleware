@@ -1000,12 +1000,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
-        data = await request.json()
-        return JSONResponse(
-            content=operate.bridge_manager().bridge_refill_requirements(
-                client_input=data
+        try:
+            data = await request.json()
+            return JSONResponse(
+                content=operate.bridge_manager().bridge_refill_requirements(
+                    client_input=data
+                )
             )
-        )
+        except ValueError as e:
+            return JSONResponse(content={"error": str(e)}, status_code=400)
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=500,
+            )
 
     return app
 
