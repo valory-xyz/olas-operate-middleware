@@ -26,7 +26,7 @@ import shutil
 import time
 import uuid
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -59,6 +59,10 @@ class BridgeProvider:
         """Initialize the bridge provider."""
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.bridge.BridgeProvider")
+
+    def name(self) -> str:
+        """Get the name of the bridge provider."""
+        return self.__class__.__name__
 
     @abstractmethod
     def get_quote(
@@ -145,7 +149,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
         now = int(time.time())
         if to_amount == 0:
-            self.logger.info("[BRIDGE] Zero-amount quote requested")
+            self.logger.info("[LI.FI BRIDGE] Zero-amount quote requested")
             return {
                 "quote": {},
                 "metadata": {
@@ -186,12 +190,12 @@ class LiFiBridgeProvider(BridgeProvider):
                 }
             except requests.RequestException as e:
                 self.logger.warning(
-                    f"[BRIDGE] Request quote failed with code {response.status_code} (attempt {attempt}/{DEFAULT_MAX_RETRIES}): {e}"
+                    f"[LI.FI BRIDGE] Request quote failed with code {response.status_code} (attempt {attempt}/{DEFAULT_MAX_RETRIES}): {e}"
                 )
 
                 if attempt >= DEFAULT_MAX_RETRIES:
                     self.logger.error(
-                        f"[BRIDGE]Request quote failed with code {response.status_code} after {DEFAULT_MAX_RETRIES} attempts: {e}"
+                        f"[LI.FI BRIDGE]Request quote failed with code {response.status_code} after {DEFAULT_MAX_RETRIES} attempts: {e}"
                     )
                     response_json = response.json()
                     return {
@@ -244,7 +248,7 @@ class LiFiBridgeProvider(BridgeProvider):
     def execute_quote(self, quote: dict) -> None:
         """Execute the quote."""
 
-        self.logger.info("[BRIDGE] Execute quote.")
+        self.logger.info("[LI.FI BRIDGE] Execute quote.")
         from_token = quote["action"]["fromToken"]["address"]
         from_amount = int(quote["action"]["fromAmount"])
 
@@ -258,7 +262,7 @@ class LiFiBridgeProvider(BridgeProvider):
         account = w3.eth.account.from_key(private_key)
 
         if from_token != ZERO_ADDRESS:
-            self.logger.info(f"[BRIDGE] Approve transaction for token {from_token}.")
+            self.logger.info(f"[LI.FI BRIDGE] Approve transaction for token {from_token}.")
             from_token_contract = w3.eth.contract(
                 address=from_token,
                 abi=[
@@ -293,9 +297,9 @@ class LiFiBridgeProvider(BridgeProvider):
                 transaction, private_key
             )
             tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-            self.logger.info(f"[BRIDGE] Approve transaction {tx_hash=}.")
+            self.logger.info(f"[LI.FI BRIDGE] Approve transaction {tx_hash=}.")
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-            self.logger.info(f"[BRIDGE] Approve transaction {receipt=}.")
+            self.logger.info(f"[LI.FI BRIDGE] Approve transaction {receipt=}.")
 
         transaction = {
             "value": w3.to_wei(int(transaction_request["value"], 16), "wei"),
@@ -322,8 +326,7 @@ class BridgeManagerData(LocalResource):
 
     path: Path
     version: int = 1
-    requested_quote_bundles: dict = field(default_factory=dict)
-    last_requested_quote_bundle_id: str | None = None
+    last_requested_quote_bundle: dict | None = None
 
     _file = "bridge.json"
 
@@ -361,8 +364,8 @@ class BridgeManagerData(LocalResource):
             BridgeManagerData(path=path).store()
 
         try:
-            json.loads(file.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
+            super().load(path=file)
+        except (json.JSONDecodeError, KeyError):
             new_file = path / f"invalid_{int(time.time())}_{cls._file}"
             file.rename(new_file)
             BridgeManagerData(path=path).store()
@@ -405,13 +408,8 @@ class BridgeManager:
     ) -> dict:
         """Ensures to return a valid (non expired) quote bundle for the given inputs."""
 
-        # TODO store only one?
-
-        quote_bundle = self.data.requested_quote_bundles.get(
-            self.data.last_requested_quote_bundle_id, {}
-        )
         now = int(time.time())
-
+        quote_bundle = self.data.last_requested_quote_bundle or {}
         create_new_quote_bundle = False
         update_quotes = False
 
@@ -433,13 +431,13 @@ class BridgeManager:
             quote_bundle["quote_requests"] = quote_requests
             quote_bundle["executions"] = []
             quote_bundle["execution_status"] = []
-            self.data.requested_quote_bundles[quote_bundle["id"]] = quote_bundle
             update_quotes = True
 
         if update_quotes:
             self.logger.info("[BRIDGE MANAGER] Requesting new quote bundle.")
             quote_bundle["timestamp"] = now
             quote_bundle["expiration_timestamp"] = now + self.quote_validity_period
+            quote_bundle["bridge_provider"] = self.bridge_provider.name()
             quote_bundle[
                 "bridge_quote_responses"
             ] = self.bridge_provider.get_quote_responses(quote_requests)
@@ -449,8 +447,7 @@ class BridgeManager:
                 quote_bundle["bridge_quote_responses"]
             )
 
-        if create_new_quote_bundle or update_quotes:
-            self.data.last_requested_quote_bundle_id = quote_bundle["id"]
+            self.data.last_requested_quote_bundle = quote_bundle
             self.data.store()
 
         return quote_bundle
@@ -512,7 +509,6 @@ class BridgeManager:
     def bridge_refill_requirements(self, client_input: dict) -> dict:
         """Get bridge refill requirements."""
 
-        # TODO store flattened vs user input
         # TODO check if destination is EOA or Safe.
 
         quote_requests = client_input.get("quote_requests", [])
@@ -592,7 +588,7 @@ class BridgeManager:
     def execute_quote_bundle(self, quote_bundle_id: str) -> None:
         """Execute quote bundle"""
 
-        quote_bundle = self.data.requested_quote_bundles.get(quote_bundle_id)
+        quote_bundle = self.data.last_requested_quote_bundle
         if not quote_bundle:
             raise ValueError(f"[BRIDGE MANAGER] Id {quote_bundle_id} not found.")
 
@@ -606,5 +602,5 @@ class BridgeManager:
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
-        for quote in self.data.requested_quote_bundles["bridge_quote_responses"]:
+        for quote in quote_bundle["bridge_quote_responses"]:
             self.bridge_provider.execute_quote(quote)
