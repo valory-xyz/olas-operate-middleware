@@ -951,7 +951,8 @@ Returns the refill requirements on the source chain for bridging assets to targe
           "amount": 60000000000000000000
         },
       },
-    ]
+    ],
+    "force_update": false
   }
 ```
 
