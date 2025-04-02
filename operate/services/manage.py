@@ -569,16 +569,13 @@ class ServiceManager:
                 staking_program_id=current_staking_program,
             ),
         )
-        if user_params.staking_program_id == current_staking_program:
-            target_staking_params = current_staking_program
-        else:
-            target_staking_params = sftxb.get_staking_params(
-                fallback_params=fallback_params,
-                staking_contract=get_staking_contract(
-                    chain=ledger_config.chain,
-                    staking_program_id=user_params.staking_program_id,
-                ),
-            )
+        target_staking_params = sftxb.get_staking_params(
+            fallback_params=fallback_params,
+            staking_contract=get_staking_contract(
+                chain=ledger_config.chain,
+                staking_program_id=user_params.staking_program_id,
+            ),
+        )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
