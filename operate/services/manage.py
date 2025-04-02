@@ -51,7 +51,6 @@ from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
-    NO_STAKING_PROGRAM_ID,
     OLAS,
     STAKING,
     USDC,
@@ -552,22 +551,33 @@ class ServiceManager:
             service.store()
         self.logger.info(f"Service state: {chain_data.on_chain_state.name}")
 
-        if user_params.use_staking:
-            staking_params = sftxb.get_staking_params(
+        current_staking_program = self._get_current_staking_program(service, chain)
+        fallback_params = dict(  # nosec
+            staking_contract=NULL_ADDRESS,
+            agent_ids=[user_params.agent_id],
+            service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
+            staking_token=NULL_ADDRESS,  # nosec
+            service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
+            min_staking_deposit=20000000000000000000,
+            activity_checker=NULL_ADDRESS,  # nosec
+        )
+
+        current_staking_params = sftxb.get_staking_params(
+            fallback_params=fallback_params,
+            staking_contract=get_staking_contract(
+                chain=ledger_config.chain,
+                staking_program_id=current_staking_program,
+            ),
+        )
+        if user_params.staking_program_id == current_staking_program:
+            target_staking_params = current_staking_program
+        else:
+            target_staking_params = sftxb.get_staking_params(
+                fallback_params=fallback_params,
                 staking_contract=get_staking_contract(
                     chain=ledger_config.chain,
                     staking_program_id=user_params.staking_program_id,
                 ),
-            )
-        else:
-            staking_params = dict(  # nosec
-                staking_contract=NULL_ADDRESS,
-                agent_ids=[user_params.agent_id],
-                service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
-                staking_token=NULL_ADDRESS,  # nosec
-                service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
-                min_staking_deposit=20000000000000000000,
-                activity_checker=NULL_ADDRESS,  # nosec
             )
 
         # TODO A customized, arbitrary computation mechanism should be devised.
@@ -585,7 +595,7 @@ class ServiceManager:
                 agent_mech = (
                     mech_activity_contract.get_instance(
                         ledger_api=sftxb.ledger_api,
-                        contract_address=staking_params["activity_checker"],
+                        contract_address=target_staking_params["activity_checker"],
                     )
                     .functions.agentMech()
                     .call()
@@ -609,7 +619,7 @@ class ServiceManager:
                     mech_marketplace_address = (
                         requester_activity_checker.get_instance(
                             ledger_api=sftxb.ledger_api,
-                            contract_address=staking_params["activity_checker"],
+                            contract_address=target_staking_params["activity_checker"],
                         )
                         .functions.mechMarketplace()
                         .call()
@@ -637,8 +647,10 @@ class ServiceManager:
                     "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
                     "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
                     f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
-                    "STAKING_CONTRACT_ADDRESS": staking_params.get("staking_contract"),
-                    "STAKING_TOKEN_CONTRACT_ADDRESS": staking_params.get(
+                    "STAKING_CONTRACT_ADDRESS": target_staking_params.get(
+                        "staking_contract"
+                    ),
+                    "STAKING_TOKEN_CONTRACT_ADDRESS": target_staking_params.get(
                         "staking_contract"
                     ),
                     "MECH_MARKETPLACE_CONFIG": (
@@ -646,13 +658,13 @@ class ServiceManager:
                         f'"priority_mech_address":"{priority_mech_address}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
                         f'"priority_mech_service_id":975,'
-                        f'"requester_staking_instance_address":"{staking_params.get("staking_contract")}",'
+                        f'"requester_staking_instance_address":"{target_staking_params.get("staking_contract")}",'
                         f'"response_timeout":300}}'
                     ),
-                    "ACTIVITY_CHECKER_CONTRACT_ADDRESS": staking_params.get(
+                    "ACTIVITY_CHECKER_CONTRACT_ADDRESS": target_staking_params.get(
                         "activity_checker"
                     ),
-                    "MECH_ACTIVITY_CHECKER_CONTRACT": staking_params.get(
+                    "MECH_ACTIVITY_CHECKER_CONTRACT": target_staking_params.get(
                         "activity_checker"
                     ),
                     "MECH_CONTRACT_ADDRESS": agent_mech,
@@ -699,8 +711,8 @@ class ServiceManager:
                 protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
-                protocol_asset_requirements[staking_params["staking_token"]] = (
-                    staking_params["min_staking_deposit"]
+                protocol_asset_requirements[target_staking_params["staking_token"]] = (
+                    target_staking_params["min_staking_deposit"]
                     * service.helper.config.number_of_agents
                 )
             else:
@@ -720,18 +732,18 @@ class ServiceManager:
 
         # TODO Handle this in a more graceful way.
         agent_id = (
-            staking_params["agent_ids"][0]
-            if staking_params["agent_ids"]
+            target_staking_params["agent_ids"][0]
+            if target_staking_params["agent_ids"]
             else user_params.agent_id
         )
-        staking_params["agent_ids"] = [agent_id]
+        target_staking_params["agent_ids"] = [agent_id]
 
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
         on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
         on_chain_description = on_chain_metadata.get("description")
 
         current_agent_bond = sftxb.get_agent_bond(
-            service_id=chain_data.token, agent_id=staking_params["agent_ids"][0]
+            service_id=chain_data.token, agent_id=target_staking_params["agent_ids"][0]
         )
 
         is_first_mint = (
@@ -746,12 +758,12 @@ class ServiceManager:
             and (
                 # TODO Discuss how to manage on-chain hash updates with staking programs.
                 # on_chain_hash != service.hash or  # noqa
-                current_agent_id != staking_params["agent_ids"][0]
+                current_agent_id != target_staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
-                or current_agent_bond != staking_params["min_staking_deposit"]
+                or current_agent_bond != target_staking_params["min_staking_deposit"]
+                or current_staking_params["staking_token"]
+                != target_staking_params["staking_token"]
                 or on_chain_description != service.description
-                or (current_staking_program is None)
-                ^ (user_params.staking_program_id == NO_STAKING_PROGRAM_ID)
             )
         )
 
@@ -761,9 +773,9 @@ class ServiceManager:
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{target_staking_params['agent_ids'][0]=}")
         self.logger.info(f"{current_agent_bond=}")
-        self.logger.info(f"{staking_params['min_staking_deposit']=}")
+        self.logger.info(f"{target_staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
@@ -785,7 +797,7 @@ class ServiceManager:
                             agent_id=agent_id,
                             number_of_slots=service.helper.config.number_of_agents,
                             cost_of_bond=(
-                                staking_params["min_staking_deposit"]
+                                target_staking_params["min_staking_deposit"]
                                 if user_params.use_staking
                                 else user_params.cost_of_bond
                             ),
@@ -793,7 +805,7 @@ class ServiceManager:
                             nft=IPFSHash(user_params.nft),
                             update_token=chain_data.token,
                             token=(
-                                staking_params["staking_token"]
+                                target_staking_params["staking_token"]
                                 if user_params.use_staking
                                 else None
                             ),
@@ -807,7 +819,7 @@ class ServiceManager:
                     t.Tuple,
                     registry_contracts.service_registry.process_receipt(
                         ledger_api=sftxb.ledger_api,
-                        contract_address=staking_params["service_registry"],
+                        contract_address=target_staking_params["service_registry"],
                         event="UpdateService",
                         receipt=receipt,
                     ).get("events"),
@@ -837,7 +849,7 @@ class ServiceManager:
                         agent_id=agent_id,
                         number_of_slots=service.helper.config.number_of_agents,
                         cost_of_bond=(
-                            staking_params["min_staking_deposit"]
+                            target_staking_params["min_staking_deposit"]
                             if user_params.use_staking
                             else user_params.cost_of_bond
                         ),
@@ -845,7 +857,7 @@ class ServiceManager:
                         nft=IPFSHash(user_params.nft),
                         update_token=None,
                         token=(
-                            staking_params["staking_token"]
+                            target_staking_params["staking_token"]
                             if user_params.use_staking
                             else None
                         ),
@@ -859,7 +871,7 @@ class ServiceManager:
                 t.Tuple,
                 registry_contracts.service_registry.process_receipt(
                     ledger_api=sftxb.ledger_api,
-                    contract_address=staking_params["service_registry"],
+                    contract_address=target_staking_params["service_registry"],
                     event="CreateService",
                     receipt=receipt,
                 ).get("events"),
@@ -875,8 +887,8 @@ class ServiceManager:
             # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
-                token_utility = staking_params["service_registry_token_utility"]
-                olas_token = staking_params["staking_token"]
+                token_utility = target_staking_params["service_registry_token_utility"]
+                olas_token = target_staking_params["staking_token"]
                 self.logger.info(
                     f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
@@ -939,8 +951,8 @@ class ServiceManager:
         ):
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
-                token_utility = staking_params["service_registry_token_utility"]
-                olas_token = staking_params["staking_token"]
+                token_utility = target_staking_params["service_registry_token_utility"]
+                olas_token = target_staking_params["staking_token"]
                 self.logger.info(
                     f"Approving OLAS as bonding token from {safe} to {token_utility}"
                 )
