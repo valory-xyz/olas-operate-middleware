@@ -336,11 +336,14 @@ Creates a Gnosis safe for given chain.
 <details>
   <summary>Request</summary>
 
-```js
+```json
 {
   "chain": "gnosis",
-  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-  "fund_amount": 10000000000000000
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "initial_funds": {
+    "0x0000000000000000000000000000000000000000": 1000000000000000000,
+    "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+  }
 }
 ```
 

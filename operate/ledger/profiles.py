@@ -21,6 +21,7 @@
 
 import typing as t
 
+from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
 
 
@@ -140,12 +141,22 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 
 DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"
 
-DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, int] = {
-    Chain.GNOSIS: 1e18,
-    Chain.OPTIMISTIC: 1e15 / 4,
-    Chain.BASE: 1e15 / 4,
-    Chain.ETHEREUM: 1e15 / 4,
-    Chain.MODE: 1e15 / 4,
+DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, t.Dict[str, int]] = {
+    Chain.GNOSIS: {
+        ZERO_ADDRESS: int(1e18),
+    },
+    Chain.OPTIMISTIC: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.BASE: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.ETHEREUM: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.MODE: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
 }
 
 # ERC20 token addresses

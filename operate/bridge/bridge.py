@@ -45,7 +45,7 @@ from operate.services.manage import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
-DEFAULT_MAX_RETRIES = 3
+DEFAULT_MAX_RETRIES = 1
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
@@ -128,7 +128,7 @@ class BridgeProvider:
         return bridge_requirements
 
     @abstractmethod
-    def execute_quote(self, quote: dict) -> None:
+    def execute_quote(self, bridge_quote_response: dict) -> None:
         """Execute the quote."""
         raise NotImplementedError()
 
@@ -148,7 +148,6 @@ class LiFiBridgeProvider(BridgeProvider):
     ) -> dict:
         """Get bridge quote."""
 
-        now = int(time.time())
         if to_amount == 0:
             self.logger.info("[LI.FI BRIDGE] Zero-amount quote requested")
             return {
@@ -158,8 +157,8 @@ class LiFiBridgeProvider(BridgeProvider):
                     "elapsed_time": 0,
                     "error": False,
                     "message": "Zero-amount quote requested",
-                    "response_status": HTTPStatus.OK,
-                    "timestamp": now,
+                    "status": HTTPStatus.OK,
+                    "timestamp": int(time.time()),
                 },
             }
 
@@ -176,7 +175,6 @@ class LiFiBridgeProvider(BridgeProvider):
         }
         for attempt in range(1, DEFAULT_MAX_RETRIES + 1):
             start = time.time()
-            response = None
             try:
                 self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
                 response = requests.get(
@@ -190,8 +188,8 @@ class LiFiBridgeProvider(BridgeProvider):
                         "elapsed_time": time.time() - start,
                         "error": False,
                         "message": "",
-                        "response_status": response.status_code,
-                        "timestamp": now,
+                        "status": response.status_code,
+                        "timestamp": int(time.time()),
                     },
                 }
             except requests.Timeout as e:
@@ -205,15 +203,15 @@ class LiFiBridgeProvider(BridgeProvider):
                         "elapsed_time": time.time() - start,
                         "error": True,
                         "message": str(e),
-                        "response_status": HTTPStatus.GATEWAY_TIMEOUT,
-                        "timestamp": now,
+                        "status": HTTPStatus.GATEWAY_TIMEOUT,
+                        "timestamp": int(time.time()),
                     },
                 }
             except requests.RequestException as e:
                 self.logger.warning(
                     f"[LI.FI BRIDGE] Request failed on attempt {attempt}/{DEFAULT_MAX_RETRIES}: {e}."
                 )
-                response_json = response.json() if response else {}
+                response_json = response.json()
                 output = {
                     "quote": response_json,
                     "metadata": {
@@ -221,10 +219,8 @@ class LiFiBridgeProvider(BridgeProvider):
                         "elapsed_time": time.time() - start,
                         "error": True,
                         "message": response_json.get("message") or str(e),
-                        "request_status": response.status_code
-                        if response
-                        else HTTPStatus.INTERNAL_SERVER_ERROR,
-                        "timestamp": now,
+                        "status": response.status_code,
+                        "timestamp": int(time.time()),
                     },
                 }
 
@@ -270,10 +266,19 @@ class LiFiBridgeProvider(BridgeProvider):
                 }
             }
 
-    def execute_quote(self, quote: dict) -> None:
+    def execute_quote(self, bridge_quote_response: dict) -> None:
         """Execute the quote."""
 
-        self.logger.info("[LI.FI BRIDGE] Execute quote.")
+        quote = bridge_quote_response["quote"]
+        metadata = bridge_quote_response["metadata"]
+
+        if not quote or metadata.get("error", False):
+            self.logger.info(
+                "[LI.FI BRIDGE] Skipping quote execution (no quote or request error)."
+            )
+            return None
+
+        self.logger.info(f"[LI.FI BRIDGE] Execute quote {quote.get('id')}.")
         from_token = quote["action"]["fromToken"]["address"]
         from_amount = int(quote["action"]["fromAmount"])
 
@@ -354,6 +359,7 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     last_requested_quote_bundle: dict = field(default_factory=dict)
+    executed_quotes: dict = field(default_factory=dict)
 
     _file = "bridge.json"
 
@@ -458,8 +464,7 @@ class BridgeManager:
         if create_new_quote_bundle:
             quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
             quote_bundle["quote_requests"] = quote_requests
-            quote_bundle["executions"] = []
-            quote_bundle["execution_status"] = []
+            quote_bundle["quote_executions"] = []
             update_quotes = True
 
         if update_quotes:
@@ -546,11 +551,11 @@ class BridgeManager:
                     "[BRIDGE MANAGER] Request contains duplicate entries with same 'from' and 'to'."
                 )
 
-    def bridge_refill_requirements(self, client_input: dict) -> dict:
+    def bridge_refill_requirements(
+        self, quote_requests: list, force_update: bool = False
+    ) -> dict:
         """Get bridge refill requirements."""
 
-        quote_requests = client_input.get("quote_requests", [])
-        force_update = client_input.get("force_update", False)
         self._raise_if_invalid(quote_requests)
         self.logger.info(
             f"[BRIDGE MANAGER] Num. quote requests: {len(quote_requests)}."
@@ -632,11 +637,14 @@ class BridgeManager:
 
         quote_bundle = self.data.last_requested_quote_bundle
         if not quote_bundle:
-            raise ValueError(f"[BRIDGE MANAGER] Id {quote_bundle_id} not found.")
+            raise RuntimeError("[BRIDGE MANAGER] No quote bundle.")
 
-        quote_requests = quote_bundle["quote_requests"]
+        if quote_bundle.get("id") != quote_bundle_id:
+            raise RuntimeError(
+                f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} does not match last requested quote bundle id {quote_bundle.get('id')}."
+            )
 
-        requirements = self.bridge_refill_requirements(quote_requests)
+        requirements = self.bridge_refill_requirements(quote_bundle["quote_requests"])
 
         if requirements["is_refill_required"]:
             raise RuntimeError(
@@ -644,5 +652,6 @@ class BridgeManager:
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
-        for quote in quote_bundle["bridge_quote_responses"]:
-            self.bridge_provider.execute_quote(quote)
+        for bridge_quote_response in quote_bundle["bridge_quote_responses"]:
+            quote_execution = self.bridge_provider.execute_quote(bridge_quote_response)
+            quote_bundle["quote_executions"].append(quote_execution)

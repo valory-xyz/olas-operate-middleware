@@ -633,12 +633,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             chain=chain,
             backup_owner=backup_owner,
         )
-        wallet.transfer(
-            to=t.cast(str, safes.get(chain)),
-            amount=int(data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])),
-            chain=chain,
-            from_safe=False,
-        )
+
+        safe_address = t.cast(str, safes.get(chain))
+        initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
+
+        for asset, amount in initial_funds.items():
+            wallet.transfer_asset(
+                to=safe_address,
+                amount=amount,
+                chain=chain,
+                asset=asset,
+                from_safe=False,
+            )
+
         return JSONResponse(
             content={"safe": safes.get(chain), "message": "Safe created!"}
         )
@@ -1004,7 +1011,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         try:
             data = await request.json()
             output = operate.bridge_manager().bridge_refill_requirements(
-                client_input=data
+                quote_requests=data
             )
 
             return JSONResponse(
