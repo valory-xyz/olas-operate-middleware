@@ -127,11 +127,12 @@ class BridgeProvider:
 class LiFiTransactionStatus(str, enum.Enum):
     """LI.FI transaction status."""
 
-    NOT_FOUND = "not_found"
-    INVALID = "invalid"
-    PENDING = "pending"
-    DONE = "done"
-    FAILED = "failed"
+    NOT_FOUND = "NOT_FOUND"
+    INVALID = "INVALID"
+    PENDING = "PENDING"
+    DONE = "DONE"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
 
     def __str__(self) -> str:
         """__str__"""
@@ -415,7 +416,7 @@ class LiFiBridgeProvider(BridgeProvider):
         response = requests.get(url=url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         response_json = response.json()
-        status = response_json.get("status", "unknown").lower()
+        status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
         execution["status"] = status
 
     def is_execution_finished(self, bridge_workflow: dict) -> bool:
@@ -453,10 +454,10 @@ class LiFiBridgeProvider(BridgeProvider):
 class QuoteBundleStatus(str, enum.Enum):
     """Quote bundle status."""
 
-    CREATED = "created"
-    QUOTED = "quoted"
-    SUBMITTED = "submitted"
-    FINISHED = "finished"  # All requests in the bundle are either done or failed.
+    CREATED = "CREATED"
+    QUOTED = "QUOTED"
+    SUBMITTED = "SUBMITTED"
+    FINISHED = "FINISHED"  # All requests in the bundle are either done or failed.
 
     def __str__(self) -> str:
         """__str__"""
@@ -563,7 +564,7 @@ class BridgeManager:
             self.logger.info("[BRIDGE MANAGER] No last quote bundle.")
             create_new_quote_bundle = True
             quote_bundle_id = None
-        elif quote_bundle.get("status") != QuoteBundleStatus.QUOTED:
+        elif quote_bundle.get("status") not in (QuoteBundleStatus.CREATED, QuoteBundleStatus.QUOTED):
             raise RuntimeError("[BRIDGE MANAGER] Quote bundle inconsistent status.")
         elif DeepDiff(bridge_requests, quote_bundle.get("bridge_requests", [])):
             self.logger.info("[BRIDGE MANAGER] Different quote requests.")

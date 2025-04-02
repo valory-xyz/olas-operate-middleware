@@ -1070,10 +1070,10 @@ Executes a quote bundle.
 
 Gets the status of a quote bundle. The attribute `status` can take the following values sequentially:
 
-- `created`: The quote bundle internal data structure has been created, but no quotes have been requested yet.
-- `quoted`: A quote is available. Quote updates are possible in this state if either expired or forced through the [POST /api/bridge/bridge_refill_requirements](#post-apibridgebridge_refill_requirements) endpoint by setting `force_update=true`.
-- `submitted`: The quote bundle has been submitted for execution.
-- `finished`: All the quote executions in the bundle have reached their final state (either done or failed). No more updates are expected for this quote bundle.
+- `CREATED`: The quote bundle internal data structure has been created, but no quotes have been requested yet.
+- `QUOTED`: A quote is available. Quote updates are possible in this state if either expired or forced through the [POST /api/bridge/bridge_refill_requirements](#post-apibridgebridge_refill_requirements) endpoint by setting `force_update=true`.
+- `SUBMITTED`: The quote bundle has been submitted for execution.
+- `FINISHED`: All the quote executions in the bundle have reached their final state (either done or failed). No more updates are expected for this quote bundle.
 
 <details>
   <summary>Response</summary>
