@@ -894,7 +894,10 @@ The refill requirements are computed based on the fund requirements present on t
 
 ### `POST /api/bridge/bridge_refill_requirements`
 
-Returns the refill requirements on the source chain for bridging assets to target chains.
+Creates a quote bundle to fulfill the bridge requests and returns
+
+- the refill requirements on the source chain for bridging assets to target chains,
+- the quote bundle id to execute the request.
 
 <details>
   <summary>Request</summary>
@@ -964,9 +967,9 @@ Returns the refill requirements on the source chain for bridging assets to targe
 <details>
   <summary>Response</summary>
 
-```json
+  ```json
   {
-    "id": "e05509f3-d153-4b69-94cf-f82324f8c226",
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
     "balances": {
       "ethereum": {
         "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
@@ -1007,7 +1010,101 @@ Returns the refill requirements on the source chain for bridging assets to targe
     ],
     "errors": false
   }
+  ```
+
+</details>
+
+---
+
+### `POST /api/bridge/execute`
+
+Executes a quote bundle.
+
+<details>
+  <summary>Request</summary>
+
+```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d"
+  }
 ```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
+    "status": "submitted",
+    "executions": [
+      {
+        "error": false,
+        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "message": "",
+        "status": "done",
+        "timestamp": 1743626170,
+        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "tx_status": 1
+      },
+      {
+        "error": false,
+        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "message": "",
+        "status": "pending",
+        "timestamp": 1743626185,
+        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "tx_status": 1
+      }
+    ],
+    "errors": false
+  }
+  ```
+
+</details>
+
+---
+
+### `GET /api/bridge/status/{quote_bundle_id}`
+
+Gets the status of a quote bundle. The attribute `status` can take the following values sequentially:
+
+- `created`: The quote bundle internal data structure has been created, but no quotes have been requested yet.
+- `quoted`: A quote is available. Quote updates are possible in this state if either expired or forced through the [POST /api/bridge/bridge_refill_requirements](#post-apibridgebridge_refill_requirements) endpoint by setting `force_update=true`.
+- `submitted`: The quote bundle has been submitted for execution.
+- `finished`: All the quote executions in the bundle have reached their final state (either done or failed). No more updates are expected for this quote bundle.
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
+    "status": "finished",
+    "executions": [
+      {
+        "error": false,
+        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "message": "",
+        "status": "done",
+        "timestamp": 1743626170,
+        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "tx_status": 1
+      },
+      {
+        "error": false,
+        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "message": "",
+        "status": "done",
+        "timestamp": 1743626185,
+        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "tx_status": 1
+      }
+    ],
+    "errors": false
+  }
+  ```
 
 </details>
 
