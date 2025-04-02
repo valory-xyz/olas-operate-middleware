@@ -845,8 +845,13 @@ class _ChainUtil:
             staking_contract=staking_contract,
         )
 
-    def get_staking_params(self, staking_contract: str) -> t.Dict:
+    def get_staking_params(
+        self, staking_contract: str, fallback_params: t.Optional[t.Dict] = None
+    ) -> t.Dict:
         """Get agent IDs for the staking contract"""
+
+        if staking_contract is None and fallback_params is not None:
+            return fallback_params
 
         cache = _ChainUtil._cache
         if staking_contract in cache.setdefault("get_staking_params", {}):
