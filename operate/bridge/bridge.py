@@ -20,6 +20,7 @@
 """Bridge manager."""
 
 
+import enum
 import json
 import logging
 import shutil
@@ -45,7 +46,7 @@ from operate.services.manage import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
-DEFAULT_MAX_RETRIES = 1
+DEFAULT_MAX_RETRIES = 3
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
@@ -67,50 +68,22 @@ class BridgeProvider:
         return self.__class__.__name__
 
     @abstractmethod
-    def get_quote(
-        self,
-        from_chain: Chain,
-        from_address: str,
-        from_token: str,
-        to_chain: Chain,
-        to_token: str,
-        to_address: str,
-        to_amount: int,
-    ) -> dict:
-        """Get bridge quote."""
+    def update_with_quote(self, bridge_workflow: dict) -> None:
+        """Update the request with the quote."""
         raise NotImplementedError()
 
-    def get_quote_responses(self, quote_requests: list) -> list:
-        """Get bridge quotes."""
-        bridge_quote_responses = []
-
-        for quote_request in quote_requests:
-            bridge_quote_response = self.get_quote(
-                from_chain=Chain(quote_request["from"]["chain"]),
-                from_address=quote_request["from"]["address"],
-                from_token=quote_request["from"]["token"],
-                to_chain=Chain(quote_request["to"]["chain"]),
-                to_address=quote_request["to"]["address"],
-                to_token=quote_request["to"]["token"],
-                to_amount=quote_request["to"]["amount"],
-            )
-
-            bridge_quote_responses.append(bridge_quote_response)
-
-        return bridge_quote_responses
-
     @abstractmethod
-    def get_quote_requirements(self, bridge_quote_response: dict) -> dict | None:
+    def get_quote_requirements(self, bridge_workflow: dict) -> dict | None:
         """Get bridge requirements for a single quote."""
         raise NotImplementedError()
 
-    def sum_quotes_requirements(self, bridge_quote_responses: list) -> dict:
+    def sum_quotes_requirements(self, bridge_workflows: list) -> dict:
         """Get bridge requirements for a list of quotes."""
 
         bridge_requirements: dict = {}
 
-        for bridge_quote_response in bridge_quote_responses:
-            req = self.get_quote_requirements(bridge_quote_response)
+        for workflow in bridge_workflows:
+            req = self.get_quote_requirements(workflow)
 
             if not req:
                 continue
@@ -128,47 +101,60 @@ class BridgeProvider:
         return bridge_requirements
 
     @abstractmethod
-    def execute_quote(self, bridge_quote_response: dict) -> None:
+    def update_with_execution(self, bridge_workflow: dict) -> None:
         """Execute the quote."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def update_execution_status(self, bridge_workflow: dict) -> None:
+        """Update the execution status."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def is_execution_finished(self, bridge_workflow: dict) -> bool:
+        """Check if the execution is finished."""
         raise NotImplementedError()
 
 
 class LiFiBridgeProvider(BridgeProvider):
     """LI.FI Bridge provider."""
 
-    def get_quote(
-        self,
-        from_chain: Chain,
-        from_address: str,
-        from_token: str,
-        to_chain: Chain,
-        to_token: str,
-        to_address: str,
-        to_amount: int,
-    ) -> dict:
-        """Get bridge quote."""
+    def update_with_quote(self, bridge_workflow: dict) -> None:
+        """Update the request with the quote."""
+
+        if "execution" in bridge_workflow:
+            raise ValueError(
+                "[LI.FI BRIDGE] Cannot update workflow with quote: execution already present."
+            )
+
+        from_chain = bridge_workflow["request"]["from"]["chain"]
+        from_address = bridge_workflow["request"]["from"]["address"]
+        from_token = bridge_workflow["request"]["from"]["token"]
+        to_chain = bridge_workflow["request"]["to"]["chain"]
+        to_address = bridge_workflow["request"]["to"]["address"]
+        to_token = bridge_workflow["request"]["to"]["token"]
+        to_amount = bridge_workflow["request"]["to"]["amount"]
 
         if to_amount == 0:
             self.logger.info("[LI.FI BRIDGE] Zero-amount quote requested")
-            return {
-                "quote": {},
-                "metadata": {
-                    "attempts": 0,
-                    "elapsed_time": 0,
-                    "error": False,
-                    "message": "Zero-amount quote requested",
-                    "status": HTTPStatus.OK,
-                    "timestamp": int(time.time()),
-                },
+            bridge_workflow["quote"] = {
+                "response": {},
+                "attempts": 0,
+                "elapsed_time": 0,
+                "error": False,
+                "message": "Zero-amount quote requested",
+                "status": HTTPStatus.OK,
+                "timestamp": int(time.time()),
             }
+            return
 
         url = "https://li.quest/v1/quote/toAmount"
         headers = {"accept": "application/json"}
         params = {
-            "fromChain": from_chain.id,
+            "fromChain": Chain(from_chain).id,
             "fromAddress": from_address,
             "fromToken": from_token,
-            "toChain": to_chain.id,
+            "toChain": Chain(to_chain).id,
             "toAddress": to_address,
             "toToken": to_token,
             "toAmount": to_amount,
@@ -181,31 +167,28 @@ class LiFiBridgeProvider(BridgeProvider):
                     url=url, headers=headers, params=params, timeout=30
                 )
                 response.raise_for_status()
-                return {
-                    "quote": response.json(),
-                    "metadata": {
-                        "attempts": attempt,
-                        "elapsed_time": time.time() - start,
-                        "error": False,
-                        "message": "",
-                        "status": response.status_code,
-                        "timestamp": int(time.time()),
-                    },
+                bridge_workflow["quote"] = {
+                    "response": response.json(),
+                    "attempts": attempt,
+                    "elapsed_time": time.time() - start,
+                    "error": False,
+                    "message": "",
+                    "status": response.status_code,
+                    "timestamp": int(time.time()),
                 }
+                return
             except requests.Timeout as e:
                 self.logger.warning(
                     f"[LI.FI BRIDGE] Timeout request on attempt {attempt}/{DEFAULT_MAX_RETRIES}: {e}."
                 )
                 output = {
-                    "quote": {},
-                    "metadata": {
-                        "attempts": attempt,
-                        "elapsed_time": time.time() - start,
-                        "error": True,
-                        "message": str(e),
-                        "status": HTTPStatus.GATEWAY_TIMEOUT,
-                        "timestamp": int(time.time()),
-                    },
+                    "response": {},
+                    "attempts": attempt,
+                    "elapsed_time": time.time() - start,
+                    "error": True,
+                    "message": str(e),
+                    "status": HTTPStatus.GATEWAY_TIMEOUT,
+                    "timestamp": int(time.time()),
                 }
             except requests.RequestException as e:
                 self.logger.warning(
@@ -213,35 +196,32 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 response_json = response.json()
                 output = {
-                    "quote": response_json,
-                    "metadata": {
-                        "attempts": attempt,
-                        "elapsed_time": time.time() - start,
-                        "error": True,
-                        "message": response_json.get("message") or str(e),
-                        "status": response.status_code,
-                        "timestamp": int(time.time()),
-                    },
+                    "response": response_json,
+                    "attempts": attempt,
+                    "elapsed_time": time.time() - start,
+                    "error": True,
+                    "message": response_json.get("message") or str(e),
+                    "status": response.status_code,
+                    "timestamp": int(time.time()),
                 }
 
             if attempt >= DEFAULT_MAX_RETRIES:
                 self.logger.error(
                     f"[LI.FI BRIDGE] Request failed after {DEFAULT_MAX_RETRIES} attempts."
                 )
-                return output
+                bridge_workflow["quote"] = output
+                return
 
             time.sleep(2)
 
-        return {}
-
     # TODO gas fees !
-    def get_quote_requirements(self, bridge_quote_response: dict) -> dict | None:
+    def get_quote_requirements(self, bridge_workflow: dict) -> dict | None:
         """Get bridge requirements for a quote."""
 
-        quote = bridge_quote_response["quote"]
-        metadata = bridge_quote_response["metadata"]
+        quote = bridge_workflow["quote"]["response"]
+        error = bridge_workflow["quote"].get("error", False)
 
-        if metadata.get("error", False) or "action" not in quote:
+        if error or "action" not in quote:
             return None
 
         from_chain = Chain.from_id(quote["action"]["fromChainId"])
@@ -266,19 +246,48 @@ class LiFiBridgeProvider(BridgeProvider):
                 }
             }
 
-    def execute_quote(self, bridge_quote_response: dict) -> None:
+    def update_with_execution(self, bridge_workflow: dict) -> None:
         """Execute the quote."""
 
-        quote = bridge_quote_response["quote"]
-        metadata = bridge_quote_response["metadata"]
-
-        if not quote or metadata.get("error", False):
-            self.logger.info(
-                "[LI.FI BRIDGE] Skipping quote execution (no quote or request error)."
+        if "quote" not in bridge_workflow:
+            raise ValueError(
+                "[LI.FI BRIDGE] Cannot update workflow with execution: quote not present."
             )
-            return None
 
-        self.logger.info(f"[LI.FI BRIDGE] Execute quote {quote.get('id')}.")
+        if "execution" in bridge_workflow:
+            raise ValueError(
+                "[LI.FI BRIDGE] Cannot update workflow with quote: execution already present."
+            )
+
+        quote = bridge_workflow["quote"]["response"]
+        error = bridge_workflow["quote"].get("error", False)
+
+        if error:
+            self.logger.info("[LI.FI BRIDGE] Skipping quote execution (quote error).")
+            bridge_workflow["execution"] = {
+                "error": True,
+                "explorer_link": None,
+                "message": "Skipped quote execution (quote error).",
+                "status": None,
+                "timestamp": int(time.time()),
+                "tx_hash": None,
+                "tx_status": None,
+            }
+            return
+        if not quote:
+            self.logger.info("[LI.FI BRIDGE] Skipping quote execution (empty quote).")
+            bridge_workflow["execution"] = {
+                "error": False,
+                "explorer_link": None,
+                "message": "Skipped quote execution (empty quote).",
+                "status": None,
+                "timestamp": int(time.time()),
+                "tx_hash": None,
+                "tx_status": None,
+            }
+            return
+
+        self.logger.info(f"[LI.FI BRIDGE] Executing quote {quote.get('id')}.")
         from_token = quote["action"]["fromToken"]["address"]
         from_amount = int(quote["action"]["fromAmount"])
 
@@ -347,9 +356,78 @@ class LiFiBridgeProvider(BridgeProvider):
         transaction["gas"] = gas_estimate
         signed_transaction = w3.eth.account.sign_transaction(transaction, private_key)
         tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-        print(f"Quote transaction {tx_hash=}")
+        self.logger.info(f"[LI.FI BRIDGE] Quote {quote['id']} tx_hash={tx_hash.hex()}.")
+
+        # TODO remove?
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-        print(f"Quote transaction {receipt=}")
+        self.logger.info(f"[LI.FI BRIDGE] Quote {quote['id']} executed.")
+
+        bridge_workflow["execution"] = {
+            "error": receipt.get("status", 0) == 0,
+            "explorer_link": f"https://scan.li.fi/tx/{tx_hash.hex()}",
+            "message": "",
+            "status": None,
+            "timestamp": int(time.time()),
+            "tx_hash": tx_hash.hex(),
+            "tx_status": receipt.get("status", 0),
+        }
+
+    def update_execution_status(self, bridge_workflow: dict) -> None:
+        """Update the execution status."""
+
+        print("xxxxxx")
+
+        if "execution" not in bridge_workflow:
+            raise ValueError(
+                "[LI.FI BRIDGE] Cannot update workflow execution: execution not present."
+            )
+
+        execution = bridge_workflow["execution"]
+        tx_hash = execution["tx_hash"]
+
+        if not tx_hash:
+            execution["status"] = None
+            return
+
+        url = "https://li.quest/v1/status"
+        headers = {"accept": "application/json"}
+        params = {
+            "txHash": tx_hash,
+        }
+        response = requests.get(url=url, headers=headers, params=params, timeout=30)
+        response.raise_for_status()
+        response_json = response.json()
+        status = response_json.get("status", "unknown").lower()
+        execution["status"] = status
+
+    def is_execution_finished(self, bridge_workflow: dict) -> bool:
+        """Check if the execution is finished."""
+
+        if "execution" not in bridge_workflow:
+            raise ValueError(
+                "[LI.FI BRIDGE] Cannot update workflow execution: execution not present."
+            )
+
+        execution = bridge_workflow["execution"]
+        if "status" in execution and execution["status"] in (None, "done", "failed"):
+            return True
+
+        self.update_execution_status(bridge_workflow)
+
+        execution = bridge_workflow["execution"]
+        if execution.get("status") in (None, "done", "failed"):
+            return True
+
+        return False
+
+
+class QuoteBundleStatus(str, enum.Enum):
+    """Quote bundle status."""
+
+    CREATED = "created"
+    QUOTED = "quoted"
+    EXECUTED = "executed"
+    FINISHED = "finished"  # All requests in the bundle are either done or failed.
 
 
 @dataclass
@@ -358,7 +436,7 @@ class BridgeManagerData(LocalResource):
 
     path: Path
     version: int = 1
-    last_requested_quote_bundle: dict = field(default_factory=dict)
+    last_requested_quote_bundle: dict | None = None
     executed_quotes: dict = field(default_factory=dict)
 
     _file = "bridge.json"
@@ -438,50 +516,83 @@ class BridgeManager:
         )
         self.data.store()
 
-    def _refresh_latest_requested_quote_bundle(
-        self, quote_requests: list, force_update: bool
-    ) -> None:
+    def _get_updated_quote_bundle(
+        self, bridge_requests: list, force_update: bool
+    ) -> dict:
         """Ensures to return a valid (non expired) quote bundle for the given inputs."""
 
         now = int(time.time())
         quote_bundle = self.data.last_requested_quote_bundle or {}
+        quote_bundle_id = quote_bundle.get("id")
         create_new_quote_bundle = False
-        update_quotes = False
 
         if not quote_bundle:
             self.logger.info("[BRIDGE MANAGER] No last quote bundle.")
             create_new_quote_bundle = True
-        elif DeepDiff(quote_requests, quote_bundle.get("quote_requests", [])):
+            quote_bundle_id = None
+        elif quote_bundle.get("status") != QuoteBundleStatus.QUOTED:
+            raise RuntimeError("[BRIDGE MANAGER] Quote bundle inconsistent status.")
+        elif DeepDiff(bridge_requests, quote_bundle.get("bridge_requests", [])):
             self.logger.info("[BRIDGE MANAGER] Different quote requests.")
             create_new_quote_bundle = True
+            quote_bundle_id = None
         elif force_update:
             self.logger.info("[BRIDGE MANAGER] Force quote update.")
-            update_quotes = True
-        elif now > quote_bundle.get("expiration_timestamp", 0):
+            create_new_quote_bundle = True
+        elif now > quote_bundle.get("timestamp", 0) + self.quote_validity_period:
             self.logger.info("[BRIDGE MANAGER] Quote bundle expired.")
-            update_quotes = True
+            create_new_quote_bundle = True
 
         if create_new_quote_bundle:
-            quote_bundle["id"] = f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
-            quote_bundle["quote_requests"] = quote_requests
-            quote_bundle["quote_executions"] = []
-            update_quotes = True
-
-        if update_quotes:
             self.logger.info("[BRIDGE MANAGER] Requesting new quote bundle.")
+            quote_bundle = {}
+            quote_bundle["id"] = (
+                quote_bundle_id or f"{QUOTE_BUNDLE_PREFIX}{uuid.uuid4()}"
+            )
+            quote_bundle["bridge_provider"] = self.bridge_provider.name()
+            quote_bundle["status"] = QuoteBundleStatus.CREATED.value
+            quote_bundle["bridge_requests"] = bridge_requests
+            quote_bundle["bridge_workflows"] = [
+                {"request": request} for request in bridge_requests
+            ]
             quote_bundle["timestamp"] = now
             quote_bundle["expiration_timestamp"] = now + self.quote_validity_period
-            quote_bundle["bridge_provider"] = self.bridge_provider.name()
-            quote_bundle[
-                "bridge_quote_responses"
-            ] = self.bridge_provider.get_quote_responses(quote_requests)
+
+            for workflow in quote_bundle["bridge_workflows"]:
+                self.bridge_provider.update_with_quote(workflow)
+
+            quote_bundle["status"] = QuoteBundleStatus.QUOTED.value
             quote_bundle[
                 "bridge_requirements"
             ] = self.bridge_provider.sum_quotes_requirements(
-                quote_bundle["bridge_quote_responses"]
+                quote_bundle["bridge_workflows"]
             )
 
             self.data.last_requested_quote_bundle = quote_bundle
+            self.data.store()
+
+        return quote_bundle
+
+    def _update_quote_bundle_status(self, quote_bundle_id: str) -> None:
+        quote_bundle = self.data.executed_quotes.get(quote_bundle_id)
+
+        if not quote_bundle:
+            raise ValueError(
+                f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} not found."
+            )
+
+        initial_status = quote_bundle["status"]
+        is_execution_finished = all(
+            self.bridge_provider.is_execution_finished(workflow)
+            for workflow in quote_bundle["bridge_workflows"]
+        )
+
+        if is_execution_finished:
+            quote_bundle["status"] = QuoteBundleStatus.FINISHED.value
+        else:
+            quote_bundle["status"] = QuoteBundleStatus.EXECUTED.value
+
+        if initial_status != quote_bundle["status"]:
             self.data.store()
 
     def _raise_if_invalid(self, bridge_requests: list) -> None:
@@ -552,19 +663,18 @@ class BridgeManager:
                 )
 
     def bridge_refill_requirements(
-        self, quote_requests: list, force_update: bool = False
+        self, bridge_requests: list, force_update: bool = False
     ) -> dict:
         """Get bridge refill requirements."""
 
-        self._raise_if_invalid(quote_requests)
+        self._raise_if_invalid(bridge_requests)
         self.logger.info(
-            f"[BRIDGE MANAGER] Num. quote requests: {len(quote_requests)}."
+            f"[BRIDGE MANAGER] Quote requests count: {len(bridge_requests)}."
         )
-        self._refresh_latest_requested_quote_bundle(quote_requests, force_update)
 
-        quote_bundle = self.data.last_requested_quote_bundle
+        quote_bundle = self._get_updated_quote_bundle(bridge_requests, force_update)
 
-        chains = [request["from"]["chain"] for request in quote_requests]
+        chains = [request["from"]["chain"] for request in bridge_requests]
         balances = {}
         for chain in chains:
             ledger_api = self.wallet_manager.load(Chain(chain).ledger_type).ledger_api(
@@ -575,12 +685,12 @@ class BridgeManager:
                 asset_addresses={ZERO_ADDRESS}
                 | {
                     request["from"]["token"]
-                    for request in quote_requests
+                    for request in bridge_requests
                     if request["from"]["chain"] == chain
                 },
                 addresses={
                     request["from"]["address"]
-                    for request in quote_requests
+                    for request in bridge_requests
                     if request["from"]["chain"] == chain
                 },
             )
@@ -608,9 +718,15 @@ class BridgeManager:
         )
 
         quote_response_status = [
-            response["metadata"] for response in quote_bundle["bridge_quote_responses"]
+            {
+                "message": response["quote"]["message"],
+                "error": response["quote"]["error"],
+            }
+            for response in quote_bundle["bridge_workflows"]
         ]
-        errors = any(status["error"] for status in quote_response_status)
+        errors = any(
+            workflow["quote"]["error"] for workflow in quote_bundle["bridge_workflows"]
+        )
         self._quote_bundle_updated_on_session = True
 
         return {
@@ -627,7 +743,7 @@ class BridgeManager:
             "errors": errors,
         }
 
-    def execute_quote_bundle(self, quote_bundle_id: str) -> None:
+    def execute_quote_bundle(self, quote_bundle_id: str) -> dict:
         """Execute quote bundle"""
 
         if not self._quote_bundle_updated_on_session:
@@ -636,6 +752,7 @@ class BridgeManager:
             )
 
         quote_bundle = self.data.last_requested_quote_bundle
+
         if not quote_bundle:
             raise RuntimeError("[BRIDGE MANAGER] No quote bundle.")
 
@@ -644,7 +761,7 @@ class BridgeManager:
                 f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} does not match last requested quote bundle id {quote_bundle.get('id')}."
             )
 
-        requirements = self.bridge_refill_requirements(quote_bundle["quote_requests"])
+        requirements = self.bridge_refill_requirements(quote_bundle["bridge_requests"])
 
         if requirements["is_refill_required"]:
             raise RuntimeError(
@@ -652,6 +769,56 @@ class BridgeManager:
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
-        for bridge_quote_response in quote_bundle["bridge_quote_responses"]:
-            quote_execution = self.bridge_provider.execute_quote(bridge_quote_response)
-            quote_bundle["quote_executions"].append(quote_execution)
+        for bridge_workflow in quote_bundle["bridge_workflows"]:
+            self.bridge_provider.update_with_execution(bridge_workflow)
+
+        quote_bundle["status"] = QuoteBundleStatus.EXECUTED.value
+
+        self.data.last_requested_quote_bundle = None
+        self.data.executed_quotes[quote_bundle["id"]] = quote_bundle
+        self.data.store()
+        self._quote_bundle_updated_on_session = False
+        self.logger.info(
+            f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} executed."
+        )
+
+        executions = [
+            workflow["execution"] for workflow in quote_bundle["bridge_workflows"]
+        ]
+        errors = any(
+            workflow["execution"]["error"]
+            for workflow in quote_bundle["bridge_workflows"]
+        )
+
+        return {
+            "id": quote_bundle["id"],
+            "executions": executions,
+            "errors": errors,
+        }
+
+    def get_execution_status(self, quote_bundle_id: str) -> dict:
+        """Get execution status of quote bundle."""
+
+        quote_bundle = self.data.executed_quotes.get(quote_bundle_id)
+
+        if not quote_bundle:
+            raise ValueError(
+                f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} not found."
+            )
+
+        self._update_quote_bundle_status(quote_bundle_id)
+
+        executions = [
+            workflow["execution"] for workflow in quote_bundle["bridge_workflows"]
+        ]
+        errors = any(
+            workflow["execution"]["error"]
+            for workflow in quote_bundle["bridge_workflows"]
+        )
+
+        return {
+            "id": quote_bundle["id"],
+            "status": quote_bundle["status"],
+            "executions": executions,
+            "errors": errors,
+        }

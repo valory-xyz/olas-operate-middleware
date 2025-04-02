@@ -1011,7 +1011,64 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         try:
             data = await request.json()
             output = operate.bridge_manager().bridge_refill_requirements(
-                quote_requests=data
+                bridge_requests=data
+            )
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.BAD_GATEWAY
+                if output["errors"]
+                else HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/bridge/execute")
+    @with_retries
+    async def _bridge_execute(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        try:
+            data = await request.json()
+            output = operate.bridge_manager().execute_quote_bundle(
+                quote_bundle_id=data["id"]
+            )
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.BAD_GATEWAY
+                if output["errors"]
+                else HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get(f"/api/bridge/status/{id}")
+    @with_retries
+    async def _bridge_status(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+
+        quote_bundle_id = request.path_params["id"]
+
+        try:
+            output = operate.bridge_manager().get_execution_status(
+                quote_bundle_id=quote_bundle_id
             )
 
             return JSONResponse(
