@@ -1043,7 +1043,7 @@ Executes a quote bundle.
         "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "message": "",
-        "status": "done",
+        "status": "DONE",
         "timestamp": 1743626170,
         "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "tx_status": 1
@@ -1052,7 +1052,7 @@ Executes a quote bundle.
         "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "message": "",
-        "status": "pending",
+        "status": "PENDING",
         "timestamp": 1743626185,
         "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "tx_status": 1
@@ -1081,13 +1081,13 @@ Gets the status of a quote bundle. The attribute `status` can take the following
   ```json
   {
     "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "status": "finished",
+    "status": "FINISHED",
     "executions": [
       {
         "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "message": "",
-        "status": "done",
+        "status": "DONE",
         "timestamp": 1743626170,
         "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "tx_status": 1
@@ -1096,7 +1096,7 @@ Gets the status of a quote bundle. The attribute `status` can take the following
         "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "message": "",
-        "status": "done",
+        "status": "DONE",
         "timestamp": 1743626185,
         "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "tx_status": 1
