@@ -319,6 +319,15 @@ class LiFiBridgeProvider(BridgeProvider):
         from_chain = Chain.from_id(transaction_request["chainId"])
         wallet = self.wallet_manager.load(from_chain.ledger_type)
 
+        tx_settler = TxSettler(
+            ledger_api=wallet.ledger_api(from_chain),
+            crypto=wallet.crypto,
+            chain_type=from_chain,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+
         # Bridges from an asset other than native require an approval transaction.
         if from_token != ZERO_ADDRESS:
             self.logger.info(
@@ -327,15 +336,6 @@ class LiFiBridgeProvider(BridgeProvider):
 
             # TODO Approval is done on several places. Consider exporting to a
             # higher-level layer (e.g., wallet?)
-            tx_settler = TxSettler(
-                ledger_api=wallet.ledger_api(from_chain),
-                crypto=wallet.crypto,
-                chain_type=from_chain,
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-            )
-
             def _build_approval_tx(  # pylint: disable=unused-argument
                 *args: t.Any, **kargs: t.Any
             ) -> dict:
@@ -356,42 +356,43 @@ class LiFiBridgeProvider(BridgeProvider):
             )
             self.logger.info("[LI.FI BRIDGE] Approve transaction settled.")
 
-        # TODO rewrite with framework methods
         self.logger.info(
             f"[LI.FI BRIDGE] Preparing bridge transaction for quote {quote['id']}."
         )
-        private_key = wallet.crypto.private_key
-        w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
-        account = w3.eth.account.from_key(private_key)
 
-        transaction = {
-            "value": w3.to_wei(int(transaction_request["value"], 16), "wei"),
-            "to": transaction_request["to"],
-            "data": bytes.fromhex(transaction_request["data"][2:]),
-            "from": account.address,
-            "gasPrice": w3.to_wei(int(transaction_request["gasPrice"], 16), "wei"),
-            "chainId": transaction_request["chainId"],
-            "nonce": w3.eth.get_transaction_count(account.address),
-        }
+        def _build_bridge_tx(  # pylint: disable=unused-argument
+            *args: t.Any, **kargs: t.Any
+        ) -> dict:
+            w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
+            return {
+                "value": int(transaction_request["value"], 16),
+                "to": transaction_request["to"],
+                "data": bytes.fromhex(transaction_request["data"][2:]),
+                "from": wallet.address,
+                "chainId": transaction_request["chainId"],
+                "gasPrice": int(transaction_request["gasPrice"], 16),
+                "gas": int(transaction_request["gasLimit"], 16),
+                "nonce": w3.eth.get_transaction_count(wallet.address),
+            }
 
-        gas_estimate = w3.eth.estimate_gas(transaction)
-        transaction["gas"] = gas_estimate
-        signed_transaction = w3.eth.account.sign_transaction(transaction, private_key)
-        tx_hash = w3.eth.send_raw_transaction(signed_transaction.rawTransaction)
-        self.logger.info(f"[LI.FI BRIDGE] Bridge transaction tx_hash={tx_hash.hex()}.")
-
-        # TODO remove?
-        receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+        setattr(tx_settler, "build", _build_bridge_tx)  # noqa: B010
+        tx_receipt = tx_settler.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
+        )
         self.logger.info("[LI.FI BRIDGE] Bridge transaction settled.")
+        tx_hash = tx_receipt.get("transactionHash", "").hex()
 
         bridge_workflow["execution"] = {
-            "error": receipt.get("status", 0) == 0,
-            "explorer_link": f"https://scan.li.fi/tx/{tx_hash.hex()}",
+            "error": tx_receipt.get("status", 0) == 0,
+            "explorer_link": f"https://scan.li.fi/tx/{tx_hash}",
             "message": None,
             "status": None,
             "timestamp": int(time.time()),
-            "tx_hash": tx_hash.hex(),
-            "tx_status": receipt.get("status", 0),
+            "tx_hash": tx_hash,
+            "tx_status": tx_receipt.get("status", 0),
         }
 
     def update_execution_status(self, bridge_workflow: dict) -> bool:
