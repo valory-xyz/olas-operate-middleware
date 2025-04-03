@@ -929,34 +929,8 @@ Creates a quote bundle to fulfill the bridge requests and returns
           "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
           "token": "0x0000000000000000000000000000000000000000",
           "amount": 10000000000000000000
-        },
-      },
-      {
-        "from": {
-          "chain": "ethereum",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0"
-        },
-        "to": {
-          "chain": "gnosis",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-          "amount": 0
-        },
-      },
-      {
-        "from": {
-          "chain": "ethereum",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0"
-        },
-        "to": {
-          "chain": "gnosis",
-          "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
-          "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-          "amount": 60000000000000000000
-        },
-      },
+        }
+      }
     ],
     "force_update": false
   }
@@ -978,7 +952,7 @@ Creates a quote bundle to fulfill the bridge requests and returns
         }
       }
     },
-    "bridge_requirements": {
+    "bridge_total_requirements": {
       "ethereum": {
         "0x0000000000000000000000000000000000000000": 10073082159280405,
         "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
@@ -998,17 +972,13 @@ Creates a quote bundle to fulfill the bridge requests and returns
       {
         "error": false,
         "message": "",
-        "request_status": 200,
-        "timestamp": 1743000000
       },
       {
         "error": false,
         "message": "",
-        "request_status": 200,
-        "timestamp": 1743000010
       }
     ],
-    "errors": false
+    "error": false
   }
   ```
 
@@ -1037,28 +1007,22 @@ Executes a quote bundle.
   ```json
   {
     "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "status": "submitted",
+    "status": "SUBMITTED",
     "executions": [
       {
-        "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "message": "",
         "status": "DONE",
-        "timestamp": 1743626170,
         "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-        "tx_status": 1
       },
       {
-        "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "message": "",
         "status": "PENDING",
-        "timestamp": 1743626185,
         "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-        "tx_status": 1
       }
     ],
-    "errors": false
+    "error": false
   }
   ```
 
@@ -1084,25 +1048,19 @@ Gets the status of a quote bundle. The attribute `status` can take the following
     "status": "FINISHED",
     "executions": [
       {
-        "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
         "message": "",
         "status": "DONE",
-        "timestamp": 1743626170,
         "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-        "tx_status": 1
       },
       {
-        "error": false,
         "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
         "message": "",
         "status": "DONE",
-        "timestamp": 1743626185,
         "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-        "tx_status": 1
       }
     ],
-    "errors": false
+    "error": false
   }
   ```
 

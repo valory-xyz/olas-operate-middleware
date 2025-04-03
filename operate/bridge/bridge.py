@@ -81,32 +81,28 @@ class BridgeProvider:
         raise NotImplementedError()
 
     @abstractmethod
-    def get_quote_requirements(self, bridge_workflow: dict) -> dict | None:
+    def get_quote_requirements(self, bridge_workflow: dict) -> dict:
         """Get bridge requirements for a single quote."""
         raise NotImplementedError()
 
     def sum_quotes_requirements(self, bridge_workflows: list) -> dict:
         """Get bridge requirements for a list of quotes."""
 
-        bridge_requirements: dict = {}
+        bridge_total_requirements: dict = {}
 
         for workflow in bridge_workflows:
             req = self.get_quote_requirements(workflow)
-
-            if not req:
-                continue
-
             for from_chain, from_addresses in req.items():
                 for from_address, from_tokens in from_addresses.items():
                     for from_token, from_amount in from_tokens.items():
-                        bridge_requirements.setdefault(from_chain, {}).setdefault(
+                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
                             from_address, {}
                         ).setdefault(from_token, 0)
-                        bridge_requirements[from_chain][from_address][
+                        bridge_total_requirements[from_chain][from_address][
                             from_token
                         ] += from_amount
 
-        return bridge_requirements
+        return bridge_total_requirements
 
     @abstractmethod
     def update_with_execution(self, bridge_workflow: dict) -> None:
@@ -238,30 +234,34 @@ class LiFiBridgeProvider(BridgeProvider):
             time.sleep(2)
 
     # TODO gas fees !
-    def get_quote_requirements(self, bridge_workflow: dict) -> dict | None:
+    def get_quote_requirements(self, bridge_workflow: dict) -> dict:
         """Get bridge requirements for a quote."""
 
         quote = bridge_workflow["quote"]["response"]
         error = bridge_workflow["quote"].get("error", False)
 
         if error or "action" not in quote:
-            return None
-
-        from_chain = Chain.from_id(quote["action"]["fromChainId"])
-        from_address = quote["action"]["fromAddress"]
-        from_token = quote["action"]["fromToken"]["address"]
-        from_amount = int(quote["action"]["fromAmount"])
-        transaction_value = int(quote["transactionRequest"]["value"], 16)
+            from_chain = bridge_workflow["request"]["from"]["chain"]
+            from_address = bridge_workflow["request"]["from"]["address"]
+            from_token = bridge_workflow["request"]["from"]["token"]
+            from_amount = 0
+            transaction_value = 0
+        else:
+            from_chain = Chain.from_id(quote["action"]["fromChainId"]).value
+            from_address = quote["action"]["fromAddress"]
+            from_token = quote["action"]["fromToken"]["address"]
+            from_amount = int(quote["action"]["fromAmount"])
+            transaction_value = int(quote["transactionRequest"]["value"], 16)
 
         if from_token == ZERO_ADDRESS:
             return {
-                from_chain.value: {
+                from_chain: {
                     from_address: {from_token: from_amount + transaction_value}
                 }
             }
         else:
             return {
-                from_chain.value: {
+                from_chain: {
                     from_address: {
                         ZERO_ADDRESS: transaction_value,
                         from_token: from_amount,
@@ -322,7 +322,7 @@ class LiFiBridgeProvider(BridgeProvider):
         # Bridges from an asset other than native require an approval transaction.
         if from_token != ZERO_ADDRESS:
             self.logger.info(
-                f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token}=)."
+                f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
             )
 
             # TODO Approval is done on several places. Consider exporting to a
@@ -602,7 +602,7 @@ class BridgeManager:
 
             quote_bundle["status"] = str(QuoteBundleStatus.QUOTED)
             quote_bundle[
-                "bridge_requirements"
+                "bridge_total_requirements"
             ] = self.bridge_provider.sum_quotes_requirements(
                 quote_bundle["bridge_workflows"]
             )
@@ -735,10 +735,9 @@ class BridgeManager:
             )
 
         bridge_refill_requirements: dict = {}
-        for from_chain, from_addresses in quote_bundle["bridge_requirements"].items():
-            ledger_api = self.wallet_manager.load(
-                Chain(from_chain).ledger_type
-            ).ledger_api(Chain(from_chain))
+        for from_chain, from_addresses in quote_bundle[
+            "bridge_total_requirements"
+        ].items():
             for from_address, from_tokens in from_addresses.items():
                 for from_token, from_amount in from_tokens.items():
                     balance = balances[from_chain][from_address][from_token]
@@ -760,11 +759,10 @@ class BridgeManager:
             {
                 "message": response["quote"]["message"],
                 "error": response["quote"]["error"],
-                "status": response["quote"]["status"],
             }
             for response in quote_bundle["bridge_workflows"]
         ]
-        errors = any(
+        error = any(
             workflow["quote"]["error"] for workflow in quote_bundle["bridge_workflows"]
         )
         self._quote_bundle_updated_on_session = True
@@ -772,15 +770,12 @@ class BridgeManager:
         return {
             "id": quote_bundle["id"],
             "balances": balances,
-            "bridge_requirements": quote_bundle["bridge_requirements"],
+            "bridge_total_requirements": quote_bundle["bridge_total_requirements"],
             "bridge_refill_requirements": bridge_refill_requirements,
             "expiration_timestamp": quote_bundle["expiration_timestamp"],
-            "expiration_timeout": int(
-                quote_bundle["expiration_timestamp"] - time.time()
-            ),
             "is_refill_required": is_refill_required,
             "quote_response_status": quote_response_status,
-            "errors": errors,
+            "error": error,
         }
 
     def execute_quote_bundle(self, quote_bundle_id: str) -> dict:
@@ -838,9 +833,15 @@ class BridgeManager:
         self._update_quote_bundle_status(quote_bundle_id)
 
         executions = [
-            workflow["execution"] for workflow in quote_bundle["bridge_workflows"]
+            {
+                "explorer_link": workflow["execution"]["explorer_link"],
+                "message": workflow["execution"]["message"],
+                "status": workflow["execution"]["status"],
+                "tx_hash": workflow["execution"]["tx_hash"],
+            }
+            for workflow in quote_bundle["bridge_workflows"]
         ]
-        errors = any(
+        error = any(
             workflow["execution"]["error"]
             for workflow in quote_bundle["bridge_workflows"]
         )
@@ -849,5 +850,5 @@ class BridgeManager:
             "id": quote_bundle["id"],
             "status": quote_bundle["status"],
             "executions": executions,
-            "errors": errors,
+            "error": error,
         }
