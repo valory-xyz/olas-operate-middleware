@@ -343,7 +343,7 @@ class LiFiBridgeProvider(BridgeProvider):
                     ledger_api=wallet.ledger_api(from_chain),
                     contract_address=from_token,
                     spender=transaction_request["to"],
-                    sender=wallet.address,
+                    sender=transaction_request["from"],
                     amount=from_amount,
                 )
 
@@ -368,11 +368,11 @@ class LiFiBridgeProvider(BridgeProvider):
                 "value": int(transaction_request["value"], 16),
                 "to": transaction_request["to"],
                 "data": bytes.fromhex(transaction_request["data"][2:]),
-                "from": wallet.address,
+                "from": transaction_request["from"],
                 "chainId": transaction_request["chainId"],
                 "gasPrice": int(transaction_request["gasPrice"], 16),
                 "gas": int(transaction_request["gasLimit"], 16),
-                "nonce": w3.eth.get_transaction_count(wallet.address),
+                "nonce": w3.eth.get_transaction_count(transaction_request["from"]),
             }
 
         setattr(tx_settler, "build", _build_bridge_tx)  # noqa: B010
