@@ -110,7 +110,7 @@ class BridgeProvider:
         raise NotImplementedError()
 
     @abstractmethod
-    def update_execution_status(self, bridge_workflow: dict) -> None:
+    def update_execution_status(self, bridge_workflow: dict) -> bool:
         """Update the execution status."""
         raise NotImplementedError()
 
@@ -191,7 +191,7 @@ class LiFiBridgeProvider(BridgeProvider):
                     "attempts": attempt,
                     "elapsed_time": time.time() - start,
                     "error": False,
-                    "message": "",
+                    "message": None,
                     "status": response.status_code,
                     "timestamp": int(time.time()),
                 }
@@ -387,15 +387,15 @@ class LiFiBridgeProvider(BridgeProvider):
         bridge_workflow["execution"] = {
             "error": receipt.get("status", 0) == 0,
             "explorer_link": f"https://scan.li.fi/tx/{tx_hash.hex()}",
-            "message": "",
+            "message": None,
             "status": None,
             "timestamp": int(time.time()),
             "tx_hash": tx_hash.hex(),
             "tx_status": receipt.get("status", 0),
         }
 
-    def update_execution_status(self, bridge_workflow: dict) -> None:
-        """Update the execution status."""
+    def update_execution_status(self, bridge_workflow: dict) -> bool:
+        """Update the execution status. Returns `True` if the status changed."""
 
         if "execution" not in bridge_workflow:
             raise ValueError(
@@ -406,19 +406,34 @@ class LiFiBridgeProvider(BridgeProvider):
         tx_hash = execution["tx_hash"]
 
         if not tx_hash:
-            execution["status"] = None
-            return
+            if execution["status"] is not None:
+                execution["status"] = None
+                return True
+            return False
+
+        if execution["status"] in (
+            LiFiTransactionStatus.DONE,
+            LiFiTransactionStatus.FAILED,
+        ):
+            return False
 
         url = "https://li.quest/v1/status"
         headers = {"accept": "application/json"}
         params = {
             "txHash": tx_hash,
         }
+        self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
         response = requests.get(url=url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         response_json = response.json()
         status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
-        execution["status"] = status
+        execution["message"] = response_json.get("substatusMessage")
+
+        if execution["status"] != status:
+            execution["status"] = status
+            return True
+
+        return False
 
     def is_execution_finished(self, bridge_workflow: dict) -> bool:
         """Check if the execution is finished."""
@@ -428,28 +443,18 @@ class LiFiBridgeProvider(BridgeProvider):
                 "[LI.FI BRIDGE] Cannot update workflow execution: execution not present."
             )
 
-        execution = bridge_workflow["execution"]
-
-        if execution["tx_hash"] is None:
-            execution["status"] = None
-            return True
-
-        if execution["status"] in (
-            LiFiTransactionStatus.DONE,
-            LiFiTransactionStatus.FAILED,
-        ):
-            return True
-
         self.update_execution_status(bridge_workflow)
 
         execution = bridge_workflow["execution"]
-        if execution["status"] in (
-            LiFiTransactionStatus.DONE,
-            LiFiTransactionStatus.FAILED,
-        ):
+        tx_hash = execution["tx_hash"]
+
+        if not tx_hash:
             return True
 
-        return False
+        return execution["status"] in (
+            LiFiTransactionStatus.DONE,
+            LiFiTransactionStatus.FAILED,
+        )
 
 
 class QuoteBundleStatus(str, enum.Enum):
@@ -549,6 +554,9 @@ class BridgeManager:
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
+
+    def _store_data(self) -> None:
+        self.logger.info("[BRIDGE MANAGER] Storing data to file.")
         self.data.store()
 
     def _get_updated_quote_bundle(
@@ -608,7 +616,7 @@ class BridgeManager:
             )
 
             self.data.last_requested_quote_bundle = quote_bundle
-            self.data.store()
+            self._store_data()
 
         return quote_bundle
 
@@ -621,8 +629,16 @@ class BridgeManager:
             )
 
         initial_status = quote_bundle["status"]
+        execution_status_changed = [
+            self.bridge_provider.update_execution_status(workflow)
+            for workflow in quote_bundle["bridge_workflows"]
+        ]
+
+        if any(execution_status_changed):
+            self._store_data()
+
         is_execution_finished = all(
-            self.bridge_provider.is_execution_finished(workflow)
+            self.bridge_provider.update_execution_status(workflow)
             for workflow in quote_bundle["bridge_workflows"]
         )
 
@@ -632,7 +648,7 @@ class BridgeManager:
             quote_bundle["status"] = str(QuoteBundleStatus.SUBMITTED)
 
         if initial_status != quote_bundle["status"]:
-            self.data.store()
+            self._store_data()
 
     def _raise_if_invalid(self, bridge_requests: list) -> None:
         """Preprocess quote requests."""
@@ -804,15 +820,15 @@ class BridgeManager:
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
+        quote_bundle["status"] = str(QuoteBundleStatus.SUBMITTED)
+
         for bridge_workflow in quote_bundle["bridge_workflows"]:
             self.bridge_provider.update_with_execution(bridge_workflow)
-            self.data.store()
-
-        quote_bundle["status"] = str(QuoteBundleStatus.SUBMITTED)
+            self._store_data()
 
         self.data.last_requested_quote_bundle = None
         self.data.executed_quote_bundles[quote_bundle["id"]] = quote_bundle
-        self.data.store()
+        self._store_data()
         self._quote_bundle_updated_on_session = False
         self.logger.info(
             f"[BRIDGE MANAGER] Quote bundle id {quote_bundle_id} executed."
