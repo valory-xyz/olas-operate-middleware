@@ -72,6 +72,6 @@ def reset_password(operate: "OperateApp") -> None:
     wallet: EthereumMasterWallet = operate.wallet_manager.load(
         ledger_type=LedgerType.ETHEREUM
     )
-    wallet.update_password(password=new_password)
+    wallet.update_password(new_password=new_password)
 
     print_section("Password reset done!")
