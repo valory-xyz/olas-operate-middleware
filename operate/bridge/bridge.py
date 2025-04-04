@@ -58,6 +58,22 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
+class BridgeWorkflowStatus(str, enum.Enum):
+    """Bridge workflow status."""
+
+    WORKFLOW_CREATED = "WORKFLOW_CREATED"
+    QUOTE_DONE = "QUOTE_DONE"
+    QUOTE_FAILED = "QUOTE_FAILED"
+    EXECUTION_PENDING = "EXECUTION_PENDING"
+    EXECUTION_DONE = "EXECUTION_DONE"
+    EXECUTION_FAILED = "EXECUTION_FAILED"
+    EXECUTION_NA = "EXECUTION_NA"
+
+
+    def __str__(self) -> str:
+        """__str__"""
+        return self.value
+
 
 class BridgeProvider:
     """Abstract BridgeProvider."""
@@ -162,7 +178,8 @@ class LiFiBridgeProvider(BridgeProvider):
                 "elapsed_time": 0,
                 "error": False,
                 "message": "Zero-amount quote requested.",
-                "status": HTTPStatus.OK,
+                "response_status": 0,
+                "status": BridgeWorkflowStatus.QUOTE_DONE,
                 "timestamp": int(time.time()),
             }
             return
@@ -192,7 +209,8 @@ class LiFiBridgeProvider(BridgeProvider):
                     "elapsed_time": time.time() - start,
                     "error": False,
                     "message": None,
-                    "status": response.status_code,
+                    "response_status": response.status_code,
+                    "status": BridgeWorkflowStatus.QUOTE_DONE,
                     "timestamp": int(time.time()),
                 }
                 return
@@ -206,7 +224,8 @@ class LiFiBridgeProvider(BridgeProvider):
                     "elapsed_time": time.time() - start,
                     "error": True,
                     "message": str(e),
-                    "status": HTTPStatus.GATEWAY_TIMEOUT,
+                    "response_status": HTTPStatus.GATEWAY_TIMEOUT,
+                    "status": BridgeWorkflowStatus.QUOTE_FAILED,
                     "timestamp": int(time.time()),
                 }
             except requests.RequestException as e:
@@ -220,7 +239,8 @@ class LiFiBridgeProvider(BridgeProvider):
                     "elapsed_time": time.time() - start,
                     "error": True,
                     "message": response_json.get("message") or str(e),
-                    "status": response.status_code,
+                    "response_status": response.status_code,
+                    "status": BridgeWorkflowStatus.QUOTE_FAILED,
                     "timestamp": int(time.time()),
                 }
 
@@ -291,8 +311,9 @@ class LiFiBridgeProvider(BridgeProvider):
             bridge_workflow["execution"] = {
                 "error": True,
                 "explorer_link": None,
-                "message": "Skipped quote execution (quote error).",
-                "status": None,
+                "message": "Skipped execution (quote error).",
+                "lifi_status": None,
+                "status": BridgeWorkflowStatus.EXECUTION_DONE,  # TODO alternative state?
                 "timestamp": int(time.time()),
                 "tx_hash": None,
                 "tx_status": None,
@@ -303,118 +324,128 @@ class LiFiBridgeProvider(BridgeProvider):
             bridge_workflow["execution"] = {
                 "error": False,
                 "explorer_link": None,
-                "message": "Skipped quote execution (empty quote).",
-                "status": None,
+                "message": "Skipped execution (empty quote).",
+                "lifi_status": None,
+                "status": BridgeWorkflowStatus.EXECUTION_DONE,  # TODO alternative state?
                 "timestamp": int(time.time()),
                 "tx_hash": None,
                 "tx_status": None,
             }
             return
 
-        self.logger.info(f"[LI.FI BRIDGE] Executing quote {quote.get('id')}.")
-        from_token = quote["action"]["fromToken"]["address"]
-        from_amount = int(quote["action"]["fromAmount"])
+        try:
+            self.logger.info(f"[LI.FI BRIDGE] Executing quote {quote.get('id')}.")
+            from_token = quote["action"]["fromToken"]["address"]
+            from_amount = int(quote["action"]["fromAmount"])
 
-        transaction_request = quote["transactionRequest"]
-        from_chain = Chain.from_id(transaction_request["chainId"])
-        wallet = self.wallet_manager.load(from_chain.ledger_type)
+            transaction_request = quote["transactionRequest"]
+            from_chain = Chain.from_id(transaction_request["chainId"])
+            wallet = self.wallet_manager.load(from_chain.ledger_type)
 
-        tx_settler = TxSettler(
-            ledger_api=wallet.ledger_api(from_chain),
-            crypto=wallet.crypto,
-            chain_type=from_chain,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-
-        # Bridges from an asset other than native require an approval transaction.
-        if from_token != ZERO_ADDRESS:
-            self.logger.info(
-                f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
+            tx_settler = TxSettler(
+                ledger_api=wallet.ledger_api(from_chain),
+                crypto=wallet.crypto,
+                chain_type=from_chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
             )
 
-            # TODO Approval is done on several places. Consider exporting to a
-            # higher-level layer (e.g., wallet?)
-            def _build_approval_tx(  # pylint: disable=unused-argument
-                *args: t.Any, **kargs: t.Any
-            ) -> dict:
-                return registry_contracts.erc20.get_approve_tx(
-                    ledger_api=wallet.ledger_api(from_chain),
-                    contract_address=from_token,
-                    spender=transaction_request["to"],
-                    sender=transaction_request["from"],
-                    amount=from_amount,
+            # Bridges from an asset other than native require an approval transaction.
+            if from_token != ZERO_ADDRESS:
+                self.logger.info(
+                    f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
                 )
 
-            setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
-            tx_settler.transact(
+                # TODO Approval is done on several places. Consider exporting to a
+                # higher-level layer (e.g., wallet?)
+                def _build_approval_tx(  # pylint: disable=unused-argument
+                    *args: t.Any, **kargs: t.Any
+                ) -> dict:
+                    return registry_contracts.erc20.get_approve_tx(
+                        ledger_api=wallet.ledger_api(from_chain),
+                        contract_address=from_token,
+                        spender=transaction_request["to"],
+                        sender=transaction_request["from"],
+                        amount=from_amount,
+                    )
+
+                setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
+                tx_settler.transact(
+                    method=lambda: {},
+                    contract="",
+                    kwargs={},
+                    dry_run=False,
+                )
+                self.logger.info("[LI.FI BRIDGE] Approve transaction settled.")
+
+            self.logger.info(
+                f"[LI.FI BRIDGE] Preparing bridge transaction for quote {quote['id']}."
+            )
+
+            def _build_bridge_tx(  # pylint: disable=unused-argument
+                *args: t.Any, **kargs: t.Any
+            ) -> dict:
+                w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
+                return {
+                    "value": int(transaction_request["value"], 16),
+                    "to": transaction_request["to"],
+                    "data": bytes.fromhex(transaction_request["data"][2:]),
+                    "from": transaction_request["from"],
+                    "chainId": transaction_request["chainId"],
+                    "gasPrice": int(transaction_request["gasPrice"], 16),
+                    "gas": int(transaction_request["gasLimit"], 16),
+                    "nonce": w3.eth.get_transaction_count(transaction_request["from"]),
+                }
+
+            setattr(tx_settler, "build", _build_bridge_tx)  # noqa: B010
+            tx_receipt = tx_settler.transact(
                 method=lambda: {},
                 contract="",
                 kwargs={},
                 dry_run=False,
             )
-            self.logger.info("[LI.FI BRIDGE] Approve transaction settled.")
+            self.logger.info("[LI.FI BRIDGE] Bridge transaction settled.")
+            tx_hash = tx_receipt.get("transactionHash", "").hex()
 
-        self.logger.info(
-            f"[LI.FI BRIDGE] Preparing bridge transaction for quote {quote['id']}."
-        )
-
-        def _build_bridge_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> dict:
-            w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
-            return {
-                "value": int(transaction_request["value"], 16),
-                "to": transaction_request["to"],
-                "data": bytes.fromhex(transaction_request["data"][2:]),
-                "from": transaction_request["from"],
-                "chainId": transaction_request["chainId"],
-                "gasPrice": int(transaction_request["gasPrice"], 16),
-                "gas": int(transaction_request["gasLimit"], 16),
-                "nonce": w3.eth.get_transaction_count(transaction_request["from"]),
+            bridge_workflow["execution"] = {
+                "error": tx_receipt.get("status", 0) == 0,
+                "explorer_link": f"https://scan.li.fi/tx/{tx_hash}",
+                "message": None,
+                "lifi_status": LiFiTransactionStatus.NOT_FOUND,
+                "status": BridgeWorkflowStatus.EXECUTION_PENDING if tx_hash else BridgeWorkflowStatus.EXECUTION_FAILED,
+                "timestamp": int(time.time()),
+                "tx_hash": tx_hash,
+                "tx_status": tx_receipt.get("status", 0),
             }
-
-        setattr(tx_settler, "build", _build_bridge_tx)  # noqa: B010
-        tx_receipt = tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
-        )
-        self.logger.info("[LI.FI BRIDGE] Bridge transaction settled.")
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
-
-        bridge_workflow["execution"] = {
-            "error": tx_receipt.get("status", 0) == 0,
-            "explorer_link": f"https://scan.li.fi/tx/{tx_hash}",
-            "message": None,
-            "status": None,
-            "timestamp": int(time.time()),
-            "tx_hash": tx_hash,
-            "tx_status": tx_receipt.get("status", 0),
-        }
+        except Exception as e:  # pylint: disable=broad-except
+            bridge_workflow["execution"] = {
+                "error": True,
+                "explorer_link": None,
+                "message": f"Error executing quote: {str(e)}",
+                "lifi_status": LiFiTransactionStatus.FAILED,
+                "status": BridgeWorkflowStatus.EXECUTION_FAILED,
+                "timestamp": int(time.time()),
+                "tx_hash": None,
+                "tx_status": None,
+            }
 
     def update_execution_status(self, bridge_workflow: dict) -> bool:
         """Update the execution status. Returns `True` if the status changed."""
 
+
         if "execution" not in bridge_workflow:
-            raise ValueError(
-                "[LI.FI BRIDGE] Cannot update workflow execution: execution not present."
-            )
+            return False
 
         execution = bridge_workflow["execution"]
         tx_hash = execution["tx_hash"]
 
-        if not tx_hash:
-            if execution["status"] is not None:
-                execution["status"] = None
-                return True
-            return False
+        print("update_execution_status")
+        print(f"{execution=}")
 
         if execution["status"] in (
-            LiFiTransactionStatus.DONE,
-            LiFiTransactionStatus.FAILED,
+            BridgeWorkflowStatus.EXECUTION_DONE,
+            BridgeWorkflowStatus.EXECUTION_FAILED,
         ):
             return False
 
@@ -427,11 +458,16 @@ class LiFiBridgeProvider(BridgeProvider):
         response = requests.get(url=url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         response_json = response.json()
-        status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
+        lifi_status = response_json.get("lifi_status", str(LiFiTransactionStatus.UNKNOWN))
         execution["message"] = response_json.get("substatusMessage")
 
-        if execution["status"] != status:
-            execution["status"] = status
+        if execution["lifi_status"] != lifi_status:
+            execution["lifi_status"] = lifi_status
+            if lifi_status in (
+                LiFiTransactionStatus.DONE,
+                LiFiTransactionStatus.FAILED,
+            ):
+                execution["status"] = BridgeWorkflowStatus.EXECUTION_DONE
             return True
 
         return False
@@ -639,7 +675,7 @@ class BridgeManager:
             self._store_data()
 
         is_execution_finished = all(
-            self.bridge_provider.update_execution_status(workflow)
+            self.bridge_provider.is_execution_finished(workflow)
             for workflow in quote_bundle["bridge_workflows"]
         )
 
@@ -772,10 +808,10 @@ class BridgeManager:
             for amount in from_tokens.values()
         )
 
-        quote_response_status = [
+        bridge_request_status = [
             {
                 "message": response["quote"]["message"],
-                "error": response["quote"]["error"],
+                "status": response["quote"]["status"],
             }
             for response in quote_bundle["bridge_workflows"]
         ]
@@ -791,7 +827,7 @@ class BridgeManager:
             "bridge_refill_requirements": bridge_refill_requirements,
             "expiration_timestamp": quote_bundle["expiration_timestamp"],
             "is_refill_required": is_refill_required,
-            "quote_response_status": quote_response_status,
+            "bridge_request_status": bridge_request_status,
             "error": error,
         }
 
@@ -849,7 +885,7 @@ class BridgeManager:
 
         self._update_quote_bundle_status(quote_bundle_id)
 
-        executions = [
+        bridge_request_status = [
             {
                 "explorer_link": workflow["execution"]["explorer_link"],
                 "message": workflow["execution"]["message"],
@@ -866,6 +902,6 @@ class BridgeManager:
         return {
             "id": quote_bundle["id"],
             "status": quote_bundle["status"],
-            "executions": executions,
+            "bridge_request_status": bridge_request_status,
             "error": error,
         }
