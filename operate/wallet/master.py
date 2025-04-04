@@ -303,7 +303,7 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         rpc: t.Optional[str] = None,
     ) -> None:
-        """Transfer funds from safe wallet."""
+        """Transfer erc20 from safe wallet."""
         transfer_erc20_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
@@ -321,7 +321,41 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         rpc: t.Optional[str] = None,
     ) -> None:
-        raise NotImplementedError()
+        """Transfer erc20 from EOA wallet."""
+        wallet_address = self.address
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+        tx_settler = TxSettler(
+            ledger_api=ledger_api,
+            crypto=self.crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+
+        def _build_transfer_tx(  # pylint: disable=unused-argument
+            *args: t.Any, **kargs: t.Any
+        ) -> t.Dict:
+            # TODO Backport to OpenAEA
+            instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token,
+            )
+            tx = instance.functions.transfer(to, amount).build_transaction(
+                {
+                    "from": wallet_address,
+                    "gas": 1,
+                    "gasPrice": ledger_api.api.eth.gas_price,
+                    "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
+                }
+            )
+            return ledger_api.update_with_gas_estimate(
+                transaction=tx,
+                raise_on_try=False,
+            )
+
+        setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
+        tx_settler.transact(lambda x: x, "", kwargs={})
 
     def transfer(
         self,
