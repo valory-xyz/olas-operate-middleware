@@ -76,57 +76,6 @@ class BridgeWorkflowStatus(str, enum.Enum):
         return self.value
 
 
-
-@dataclass
-class RequestData(LocalResource):
-    from_chain: Chain
-    from_address: str
-    from_token: str
-    to_chain: Chain
-    to_address: str
-    to_token: str
-    to_amount: int
-
-
-@dataclass
-class QuoteData(LocalResource):
-    """Bridge quote data."""
-
-    attempts: int = 0
-    elapsed_time: int = 0
-    error: bool = False
-    message: str | None = None
-    response: dict | None = None
-    status: int = 0
-    timestamp: int = int(time.time())
-
-
-@dataclass
-class ExecutionData(LocalResource):
-    "Bridge execution data."
-
-    error: bool = False
-    explorer_link: str | None = None
-    message: str | None = None
-    status: str | None = None
-    timestamp: int = int(time.time())
-    tx_hash: str | None = None
-    tx_status: str | None = None
-
-
-@dataclass
-class BridgeWorkflowData(LocalResource):
-    """Bridge request"""
-    path: Path
-    quote: QuoteData | None
-    _file = "bridge_workflow.json"
-
-    request: RequestData
-    id: str = f"{uuid.uuid4()}"
-    status: BridgeWorkflowStatus = BridgeWorkflowStatus.WORKFLOW_CREATED
-    execution: ExecutionData | None = None
-
-
 class BridgeProvider:
     """Abstract BridgeProvider."""
 
