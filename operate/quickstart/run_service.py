@@ -105,6 +105,9 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_supply_alpha": "mech",
         "marketplace_demand_alpha_1": "mech",
         "marketplace_demand_alpha_2": "mech",
+        "agents_fun_1": "memeooorr",
+        "agents_fun_2": "memeooorr",
+        "agents_fun_3": "memeooorr",
     },
     Chain.CELO: {},
     Chain.MODE: {
