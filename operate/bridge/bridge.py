@@ -58,6 +58,7 @@ DEFAULT_MAX_RETRIES = 3
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
 QUOTE_BUNDLE_PREFIX = "qb-"
 
+
 class BridgeWorkflowStatus(str, enum.Enum):
     """Bridge workflow status."""
 
@@ -73,6 +74,57 @@ class BridgeWorkflowStatus(str, enum.Enum):
     def __str__(self) -> str:
         """__str__"""
         return self.value
+
+
+
+@dataclass
+class RequestData(LocalResource):
+    from_chain: Chain
+    from_address: str
+    from_token: str
+    to_chain: Chain
+    to_address: str
+    to_token: str
+    to_amount: int
+
+
+@dataclass
+class QuoteData(LocalResource):
+    """Bridge quote data."""
+
+    attempts: int = 0
+    elapsed_time: int = 0
+    error: bool = False
+    message: str | None = None
+    response: dict | None = None
+    status: int = 0
+    timestamp: int = int(time.time())
+
+
+@dataclass
+class ExecutionData(LocalResource):
+    "Bridge execution data."
+
+    error: bool = False
+    explorer_link: str | None = None
+    message: str | None = None
+    status: str | None = None
+    timestamp: int = int(time.time())
+    tx_hash: str | None = None
+    tx_status: str | None = None
+
+
+@dataclass
+class BridgeWorkflowData(LocalResource):
+    """Bridge request"""
+    path: Path
+    quote: QuoteData | None
+    _file = "bridge_workflow.json"
+
+    request: RequestData
+    id: str = f"{uuid.uuid4()}"
+    status: BridgeWorkflowStatus = BridgeWorkflowStatus.WORKFLOW_CREATED
+    execution: ExecutionData | None = None
 
 
 class BridgeProvider:
@@ -100,25 +152,6 @@ class BridgeProvider:
     def get_quote_requirements(self, bridge_workflow: dict) -> dict:
         """Get bridge requirements for a single quote."""
         raise NotImplementedError()
-
-    def sum_quotes_requirements(self, bridge_workflows: list) -> dict:
-        """Get bridge requirements for a list of quotes."""
-
-        bridge_total_requirements: dict = {}
-
-        for workflow in bridge_workflows:
-            req = self.get_quote_requirements(workflow)
-            for from_chain, from_addresses in req.items():
-                for from_address, from_tokens in from_addresses.items():
-                    for from_token, from_amount in from_tokens.items():
-                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
-                            from_address, {}
-                        ).setdefault(from_token, 0)
-                        bridge_total_requirements[from_chain][from_address][
-                            from_token
-                        ] += from_amount
-
-        return bridge_total_requirements
 
     @abstractmethod
     def update_with_execution(self, bridge_workflow: dict) -> None:
@@ -596,6 +629,25 @@ class BridgeManager:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
         self.data.store()
 
+    def _sum_quotes_requirements(self, bridge_workflows: list) -> dict:
+        """Get bridge requirements for a list of quotes."""
+
+        bridge_total_requirements: dict = {}
+
+        for workflow in bridge_workflows:
+            req = self.bridge_provider.get_quote_requirements(workflow)
+            for from_chain, from_addresses in req.items():
+                for from_address, from_tokens in from_addresses.items():
+                    for from_token, from_amount in from_tokens.items():
+                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
+                            from_address, {}
+                        ).setdefault(from_token, 0)
+                        bridge_total_requirements[from_chain][from_address][
+                            from_token
+                        ] += from_amount
+
+        return bridge_total_requirements
+
     def _get_updated_quote_bundle(
         self, bridge_requests: list, force_update: bool
     ) -> dict:
@@ -648,9 +700,7 @@ class BridgeManager:
             quote_bundle["status"] = str(QuoteBundleStatus.QUOTED)
             quote_bundle[
                 "bridge_total_requirements"
-            ] = self.bridge_provider.sum_quotes_requirements(
-                quote_bundle["bridge_workflows"]
-            )
+            ] = self._sum_quotes_requirements(quote_bundle["bridge_workflows"])
 
             self.data.last_requested_quote_bundle = quote_bundle
             self._store_data()
