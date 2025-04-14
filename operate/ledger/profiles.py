@@ -124,6 +124,9 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_supply_alpha": "0xB14Cd66c6c601230EA79fa7Cc072E5E0C2F3A756",
         "marketplace_demand_alpha_1": "0x38Eb3838Dab06932E7E1E965c6F922aDfE494b88",
         "marketplace_demand_alpha_2": "0xBE6E12364B549622395999dB0dB53f163994D7AF",
+        "agents_fun_1": "0x2585e63df7BD9De8e058884D496658a030b5c6ce",
+        "agents_fun_2": "0x26FA75ef9Ccaa60E58260226A71e9d07564C01bF",
+        "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
