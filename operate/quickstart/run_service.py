@@ -558,6 +558,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             gas_fund_req = 0
             agent_fund_requirement = fund_requirements.agent
             safe_fund_requirement = fund_requirements.safe
+            master_safe_fund_requirement = 0
             service_state = manager._get_on_chain_state(service, chain_name)
             if asset_address == ZERO_ADDRESS:
                 gas_fund_req = t.cast(int, chain_metadata.get("gasFundReq"))
@@ -566,7 +567,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                     OnChainState.PRE_REGISTRATION,
                     OnChainState.ACTIVE_REGISTRATION,
                 ):
-                    agent_fund_requirement += (
+                    master_safe_fund_requirement += (
                         2  # for 1 wei in msg.value during registration and activation
                     )
 
@@ -647,7 +648,11 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             # ask for enough funds in master safe for agent EOA + service safe
             ask_funds_in_address(
                 ledger_api=ledger_api,
-                required_balance=agent_fund_requirement + safe_fund_requirement,
+                required_balance=(
+                    master_safe_fund_requirement
+                    + agent_fund_requirement
+                    + safe_fund_requirement
+                ),
                 asset_address=asset_address,
                 recipient_name="Master Safe",
                 recipient_address=wallet.safes[chain],
