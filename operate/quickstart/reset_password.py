@@ -35,6 +35,9 @@ def reset_password(operate: "OperateApp") -> None:
     """Reset password."""
     print_title("Reset your password")
 
+    operate.service_manager().migrate_service_configs()
+    operate.wallet_manager.migrate_wallet_configs()
+
     # check if agent was started before
     if not (operate._path / "user.json").exists():
         print("No previous agent setup found. Exiting.")
@@ -69,6 +72,6 @@ def reset_password(operate: "OperateApp") -> None:
     wallet: EthereumMasterWallet = operate.wallet_manager.load(
         ledger_type=LedgerType.ETHEREUM
     )
-    wallet.update_password(password=new_password)
+    wallet.update_password(new_password=new_password)
 
     print_section("Password reset done!")
