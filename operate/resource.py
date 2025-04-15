@@ -21,12 +21,16 @@
 
 import enum
 import json
+import shutil
 import typing as t
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 
 # pylint: disable=too-many-return-statements,no-member
+
+
+N_BACKUPS = 5
 
 
 def serialize(obj: t.Any) -> t.Any:
@@ -124,3 +128,16 @@ class LocalResource:
             ),
             encoding="utf-8",
         )
+
+        self.load(path)  # Validate before making backup
+
+        for i in reversed(range(N_BACKUPS - 1)):
+            older = path.with_name(f"{path.name}.bak.{i}")
+            newer = path.with_name(f"{path.name}.bak.{i + 1}")
+            if older.exists():
+                if newer.exists():
+                    newer.unlink()
+                older.rename(newer)
+
+        bak0 = path.with_name(f"{path.name}.bak.0")
+        shutil.copy2(path, bak0)
