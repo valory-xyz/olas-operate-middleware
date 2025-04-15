@@ -71,38 +71,47 @@ NO_STAKING_PROGRAM_METADATA = {
         markets, but it will not be staked within any staking program.",
 }
 CUSTOM_PROGRAM_ID = "custom_staking"
-QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, int]] = {
+QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.GNOSIS: {
-        "quickstart_beta_hobbyist": 25,
-        "quickstart_beta_hobbyist_2": 25,
-        "quickstart_beta_expert": 25,
-        "quickstart_beta_expert_2": 25,
-        "quickstart_beta_expert_3": 25,
-        "quickstart_beta_expert_4": 25,
-        "quickstart_beta_expert_5": 25,
-        "quickstart_beta_expert_6": 25,
-        "quickstart_beta_expert_7": 25,
-        "quickstart_beta_expert_8": 25,
-        "quickstart_beta_expert_9": 25,
-        "quickstart_beta_expert_10": 25,
-        "quickstart_beta_expert_11": 25,
-        "quickstart_beta_expert_12": 25,
-        "quickstart_beta_expert_15_mech_marketplace": 25,
-        "quickstart_beta_expert_16_mech_marketplace": 25,
-        "quickstart_beta_expert_17_mech_marketplace": 25,
-        "quickstart_beta_expert_18_mech_marketplace": 25,
-        "mech_marketplace": 37,
+        "quickstart_beta_hobbyist": "trader",
+        "quickstart_beta_hobbyist_2": "trader",
+        "quickstart_beta_expert": "trader",
+        "quickstart_beta_expert_2": "trader",
+        "quickstart_beta_expert_3": "trader",
+        "quickstart_beta_expert_4": "trader",
+        "quickstart_beta_expert_5": "trader",
+        "quickstart_beta_expert_6": "trader",
+        "quickstart_beta_expert_7": "trader",
+        "quickstart_beta_expert_8": "trader",
+        "quickstart_beta_expert_9": "trader",
+        "quickstart_beta_expert_10": "trader",
+        "quickstart_beta_expert_11": "trader",
+        "quickstart_beta_expert_12": "trader",
+        "quickstart_beta_expert_15_mech_marketplace": "trader",
+        "quickstart_beta_expert_16_mech_marketplace": "trader",
+        "quickstart_beta_expert_17_mech_marketplace": "trader",
+        "quickstart_beta_expert_18_mech_marketplace": "trader",
+        "mech_marketplace": "mech",
+        "marketplace_supply_alpha": "mech",
+        "marketplace_demand_alpha_1": "mech",
+        "marketplace_demand_alpha_2": "mech",
     },
     Chain.OPTIMISTIC: {
-        "optimus_alpha": 40,
+        "optimus_alpha": "optimus",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
-        "meme_base_alpha_2": 43,
+        "meme_base_alpha_2": "memeooorr",
+        "marketplace_supply_alpha": "mech",
+        "marketplace_demand_alpha_1": "mech",
+        "marketplace_demand_alpha_2": "mech",
+        "agents_fun_1": "memeooorr",
+        "agents_fun_2": "memeooorr",
+        "agents_fun_3": "memeooorr",
     },
     Chain.CELO: {},
     Chain.MODE: {
-        "optimus_alpha": 40,
+        "optimus_alpha": "modius",
     },
 }
 
@@ -139,25 +148,19 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
                     shutil.move(old_path, config.path)
                     break
         else:
-            for staking_program, agent_id in QS_STAKING_PROGRAMS[
+            for staking_program, _agent_keyword in QS_STAKING_PROGRAMS[
                 Chain.from_string(config.principal_chain)
             ].items():
                 if staking_program == config.staking_program_id:
-                    staking_agent_id = agent_id
                     break
             else:
                 raise ValueError(
-                    f"Staking program {config.staking_program_id} not found in {QS_STAKING_PROGRAMS[Chain.from_string(config.principal_chain)]}.\n"
+                    f"Staking program {config.staking_program_id} not found in {QS_STAKING_PROGRAMS[Chain.from_string(config.principal_chain)].keys()}.\n"
                     "Please resolve manually!"
                 )
 
             for service in services:
-                if (
-                    staking_agent_id
-                    == service["chain_configs"][config.principal_chain]["chain_data"][
-                        "user_params"
-                    ]["agent_id"]
-                ):
+                if _agent_keyword in service["name"].lower():
                     config.path = (
                         config.path.parent / f"{service['name']}-quickstart-config.json"
                     )
@@ -199,7 +202,6 @@ def configure_local_config(
 
     config.principal_chain = template["home_chain"]
 
-    agent_id = template["configurations"][config.principal_chain]["agent_id"]
     home_chain = Chain.from_string(config.principal_chain)
     staking_ctr = t.cast(
         StakingTokenContract,
@@ -222,7 +224,7 @@ def configure_local_config(
                 id
                 for id in STAKING[home_chain]
                 if id in QS_STAKING_PROGRAMS[home_chain]
-                and QS_STAKING_PROGRAMS[home_chain][id] == agent_id
+                and QS_STAKING_PROGRAMS[home_chain][id] in template["name"].lower()
             ]
             + [CUSTOM_PROGRAM_ID]
         )
@@ -556,6 +558,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             gas_fund_req = 0
             agent_fund_requirement = fund_requirements.agent
             safe_fund_requirement = fund_requirements.safe
+            master_safe_fund_requirement = 0
             service_state = manager._get_on_chain_state(service, chain_name)
             if asset_address == ZERO_ADDRESS:
                 gas_fund_req = t.cast(int, chain_metadata.get("gasFundReq"))
@@ -564,7 +567,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                     OnChainState.PRE_REGISTRATION,
                     OnChainState.ACTIVE_REGISTRATION,
                 ):
-                    agent_fund_requirement += (
+                    master_safe_fund_requirement += (
                         2  # for 1 wei in msg.value during registration and activation
                     )
 
@@ -645,7 +648,11 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
             # ask for enough funds in master safe for agent EOA + service safe
             ask_funds_in_address(
                 ledger_api=ledger_api,
-                required_balance=agent_fund_requirement + safe_fund_requirement,
+                required_balance=(
+                    master_safe_fund_requirement
+                    + agent_fund_requirement
+                    + safe_fund_requirement
+                ),
                 asset_address=asset_address,
                 recipient_name="Master Safe",
                 recipient_address=wallet.safes[chain],
