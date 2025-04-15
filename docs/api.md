@@ -988,7 +988,7 @@ Creates a quote bundle to fulfill the bridge requests and returns
 
 ### `POST /api/bridge/execute`
 
-Executes a quote bundle.
+Executes a quote bundle. See [GET /api/bridge/status/{quote_bundle_id}](#get-apibridgestatusquote_bundle_id) for status values.
 
 <details>
   <summary>Request</summary>
@@ -1039,24 +1039,32 @@ Gets the status of a quote bundle. The attribute `status` can take the following
 - `SUBMITTED`: The quote bundle has been submitted for execution.
 - `FINISHED`: All the quote executions in the bundle have reached their final state (either done or failed). No more updates are expected for this quote bundle.
 
+Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.
+- `EXECUTION_FAILED`: Execution failed.
+
 <details>
   <summary>Response</summary>
 
   ```json
   {
     "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "status": "FINISHED",
-    "executions": [
+    "status": "SUBMITTED",
+    "bridge_request_status": [
       {
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-        "message": "",
-        "status": "DONE",
+        "message": null,
+        "status": "EXECUTION_DONE",
         "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
       },
       {
         "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-        "message": "",
-        "status": "DONE",
+        "message": null,
+        "status": "EXECUTION_PENDING",
         "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
       }
     ],
