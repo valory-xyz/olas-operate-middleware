@@ -130,7 +130,7 @@ class LocalResource:
             encoding="utf-8",
         )
 
-        self.load(path)  # Validate before making backup
+        self.load(self.path)  # Validate before making backup
 
         for i in reversed(range(N_BACKUPS - 1)):
             older = path.with_name(f"{path.name}.bak.{i}")

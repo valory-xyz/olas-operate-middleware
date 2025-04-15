@@ -501,24 +501,6 @@ class BridgeManagerData(LocalResource):
     _file = "bridge.json"
 
     # TODO Migrate to LocalResource?
-    def store(self) -> None:
-        """Store local resource."""
-
-        file_path = self.path / self._file
-        backup_path = file_path.with_name(file_path.name + ".bak")
-
-        try:
-            if file_path.exists():
-                json.loads(file_path.read_text(encoding="utf-8"))
-                if backup_path.exists():
-                    backup_path.unlink()
-                shutil.copy2(file_path, backup_path)
-        except json.JSONDecodeError:
-            pass
-
-        super().store()
-
-    # TODO Migrate to LocalResource?
     # It can be inconvenient that all local resources create an empty resource
     # if the file is corrupted. For example, if a service configuration is
     # corrupted, we might want to halt execution, because otherwise, the application
