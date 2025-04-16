@@ -1018,7 +1018,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.BAD_GATEWAY
-                if output["errors"]
+                if output["error"]
                 else HTTPStatus.OK,
             )
         except ValueError as e:
