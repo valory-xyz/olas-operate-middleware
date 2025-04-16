@@ -73,7 +73,7 @@ def unit_to_wei(unit: float) -> int:
 CHAIN_TO_METADATA = {
     "gnosis": {
         "name": "Gnosis",
-        "gasFundReq": unit_to_wei(0.5),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.05),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.GNOSIS],
         "token_data": {
             ZERO_ADDRESS: {
@@ -97,7 +97,7 @@ CHAIN_TO_METADATA = {
     },
     "mode": {
         "name": "Mode",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.MODE],
         "token_data": {
             ZERO_ADDRESS: {
@@ -121,7 +121,7 @@ CHAIN_TO_METADATA = {
     },
     "optimistic": {
         "name": "Optimism",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
         "token_data": {
             ZERO_ADDRESS: {
@@ -145,7 +145,7 @@ CHAIN_TO_METADATA = {
     },
     "base": {
         "name": "Base",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.BASE],
         "token_data": {
             ZERO_ADDRESS: {
