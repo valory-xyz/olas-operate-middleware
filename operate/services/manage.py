@@ -2352,9 +2352,6 @@ class ServiceManager:
                 ):
                     allow_start_agent = False
 
-            # Remove placeholder value
-            refill_requirements[chain].pop("master_safe", None)
-
             # Refill requirements for Master EOA
             eoa_funding_values = self._get_master_eoa_native_funding_values(
                 master_safe_exists=master_safe_exists,
