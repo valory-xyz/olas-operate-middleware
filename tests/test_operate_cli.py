@@ -19,8 +19,11 @@
 
 """Tests for operate.cli module."""
 
+import hashlib
+import json
 from pathlib import Path
 
+import argon2
 import pytest
 from web3 import Web3
 
@@ -133,3 +136,48 @@ class TestOperateApp:
         invalid_mnemonic = random_mnemonic(num_words=15)
         with pytest.raises(ValueError, match=rf"^{MSG_INVALID_MNEMONIC}"):
             operate.update_password_with_mnemonic(invalid_mnemonic, password2)
+
+    def test_migrate_account(
+        self,
+        tmp_path: Path,
+        password: str,
+    ) -> None:
+        """Test operate.user_account.is_valid(password) and MigrationManager.migrate_user_account()"""
+
+        operate_home_path = tmp_path / OPERATE_HOME
+        operate = OperateApp(
+            home=operate_home_path,
+        )
+
+        # Artificially create an old-format user.json
+        sha256 = hashlib.sha256()
+        sha256.update(password.encode())
+        password_sha = sha256.hexdigest()
+        data = {"password_sha": password_sha}
+        user_json_path = operate_home_path / "user.json"
+        user_json_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+        operate = OperateApp(
+            home=operate_home_path,
+        )
+
+        data = json.loads(user_json_path.read_text(encoding="utf-8"))
+
+        assert operate.user_account
+        assert "password_hash" in data
+        assert "password_sha" not in data
+        assert password_sha == data["password_hash"]
+        ph = argon2.PasswordHasher()
+        with pytest.raises(argon2.exceptions.InvalidHashError):
+            ph.verify(data["password_hash"], password)
+
+        operate.user_account.is_valid(password)
+        data = json.loads(user_json_path.read_text(encoding="utf-8"))
+
+        assert operate.user_account
+        assert operate.user_account.is_valid(password)
+        assert "password_hash" in data
+        assert "password_sha" not in data
+        assert password_sha != data["password_hash"]
+        ph = argon2.PasswordHasher()
+        assert ph.verify(data["password_hash"], password)
