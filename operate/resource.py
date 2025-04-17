@@ -50,6 +50,7 @@ def serialize(obj: t.Any) -> t.Any:
 
 def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     """Desrialize a json object."""
+
     base = getattr(otype, "__class__")  # noqa: B009
     if base.__name__ == "_GenericAlias":  # type: ignore
         args = otype.__args__  # type: ignore
