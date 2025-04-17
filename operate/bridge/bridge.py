@@ -81,11 +81,17 @@ class BridgeRequestStatus(str, enum.Enum):
 class BridgeRequest(LocalResource):
     """BridgeRequest."""
 
-    request: dict
+    params: dict
     id: str = f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}"
     status: BridgeRequestStatus = BridgeRequestStatus.REQUEST_CREATED
     quote: dict | None = None
     execution: dict | None = None
+
+
+@dataclass
+class BridgeRequestBundle(LocalResource):
+    pass
+
 
 class BridgeProvider:
     """Abstract BridgeProvider."""
@@ -155,13 +161,13 @@ class LiFiBridgeProvider(BridgeProvider):
                 f"[LI.FI BRIDGE] Cannot update bridge request {bridge_request.id} with quote: execution already present."
             )
 
-        from_chain = bridge_request.request["from"]["chain"]
-        from_address = bridge_request.request["from"]["address"]
-        from_token = bridge_request.request["from"]["token"]
-        to_chain = bridge_request.request["to"]["chain"]
-        to_address = bridge_request.request["to"]["address"]
-        to_token = bridge_request.request["to"]["token"]
-        to_amount = bridge_request.request["to"]["amount"]
+        from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+        to_chain = bridge_request.params["to"]["chain"]
+        to_address = bridge_request.params["to"]["address"]
+        to_token = bridge_request.params["to"]["token"]
+        to_amount = bridge_request.params["to"]["amount"]
 
         if to_amount == 0:
             self.logger.info("[LI.FI BRIDGE] Zero-amount quote requested.")
@@ -246,9 +252,9 @@ class LiFiBridgeProvider(BridgeProvider):
         """Get bridge requirements for a quote."""
 
         if not bridge_request.quote or not bridge_request.quote["response"] or not "action" in bridge_request.quote["response"]:
-            from_chain = bridge_request.request["from"]["chain"]
-            from_address = bridge_request.request["from"]["address"]
-            from_token = bridge_request.request["from"]["token"]
+            from_chain = bridge_request.params["from"]["chain"]
+            from_address = bridge_request.params["from"]["address"]
+            from_token = bridge_request.params["from"]["token"]
             from_amount = 0
             transaction_value = 0
         else:
@@ -676,7 +682,7 @@ class BridgeManager:
             bundle["status"] = str(BridgeRequestBundleStatus.CREATED)
             bundle["user_bridge_requests"] = user_bridge_requests
             bundle["bridge_requests"] = [
-                BridgeRequest(request=request)
+                BridgeRequest(params=request)
                 for request in user_bridge_requests
             ]
             bundle["timestamp"] = now
