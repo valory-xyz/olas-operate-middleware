@@ -123,7 +123,7 @@ class LocalResource:
 
         bak0 = path.with_name(f"{path.name}.0.bak")
 
-        if not bak0.exists():
+        if path.exists() and not bak0.exists():
             shutil.copy2(path, bak0)
 
         path.write_text(
