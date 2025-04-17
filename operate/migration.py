@@ -24,6 +24,8 @@ import json
 import logging
 from pathlib import Path
 
+from operate.utils import create_backup
+
 
 class MigrationManager:
     """MigrationManager"""
@@ -53,6 +55,7 @@ class MigrationManager:
         if "password_sha" not in data:
             return
 
+        create_backup(path)
         new_data = {"password_hash": data["password_sha"]}
         with open(path, "w", encoding="utf-8") as f:
             json.dump(new_data, f, indent=4)
