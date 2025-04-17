@@ -121,6 +121,11 @@ class LocalResource:
         if self._file is not None:
             path = path / self._file
 
+        bak0 = path.with_name(f"{path.name}.0.bak")
+
+        if not bak0.exists():
+            shutil.copy2(path, bak0)
+
         path.write_text(
             json.dumps(
                 self.json,
@@ -132,12 +137,11 @@ class LocalResource:
         self.load(self.path)  # Validate before making backup
 
         for i in reversed(range(N_BACKUPS - 1)):
-            older = path.with_name(f"{path.name}.bak.{i}")
-            newer = path.with_name(f"{path.name}.bak.{i + 1}")
-            if older.exists():
-                if newer.exists():
-                    newer.unlink()
-                older.rename(newer)
+            newer = path.with_name(f"{path.name}.{i}.bak")
+            older = path.with_name(f"{path.name}.{i + 1}.bak")
+            if newer.exists():
+                if older.exists():
+                    older.unlink()
+                newer.rename(older)
 
-        bak0 = path.with_name(f"{path.name}.bak.0")
         shutil.copy2(path, bak0)
