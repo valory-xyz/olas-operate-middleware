@@ -137,11 +137,11 @@ class LocalResource:
         self.load(self.path)  # Validate before making backup
 
         for i in reversed(range(N_BACKUPS - 1)):
-            older = path.with_name(f"{path.name}.{i}.bak")
-            newer = path.with_name(f"{path.name}.{i + 1}.bak")
-            if older.exists():
-                if newer.exists():
-                    newer.unlink()
-                older.rename(newer)
+            newer = path.with_name(f"{path.name}.{i}.bak")
+            older = path.with_name(f"{path.name}.{i + 1}.bak")
+            if newer.exists():
+                if older.exists():
+                    older.unlink()
+                newer.rename(older)
 
         shutil.copy2(path, bak0)
