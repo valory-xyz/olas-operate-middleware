@@ -1016,7 +1016,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             data = await request.json()
             output = operate.bridge_manager().bridge_refill_requirements(
                 requests_params=data["bridge_requests"],
-                force_update=data.get("force_update", False)
+                force_update=data.get("force_update", False),
             )
 
             return JSONResponse(
@@ -1044,9 +1044,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             data = await request.json()
-            output = operate.bridge_manager().execute_bundle(
-                bundle_id=data["id"]
-            )
+            output = operate.bridge_manager().execute_bundle(bundle_id=data["id"])
 
             return JSONResponse(
                 content=output,

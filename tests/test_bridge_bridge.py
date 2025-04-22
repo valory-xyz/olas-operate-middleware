@@ -21,26 +21,24 @@
 
 
 import os
-from pathlib import Path
 import time
+from pathlib import Path
 
-from operate.constants import ZERO_ADDRESS
 import pytest
 from deepdiff import DeepDiff
 
-from operate import wallet
-from operate.bridge.bridge import (
+from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
+    BridgeRequest,
+    BridgeRequestStatus,
+    LiFiBridgeProvider,
     MESSAGE_EXECUTION_SKIPPED,
     MESSAGE_QUOTE_ZERO,
-    BridgeRequestStatus,
-    BridgeRequest,
-    LiFiBridgeProvider,
-    # MESSAGE_EXECUTION_SKIPPED,
-    # MESSAGE_QUOTE_ZERO,
 )
 from operate.cli import OperateApp
-from operate.operate_types import Chain, LedgerType
+from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS
+from operate.operate_types import Chain, LedgerType
+
 
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE = ".operate_test"
@@ -98,28 +96,27 @@ class TestLiFiBridge:
             assert qd.elapsed_time == 0, "Wrong quote data."
             assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
             assert qd.response is None, "Wrong quote data."
-            assert timestamp <= qd.timestamp and qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
+            ), "Wrong status."
 
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": MESSAGE_QUOTE_ZERO,
-            "status": BridgeRequestStatus.QUOTE_DONE.value
+            "status": BridgeRequestStatus.QUOTE_DONE.value,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
             print(diff)
 
         assert not diff, "Wrong status."
+        assert bridge_request.quote_data is not None, "Missing quote data."
 
         br = bridge_request.quote_data.requirements
         expected_br = {
-            "gnosis": {
-                wallet_address: {
-                    ZERO_ADDRESS: 0,
-                    OLAS[Chain.GNOSIS]: 0
-                }
-            }
+            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
         }
         diff = DeepDiff(br, expected_br)
         if diff:
@@ -147,18 +144,23 @@ class TestLiFiBridge:
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.explorer_link is None, "Wrong execution data."
         assert ed.message == MESSAGE_EXECUTION_SKIPPED, "Wrong execution data."
-        assert timestamp <= ed.timestamp and ed.timestamp <= int(time.time()), "Wrong execution data."
+        assert timestamp <= ed.timestamp, "Wrong quote data."
+        assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hash is None, "Wrong execution data."
         assert ed.tx_status == 0, "Wrong execution data."
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_DONE, "Wrong status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong status."
 
         bridge.update_execution_status(bridge_request)
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_DONE, "Wrong status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong status."
 
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": MESSAGE_EXECUTION_SKIPPED,
-            "status": BridgeRequestStatus.EXECUTION_DONE.value
+            "status": BridgeRequestStatus.EXECUTION_DONE.value,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -215,14 +217,17 @@ class TestLiFiBridge:
             assert qd.elapsed_time > 0, "Wrong quote data."
             assert qd.message is not None, "Wrong quote data."
             assert qd.response is not None, "Wrong quote data."
-            assert timestamp <= qd.timestamp and qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert bridge_request.status == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
+            ), "Wrong status."
 
         assert bridge_request.quote_data is not None, "Wrong quote data."
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_FAILED
+            "status": BridgeRequestStatus.QUOTE_FAILED,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -232,12 +237,7 @@ class TestLiFiBridge:
 
         br = bridge_request.quote_data.requirements
         expected_br = {
-            "gnosis": {
-                wallet_address: {
-                    ZERO_ADDRESS: 0,
-                    OLAS[Chain.GNOSIS]: 0
-                }
-            }
+            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
         }
         diff = DeepDiff(br, expected_br)
         if diff:
@@ -252,7 +252,9 @@ class TestLiFiBridge:
         assert qd.message is not None, "Wrong quote data."
         assert qd.response is not None, "Wrong quote data."
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert bridge_request.status == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
+        ), "Wrong status."
 
         with pytest.raises(RuntimeError):
             bridge.update_execution_status(bridge_request)
@@ -265,18 +267,23 @@ class TestLiFiBridge:
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.explorer_link is None, "Wrong execution data."
         assert ed.message == MESSAGE_EXECUTION_SKIPPED, "Wrong execution data."
-        assert timestamp <= ed.timestamp and ed.timestamp <= int(time.time()), "Wrong execution data."
+        assert timestamp <= ed.timestamp, "Wrong quote data."
+        assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hash is None, "Wrong execution data."
         assert ed.tx_status == 0, "Wrong execution data."
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED, "Wrong status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
+        ), "Wrong status."
 
         bridge.update_execution_status(bridge_request)
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED, "Wrong status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
+        ), "Wrong status."
 
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": ed.message,
-            "status": BridgeRequestStatus.EXECUTION_FAILED
+            "status": BridgeRequestStatus.EXECUTION_FAILED,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -334,20 +341,24 @@ class TestLiFiBridge:
             assert qd.elapsed_time > 0, "Wrong quote data."
             assert qd.message is None, "Wrong quote data."
             assert qd.response is not None, "Wrong quote data."
-            assert timestamp <= qd.timestamp and qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
+            ), "Wrong status."
 
         assert bridge_request.quote_data is not None, "Wrong quote data."
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_DONE
+            "status": BridgeRequestStatus.QUOTE_DONE,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
             print(diff)
 
         assert not diff, "Wrong status."
+        assert bridge_request.quote_data.response is not None, "Missing quote data."
 
         quote = bridge_request.quote_data.response
         br = bridge_request.quote_data.requirements
@@ -355,7 +366,7 @@ class TestLiFiBridge:
             "gnosis": {
                 wallet_address: {
                     ZERO_ADDRESS: int(quote["transactionRequest"]["value"], 16),
-                    OLAS[Chain.GNOSIS]: int(quote["action"]["fromAmount"])
+                    OLAS[Chain.GNOSIS]: int(quote["action"]["fromAmount"]),  # type: ignore
                 }
             }
         }
@@ -405,7 +416,7 @@ class TestLiFiBridge:
                     "chain": "base",
                     "address": wallet_address,
                     "token": ZERO_ADDRESS,
-                    "amount": 0,  #1_000_000_000_000_000,
+                    "amount": 0,  # 1_000_000_000_000_000,
                 },
             },
             {
@@ -420,35 +431,29 @@ class TestLiFiBridge:
                     "token": OLAS[Chain.BASE],
                     "amount": 0,  # 1_000_000_000_000_000_000,
                 },
-            }
+            },
         ]
 
         timestamp1 = time.time()
         brr = bridge_manager.bridge_refill_requirements(
-            requests_params=params,
-            force_update=False
+            requests_params=params, force_update=False
         )
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
             "balances": {
-                "gnosis": {
-                    wallet_address: {
-                        ZERO_ADDRESS: 0,
-                        OLAS[Chain.GNOSIS]: 0
-                    }
-                }
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
             },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
                     "message": MESSAGE_QUOTE_ZERO,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value
+                    "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
                 {
                     "message": MESSAGE_QUOTE_ZERO,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value
-                }
+                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
             "error": False,
@@ -456,13 +461,32 @@ class TestLiFiBridge:
             "is_refill_required": False,
         }
 
-        assert brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0, "Wrong bridge refill requirements."
-        assert brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0, "Wrong bridge refill requirements."
-        assert brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0, "Wrong bridge refill requirements."
-        assert brr["bridge_refill_requirements"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0, "Wrong bridge refill requirements."
-        assert not DeepDiff(brr["bridge_refill_requirements"], brr["bridge_total_requirements"]), "Wrong bridge refill requirements."
-        assert brr["expiration_timestamp"] >= timestamp1, "Wrong bridge refill requirements."
-        assert brr["expiration_timestamp"] <= timestamp2 + bridge_manager.quote_validity_period, "Wrong bridge refill requirements."
+        assert (
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
+            == 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["bridge_refill_requirements"]["gnosis"][wallet_address][
+                OLAS[Chain.GNOSIS]
+            ]
+            == 0
+        ), "Wrong bridge refill requirements."
+        assert not DeepDiff(
+            brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["expiration_timestamp"] >= timestamp1
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["expiration_timestamp"]
+            <= timestamp2 + bridge_manager.quote_validity_period
+        ), "Wrong bridge refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
         if diff:
@@ -514,35 +538,23 @@ class TestLiFiBridge:
                     "token": OLAS[Chain.BASE],
                     "amount": 1_000_000_000_000_000_000,
                 },
-            }
+            },
         ]
 
         timestamp1 = time.time()
         brr = bridge_manager.bridge_refill_requirements(
-            requests_params=params,
-            force_update=False
+            requests_params=params, force_update=False
         )
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
             "balances": {
-                "gnosis": {
-                    wallet_address: {
-                        ZERO_ADDRESS: 0,
-                        OLAS[Chain.GNOSIS]: 0
-                    }
-                }
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
             },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
-                {
-                    "message": None,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value
-                },
-                {
-                    "message": None,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value
-                }
+                {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
+                {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
             "error": False,
@@ -550,17 +562,35 @@ class TestLiFiBridge:
             "is_refill_required": True,
         }
 
-        assert brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0, "Wrong bridge refill requirements."
-        assert brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0, "Wrong bridge refill requirements."
-        assert brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS] > 0, "Wrong bridge refill requirements."
-        assert brr["bridge_refill_requirements"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] > 0, "Wrong bridge refill requirements."
-        assert not DeepDiff(brr["bridge_refill_requirements"], brr["bridge_total_requirements"]), "Wrong bridge refill requirements."
-        assert brr["expiration_timestamp"] >= timestamp1, "Wrong bridge refill requirements."
-        assert brr["expiration_timestamp"] <= timestamp2 + bridge_manager.quote_validity_period, "Wrong bridge refill requirements."
+        assert (
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
+            > 0
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["bridge_refill_requirements"]["gnosis"][wallet_address][
+                OLAS[Chain.GNOSIS]
+            ]
+            > 0
+        ), "Wrong bridge refill requirements."
+        assert not DeepDiff(
+            brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["expiration_timestamp"] >= timestamp1
+        ), "Wrong bridge refill requirements."
+        assert (
+            brr["expiration_timestamp"]
+            <= timestamp2 + bridge_manager.quote_validity_period
+        ), "Wrong bridge refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
         if diff:
             print(diff)
 
         assert not diff, "Wrong bridge refill requirements."
-

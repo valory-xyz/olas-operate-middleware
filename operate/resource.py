@@ -52,16 +52,16 @@ def serialize(obj: t.Any) -> t.Any:
 def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     """Desrialize a json object."""
 
-    origin = getattr(otype, '__origin__', None)
+    origin = getattr(otype, "__origin__", None)
 
     # Handle Union and Optional
     if origin is t.Union or isinstance(otype, types.UnionType):
         for arg in t.get_args(otype):
-            if arg is type(None):
+            if arg is type(None):  # noqa: E721
                 continue
             try:
                 return deserialize(obj, arg)
-            except Exception:
+            except Exception:  # pylint: disable=broad-except
                 continue
         return None
 
@@ -74,8 +74,7 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     if origin is dict:
         key_type, val_type = t.get_args(otype)
         return {
-            deserialize(k, key_type): deserialize(v, val_type)
-            for k, v in obj.items()
+            deserialize(k, key_type): deserialize(v, val_type) for k, v in obj.items()
         }
 
     base = getattr(otype, "__class__")  # noqa: B009

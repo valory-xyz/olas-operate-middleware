@@ -64,6 +64,7 @@ MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
 @dataclass
 class QuoteData(LocalResource):
     """QuoteData"""
+
     attempts: int
     requirements: dict
     elapsed_time: float
@@ -76,6 +77,7 @@ class QuoteData(LocalResource):
 @dataclass
 class ExecutionData(LocalResource):
     """ExecutionData"""
+
     bridge_status: enum.Enum | None
     elapsed_time: float
     explorer_link: str | None
@@ -87,6 +89,7 @@ class ExecutionData(LocalResource):
 
 class BridgeRequestStatus(str, enum.Enum):
     """BridgeRequestStatus"""
+
     CREATED = "CREATED"
     QUOTE_DONE = "QUOTE_DONE"
     QUOTE_FAILED = "QUOTE_FAILED"
@@ -102,6 +105,7 @@ class BridgeRequestStatus(str, enum.Enum):
 @dataclass
 class BridgeRequest(LocalResource):
     """BridgeRequest"""
+
     params: dict
     id: str = f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}"
     status: BridgeRequestStatus = BridgeRequestStatus.CREATED
@@ -118,15 +122,9 @@ class BridgeRequest(LocalResource):
                 "tx_hash": self.execution_data.tx_hash,
             }
         if self.quote_data:
-            return {
-                "message": self.quote_data.message,
-                "status": self.status.value
-            }
+            return {"message": self.quote_data.message, "status": self.status.value}
 
-        return {
-            "message": None,
-            "status": self.status.value
-        }
+        return {"message": None, "status": self.status.value}
 
 
 class BridgeRequestBundleStatus(str, enum.Enum):
@@ -153,6 +151,7 @@ class BridgeRequestBundleStatus(str, enum.Enum):
 @dataclass
 class BridgeRequestBundle(LocalResource):
     """BridgeRequestBundle"""
+
     bridge_provider: str
     status: BridgeRequestBundleStatus
     requests_params: list[dict]
@@ -163,8 +162,7 @@ class BridgeRequestBundle(LocalResource):
     def get_from_chains(self) -> set[Chain]:
         """Get 'from' chains."""
         return {
-            Chain(request.params["from"]["chain"])
-            for request in self.bridge_requests
+            Chain(request.params["from"]["chain"]) for request in self.bridge_requests
         }
 
     def get_from_addresses(self, chain: Chain) -> set[str]:
@@ -273,7 +271,11 @@ class LiFiBridgeProvider(BridgeProvider):
     def quote(self, bridge_request: BridgeRequest) -> None:
         """Update the request with the quote."""
 
-        if bridge_request.status not in (BridgeRequestStatus.CREATED, BridgeRequestStatus.QUOTE_DONE, BridgeRequestStatus.QUOTE_FAILED):
+        if bridge_request.status not in (
+            BridgeRequestStatus.CREATED,
+            BridgeRequestStatus.QUOTE_DONE,
+            BridgeRequestStatus.QUOTE_FAILED,
+        ):
             raise RuntimeError(
                 f"[LI.FI BRIDGE] Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
             )
@@ -308,7 +310,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 message=MESSAGE_QUOTE_ZERO,
                 response=None,
                 response_status=0,
-                timestamp=int(time.time())
+                timestamp=int(time.time()),
             )
             bridge_request.quote_data = quote_data
             bridge_request.status = BridgeRequestStatus.QUOTE_DONE
@@ -336,7 +338,9 @@ class LiFiBridgeProvider(BridgeProvider):
                 response.raise_for_status()
                 response_json = response.json()
                 from_amount = int(response_json["action"]["fromAmount"])
-                transaction_value = int(response_json["transactionRequest"]["value"], 16)
+                transaction_value = int(
+                    response_json["transactionRequest"]["value"], 16
+                )
 
                 # TODO: gas fees!
                 if from_token == ZERO_ADDRESS:
@@ -362,7 +366,7 @@ class LiFiBridgeProvider(BridgeProvider):
                     message=None,
                     response=response_json,
                     response_status=response.status_code,
-                    timestamp=int(time.time())
+                    timestamp=int(time.time()),
                 )
                 bridge_request.quote_data = quote_data
                 bridge_request.status = BridgeRequestStatus.QUOTE_DONE
@@ -378,7 +382,7 @@ class LiFiBridgeProvider(BridgeProvider):
                     message=str(e),
                     response=None,
                     response_status=HTTPStatus.GATEWAY_TIMEOUT,
-                    timestamp=int(time.time())
+                    timestamp=int(time.time()),
                 )
             except requests.RequestException as e:
                 self.logger.warning(
@@ -391,8 +395,10 @@ class LiFiBridgeProvider(BridgeProvider):
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
                     response=response_json,
-                    response_status=getattr(response, "status_code", HTTPStatus.BAD_GATEWAY),
-                    timestamp=int(time.time())
+                    response_status=getattr(
+                        response, "status_code", HTTPStatus.BAD_GATEWAY
+                    ),
+                    timestamp=int(time.time()),
                 )
             if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
                 self.logger.error(
@@ -407,7 +413,10 @@ class LiFiBridgeProvider(BridgeProvider):
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the quote."""
 
-        if bridge_request.status not in (BridgeRequestStatus.QUOTE_DONE, BridgeRequestStatus.QUOTE_FAILED):
+        if bridge_request.status not in (
+            BridgeRequestStatus.QUOTE_DONE,
+            BridgeRequestStatus.QUOTE_FAILED,
+        ):
             raise RuntimeError(
                 f"[LI.FI BRIDGE] Cannot execute bridge request {bridge_request.id} with status {bridge_request.status}."
             )
@@ -434,7 +443,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 message=MESSAGE_EXECUTION_SKIPPED,
                 timestamp=int(timestamp),
                 tx_hash=None,
-                tx_status=0
+                tx_status=0,
             )
             bridge_request.execution_data = execution_data
 
@@ -550,7 +559,10 @@ class LiFiBridgeProvider(BridgeProvider):
     def update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
 
-        if bridge_request.status in (BridgeRequestStatus.EXECUTION_DONE, BridgeRequestStatus.EXECUTION_FAILED):
+        if bridge_request.status in (
+            BridgeRequestStatus.EXECUTION_DONE,
+            BridgeRequestStatus.EXECUTION_FAILED,
+        ):
             return
 
         if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING):
@@ -585,6 +597,7 @@ class LiFiBridgeProvider(BridgeProvider):
             elif lifi_status == LiFiTransactionStatus.FAILED:
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
+
 @dataclass
 class BridgeManagerData(LocalResource):
     """BridgeManagerData"""
@@ -592,7 +605,9 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     last_requested_bundle: BridgeRequestBundle | None = None
-    executed_bundles: dict[str, BridgeRequestBundle] = field(default_factory=dict[str, BridgeRequestBundle])
+    executed_bundles: dict[str, BridgeRequestBundle] = field(
+        default_factory=dict[str, BridgeRequestBundle]
+    )
 
     _file = "bridge.json"
 
@@ -619,10 +634,6 @@ class BridgeManagerData(LocalResource):
             BridgeManagerData(path=path).store()
 
         return super().load(path)
-
-
-
-
 
 
 class BridgeManager:
@@ -697,8 +708,7 @@ class BridgeManager:
                 status=BridgeRequestBundleStatus.CREATED,
                 requests_params=requests_params,
                 bridge_requests=[
-                    BridgeRequest(params=params)
-                    for params in requests_params
+                    BridgeRequest(params=params) for params in requests_params
                 ],
                 timestamp=now,
             )
@@ -713,24 +723,21 @@ class BridgeManager:
         bundle = self.data.executed_bundles.get(bundle_id)
 
         if not bundle:
-            raise ValueError(
-                f"[BRIDGE MANAGER] Bundle id {bundle_id} not found."
-            )
-        
-        if bundle.status in (BridgeRequestBundleStatus.EXECUTION_DONE, BridgeRequestBundleStatus.EXECUTION_FAILED):
+            raise ValueError(f"[BRIDGE MANAGER] Bundle id {bundle_id} not found.")
+
+        if bundle.status in (
+            BridgeRequestBundleStatus.EXECUTION_DONE,
+            BridgeRequestBundleStatus.EXECUTION_FAILED,
+        ):
             return
 
         initial_bundle_status = bundle.status
-        initial_status = [
-            request.status for request in bundle.bridge_requests
-        ]
+        initial_status = [request.status for request in bundle.bridge_requests]
 
         for request in bundle.bridge_requests:
             self.bridge_provider.update_execution_status(request)
 
-        status = [
-            request.status for request in bundle.bridge_requests
-        ]
+        status = [request.status for request in bundle.bridge_requests]
 
         if all(
             request.status in (BridgeRequestStatus.EXECUTION_DONE)
@@ -738,7 +745,11 @@ class BridgeManager:
         ):
             bundle.status = BridgeRequestBundleStatus.EXECUTION_DONE
         elif all(
-            request.status in (BridgeRequestStatus.EXECUTION_DONE, BridgeRequestStatus.EXECUTION_FAILED)
+            request.status
+            in (
+                BridgeRequestStatus.EXECUTION_DONE,
+                BridgeRequestStatus.EXECUTION_FAILED,
+            )
             for request in bundle.bridge_requests
         ):
             bundle.status = BridgeRequestBundleStatus.EXECUTION_FAILED
@@ -829,9 +840,7 @@ class BridgeManager:
 
         balances = {}
         for chain in bundle.get_from_chains():
-            ledger_api = self.wallet_manager.load(chain.ledger_type).ledger_api(
-                chain
-            )
+            ledger_api = self.wallet_manager.load(chain.ledger_type).ledger_api(chain)
             balances[chain.value] = get_assets_balances(
                 ledger_api=ledger_api,
                 asset_addresses={ZERO_ADDRESS} | bundle.get_from_tokens(chain),
@@ -857,23 +866,26 @@ class BridgeManager:
         )
 
         bridge_request_status = [
-            request.get_status_json()
-            for request in bundle.bridge_requests
+            request.get_status_json() for request in bundle.bridge_requests
         ]
         error = any(
-            request.status in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED) for request in bundle.bridge_requests
+            request.status
+            in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED)
+            for request in bundle.bridge_requests
         )
 
-        return dict({
-            "id": bundle.id,
-            "balances": balances,
-            "bridge_refill_requirements": bridge_refill_requirements,
-            "bridge_request_status": bridge_request_status,
-            "bridge_total_requirements": bridge_total_requirements,
-            "error": error,
-            "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
-            "is_refill_required": is_refill_required,
-        })
+        return dict(
+            {
+                "id": bundle.id,
+                "balances": balances,
+                "bridge_refill_requirements": bridge_refill_requirements,
+                "bridge_request_status": bridge_request_status,
+                "bridge_total_requirements": bridge_total_requirements,
+                "error": error,
+                "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
+                "is_refill_required": is_refill_required,
+            }
+        )
 
     def execute_bundle(self, bundle_id: str) -> dict:
         """Execute the bundle"""
@@ -885,7 +897,7 @@ class BridgeManager:
 
         if bundle.id != bundle_id:
             raise RuntimeError(
-                f"[BRIDGE MANAGER] Quote bundle id {bundle_id} does not match last requested bundle id {bundle.get('id')}."
+                f"[BRIDGE MANAGER] Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
             )
 
         requirements = self.bridge_refill_requirements(bundle.requests_params)
@@ -905,9 +917,7 @@ class BridgeManager:
         self.data.last_requested_bundle = None
         self.data.executed_bundles[bundle.id] = bundle
         self._store_data()
-        self.logger.info(
-            f"[BRIDGE MANAGER] Bundle id {bundle_id} executed."
-        )
+        self.logger.info(f"[BRIDGE MANAGER] Bundle id {bundle_id} executed.")
 
         return self.get_execution_status(bundle_id)
 
@@ -917,18 +927,16 @@ class BridgeManager:
         bundle = self.data.executed_bundles.get(bundle_id)
 
         if not bundle:
-            raise ValueError(
-                f"[BRIDGE MANAGER] Bundle id {bundle_id} not found."
-            )
+            raise ValueError(f"[BRIDGE MANAGER] Bundle id {bundle_id} not found.")
 
         self._update_bundle_status(bundle_id)
 
         bridge_request_status = [
-            request.get_status_json()
-            for request in bundle.bridge_requests
+            request.get_status_json() for request in bundle.bridge_requests
         ]
         error = any(
-            request.status in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED)
+            request.status
+            in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED)
             for request in bundle.bridge_requests
         )
 
