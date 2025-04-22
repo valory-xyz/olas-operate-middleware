@@ -22,6 +22,7 @@
 import enum
 import json
 import shutil
+import types
 import typing as t
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
@@ -50,6 +51,32 @@ def serialize(obj: t.Any) -> t.Any:
 
 def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     """Desrialize a json object."""
+
+    origin = getattr(otype, '__origin__', None)
+
+    # Handle Union and Optional
+    if origin is t.Union or isinstance(otype, types.UnionType):
+        for arg in t.get_args(otype):
+            if arg is type(None):
+                continue
+            try:
+                return deserialize(obj, arg)
+            except Exception:
+                continue
+        return None
+
+    # Handle list[T]
+    if origin is list:
+        (item_type,) = t.get_args(otype)
+        return [deserialize(item, item_type) for item in obj]
+
+    # Handle dict[K, V]
+    if origin is dict:
+        key_type, val_type = t.get_args(otype)
+        return {
+            deserialize(k, key_type): deserialize(v, val_type)
+            for k, v in obj.items()
+        }
 
     base = getattr(otype, "__class__")  # noqa: B009
     if base.__name__ == "_GenericAlias":  # type: ignore
