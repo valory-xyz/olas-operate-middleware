@@ -73,7 +73,7 @@ def unit_to_wei(unit: float) -> int:
 CHAIN_TO_METADATA = {
     "gnosis": {
         "name": "Gnosis",
-        "gasFundReq": unit_to_wei(0.05),  # fund for master EOA
+        "gasFundReq": unit_to_wei(0.5),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.GNOSIS],
         "token_data": {
             ZERO_ADDRESS: {

@@ -67,8 +67,7 @@ if t.TYPE_CHECKING:
 
 NO_STAKING_PROGRAM_METADATA = {
     "name": "No staking",
-    "description": "Your Olas Predict agent will still actively participate in prediction\
-        markets, but it will not be staked within any staking program.",
+    "description": "Your agent will still work as expected, but it will not be staked within any staking program.",
 }
 CUSTOM_PROGRAM_ID = "custom_staking"
 QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
