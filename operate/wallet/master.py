@@ -168,8 +168,8 @@ class MasterWallet(LocalResource):
         """Drain all erc20/native assets to the given account."""
         raise NotImplementedError()
 
-    @staticmethod
-    def new(password: str, path: Path) -> t.Tuple["MasterWallet", t.List[str]]:
+    @classmethod
+    def new(cls, password: str, path: Path) -> t.Tuple["MasterWallet", t.List[str]]:
         """Create a new master wallet."""
         raise NotImplementedError()
 
@@ -532,10 +532,15 @@ class EthereumMasterWallet(MasterWallet):
     ) -> t.Tuple["EthereumMasterWallet", t.List[str]]:
         """Create a new master wallet."""
         # Backport support on aea
+
+        eoa_wallet_path = path / cls._key
+        if eoa_wallet_path.exists():
+            raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
+
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
-        (path / cls._key).write_text(
+        eoa_wallet_path.write_text(
             data=json.dumps(
                 Account.encrypt(
                     private_key=crypto._private_key,  # pylint: disable=protected-access
