@@ -357,8 +357,8 @@ class LiFiBridgeProvider(BridgeProvider):
                 transaction_value = int(
                     response_json["transactionRequest"]["value"], 16
                 )
-                gas_price = int(response_json["gasPrice"], 16)
-                gas_limit = int(response_json["gasLimit"], 16)
+                gas_price = int(response_json["transactionRequest"]["gasPrice"], 16)
+                gas_limit = int(response_json["transactionRequest"]["gasLimit"], 16)
                 gas_fees = gas_price * gas_limit
 
                 if from_token == ZERO_ADDRESS:
