@@ -353,12 +353,10 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 response.raise_for_status()
                 response_json = response.json()
-                from_amount = int(response_json["action"]["fromAmount"])
-                transaction_value = int(
-                    response_json["transactionRequest"]["value"], 16
-                )
-                gas_price = int(response_json["transactionRequest"]["gasPrice"], 16)
-                gas_limit = int(response_json["transactionRequest"]["gasLimit"], 16)
+                transaction_request = response_json["transactionRequest"]
+                transaction_value = int(transaction_request["value"], 16)
+                gas_price = int(transaction_request["gasPrice"], 16)
+                gas_limit = int(transaction_request["gasLimit"], 16)
                 gas_fees = gas_price * gas_limit
 
                 if from_token == ZERO_ADDRESS:
@@ -368,6 +366,26 @@ class LiFiBridgeProvider(BridgeProvider):
                         }
                     }
                 else:
+                    from_amount = int(response_json["action"]["fromAmount"])
+                    chain = Chain(from_chain)
+                    wallet = self.wallet_manager.load(chain.ledger_type)
+                    ledger_api = wallet.ledger_api(chain)
+
+                    approve_tx = registry_contracts.erc20.get_approve_tx(
+                        ledger_api=wallet.ledger_api(chain),
+                        contract_address=from_token,
+                        spender=transaction_request["to"],
+                        sender=transaction_request["from"],
+                        amount=from_amount,
+                    )
+                    approve_tx = ledger_api.update_with_gas_estimate(
+                        transaction=approve_tx,
+                        raise_on_try=True,
+                    )
+                    gas_price = approve_tx["gas"]
+                    approve_gas_limit = approve_tx["gas"]
+                    gas_fees = (gas_limit + approve_gas_limit) * gas_price
+
                     requirements = {
                         from_chain: {
                             from_address: {
@@ -479,13 +497,13 @@ class LiFiBridgeProvider(BridgeProvider):
             from_amount = int(quote["action"]["fromAmount"])
 
             transaction_request = quote["transactionRequest"]
-            from_chain = Chain.from_id(transaction_request["chainId"])
-            wallet = self.wallet_manager.load(from_chain.ledger_type)
+            chain = Chain.from_id(transaction_request["chainId"])
+            wallet = self.wallet_manager.load(chain.ledger_type)
 
             tx_settler = TxSettler(
-                ledger_api=wallet.ledger_api(from_chain),
+                ledger_api=wallet.ledger_api(chain),
                 crypto=wallet.crypto,
-                chain_type=from_chain,
+                chain_type=chain,
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -497,20 +515,20 @@ class LiFiBridgeProvider(BridgeProvider):
                     f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
                 )
 
-                # TODO Approval is done on several places. Consider exporting to a
+                # TODO Approve is done on several places. Consider exporting to a
                 # higher-level layer (e.g., wallet?)
-                def _build_approval_tx(  # pylint: disable=unused-argument
+                def _build_approve_tx(  # pylint: disable=unused-argument
                     *args: t.Any, **kargs: t.Any
                 ) -> t.Dict:
                     return registry_contracts.erc20.get_approve_tx(
-                        ledger_api=wallet.ledger_api(from_chain),
+                        ledger_api=wallet.ledger_api(chain),
                         contract_address=from_token,
                         spender=transaction_request["to"],
                         sender=transaction_request["from"],
                         amount=from_amount,
                     )
 
-                setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
+                setattr(tx_settler, "build", _build_approve_tx)  # noqa: B010
                 tx_settler.transact(
                     method=lambda: {},
                     contract="",
@@ -526,7 +544,7 @@ class LiFiBridgeProvider(BridgeProvider):
             def _build_bridge_tx(  # pylint: disable=unused-argument
                 *args: t.Any, **kargs: t.Any
             ) -> t.Dict:
-                w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
+                w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=chain)))
                 return {
                     "value": int(transaction_request["value"], 16),
                     "to": transaction_request["to"],
@@ -800,7 +818,7 @@ class BridgeManager:
 
             wallet = self.wallet_manager.load(Chain(from_chain).ledger_type)
             wallet_address = wallet.address
-            safe_address = wallet.safes.get(from_chain)
+            safe_address = wallet.safes.get(Chain(from_chain))
 
             if from_address is None or not (
                 from_address == wallet_address or from_address == safe_address
