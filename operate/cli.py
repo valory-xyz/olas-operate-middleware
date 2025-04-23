@@ -43,7 +43,7 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.bridge.bridge import BridgeManager
+from operate.bridge.bridge import BridgeManager, BridgeRequestBundleStatus
 from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.migration import MigrationManager
@@ -1021,9 +1021,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             return JSONResponse(
                 content=output,
-                status_code=HTTPStatus.BAD_GATEWAY
-                if output["error"]
-                else HTTPStatus.OK,
+                status_code=HTTPStatus.OK,
             )
         except ValueError as e:
             return JSONResponse(
@@ -1048,9 +1046,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             return JSONResponse(
                 content=output,
-                status_code=HTTPStatus.BAD_GATEWAY
-                if output["errors"]
-                else HTTPStatus.OK,
+                status_code=HTTPStatus.OK,
             )
         except ValueError as e:
             return JSONResponse(
