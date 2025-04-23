@@ -33,7 +33,6 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlencode
 
-from pytest import param
 import requests
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
@@ -452,7 +451,9 @@ class LiFiBridgeProvider(BridgeProvider):
         quote = bridge_request.quote_data.response
 
         if not quote or "action" not in quote:
-            self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})")
+            self.logger.info(
+                f"[LI.FI BRIDGE] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
+            )
             execution_data = ExecutionData(
                 bridge_status=None,
                 elapsed_time=0,
@@ -622,9 +623,7 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     last_requested_bundle: t.Optional[BridgeRequestBundle] = None
-    executed_bundles: t.Dict[str, BridgeRequestBundle] = field(
-        default_factory=dict
-    )
+    executed_bundles: t.Dict[str, BridgeRequestBundle] = field(default_factory=dict)
 
     _file = "bridge.json"
 
@@ -845,7 +844,7 @@ class BridgeManager:
 
         bridge_total_requirements = bundle.sum_bridge_requirements()
 
-        bridge_refill_requirements = {}
+        bridge_refill_requirements: t.Dict = {}
         for from_chain, from_addresses in bridge_total_requirements.items():
             for from_address, from_tokens in from_addresses.items():
                 for from_token, from_amount in from_tokens.items():
@@ -874,7 +873,7 @@ class BridgeManager:
                 "bridge_total_requirements": bridge_total_requirements,
                 "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
                 "is_refill_required": is_refill_required,
-                "status": bundle.status
+                "status": bundle.status,
             }
         )
 

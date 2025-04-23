@@ -43,7 +43,7 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.bridge.bridge import BridgeManager, BridgeRequestBundleStatus
+from operate.bridge.bridge import BridgeManager
 from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
 from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
 from operate.migration import MigrationManager
