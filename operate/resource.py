@@ -61,7 +61,7 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
                 continue
             try:
                 return deserialize(obj, arg)
-            except Exception:  # pylint: disable=broad-except
+            except Exception:  # pylint: disable=broad-except  # nosec
                 continue
         return None
 
