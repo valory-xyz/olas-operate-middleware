@@ -893,7 +893,7 @@ class BridgeManager:
                 "bridge_total_requirements": bridge_total_requirements,
                 "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
                 "is_refill_required": is_refill_required,
-                "status": bundle.status,
+                "status": bundle.status.value,
             }
         )
 
@@ -946,6 +946,6 @@ class BridgeManager:
 
         return {
             "id": bundle.id,
-            "status": bundle.status,
+            "status": bundle.status.value,
             "bridge_request_status": bridge_request_status,
         }

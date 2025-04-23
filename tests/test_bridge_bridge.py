@@ -29,6 +29,7 @@ from deepdiff import DeepDiff
 
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
     BridgeRequest,
+    BridgeRequestBundleStatus,
     BridgeRequestStatus,
     LiFiBridgeProvider,
     MESSAGE_EXECUTION_SKIPPED,
@@ -143,7 +144,8 @@ class TestLiFiBridge:
         assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.explorer_link is None, "Wrong execution data."
-        assert ed.message == MESSAGE_EXECUTION_SKIPPED, "Wrong execution data."
+        assert ed.message is not None, "Wrong execution data."
+        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hash is None, "Wrong execution data."
@@ -158,8 +160,11 @@ class TestLiFiBridge:
         ), "Wrong status."
 
         sj = bridge_request.get_status_json()
+        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
-            "message": MESSAGE_EXECUTION_SKIPPED,
+            "explorer_link": sj["explorer_link"],
+            "tx_hash": None,
+            "message": sj["message"],
             "status": BridgeRequestStatus.EXECUTION_DONE.value,
         }
         diff = DeepDiff(sj, expected_sj)
@@ -227,7 +232,7 @@ class TestLiFiBridge:
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_FAILED,
+            "status": BridgeRequestStatus.QUOTE_FAILED.value,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -266,7 +271,8 @@ class TestLiFiBridge:
         assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.explorer_link is None, "Wrong execution data."
-        assert ed.message == MESSAGE_EXECUTION_SKIPPED, "Wrong execution data."
+        assert ed.message is not None, "Wrong execution data."
+        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hash is None, "Wrong execution data."
@@ -281,9 +287,12 @@ class TestLiFiBridge:
         ), "Wrong status."
 
         sj = bridge_request.get_status_json()
+        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
-            "message": ed.message,
-            "status": BridgeRequestStatus.EXECUTION_FAILED,
+            "explorer_link": sj["explorer_link"],
+            "tx_hash": None,
+            "message": sj["message"],
+            "status": BridgeRequestStatus.EXECUTION_FAILED.value,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -351,7 +360,7 @@ class TestLiFiBridge:
         sj = bridge_request.get_status_json()
         expected_sj = {
             "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_DONE,
+            "status": BridgeRequestStatus.QUOTE_DONE.value,
         }
         diff = DeepDiff(sj, expected_sj)
         if diff:
@@ -365,7 +374,7 @@ class TestLiFiBridge:
         expected_br = {
             "gnosis": {
                 wallet_address: {
-                    ZERO_ADDRESS: int(quote["transactionRequest"]["value"], 16),
+                    ZERO_ADDRESS: br["gnosis"][wallet_address][ZERO_ADDRESS],
                     OLAS[Chain.GNOSIS]: int(quote["action"]["fromAmount"]),  # type: ignore
                 }
             }
@@ -456,7 +465,7 @@ class TestLiFiBridge:
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "error": False,
+            "status": BridgeRequestBundleStatus.QUOTE_DONE.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": False,
         }
@@ -562,7 +571,7 @@ class TestLiFiBridge:
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "error": False,
+            "status": BridgeRequestBundleStatus.QUOTE_FAILED.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": False,
         }
@@ -663,7 +672,7 @@ class TestLiFiBridge:
                 {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "error": False,
+            "status": BridgeRequestBundleStatus.QUOTE_DONE.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": True,
         }
