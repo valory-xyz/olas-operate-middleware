@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import cast
 from urllib.parse import urlencode
 
+from pytest import param
 import requests
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
@@ -66,10 +67,10 @@ class QuoteData(LocalResource):
     """QuoteData"""
 
     attempts: int
-    requirements: dict
+    requirements: t.Dict
     elapsed_time: float
-    message: str | None
-    response: dict | None
+    message: t.Optional[str]
+    response: t.Optional[t.Dict]
     response_status: int
     timestamp: int
 
@@ -78,12 +79,12 @@ class QuoteData(LocalResource):
 class ExecutionData(LocalResource):
     """ExecutionData"""
 
-    bridge_status: enum.Enum | None
+    bridge_status: t.Optional[enum.Enum]
     elapsed_time: float
-    explorer_link: str | None
-    message: str | None
+    explorer_link: t.Optional[str]
+    message: t.Optional[str]
     timestamp: int
-    tx_hash: str | None
+    tx_hash: t.Optional[str]
     tx_status: int
 
 
@@ -106,13 +107,13 @@ class BridgeRequestStatus(str, enum.Enum):
 class BridgeRequest(LocalResource):
     """BridgeRequest"""
 
-    params: dict
+    params: t.Dict
     id: str = f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}"
     status: BridgeRequestStatus = BridgeRequestStatus.CREATED
-    quote_data: QuoteData | None = None
-    execution_data: ExecutionData | None = None
+    quote_data: t.Optional[QuoteData] = None
+    execution_data: t.Optional[ExecutionData] = None
 
-    def get_status_json(self) -> dict:
+    def get_status_json(self) -> t.Dict:
         """JSON representation of the status."""
         if self.execution_data:
             return {
@@ -136,12 +137,7 @@ class BridgeRequestBundleStatus(str, enum.Enum):
     EXECUTION_PENDING = "EXECUTION_PENDING"
     EXECUTION_DONE = "EXECUTION_DONE"
     EXECUTION_FAILED = "EXECUTION_FAILED"
-
-    # CREATED = "CREATED"
-    # QUOTED = "QUOTED"
-    # QUOTED2 = "QUOTED"
-    # SUBMITTED = "SUBMITTED"
-    # FINISHED = "FINISHED"  # All requests in the bundle are either done or failed.
+    UNKNOWN = "UNKNOWN"
 
     def __str__(self) -> str:
         """__str__"""
@@ -153,11 +149,32 @@ class BridgeRequestBundle(LocalResource):
     """BridgeRequestBundle"""
 
     bridge_provider: str
-    status: BridgeRequestBundleStatus
-    requests_params: list[dict]
-    bridge_requests: list[BridgeRequest]
+    requests_params: t.List[t.Dict]
+    bridge_requests: t.List[BridgeRequest]
     timestamp: int
     id: str
+
+    @property
+    def status(self) -> BridgeRequestBundleStatus:
+        """Status"""
+        statuses = {request.status for request in self.bridge_requests}
+
+        if BridgeRequestStatus.EXECUTION_PENDING in statuses:
+            return BridgeRequestBundleStatus.EXECUTION_PENDING
+
+        if BridgeRequestStatus.EXECUTION_FAILED in statuses:
+            return BridgeRequestBundleStatus.EXECUTION_FAILED
+
+        if statuses == {BridgeRequestStatus.EXECUTION_DONE}:
+            return BridgeRequestBundleStatus.EXECUTION_DONE
+
+        if BridgeRequestStatus.QUOTE_FAILED in statuses:
+            return BridgeRequestBundleStatus.QUOTE_FAILED
+
+        if statuses == {BridgeRequestStatus.QUOTE_DONE}:
+            return BridgeRequestBundleStatus.QUOTE_DONE
+
+        return BridgeRequestBundleStatus.CREATED
 
     def get_from_chains(self) -> set[Chain]:
         """Get 'from' chains."""
@@ -183,10 +200,10 @@ class BridgeRequestBundle(LocalResource):
             if request.params["from"]["chain"] == chain_str
         }
 
-    def sum_bridge_requirements(self) -> dict:
+    def sum_bridge_requirements(self) -> t.Dict:
         """Sum bridge requirements."""
 
-        bridge_total_requirements: dict = {}
+        bridge_total_requirements: t.Dict = {}
 
         for request in self.bridge_requests:
             if not request.quote_data:
@@ -212,7 +229,7 @@ class BridgeProvider:
     def __init__(
         self,
         wallet_manager: MasterWalletManager,
-        logger: logging.Logger | None = None,
+        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize the bridge provider."""
         self.wallet_manager = wallet_manager
@@ -435,12 +452,12 @@ class LiFiBridgeProvider(BridgeProvider):
         quote = bridge_request.quote_data.response
 
         if not quote or "action" not in quote:
-            self.logger.info("[LI.FI BRIDGE] Skipping quote execution.")
+            self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})")
             execution_data = ExecutionData(
                 bridge_status=None,
                 elapsed_time=0,
                 explorer_link=None,
-                message=MESSAGE_EXECUTION_SKIPPED,
+                message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
                 timestamp=int(timestamp),
                 tx_hash=None,
                 tx_status=0,
@@ -481,7 +498,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 # higher-level layer (e.g., wallet?)
                 def _build_approval_tx(  # pylint: disable=unused-argument
                     *args: t.Any, **kargs: t.Any
-                ) -> dict:
+                ) -> t.Dict:
                     return registry_contracts.erc20.get_approve_tx(
                         ledger_api=wallet.ledger_api(from_chain),
                         contract_address=from_token,
@@ -505,7 +522,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
             def _build_bridge_tx(  # pylint: disable=unused-argument
                 *args: t.Any, **kargs: t.Any
-            ) -> dict:
+            ) -> t.Dict:
                 w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=from_chain)))
                 return {
                     "value": int(transaction_request["value"], 16),
@@ -604,9 +621,9 @@ class BridgeManagerData(LocalResource):
 
     path: Path
     version: int = 1
-    last_requested_bundle: BridgeRequestBundle | None = None
-    executed_bundles: dict[str, BridgeRequestBundle] = field(
-        default_factory=dict[str, BridgeRequestBundle]
+    last_requested_bundle: t.Optional[BridgeRequestBundle] = None
+    executed_bundles: t.Dict[str, BridgeRequestBundle] = field(
+        default_factory=dict
     )
 
     _file = "bridge.json"
@@ -645,9 +662,9 @@ class BridgeManager:
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
-        logger: logging.Logger | None = None,
-        bridge_provider: BridgeProvider | None = None,
-        quote_validity_period: int | None = None,
+        logger: t.Optional[logging.Logger] = None,
+        bridge_provider: t.Optional[BridgeProvider] = None,
+        quote_validity_period: int = DEFAULT_QUOTE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
@@ -656,10 +673,7 @@ class BridgeManager:
         self.bridge_provider = bridge_provider or LiFiBridgeProvider(
             wallet_manager, logger
         )
-        self.quote_validity_period = (
-            quote_validity_period or DEFAULT_QUOTE_VALIDITY_PERIOD
-        )
-
+        self.quote_validity_period = quote_validity_period
         self.path.mkdir(exist_ok=True)
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
@@ -670,7 +684,7 @@ class BridgeManager:
         self.data.store()
 
     def _get_updated_bundle(
-        self, requests_params: list[dict], force_update: bool
+        self, requests_params: t.List[t.Dict], force_update: bool
     ) -> BridgeRequestBundle:
         """Ensures to return a valid (non expired) bundle for the given inputs."""
 
@@ -705,7 +719,6 @@ class BridgeManager:
             bundle = BridgeRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
                 bridge_provider=self.bridge_provider.name(),
-                status=BridgeRequestBundleStatus.CREATED,
                 requests_params=requests_params,
                 bridge_requests=[
                     BridgeRequest(params=params) for params in requests_params
@@ -739,27 +752,10 @@ class BridgeManager:
 
         status = [request.status for request in bundle.bridge_requests]
 
-        if all(
-            request.status in (BridgeRequestStatus.EXECUTION_DONE)
-            for request in bundle.bridge_requests
-        ):
-            bundle.status = BridgeRequestBundleStatus.EXECUTION_DONE
-        elif all(
-            request.status
-            in (
-                BridgeRequestStatus.EXECUTION_DONE,
-                BridgeRequestStatus.EXECUTION_FAILED,
-            )
-            for request in bundle.bridge_requests
-        ):
-            bundle.status = BridgeRequestBundleStatus.EXECUTION_FAILED
-        else:
-            bundle.status = BridgeRequestBundleStatus.EXECUTION_PENDING
-
         if initial_bundle_status != bundle.status or initial_status != status:
             self._store_data()
 
-    def _raise_if_invalid(self, bridge_requests: list) -> None:
+    def _raise_if_invalid(self, bridge_requests: t.List) -> None:
         """Preprocess quote requests."""
 
         seen: set = set()
@@ -827,8 +823,8 @@ class BridgeManager:
                 )
 
     def bridge_refill_requirements(
-        self, requests_params: list[dict], force_update: bool = False
-    ) -> dict:
+        self, requests_params: t.List[t.Dict], force_update: bool = False
+    ) -> t.Dict:
         """Get bridge refill requirements."""
 
         self._raise_if_invalid(requests_params)
@@ -849,7 +845,7 @@ class BridgeManager:
 
         bridge_total_requirements = bundle.sum_bridge_requirements()
 
-        bridge_refill_requirements: dict = {}
+        bridge_refill_requirements = {}
         for from_chain, from_addresses in bridge_total_requirements.items():
             for from_address, from_tokens in from_addresses.items():
                 for from_token, from_amount in from_tokens.items():
@@ -868,11 +864,6 @@ class BridgeManager:
         bridge_request_status = [
             request.get_status_json() for request in bundle.bridge_requests
         ]
-        error = any(
-            request.status
-            in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED)
-            for request in bundle.bridge_requests
-        )
 
         return dict(
             {
@@ -881,13 +872,13 @@ class BridgeManager:
                 "bridge_refill_requirements": bridge_refill_requirements,
                 "bridge_request_status": bridge_request_status,
                 "bridge_total_requirements": bridge_total_requirements,
-                "error": error,
                 "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
                 "is_refill_required": is_refill_required,
+                "status": bundle.status
             }
         )
 
-    def execute_bundle(self, bundle_id: str) -> dict:
+    def execute_bundle(self, bundle_id: str) -> t.Dict:
         """Execute the bundle"""
 
         bundle = self.data.last_requested_bundle
@@ -908,7 +899,6 @@ class BridgeManager:
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
-        bundle.status = BridgeRequestBundleStatus.EXECUTION_PENDING
 
         for request in bundle.bridge_requests:
             self.bridge_provider.execute(request)
@@ -921,7 +911,7 @@ class BridgeManager:
 
         return self.get_execution_status(bundle_id)
 
-    def get_execution_status(self, bundle_id: str) -> dict:
+    def get_execution_status(self, bundle_id: str) -> t.Dict:
         """Get execution status of bundle."""
 
         bundle = self.data.executed_bundles.get(bundle_id)
@@ -934,15 +924,9 @@ class BridgeManager:
         bridge_request_status = [
             request.get_status_json() for request in bundle.bridge_requests
         ]
-        error = any(
-            request.status
-            in (BridgeRequestStatus.QUOTE_FAILED, BridgeRequestStatus.EXECUTION_FAILED)
-            for request in bundle.bridge_requests
-        )
 
         return {
             "id": bundle.id,
             "status": bundle.status,
             "bridge_request_status": bridge_request_status,
-            "error": error,
         }

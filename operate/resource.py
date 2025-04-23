@@ -65,17 +65,17 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
                 continue
         return None
 
-    # Handle list[T]
-    if origin is list:
-        (item_type,) = t.get_args(otype)
-        return [deserialize(item, item_type) for item in obj]
+    # # Handle list[T]
+    # if origin is list:
+    #     (item_type,) = t.get_args(otype)
+    #     return [deserialize(item, item_type) for item in obj]
 
-    # Handle dict[K, V]
-    if origin is dict:
-        key_type, val_type = t.get_args(otype)
-        return {
-            deserialize(k, key_type): deserialize(v, val_type) for k, v in obj.items()
-        }
+    # # Handle dict[K, V]
+    # if origin is dict:
+    #     key_type, val_type = t.get_args(otype)
+    #     return {
+    #         deserialize(k, key_type): deserialize(v, val_type) for k, v in obj.items()
+    #     }
 
     base = getattr(otype, "__class__")  # noqa: B009
     if base.__name__ == "_GenericAlias":  # type: ignore
