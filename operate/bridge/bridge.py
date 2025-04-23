@@ -357,19 +357,21 @@ class LiFiBridgeProvider(BridgeProvider):
                 transaction_value = int(
                     response_json["transactionRequest"]["value"], 16
                 )
+                gas_price = int(response_json["gasPrice"], 16)
+                gas_limit = int(response_json["gasLimit"], 16)
+                gas_fees = gas_price * gas_limit
 
-                # TODO: gas fees!
                 if from_token == ZERO_ADDRESS:
                     requirements = {
                         from_chain: {
-                            from_address: {from_token: from_amount + transaction_value}
+                            from_address: {from_token: transaction_value + gas_fees}
                         }
                     }
                 else:
                     requirements = {
                         from_chain: {
                             from_address: {
-                                ZERO_ADDRESS: transaction_value,
+                                ZERO_ADDRESS: transaction_value + gas_fees,
                                 from_token: from_amount,
                             }
                         }
