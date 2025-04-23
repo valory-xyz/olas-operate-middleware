@@ -163,7 +163,7 @@ class TestLiFiBridge:
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
-            "tx_hash": None,
+            "tx_hash": None,  # type: ignore
             "message": sj["message"],
             "status": BridgeRequestStatus.EXECUTION_DONE.value,
         }
