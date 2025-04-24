@@ -254,7 +254,7 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
     ):
         print("Error: The provided RPC does not support 'eth_newFilter'.")
         spinner.fail("Terminating script.")
-    elif rpc_error_message == "invalid params":
+    elif "invalid" in rpc_error_message or "params" in rpc_error_message:
         spinner.succeed("RPC checks passed.")
         return True
     else:
