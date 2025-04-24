@@ -429,13 +429,20 @@ class CustomBinaryDeploymentRunner(AbstractDeploymentRunner):
     def __init__(self, work_directory: Path, agent_binary: Path) -> None:
         """Init the deployment runner."""
         super().__init__(work_directory=work_directory)
-        self.agent_binary = agent_binary
+        self._agent_binary = agent_binary
+    
+    @property
+    def agent_bin(self) -> str:
+        """Return agent binary path."""
+        if self._agent_binary.is_absolute():
+            return str(self._agent_binary)
+        return str(Path(os.path.dirname(sys.executable)) / self._agent_binary)
 
     def start(self) -> None:
         """Start agent process."""
         env_vars = json.loads((self._work_directory / "agent.json").read_text())
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[self.agent_binary],
+            args=[self.agent_bin],
             cwd=self._work_directory / "agent",
             stdout=subprocess.DEVNULL,  # comment out for debugging
             stderr=subprocess.DEVNULL,  # comment out for debugging
