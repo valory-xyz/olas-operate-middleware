@@ -356,6 +356,11 @@ Creates a Gnosis safe for given chain.
 
   ```json
   {
+    "create_tx": "0xac14dcd5938c71cd97388307c41477dc2f2a4e97b6b2641cef123a769898bd03",
+    "transfer_txs": {
+      "0x0000000000000000000000000000000000000000": "0x0036489a4a27b4ee1b7e4a37ae5597b895bf43e4cda25c7e6c0f1d02f8c098aa",
+      "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": "0x45304084049916535419d4b175074cdfcaeea59e3a5d34010854b3ac049261b2"
+    },
     "safe": "0x29e23F7705d849F368855947691cB133CD770752",
     "message": "Safe created!"
   }
