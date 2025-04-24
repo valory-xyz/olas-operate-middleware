@@ -1066,7 +1066,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.get(f"/api/bridge/status/{id}")
+    @app.get("/api/bridge/status/{id}")
     @with_retries
     async def _bridge_status(request: Request) -> JSONResponse:
         """Get the bridge refill requirements."""
@@ -1080,9 +1080,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             return JSONResponse(
                 content=output,
-                status_code=HTTPStatus.BAD_GATEWAY
-                if output["errors"]
-                else HTTPStatus.OK,
+                status_code=HTTPStatus.OK,
             )
         except ValueError as e:
             return JSONResponse(

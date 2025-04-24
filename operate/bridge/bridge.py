@@ -755,7 +755,7 @@ class BridgeManager:
         bundle = self.data.executed_bundles.get(bundle_id)
 
         if not bundle:
-            raise ValueError(f"[BRIDGE MANAGER] Bundle id {bundle_id} not found.")
+            raise ValueError(f"Bundle id {bundle_id} not found.")
 
         if bundle.status in (
             BridgeRequestBundleStatus.EXECUTION_DONE,
@@ -786,7 +786,7 @@ class BridgeManager:
                 or "to" not in request
             ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid input: All quote requests must contain exactly one 'from' and one 'to' sender."
+                    "Invalid input: All quote requests must contain exactly one 'from' and one 'to' sender."
                 )
 
             from_ = request["from"]
@@ -799,7 +799,7 @@ class BridgeManager:
                 or "token" not in from_
             ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid input: 'from' must contain 'chain', 'address', and 'token'."
+                    "Invalid input: 'from' must contain 'chain', 'address', and 'token'."
                 )
 
             if (
@@ -810,7 +810,7 @@ class BridgeManager:
                 or "amount" not in to
             ):
                 raise ValueError(
-                    "[BRIDGE MANAGER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
+                    "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
                 )
 
             from_chain = request["from"]["chain"]
@@ -824,7 +824,7 @@ class BridgeManager:
                 from_address == wallet_address or from_address == safe_address
             ):
                 raise ValueError(
-                    f"[BRIDGE MANAGER] Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
+                    f"Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
                 )
 
             key = (
@@ -838,7 +838,7 @@ class BridgeManager:
 
             if key in seen:
                 raise ValueError(
-                    "[BRIDGE MANAGER] Request contains duplicate entries with same 'from' and 'to'."
+                    "Request contains duplicate entries with same 'from' and 'to'."
                 )
 
     def bridge_refill_requirements(
@@ -907,14 +907,14 @@ class BridgeManager:
 
         if bundle.id != bundle_id:
             raise RuntimeError(
-                f"[BRIDGE MANAGER] Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
+                f"Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
             )
 
         requirements = self.bridge_refill_requirements(bundle.requests_params)
 
         if requirements["is_refill_required"]:
             raise RuntimeError(
-                f"[BRIDGE MANAGER] Refill requirements not satisfied for bundle id {bundle_id}."
+                f"Refill requirements not satisfied for bundle id {bundle_id}."
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
@@ -936,7 +936,7 @@ class BridgeManager:
         bundle = self.data.executed_bundles.get(bundle_id)
 
         if not bundle:
-            raise ValueError(f"[BRIDGE MANAGER] Bundle id {bundle_id} not found.")
+            raise ValueError(f"Bundle id {bundle_id} not found.")
 
         self._update_bundle_status(bundle_id)
 
