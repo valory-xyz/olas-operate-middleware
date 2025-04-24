@@ -603,7 +603,7 @@ def get_asset_balance(
         )
     except Exception as e:
         raise RuntimeError(
-            f"Cannot get balance of {address=} {asset_address=} rpc={ledger_api._api.provider.endpoint_uri}."
+            f"Cannot get balance of {address=} {asset_address=} rpc={ledger_api._api.provider.endpoint_uri}."  # pylint: disable=protected-access
         ) from e
 
 
