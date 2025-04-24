@@ -633,16 +633,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
 
-        tx_hash = wallet.create_safe(  # pylint: disable=no-member
+        create_tx = wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
             backup_owner=backup_owner,
         )
-        create_tx_link = tx_hash
 
         safe_address = t.cast(str, safes.get(chain))
         initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
 
-        transfer_tx_links = {}
+        transfer_txs = {}
         for asset, amount in initial_funds.items():
             tx_hash = wallet.transfer_asset(
                 to=safe_address,
@@ -651,14 +650,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 asset=asset,
                 from_safe=False,
             )
-            transfer_tx_links[asset] = tx_hash
+            transfer_txs[asset] = tx_hash
 
         return JSONResponse(
             content={
-                "create_tx": create_tx_link,
-                "transfer_txs": transfer_tx_links,
+                "create_tx": create_tx,
+                "transfer_txs": transfer_txs,
                 "safe": safes.get(chain),
-                "message": "Safe created!"
+                "message": "Safe created!",
             }
         )
 

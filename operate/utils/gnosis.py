@@ -479,7 +479,7 @@ def transfer(
         build_and_send_tx=_build_and_send_tx,
     )
     tx_hash = tx_receipt.get("transactionHash", "").hex()
-    return tx_hash    
+    return tx_hash
 
 
 def transfer_erc20_from_safe(

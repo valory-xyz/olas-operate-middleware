@@ -282,7 +282,6 @@ class EthereumMasterWallet(MasterWallet):
         tx_hash = tx_receipt.get("transactionHash", "").hex()
         return tx_hash
 
-
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
