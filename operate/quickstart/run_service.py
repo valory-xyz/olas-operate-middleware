@@ -742,7 +742,6 @@ def run_service(
         use_docker=use_docker,
         use_kubernetes=use_k8s,
         build_only=build_only,
-        custom_binary=service.binary_path,
     )
     if build_only:
         print_section(f"Built the {template['name']}")

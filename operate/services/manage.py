@@ -2099,7 +2099,6 @@ class ServiceManager:
         use_docker: bool = False,
         use_kubernetes: bool = False,
         build_only: bool = False,
-        custom_binary: t.Optional[str] = None,
     ) -> Deployment:
         """
         Deploy service locally
@@ -2119,11 +2118,11 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
-            use_binary=custom_binary is not None,
+            use_custom_binary=service.binary_path is not None,
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker, custom_binary=custom_binary)
+        deployment.start(use_docker=use_docker, custom_binary=service.binary_path)
         return deployment
 
     def stop_service_locally(

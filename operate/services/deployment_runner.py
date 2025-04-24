@@ -433,12 +433,13 @@ class CustomBinaryDeploymentRunner(AbstractDeploymentRunner):
 
     def start(self) -> None:
         """Start agent process."""
+        env_vars = json.loads((self._work_directory / "agent.json").read_text())
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self.agent_binary],
-            cwd=str(self._work_directory),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            env=os.environ,
+            cwd=self._work_directory / "agent",
+            stdout=subprocess.DEVNULL,  # comment out for debugging
+            stderr=subprocess.DEVNULL,  # comment out for debugging
+            env=os.environ | env_vars,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process

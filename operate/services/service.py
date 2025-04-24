@@ -362,6 +362,8 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         use_acn: bool = False,
     ) -> "HostDeploymentGenerator":
         """Generate agent and tendermint configurations"""
+        self.build_dir.mkdir(exist_ok=True, parents=True)
+        (self.build_dir / "agent").mkdir(exist_ok=True, parents=True)
         agent = self.service_builder.generate_agent(agent_n=0)
         agent = {key: f"{value}" for key, value in agent.items()}
         (self.build_dir / "agent.json").write_text(
@@ -572,7 +574,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
+    def _build_host(
+            self,
+            force: bool = True,
+            chain: t.Optional[str] = None,
+            with_tm: bool = True,
+    ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT
         if build.exists() and not force:
@@ -633,16 +640,16 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            (
-                HostDeploymentGenerator(
-                    service_builder=builder,
-                    build_dir=build.resolve(),
-                    use_tm_testnet_setup=True,
-                )
-                .generate_config_tendermint()
-                .generate()
-                .populate_private_keys()
+            deployement_generator = HostDeploymentGenerator(
+                service_builder=builder,
+                build_dir=build.resolve(),
+                use_tm_testnet_setup=True,
             )
+            if with_tm:
+                deployement_generator.generate_config_tendermint()
+
+            deployement_generator.generate()
+            deployement_generator.populate_private_keys()
 
         except Exception as e:
             if build.exists():
@@ -652,24 +659,11 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_binary(self, force: bool = False) -> None:
-        """Build a deployment directory to run the agent with binary."""
-        build = self.path / DEPLOYMENT
-        if build.exists() and not force:
-            return
-
-        if build.exists() and force:
-            shutil.rmtree(build)
-
-        build.mkdir(exist_ok=True)
-        self.status = DeploymentStatus.BUILT
-        self.store()
-
     def build(
         self,
         use_docker: bool = False,
         use_kubernetes: bool = False,
-        use_binary: bool = False,
+        use_custom_binary: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -692,10 +686,8 @@ class Deployment(LocalResource):
                 self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
-        elif use_binary:
-            self._build_binary(force=force)
         else:
-            self._build_host(force=force, chain=chain)
+            self._build_host(force=force, chain=chain, with_tm=not use_custom_binary)
 
         os.environ.clear()
         os.environ.update(original_env)
