@@ -43,6 +43,10 @@ from operate.operate_types import Chain, LedgerType
 
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE = ".operate_test"
+RUNNING_IN_CI = (
+    os.getenv("GITHUB_ACTIONS", "").lower() == "true"
+    or os.getenv("CI", "").lower() == "true"
+)
 
 
 class TestLiFiBridge:
@@ -300,7 +304,7 @@ class TestLiFiBridge:
 
         assert not diff, "Wrong status."
 
-    @pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip test on CI.")
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     def test_bridge_quote(
         self,
         tmp_path: Path,
@@ -609,8 +613,8 @@ class TestLiFiBridge:
 
         assert not diff, "Wrong bridge refill requirements."
 
-    @pytest.mark.skipif(os.getenv("CI") == "true", reason="Skip test on CI.")
-    def test_bundle(
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
+    def test_bundle_quote(
         self,
         tmp_path: Path,
         password: str,
