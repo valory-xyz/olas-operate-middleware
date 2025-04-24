@@ -590,16 +590,21 @@ def get_asset_balance(
             raise ValueError(f"Invalid address: {address}")
         return 0
 
-    if asset_address == ZERO_ADDRESS:
-        return ledger_api.get_balance(address)
-    return (
-        registry_contracts.erc20.get_instance(
-            ledger_api=ledger_api,
-            contract_address=asset_address,
+    try:
+        if asset_address == ZERO_ADDRESS:
+            return ledger_api.get_balance(address, raise_on_try=True)
+        return (
+            registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=asset_address,
+            )
+            .functions.balanceOf(address)
+            .call()
         )
-        .functions.balanceOf(address)
-        .call()
-    )
+    except Exception as e:
+        raise RuntimeError(
+            f"Cannot get balance of {address=} {asset_address=} rpc={ledger_api._api.provider.endpoint_uri}."
+        ) from e
 
 
 def get_assets_balances(
