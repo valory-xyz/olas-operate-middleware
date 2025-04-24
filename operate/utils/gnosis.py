@@ -211,7 +211,7 @@ def create_safe(
     crypto: Crypto,
     backup_owner: t.Optional[str] = None,
     salt_nonce: t.Optional[int] = None,
-) -> t.Tuple[str, int]:
+) -> t.Tuple[str, int, str]:
     """Create gnosis safe."""
     salt_nonce = salt_nonce or _get_nonce()
 
@@ -248,12 +248,13 @@ def create_safe(
         contract="",
         kwargs={},
     )
+    tx_hash = receipt.get("transactionHash", "").hex()
     instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
         ledger_api=ledger_api,
         contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
     )
     (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    return event["args"]["proxy"], salt_nonce
+    return event["args"]["proxy"], salt_nonce, tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
@@ -270,7 +271,7 @@ def send_safe_txs(
     ledger_api: LedgerApi,
     crypto: Crypto,
     to: t.Optional[str] = None,
-) -> None:
+) -> t.Optional[str]:
     """Send internal safe transaction."""
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
@@ -313,10 +314,12 @@ def send_safe_txs(
             crypto.sign_transaction(transaction),
         )
 
-    settle_raw_transaction(
+    tx_receipt = settle_raw_transaction(
         ledger_api=ledger_api,
         build_and_send_tx=_build_and_send_tx,
     )
+    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    return tx_hash
 
 
 def add_owner(
@@ -428,7 +431,7 @@ def transfer(
     safe: str,
     to: str,
     amount: t.Union[float, int],
-) -> None:
+) -> t.Optional[str]:
     """Transfer assets from safe to given address."""
     amount = int(amount)
     owner = ledger_api.api.to_checksum_address(
@@ -471,10 +474,12 @@ def transfer(
             crypto.sign_transaction(transaction),
         )
 
-    settle_raw_transaction(
+    tx_receipt = settle_raw_transaction(
         ledger_api=ledger_api,
         build_and_send_tx=_build_and_send_tx,
     )
+    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    return tx_hash    
 
 
 def transfer_erc20_from_safe(
@@ -484,7 +489,7 @@ def transfer_erc20_from_safe(
     token: str,
     to: str,
     amount: t.Union[float, int],
-) -> None:
+) -> t.Optional[str]:
     """Transfer ERC20 assets from safe to given address."""
     amount = int(amount)
     instance = registry_contracts.erc20.get_instance(
@@ -498,7 +503,7 @@ def transfer_erc20_from_safe(
             amount,
         ],
     )
-    send_safe_txs(
+    return send_safe_txs(
         txd=bytes.fromhex(txd[2:]),
         safe=safe,
         ledger_api=ledger_api,

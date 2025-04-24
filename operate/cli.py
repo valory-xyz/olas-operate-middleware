@@ -575,7 +575,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/wallet/safe/{chain}")
     @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
-        """Create wallet safe"""
+        """Get safe address"""
         chain = Chain.from_string(request.path_params["chain"])
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager
@@ -633,27 +633,36 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
 
-        wallet.create_safe(  # pylint: disable=no-member
+        tx_hash = wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
             backup_owner=backup_owner,
         )
+        create_tx_link = tx_hash
 
         safe_address = t.cast(str, safes.get(chain))
         initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
 
+        transfer_tx_links = {}
         for asset, amount in initial_funds.items():
-            wallet.transfer_asset(
+            tx_hash = wallet.transfer_asset(
                 to=safe_address,
                 amount=amount,
                 chain=chain,
                 asset=asset,
                 from_safe=False,
             )
+            transfer_tx_links[asset] = tx_hash
 
         return JSONResponse(
-            content={"safe": safes.get(chain), "message": "Safe created!"}
+            content={
+                "create_tx": create_tx_link,
+                "transfer_txs": transfer_tx_links,
+                "safe": safes.get(chain),
+                "message": "Safe created!"
+            }
         )
 
+    # TODO possibly unused endpoint
     @app.post("/api/wallet/safes")
     @with_retries
     async def _create_safes(request: Request) -> t.List[t.Dict]:
@@ -730,7 +739,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if "chain" not in data:
             return JSONResponse(
-                content={"error": "You need to specify a chain to updae a safe."},
+                content={"error": "You need to specify a chain to update a safe."},
                 status_code=401,
             )
 
