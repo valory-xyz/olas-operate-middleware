@@ -286,16 +286,16 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
         """Transfer funds from safe wallet."""
-        if self.safes is not None:
-            return transfer_from_safe(
-                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-                crypto=self.crypto,
-                safe=t.cast(str, self.safes[chain]),
-                to=to,
-                amount=amount,
-            )
-        else:
+        if self.safes is None:
             raise ValueError("Safes not initialized")
+        
+        return transfer_from_safe(
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+            crypto=self.crypto,
+            safe=t.cast(str, self.safes[chain]),
+            to=to,
+            amount=amount,
+        )
 
     def _transfer_erc20_from_safe(
         self,
@@ -306,17 +306,17 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer erc20 from safe wallet."""
-        if self.safes is not None:
-            return transfer_erc20_from_safe(
-                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-                crypto=self.crypto,
-                token=token,
-                safe=t.cast(str, self.safes[chain]),  # type: ignore
-                to=to,
-                amount=amount,
-            )
-        else:
+        if self.safes is None:
             raise ValueError("Safes not initialized")
+
+        return transfer_erc20_from_safe(
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+            crypto=self.crypto,
+            token=token,
+            safe=t.cast(str, self.safes[chain]),  # type: ignore
+            to=to,
+            amount=amount,
+        )
 
     def _transfer_erc20_from_eoa(
         self,
