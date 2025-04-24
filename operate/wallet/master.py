@@ -288,7 +288,7 @@ class EthereumMasterWallet(MasterWallet):
         """Transfer funds from safe wallet."""
         if self.safes is None:
             raise ValueError("Safes not initialized")
-        
+
         return transfer_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
