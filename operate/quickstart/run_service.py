@@ -389,10 +389,15 @@ def configure_local_config(
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
                 if env_var_data["value"]:
-                    print(f"Example: {env_var_data['value']}")
-                config.user_provided_args[env_var_name] = ask_or_get_from_env(
+                    print(f"Default: {env_var_data['value']}")
+
+                user_provided_arg = ask_or_get_from_env(
                     f"Please enter {env_var_data['name']}: ", False, env_var_name
                 )
+                config.user_provided_args[env_var_name] = env_var_data["value"]
+                if user_provided_arg:
+                    config.user_provided_args[env_var_name] = user_provided_arg
+
                 print()
 
             template["env_variables"][env_var_name][
