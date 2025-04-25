@@ -430,7 +430,7 @@ class CustomBinaryDeploymentRunner(AbstractDeploymentRunner):
         """Init the deployment runner."""
         super().__init__(work_directory=work_directory)
         self._agent_binary = agent_binary
-    
+
     @property
     def agent_bin(self) -> str:
         """Return agent binary path."""

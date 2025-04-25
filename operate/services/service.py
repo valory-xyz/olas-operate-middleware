@@ -575,10 +575,10 @@ class Deployment(LocalResource):
         self.store()
 
     def _build_host(
-            self,
-            force: bool = True,
-            chain: t.Optional[str] = None,
-            with_tm: bool = True,
+        self,
+        force: bool = True,
+        chain: t.Optional[str] = None,
+        with_tm: bool = True,
     ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT
