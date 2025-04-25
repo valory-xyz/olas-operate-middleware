@@ -136,7 +136,6 @@ class BridgeRequestBundleStatus(str, enum.Enum):
     EXECUTION_PENDING = "EXECUTION_PENDING"
     EXECUTION_DONE = "EXECUTION_DONE"
     EXECUTION_FAILED = "EXECUTION_FAILED"
-    UNKNOWN = "UNKNOWN"
 
     def __str__(self) -> str:
         """__str__"""
