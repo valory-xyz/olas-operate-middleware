@@ -34,6 +34,7 @@ from typing import cast
 from urllib.parse import urlencode
 
 import requests
+from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.tx import TxSettler
@@ -66,7 +67,6 @@ class QuoteData(LocalResource):
     """QuoteData"""
 
     attempts: int
-    requirements: t.Dict
     elapsed_time: float
     message: t.Optional[str]
     response: t.Optional[t.Dict]
@@ -198,28 +198,6 @@ class BridgeRequestBundle(LocalResource):
             if request.params["from"]["chain"] == chain_str
         }
 
-    def sum_bridge_requirements(self) -> t.Dict:
-        """Sum bridge requirements."""
-
-        bridge_total_requirements: t.Dict = {}
-
-        for request in self.bridge_requests:
-            if not request.quote_data:
-                continue
-
-            bridge_requirements = request.quote_data.requirements
-            for from_chain, from_addresses in bridge_requirements.items():
-                for from_address, from_tokens in from_addresses.items():
-                    for from_token, from_amount in from_tokens.items():
-                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
-                            from_address, {}
-                        ).setdefault(from_token, 0)
-                        bridge_total_requirements[from_chain][from_address][
-                            from_token
-                        ] += from_amount
-
-        return bridge_total_requirements
-
 
 class BridgeProvider:
     """(Abstract) BridgeProvider"""
@@ -243,6 +221,11 @@ class BridgeProvider:
         raise NotImplementedError()
 
     @abstractmethod
+    def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
+        """Gets the bridge requirements to execute the quote, with updated gas estimation."""
+        raise NotImplementedError()
+
+    @abstractmethod
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the quote."""
         raise NotImplementedError()
@@ -258,6 +241,28 @@ class BridgeProvider:
             self.quote(bridge_request=bridge_request)
 
         bundle.timestamp = int(time.time())
+
+    def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
+        """Sum bridge requirements."""
+
+        bridge_total_requirements: t.Dict = {}
+
+        for request in bundle.bridge_requests:
+            if not request.quote_data:
+                continue
+
+            bridge_requirements = self.bridge_requirements(request)
+            for from_chain, from_addresses in bridge_requirements.items():
+                for from_address, from_tokens in from_addresses.items():
+                    for from_token, from_amount in from_tokens.items():
+                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
+                            from_address, {}
+                        ).setdefault(from_token, 0)
+                        bridge_total_requirements[from_chain][from_address][
+                            from_token
+                        ] += from_amount
+
+        return bridge_total_requirements
 
     def execute_bundle(self, bundle: BridgeRequestBundle) -> None:
         """Update the bundle with the quotes."""
@@ -283,6 +288,92 @@ class LiFiTransactionStatus(str, enum.Enum):
 class LiFiBridgeProvider(BridgeProvider):
     """LI.FI Bridge provider."""
 
+    @staticmethod
+    def _build_approve_tx(
+        quote_data: QuoteData, ledger_api: LedgerApi
+    ) -> t.Optional[t.Dict]:
+        quote = quote_data.response
+        if not quote:
+            return None
+
+        if "action" not in quote:
+            return None
+
+        from_token = quote["action"]["fromToken"]["address"]
+        if from_token == ZERO_ADDRESS:
+            return None
+
+        transaction_request = quote.get("transactionRequest")
+        if not transaction_request:
+            return None
+
+        from_amount = int(quote["action"]["fromAmount"])
+
+        approve_tx = registry_contracts.erc20.get_approve_tx(
+            ledger_api=ledger_api,
+            contract_address=from_token,
+            spender=transaction_request["to"],
+            sender=transaction_request["from"],
+            amount=from_amount,
+        )
+        return LiFiBridgeProvider._update_tx_gas_pricing(approve_tx, ledger_api)
+
+    @staticmethod
+    def _get_bridge_tx(
+        quote_data: QuoteData, ledger_api: LedgerApi
+    ) -> t.Optional[t.Dict]:
+        quote = quote_data.response
+        if not quote:
+            return None
+
+        if "action" not in quote:
+            return None
+
+        transaction_request = quote.get("transactionRequest")
+        if not transaction_request:
+            return None
+
+        bridge_tx = {
+            "value": int(transaction_request["value"], 16),
+            "to": transaction_request["to"],
+            "data": bytes.fromhex(transaction_request["data"][2:]),
+            "from": transaction_request["from"],
+            "chainId": transaction_request["chainId"],
+            "gasPrice": int(transaction_request["gasPrice"], 16),
+            "gas": int(transaction_request["gasLimit"], 16),
+            "nonce": ledger_api.api.eth.get_transaction_count(
+                transaction_request["from"]
+            ),
+        }
+
+        return LiFiBridgeProvider._update_tx_gas_pricing(bridge_tx, ledger_api)
+
+    @staticmethod
+    def _update_tx_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> t.Dict:
+        output_tx = tx.copy()
+        output_tx.pop("maxFeePerGas", None)
+        output_tx.pop("gasPrice", None)
+        output_tx.pop("maxPriorityFeePerGas", None)
+
+        gas_pricing = ledger_api.try_get_gas_pricing()
+        if gas_pricing is None:
+            raise RuntimeError("[LI.FI BRIDGE] Unable to retrieve gas pricing.")
+
+        if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
+            output_tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+            output_tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+        elif "gasPrice" in gas_pricing:
+            output_tx["gasPrice"] = gas_pricing["gasPrice"]
+        else:
+            raise RuntimeError("[LI.FI BRIDGE] Retrieved invalid gas pricing.")
+
+        return output_tx
+
+    @staticmethod
+    def _calculate_gas_fees(tx: t.Dict) -> int:
+        gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
+        return tx.get(gas_key, 0) * tx["gas"]
+
     def quote(self, bridge_request: BridgeRequest) -> None:
         """Update the request with the quote."""
 
@@ -307,20 +398,11 @@ class LiFiBridgeProvider(BridgeProvider):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        zero_requirements = {
-            from_chain: {
-                from_address: {
-                    ZERO_ADDRESS: 0,
-                    from_token: 0,
-                }
-            }
-        }
 
         if to_amount == 0:
             self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
                 attempts=0,
-                requirements=zero_requirements,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
                 response=None,
@@ -352,51 +434,8 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 response.raise_for_status()
                 response_json = response.json()
-                transaction_request = response_json["transactionRequest"]
-                transaction_value = int(transaction_request["value"], 16)
-                gas_price = int(transaction_request["gasPrice"], 16)
-                gas_limit = int(transaction_request["gasLimit"], 16)
-                gas_fees = gas_price * gas_limit
-
-                if from_token == ZERO_ADDRESS:
-                    requirements = {
-                        from_chain: {
-                            from_address: {from_token: transaction_value + gas_fees}
-                        }
-                    }
-                else:
-                    from_amount = int(response_json["action"]["fromAmount"])
-                    chain = Chain(from_chain)
-                    wallet = self.wallet_manager.load(chain.ledger_type)
-                    ledger_api = wallet.ledger_api(chain)
-
-                    approve_tx = registry_contracts.erc20.get_approve_tx(
-                        ledger_api=wallet.ledger_api(chain),
-                        contract_address=from_token,
-                        spender=transaction_request["to"],
-                        sender=transaction_request["from"],
-                        amount=from_amount,
-                    )
-                    approve_tx = ledger_api.update_with_gas_estimate(
-                        transaction=approve_tx,
-                        raise_on_try=True,
-                    )
-                    gas_price = approve_tx["gas"]
-                    approve_gas_limit = approve_tx["gas"]
-                    gas_fees = (gas_limit + approve_gas_limit) * gas_price
-
-                    requirements = {
-                        from_chain: {
-                            from_address: {
-                                ZERO_ADDRESS: transaction_value + gas_fees,
-                                from_token: from_amount,
-                            }
-                        }
-                    }
-
                 quote_data = QuoteData(
                     attempts=attempt,
-                    requirements=requirements,
                     elapsed_time=time.time() - start,
                     message=None,
                     response=response_json,
@@ -412,7 +451,6 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 quote_data = QuoteData(
                     attempts=attempt,
-                    requirements=zero_requirements,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     response=None,
@@ -426,7 +464,6 @@ class LiFiBridgeProvider(BridgeProvider):
                 response_json = response.json()
                 quote_data = QuoteData(
                     attempts=attempt,
-                    requirements=zero_requirements,
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
                     response=response_json,
@@ -444,6 +481,59 @@ class LiFiBridgeProvider(BridgeProvider):
                 return
 
             time.sleep(2)
+
+    def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
+        """Gets the fund requirements to execute the quote, with updated gas estimation."""
+
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            raise RuntimeError(
+                f"[LI.FI BRIDGE] Cannot compute requirements for bridge request {bridge_request.id}: quote not present."
+            )
+
+        from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+
+        zero_requirements = {
+            from_chain: {
+                from_address: {
+                    ZERO_ADDRESS: 0,
+                    from_token: 0,
+                }
+            }
+        }
+
+        chain = Chain(from_chain)
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain)
+
+        approve_tx = self._build_approve_tx(quote_data, ledger_api)
+        bridge_tx = self._get_bridge_tx(quote_data, ledger_api)
+        if not bridge_tx:
+            return zero_requirements
+
+        bridge_tx_value = bridge_tx["value"]
+        bridge_tx_gas_fees = self._calculate_gas_fees(bridge_tx)
+
+        if approve_tx:
+            approve_tx_gas_fees = self._calculate_gas_fees(approve_tx)
+            return {
+                from_chain: {
+                    from_address: {
+                        ZERO_ADDRESS: bridge_tx_value
+                        + bridge_tx_gas_fees
+                        + approve_tx_gas_fees,
+                        from_token: approve_tx["value"],
+                    }
+                }
+            }
+
+        return {
+            from_chain: {
+                from_address: {from_token: bridge_tx_value + bridge_tx_gas_fees}
+            }
+        }
 
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the quote."""
@@ -498,9 +588,10 @@ class LiFiBridgeProvider(BridgeProvider):
             transaction_request = quote["transactionRequest"]
             chain = Chain.from_id(transaction_request["chainId"])
             wallet = self.wallet_manager.load(chain.ledger_type)
+            ledger_api = wallet.ledger_api(chain)
 
             tx_settler = TxSettler(
-                ledger_api=wallet.ledger_api(chain),
+                ledger_api=ledger_api,
                 crypto=wallet.crypto,
                 chain_type=chain,
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
@@ -509,25 +600,14 @@ class LiFiBridgeProvider(BridgeProvider):
             )
 
             # Bridges from an asset other than native require an approval transaction.
-            if from_token != ZERO_ADDRESS:
+            approve_tx = self._build_approve_tx(bridge_request.quote_data, ledger_api)
+            if approve_tx:
                 self.logger.info(
                     f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
                 )
-
-                # TODO Approve is done on several places. Consider exporting to a
-                # higher-level layer (e.g., wallet?)
-                def _build_approve_tx(  # pylint: disable=unused-argument
-                    *args: t.Any, **kargs: t.Any
-                ) -> t.Dict:
-                    return registry_contracts.erc20.get_approve_tx(
-                        ledger_api=wallet.ledger_api(chain),
-                        contract_address=from_token,
-                        spender=transaction_request["to"],
-                        sender=transaction_request["from"],
-                        amount=from_amount,
-                    )
-
-                setattr(tx_settler, "build", _build_approve_tx)  # noqa: B010
+                setattr(
+                    tx_settler, "build", lambda *args, **kwargs: approve_tx
+                )  # noqa: B010
                 tx_settler.transact(
                     method=lambda: {},
                     contract="",
@@ -539,23 +619,10 @@ class LiFiBridgeProvider(BridgeProvider):
             self.logger.info(
                 f"[LI.FI BRIDGE] Preparing bridge transaction for quote {quote['id']}."
             )
-
-            def _build_bridge_tx(  # pylint: disable=unused-argument
-                *args: t.Any, **kargs: t.Any
-            ) -> t.Dict:
-                w3 = Web3(Web3.HTTPProvider(get_default_rpc(chain=chain)))
-                return {
-                    "value": int(transaction_request["value"], 16),
-                    "to": transaction_request["to"],
-                    "data": bytes.fromhex(transaction_request["data"][2:]),
-                    "from": transaction_request["from"],
-                    "chainId": transaction_request["chainId"],
-                    "gasPrice": int(transaction_request["gasPrice"], 16),
-                    "gas": int(transaction_request["gasLimit"], 16),
-                    "nonce": w3.eth.get_transaction_count(transaction_request["from"]),
-                }
-
-            setattr(tx_settler, "build", _build_bridge_tx)  # noqa: B010
+            bridge_tx = self._get_bridge_tx(bridge_request.quote_data, ledger_api)
+            setattr(
+                tx_settler, "build", lambda *args, **kwargs: bridge_tx
+            )  # noqa: B010
             tx_receipt = tx_settler.transact(
                 method=lambda: {},
                 contract="",
@@ -861,7 +928,9 @@ class BridgeManager:
                 addresses=bundle.get_from_addresses(chain),
             )
 
-        bridge_total_requirements = bundle.sum_bridge_requirements()
+        bridge_total_requirements = self.bridge_provider.bridge_total_requirements(
+            bundle
+        )
 
         bridge_refill_requirements: t.Dict = {}
         for from_chain, from_addresses in bridge_total_requirements.items():
@@ -912,8 +981,8 @@ class BridgeManager:
         requirements = self.bridge_refill_requirements(bundle.requests_params)
 
         if requirements["is_refill_required"]:
-            raise RuntimeError(
-                f"Refill requirements not satisfied for bundle id {bundle_id}."
+            self.logger.warning(
+                f"[BRIDGE MANAGER] Refill requirements not satisfied for bundle id {bundle_id}."
             )
 
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")

@@ -119,7 +119,7 @@ class TestLiFiBridge:
         assert not diff, "Wrong status."
         assert bridge_request.quote_data is not None, "Missing quote data."
 
-        br = bridge_request.quote_data.requirements
+        br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
         }
@@ -244,7 +244,7 @@ class TestLiFiBridge:
 
         assert not diff, "Wrong status."
 
-        br = bridge_request.quote_data.requirements
+        br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
         }
@@ -374,7 +374,7 @@ class TestLiFiBridge:
         assert bridge_request.quote_data.response is not None, "Missing quote data."
 
         quote = bridge_request.quote_data.response
-        br = bridge_request.quote_data.requirements
+        br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "gnosis": {
                 wallet_address: {
