@@ -27,7 +27,7 @@ import time
 import typing as t
 import uuid
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from http import HTTPStatus
 from pathlib import Path
 from typing import cast
@@ -39,7 +39,6 @@ from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.tx import TxSettler
 from deepdiff import DeepDiff
-from web3 import Web3
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -47,7 +46,6 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_rpc
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
@@ -56,6 +54,7 @@ from operate.wallet.master import MasterWalletManager
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
+EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "br-"
 BRIDGE_REQUEST_PREFIX = "br-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
@@ -524,7 +523,7 @@ class LiFiBridgeProvider(BridgeProvider):
                         ZERO_ADDRESS: bridge_tx_value
                         + bridge_tx_gas_fees
                         + approve_tx_gas_fees,
-                        from_token: approve_tx["value"],
+                        from_token: int(quote_data.response["action"]["fromAmount"]),  # type: ignore
                     }
                 }
             }
@@ -583,7 +582,6 @@ class LiFiBridgeProvider(BridgeProvider):
         try:
             self.logger.info(f"[LI.FI BRIDGE] Executing quote {quote.get('id')}.")
             from_token = quote["action"]["fromToken"]["address"]
-            from_amount = int(quote["action"]["fromAmount"])
 
             transaction_request = quote["transactionRequest"]
             chain = Chain.from_id(transaction_request["chainId"])
@@ -605,9 +603,9 @@ class LiFiBridgeProvider(BridgeProvider):
                 self.logger.info(
                     f"[LI.FI BRIDGE] Preparing approve transaction for for quote {quote['id']} ({from_token=})."
                 )
-                setattr(
+                setattr(  # noqa: B010
                     tx_settler, "build", lambda *args, **kwargs: approve_tx
-                )  # noqa: B010
+                )
                 tx_settler.transact(
                     method=lambda: {},
                     contract="",
@@ -620,9 +618,9 @@ class LiFiBridgeProvider(BridgeProvider):
                 f"[LI.FI BRIDGE] Preparing bridge transaction for quote {quote['id']}."
             )
             bridge_tx = self._get_bridge_tx(bridge_request.quote_data, ledger_api)
-            setattr(
+            setattr(  # noqa: B010
                 tx_settler, "build", lambda *args, **kwargs: bridge_tx
-            )  # noqa: B010
+            )
             tx_receipt = tx_settler.transact(
                 method=lambda: {},
                 contract="",
@@ -709,7 +707,6 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     last_requested_bundle: t.Optional[BridgeRequestBundle] = None
-    executed_bundles: t.Dict[str, BridgeRequestBundle] = field(default_factory=dict)
 
     _file = "bridge.json"
 
@@ -760,6 +757,7 @@ class BridgeManager:
         )
         self.quote_validity_period = quote_validity_period
         self.path.mkdir(exist_ok=True)
+        (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
@@ -817,12 +815,7 @@ class BridgeManager:
 
         return bundle
 
-    def _update_bundle_status(self, bundle_id: str) -> None:
-        bundle = self.data.executed_bundles.get(bundle_id)
-
-        if not bundle:
-            raise ValueError(f"Bundle id {bundle_id} not found.")
-
+    def _update_bundle_status(self, bundle: BridgeRequestBundle) -> None:
         if bundle.status in (
             BridgeRequestBundleStatus.EXECUTION_DONE,
             BridgeRequestBundleStatus.EXECUTION_FAILED,
@@ -838,7 +831,7 @@ class BridgeManager:
         status = [request.status for request in bundle.bridge_requests]
 
         if initial_bundle_status != bundle.status or initial_status != status:
-            self._store_data()
+            bundle.store()
 
     def _raise_if_invalid(self, bridge_requests: t.List) -> None:
         """Preprocess quote requests."""
@@ -978,6 +971,10 @@ class BridgeManager:
                 f"Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
             )
 
+        bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle.id}.json"
+        bundle.path = bundle_path
+        bundle.store()
+
         requirements = self.bridge_refill_requirements(bundle.requests_params)
 
         if requirements["is_refill_required"]:
@@ -992,8 +989,8 @@ class BridgeManager:
             self._store_data()
 
         self.data.last_requested_bundle = None
-        self.data.executed_bundles[bundle.id] = bundle
         self._store_data()
+        bundle.store()
         self.logger.info(f"[BRIDGE MANAGER] Bundle id {bundle_id} executed.")
 
         return self.get_execution_status(bundle_id)
@@ -1001,12 +998,13 @@ class BridgeManager:
     def get_execution_status(self, bundle_id: str) -> t.Dict:
         """Get execution status of bundle."""
 
-        bundle = self.data.executed_bundles.get(bundle_id)
+        bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle_id}.json"
+        bundle = cast(BridgeRequestBundle, BridgeRequestBundle.load(bundle_path))
 
         if not bundle:
             raise ValueError(f"Bundle id {bundle_id} not found.")
 
-        self._update_bundle_status(bundle_id)
+        self._update_bundle_status(bundle)
 
         bridge_request_status = [
             request.get_status_json() for request in bundle.bridge_requests
