@@ -423,7 +423,7 @@ class LiFiBridgeProvider(BridgeProvider):
             "toAddress": to_address,
             "toToken": to_token,
             "toAmount": to_amount,
-            "maxPriceImpact": 0.20,  # TODO determine correct value
+            "maxPriceImpact": 0.50,  # TODO determine correct value
         }
         for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
             start = time.time()
