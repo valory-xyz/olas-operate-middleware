@@ -656,7 +656,7 @@ class ServiceManager:
                         f'{{"mech_marketplace_address":"{mech_marketplace_address}",'
                         f'"priority_mech_address":"{priority_mech_address}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
-                        f'"priority_mech_service_id":975,'
+                        f'"priority_mech_service_id":{service.env_variables.get("PRIORITY_MECH_SERVICE_ID", {"value": 975})["value"]},'
                         f'"requester_staking_instance_address":"{target_staking_params.get("staking_contract")}",'
                         f'"response_timeout":300}}'
                     ),
