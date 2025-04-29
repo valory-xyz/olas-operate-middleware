@@ -988,7 +988,7 @@ class BridgeManager:
             self.bridge_provider.execute(request)
             self._store_data()
 
-        self.data.last_requested_bundle = None
+        self.data.last_requested_bundle = None  # TODO Move up after bundle.store() ?
         self._store_data()
         bundle.store()
         self.logger.info(f"[BRIDGE MANAGER] Bundle id {bundle_id} executed.")
@@ -1000,6 +1000,7 @@ class BridgeManager:
 
         bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle_id}.json"
         bundle = cast(BridgeRequestBundle, BridgeRequestBundle.load(bundle_path))
+        bundle.path = bundle_path  # TODO backport to resource.py ?
 
         if not bundle:
             raise ValueError(f"Bundle id {bundle_id} not found.")
