@@ -645,7 +645,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         for asset, amount in initial_funds.items():
             tx_hash = wallet.transfer_asset(
                 to=safe_address,
-                amount=amount,
+                amount=int(amount),
                 chain=chain,
                 asset=asset,
                 from_safe=False,

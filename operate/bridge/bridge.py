@@ -347,6 +347,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
         return LiFiBridgeProvider._update_tx_gas_pricing(bridge_tx, ledger_api)
 
+    # TODO This gas pricing management should possibly be done at a lower level in the library
     @staticmethod
     def _update_tx_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> t.Dict:
         output_tx = tx.copy()
