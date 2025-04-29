@@ -29,7 +29,6 @@ from deepdiff import DeepDiff
 
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
     BridgeRequest,
-    BridgeRequestBundleStatus,
     BridgeRequestStatus,
     LiFiBridgeProvider,
     MESSAGE_EXECUTION_SKIPPED,
@@ -89,8 +88,11 @@ class TestLiFiBridge:
         with pytest.raises(RuntimeError):
             bridge.execute(bridge_request)
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
 
         for _ in range(2):
             timestamp = int(time.time())
@@ -138,8 +140,11 @@ class TestLiFiBridge:
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
         assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
         timestamp = int(time.time())
         bridge.execute(bridge_request=bridge_request)
@@ -214,8 +219,11 @@ class TestLiFiBridge:
         with pytest.raises(RuntimeError):
             bridge.execute(bridge_request)
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
 
         for _ in range(2):
             timestamp = int(time.time())
@@ -265,8 +273,11 @@ class TestLiFiBridge:
             bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
         ), "Wrong status."
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
 
         timestamp = int(time.time())
         bridge.execute(bridge_request=bridge_request)
@@ -342,8 +353,11 @@ class TestLiFiBridge:
         with pytest.raises(RuntimeError):
             bridge.execute(bridge_request)
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
 
         for _ in range(2):
             timestamp = int(time.time())
@@ -398,8 +412,11 @@ class TestLiFiBridge:
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
         assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
-        with pytest.raises(RuntimeError):
-            bridge.update_execution_status(bridge_request)
+        status1 = bridge_request.status
+        bridge.update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
     def test_bundle_zero(
         self,
@@ -469,7 +486,6 @@ class TestLiFiBridge:
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "status": BridgeRequestBundleStatus.QUOTE_DONE.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": False,
         }
@@ -575,7 +591,6 @@ class TestLiFiBridge:
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "status": BridgeRequestBundleStatus.QUOTE_FAILED.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": False,
         }
@@ -676,7 +691,6 @@ class TestLiFiBridge:
                 {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
-            "status": BridgeRequestBundleStatus.QUOTE_DONE.value,
             "expiration_timestamp": brr["expiration_timestamp"],
             "is_refill_required": True,
         }
