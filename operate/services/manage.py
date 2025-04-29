@@ -2660,7 +2660,7 @@ class ServiceManager:
                     "threshold": 5000000000000000,
                 },
                 Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-                Chain.MODE: {"topup": 500000000000000, "threshold": 500000000000000},
+                Chain.MODE: {"topup": 5000000000000000, "threshold": 5000000000000000},
             },
         }
 
