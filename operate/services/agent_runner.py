@@ -10,10 +10,10 @@ import requests
 
 AGENTS_SUPPORTED = {
     "valory": {
-        "trader": "https://github.com/valory-xyz/trader-test/",
-        "optimus": "https://github.com/valory-xyz/optimus-testing/",
+        "trader": "https://github.com/valory-xyz/trader/releases/latest/download/",
+        "optimus": "https://github.com/valory-xyz/optimus/releases/latest/download/",
     },
-    "dvilela": {"memeooorr": "https://github.com/valory-xyz/meme-ooorr-test/"},
+    "dvilela": {"memeooorr": "https://github.com/dvilelaf/meme-ooorr/releases/latest/download/"},
 }
 
 
@@ -74,7 +74,7 @@ def download_agent_runner(
             f"No agent named {agent_name} supported for author {agent_author}"
         )
     repo_url = AGENTS_SUPPORTED[agent_author][agent_name]
-    download_url = f"{repo_url}/releases/latest/download/{agent_runner_name}"
+    download_url = f"{repo_url}{agent_runner_name}"
     try:
         with TemporaryDirectory() as tmp_dir:
             tmp_file = Path(tmp_dir) / "agent_runner"
