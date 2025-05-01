@@ -198,10 +198,10 @@ def ask_or_get_from_env(
     """Get user input either interactively or from environment variables."""
     if os.getenv("ATTENDED", "true").lower() == "true":
         if is_pass:
-            return getpass.getpass(prompt)
-        return input(prompt)
+            return getpass.getpass(prompt).strip()
+        return input(prompt).strip()
     if env_var_name in os.environ:
-        return os.environ[env_var_name]
+        return os.environ[env_var_name].strip()
     if raise_if_missing:
         raise ValueError(f"{env_var_name} env var required in unattended mode")
     return ""
@@ -254,7 +254,7 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
     ):
         print("Error: The provided RPC does not support 'eth_newFilter'.")
         spinner.fail("Terminating script.")
-    elif rpc_error_message == "invalid params":
+    elif "invalid" in rpc_error_message or "params" in rpc_error_message:
         spinner.succeed("RPC checks passed.")
         return True
     else:
