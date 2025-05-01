@@ -919,12 +919,11 @@ class BridgeManager:
                 f"Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
             )
 
+        requirements = self.bridge_refill_requirements(bundle.requests_params)
         self.data.last_requested_bundle = None
         bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle.id}.json"
         bundle.path = bundle_path
         bundle.store()
-
-        requirements = self.bridge_refill_requirements(bundle.requests_params)
 
         if requirements["is_refill_required"]:
             self.logger.warning(
