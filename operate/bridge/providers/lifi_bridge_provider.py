@@ -138,7 +138,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
         gas_pricing = ledger_api.try_get_gas_pricing()
         if gas_pricing is None:
-            raise RuntimeError("[LI.FI BRIDGE] Unable to retrieve gas pricing.")
+            raise RuntimeError("Unable to retrieve gas pricing.")
 
         if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
             output_tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
@@ -146,7 +146,7 @@ class LiFiBridgeProvider(BridgeProvider):
         elif "gasPrice" in gas_pricing:
             output_tx["gasPrice"] = gas_pricing["gasPrice"]
         else:
-            raise RuntimeError("[LI.FI BRIDGE] Retrieved invalid gas pricing.")
+            raise RuntimeError("Retrieved invalid gas pricing.")
 
         return output_tx
 
@@ -165,12 +165,12 @@ class LiFiBridgeProvider(BridgeProvider):
             BridgeRequestStatus.QUOTE_FAILED,
         ):
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
             )
 
         if bridge_request.execution_data:
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot quote bridge request {bridge_request.id}: execution already present."
+                f"Cannot quote bridge request {bridge_request.id}: execution already present."
             )
 
         from_chain = bridge_request.params["from"]["chain"]
@@ -271,7 +271,7 @@ class LiFiBridgeProvider(BridgeProvider):
         quote_data = bridge_request.quote_data
         if not quote_data:
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot compute requirements for bridge request {bridge_request.id}: quote not present."
+                f"Cannot compute requirements for bridge request {bridge_request.id}: quote not present."
             )
 
         from_chain = bridge_request.params["from"]["chain"]
@@ -327,17 +327,17 @@ class LiFiBridgeProvider(BridgeProvider):
             BridgeRequestStatus.QUOTE_FAILED,
         ):
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot execute bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot execute bridge request {bridge_request.id} with status {bridge_request.status}."
             )
 
         if not bridge_request.quote_data:
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot execute bridge request {bridge_request.id}: quote data not present."
+                f"Cannot execute bridge request {bridge_request.id}: quote data not present."
             )
 
         if bridge_request.execution_data:
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot execute bridge request {bridge_request.id}: execution data already present."
+                f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
         timestamp = time.time()
@@ -452,7 +452,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
         if not bridge_request.execution_data:
             raise RuntimeError(
-                f"[LI.FI BRIDGE] Cannot update bridge request {bridge_request.id}: execution data not present."
+                f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
         execution = bridge_request.execution_data
