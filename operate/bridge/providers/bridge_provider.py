@@ -123,6 +123,10 @@ class BridgeProvider:
         """Get the id of the bridge provider."""
         return f"{cls.__module__}.{cls.__qualname__}"
 
+    def description(self) -> str:
+        """Get a human-readable description of the bridge provider."""
+        return self.__class__.__name__
+
     def _validate(self, bridge_request: BridgeRequest) -> None:
         """Validate the bridge request."""
         if bridge_request.bridge_provider_id != self.id():

@@ -68,6 +68,10 @@ class LiFiTransactionStatus(str, enum.Enum):
 class LiFiBridgeProvider(BridgeProvider):
     """LI.FI Bridge provider."""
 
+    def description(self) -> str:
+        """Get a human-readable description of the bridge provider."""
+        return "LI.FI Bridge & DEX Aggregation Protocol https://li.fi/"
+
     @staticmethod
     def _build_approve_tx(
         quote_data: QuoteData, ledger_api: LedgerApi
