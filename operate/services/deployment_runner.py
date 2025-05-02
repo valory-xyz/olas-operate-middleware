@@ -173,12 +173,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
         self._run_aea("fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir)
 
-        # Add keys
-        shutil.copy(
-            working_dir / "ethereum_private_key.txt",
-            working_dir / "agent" / "ethereum_private_key.txt",
-        )
-
         self._run_aea("add-key", "ethereum", cwd=working_dir / "agent")
 
         self._run_aea("issue-certificates", cwd=working_dir / "agent")

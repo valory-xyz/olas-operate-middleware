@@ -651,6 +651,12 @@ class Deployment(LocalResource):
             deployement_generator.generate()
             deployement_generator.populate_private_keys()
 
+            # Add keys
+            shutil.copy(
+                build / "ethereum_private_key.txt",
+                build / "agent" / "ethereum_private_key.txt",
+            )
+
         except Exception as e:
             if build.exists():
                 shutil.rmtree(build)
