@@ -1074,7 +1074,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         quote_bundle_id = request.path_params["id"]
 
         try:
-            output = operate.bridge_manager().get_status(bundle_id=quote_bundle_id)
+            output = operate.bridge_manager().get_status_json(bundle_id=quote_bundle_id)
 
             return JSONResponse(
                 content=output,

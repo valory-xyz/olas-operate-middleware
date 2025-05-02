@@ -34,7 +34,7 @@ from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE
 from operate.bridge.providers.bridge_provider import (
     BridgeRequestStatus,
     MESSAGE_EXECUTION_SKIPPED,
-    MESSAGE_QUOTE_ZERO
+    MESSAGE_QUOTE_ZERO,
 )
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
@@ -83,7 +83,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params)
+        bridge_request = BridgeRequest(params, bridge.id())
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -214,7 +214,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params)
+        bridge_request = BridgeRequest(params, bridge.id())
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -348,7 +348,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params)
+        bridge_request = BridgeRequest(params, bridge.id())
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 

@@ -22,7 +22,6 @@
 
 import enum
 import logging
-import time
 import typing as t
 import uuid
 from abc import abstractmethod
@@ -30,7 +29,6 @@ from dataclasses import dataclass
 
 from aea.helpers.logging import setup_logger
 
-from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
@@ -87,6 +85,7 @@ class BridgeRequest(LocalResource):
     """BridgeRequest"""
 
     params: t.Dict
+    bridge_provider_id: str
     id: str = f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}"
     status: BridgeRequestStatus = BridgeRequestStatus.CREATED
     quote_data: t.Optional[QuoteData] = None
@@ -107,41 +106,6 @@ class BridgeRequest(LocalResource):
         return {"message": None, "status": self.status.value}
 
 
-@dataclass
-class BridgeRequestBundle(LocalResource):
-    """BridgeRequestBundle"""
-
-    bridge_provider: str
-    requests_params: t.List[t.Dict]
-    bridge_requests: t.List[BridgeRequest]
-    timestamp: int
-    id: str
-
-    def get_from_chains(self) -> set[Chain]:
-        """Get 'from' chains."""
-        return {
-            Chain(request.params["from"]["chain"]) for request in self.bridge_requests
-        }
-
-    def get_from_addresses(self, chain: Chain) -> set[str]:
-        """Get 'from' addresses."""
-        chain_str = chain.value
-        return {
-            request.params["from"]["address"]
-            for request in self.bridge_requests
-            if request.params["from"]["chain"] == chain_str
-        }
-
-    def get_from_tokens(self, chain: Chain) -> set[str]:
-        """Get 'from' tokens."""
-        chain_str = chain.value
-        return {
-            request.params["from"]["token"]
-            for request in self.bridge_requests
-            if request.params["from"]["chain"] == chain_str
-        }
-
-
 class BridgeProvider:
     """(Abstract) BridgeProvider"""
 
@@ -154,9 +118,53 @@ class BridgeProvider:
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.bridge.BridgeProvider")
 
-    def name(self) -> str:
-        """Get the name of the bridge provider."""
-        return self.__class__.__name__
+    @classmethod
+    def id(cls) -> str:
+        """Get the id of the bridge provider."""
+        return f"{cls.__module__}.{cls.__qualname__}"
+
+    def _validate(self, bridge_request: BridgeRequest) -> None:
+        """Validate the bridge request."""
+        if bridge_request.bridge_provider_id != self.id():
+            raise ValueError(
+                f"Bridge request provider id {bridge_request.bridge_provider_id} does not match the bridge provider id {self.id()}"
+            )
+
+    def create_request(self, params: t.Dict) -> BridgeRequest:
+        """Create a bridge request."""
+        if "from" not in params or "to" not in params:
+            raise ValueError(
+                "Invalid input: All requests must contain exactly one 'from' and one 'to' sender."
+            )
+
+        from_ = params["from"]
+        to = params["to"]
+
+        if (
+            not isinstance(from_, t.Dict)
+            or "chain" not in from_
+            or "address" not in from_
+            or "token" not in from_
+        ):
+            raise ValueError(
+                "Invalid input: 'from' must contain 'chain', 'address', and 'token'."
+            )
+
+        if (
+            not isinstance(to, t.Dict)
+            or "chain" not in to
+            or "address" not in to
+            or "token" not in to
+            or "amount" not in to
+        ):
+            raise ValueError(
+                "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
+            )
+
+        return BridgeRequest(
+            params=params,
+            bridge_provider_id=self.id(),
+        )
 
     @abstractmethod
     def quote(self, bridge_request: BridgeRequest) -> None:
@@ -177,58 +185,3 @@ class BridgeProvider:
     def update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
         raise NotImplementedError()
-
-    def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
-        """Update the bundle with the quotes."""
-        for bridge_request in bundle.bridge_requests:
-            self.quote(bridge_request=bridge_request)
-
-        bundle.timestamp = int(time.time())
-
-    def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
-        """Sum bridge requirements."""
-
-        bridge_total_requirements: t.Dict = {}
-
-        for request in bundle.bridge_requests:
-            if not request.quote_data:
-                continue
-
-            bridge_requirements = self.bridge_requirements(request)
-            for from_chain, from_addresses in bridge_requirements.items():
-                for from_address, from_tokens in from_addresses.items():
-                    for from_token, from_amount in from_tokens.items():
-                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
-                            from_address, {}
-                        ).setdefault(from_token, 0)
-                        bridge_total_requirements[from_chain][from_address][
-                            from_token
-                        ] += from_amount
-
-        return bridge_total_requirements
-
-    def execute_bundle(self, bundle: BridgeRequestBundle) -> None:
-        """Update the bundle with the quotes."""
-        for bridge_request in bundle.bridge_requests:
-            self.execute(bridge_request=bridge_request)
-
-    def get_status_json(self, bundle: BridgeRequestBundle) -> t.Dict:
-        """JSON representation of the status."""
-        initial_status = [request.status for request in bundle.bridge_requests]
-
-        for request in bundle.bridge_requests:
-            self.update_execution_status(request)
-
-        updated_status = [request.status for request in bundle.bridge_requests]
-
-        if initial_status != updated_status and bundle.path is not None:
-            bundle.store()
-
-        bridge_request_status = [
-            request.get_status_json() for request in bundle.bridge_requests
-        ]
-
-        return {
-            "id": bundle.id,
-            "bridge_request_status": bridge_request_status,
-        }

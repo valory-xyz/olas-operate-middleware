@@ -157,6 +157,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
     def quote(self, bridge_request: BridgeRequest) -> None:
         """Update the request with the quote."""
+        self._validate(bridge_request)
 
         if bridge_request.status not in (
             BridgeRequestStatus.CREATED,
@@ -265,6 +266,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
         """Gets the fund requirements to execute the quote, with updated gas estimation."""
+        self._validate(bridge_request)
 
         quote_data = bridge_request.quote_data
         if not quote_data:
@@ -318,6 +320,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the quote."""
+        self._validate(bridge_request)
 
         if bridge_request.status not in (
             BridgeRequestStatus.QUOTE_DONE,
@@ -442,6 +445,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
     def update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
+        self._validate(bridge_request)
 
         if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING):
             return

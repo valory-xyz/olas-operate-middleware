@@ -32,11 +32,7 @@ from typing import cast
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 
-from operate.bridge.providers.bridge_provider import (
-    BridgeProvider,
-    BridgeRequest,
-    BridgeRequestBundle,
-)
+from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
@@ -45,9 +41,43 @@ from operate.services.manage import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
-DEFAULT_QUOTE_VALIDITY_PERIOD = 3 * 60
+DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
 EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "br-"
+
+
+@dataclass
+class BridgeRequestBundle(LocalResource):
+    """BridgeRequestBundle"""
+
+    requests_params: t.List[t.Dict]
+    bridge_requests: t.List[BridgeRequest]
+    timestamp: int
+    id: str
+
+    def get_from_chains(self) -> set[Chain]:
+        """Get 'from' chains."""
+        return {
+            Chain(request.params["from"]["chain"]) for request in self.bridge_requests
+        }
+
+    def get_from_addresses(self, chain: Chain) -> set[str]:
+        """Get 'from' addresses."""
+        chain_str = chain.value
+        return {
+            request.params["from"]["address"]
+            for request in self.bridge_requests
+            if request.params["from"]["chain"] == chain_str
+        }
+
+    def get_from_tokens(self, chain: Chain) -> set[str]:
+        """Get 'from' tokens."""
+        chain_str = chain.value
+        return {
+            request.params["from"]["token"]
+            for request in self.bridge_requests
+            if request.params["from"]["chain"] == chain_str
+        }
 
 
 @dataclass
@@ -88,29 +118,28 @@ class BridgeManagerData(LocalResource):
 class BridgeManager:
     """BridgeManager"""
 
-    # TODO singleton
+    _bridge_providers: t.Dict[str, BridgeProvider]
 
     def __init__(
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
-        bridge_provider: t.Optional[BridgeProvider] = None,
-        quote_validity_period: int = DEFAULT_QUOTE_VALIDITY_PERIOD,
+        quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
-        self.bridge_provider = bridge_provider or LiFiBridgeProvider(
-            wallet_manager, logger
-        )
         self.quote_validity_period = quote_validity_period
         self.path.mkdir(exist_ok=True)
         (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
+        self._bridge_providers = {
+            LiFiBridgeProvider.id(): LiFiBridgeProvider(wallet_manager, logger),
+        }
 
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
@@ -133,73 +162,40 @@ class BridgeManager:
             create_new_bundle = True
         elif force_update:
             self.logger.info("[BRIDGE MANAGER] Force bundle update.")
-            self.bridge_provider.quote_bundle(bundle)
+            self.quote_bundle(bundle)
             self._store_data()
         elif now > bundle.timestamp + self.quote_validity_period:
             self.logger.info("[BRIDGE MANAGER] Bundle expired.")
-            self.bridge_provider.quote_bundle(bundle)
+            self.quote_bundle(bundle)
             self._store_data()
 
         if not bundle or create_new_bundle:
             self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
 
+            bridge_requests = []
+            for params in requests_params:
+                bridge = self._bridge_providers[LiFiBridgeProvider.id()]
+                bridge_requests.append(bridge.create_request(params=params))
+
             bundle = BridgeRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
-                bridge_provider=self.bridge_provider.name(),
                 requests_params=requests_params,
-                bridge_requests=[
-                    BridgeRequest(params=params) for params in requests_params
-                ],
+                bridge_requests=bridge_requests,
                 timestamp=now,
             )
 
             self.data.last_requested_bundle = bundle
-            self.bridge_provider.quote_bundle(bundle)
+            self.quote_bundle(bundle)
             self._store_data()
 
         return bundle
 
-    def _raise_if_invalid(self, bridge_requests: t.List) -> None:
+    def _raise_if_invalid(self, requests_params: t.List) -> None:
         """Preprocess quote requests."""
 
-        seen: set = set()
-
-        for request in bridge_requests:
-            if (
-                not isinstance(request, dict)
-                or "from" not in request
-                or "to" not in request
-            ):
-                raise ValueError(
-                    "Invalid input: All quote requests must contain exactly one 'from' and one 'to' sender."
-                )
-
-            from_ = request["from"]
-            to = request["to"]
-
-            if (
-                not isinstance(from_, dict)
-                or "chain" not in from_
-                or "address" not in from_
-                or "token" not in from_
-            ):
-                raise ValueError(
-                    "Invalid input: 'from' must contain 'chain', 'address', and 'token'."
-                )
-
-            if (
-                not isinstance(to, dict)
-                or "chain" not in to
-                or "address" not in to
-                or "token" not in to
-                or "amount" not in to
-            ):
-                raise ValueError(
-                    "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
-                )
-
-            from_chain = request["from"]["chain"]
-            from_address = request["from"]["address"]
+        for params in requests_params:
+            from_chain = params["from"]["chain"]
+            from_address = params["from"]["address"]
 
             wallet = self.wallet_manager.load(Chain(from_chain).ledger_type)
             wallet_address = wallet.address
@@ -210,20 +206,6 @@ class BridgeManager:
             ):
                 raise ValueError(
                     f"Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
-                )
-
-            key = (
-                request["from"]["chain"],
-                request["from"]["address"],
-                request["from"]["token"],
-                request["to"]["chain"],
-                request["to"]["address"],
-                request["to"]["token"],
-            )
-
-            if key in seen:
-                raise ValueError(
-                    "Request contains duplicate entries with same 'from' and 'to'."
                 )
 
     def bridge_refill_requirements(
@@ -247,9 +229,7 @@ class BridgeManager:
                 addresses=bundle.get_from_addresses(chain),
             )
 
-        bridge_total_requirements = self.bridge_provider.bridge_total_requirements(
-            bundle
-        )
+        bridge_total_requirements = self.bridge_total_requirements(bundle)
 
         bridge_refill_requirements: t.Dict = {}
         for from_chain, from_addresses in bridge_total_requirements.items():
@@ -267,7 +247,7 @@ class BridgeManager:
             for amount in from_tokens.values()
         )
 
-        status_json = self.bridge_provider.get_status_json(bundle)
+        status_json = self.get_status_json(bundle.id)
         status_json.update(
             {
                 "balances": balances,
@@ -306,21 +286,74 @@ class BridgeManager:
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
 
         for request in bundle.bridge_requests:
-            self.bridge_provider.execute(request)
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge.execute(request)
             self._store_data()
 
         self._store_data()
         bundle.store()
         self.logger.info(f"[BRIDGE MANAGER] Bundle id {bundle_id} executed.")
-        return self.get_status(bundle_id)
+        return self.get_status_json(bundle_id)
 
-    def get_status(self, bundle_id: str) -> t.Dict:
+    def get_status_json(self, bundle_id: str) -> t.Dict:
         """Get execution status of bundle."""
         bundle = self.data.last_requested_bundle
-        if bundle is not None and bundle.id == bundle_id:
-            return self.bridge_provider.get_status_json(bundle)
 
-        bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle_id}.json"
-        bundle = cast(BridgeRequestBundle, BridgeRequestBundle.load(bundle_path))
-        bundle.path = bundle_path  # TODO backport to resource.py ?
-        return self.bridge_provider.get_status_json(bundle)
+        if bundle is not None and bundle.id == bundle_id:
+            pass
+        else:
+            bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle_id}.json"
+            if bundle_path.exists():
+                bundle = cast(
+                    BridgeRequestBundle, BridgeRequestBundle.load(bundle_path)
+                )
+                bundle.path = bundle_path  # TODO backport to resource.py ?
+            else:
+                raise FileNotFoundError(f"Bundle with ID {bundle_id} does not exist.")
+
+        initial_status = [request.status for request in bundle.bridge_requests]
+
+        for request in bundle.bridge_requests:
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge.update_execution_status(request)
+
+        updated_status = [request.status for request in bundle.bridge_requests]
+
+        if initial_status != updated_status and bundle.path is not None:
+            bundle.store()
+
+        bridge_request_status = [
+            request.get_status_json() for request in bundle.bridge_requests
+        ]
+
+        return {
+            "id": bundle.id,
+            "bridge_request_status": bridge_request_status,
+        }
+
+    def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
+        """Sum bridge requirements."""
+        bridge_total_requirements: t.Dict = {}
+        for request in bundle.bridge_requests:
+            if not request.quote_data:
+                continue
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge_requirements = bridge.bridge_requirements(request)
+            for from_chain, from_addresses in bridge_requirements.items():
+                for from_address, from_tokens in from_addresses.items():
+                    for from_token, from_amount in from_tokens.items():
+                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
+                            from_address, {}
+                        ).setdefault(from_token, 0)
+                        bridge_total_requirements[from_chain][from_address][
+                            from_token
+                        ] += from_amount
+
+        return bridge_total_requirements
+
+    def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
+        """Update the bundle with the quotes."""
+        for bridge_request in bundle.bridge_requests:
+            bridge = self._bridge_providers[bridge_request.bridge_provider_id]
+            bridge.quote(bridge_request)
+        bundle.timestamp = int(time.time())
