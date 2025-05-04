@@ -322,9 +322,10 @@ class BridgeManager:
         if initial_status != updated_status and bundle.path is not None:
             bundle.store()
 
-        bridge_request_status = [
-            request.get_status_json() for request in bundle.bridge_requests
-        ]
+        bridge_request_status = []
+        for request in bundle.bridge_requests:
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge_request_status.append(bridge.get_status_json(request))
 
         return {
             "id": bundle.id,
