@@ -25,7 +25,7 @@ import logging
 import time
 import typing as t
 import uuid
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from aea.crypto.base import LedgerApi
@@ -102,8 +102,16 @@ class BridgeRequest(LocalResource):
     execution_data: t.Optional[ExecutionData] = None
 
 
-class BridgeProvider:
-    """(Abstract) BridgeProvider"""
+class BridgeProvider(ABC):
+    """(Abstract) BridgeProvider.
+    
+    Derived classes must iplement the following methods:
+        - description
+        - quote
+        - _get_transactions
+        - update_execution_status
+        - _get_explorer_link
+    """
 
     def __init__(
         self,
@@ -171,6 +179,13 @@ class BridgeProvider:
         """Update the request with the quote."""
         raise NotImplementedError()
 
+    @abstractmethod
+    def _get_transactions(
+        self, bridge_request: BridgeRequest
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the bridge request."""
+        raise NotImplementedError()
+
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
         """Gets the bridge requirements to execute the quote, with updated gas estimation."""
         self._validate(bridge_request)
@@ -227,13 +242,6 @@ class BridgeProvider:
             result[from_chain][from_address][from_token] = total_token
 
         return result
-
-    @abstractmethod
-    def _get_transactions(
-        self, bridge_request: BridgeRequest
-    ) -> t.List[t.Tuple[str, t.Dict]]:
-        """Get the sorted list of transactions to execute the bridge request."""
-        raise NotImplementedError()
 
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the quote."""
@@ -338,7 +346,7 @@ class BridgeProvider:
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
     @abstractmethod
-    def update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
         raise NotImplementedError()
 
@@ -350,6 +358,7 @@ class BridgeProvider:
     def get_status_json(self, bridge_request: BridgeRequest) -> t.Dict:
         """JSON representation of the status."""
         if bridge_request.execution_data:
+            self._update_execution_status(bridge_request)
             tx_hash = None
             explorer_link = None
             if bridge_request.execution_data.tx_hashes:

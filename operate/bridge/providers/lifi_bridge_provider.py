@@ -266,11 +266,11 @@ class LiFiBridgeProvider(BridgeProvider):
             ("Bridge transaction", bridge_tx),
         ]
 
-    def update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
         self._validate(bridge_request)
 
-        if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING):
+        if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING, BridgeRequestStatus.EXECUTION_UNKNOWN):
             return
 
         if not bridge_request.execution_data:
@@ -289,30 +289,29 @@ class LiFiBridgeProvider(BridgeProvider):
         params = {
             "txHash": tx_hash,
         }
+
         try:
             self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
-            response.raise_for_status()
             response_json = response.json()
+            execution.bridge_status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
+            execution.message = response_json.get("substatusMessage", response_json.get("message"))
+            response.raise_for_status()
         except Exception as e:
             self.logger.error(
                 f"[LI.FI BRIDGE] Failed to update bridge status for {tx_hash}: {e}"
             )
-            bridge_request.status = (
-                BridgeRequestStatus.EXECUTION_UNKNOWN
-            )  # TODO should be EXECUTION_FAILED ?
-            return
 
-        lifi_status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
-        execution.message = response_json.get("substatusMessage")
-
-        if execution.bridge_status != lifi_status:
-            execution.bridge_status = lifi_status
-            if lifi_status == LiFiTransactionStatus.DONE:
-                bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
-            elif lifi_status == LiFiTransactionStatus.FAILED:
-                bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+        if execution.bridge_status == LiFiTransactionStatus.DONE:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+        elif execution.bridge_status == LiFiTransactionStatus.FAILED:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+        elif execution.bridge_status == LiFiTransactionStatus.PENDING:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
+        else:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
 
     def _get_explorer_link(self, tx_hash: str) -> str:
         """Get the explorer link for a transaction."""
         return f"https://scan.li.fi/tx/{tx_hash}"
+ 
