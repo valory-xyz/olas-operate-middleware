@@ -986,6 +986,9 @@ class ServiceManager:
                 )
                 cost_of_bond = 1 * len(instances)
 
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!")
+            import sys
+            sys.exit(1)
             return
 
             self.logger.info(
