@@ -701,6 +701,10 @@ class _ChainUtil:
             chain_type=self.chain_type,
             token_id=service_id,
         )
+
+        if multisig_address == NULL_ADDRESS:
+            return []
+
         return registry_contracts.gnosis_safe.get_owners(
             ledger_api=ledger_api,
             contract_address=multisig_address,

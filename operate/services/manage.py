@@ -1237,10 +1237,7 @@ class ServiceManager:
                 chain=Chain(chain),
             )
 
-        if (
-            len(counter_current_safe_owners) > 0
-            and counter_current_safe_owners == counter_instances
-        ):
+        if counter_current_safe_owners == counter_instances:
             if withdrawal_address is None:
                 self.logger.info("Service funded for safe swap")
                 self.fund_service(
