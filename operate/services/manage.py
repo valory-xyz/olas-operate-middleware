@@ -986,11 +986,6 @@ class ServiceManager:
                 )
                 cost_of_bond = 1 * len(instances)
 
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!")
-            import sys
-            sys.exit(1)
-            return
-
             self.logger.info(
                 f"Registering agent instances: {chain_data.token} -> {instances}"
             )
@@ -1242,7 +1237,10 @@ class ServiceManager:
                 chain=Chain(chain),
             )
 
-        if counter_current_safe_owners == counter_instances:
+        if (
+            len(counter_current_safe_owners) > 0
+            and counter_current_safe_owners == counter_instances
+        ):
             if withdrawal_address is None:
                 self.logger.info("Service funded for safe swap")
                 self.fund_service(
