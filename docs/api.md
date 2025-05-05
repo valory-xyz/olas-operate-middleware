@@ -1012,7 +1012,6 @@ Executes a quote bundle. See [GET /api/bridge/status/{quote_bundle_id}](#get-api
   ```json
   {
     "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "status": "SUBMITTED",
     "bridge_request_status": [
       {
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
@@ -1037,16 +1036,7 @@ Executes a quote bundle. See [GET /api/bridge/status/{quote_bundle_id}](#get-api
 
 ### `GET /api/bridge/status/{quote_bundle_id}`
 
-Gets the status of a quote bundle. The attribute `status` can take the following values sequentially:
-
-- `CREATED`: The quote bundle internal data structure has been created, but no quotes have been requested yet.
-- `QUOTE_DONE`: A quote is available for all bridge requests. Quote updates are possible in this state if either expired or forced through the [POST /api/bridge/bridge_refill_requirements](#post-apibridgebridge_refill_requirements) endpoint by setting `force_update=true`.
-- `QUOTE_FAILED`: Quote failed for some bridge requests. Quote updates are possible in this state if either expired or forced through the [POST /api/bridge/bridge_refill_requirements](#post-apibridgebridge_refill_requirements) endpoint by setting `force_update=true`.
-- `EXECUTION_PENDING`: Execution submitted and pending to be finalized for some bridge request.
-- `EXECUTION_DONE`: Execution finalized successfully for all requests.
-- `EXECUTION_FAILED`: Execution failed.
-
-Individual bridge request status:
+Gets the status of a quote bundle. Individual bridge request status:
 
 - `QUOTE_DONE`: A quote is available.
 - `QUOTE_FAILED`: Failed to request a quote.
@@ -1060,7 +1050,6 @@ Individual bridge request status:
   ```json
   {
     "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "status": "SUBMITTED",
     "bridge_request_status": [
       {
         "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
