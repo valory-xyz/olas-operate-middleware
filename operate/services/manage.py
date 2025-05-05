@@ -986,6 +986,8 @@ class ServiceManager:
                 )
                 cost_of_bond = 1 * len(instances)
 
+            return
+
             self.logger.info(
                 f"Registering agent instances: {chain_data.token} -> {instances}"
             )
