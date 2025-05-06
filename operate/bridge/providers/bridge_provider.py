@@ -96,7 +96,7 @@ class BridgeRequest(LocalResource):
 
     params: t.Dict
     bridge_provider_id: str
-    id: str = f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}"
+    id: str
     status: BridgeRequestStatus = BridgeRequestStatus.CREATED
     quote_data: t.Optional[QuoteData] = None
     execution_data: t.Optional[ExecutionData] = None
@@ -172,6 +172,7 @@ class BridgeProvider(ABC):
         return BridgeRequest(
             params=params,
             bridge_provider_id=self.id(),
+            id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
         )
 
     @abstractmethod
