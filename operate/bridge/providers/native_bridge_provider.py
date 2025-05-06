@@ -20,14 +20,10 @@
 """Native bridge provider."""
 
 
-import enum
 import time
 import typing as t
-from http import HTTPStatus
-from urllib.parse import urlencode
 
 import eth_abi
-import requests
 from aea.crypto.base import LedgerApi
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
@@ -41,7 +37,6 @@ from operate.bridge.providers.bridge_provider import (
 )
 from operate.constants import ZERO_ADDRESS
 from operate.data import DATA_DIR
-from operate.data.contracts import l2_standard_bridge
 from operate.data.contracts.l1_standard_bridge.contract import L1StandardBridge
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.operate_types import Chain
