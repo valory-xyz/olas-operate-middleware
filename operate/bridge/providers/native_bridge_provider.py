@@ -213,6 +213,10 @@ class NativeBridgeProvider(BridgeProvider):
         self, bridge_request: BridgeRequest
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Get the sorted list of transactions to execute the bridge request."""
+        self.logger.info(
+            f"[NATIVE BRIDGE] Get transactions for bridge request {bridge_request.id}."
+        )
+
         self._validate(bridge_request)
 
         if not bridge_request.quote_data:
@@ -243,11 +247,12 @@ class NativeBridgeProvider(BridgeProvider):
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
+        self.logger.info(
+            f"[NATIVE BRIDGE] Updating execution status for bridge request {bridge_request.id}."
+        )
+
         self._validate(bridge_request)
 
-        self.logger.info(
-            f"[NATIVE BRIDGE] Updating execution status for {bridge_request.id}..."
-        )
         if bridge_request.status not in (
             BridgeRequestStatus.EXECUTION_PENDING,
             # BridgeRequestStatus.EXECUTION_UNKNOWN,
@@ -294,13 +299,13 @@ class NativeBridgeProvider(BridgeProvider):
 
             target_extra_data = Web3.keccak(text=bridge_request.id).hex()
 
-            starting_block = self._find_starting_block(bridge_request)
+            starting_block = self.__find_starting_block(bridge_request)
             starting_block_ts = w3.eth.get_block(starting_block).timestamp
             latest_block = w3.eth.block_number
 
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
-                event_found = self._find_event_in_range(
+                event_found = self.__find_event_in_range(
                     w3,
                     to_bridge,
                     from_block,
@@ -322,7 +327,7 @@ class NativeBridgeProvider(BridgeProvider):
             self.logger.error(f"Error updating execution status: {e}")
             bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
 
-    def _find_event_in_range(
+    def __find_event_in_range(
         self,
         w3,
         contract_address: str,
@@ -342,10 +347,6 @@ class NativeBridgeProvider(BridgeProvider):
             }
         )
 
-        from icecream import ic
-
-        ic(logs)
-
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
             extra_data = "0x" + decoded[-1].hex()
@@ -354,7 +355,7 @@ class NativeBridgeProvider(BridgeProvider):
 
         return False
 
-    def _find_starting_block(self, bridge_request: BridgeRequest) -> int:
+    def __find_starting_block(self, bridge_request: BridgeRequest) -> int:
         """Find the starting block for the event log search on the destination chain.
 
         The starting block to search for the event log is the largest block on the

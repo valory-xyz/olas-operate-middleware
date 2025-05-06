@@ -169,6 +169,7 @@ class BridgeProvider(ABC):
                 "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
 
+        params["to"]["amount"] = int(params["to"]["amount"])
         return BridgeRequest(
             params=params,
             bridge_provider_id=self.id(),
