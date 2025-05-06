@@ -109,7 +109,7 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot quote bridge request {bridge_request.id}: execution already present."
             )
 
-        to_amount = bridge_request.params["to"]["amount"]
+        to_amount = int(bridge_request.params["to"]["amount"])
 
         message = None
         if to_amount == 0:
@@ -141,7 +141,7 @@ class NativeBridgeProvider(BridgeProvider):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        to_amount = int(bridge_request.params["to"]["amount"])
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
 
@@ -192,7 +192,7 @@ class NativeBridgeProvider(BridgeProvider):
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
-        to_amount = bridge_request.params["to"]["amount"]
+        to_amount = int(bridge_request.params["to"]["amount"])
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
 
         if from_token == ZERO_ADDRESS:

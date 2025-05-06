@@ -88,7 +88,7 @@ class LiFiBridgeProvider(BridgeProvider):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        to_amount = int(bridge_request.params["to"]["amount"])
 
         if to_amount == 0:
             self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
