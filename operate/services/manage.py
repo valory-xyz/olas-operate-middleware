@@ -623,8 +623,10 @@ class ServiceManager:
                     )
 
                     use_mech_marketplace = True
-                    agent_mech = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
-                    priority_mech_address = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
+                    agent_mech = priority_mech_address = service.env_variables.get(
+                        "PRIORITY_MECH_ADDRESS",
+                        {"value": DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH},
+                    )["value"]
 
                 except Exception:  # pylint: disable=broad-except
                     self.logger.warning(
@@ -2663,7 +2665,7 @@ class ServiceManager:
                     "threshold": 5000000000000000,
                 },
                 Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-                Chain.MODE: {"topup": 500000000000000, "threshold": 500000000000000},
+                Chain.MODE: {"topup": 5000000000000000, "threshold": 5000000000000000},
             },
         }
 

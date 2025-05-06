@@ -33,14 +33,13 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, OPERATE_HOME, ZERO_ADDRESS
+from operate.constants import IPFS_ADDRESS, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,
-    OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
@@ -55,8 +54,9 @@ from operate.quickstart.utils import (
     wei_to_token,
 )
 from operate.services.manage import ServiceManager
-from operate.services.service import NON_EXISTENT_MULTISIG, Service
+from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
+from operate.wallet.master import MasterWallet
 
 
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -67,8 +67,7 @@ if t.TYPE_CHECKING:
 
 NO_STAKING_PROGRAM_METADATA = {
     "name": "No staking",
-    "description": "Your Olas Predict agent will still actively participate in prediction\
-        markets, but it will not be staked within any staking program.",
+    "description": "Your agent will still work as expected, but it will not be staked within any staking program.",
 }
 CUSTOM_PROGRAM_ID = "custom_staking"
 QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
@@ -390,10 +389,15 @@ def configure_local_config(
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
                 if env_var_data["value"]:
-                    print(f"Example: {env_var_data['value']}")
-                config.user_provided_args[env_var_name] = ask_or_get_from_env(
+                    print(f"Default: {env_var_data['value']}")
+
+                user_provided_arg = ask_or_get_from_env(
                     f"Please enter {env_var_data['name']}: ", False, env_var_name
                 )
+                config.user_provided_args[env_var_name] = env_var_data["value"]
+                if user_provided_arg:
+                    config.user_provided_args[env_var_name] = user_provided_arg
+
                 print()
 
             template["env_variables"][env_var_name][
@@ -517,6 +521,67 @@ def ask_funds_in_address(
         )
 
 
+def _ask_funds_from_requirements(
+    manager: ServiceManager,
+    wallet: MasterWallet,
+    service: Service,
+) -> bool:
+    """Ask for funds from requirements."""
+    spinner = Halo(text="Calculating funds requirements...", spinner="dots")
+    spinner.start()
+    requirements = manager.refill_requirements(
+        service_config_id=service.service_config_id
+    )
+    spinner.stop()
+
+    wallet_names = (
+        {
+            wallet.crypto.address: "Master EOA",
+            "master_safe": "Master Safe",
+            "service_safe": "Service Safe",
+        }
+        | {safe_address: "Master Safe" for safe_address in wallet.safes.values()}
+        | {
+            chain_config.chain_data.multisig: "Service Safe"
+            for chain_config in service.chain_configs.values()
+        }
+        | {key.address: "Agent EOA" for key in service.keys}
+    )
+
+    if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
+        for chain_name, balances in requirements["balances"].items():
+            ledger_api = wallet.ledger_api(
+                chain=Chain(chain_name),
+                rpc=service.chain_configs[chain_name].ledger_config.rpc,
+            )
+            for wallet_address, asset_balances in balances.items():
+                for asset_address, balance in asset_balances.items():
+                    print(
+                        f"[{chain_name}] {wallet_names[wallet_address]} has {wei_to_token(balance, chain_name, asset_address)}"
+                    )
+
+        return True
+
+    for chain_name, chain_requirements in requirements["refill_requirements"].items():
+        chain = Chain(chain_name)
+        ledger_api = wallet.ledger_api(
+            chain=chain,
+            rpc=service.chain_configs[chain_name].ledger_config.rpc,
+        )
+        for wallet_address, requirements in chain_requirements.items():
+            for asset_address, requirement in requirements.items():
+                ask_funds_in_address(
+                    ledger_api=ledger_api,
+                    chain=chain_name,
+                    asset_address=asset_address,
+                    required_balance=requirement,
+                    recipient_address=wallet_address,
+                    recipient_name=wallet_names[wallet_address],
+                )
+
+    return False
+
+
 def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
     """Ensure enough funds."""
     if not operate.wallet_manager.exists(ledger_type=LedgerType.ETHEREUM):
@@ -537,158 +602,26 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
         wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
     manager = operate.service_manager()
-    config = load_local_config(operate=operate, service_name=t.cast(str, service.name))
 
-    for chain_name, chain_config in service.chain_configs.items():
-        print_section(f"[{chain_name}] Set up the service in the Olas Protocol")
-        chain_metadata = CHAIN_TO_METADATA[chain_name]
-
-        if chain_config.ledger_config.rpc is not None:
-            os.environ["CUSTOM_CHAIN_RPC"] = chain_config.ledger_config.rpc
-
-        chain = chain_config.ledger_config.chain
-        ledger_api = wallet.ledger_api(
-            chain=chain,
-            rpc=chain_config.ledger_config.rpc,
-        )
-
-        for (
-            asset_address,
-            fund_requirements,
-        ) in chain_config.chain_data.user_params.fund_requirements.items():
-            gas_fund_req = 0
-            agent_fund_requirement = fund_requirements.agent
-            safe_fund_requirement = fund_requirements.safe
-            master_safe_fund_requirement = 0
-            service_state = manager._get_on_chain_state(service, chain_name)
-            if asset_address == ZERO_ADDRESS:
-                gas_fund_req = t.cast(int, chain_metadata.get("gasFundReq"))
-                if service_state in (
-                    OnChainState.NON_EXISTENT,
-                    OnChainState.PRE_REGISTRATION,
-                    OnChainState.ACTIVE_REGISTRATION,
-                ):
-                    master_safe_fund_requirement += (
-                        2  # for 1 wei in msg.value during registration and activation
-                    )
-
-            # print the master EOA balance that was created above
-            balance_str = wei_to_token(
-                get_asset_balance(ledger_api, asset_address, wallet.crypto.address),
-                chain_name,
-                asset_address,
-            )
-            print(
-                f"[{chain_name}] Master EOA balance: {balance_str}",
-            )
-
-            # if master safe exists print its balance
-            safe_exists = wallet.safes.get(chain) is not None
-            if safe_exists:
-                balance_str = wei_to_token(
-                    get_asset_balance(ledger_api, asset_address, wallet.safes[chain]),
-                    chain_name,
-                    asset_address,
-                )
-                print(f"[{chain_name}] Master safe balance: {balance_str}")
-
-            # if service safe exists print its balance
-            if chain_config.chain_data.multisig != NON_EXISTENT_MULTISIG:
-                service_save_balance = get_asset_balance(
-                    ledger_api, asset_address, chain_config.chain_data.multisig
-                )
-                print(
-                    f"[{chain_name}] Service safe balance: {wei_to_token(service_save_balance, chain_name, asset_address)}"
-                )
-                if service_save_balance >= safe_fund_requirement:
-                    safe_fund_requirement = (
-                        0  # no need to fund the service safe if it has enough funds
-                    )
-
-            # if agent EOA exists print its balance
-            if len(service.keys) > 0:
-                agent_eoa_balance = get_asset_balance(
-                    ledger_api, asset_address, service.keys[0].address
-                )
-                print(
-                    f"[{chain_name}] Agent EOA balance: {wei_to_token(agent_eoa_balance, chain_name, asset_address)}"
-                )
-                if agent_eoa_balance >= agent_fund_requirement:
-                    agent_fund_requirement = (
-                        0  # no need to fund the agent EOA if it has enough funds
-                    )
-
-            # ask for enough funds in master EOA for gas fees
-            ask_funds_in_address(
-                ledger_api=ledger_api,
-                required_balance=gas_fund_req,
-                asset_address=asset_address,
-                recipient_name="Master EOA",
-                recipient_address=wallet.crypto.address,
-                chain=chain_name,
-            )
-
-            # if master safe does not exist, create it
-            if not safe_exists:
+    backup_owner = None
+    while not _ask_funds_from_requirements(manager, wallet, service):
+        for chain_name, chain_config in service.chain_configs.items():
+            chain = Chain.from_string(chain_name)
+            if wallet.safes.get(chain) is None:
                 print(f"[{chain_name}] Creating Master Safe")
-                wallet_manager = operate.wallet_manager
-                wallet = wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
-                backup_owner = ask_or_get_from_env(
-                    "Please input your backup owner (leave empty to skip): ",
-                    False,
-                    "BACKUP_OWNER",
-                    raise_if_missing=False,
-                )
+                if backup_owner is None:
+                    backup_owner = ask_or_get_from_env(
+                        "Please input your backup owner (leave empty to skip): ",
+                        False,
+                        "BACKUP_OWNER",
+                        raise_if_missing=False,
+                    )
 
                 wallet.create_safe(
                     chain=chain,
                     rpc=chain_config.ledger_config.rpc,
                     backup_owner=None if backup_owner == "" else backup_owner,
                 )
-
-            # ask for enough funds in master safe for agent EOA + service safe
-            ask_funds_in_address(
-                ledger_api=ledger_api,
-                required_balance=(
-                    master_safe_fund_requirement
-                    + agent_fund_requirement
-                    + safe_fund_requirement
-                ),
-                asset_address=asset_address,
-                recipient_name="Master Safe",
-                recipient_address=wallet.safes[chain],
-                chain=chain_name,
-            )
-
-        # if staking, ask for the required OLAS for it
-        if chain_config.chain_data.user_params.use_staking:
-            staking_contract = get_staking_contract(chain, config.staking_program_id)
-            assert (  # nosec
-                staking_contract is not None
-            ), "Staking contract not found for the chosen staking program"
-            if service_state in (
-                OnChainState.NON_EXISTENT,
-                OnChainState.PRE_REGISTRATION,
-            ):
-                required_olas = 2 * chain_config.chain_data.user_params.cost_of_bond
-            elif service_state == OnChainState.ACTIVE_REGISTRATION:
-                required_olas = chain_config.chain_data.user_params.cost_of_bond
-            else:
-                required_olas = 0
-
-            sftxb = manager.get_eth_safe_tx_builder(
-                ledger_config=chain_config.ledger_config
-            )
-            ask_funds_in_address(
-                ledger_api=ledger_api,
-                required_balance=required_olas,
-                asset_address=sftxb.get_staking_params(staking_contract)[
-                    "staking_token"
-                ],
-                recipient_name="Master Safe",
-                recipient_address=wallet.safes[chain],
-                chain=chain_name,
-            )
 
 
 def run_service(
