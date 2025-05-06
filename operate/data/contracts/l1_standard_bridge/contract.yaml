@@ -6,9 +6,9 @@ description: Optimism L1 Standard Bridge
 license: Apache-2.0
 aea_version: '>=1.0.0, <2.0.0'
 fingerprint:
-  __init__.py: bafybeid4hg5rx75ltdjmekmxdddwqzbvblygmvlhws5samjxfirnkp666i
-  build/L1StandardBridge.json: bafybeiagrufcoljrlo2zklc7kxwh7eyrf67usos2bqnf7hss47hgm6low4
-  contract.py: bafybeihgiwyy5gj5tpyz6wnjlfsywssanrbuzskqctt557f3galofewqse
+  __init__.py: bafybeifsbxn6hlccnpgqnpvaz3ph6ajl4is4mcyerr6aqp7heggagcphye
+  build/L1StandardBridge.json: bafybeidq6jt7zmedtuxbbyggiqhu7w6543bunyd2vrbibg6y2svxsi2q5m
+  contract.py: bafybeiaekcbs6yjaft2jysvdxvrd7tknpkcnf6npmr3zgutlnss7gwgijq
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: L1StandardBridge

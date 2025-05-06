@@ -104,7 +104,7 @@ class BridgeRequest(LocalResource):
 
 class BridgeProvider(ABC):
     """(Abstract) BridgeProvider.
-    
+
     Derived classes must iplement the following methods:
         - description
         - quote

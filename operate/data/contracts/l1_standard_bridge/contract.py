@@ -33,18 +33,64 @@ class L1StandardBridge(Contract):
     contract_id = PublicId.from_str("valory/l1_standard_bridge:0.1.0")
 
     @classmethod
+    def build_bridge_eth_to_tx(
+        cls,
+        ledger_api: LedgerApi,
+        contract_address: str,
+        sender: str,
+        to: str,
+        amount: int,
+        min_gas_limit: int,
+        extra_data: bytes,
+        raise_on_try: bool = False,
+    ) -> JSONLike:
+        """Build bridgeETHTo tx."""
+        contract_instance = cls.get_instance(
+            ledger_api=ledger_api,
+            contract_address=contract_address
+        )
+        tx = contract_instance.functions.bridgeETHTo(to, min_gas_limit, extra_data).build_transaction(
+            {
+                "from": sender,
+                "value": amount,
+                "gas": 1,
+                "gasPrice": ledger_api.api.eth.gas_price,
+                "nonce": ledger_api.api.eth.get_transaction_count(sender),
+            }
+        )
+        return ledger_api.update_with_gas_estimate(
+            transaction=tx,
+            raise_on_try=raise_on_try,
+        )
+
+    @classmethod
     def build_deposit_erc20_to_tx(
         cls,
         ledger_api: LedgerApi,
         contract_address: str,
+        sender: str,
         l1_token: str,
         l2_token: str,
         to: str,
         amount: int,
         min_gas_limit: int,
         extra_data: bytes,
+        raise_on_try: bool = False,
     ) -> JSONLike:
         """Build depositERC20To tx."""
-        contract_instance = cls.get_instance(ledger_api, contract_address)
-        data = contract_instance.encodeABI("depositERC20To", args=[l1_token, l2_token, to, amount, min_gas_limit, extra_data])
-        return dict(data=bytes.fromhex(data[2:]))
+        contract_instance = cls.get_instance(
+            ledger_api=ledger_api,
+            contract_address=contract_address
+        )
+        tx = contract_instance.functions.depositERC20To(l1_token, l2_token, to, amount, min_gas_limit, extra_data).build_transaction(
+            {
+                "from": sender,
+                "gas": 1,
+                "gasPrice": ledger_api.api.eth.gas_price,
+                "nonce": ledger_api.api.eth.get_transaction_count(sender),
+            }
+        )
+        return ledger_api.update_with_gas_estimate(
+            transaction=tx,
+            raise_on_try=raise_on_try,
+        )

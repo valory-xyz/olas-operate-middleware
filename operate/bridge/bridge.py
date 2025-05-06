@@ -34,6 +34,10 @@ from deepdiff import DeepDiff
 
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
+from operate.bridge.providers.native_bridge_provider import (
+    NATIVE_BRIDGE_ENDPOINTS,
+    NativeBridgeProvider,
+)
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 from operate.resource import LocalResource
@@ -139,6 +143,7 @@ class BridgeManager:
         )
         self._bridge_providers = {
             LiFiBridgeProvider.id(): LiFiBridgeProvider(wallet_manager, logger),
+            NativeBridgeProvider.id(): NativeBridgeProvider(wallet_manager, logger),
         }
 
     def _store_data(self) -> None:
@@ -174,7 +179,13 @@ class BridgeManager:
 
             bridge_requests = []
             for params in requests_params:
-                bridge = self._bridge_providers[LiFiBridgeProvider.id()]
+                from_chain = params["from"]["chain"]
+                to_chain = params["to"]["chain"]
+
+                if (from_chain, to_chain) in NATIVE_BRIDGE_ENDPOINTS:
+                    bridge = self._bridge_providers[NativeBridgeProvider.id()]
+                else:
+                    bridge = self._bridge_providers[LiFiBridgeProvider.id()]
                 bridge_requests.append(bridge.create_request(params=params))
 
             bundle = BridgeRequestBundle(

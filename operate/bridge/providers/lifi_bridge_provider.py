@@ -175,8 +175,12 @@ class LiFiBridgeProvider(BridgeProvider):
 
     @staticmethod
     def _get_bridge_tx(
-        quote_data: QuoteData, ledger_api: LedgerApi
+        bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            return None
+
         quote = quote_data.response
         if not quote:
             return None
@@ -205,8 +209,12 @@ class LiFiBridgeProvider(BridgeProvider):
 
     @staticmethod
     def _get_approve_tx(
-        quote_data: QuoteData, ledger_api: LedgerApi
+        bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            return None
+
         quote = quote_data.response
         if not quote:
             return None
@@ -248,12 +256,12 @@ class LiFiBridgeProvider(BridgeProvider):
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
 
-        bridge_tx = self._get_bridge_tx(bridge_request.quote_data, ledger_api)
+        bridge_tx = self._get_bridge_tx(bridge_request, ledger_api)
 
         if not bridge_tx:
             return []
 
-        approve_tx = self._get_approve_tx(bridge_request.quote_data, ledger_api)
+        approve_tx = self._get_approve_tx(bridge_request, ledger_api)
 
         if approve_tx:
             bridge_tx["nonce"] = approve_tx["nonce"] + 1
@@ -270,7 +278,10 @@ class LiFiBridgeProvider(BridgeProvider):
         """Update the execution status. Returns `True` if the status changed."""
         self._validate(bridge_request)
 
-        if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING, BridgeRequestStatus.EXECUTION_UNKNOWN):
+        if bridge_request.status not in (
+            BridgeRequestStatus.EXECUTION_PENDING,
+            BridgeRequestStatus.EXECUTION_UNKNOWN,
+        ):
             return
 
         if not bridge_request.execution_data:
@@ -294,8 +305,12 @@ class LiFiBridgeProvider(BridgeProvider):
             self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
             response_json = response.json()
-            execution.bridge_status = response_json.get("status", str(LiFiTransactionStatus.UNKNOWN))
-            execution.message = response_json.get("substatusMessage", response_json.get("message"))
+            execution.bridge_status = response_json.get(
+                "status", str(LiFiTransactionStatus.UNKNOWN)
+            )
+            execution.message = response_json.get(
+                "substatusMessage", response_json.get("message")
+            )
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
@@ -314,4 +329,3 @@ class LiFiBridgeProvider(BridgeProvider):
     def _get_explorer_link(self, tx_hash: str) -> str:
         """Get the explorer link for a transaction."""
         return f"https://scan.li.fi/tx/{tx_hash}"
- 
