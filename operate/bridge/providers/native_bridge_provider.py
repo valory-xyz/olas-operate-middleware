@@ -383,7 +383,7 @@ class NativeBridgeProvider(BridgeProvider):
         tx_timestamp = block.timestamp
 
         # 2. Binary search the destination chain for block just before this timestamp
-        def find_block_before_timestamp(w3, timestamp) -> int:
+        def find_block_before_timestamp(w3, timestamp: int) -> int:
             latest = w3.eth.block_number
             low, high = 0, latest
             best = 0
