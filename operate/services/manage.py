@@ -2290,6 +2290,26 @@ class ServiceManager:
                 raise_on_invalid_address=False,
             )
 
+            # TODO this is a patch for the case when balance is in MasterEOA (bridging)
+            if master_safe == "master_safe":
+                eoa_funding_values = self._get_master_eoa_native_funding_values(
+                    master_safe_exists=master_safe_exists,
+                    chain=Chain(chain),
+                    balance=balances[chain][master_eoa][ZERO_ADDRESS],
+                )
+
+                for asset in balances[chain][master_safe]:
+                    if asset == ZERO_ADDRESS:
+                        balances[chain][master_safe][asset] = max(
+                            balances[chain][master_eoa][asset]
+                            - eoa_funding_values["topup"],
+                            0,
+                        )
+                    else:
+                        balances[chain][master_safe][asset] = balances[chain][
+                            master_eoa
+                        ][asset]
+
             # TODO this is a balances patch to count wrapped native asset as
             # native assets for the service safe
             if Chain(chain) in WRAPPED_NATIVE_ASSET:
