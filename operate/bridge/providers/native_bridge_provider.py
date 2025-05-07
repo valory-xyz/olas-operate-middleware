@@ -51,7 +51,7 @@ NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
     (Chain.ETHEREUM.value, Chain.BASE.value): {
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
         "to_bridge": "0x4200000000000000000000000000000000000010",
-        "duration": 5 * 60,
+        "bridge_eta": 5 * 60,
     }
 }
 
@@ -111,7 +111,10 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot quote bridge request {bridge_request.id}: execution already present."
             )
 
+        from_chain = bridge_request.params["from"]["chain"]
+        to_chain = bridge_request.params["to"]["chain"]
         to_amount = int(bridge_request.params["to"]["amount"])
+        bridge_eta = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"]
 
         message = None
         if to_amount == 0:
@@ -120,6 +123,7 @@ class NativeBridgeProvider(BridgeProvider):
 
         quote_data = QuoteData(
             attempts=0,
+            bridge_eta=bridge_eta,
             elapsed_time=0,
             message=message,
             response=None,
@@ -283,7 +287,7 @@ class NativeBridgeProvider(BridgeProvider):
         to_address = bridge_request.params["to"]["address"]
 
         to_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["to_bridge"]
-        duration = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["duration"])
+        bridge_eta = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"])
 
         try:
             chain = Chain(to_chain)
@@ -329,7 +333,7 @@ class NativeBridgeProvider(BridgeProvider):
                     return
 
                 last_block_ts = w3.eth.get_block(to_block).timestamp
-                if last_block_ts > starting_block_ts + duration * 2:
+                if last_block_ts > starting_block_ts + bridge_eta * 2:
                     bridge_request.status = (
                         BridgeRequestStatus.EXECUTION_FAILED
                     )  # TODO EXECUTION_UNKNOWN ?

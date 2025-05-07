@@ -55,6 +55,7 @@ class QuoteData(LocalResource):
     """QuoteData"""
 
     attempts: int
+    bridge_eta: t.Optional[int]
     elapsed_time: float
     message: t.Optional[str]
     response: t.Optional[t.Dict]

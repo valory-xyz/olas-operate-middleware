@@ -94,6 +94,7 @@ class LiFiBridgeProvider(BridgeProvider):
             self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
                 attempts=0,
+                bridge_eta=None,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
                 response=None,
@@ -127,6 +128,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 response_json = response.json()
                 quote_data = QuoteData(
                     attempts=attempt,
+                    bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=None,
                     response=response_json,
@@ -142,6 +144,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 quote_data = QuoteData(
                     attempts=attempt,
+                    bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     response=None,
@@ -155,6 +158,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 response_json = response.json()
                 quote_data = QuoteData(
                     attempts=attempt,
+                    bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
                     response=response_json,
