@@ -19,8 +19,6 @@
 
 """This module contains the class to connect to the `L1StandardBridge` contract."""
 
-from enum import Enum
-
 from aea.common import JSONLike
 from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
@@ -46,10 +44,11 @@ class L1StandardBridge(Contract):
     ) -> JSONLike:
         """Build bridgeETHTo tx."""
         contract_instance = cls.get_instance(
-            ledger_api=ledger_api,
-            contract_address=contract_address
+            ledger_api=ledger_api, contract_address=contract_address
         )
-        tx = contract_instance.functions.bridgeETHTo(to, min_gas_limit, extra_data).build_transaction(
+        tx = contract_instance.functions.bridgeETHTo(
+            to, min_gas_limit, extra_data
+        ).build_transaction(
             {
                 "from": sender,
                 "value": amount,
@@ -64,28 +63,29 @@ class L1StandardBridge(Contract):
         )
 
     @classmethod
-    def build_deposit_erc20_to_tx(
+    def build_bridge_erc20_to_tx(
         cls,
         ledger_api: LedgerApi,
         contract_address: str,
         sender: str,
-        l1_token: str,
-        l2_token: str,
+        local_token: str,
+        remote_token: str,
         to: str,
         amount: int,
         min_gas_limit: int,
         extra_data: bytes,
         raise_on_try: bool = False,
     ) -> JSONLike:
-        """Build depositERC20To tx."""
+        """Build bridgeERC20To tx."""
         contract_instance = cls.get_instance(
-            ledger_api=ledger_api,
-            contract_address=contract_address
+            ledger_api=ledger_api, contract_address=contract_address
         )
-        tx = contract_instance.functions.depositERC20To(l1_token, l2_token, to, amount, min_gas_limit, extra_data).build_transaction(
+        tx = contract_instance.functions.bridgeERC20To(
+            local_token, remote_token, to, amount, min_gas_limit, extra_data
+        ).build_transaction(
             {
                 "from": sender,
-                "gas": 1,
+                "gas": 1_000_000,
                 "gasPrice": ledger_api.api.eth.gas_price,
                 "nonce": ledger_api.api.eth.get_transaction_count(sender),
             }
