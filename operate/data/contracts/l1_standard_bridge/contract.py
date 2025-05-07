@@ -25,6 +25,9 @@ from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 
 
+DEFAULT_BRIDGE_MIN_GAS_LIMIT = 300000
+
+
 class L1StandardBridge(Contract):
     """The Service Staking contract."""
 

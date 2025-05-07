@@ -37,15 +37,17 @@ from operate.bridge.providers.bridge_provider import (
 )
 from operate.constants import ZERO_ADDRESS
 from operate.data import DATA_DIR
-from operate.data.contracts.l1_standard_bridge.contract import L1StandardBridge
+from operate.data.contracts.l1_standard_bridge.contract import (
+    DEFAULT_BRIDGE_MIN_GAS_LIMIT,
+    L1StandardBridge,
+)
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.operate_types import Chain
 
 
-BRIDGE_MIN_GAS_LIMIT = 300000
 BLOCK_CHUNK_SIZE = 5000
 
-NATIVE_BRIDGE_ENDPOINTS = {
+NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
     (Chain.ETHEREUM.value, Chain.BASE.value): {
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
         "to_bridge": "0x4200000000000000000000000000000000000010",
@@ -155,7 +157,7 @@ class NativeBridgeProvider(BridgeProvider):
                 sender=from_address,
                 to=to_address,
                 amount=int(to_amount),
-                min_gas_limit=BRIDGE_MIN_GAS_LIMIT,
+                min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
         else:
@@ -167,7 +169,7 @@ class NativeBridgeProvider(BridgeProvider):
                 remote_token=to_token,
                 to=to_address,
                 amount=int(to_amount),
-                min_gas_limit=BRIDGE_MIN_GAS_LIMIT,
+                min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
         self.logger.info(f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}.")
@@ -341,7 +343,7 @@ class NativeBridgeProvider(BridgeProvider):
 
     def __find_event_in_range(
         self,
-        w3,
+        w3: Web3,
         contract_address: str,
         from_block: int,
         to_block: int,
@@ -382,6 +384,17 @@ class NativeBridgeProvider(BridgeProvider):
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
         w3_source = ledger_api.api
+
+        if not bridge_request.execution_data:
+            raise RuntimeError(
+                f"Error on bridge request {bridge_request.id}: execution data not present."
+            )
+
+        if not bridge_request.execution_data.tx_hashes:
+            raise RuntimeError(
+                f"Error on bridge request {bridge_request.id}: tx_hashes not present."
+            )
+
         tx = w3_source.eth.get_transaction_receipt(
             bridge_request.execution_data.tx_hashes[-1]
         )
@@ -395,7 +408,7 @@ class NativeBridgeProvider(BridgeProvider):
         ledger_api = wallet.ledger_api(chain)
         w3_dest = ledger_api.api
 
-        def find_block_before_timestamp(w3, timestamp: int) -> int:
+        def find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
             latest = w3.eth.block_number
             low, high = 0, latest
             best = 0
