@@ -83,7 +83,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id())
+        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -213,7 +213,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id())
+        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -346,7 +346,7 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id())
+        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 

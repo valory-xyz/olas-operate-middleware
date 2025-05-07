@@ -127,10 +127,13 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_request.quote_data = quote_data
         bridge_request.status = BridgeRequestStatus.QUOTE_DONE
 
-    @staticmethod
     def _get_bridge_tx(
-        bridge_request: BridgeRequest, ledger_api: LedgerApi
+        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
+        self.logger.info(
+            f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
+        )
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
@@ -156,34 +159,29 @@ class NativeBridgeProvider(BridgeProvider):
                 extra_data=extra_data,
             )
         else:
-            bridge_tx = L1_STANDARD_BRIDGE_CONTRACT.build_deposit_erc20_to_tx(
+            bridge_tx = L1_STANDARD_BRIDGE_CONTRACT.build_bridge_erc20_to_tx(
                 ledger_api=ledger_api,
                 contract_address=from_bridge,
                 sender=from_address,
-                l1_token=from_token,
-                l2_token=to_token,
+                local_token=from_token,
+                remote_token=to_token,
                 to=to_address,
                 amount=int(to_amount),
                 min_gas_limit=BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
-
-        # TODO: fix this, gas estimation fails.
-        bridge_tx["gas"] = 1200000  # TODO remove
+        self.logger.info(f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}.")
         ledger_api.update_with_gas_estimate(bridge_tx)
-
-        # w3 = Web3(Web3.HTTPProvider("https://rpc-gate.autonolas.tech/ethereum-rpc/"))
-        # estimated_gas = w3.eth.estimate_gas(bridge_tx)
-        # print(f"Estimated gas: {estimated_gas}")
-        # from icecream import ic
-        # ic(bridge_tx)
-
+        self.logger.info(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
         return NativeBridgeProvider._update_with_gas_pricing(bridge_tx, ledger_api)
 
-    @staticmethod
     def _get_approve_tx(
-        bridge_request: BridgeRequest, ledger_api: LedgerApi
+        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
+        self.logger.info(
+            f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
+        )
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
@@ -205,8 +203,12 @@ class NativeBridgeProvider(BridgeProvider):
             sender=from_address,
             amount=to_amount,
         )
-
+        approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
+        self.logger.info(
+            f"[NATIVE BRIDGE] Gas before updating {approve_tx.get('gas')}."
+        )
         ledger_api.update_with_gas_estimate(approve_tx)
+        self.logger.info(f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}.")
         return NativeBridgeProvider._update_with_gas_pricing(approve_tx, ledger_api)
 
     def _get_transactions(
@@ -265,6 +267,12 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
+        if execution_data.tx_status and any(
+            status == 0 for status in execution_data.tx_status
+        ):
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            return
+
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
@@ -299,7 +307,7 @@ class NativeBridgeProvider(BridgeProvider):
 
             target_extra_data = Web3.keccak(text=bridge_request.id).hex()
 
-            starting_block = self.__find_starting_block(bridge_request)
+            starting_block = self.__find_starting_block_number(bridge_request)
             starting_block_ts = w3.eth.get_block(starting_block).timestamp
             latest_block = w3.eth.block_number
 
@@ -320,12 +328,16 @@ class NativeBridgeProvider(BridgeProvider):
 
                 last_block_ts = w3.eth.get_block(to_block).timestamp
                 if last_block_ts > starting_block_ts + duration * 2:
-                    bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
+                    bridge_request.status = (
+                        BridgeRequestStatus.EXECUTION_FAILED
+                    )  # TODO EXECUTION_UNKNOWN ?
                     return
 
         except Exception as e:
             self.logger.error(f"Error updating execution status: {e}")
-            bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
+            bridge_request.status = (
+                BridgeRequestStatus.EXECUTION_FAILED
+            )  # TODO EXECUTION_UNKNOWN ?
 
     def __find_event_in_range(
         self,
@@ -355,28 +367,21 @@ class NativeBridgeProvider(BridgeProvider):
 
         return False
 
-    def __find_starting_block(self, bridge_request: BridgeRequest) -> int:
+    def __find_starting_block_number(self, bridge_request: BridgeRequest) -> int:
         """Find the starting block for the event log search on the destination chain.
 
-        The starting block to search for the event log is the largest block on the
-        destination chain so that its timestamp is less than the timestamp of the
-        bridge transaction on the source chain.
+        The starting block to search for the event log is the block with the largest
+        block number on the destination chain so that its timestamp is less than the
+        timestamp of the bridge transaction on the source chain.
         """
         self._validate(bridge_request)
 
+        # 1. Get timestamp of the transaction on the source chain
         from_chain = bridge_request.params["from"]["chain"]
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
         w3_source = ledger_api.api
-
-        to_chain = bridge_request.params["to"]["chain"]
-        chain = Chain(to_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-        w3_dest = ledger_api.api
-
-        # 1. Get timestamp of the transaction on the source chain
         tx = w3_source.eth.get_transaction_receipt(
             bridge_request.execution_data.tx_hashes[-1]
         )
@@ -384,6 +389,12 @@ class NativeBridgeProvider(BridgeProvider):
         tx_timestamp = block.timestamp
 
         # 2. Binary search the destination chain for block just before this timestamp
+        to_chain = bridge_request.params["to"]["chain"]
+        chain = Chain(to_chain)
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain)
+        w3_dest = ledger_api.api
+
         def find_block_before_timestamp(w3, timestamp: int) -> int:
             latest = w3.eth.block_number
             low, high = 0, latest

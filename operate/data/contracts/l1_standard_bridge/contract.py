@@ -52,7 +52,7 @@ class L1StandardBridge(Contract):
             {
                 "from": sender,
                 "value": amount,
-                "gas": 1,
+                "gas": 1_000_000,
                 "gasPrice": ledger_api.api.eth.gas_price,
                 "nonce": ledger_api.api.eth.get_transaction_count(sender),
             }
