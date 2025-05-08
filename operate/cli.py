@@ -611,6 +611,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
+
+        logger.info(f"POST /api/wallet/safe {data=}")
+
         chain = Chain(data["chain"])
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager

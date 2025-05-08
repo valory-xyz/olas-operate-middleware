@@ -2239,6 +2239,7 @@ class ServiceManager:
         bonded_assets: t.Dict = {}
         protocol_asset_requirements: t.Dict = {}
         refill_requirements: t.Dict = {}
+        total_requirements: t.Dict = {}
         allow_start_agent = True
         is_refill_required = False
 
@@ -2290,7 +2291,8 @@ class ServiceManager:
                 raise_on_invalid_address=False,
             )
 
-            # TODO this is a patch for the case when balance is in MasterEOA (bridging)
+            # TODO this is a patch for the case when excess balance is in MasterEOA
+            # and MasterSafe is not created (typically for onboarding bridging)
             if master_safe == "master_safe":
                 eoa_funding_values = self._get_master_eoa_native_funding_values(
                     master_safe_exists=master_safe_exists,
@@ -2305,10 +2307,12 @@ class ServiceManager:
                             - eoa_funding_values["topup"],
                             0,
                         )
+                        # This line would keep the sum of balances constant, but then it will not be able to transfer the correct amount to MasterSafe: balances[chain][master_eoa][asset] = min(balances[chain][master_eoa][asset], eoa_funding_values["topup"])
                     else:
                         balances[chain][master_safe][asset] = balances[chain][
                             master_eoa
                         ][asset]
+                        # This line would keep the sum of balances constant, but then it will not be able to transfer the correct amount to MasterSafe: balances[chain][master_eoa][asset] = 0
 
             # TODO this is a balances patch to count wrapped native asset as
             # native assets for the service safe
@@ -2323,6 +2327,7 @@ class ServiceManager:
 
             # Refill requirements
             refill_requirements[chain] = {}
+            total_requirements[chain] = {}
 
             # Refill requirements for Master Safe
             for asset_address in (
@@ -2366,6 +2371,17 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
+                total_requirements[chain].setdefault(master_safe, {})[
+                    asset_address
+                ] = sum(
+                    agent_asset_funding_values[address]["topup"]
+                    for address in agent_asset_funding_values
+                ) + protocol_asset_requirements[
+                    chain
+                ].get(
+                    asset_address, 0
+                )
+
                 if asset_address == ZERO_ADDRESS and any(
                     balances[chain][master_safe][asset_address] == 0
                     and balances[chain][address][asset_address] == 0
@@ -2392,6 +2408,10 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
+            total_requirements[chain].setdefault(master_eoa, {})[
+                ZERO_ADDRESS
+            ] = eoa_funding_values["topup"]
+
         is_refill_required = any(
             amount > 0
             for chain in refill_requirements.values()
@@ -2402,6 +2422,7 @@ class ServiceManager:
         return {
             "balances": balances,
             "bonded_assets": bonded_assets,
+            "total_requirements": total_requirements,
             "refill_requirements": refill_requirements,
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
