@@ -341,8 +341,8 @@ class TestService:
     @pytest.mark.parametrize(
         "staking_program_id", ["staking_program_1", "staking_program_2"]
     )
-    @pytest.mark.parametrize("use_mech_marketplace", [True])
-    @pytest.mark.parametrize("use_staking", [True])
+    @pytest.mark.parametrize("use_mech_marketplace", [True, False])
+    @pytest.mark.parametrize("use_staking", [True, False])
     @pytest.mark.parametrize(
         "get_config_json_data",
         [

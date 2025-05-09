@@ -26,6 +26,7 @@ import traceback
 import typing as t
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
@@ -42,8 +43,9 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
-from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
+from operate.bridge.bridge import BridgeManager
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT, OLAS, USDC
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
@@ -54,6 +56,8 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
+from operate.services.manage import ServiceManager
+from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
@@ -167,6 +171,15 @@ class OperateApp:
             password=self.password,
         )
         manager.setup()
+        return manager
+
+    def bridge_manager(self) -> BridgeManager:
+        """Load master wallet."""
+        manager = BridgeManager(
+            path=self._path / "bridge",
+            wallet_manager=self.wallet_manager,
+            # remove: quote_validity_period=24 * 60 * 60,  # TODO remove
+        )
         return manager
 
     def setup(self) -> None:
@@ -564,7 +577,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/wallet/safe/{chain}")
     @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
-        """Create wallet safe"""
+        """Get safe address"""
         chain = Chain.from_string(request.path_params["chain"])
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager
@@ -600,6 +613,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
+
+        logger.info(f"POST /api/wallet/safe {data=}")
+
         chain = Chain(data["chain"])
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager
@@ -622,20 +638,61 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
 
-        wallet.create_safe(  # pylint: disable=no-member
+        create_tx = wallet.create_safe(  # pylint: disable=no-member
             chain=chain,
             backup_owner=backup_owner,
         )
-        wallet.transfer(
-            to=t.cast(str, safes.get(chain)),
-            amount=int(data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])),
-            chain=chain,
-            from_safe=False,
+
+        safe_address = t.cast(str, safes.get(chain))
+
+        transfer_excess_assets = (
+            str(data.get("transfer_excess_assets", "false")).lower() == "true"
         )
+        initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
+
+        if transfer_excess_assets:
+            balances = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses=[wallet.address],
+                asset_addresses=[ZERO_ADDRESS, OLAS[Chain(chain)], USDC[Chain(chain)]],
+                raise_on_invalid_address=False,
+            )[wallet.address]
+
+            initial_funds = {}
+            keep_funds = {
+                ZERO_ADDRESS: ServiceManager._get_master_eoa_native_funding_values(
+                    master_safe_exists=False,
+                    chain=Chain(chain),
+                    balance=balances.get(ZERO_ADDRESS, 0),
+                )["topup"]
+            }
+            for asset, balance in balances.items():
+                if balance > 0:
+                    initial_funds[asset] = max(balance - keep_funds.get(asset, 0), 0)
+
+        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+
+        transfer_txs = {}
+        for asset, amount in initial_funds.items():
+            tx_hash = wallet.transfer_asset(
+                to=safe_address,
+                amount=int(amount),
+                chain=chain,
+                asset=asset,
+                from_safe=False,
+            )
+            transfer_txs[asset] = tx_hash
+
         return JSONResponse(
-            content={"safe": safes.get(chain), "message": "Safe created!"}
+            content={
+                "create_tx": create_tx,
+                "transfer_txs": transfer_txs,
+                "safe": safes.get(chain),
+                "message": "Safe created!",
+            }
         )
 
+    # TODO possibly unused endpoint
     @app.post("/api/wallet/safes")
     @with_retries
     async def _create_safes(request: Request) -> t.List[t.Dict]:
@@ -712,7 +769,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if "chain" not in data:
             return JSONResponse(
-                content={"error": "You need to specify a chain to updae a safe."},
+                content={"error": "You need to specify a chain to update a safe."},
                 status_code=401,
             )
 
@@ -791,7 +848,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
-        """Get the service balances."""
+        """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
 
         if not operate.service_manager().exists(service_config_id=service_config_id):
@@ -986,6 +1043,83 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         return JSONResponse(content={"error": None})
+
+    @app.post("/api/bridge/bridge_refill_requirements")
+    @with_retries
+    async def _bridge_refill_requirements(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        try:
+            data = await request.json()
+            output = operate.bridge_manager().bridge_refill_requirements(
+                requests_params=data["bridge_requests"],
+                force_update=data.get("force_update", False),
+            )
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/bridge/execute")
+    @with_retries
+    async def _bridge_execute(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        try:
+            data = await request.json()
+            output = operate.bridge_manager().execute_bundle(bundle_id=data["id"])
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/bridge/status/{id}")
+    @with_retries
+    async def _bridge_status(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+
+        quote_bundle_id = request.path_params["id"]
+
+        try:
+            output = operate.bridge_manager().get_status_json(bundle_id=quote_bundle_id)
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     return app
 

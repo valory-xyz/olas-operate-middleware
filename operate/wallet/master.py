@@ -129,7 +129,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -142,7 +142,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -154,7 +154,7 @@ class MasterWallet(LocalResource):
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer erc20/native assets to the given account."""
         raise NotImplementedError()
 
@@ -178,7 +178,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         backup_owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Create safe."""
         raise NotImplementedError()
 
@@ -241,7 +241,7 @@ class EthereumMasterWallet(MasterWallet):
 
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds from EOA wallet."""
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
         tx_helper = TxSettler(
@@ -278,22 +278,24 @@ class EthereumMasterWallet(MasterWallet):
             )
 
         setattr(tx_helper, "build", _build_tx)  # noqa: B010
-        tx_helper.transact(lambda x: x, "", kwargs={})
+        tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
+        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        return tx_hash
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds from safe wallet."""
-        if self.safes is not None:
-            transfer_from_safe(
-                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-                crypto=self.crypto,
-                safe=t.cast(str, self.safes[chain]),
-                to=to,
-                amount=amount,
-            )
-        else:
+        if self.safes is None:
             raise ValueError("Safes not initialized")
+
+        return transfer_from_safe(
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+            crypto=self.crypto,
+            safe=t.cast(str, self.safes[chain]),
+            to=to,
+            amount=amount,
+        )
 
     def _transfer_erc20_from_safe(
         self,
@@ -302,9 +304,12 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        """Transfer funds from safe wallet."""
-        transfer_erc20_from_safe(
+    ) -> t.Optional[str]:
+        """Transfer erc20 from safe wallet."""
+        if self.safes is None:
+            raise ValueError("Safes not initialized")
+
+        return transfer_erc20_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             token=token,
@@ -320,8 +325,44 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        raise NotImplementedError()
+    ) -> t.Optional[str]:
+        """Transfer erc20 from EOA wallet."""
+        wallet_address = self.address
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+        tx_settler = TxSettler(
+            ledger_api=ledger_api,
+            crypto=self.crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+
+        def _build_transfer_tx(  # pylint: disable=unused-argument
+            *args: t.Any, **kargs: t.Any
+        ) -> t.Dict:
+            # TODO Backport to OpenAEA
+            instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token,
+            )
+            tx = instance.functions.transfer(to, amount).build_transaction(
+                {
+                    "from": wallet_address,
+                    "gas": 1,
+                    "gasPrice": ledger_api.api.eth.gas_price,
+                    "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
+                }
+            )
+            return ledger_api.update_with_gas_estimate(
+                transaction=tx,
+                raise_on_try=False,
+            )
+
+        setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
+        tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
+        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        return tx_hash
 
     def transfer(
         self,
@@ -330,7 +371,7 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         if amount <= 0:
             return None
@@ -375,7 +416,7 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         if amount <= 0:
             return None
@@ -431,7 +472,7 @@ class EthereumMasterWallet(MasterWallet):
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """
         Transfer assets to the given account.
 
@@ -581,11 +622,11 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         backup_owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Create safe."""
         if chain in self.safe_chains:
-            return
-        safe, self.safe_nonce = create_gnosis_safe(
+            return None
+        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             backup_owner=backup_owner,
@@ -596,6 +637,7 @@ class EthereumMasterWallet(MasterWallet):
             self.safes = {}
         self.safes[chain] = safe
         self.store()
+        return tx_hash
 
     def update_backup_owner(
         self,
