@@ -170,6 +170,15 @@ class BridgeProvider(ABC):
                 "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
 
+        amount = to["amount"]
+        if (
+            not isinstance(amount, int)
+            or amount < 0
+        ):
+            raise ValueError(
+                "Invalid input: 'amount' must be a nonnegative integer."
+            )
+
         return BridgeRequest(
             params=params,
             bridge_provider_id=self.id(),
@@ -214,12 +223,16 @@ class BridgeProvider(ABC):
         total_native = 0
         total_token = 0
 
-        for _, tx in transactions:
+        for tx_label, tx in transactions:
             tx = self._update_with_gas_pricing(tx, ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
             total_native += tx_value + gas_fees
+
+            self.logger.info(f"[BRIDGE PROVIDER] Transaction {tx_label}: {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}")
+            self.logger.info(f"[BRIDGE PROVIDER] {ledger_api.api.eth.gas_price=}")
+            self.logger.info(f"[BRIDGE PROVIDER] {ledger_api.api.eth.get_block('latest').baseFeePerGas=}")
 
             if tx.get("to", "").lower() == from_token.lower() and tx.get(
                 "data", ""

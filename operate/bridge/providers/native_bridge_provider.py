@@ -79,6 +79,16 @@ ETH_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
 class NativeBridgeProvider(BridgeProvider):
     """Native bridge provider."""
 
+    def _validate(self, bridge_request: BridgeRequest) -> None:
+        """Validate the bridge request."""
+        from_chain = bridge_request.params["from"]["chain"]
+        to_chain = bridge_request.params["to"]["chain"]
+
+        if (from_chain, to_chain) not in NATIVE_BRIDGE_ENDPOINTS:
+            raise ValueError(f"Unsupported bridge from {from_chain} to {to_chain}.")
+
+        super()._validate(bridge_request)
+
     def create_request(self, params: t.Dict) -> BridgeRequest:
         """Create a bridge request."""
         from_chain = params["from"]["chain"]
@@ -113,7 +123,7 @@ class NativeBridgeProvider(BridgeProvider):
 
         from_chain = bridge_request.params["from"]["chain"]
         to_chain = bridge_request.params["to"]["chain"]
-        to_amount = int(bridge_request.params["to"]["amount"])
+        to_amount = bridge_request.params["to"]["amount"]
         bridge_eta = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"]
 
         message = None
@@ -150,7 +160,7 @@ class NativeBridgeProvider(BridgeProvider):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
-        to_amount = int(bridge_request.params["to"]["amount"])
+        to_amount = bridge_request.params["to"]["amount"]
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
 
@@ -196,7 +206,7 @@ class NativeBridgeProvider(BridgeProvider):
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
-        to_amount = int(bridge_request.params["to"]["amount"])
+        to_amount = bridge_request.params["to"]["amount"]
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
 
         if from_token == ZERO_ADDRESS:
@@ -228,6 +238,9 @@ class NativeBridgeProvider(BridgeProvider):
         self._validate(bridge_request)
 
         if not bridge_request.quote_data:
+            return []
+
+        if bridge_request.params["to"]["amount"] == 0:
             return []
 
         from_chain = bridge_request.params["from"]["chain"]
