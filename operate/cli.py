@@ -44,8 +44,8 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge import BridgeManager
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES
-from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
+from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT, OLAS, USDC
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
@@ -56,6 +56,8 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
+from operate.services.manage import ServiceManager
+from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 
@@ -642,7 +644,33 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         safe_address = t.cast(str, safes.get(chain))
+
+        transfer_excess_assets = (
+            str(data.get("transfer_excess_assets", "false")).lower() == "true"
+        )
         initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
+
+        if transfer_excess_assets:
+            balances = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses=[wallet.address],
+                asset_addresses=[ZERO_ADDRESS, OLAS[Chain(chain)], USDC[Chain(chain)]],
+                raise_on_invalid_address=False,
+            )[wallet.address]
+
+            initial_funds = {}
+            keep_funds = {
+                ZERO_ADDRESS: ServiceManager._get_master_eoa_native_funding_values(
+                    master_safe_exists=False,
+                    chain=Chain(chain),
+                    balance=balances.get(ZERO_ADDRESS, 0),
+                )["topup"]
+            }
+            for asset, balance in balances.items():
+                if balance > 0:
+                    initial_funds[asset] = max(balance - keep_funds.get(asset, 0), 0)
+
+        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
         transfer_txs = {}
         for asset, amount in initial_funds.items():
