@@ -170,14 +170,7 @@ class BridgeProvider(ABC):
                 "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
 
-        amount = to["amount"]
-        if (
-            not isinstance(amount, int)
-            or amount < 0
-        ):
-            raise ValueError(
-                "Invalid input: 'amount' must be a nonnegative integer."
-            )
+        to["amount"] = int(to["amount"])
 
         return BridgeRequest(
             params=params,

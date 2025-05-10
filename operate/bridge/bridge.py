@@ -207,7 +207,6 @@ class BridgeManager:
         for params in requests_params:
             from_chain = params["from"]["chain"]
             from_address = params["from"]["address"]
-            params["to"]["amount"] = int(params["to"]["amount"])
 
             wallet = self.wallet_manager.load(Chain(from_chain).ledger_type)
             wallet_address = wallet.address
