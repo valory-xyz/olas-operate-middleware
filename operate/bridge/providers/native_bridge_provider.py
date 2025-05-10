@@ -243,17 +243,14 @@ class NativeBridgeProvider(BridgeProvider):
         if bridge_request.params["to"]["amount"] == 0:
             return []
 
-        from_chain = bridge_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
+        from_ledger_api = self._from_ledger_api(bridge_request)
 
-        bridge_tx = self._get_bridge_tx(bridge_request, ledger_api)
+        bridge_tx = self._get_bridge_tx(bridge_request, from_ledger_api)
 
         if not bridge_tx:
             return []
 
-        approve_tx = self._get_approve_tx(bridge_request, ledger_api)
+        approve_tx = self._get_approve_tx(bridge_request, from_ledger_api)
 
         if approve_tx:
             bridge_tx["nonce"] = approve_tx["nonce"] + 1
@@ -303,10 +300,8 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_eta = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"])
 
         try:
-            chain = Chain(to_chain)
-            wallet = self.wallet_manager.load(chain.ledger_type)
-            ledger_api = wallet.ledger_api(chain)
-            w3 = ledger_api.api
+            to_ledger_api = self._to_ledger_api(bridge_request)
+            w3 = to_ledger_api.api
 
             if from_token == ZERO_ADDRESS:
                 topics = [
@@ -399,11 +394,8 @@ class NativeBridgeProvider(BridgeProvider):
         self._validate(bridge_request)
 
         # 1. Get timestamp of the transaction on the source chain
-        from_chain = bridge_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-        w3_source = ledger_api.api
+        to_ledger_api = self._from_ledger_api(bridge_request)
+        w3_source = to_ledger_api.api
 
         if not bridge_request.execution_data:
             raise RuntimeError(
@@ -422,11 +414,8 @@ class NativeBridgeProvider(BridgeProvider):
         tx_timestamp = block.timestamp
 
         # 2. Binary search the destination chain for block just before this timestamp
-        to_chain = bridge_request.params["to"]["chain"]
-        chain = Chain(to_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-        w3_dest = ledger_api.api
+        to_ledger_api = self._to_ledger_api(bridge_request)
+        w3_dest = to_ledger_api.api
 
         def find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
             latest = w3.eth.block_number
