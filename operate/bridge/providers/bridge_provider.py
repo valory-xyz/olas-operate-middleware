@@ -20,6 +20,7 @@
 """Bridge provider."""
 
 
+import copy
 import enum
 import logging
 import time
@@ -170,11 +171,30 @@ class BridgeProvider(ABC):
                 "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
 
+        params = copy.deepcopy(params)
+        params["to"]["amount"] = int(params["to"]["amount"])
+
         return BridgeRequest(
             params=params,
             bridge_provider_id=self.id(),
             id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
         )
+
+    def _from_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
+        """Get the from ledger api."""
+        from_chain = bridge_request.params["from"]["chain"]
+        chain = Chain(from_chain)
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain)
+        return ledger_api
+
+    def _to_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
+        """Get the from ledger api."""
+        from_chain = bridge_request.params["to"]["chain"]
+        chain = Chain(from_chain)
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        ledger_api = wallet.ledger_api(chain)
+        return ledger_api
 
     @abstractmethod
     def quote(self, bridge_request: BridgeRequest) -> None:
@@ -195,10 +215,7 @@ class BridgeProvider(ABC):
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
-
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
+        from_ledger_api = self._from_ledger_api(bridge_request)
 
         transactions = self._get_transactions(bridge_request)
         if not transactions:
@@ -214,12 +231,20 @@ class BridgeProvider(ABC):
         total_native = 0
         total_token = 0
 
-        for _, tx in transactions:
-            tx = self._update_with_gas_pricing(tx, ledger_api)
+        for tx_label, tx in transactions:
+            tx = self._update_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
             total_native += tx_value + gas_fees
+
+            self.logger.info(
+                f"[BRIDGE PROVIDER] Transaction {tx_label}: {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
+            )
+            self.logger.info(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.gas_price=}")
+            self.logger.info(
+                f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
+            )
 
             if tx.get("to", "").lower() == from_token.lower() and tx.get(
                 "data", ""
@@ -290,14 +315,13 @@ class BridgeProvider(ABC):
 
         try:
             self.logger.info(f"[BRIDGE] Executing bridge request {bridge_request.id}.")
-
             chain = Chain(bridge_request.params["from"]["chain"])
             wallet = self.wallet_manager.load(chain.ledger_type)
-            ledger_api = wallet.ledger_api(chain)
+            from_ledger_api = self._from_ledger_api(bridge_request)
             tx_settler = TxSettler(
-                ledger_api=ledger_api,
+                ledger_api=from_ledger_api,
                 crypto=wallet.crypto,
-                chain_type=chain,
+                chain_type=Chain(bridge_request.params["from"]["chain"]),
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,

@@ -660,7 +660,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             initial_funds = {}
             keep_funds = {
-                ZERO_ADDRESS: ServiceManager._get_master_eoa_native_funding_values(
+                ZERO_ADDRESS: ServiceManager.get_master_eoa_native_funding_values(
                     master_safe_exists=False,
                     chain=Chain(chain),
                     balance=balances.get(ZERO_ADDRESS, 0),
