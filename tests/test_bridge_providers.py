@@ -162,7 +162,6 @@ class TestLiFiBridge:
         bridge.execute(bridge_request=bridge_request)
         ed = bridge_request.execution_data
         assert ed is not None, "Missing execution data."
-        assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.message is not None, "Wrong execution data."
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
@@ -296,7 +295,6 @@ class TestLiFiBridge:
         bridge.execute(bridge_request=bridge_request)
         ed = bridge_request.execution_data
         assert ed is not None, "Missing execution data."
-        assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.message is not None, "Wrong execution data."
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
@@ -564,7 +562,6 @@ class TestNativeBridge:
         bridge.execute(bridge_request=bridge_request)
         ed = bridge_request.execution_data
         assert ed is not None, "Missing execution data."
-        assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.message is not None, "Wrong execution data."
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
@@ -698,7 +695,6 @@ class TestNativeBridge:
         bridge.execute(bridge_request=bridge_request)
         ed = bridge_request.execution_data
         assert ed is not None, "Missing execution data."
-        assert ed.bridge_status is None, "Wrong execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.message is not None, "Wrong execution data."
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
@@ -903,7 +899,6 @@ class TestNativeBridge:
         )
 
         execution_data = ExecutionData(
-            bridge_status=None,
             elapsed_time=0,
             message=None,
             timestamp=0,
@@ -953,7 +948,6 @@ class TestNativeBridge:
         )
 
         execution_data = ExecutionData(
-            bridge_status=None,
             elapsed_time=0,
             message=None,
             timestamp=0,

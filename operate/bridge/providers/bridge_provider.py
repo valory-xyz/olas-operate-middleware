@@ -68,7 +68,6 @@ class QuoteData(LocalResource):
 class ExecutionData(LocalResource):
     """ExecutionData"""
 
-    bridge_status: t.Optional[enum.Enum]
     elapsed_time: float
     message: t.Optional[str]
     timestamp: int
@@ -298,7 +297,6 @@ class BridgeProvider(ABC):
                 f"[LI.FI BRIDGE] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
             )
             execution_data = ExecutionData(
-                bridge_status=None,
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
                 timestamp=int(timestamp),
@@ -345,7 +343,6 @@ class BridgeProvider(ABC):
                 tx_status.append(tx_receipt.get("status", 0))
 
             execution_data = ExecutionData(
-                bridge_status=None,
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
@@ -361,7 +358,6 @@ class BridgeProvider(ABC):
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[BRIDGE] Error executing bridge request: {e}")
             execution_data = ExecutionData(
-                bridge_status=None,
                 elapsed_time=time.time() - timestamp,
                 message=f"Error executing quote: {str(e)}",
                 timestamp=int(timestamp),

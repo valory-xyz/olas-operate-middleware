@@ -309,7 +309,7 @@ class LiFiBridgeProvider(BridgeProvider):
             self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
             response_json = response.json()
-            execution.bridge_status = response_json.get(
+            lifi_status = response_json.get(
                 "status", str(LiFiTransactionStatus.UNKNOWN)
             )
             execution.message = response_json.get(
@@ -321,11 +321,11 @@ class LiFiBridgeProvider(BridgeProvider):
                 f"[LI.FI BRIDGE] Failed to update bridge status for {tx_hash}: {e}"
             )
 
-        if execution.bridge_status == LiFiTransactionStatus.DONE:
+        if lifi_status == LiFiTransactionStatus.DONE:
             bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
-        elif execution.bridge_status == LiFiTransactionStatus.FAILED:
+        elif lifi_status == LiFiTransactionStatus.FAILED:
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
-        elif execution.bridge_status == LiFiTransactionStatus.PENDING:
+        elif lifi_status == LiFiTransactionStatus.PENDING:
             bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
         else:
             bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
