@@ -28,7 +28,7 @@ import pytest
 from web3 import Web3
 
 from operate.cli import OperateApp
-from operate.constants import OPERATE_HOME
+from operate.constants import OPERATE
 from operate.operate_types import LedgerType
 
 from tests.conftest import random_string
@@ -59,7 +59,7 @@ class TestOperateApp:
         """Test operate.update_password() and operate.update_password_with_mnemonic()"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE_HOME,
+            home=tmp_path / OPERATE,
         )
         operate.setup()
         password1 = random_string()

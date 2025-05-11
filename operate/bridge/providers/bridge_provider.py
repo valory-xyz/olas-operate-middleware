@@ -190,7 +190,7 @@ class BridgeProvider(ABC):
 
     def _to_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = bridge_request.params["from"]["chain"]
+        from_chain = bridge_request.params["to"]["chain"]
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
@@ -214,7 +214,7 @@ class BridgeProvider(ABC):
 
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
-        from_token = .params["from"]["token"]
+        from_token = bridge_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
         transactions = self._get_transactions(bridge_request)
@@ -238,9 +238,13 @@ class BridgeProvider(ABC):
             tx_value = int(tx.get("value", 0))
             total_native += tx_value + gas_fees
 
-            self.logger.info(f"[BRIDGE PROVIDER] Transaction {tx_label}: {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}")
+            self.logger.info(
+                f"[BRIDGE PROVIDER] Transaction {tx_label}: {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
+            )
             self.logger.info(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.gas_price=}")
-            self.logger.info(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}")
+            self.logger.info(
+                f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
+            )
 
             if tx.get("to", "").lower() == from_token.lower() and tx.get(
                 "data", ""
@@ -311,6 +315,7 @@ class BridgeProvider(ABC):
 
         try:
             self.logger.info(f"[BRIDGE] Executing bridge request {bridge_request.id}.")
+            chain = Chain(bridge_request.params["from"]["chain"])
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(bridge_request)
             tx_settler = TxSettler(

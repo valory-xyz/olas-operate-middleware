@@ -2294,7 +2294,7 @@ class ServiceManager:
             # TODO this is a patch for the case when excess balance is in MasterEOA
             # and MasterSafe is not created (typically for onboarding bridging)
             if master_safe == "master_safe":
-                eoa_funding_values = self._get_master_eoa_native_funding_values(
+                eoa_funding_values = self.get_master_eoa_native_funding_values(
                     master_safe_exists=master_safe_exists,
                     chain=Chain(chain),
                     balance=balances[chain][master_eoa][ZERO_ADDRESS],
@@ -2391,7 +2391,7 @@ class ServiceManager:
                     allow_start_agent = False
 
             # Refill requirements for Master EOA
-            eoa_funding_values = self._get_master_eoa_native_funding_values(
+            eoa_funding_values = self.get_master_eoa_native_funding_values(
                 master_safe_exists=master_safe_exists,
                 chain=Chain(chain),
                 balance=balances[chain][master_eoa][ZERO_ADDRESS],
@@ -2664,9 +2664,10 @@ class ServiceManager:
         }
 
     @staticmethod
-    def _get_master_eoa_native_funding_values(
+    def get_master_eoa_native_funding_values(
         master_safe_exists: bool, chain: Chain, balance: int
     ) -> t.Dict:
+        """Get Master EOA native funding values."""
         funding_values = {
             True: {
                 Chain.ETHEREUM: {
