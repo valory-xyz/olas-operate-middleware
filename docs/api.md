@@ -336,10 +336,35 @@ Creates a Gnosis safe for given chain.
 <details>
   <summary>Request</summary>
 
-```js
+Using default new safe funding:
+
+```json
 {
-  "chain": Chain,
-  "fund_amount": 10000000000000000
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+}
+```
+
+Specify new safe funding:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "initial_funds": {
+    "0x0000000000000000000000000000000000000000": 1000000000000000000,
+    "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+  }
+}
+```
+
+Transfer all excess assets (except operational Master EOA balance) to the new safe:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "transfer_excess_assets": true
 }
 ```
 
@@ -352,15 +377,13 @@ Creates a Gnosis safe for given chain.
 
   ```json
   {
-    "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "safe_chains": [
-      "gnosis"
-    ],
-    "ledger_type": 0,
-    "safes": {
-      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
+    "create_tx": "0xac14dcd5938c71cd97388307c41477dc2f2a4e97b6b2641cef123a769898bd03",
+    "transfer_txs": {
+      "0x0000000000000000000000000000000000000000": "0x0036489a4a27b4ee1b7e4a37ae5597b895bf43e4cda25c7e6c0f1d02f8c098aa",
+      "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": "0x45304084049916535419d4b175074cdfcaeea59e3a5d34010854b3ac049261b2"
     },
-    "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+    "safe": "0x29e23F7705d849F368855947691cB133CD770752",
+    "message": "Safe created!"
   }
   ```
 
@@ -886,6 +909,183 @@ The refill requirements are computed based on the fund requirements present on t
   ```json
   {
     "error": "Service foo not found"
+  }
+  ```
+
+</details>
+
+---
+
+## Bridge
+
+### `POST /api/bridge/bridge_refill_requirements`
+
+Creates a quote bundle to fulfill the bridge requests and returns
+
+- the refill requirements on the source chain for bridging assets to target chains,
+- the quote bundle id to execute the request.
+
+<details>
+  <summary>Request</summary>
+
+```json
+  {
+    "bridge_requests": [
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000"
+        },
+        "to": {
+          "chain": "gnosis",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000",
+          "amount": 10000000000000000000
+        },
+      },
+      {
+        "from": {
+          "chain": "ethereum",
+          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
+          "token": "0x0000000000000000000000000000000000000000"
+        },
+        "to": {
+          "chain": "gnosis",
+          "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
+          "token": "0x0000000000000000000000000000000000000000",
+          "amount": 10000000000000000000
+        }
+      }
+    ],
+    "force_update": false
+  }
+```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
+    "balances": {
+      "ethereum": {
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 0,
+          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 0
+        }
+      }
+    },
+    "bridge_total_requirements": {
+      "ethereum": {
+        "0x0000000000000000000000000000000000000000": 10073082159280405,
+        "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+      }
+    },
+    "bridge_refill_requirements": {
+      "ethereum": {
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+          "0x0000000000000000000000000000000000000000": 10073082159280405,
+          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
+        }
+      }
+    },
+    "expiration_timestamp": 1743000251,
+    "is_refill_required": true,
+    "bridge_request_status": [
+      {
+        "message": "",
+        "status": "QUOTE_DONE",
+      },
+      {
+        "message": "",
+        "status": "QUOTE_DONE",
+      }
+    ],
+    "error": false
+  }
+  ```
+
+</details>
+
+---
+
+### `POST /api/bridge/execute`
+
+Executes a quote bundle. See [GET /api/bridge/status/{quote_bundle_id}](#get-apibridgestatusquote_bundle_id) for status values.
+
+<details>
+  <summary>Request</summary>
+
+```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d"
+  }
+```
+
+</details>
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
+    "bridge_request_status": [
+      {
+        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "message": null,
+        "status": "EXECUTION_DONE",
+        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+      },
+      {
+        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "message": null,
+        "status": "EXECUTION_PENDING",
+        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+      }
+    ],
+    "error": false
+  }
+  ```
+
+</details>
+
+---
+
+### `GET /api/bridge/status/{quote_bundle_id}`
+
+Gets the status of a quote bundle. Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.
+- `EXECUTION_FAILED`: Execution failed.
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
+    "bridge_request_status": [
+      {
+        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+        "message": null,
+        "status": "EXECUTION_DONE",
+        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
+      },
+      {
+        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+        "message": null,
+        "status": "EXECUTION_PENDING",
+        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
+      }
+    ],
+    "error": false
   }
   ```
 
