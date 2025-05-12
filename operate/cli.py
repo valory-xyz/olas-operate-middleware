@@ -590,7 +590,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/wallet/safe")
-    async def _create_safe(request: Request) -> t.List[t.Dict]:
+    async def _create_safe(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.List[t.Dict]:
         """Create wallet safe"""
         if operate.user_account is None:
             return JSONResponse(
@@ -637,7 +639,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         backup_owner = data.get("backup_owner")
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
-
 
         # A default nonzero balance might be required on the Safe after creation.
         # This is possibly required to estimate gas in protocol transactions.
