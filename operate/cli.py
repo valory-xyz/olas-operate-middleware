@@ -645,6 +645,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         safe_address = t.cast(str, safes.get(chain))
 
+        # A default nonzero balance might be required on the Safe after creation.
+        # This is possibly required to estimate gas in protocol transactions.
         initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
         transfer_excess_assets = (
             str(data.get("transfer_excess_assets", "false")).lower() == "true"
