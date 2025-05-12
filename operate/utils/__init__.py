@@ -21,6 +21,7 @@
 
 import shutil
 import time
+import typing as t
 from pathlib import Path
 
 
@@ -45,3 +46,50 @@ def create_backup(path: Path) -> Path:
         shutil.copy2(path, backup_path)
 
     return backup_path
+
+
+NestedDict = t.Union[int, t.Dict[str, "NestedDict"]]
+
+
+def merge_sum_dicts(*dicts: NestedDict) -> NestedDict:
+    """
+    Merge a list of nested dicts by summing all innermost `int` values.
+
+    Supports arbitrary depth; keys not in all dicts are still included.
+    Missing values are treated as 0.
+    All `dicts` must follow the same nesting structure.
+    """
+    if all(isinstance(o, int) for o in dicts):
+        return sum(dicts)  # type: ignore
+
+    result: t.Dict[str, NestedDict] = {}
+    for d in dicts:
+        for k, v in d.items():  # type: ignore
+            if isinstance(v, dict):
+                result[k] = merge_sum_dicts(result.get(k, {}), v)
+            elif isinstance(v, int):
+                result[k] = result.get(k, 0) + v  # type: ignore
+    return result
+
+
+def subtract_dicts(a: NestedDict, b: NestedDict) -> NestedDict:
+    """
+    Recursively subtract values in `b` from `a`. Negative results are upper bounded at 0.
+
+    Supports arbitrary depth; keys not in all dicts are still included.
+    Missing values are treated as 0.
+    All `dicts` must follow the same nesting structure.
+    """
+    if isinstance(a, int) and isinstance(b, int):
+        return max(a - b, 0)  # type: ignore
+
+    result = {}
+    for key in a.keys() | b.keys():  # type: ignore
+        va, vb = a.get(key), b.get(key)  # type: ignore
+        if isinstance(va, dict) or isinstance(vb, dict):
+            result[key] = subtract_dicts(
+                va if isinstance(va, dict) else {}, vb if isinstance(vb, dict) else {}
+            )
+        else:
+            result[key] = max((va or 0) - (vb or 0), 0)  # type: ignore
+    return result

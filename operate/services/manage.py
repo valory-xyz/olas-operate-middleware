@@ -50,6 +50,7 @@ from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
     OLAS,
     STAKING,
@@ -2668,41 +2669,7 @@ class ServiceManager:
         master_safe_exists: bool, chain: Chain, balance: int
     ) -> t.Dict:
         """Get Master EOA native funding values."""
-        funding_values = {
-            True: {
-                Chain.ETHEREUM: {
-                    "topup": 20000000000000000,
-                    "threshold": 10000000000000000,
-                },
-                Chain.GNOSIS: {
-                    "topup": 1500000000000000000,
-                    "threshold": 750000000000000000,
-                },
-                Chain.OPTIMISTIC: {
-                    "topup": 5000000000000000,
-                    "threshold": 2500000000000000,
-                },
-                Chain.BASE: {"topup": 5000000000000000, "threshold": 2500000000000000},
-                Chain.MODE: {"topup": 500000000000000, "threshold": 250000000000000},
-            },
-            False: {
-                Chain.ETHEREUM: {
-                    "topup": 20000000000000000,
-                    "threshold": 20000000000000000,
-                },
-                Chain.GNOSIS: {
-                    "topup": 1500000000000000000,
-                    "threshold": 1500000000000000000,
-                },
-                Chain.OPTIMISTIC: {
-                    "topup": 5000000000000000,
-                    "threshold": 5000000000000000,
-                },
-                Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-                Chain.MODE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-            },
-        }
 
-        values = funding_values[master_safe_exists][chain]
-        values["balance"] = balance
-        return values
+        topup = DEFAULT_MASTER_EOA_FUNDS[chain][ZERO_ADDRESS]
+        threshold = topup / 2 if master_safe_exists else topup
+        return {"topup": topup, "threshold": threshold, "balance": balance}

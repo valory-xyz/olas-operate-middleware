@@ -44,8 +44,12 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge import BridgeManager
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
-from operate.ledger.profiles import DEFAULT_NEW_SAFE_FUNDS_AMOUNT, OLAS, USDC
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS, ZERO_ADDRESS
+from operate.ledger.profiles import (
+    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_NEW_SAFE_FUNDS,
+    ERC20_TOKENS,
+), OLAS, USDC
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
@@ -56,6 +60,8 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
+from operate.utils import subtract_dicts
+from operate.utils.gnosis import get_assets_balances
 from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
@@ -597,8 +603,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/wallet/safe")
-    @with_retries
-    async def _create_safe(request: Request) -> t.List[t.Dict]:
+    async def _create_safe(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> t.List[t.Dict]:
         """Create wallet safe"""
         if operate.user_account is None:
             return JSONResponse(
@@ -613,6 +620,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         data = await request.json()
+
+        if "initial_funds" in data and "transfer_excess_assets" in data:
+            return JSONResponse(
+                content={
+                    "error": "You can only specify 'initial_funds' or 'transfer_excess_assets', but not both."
+                },
+                status_code=400,
+            )
 
         logger.info(f"POST /api/wallet/safe {data=}")
 
@@ -638,115 +653,58 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
 
-        create_tx = wallet.create_safe(  # pylint: disable=no-member
-            chain=chain,
-            backup_owner=backup_owner,
-        )
-
-        safe_address = t.cast(str, safes.get(chain))
-
+        # A default nonzero balance might be required on the Safe after creation.
+        # This is possibly required to estimate gas in protocol transactions.
+        initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
         transfer_excess_assets = (
             str(data.get("transfer_excess_assets", "false")).lower() == "true"
         )
-        initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
 
         if transfer_excess_assets:
+            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
             balances = get_assets_balances(
                 ledger_api=ledger_api,
-                addresses=[wallet.address],
-                asset_addresses=[ZERO_ADDRESS, OLAS[Chain(chain)], USDC[Chain(chain)]],
+                addresses={wallet.address},
+                asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-
-            initial_funds = {}
-            keep_funds = {
-                ZERO_ADDRESS: ServiceManager.get_master_eoa_native_funding_values(
-                    master_safe_exists=False,
-                    chain=Chain(chain),
-                    balance=balances.get(ZERO_ADDRESS, 0),
-                )["topup"]
-            }
-            for asset, balance in balances.items():
-                if balance > 0:
-                    initial_funds[asset] = max(balance - keep_funds.get(asset, 0), 0)
+            initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
-        transfer_txs = {}
-        for asset, amount in initial_funds.items():
-            tx_hash = wallet.transfer_asset(
-                to=safe_address,
-                amount=int(amount),
+        try:
+            create_tx = wallet.create_safe(  # pylint: disable=no-member
                 chain=chain,
-                asset=asset,
-                from_safe=False,
-            )
-            transfer_txs[asset] = tx_hash
-
-        return JSONResponse(
-            content={
-                "create_tx": create_tx,
-                "transfer_txs": transfer_txs,
-                "safe": safes.get(chain),
-                "message": "Safe created!",
-            }
-        )
-
-    # TODO possibly unused endpoint
-    @app.post("/api/wallet/safes")
-    @with_retries
-    async def _create_safes(request: Request) -> t.List[t.Dict]:
-        """Create wallet safes"""
-        if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Cannot create safe; User account does not exist!"},
-                status_code=400,
+                backup_owner=backup_owner,
             )
 
-        if operate.password is None:
-            return JSONResponse(
-                content={"error": "You need to login before creating a safe"},
-                status_code=401,
-            )
+            safe_address = t.cast(str, safes.get(chain))
 
-        data = await request.json()
-        chains = [Chain(chain_str) for chain_str in data["chains"]]
-        # check that all chains are supported
-        for chain in chains:
-            ledger_type = chain.ledger_type
-            manager = operate.wallet_manager
-            if not manager.exists(ledger_type=ledger_type):
-                return JSONResponse(
-                    content={
-                        "error": f"A wallet of type {ledger_type} does not exist for chain {chain}."
-                    }
+            transfer_txs = {}
+            for asset, amount in initial_funds.items():
+                tx_hash = wallet.transfer_asset(
+                    to=safe_address,
+                    amount=int(amount),
+                    chain=chain,
+                    asset=asset,
+                    from_safe=False,
                 )
+                transfer_txs[asset] = tx_hash
 
-        # mint the safes
-        for chain in chains:
-            ledger_type = chain.ledger_type
-            manager = operate.wallet_manager
-
-            wallet = manager.load(ledger_type=ledger_type)
-            if wallet.safes is not None and wallet.safes.get(chain) is not None:
-                logger.info(f"Safe already exists for chain {chain}")
-                continue
-
-            safes = t.cast(t.Dict[Chain, str], wallet.safes)
-            wallet.create_safe(  # pylint: disable=no-member
-                chain=chain,
-                owner=data.get("backup_owner"),
+            return JSONResponse(
+                content={
+                    "create_tx": create_tx,
+                    "transfer_txs": transfer_txs,
+                    "safe": safes.get(chain),
+                    "message": "Safe created!",
+                }
             )
-            wallet.transfer(
-                to=t.cast(str, safes.get(chain)),
-                amount=int(
-                    data.get("fund_amount", DEFAULT_NEW_SAFE_FUNDS_AMOUNT[chain])
-                ),
-                chain=chain,
-                from_safe=False,
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e), "traceback": traceback.format_exc()},
             )
-
-        return JSONResponse(content={"safes": safes, "message": "Safes created."})
 
     @app.put("/api/wallet/safe")
     @with_retries

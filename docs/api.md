@@ -336,6 +336,17 @@ Creates a Gnosis safe for given chain.
 <details>
   <summary>Request</summary>
 
+Using default new safe funding:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+}
+```
+
+Specify new safe funding:
+
 ```json
 {
   "chain": "gnosis",
@@ -344,6 +355,16 @@ Creates a Gnosis safe for given chain.
     "0x0000000000000000000000000000000000000000": 1000000000000000000,
     "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
   }
+}
+```
+
+Transfer all excess assets (except operational Master EOA balance) to the new safe:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "transfer_excess_assets": true
 }
 ```
 

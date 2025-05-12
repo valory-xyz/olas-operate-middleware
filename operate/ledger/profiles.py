@@ -144,23 +144,6 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
 
 DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"
 
-DEFAULT_NEW_SAFE_FUNDS_AMOUNT: t.Dict[Chain, t.Dict[str, int]] = {
-    Chain.GNOSIS: {
-        ZERO_ADDRESS: int(1e18),
-    },
-    Chain.OPTIMISTIC: {
-        ZERO_ADDRESS: int(1e15 / 4),
-    },
-    Chain.BASE: {
-        ZERO_ADDRESS: int(1e15 / 4),
-    },
-    Chain.ETHEREUM: {
-        ZERO_ADDRESS: int(1e15 / 4),
-    },
-    Chain.MODE: {
-        ZERO_ADDRESS: int(1e15 / 4),
-    },
-}
 
 # ERC20 token addresses
 OLAS: t.Dict[Chain, str] = {
@@ -194,6 +177,32 @@ WRAPPED_NATIVE_ASSET = {
 }
 
 ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+
+DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
+    Chain.BASE: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.ETHEREUM: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.GNOSIS: {
+        ZERO_ADDRESS: int(1e18),
+    },
+    Chain.MODE: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.OPTIMISTIC: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
+}
+
+DEFAULT_MASTER_EOA_FUNDS = {
+    Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+    Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
+    Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+    Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
+    Chain.OPTIMISTIC: {ZERO_ADDRESS: 5_000_000_000_000_000},
+}
 
 
 def get_staking_contract(
