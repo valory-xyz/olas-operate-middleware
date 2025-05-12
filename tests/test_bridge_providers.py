@@ -898,7 +898,7 @@ class TestNativeBridge:
             execution_data=execution_data,
         )
 
-        bridge._update_execution_status(bridge_request)
+        bridge.get_status_json(bridge_request)
 
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
@@ -948,7 +948,106 @@ class TestNativeBridge:
             execution_data=execution_data,
         )
 
-        bridge._update_execution_status(bridge_request)
+        bridge.get_status_json(bridge_request)
+
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong execution status."
+
+        params = {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 30750000000000000,
+            },
+        }
+
+        quote_data = QuoteData(
+            attempts=0,
+            bridge_eta=0,
+            elapsed_time=0,
+            message=None,
+            response=None,
+            response_status=0,
+            timestamp=0,
+        )
+
+        execution_data = ExecutionData(
+            elapsed_time=0,
+            message=None,
+            timestamp=0,
+            tx_hashes=[
+                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba"
+            ],
+            tx_status=[1],
+        )
+
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=NativeBridgeProvider.id(),
+            id="b-7ca71220-4336-414f-985e-bdfe11707c71",
+            status=BridgeRequestStatus.EXECUTION_PENDING,
+            quote_data=quote_data,
+            execution_data=execution_data,
+        )
+
+        bridge.get_status_json(bridge_request)
+
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong execution status."
+
+        params = {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "amount": 100000000000000000000,
+            },
+        }
+
+        quote_data = QuoteData(
+            attempts=0,
+            bridge_eta=0,
+            elapsed_time=0,
+            message=None,
+            response=None,
+            response_status=0,
+            timestamp=0,
+        )
+
+        execution_data = ExecutionData(
+            elapsed_time=0,
+            message=None,
+            timestamp=0,
+            tx_hashes=[
+                "0x0de7870695400316eb3f71b3ea7d0e44cd4890dc6aa33b9ffdb5d35b05852232",
+                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+            ],
+            tx_status=[1, 1],
+        )
+
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=NativeBridgeProvider.id(),
+            id="b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+            status=BridgeRequestStatus.EXECUTION_PENDING,
+            quote_data=quote_data,
+            execution_data=execution_data,
+        )
+
+        bridge.get_status_json(bridge_request)
 
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
