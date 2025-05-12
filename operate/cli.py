@@ -638,12 +638,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if backup_owner:
             backup_owner = ledger_api.api.to_checksum_address(backup_owner)
 
-        create_tx = wallet.create_safe(  # pylint: disable=no-member
-            chain=chain,
-            backup_owner=backup_owner,
-        )
-
-        safe_address = t.cast(str, safes.get(chain))
 
         # A default nonzero balance might be required on the Safe after creation.
         # This is possibly required to estimate gas in protocol transactions.
@@ -663,6 +657,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+
+        create_tx = wallet.create_safe(  # pylint: disable=no-member
+            chain=chain,
+            backup_owner=backup_owner,
+        )
+
+        safe_address = t.cast(str, safes.get(chain))
 
         transfer_txs = {}
         for asset, amount in initial_funds.items():
