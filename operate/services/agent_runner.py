@@ -10,10 +10,10 @@ import requests
 
 AGENTS_SUPPORTED = {
     "valory": {
-        "trader": "https://github.com/valory-xyz/trader/releases/latest/download/",
-        "optimus": "https://github.com/valory-xyz/optimus/releases/latest/download/",
+        "trader": "https://github.com/valory-xyz/trader/releases/download/v0.0.101/",
+        "optimus": "https://github.com/valory-xyz/optimus/releases/download/v0.0.101/",
     },
-    "dvilela": {"memeooorr": "https://github.com/dvilelaf/meme-ooorr/releases/latest/download/"},
+    "dvilela": {"memeooorr": "https://github.com/valory-xyz/meme-ooorr-test/releases/download/v0.0.3/"},
 }
 
 
