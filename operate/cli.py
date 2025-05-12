@@ -611,7 +611,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": "You can only specify 'initial_funds' or 'transfer_excess_assets', but not both."
-                }
+                },
+                status_code=400,
             )
 
         logger.info(f"POST /api/wallet/safe {data=}")
@@ -662,6 +663,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             chain=chain,
             backup_owner=backup_owner,
         )
+
+
+
 
         safe_address = t.cast(str, safes.get(chain))
 
