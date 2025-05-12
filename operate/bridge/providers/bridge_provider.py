@@ -328,6 +328,10 @@ class BridgeProvider(ABC):
             tx_status = []
 
             for tx_label, tx in txs:
+
+                # TODO backport to wallet execute
+                # Wallet should return hash
+                # Here we re-check the receipt.
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
                 setattr(  # noqa: B010
                     tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023

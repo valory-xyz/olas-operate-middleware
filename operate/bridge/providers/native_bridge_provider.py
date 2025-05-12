@@ -283,6 +283,7 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
+        # TODO check from the RPC, not stored value.
         if execution_data.tx_status and any(
             status == 0 for status in execution_data.tx_status
         ):
@@ -347,13 +348,13 @@ class NativeBridgeProvider(BridgeProvider):
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
                 event_found = self._is_event_in_range(
-                    w3,
-                    to_bridge,
-                    from_block,
-                    to_block,
-                    topics,
-                    non_indexed_types,
-                    non_indexed_values,
+                    w3=w3,
+                    contract_address=to_bridge,
+                    from_block=from_block,
+                    to_block=to_block,
+                    topics=topics,
+                    non_indexed_types=non_indexed_types,
+                    non_indexed_values=non_indexed_values,
                 )
                 if event_found:
                     self.logger.info(
@@ -421,4 +422,4 @@ class NativeBridgeProvider(BridgeProvider):
 
     def _get_explorer_link(self, tx_hash: str) -> str:
         """Get the explorer link for a transaction."""
-        return f"https://etherscan.io/tx/{tx_hash}"
+        return f"https://etherscan.io/tx/{tx_hash}"  # TODO this bridge should return None here - discuss with FE

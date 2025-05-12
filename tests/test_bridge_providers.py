@@ -466,6 +466,8 @@ class TestNativeBridge:
         }
 
         bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
+
+        # Create
         bridge_request = bridge.create_request(params)
         expected_request = BridgeRequest(
             params={
@@ -499,37 +501,37 @@ class TestNativeBridge:
 
         assert bridge_request == expected_request, "Wrong bridge request."
 
+        # Quote
+        expected_quote_data = QuoteData(
+            attempts=0,
+            bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
+            elapsed_time=0,
+            message=MESSAGE_QUOTE_ZERO,
+            response=None,
+            response_status=0,
+            timestamp=int(time.time()),
+        )
+        expected_request.quote_data = expected_quote_data
+        expected_request.status = BridgeRequestStatus.QUOTE_DONE
+
         for _ in range(2):
             timestamp = int(time.time())
             bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.attempts == 0, "Wrong quote data."
-            assert (
-                qd.bridge_eta
-                == NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"]
-            ), "Wrong quote data."
-            assert qd.elapsed_time == 0, "Wrong quote data."
-            assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-            assert qd.response is None, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
-            ), "Wrong status."
+            expected_quote_data.timestamp = bridge_request.quote_data.timestamp
+            assert bridge_request == expected_request, "Wrong bridge request."
+            sj = bridge.get_status_json(bridge_request)
+            expected_sj = {
+                "message": MESSAGE_QUOTE_ZERO,
+                "status": BridgeRequestStatus.QUOTE_DONE.value,
+            }
+            diff = DeepDiff(sj, expected_sj)
+            if diff:
+                print(diff)
 
-        sj = bridge.get_status_json(bridge_request)
-        expected_sj = {
-            "message": MESSAGE_QUOTE_ZERO,
-            "status": BridgeRequestStatus.QUOTE_DONE.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
+            assert not diff, "Wrong status."
+            assert bridge_request == expected_request, "Wrong bridge request."
 
-        assert not diff, "Wrong status."
-        assert bridge_request.quote_data is not None, "Missing quote data."
-
+        # Get requirements
         br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "ethereum": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}}
@@ -539,45 +541,23 @@ class TestNativeBridge:
             print(diff)
 
         assert not diff, "Wrong bridge requirements."
+        assert bridge_request == expected_request, "Wrong bridge request."
 
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.attempts == 0, "Wrong quote data."
-        assert (
-            qd.bridge_eta == NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"]
-        ), "Wrong quote data."
-        assert qd.elapsed_time == 0, "Wrong quote data."
-        assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-        assert qd.response is None, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        # Execute
+        expected_execution_data = ExecutionData(
+            elapsed_time=0,
+            message=f"{MESSAGE_EXECUTION_SKIPPED} (bridge_request.status=<BridgeRequestStatus.QUOTE_DONE: 'QUOTE_DONE'>)",
+            timestamp=int(timestamp),
+            tx_hashes=None,
+            tx_status=None,
+        )
+        expected_request.execution_data = expected_execution_data
+        expected_request.status = BridgeRequestStatus.EXECUTION_DONE
 
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-
-        timestamp = int(time.time())
         bridge.execute(bridge_request=bridge_request)
-        ed = bridge_request.execution_data
-        assert ed is not None, "Missing execution data."
-        assert ed.elapsed_time == 0, "Wrong execution data."
-        assert ed.message is not None, "Wrong execution data."
-        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
-        assert timestamp <= ed.timestamp, "Wrong quote data."
-        assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.tx_hashes is None, "Wrong execution data."
-        assert ed.tx_status is None, "Wrong execution data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong status."
+        expected_execution_data.timestamp = bridge_request.execution_data.timestamp
 
-        bridge._update_execution_status(bridge_request)
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong status."
-
+        assert bridge_request == expected_request, "Wrong bridge request."
         sj = bridge.get_status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
@@ -591,6 +571,7 @@ class TestNativeBridge:
             print(diff)
 
         assert not diff, "Wrong status."
+        assert bridge_request == expected_request, "Wrong bridge request."
 
     def test_bridge_error(
         self,
