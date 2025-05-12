@@ -68,12 +68,14 @@ L2_STANDARD_BRIDGE_CONTRACT = t.cast(
     ),
 )
 
-ERC20_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
-    text="ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
-).hex()
 ETH_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
     text="ETHBridgeFinalized(address,address,uint256,bytes)"
 ).hex()
+ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["uint256", "bytes"]
+ERC20_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
+    text="ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
+).hex()
+ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["address", "uint256", "bytes"]
 
 
 class NativeBridgeProvider(BridgeProvider):
@@ -283,13 +285,6 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        # TODO check from the RPC, not stored value.
-        if execution_data.tx_status and any(
-            status == 0 for status in execution_data.tx_status
-        ):
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
-            return
-
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
@@ -302,12 +297,19 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_eta = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"])
 
         try:
+            from_w3 = self._from_ledger_api(bridge_request).api
+
+            for tx_hash in execution_data.tx_hashes:
+                receipt = from_w3.eth.get_transaction_receipt(tx_hash)
+                if receipt.status == 0:
+                    bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+                    return
+
             # Get the timestamp of the bridge_tx on the 'from' chain
-            from_ledger_api = self._from_ledger_api(bridge_request)
-            bridge_tx_receipt = from_ledger_api.api.eth.get_transaction_receipt(
+            bridge_tx_receipt = from_w3.eth.get_transaction_receipt(
                 bridge_request.execution_data.tx_hashes[-1]
             )
-            bridge_tx_block = from_ledger_api.api.eth.get_block(
+            bridge_tx_block = from_w3.eth.get_block(
                 bridge_tx_receipt.blockNumber
             )
             bridge_tx_ts = bridge_tx_block.timestamp
@@ -319,7 +321,7 @@ class NativeBridgeProvider(BridgeProvider):
                     "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
                     "0x" + to_address.lower()[2:].rjust(64, "0"),  # from
                 ]
-                non_indexed_types = ["uint256", "bytes"]
+                non_indexed_types = ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES
                 non_indexed_values = [
                     to_amount,  # amount
                     Web3.keccak(text=bridge_request.id),  # extraData
@@ -331,7 +333,7 @@ class NativeBridgeProvider(BridgeProvider):
                     "0x" + from_token.lower()[2:].rjust(64, "0"),  # remoteToken
                     "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
                 ]
-                non_indexed_types = ["address", "uint256", "bytes"]
+                non_indexed_types = ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES
                 non_indexed_values = [
                     to_address.lower(),  # to
                     to_amount,  # amount
@@ -339,16 +341,15 @@ class NativeBridgeProvider(BridgeProvider):
                 ]
 
             # Find the event on the 'to' chain
-            to_ledger_api = self._to_ledger_api(bridge_request)
-            w3 = to_ledger_api.api
-            starting_block = self._find_block_before_timestamp(w3, bridge_tx_ts)
-            starting_block_ts = w3.eth.get_block(starting_block).timestamp
-            latest_block = w3.eth.block_number
+            to_w3 = self._to_ledger_api(bridge_request).api
+            starting_block = self._find_block_before_timestamp(to_w3, bridge_tx_ts)
+            starting_block_ts = to_w3.eth.get_block(starting_block).timestamp
+            latest_block = to_w3.eth.block_number
 
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
                 event_found = self._is_event_in_range(
-                    w3=w3,
+                    w3=to_w3,
                     contract_address=to_bridge,
                     from_block=from_block,
                     to_block=to_block,
@@ -363,7 +364,7 @@ class NativeBridgeProvider(BridgeProvider):
                     bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
                     return
 
-                last_block_ts = w3.eth.get_block(to_block).timestamp
+                last_block_ts = to_w3.eth.get_block(to_block).timestamp
                 if last_block_ts > starting_block_ts + bridge_eta * 2:
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution failed for {bridge_request.id}: bridge exceeds 2*ETA."

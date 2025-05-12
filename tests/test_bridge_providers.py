@@ -168,7 +168,6 @@ class TestLiFiBridge:
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hashes is None, "Wrong execution data."
-        assert ed.tx_status is None, "Wrong execution data."
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
         ), "Wrong status."
@@ -301,7 +300,6 @@ class TestLiFiBridge:
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hashes is None, "Wrong execution data."
-        assert ed.tx_status is None, "Wrong execution data."
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
         ), "Wrong status."
@@ -549,7 +547,6 @@ class TestNativeBridge:
             message=f"{MESSAGE_EXECUTION_SKIPPED} (bridge_request.status=<BridgeRequestStatus.QUOTE_DONE: 'QUOTE_DONE'>)",
             timestamp=int(timestamp),
             tx_hashes=None,
-            tx_status=None,
         )
         expected_request.execution_data = expected_execution_data
         expected_request.status = BridgeRequestStatus.EXECUTION_DONE
@@ -682,7 +679,6 @@ class TestNativeBridge:
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.tx_hashes is None, "Wrong execution data."
-        assert ed.tx_status is None, "Wrong execution data."
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
         ), "Wrong status."
@@ -886,7 +882,6 @@ class TestNativeBridge:
             tx_hashes=[
                 "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd"
             ],
-            tx_status=[1],
         )
 
         bridge_request = BridgeRequest(
@@ -936,7 +931,6 @@ class TestNativeBridge:
                 "0x0b269344009722d1a8f7ee10c03117dc5e7f833d6ba403b140b580c1016645ff",
                 "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
             ],
-            tx_status=[1, 1],
         )
 
         bridge_request = BridgeRequest(
@@ -985,7 +979,6 @@ class TestNativeBridge:
             tx_hashes=[
                 "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba"
             ],
-            tx_status=[1],
         )
 
         bridge_request = BridgeRequest(
@@ -1035,7 +1028,6 @@ class TestNativeBridge:
                 "0x0de7870695400316eb3f71b3ea7d0e44cd4890dc6aa33b9ffdb5d35b05852232",
                 "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
             ],
-            tx_status=[1, 1],
         )
 
         bridge_request = BridgeRequest(

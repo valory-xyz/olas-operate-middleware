@@ -72,7 +72,6 @@ class ExecutionData(LocalResource):
     message: t.Optional[str]
     timestamp: int
     tx_hashes: t.Optional[t.List[str]]
-    tx_status: t.Optional[t.List[int]]
 
 
 class BridgeRequestStatus(str, enum.Enum):
@@ -301,7 +300,6 @@ class BridgeProvider(ABC):
                 message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
                 timestamp=int(timestamp),
                 tx_hashes=None,
-                tx_status=None,
             )
             bridge_request.execution_data = execution_data
 
@@ -325,7 +323,6 @@ class BridgeProvider(ABC):
                 sleep=ON_CHAIN_INTERACT_SLEEP,
             )
             tx_hashes = []
-            tx_status = []
 
             for tx_label, tx in txs:
 
@@ -344,14 +341,12 @@ class BridgeProvider(ABC):
                 )
                 self.logger.info(f"[BRIDGE] Transaction {tx_label} settled.")
                 tx_hashes.append(tx_receipt.get("transactionHash", "").hex())
-                tx_status.append(tx_receipt.get("status", 0))
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
                 tx_hashes=tx_hashes,
-                tx_status=tx_status,
             )
             bridge_request.execution_data = execution_data
             if len(tx_hashes) == len(txs):
@@ -366,7 +361,6 @@ class BridgeProvider(ABC):
                 message=f"Error executing quote: {str(e)}",
                 timestamp=int(timestamp),
                 tx_hashes=None,
-                tx_status=None,
             )
             bridge_request.execution_data = execution_data
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
