@@ -32,6 +32,7 @@ from typing import cast
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 
+from merge_dicts import merge_sum_dicts, subtract_dicts
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
 from operate.bridge.providers.native_bridge_provider import (
@@ -242,14 +243,7 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements: t.Dict = {}
-        for from_chain, from_addresses in bridge_total_requirements.items():
-            for from_address, from_tokens in from_addresses.items():
-                for from_token, from_amount in from_tokens.items():
-                    balance = balances[from_chain][from_address][from_token]
-                    bridge_refill_requirements.setdefault(from_chain, {}).setdefault(
-                        from_address, {}
-                    )[from_token] = max(from_amount - balance, 0)
+        bridge_refill_requirements = subtract_dicts(bridge_total_requirements, balances)
 
         is_refill_required = any(
             amount > 0
@@ -341,23 +335,12 @@ class BridgeManager:
 
     def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
         """Sum bridge requirements."""
-        bridge_total_requirements: t.Dict = {}
+        requirements = []
         for request in bundle.bridge_requests:
-            if not request.quote_data:
-                continue
             bridge = self._bridge_providers[request.bridge_provider_id]
-            bridge_requirements = bridge.bridge_requirements(request)
-            for from_chain, from_addresses in bridge_requirements.items():
-                for from_address, from_tokens in from_addresses.items():
-                    for from_token, from_amount in from_tokens.items():
-                        bridge_total_requirements.setdefault(from_chain, {}).setdefault(
-                            from_address, {}
-                        ).setdefault(from_token, 0)
-                        bridge_total_requirements[from_chain][from_address][
-                            from_token
-                        ] += from_amount
+            requirements.append(bridge.bridge_requirements(request))
 
-        return bridge_total_requirements
+        return merge_sum_dicts(requirements)
 
     def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
         """Update the bundle with the quotes."""

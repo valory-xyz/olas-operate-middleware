@@ -44,12 +44,12 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge import BridgeManager
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS, ZERO_ADDRESS
+from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
-), OLAS, USDC
+)
 from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
