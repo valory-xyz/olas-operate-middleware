@@ -590,7 +590,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/wallet/safe")
-    @with_retries
     async def _create_safe(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
         if operate.user_account is None:
@@ -659,32 +658,39 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
-        create_tx = wallet.create_safe(  # pylint: disable=no-member
-            chain=chain,
-            backup_owner=backup_owner,
-        )
-
-        safe_address = t.cast(str, safes.get(chain))
-
-        transfer_txs = {}
-        for asset, amount in initial_funds.items():
-            tx_hash = wallet.transfer_asset(
-                to=safe_address,
-                amount=int(amount),
+        try:
+            create_tx = wallet.create_safe(  # pylint: disable=no-member
                 chain=chain,
-                asset=asset,
-                from_safe=False,
+                backup_owner=backup_owner,
             )
-            transfer_txs[asset] = tx_hash
 
-        return JSONResponse(
-            content={
-                "create_tx": create_tx,
-                "transfer_txs": transfer_txs,
-                "safe": safes.get(chain),
-                "message": "Safe created!",
-            }
-        )
+            safe_address = t.cast(str, safes.get(chain))
+
+            transfer_txs = {}
+            for asset, amount in initial_funds.items():
+                tx_hash = wallet.transfer_asset(
+                    to=safe_address,
+                    amount=int(amount),
+                    chain=chain,
+                    asset=asset,
+                    from_safe=False,
+                )
+                transfer_txs[asset] = tx_hash
+
+            return JSONResponse(
+                content={
+                    "create_tx": create_tx,
+                    "transfer_txs": transfer_txs,
+                    "safe": safes.get(chain),
+                    "message": "Safe created!",
+                }
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(traceback.format_exc())
+            return JSONResponse(
+                status_code=500,
+                content={"error": str(e), "traceback": traceback.format_exc()},
+            )
 
     @app.put("/api/wallet/safe")
     @with_retries
