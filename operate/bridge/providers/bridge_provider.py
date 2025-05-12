@@ -97,9 +97,9 @@ class BridgeRequest(LocalResource):
     params: t.Dict
     bridge_provider_id: str
     id: str
-    status: BridgeRequestStatus = BridgeRequestStatus.CREATED
-    quote_data: t.Optional[QuoteData] = None
-    execution_data: t.Optional[ExecutionData] = None
+    status: BridgeRequestStatus
+    quote_data: t.Optional[QuoteData]
+    execution_data: t.Optional[ExecutionData]
 
 
 class BridgeProvider(ABC):
@@ -176,6 +176,9 @@ class BridgeProvider(ABC):
             params=params,
             bridge_provider_id=self.id(),
             id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED
         )
 
     def _from_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
