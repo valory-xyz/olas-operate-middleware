@@ -664,9 +664,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             backup_owner=backup_owner,
         )
 
-
-
-
         safe_address = t.cast(str, safes.get(chain))
 
         transfer_txs = {}
