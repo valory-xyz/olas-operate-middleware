@@ -57,7 +57,13 @@ from operate.ledger.profiles import (
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
 )
-from operate.operate_types import Chain, FundingValues, LedgerConfig, ServiceTemplate
+from operate.operate_types import (
+    Chain,
+    FundingValues,
+    LedgerConfig,
+    ServiceEnvProvisionType,
+    ServiceTemplate,
+)
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
@@ -623,14 +629,25 @@ class ServiceManager:
                     )
 
                     use_mech_marketplace = True
-                    agent_mech = priority_mech_address = service.env_variables.get(
-                        "PRIORITY_MECH_ADDRESS",
-                        {"value": DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH},
-                    )["value"]
+                    if (
+                        "PRIORITY_MECH_ADDRESS" in service.env_variables
+                        and service.env_variables["PRIORITY_MECH_ADDRESS"][
+                            "provision_type"
+                        ]
+                        == ServiceEnvProvisionType.USER
+                    ):
+                        agent_mech = priority_mech_address = service.env_variables[
+                            "PRIORITY_MECH_ADDRESS"
+                        ]["value"]
+                    else:
+                        agent_mech = (
+                            priority_mech_address
+                        ) = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
 
                 except Exception:  # pylint: disable=broad-except
                     self.logger.warning(
-                        "Cannot determine type of activity checker contract. Using default parameters."
+                        "Cannot determine type of activity checker contract. Using default parameters. "
+                        "NOTE: This will be an exception in the future!"
                     )
                     agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
                     use_mech_marketplace = False
@@ -1266,9 +1283,9 @@ class ServiceManager:
                         key=current_safe_owners[0]
                     ).private_key  # TODO allow multiple owners
                 ),  # noqa: E800
-                new_owner_address=safe
-                if safe
-                else wallet.crypto.address,  # TODO it should always be safe address
+                new_owner_address=(
+                    safe if safe else wallet.crypto.address
+                ),  # TODO it should always be safe address
             )  # noqa: E800
 
         if withdrawal_address is not None:
