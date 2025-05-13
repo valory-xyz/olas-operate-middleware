@@ -321,7 +321,7 @@ class BridgeManager:
         bridge_request_status = []
         for request in bundle.bridge_requests:
             bridge = self._bridge_providers[request.bridge_provider_id]
-            bridge_request_status.append(bridge.get_status_json(request))
+            bridge_request_status.append(bridge.status_json(request))
 
         updated_status = [request.status for request in bundle.bridge_requests]
 

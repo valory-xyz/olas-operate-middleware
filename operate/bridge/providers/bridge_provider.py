@@ -73,7 +73,8 @@ class ExecutionData(LocalResource):
     elapsed_time: float
     message: t.Optional[str]
     timestamp: int
-    tx_hashes: t.Optional[t.List[str]]
+    from_tx_hash: t.Optional[str]
+    to_tx_hash: t.Optional[str]
 
 
 class BridgeRequestStatus(str, enum.Enum):
@@ -107,11 +108,19 @@ class BridgeRequest(LocalResource):
 class BridgeProvider(ABC):
     """(Abstract) BridgeProvider.
 
-    Derived classes must iplement the following methods:
+    Expected usage:
+        1. params = {...}
+        2. request = bridge.create_request(params)
+        3. bridge.quote(request)
+        4. bridge.requirements(request)
+        5. bridge.execute(request)
+        6. bridge.status_json(request)
+
+    Derived classes must implement the following methods:
         - description
         - quote
+        - _update_execution_status
         - _get_transactions
-        - update_execution_status
         - _get_explorer_link
     """
 
@@ -255,8 +264,8 @@ class BridgeProvider(ABC):
                 try:
                     amount = int(tx["data"][-64:], 16)
                     total_token += amount
-                except Exception:
-                    raise RuntimeError("Malformed ERC20 approve transaction.")
+                except Exception as e:
+                    raise RuntimeError("Malformed ERC20 approve transaction.") from e
 
         result = {
             from_chain: {
@@ -302,7 +311,8 @@ class BridgeProvider(ABC):
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
                 timestamp=int(timestamp),
-                tx_hashes=None,
+                from_tx_hash=None,
+                to_tx_hash=None,
             )
             bridge_request.execution_data = execution_data
 
@@ -328,9 +338,6 @@ class BridgeProvider(ABC):
             tx_hashes = []
 
             for tx_label, tx in txs:
-                # TODO backport to wallet execute
-                # Wallet should return hash
-                # Here we re-check the receipt.
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
                 setattr(  # noqa: B010
                     tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
@@ -348,7 +355,8 @@ class BridgeProvider(ABC):
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
-                tx_hashes=tx_hashes,
+                from_tx_hash=tx_hashes[-1],
+                to_tx_hash=None,
             )
             bridge_request.execution_data = execution_data
             if len(tx_hashes) == len(txs):
@@ -362,7 +370,8 @@ class BridgeProvider(ABC):
                 elapsed_time=time.time() - timestamp,
                 message=f"Error executing quote: {str(e)}",
                 timestamp=int(timestamp),
-                tx_hashes=None,
+                from_tx_hash=None,
+                to_tx_hash=None,
             )
             bridge_request.execution_data = execution_data
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
@@ -377,14 +386,14 @@ class BridgeProvider(ABC):
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 
-    def get_status_json(self, bridge_request: BridgeRequest) -> t.Dict:
+    def status_json(self, bridge_request: BridgeRequest) -> t.Dict:
         """JSON representation of the status."""
         if bridge_request.execution_data:
             self._update_execution_status(bridge_request)
             tx_hash = None
             explorer_link = None
-            if bridge_request.execution_data.tx_hashes:
-                tx_hash = bridge_request.execution_data.tx_hashes[-1]
+            if bridge_request.execution_data.from_tx_hash:
+                tx_hash = bridge_request.execution_data.from_tx_hash
                 explorer_link = self._get_explorer_link(tx_hash)
 
             return {
@@ -422,3 +431,12 @@ class BridgeProvider(ABC):
             raise RuntimeError("Retrieved invalid gas pricing.")
 
         return output_tx
+
+    # @staticmethod
+    # def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> t.Dict:
+    #     original_from = tx["from"]
+    #     original_gas = tx["gas"]
+    #     tx["gas"] = 1
+    #     ledger_api.update_with_gas_estimate(tx)
+    #     if tx["gas"] == 1:
+    #         tx["from"] = 

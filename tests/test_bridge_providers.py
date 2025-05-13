@@ -24,6 +24,7 @@ import os
 import time
 from pathlib import Path
 
+from operate import wallet
 import pytest
 from deepdiff import DeepDiff
 from web3 import Web3
@@ -127,7 +128,7 @@ class TestLiFiBridge:
                 bridge_request.status == BridgeRequestStatus.QUOTE_DONE
             ), "Wrong status."
 
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         expected_sj = {
             "message": MESSAGE_QUOTE_ZERO,
             "status": BridgeRequestStatus.QUOTE_DONE.value,
@@ -174,7 +175,7 @@ class TestLiFiBridge:
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.tx_hashes is None, "Wrong execution data."
+        assert ed.from_tx_hash is None, "Wrong execution data."
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
         ), "Wrong status."
@@ -184,7 +185,7 @@ class TestLiFiBridge:
             bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
         ), "Wrong status."
 
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
@@ -265,7 +266,7 @@ class TestLiFiBridge:
             ), "Wrong status."
 
         assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         expected_sj = {
             "message": bridge_request.quote_data.message,
             "status": BridgeRequestStatus.QUOTE_FAILED.value,
@@ -313,7 +314,7 @@ class TestLiFiBridge:
         assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.tx_hashes is None, "Wrong execution data."
+        assert ed.from_tx_hash is None, "Wrong execution data."
         assert (
             bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
         ), "Wrong status."
@@ -323,7 +324,7 @@ class TestLiFiBridge:
             bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
         ), "Wrong status."
 
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
@@ -405,7 +406,7 @@ class TestLiFiBridge:
             ), "Wrong status."
 
         assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         expected_sj = {
             "message": bridge_request.quote_data.message,
             "status": BridgeRequestStatus.QUOTE_DONE.value,
@@ -534,11 +535,10 @@ class TestNativeBridge:
         expected_request.status = BridgeRequestStatus.QUOTE_DONE
 
         for _ in range(2):
-            timestamp = int(time.time())
             bridge.quote(bridge_request=bridge_request)
             expected_quote_data.timestamp = bridge_request.quote_data.timestamp
             assert bridge_request == expected_request, "Wrong bridge request."
-            sj = bridge.get_status_json(bridge_request)
+            sj = bridge.status_json(bridge_request)
             expected_sj = {
                 "message": MESSAGE_QUOTE_ZERO,
                 "status": BridgeRequestStatus.QUOTE_DONE.value,
@@ -567,7 +567,8 @@ class TestNativeBridge:
             elapsed_time=0,
             message=f"{MESSAGE_EXECUTION_SKIPPED} (bridge_request.status=<BridgeRequestStatus.QUOTE_DONE: 'QUOTE_DONE'>)",
             timestamp=0,
-            tx_hashes=None,
+            from_tx_hash=None,
+            to_tx_hash=None,
         )
         expected_request.execution_data = expected_execution_data
         expected_request.status = BridgeRequestStatus.EXECUTION_DONE
@@ -576,7 +577,7 @@ class TestNativeBridge:
         expected_execution_data.timestamp = bridge_request.execution_data.timestamp
 
         assert bridge_request == expected_request, "Wrong bridge request."
-        sj = bridge.get_status_json(bridge_request)
+        sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
@@ -591,12 +592,16 @@ class TestNativeBridge:
         assert not diff, "Wrong status."
         assert bridge_request == expected_request, "Wrong bridge request."
 
-    def test_bridge_error(
+    def test_bridge_execute_error(
         self,
         tmp_path: Path,
         password: str,
     ) -> None:
-        """test_bridge_error"""
+        """test_bridge_execute_error"""
+
+        DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
+        DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
+
         operate = OperateApp(
             home=tmp_path / OPERATE,
         )
@@ -616,111 +621,110 @@ class TestNativeBridge:
                 "chain": Chain.BASE.value,
                 "address": wallet_address,
                 "token": OLAS[Chain.BASE],
-                "amount": 1,  # This will cause a quote error
+                "amount": "1000000000000000000",
             },
         }
 
-        bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(
-            params=params,
-            bridge_provider_id=bridge.id(),
-            id="test-id",
+        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
+
+        # Create
+        bridge_request = bridge.create_request(params)
+        expected_request = BridgeRequest(
+            params={
+                "from": {
+                    "chain": Chain.ETHEREUM.value,
+                    "address": wallet_address,
+                    "token": OLAS[Chain.ETHEREUM],
+                },
+                "to": {
+                    "chain": Chain.BASE.value,
+                    "address": wallet_address,
+                    "token": OLAS[Chain.BASE],
+                    "amount": 1000000000000000000,
+                },
+            },
+            bridge_provider_id=NativeBridgeProvider.id(),
+            id=bridge_request.id,
+            status=BridgeRequestStatus.CREATED,
             quote_data=None,
             execution_data=None,
-            status=BridgeRequestStatus.CREATED,
         )
 
-        assert not bridge_request.quote_data, "Unexpected quote data."
+        assert bridge_request == expected_request, "Wrong bridge request."
 
         with pytest.raises(RuntimeError):
             bridge.execute(bridge_request)
 
-        status1 = bridge_request.status
+        assert bridge_request == expected_request, "Wrong bridge request."
+
         bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
-        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
+
+        assert bridge_request == expected_request, "Wrong bridge request."
+
+        # Quote
+        expected_quote_data = QuoteData(
+            attempts=0,
+            bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
+            elapsed_time=0,
+            message=None,
+            response=None,
+            response_status=0,
+            timestamp=int(time.time()),
+        )
+        expected_request.quote_data = expected_quote_data
+        expected_request.status = BridgeRequestStatus.QUOTE_DONE
 
         for _ in range(2):
-            timestamp = int(time.time())
             bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.attempts > 0, "Wrong quote data."
-            assert qd.bridge_eta is None, "Wrong quote data."
-            assert qd.elapsed_time > 0, "Wrong quote data."
-            assert qd.message is not None, "Wrong quote data."
-            assert qd.response is not None, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
-            ), "Wrong status."
+            expected_quote_data.timestamp = bridge_request.quote_data.timestamp
+            assert bridge_request == expected_request, "Wrong bridge request."
+            sj = bridge.status_json(bridge_request)
+            expected_sj = {
+                "message": None,
+                "status": BridgeRequestStatus.QUOTE_DONE.value,
+            }
+            diff = DeepDiff(sj, expected_sj)
+            if diff:
+                print(diff)
 
-        assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.get_status_json(bridge_request)
-        expected_sj = {
-            "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_FAILED.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
+            assert not diff, "Wrong status."
+            assert bridge_request == expected_request, "Wrong bridge request."
 
-        assert not diff, "Wrong status."
-
+        # Get requirements
         br = bridge.bridge_requirements(bridge_request)
+        assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong bridge requirements."
         expected_br = {
-            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
+            "ethereum": {wallet_address: {ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS], OLAS[Chain.ETHEREUM]: 1000000000000000000}}
         }
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
 
         assert not diff, "Wrong bridge requirements."
+        assert bridge_request == expected_request, "Wrong bridge request."
 
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.attempts > 0, "Wrong quote data."
-        assert qd.bridge_eta is None, "Wrong quote data."
-        assert qd.elapsed_time > 0, "Wrong quote data."
-        assert qd.message is not None, "Wrong quote data."
-        assert qd.response is not None, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
-        ), "Wrong status."
+        # Execute
+        expected_execution_data = ExecutionData(
+            elapsed_time=0,
+            message=None,
+            timestamp=0,
+            from_tx_hash=None,
+            to_tx_hash=None,
+        )
+        expected_request.execution_data = expected_execution_data
+        expected_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
-
-        timestamp = int(time.time())
         bridge.execute(bridge_request=bridge_request)
-        ed = bridge_request.execution_data
-        assert ed is not None, "Missing execution data."
-        assert ed.elapsed_time == 0, "Wrong execution data."
-        assert ed.message is not None, "Wrong execution data."
-        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
-        assert timestamp <= ed.timestamp, "Wrong quote data."
-        assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.tx_hashes is None, "Wrong execution data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
-        ), "Wrong status."
+        expected_execution_data.message = bridge_request.execution_data.message
+        expected_execution_data.elapsed_time = bridge_request.execution_data.elapsed_time
+        expected_execution_data.timestamp = bridge_request.execution_data.timestamp
 
-        bridge._update_execution_status(bridge_request)
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
-        ), "Wrong status."
-
-        sj = bridge.get_status_json(bridge_request)
-        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
+        assert bridge_request == expected_request, "Wrong bridge request."
+        sj = bridge.status_json(bridge_request)
+        assert "Error executing quote" in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
-            "tx_hash": None,
+            "tx_hash": None,  # type: ignore
             "message": sj["message"],
             "status": BridgeRequestStatus.EXECUTION_FAILED.value,
         }
@@ -729,118 +733,7 @@ class TestNativeBridge:
             print(diff)
 
         assert not diff, "Wrong status."
-
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
-    def test_bridge_quote(
-        self,
-        tmp_path: Path,
-        password: str,
-    ) -> None:
-        """test_bridge_quote"""
-        operate = OperateApp(
-            home=tmp_path / OPERATE,
-        )
-        operate.setup()
-        operate.create_user_account(password=password)
-        operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
-        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
-        params = {
-            "from": {
-                "chain": "gnosis",
-                "address": wallet_address,
-                "token": OLAS[Chain.GNOSIS],
-            },
-            "to": {
-                "chain": "base",
-                "address": wallet_address,
-                "token": OLAS[Chain.BASE],
-                "amount": 1_000_000_000_000_000_000,
-            },
-        }
-
-        bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(
-            params=params,
-            bridge_provider_id=bridge.id(),
-            id="test-id",
-            quote_data=None,
-            execution_data=None,
-            status=BridgeRequestStatus.CREATED,
-        )
-
-        assert not bridge_request.quote_data, "Unexpected quote data."
-
-        with pytest.raises(RuntimeError):
-            bridge.execute(bridge_request)
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
-        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
-
-        for _ in range(2):
-            timestamp = int(time.time())
-            bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.attempts > 0, "Wrong quote data."
-            assert qd.bridge_eta is None, "Wrong quote data."
-            assert qd.elapsed_time > 0, "Wrong quote data."
-            assert qd.message is None, "Wrong quote data."
-            assert qd.response is not None, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
-            ), "Wrong status."
-
-        assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.get_status_json(bridge_request)
-        expected_sj = {
-            "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_DONE.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-        assert bridge_request.quote_data.response is not None, "Missing quote data."
-
-        quote = bridge_request.quote_data.response
-        br = bridge.bridge_requirements(bridge_request)
-        expected_br = {
-            "gnosis": {
-                wallet_address: {
-                    ZERO_ADDRESS: br["gnosis"][wallet_address][ZERO_ADDRESS],
-                    OLAS[Chain.GNOSIS]: int(quote["action"]["fromAmount"]),  # type: ignore
-                }
-            }
-        }
-        diff = DeepDiff(br, expected_br)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong bridge requirements."
-
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.attempts > 0, "Wrong quote data."
-        assert qd.bridge_eta is None, "Wrong quote data."
-        assert qd.elapsed_time > 0, "Wrong quote data."
-        assert qd.message is None, "Wrong quote data."
-        assert qd.response is not None, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        assert bridge_request == expected_request, "Wrong bridge request."
 
     @pytest.mark.parametrize("rpc", ["https://rpc-gate.autonolas.tech/base-rpc/"])
     @pytest.mark.parametrize(
@@ -870,15 +763,98 @@ class TestNativeBridge:
         block = NativeBridgeProvider._find_block_before_timestamp(w3, timestamp)
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
-    def test_update_execution_status(self, tmp_path: Path, password: str) -> None:
-        """test_update_execution_status"""
+    @pytest.mark.parametrize(
+        ("params, request_id, from_tx_hash, expected_to_tx_hash"),
+        [
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 300000000000000,
+                    },
+                },
+                "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
+                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
+                "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                        "amount": 100000000000000000,
+                    },
+                },
+                "b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
+                "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
+                "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 30750000000000000,
+                    },
+                },
+                "b-7ca71220-4336-414f-985e-bdfe11707c71",
+                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
+                "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                        "amount": 100000000000000000000,
+                    },
+                },
+                "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+                "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
+            ),
+        ],
+    )
+    def test_update_execution_status(
+        self,
+        tmp_path: Path,
+        password: str,
+        request_id: str,
+        params: dict,
+        from_tx_hash: str,
+        expected_to_tx_hash: str,
+    ) -> None:
+        """Parametrized test for update_execution_status."""
 
         DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
         DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
 
-        operate = OperateApp(
-            home=tmp_path / OPERATE,
-        )
+        operate = OperateApp(home=tmp_path / OPERATE)
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
@@ -886,20 +862,6 @@ class TestNativeBridge:
 
         bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
 
-        params = {
-            "from": {
-                "chain": "ethereum",
-                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
-            },
-            "to": {
-                "chain": "base",
-                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0000000000000000000000000000000000000000",
-                "amount": 300000000000000,
-            },
-        }
-
         quote_data = QuoteData(
             attempts=0,
             bridge_eta=0,
@@ -914,136 +876,124 @@ class TestNativeBridge:
             elapsed_time=0,
             message=None,
             timestamp=0,
-            tx_hashes=[
-                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd"
-            ],
+            from_tx_hash=from_tx_hash,
+            to_tx_hash=None,
         )
 
         bridge_request = BridgeRequest(
             params=params,
             bridge_provider_id=NativeBridgeProvider.id(),
-            id="b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
+            id=request_id,
             status=BridgeRequestStatus.EXECUTION_PENDING,
             quote_data=quote_data,
             execution_data=execution_data,
         )
 
-        bridge.get_status_json(bridge_request)
+        bridge.status_json(bridge_request)
 
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong execution status."
+        assert bridge_request.status == BridgeRequestStatus.EXECUTION_DONE, "Wrong execution status."
+        assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
 
-        params = {
-            "from": {
-                "chain": "ethereum",
-                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-            },
-            "to": {
-                "chain": "base",
-                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                "amount": 100000000000000000,
-            },
-        }
 
-        quote_data = QuoteData(
-            attempts=0,
-            bridge_eta=0,
-            elapsed_time=0,
-            message=None,
-            response=None,
-            response_status=0,
-            timestamp=0,
-        )
 
-        execution_data = ExecutionData(
-            elapsed_time=0,
-            message=None,
-            timestamp=0,
-            tx_hashes=[
-                "0x0b269344009722d1a8f7ee10c03117dc5e7f833d6ba403b140b580c1016645ff",
+    @pytest.mark.parametrize(
+        ("params, request_id, from_tx_hash, expected_to_tx_hash"),
+        [
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 42,  # Wrong amount
+                    },
+                },
+                "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
+                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
+                "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                        "amount": 100000000000000000,
+                    },
+                },
+                "b-42",  # Wrong id
                 "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
-            ],
-        )
+                "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0x54330d28ca3357F294334BDC454a032e7f353416",  # Wrong address
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 30750000000000000,
+                    },
+                },
+                "b-7ca71220-4336-414f-985e-bdfe11707c71",
+                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
+                "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
+            ),
+            (
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                        "amount": 100000000000000000000,
+                    },
+                },
+                "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+                "0x7cefa52970f4e1b12a07b9795b8f03de2bbc2ee7c42cba5913d923316e96b3c5",  # Wrong from_tx_hash
+                "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
+            ),
+        ],
+    )
+    def test_update_execution_status_fail(
+        self,
+        tmp_path: Path,
+        password: str,
+        request_id: str,
+        params: dict,
+        from_tx_hash: str,
+        expected_to_tx_hash: str,
+    ) -> None:
+        """Parametrized test for update_execution_status."""
 
-        bridge_request = BridgeRequest(
-            params=params,
-            bridge_provider_id=NativeBridgeProvider.id(),
-            id="b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
-            status=BridgeRequestStatus.EXECUTION_PENDING,
-            quote_data=quote_data,
-            execution_data=execution_data,
-        )
+        DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
+        DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
 
-        bridge.get_status_json(bridge_request)
+        operate = OperateApp(home=tmp_path / OPERATE)
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong execution status."
-
-        params = {
-            "from": {
-                "chain": "ethereum",
-                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0000000000000000000000000000000000000000",
-            },
-            "to": {
-                "chain": "base",
-                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0000000000000000000000000000000000000000",
-                "amount": 30750000000000000,
-            },
-        }
-
-        quote_data = QuoteData(
-            attempts=0,
-            bridge_eta=0,
-            elapsed_time=0,
-            message=None,
-            response=None,
-            response_status=0,
-            timestamp=0,
-        )
-
-        execution_data = ExecutionData(
-            elapsed_time=0,
-            message=None,
-            timestamp=0,
-            tx_hashes=[
-                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba"
-            ],
-        )
-
-        bridge_request = BridgeRequest(
-            params=params,
-            bridge_provider_id=NativeBridgeProvider.id(),
-            id="b-7ca71220-4336-414f-985e-bdfe11707c71",
-            status=BridgeRequestStatus.EXECUTION_PENDING,
-            quote_data=quote_data,
-            execution_data=execution_data,
-        )
-
-        bridge.get_status_json(bridge_request)
-
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong execution status."
-
-        params = {
-            "from": {
-                "chain": "ethereum",
-                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-            },
-            "to": {
-                "chain": "base",
-                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                "amount": 100000000000000000000,
-            },
-        }
+        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
             attempts=0,
@@ -1059,23 +1009,20 @@ class TestNativeBridge:
             elapsed_time=0,
             message=None,
             timestamp=0,
-            tx_hashes=[
-                "0x0de7870695400316eb3f71b3ea7d0e44cd4890dc6aa33b9ffdb5d35b05852232",
-                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-            ],
+            from_tx_hash=from_tx_hash,
+            to_tx_hash=None,
         )
 
         bridge_request = BridgeRequest(
             params=params,
             bridge_provider_id=NativeBridgeProvider.id(),
-            id="b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+            id=request_id,
             status=BridgeRequestStatus.EXECUTION_PENDING,
             quote_data=quote_data,
             execution_data=execution_data,
         )
 
-        bridge.get_status_json(bridge_request)
+        bridge.status_json(bridge_request)
 
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong execution status."
+        assert bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED, "Wrong execution status."
+        assert execution_data.to_tx_hash is None, "Wrong to_tx_hash."

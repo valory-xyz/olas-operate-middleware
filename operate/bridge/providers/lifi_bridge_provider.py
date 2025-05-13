@@ -294,15 +294,13 @@ class LiFiBridgeProvider(BridgeProvider):
             )
 
         execution = bridge_request.execution_data
-        if not execution.tx_hashes:
+        if not execution.from_tx_hash:
             return
-
-        tx_hash = execution.tx_hashes[-1]
 
         url = "https://li.quest/v1/status"
         headers = {"accept": "application/json"}
         params = {
-            "txHash": tx_hash,
+            "txHash": execution.from_tx_hash,
         }
 
         try:

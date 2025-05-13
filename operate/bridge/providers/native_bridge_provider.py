@@ -279,13 +279,12 @@ class NativeBridgeProvider(BridgeProvider):
             f"[NATIVE BRIDGE] Updating execution status for bridge request {bridge_request.id}."
         )
 
-        execution_data = bridge_request.execution_data
-        if not execution_data:
+        if not bridge_request.execution_data:
             raise RuntimeError(
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        if not execution_data.tx_hashes:
+        if not bridge_request.execution_data.from_tx_hash:
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
             return
 
@@ -303,15 +302,15 @@ class NativeBridgeProvider(BridgeProvider):
         try:
             from_w3 = self._from_ledger_api(bridge_request).api
 
-            for tx_hash in execution_data.tx_hashes:
-                receipt = from_w3.eth.get_transaction_receipt(tx_hash)
-                if receipt.status == 0:
-                    bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
-                    return
+            from_tx_hash = bridge_request.execution_data.from_tx_hash
+            receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
+            if receipt.status == 0:
+                bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+                return
 
             # Get the timestamp of the bridge_tx on the 'from' chain
             bridge_tx_receipt = from_w3.eth.get_transaction_receipt(
-                bridge_request.execution_data.tx_hashes[-1]
+                from_tx_hash
             )
             bridge_tx_block = from_w3.eth.get_block(bridge_tx_receipt.blockNumber)
             bridge_tx_ts = bridge_tx_block.timestamp
@@ -350,7 +349,7 @@ class NativeBridgeProvider(BridgeProvider):
 
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
-                event_found = self._is_event_in_range(
+                to_tx_hash = self._find_transaction_in_range(
                     w3=to_w3,
                     contract_address=to_bridge,
                     from_block=from_block,
@@ -359,10 +358,11 @@ class NativeBridgeProvider(BridgeProvider):
                     non_indexed_types=non_indexed_types,
                     non_indexed_values=non_indexed_values,
                 )
-                if event_found:
+                if to_tx_hash:
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution done for {bridge_request.id}."
                     )
+                    bridge_request.execution_data.to_tx_hash = to_tx_hash
                     bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
                     return
 
@@ -381,7 +381,7 @@ class NativeBridgeProvider(BridgeProvider):
             )  # TODO EXECUTION_UNKNOWN ?
 
     @staticmethod
-    def _is_event_in_range(
+    def _find_transaction_in_range(
         w3: Web3,
         contract_address: str,
         from_block: int,
@@ -389,8 +389,8 @@ class NativeBridgeProvider(BridgeProvider):
         topics: list[str],
         non_indexed_types: list[str],
         non_indexed_values: list[t.Any],
-    ) -> bool:
-        """Check for a finalized bridge event in the given block range."""
+    ) -> t.Optional[str]:
+        """Return the transaction hash of a matching event in the given block range, if any."""
         logs = w3.eth.get_logs(
             {
                 "fromBlock": from_block,
@@ -403,9 +403,9 @@ class NativeBridgeProvider(BridgeProvider):
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
             if all(a == b for a, b in zip(decoded, non_indexed_values)):
-                return True
+                return log["transactionHash"].hex()
 
-        return False
+        return None
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
