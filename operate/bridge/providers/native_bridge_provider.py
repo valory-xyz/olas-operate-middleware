@@ -189,9 +189,10 @@ class NativeBridgeProvider(BridgeProvider):
                 extra_data=extra_data,
             )
         self.logger.info(f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}.")
-        ledger_api.update_with_gas_estimate(bridge_tx)
+        self._update_with_gas_estimate(bridge_tx, ledger_api)
         self.logger.info(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
-        return NativeBridgeProvider._update_with_gas_pricing(bridge_tx, ledger_api)
+        self._update_with_gas_pricing(bridge_tx, ledger_api)
+        return bridge_tx
 
     def _get_approve_tx(
         self, bridge_request: BridgeRequest, ledger_api: LedgerApi
@@ -225,9 +226,10 @@ class NativeBridgeProvider(BridgeProvider):
         self.logger.info(
             f"[NATIVE BRIDGE] Gas before updating {approve_tx.get('gas')}."
         )
-        ledger_api.update_with_gas_estimate(approve_tx)
+        self._update_with_gas_estimate(approve_tx, ledger_api)
         self.logger.info(f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}.")
-        return NativeBridgeProvider._update_with_gas_pricing(approve_tx, ledger_api)
+        self._update_with_gas_pricing(approve_tx, ledger_api)
+        return approve_tx
 
     def _get_transactions(
         self, bridge_request: BridgeRequest

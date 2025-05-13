@@ -244,7 +244,7 @@ class BridgeProvider(ABC):
         total_token = 0
 
         for tx_label, tx in transactions:
-            tx = self._update_with_gas_pricing(tx, from_ledger_api)
+            self._update_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
@@ -410,33 +410,55 @@ class BridgeProvider(ABC):
 
         return {"message": None, "status": bridge_request.status.value}
 
+    # TODO backport to open aea/autonomy
     # TODO This gas pricing management should possibly be done at a lower level in the library
     @staticmethod
-    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> t.Dict:
-        output_tx = tx.copy()
-        output_tx.pop("maxFeePerGas", None)
-        output_tx.pop("gasPrice", None)
-        output_tx.pop("maxPriorityFeePerGas", None)
+    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
+        tx.pop("maxFeePerGas", None)
+        tx.pop("gasPrice", None)
+        tx.pop("maxPriorityFeePerGas", None)
 
         gas_pricing = ledger_api.try_get_gas_pricing()
         if gas_pricing is None:
             raise RuntimeError("Unable to retrieve gas pricing.")
 
         if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
-            output_tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-            output_tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+            tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+            tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
         elif "gasPrice" in gas_pricing:
-            output_tx["gasPrice"] = gas_pricing["gasPrice"]
+            tx["gasPrice"] = gas_pricing["gasPrice"]
         else:
             raise RuntimeError("Retrieved invalid gas pricing.")
 
-        return output_tx
+    # TODO backport to open aea/autonomy
+    @staticmethod
+    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+        original_gas = tx.get("gas", 1)
+        tx["gas"] = 1
+        ledger_api.update_with_gas_estimate(tx)
 
-    # @staticmethod
-    # def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> t.Dict:
-    #     original_from = tx["from"]
-    #     original_gas = tx["gas"]
-    #     tx["gas"] = 1
-    #     ledger_api.update_with_gas_estimate(tx)
-    #     if tx["gas"] == 1:
-    #         tx["from"] = 
+        if tx["gas"] > 1:
+            return
+
+        print("FAILED GAS ESTIMATION 1")
+        
+        
+        
+        original_from = tx["from"]
+        tx["from"] = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+        ledger_api.update_with_gas_estimate(tx)
+        tx["from"] = original_from
+
+        from icecream import ic
+        ic(tx)
+        if tx["gas"] > 1:
+            print("WORKED !!!!")
+            return
+        print("---------------- FAILED GAS ESTIMATION 2")
+
+
+
+        tx["gas"] = original_gas
+
+        from icecream import ic
+        ic(tx)

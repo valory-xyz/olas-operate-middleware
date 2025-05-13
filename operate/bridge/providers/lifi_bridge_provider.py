@@ -177,9 +177,8 @@ class LiFiBridgeProvider(BridgeProvider):
 
             time.sleep(2)
 
-    @staticmethod
     def _get_bridge_tx(
-        bridge_request: BridgeRequest, ledger_api: LedgerApi
+        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
         quote_data = bridge_request.quote_data
         if not quote_data:
@@ -208,12 +207,12 @@ class LiFiBridgeProvider(BridgeProvider):
                 transaction_request["from"]
             ),
         }
-        ledger_api.update_with_gas_estimate(bridge_tx)
-        return LiFiBridgeProvider._update_with_gas_pricing(bridge_tx, ledger_api)
+        self._update_with_gas_estimate(bridge_tx, ledger_api)
+        self._update_with_gas_pricing(bridge_tx, ledger_api)
+        return bridge_tx
 
-    @staticmethod
     def _get_approve_tx(
-        bridge_request: BridgeRequest, ledger_api: LedgerApi
+        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
     ) -> t.Optional[t.Dict]:
         quote_data = bridge_request.quote_data
         if not quote_data:
@@ -243,8 +242,9 @@ class LiFiBridgeProvider(BridgeProvider):
             sender=transaction_request["from"],
             amount=from_amount,
         )
-        ledger_api.update_with_gas_estimate(approve_tx)
-        return LiFiBridgeProvider._update_with_gas_pricing(approve_tx, ledger_api)
+        self._update_with_gas_estimate(approve_tx, ledger_api)
+        self._update_with_gas_pricing(approve_tx, ledger_api)
+        return approve_tx
 
     def _get_transactions(
         self, bridge_request: BridgeRequest
