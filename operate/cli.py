@@ -62,8 +62,6 @@ from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
-from operate.services.manage import ServiceManager
-from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
 
 

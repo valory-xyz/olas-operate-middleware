@@ -91,7 +91,14 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=bridge.id(),
+            id="test-id",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -221,7 +228,14 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=bridge.id(),
+            id="test-id",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -354,7 +368,14 @@ class TestLiFiBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=bridge.id(),
+            id="test-id",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -545,7 +566,7 @@ class TestNativeBridge:
         expected_execution_data = ExecutionData(
             elapsed_time=0,
             message=f"{MESSAGE_EXECUTION_SKIPPED} (bridge_request.status=<BridgeRequestStatus.QUOTE_DONE: 'QUOTE_DONE'>)",
-            timestamp=int(timestamp),
+            timestamp=0,
             tx_hashes=None,
         )
         expected_request.execution_data = expected_execution_data
@@ -600,7 +621,14 @@ class TestNativeBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=bridge.id(),
+            id="test-id",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 
@@ -733,7 +761,14 @@ class TestNativeBridge:
         }
 
         bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
-        bridge_request = BridgeRequest(params, bridge.id(), "test-id")
+        bridge_request = BridgeRequest(
+            params=params,
+            bridge_provider_id=bridge.id(),
+            id="test-id",
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
 
         assert not bridge_request.quote_data, "Unexpected quote data."
 

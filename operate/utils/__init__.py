@@ -85,10 +85,12 @@ def subtract_dicts(a: NestedDict, b: NestedDict) -> NestedDict:
 
     result = {}
     for key in a.keys() | b.keys():  # type: ignore
-        va, vb = a.get(key), b.get(key)  # type: ignore
+        va = a.get(key)  # type: ignore
+        vb = b.get(key)  # type: ignore
         if isinstance(va, dict) or isinstance(vb, dict):
             result[key] = subtract_dicts(
-                va if isinstance(va, dict) else {}, vb if isinstance(vb, dict) else {}
+                va if isinstance(va, dict) else {},
+                vb if isinstance(vb, dict) else {}
             )
         else:
             result[key] = max((va or 0) - (vb or 0), 0)  # type: ignore

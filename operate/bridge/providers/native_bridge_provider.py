@@ -285,6 +285,10 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
+        if not execution_data.tx_hashes:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            return
+
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
@@ -309,9 +313,7 @@ class NativeBridgeProvider(BridgeProvider):
             bridge_tx_receipt = from_w3.eth.get_transaction_receipt(
                 bridge_request.execution_data.tx_hashes[-1]
             )
-            bridge_tx_block = from_w3.eth.get_block(
-                bridge_tx_receipt.blockNumber
-            )
+            bridge_tx_block = from_w3.eth.get_block(bridge_tx_receipt.blockNumber)
             bridge_tx_ts = bridge_tx_block.timestamp
 
             # Prepare the event data

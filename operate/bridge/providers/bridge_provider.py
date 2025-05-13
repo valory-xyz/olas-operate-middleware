@@ -48,7 +48,9 @@ DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "b-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
-ERC20_APPROVE_SELECTOR = "0x095ea7b3"
+ERC20_APPROVE_SELECTOR = (
+    "0x095ea7b3"  # 4 first bytes of Keccak('approve(address,uint256)')
+)
 
 
 @dataclass
@@ -178,7 +180,7 @@ class BridgeProvider(ABC):
             id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
             quote_data=None,
             execution_data=None,
-            status=BridgeRequestStatus.CREATED
+            status=BridgeRequestStatus.CREATED,
         )
 
     def _from_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
@@ -249,9 +251,7 @@ class BridgeProvider(ABC):
 
             if tx.get("to", "").lower() == from_token.lower() and tx.get(
                 "data", ""
-            ).startswith(
-                ERC20_APPROVE_SELECTOR
-            ):  # approve(address,uint256)
+            ).startswith(ERC20_APPROVE_SELECTOR):
                 try:
                     amount = int(tx["data"][-64:], 16)
                     total_token += amount
@@ -328,7 +328,6 @@ class BridgeProvider(ABC):
             tx_hashes = []
 
             for tx_label, tx in txs:
-
                 # TODO backport to wallet execute
                 # Wallet should return hash
                 # Here we re-check the receipt.
