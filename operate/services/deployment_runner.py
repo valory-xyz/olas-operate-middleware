@@ -173,12 +173,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
         self._run_aea("fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir)
 
-        # Add keys
-        shutil.copy(
-            working_dir / "ethereum_private_key.txt",
-            working_dir / "agent" / "ethereum_private_key.txt",
-        )
-
         self._run_aea("add-key", "ethereum", cwd=working_dir / "agent")
 
         self._run_aea("issue-certificates", cwd=working_dir / "agent")
@@ -423,6 +417,49 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         )
 
 
+class CustomBinaryDeploymentRunner(AbstractDeploymentRunner):
+    """Deployment runner for custom binary."""
+
+    def __init__(self, work_directory: Path, agent_binary: Path) -> None:
+        """Init the deployment runner."""
+        super().__init__(work_directory=work_directory)
+        self._agent_binary = agent_binary
+
+    @property
+    def agent_bin(self) -> str:
+        """Return agent binary path."""
+        if self._agent_binary.is_absolute():
+            return str(self._agent_binary)
+        return str(Path(os.path.dirname(sys.executable)) / self._agent_binary)
+
+    def start(self) -> None:
+        """Start agent process."""
+        env_vars = json.loads((self._work_directory / "agent.json").read_text())
+        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
+            args=[self.agent_bin],
+            cwd=self._work_directory / "agent",
+            stdout=subprocess.DEVNULL,  # comment out for debugging
+            stderr=subprocess.DEVNULL,  # comment out for debugging
+            env=os.environ | env_vars,
+            creationflags=(
+                0x00000008 if platform.system() == "Windows" else 0
+            ),  # Detach process from the main process
+        )
+        print(f"Agent process started with pid: {process.pid}")
+        (self._work_directory / "agent.pid").write_text(
+            data=str(process.pid),
+            encoding="utf-8",
+        )
+
+    def stop(self) -> None:
+        """Stop agent process."""
+        pid = self._work_directory / "agent.pid"
+        print(f"Stopping agent with pid: {pid.read_text()}")
+        if not pid.exists():
+            return
+        kill_process(int(pid.read_text(encoding="utf-8")))
+
+
 def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     """Return depoyment runner according to running env."""
     deployment_runner: BaseDeploymentRunner
@@ -440,13 +477,31 @@ def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
     return deployment_runner
 
 
-def run_host_deployment(build_dir: Path) -> None:
+def run_host_deployment(build_dir: Path, custom_binary: t.Optional[str] = None) -> None:
     """Run host deployment."""
+    if custom_binary is not None:
+        deployment_runner: AbstractDeploymentRunner = CustomBinaryDeploymentRunner(
+            work_directory=build_dir,
+            agent_binary=Path(custom_binary),
+        )
+        deployment_runner.start()
+        return
+
     deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
     deployment_runner.start()
 
 
-def stop_host_deployment(build_dir: Path) -> None:
+def stop_host_deployment(
+    build_dir: Path, custom_binary: t.Optional[str] = None
+) -> None:
     """Stop host deployment."""
+    if custom_binary is not None:
+        deployment_runner: AbstractDeploymentRunner = CustomBinaryDeploymentRunner(
+            work_directory=build_dir,
+            agent_binary=Path(custom_binary),
+        )
+        deployment_runner.stop()
+        return
+
     deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
     deployment_runner.stop()
