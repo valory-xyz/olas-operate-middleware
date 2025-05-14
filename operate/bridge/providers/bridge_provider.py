@@ -440,10 +440,7 @@ class BridgeProvider(ABC):
         if tx["gas"] > 1:
             return
 
-        print("FAILED GAS ESTIMATION 1")
-        
-        
-        
+        # Try to estimate gas with a funded address
         original_from = tx["from"]
         tx["from"] = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
         ledger_api.update_with_gas_estimate(tx)

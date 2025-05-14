@@ -26,6 +26,8 @@ import typing as t
 import eth_abi
 from aea.crypto.base import LedgerApi
 from autonomy.chain.base import registry_contracts
+from operate.ledger.profiles import CONTRACTS
+from operate.utils.gnosis import MultiSendOperation
 from web3 import Web3
 
 from operate.bridge.providers.bridge_provider import (
@@ -42,7 +44,8 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     L1StandardBridge,
 )
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
-from operate.operate_types import Chain
+from operate.operate_types import Chain, ChainType
+from autonomy.chain.config import ContractConfigs
 
 
 BLOCK_CHUNK_SIZE = 5000
@@ -188,6 +191,7 @@ class NativeBridgeProvider(BridgeProvider):
                 min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
+        bridge_tx["gas"] = 160000
         self.logger.info(f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}.")
         self._update_with_gas_estimate(bridge_tx, ledger_api)
         self.logger.info(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
@@ -255,6 +259,49 @@ class NativeBridgeProvider(BridgeProvider):
             return []
 
         approve_tx = self._get_approve_tx(bridge_request, from_ledger_api)
+
+
+        # ****************************************
+        bridge_tx["operation"] = MultiSendOperation.CALL
+        bridge_tx.pop("gas", None)
+        bridge_tx.pop("gasPrice", None)
+        bridge_tx.pop("maxFeePerGas", None)
+        bridge_tx.pop("maxPriorityFeePerGas", None)
+
+        from icecream import ic
+        if approve_tx:
+            approve_tx["operation"] = MultiSendOperation.CALL
+            txs = [approve_tx, bridge_tx]
+        else:
+            txs = [bridge_tx]
+
+        ic(txs)
+        ic(ContractConfigs.multisend.contracts[ChainType.ETHEREUM])
+        from_chain = bridge_request.params["from"]["chain"]
+        multisend_data = bytes.fromhex(
+            registry_contracts.multisend.get_tx_data(
+                ledger_api=self._from_ledger_api(bridge_request),
+                contract_address=CONTRACTS[Chain(from_chain)]["multisend"],
+                multi_send_txs=txs,
+            ).get("data")[2:]
+        )
+
+        hash_payload_to_hex(
+            safe_tx_hash=tx_hash,
+            ether_value=ETHER_VALUE,
+            safe_tx_gas=SAFE_TX_GAS,
+            operation=SafeOperation.DELEGATE_CALL.value,
+            to_address=self.params.multisend_address,
+            data=tx_data,
+        )
+        print("*"*40)
+        ic(multisend_data)
+        print(len(multisend_data))
+        print("="*40)
+
+        # ****************************************
+
+
 
         if approve_tx:
             bridge_tx["nonce"] = approve_tx["nonce"] + 1
