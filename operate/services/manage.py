@@ -689,21 +689,8 @@ class ServiceManager:
                 }
             )
 
-        # TODO: yet another agent specific logic for memeooorr, which should be abstracted
-        if all(
-            var in service.env_variables
-            for var in [
-                "TWIKIT_USERNAME",
-                "TWIKIT_EMAIL",
-                "TWIKIT_PASSWORD",
-            ]
-        ):
-            store_path = service.path / "persistent_data"
-            store_path.mkdir(parents=True, exist_ok=True)
-            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
-
-        # TODO yet another computed variable for modius
-        if "optimus" in service.name.lower():
+        # TODO: yet another agent specific logic for memeooorr and optimus, which should be abstracted
+        if "memeooorr" in service.name.lower() or "optimus" in service.name.lower():
             store_path = service.path / "persistent_data"
             store_path.mkdir(parents=True, exist_ok=True)
             env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
