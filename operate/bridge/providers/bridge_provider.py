@@ -433,29 +433,35 @@ class BridgeProvider(ABC):
     # TODO backport to open aea/autonomy
     @staticmethod
     def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+
+        from icecream import ic
+        ic(tx)
         original_gas = tx.get("gas", 1)
         tx["gas"] = 1
         ledger_api.update_with_gas_estimate(tx)
 
         if tx["gas"] > 1:
+            print("!!!!!!!!!!!!   WORKED 1 !!!!!!!!!!!!!")
+            ic(tx)
             return
 
+
+        # **********************
         # Try to estimate gas with a funded address
         original_from = tx["from"]
         tx["from"] = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
         ledger_api.update_with_gas_estimate(tx)
         tx["from"] = original_from
 
-        from icecream import ic
-        ic(tx)
-        if tx["gas"] > 1:
-            print("WORKED !!!!")
-            return
-        print("---------------- FAILED GAS ESTIMATION 2")
 
+        if tx["gas"] > 1:
+            print("!!!!!!!!!!!!   WORKED 2 !!!!!!!!!!!!!")
+            ic(tx)
+            return
+        print("---------------- FAILED GAS ESTIMATION 2--------------------")
+        # **********************
 
 
         tx["gas"] = original_gas
-
-        from icecream import ic
+        print("NOT WORKED")
         ic(tx)
