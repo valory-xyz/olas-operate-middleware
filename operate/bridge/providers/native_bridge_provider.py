@@ -22,12 +22,11 @@
 
 import time
 import typing as t
+from math import ceil
 
 import eth_abi
 from aea.crypto.base import LedgerApi
 from autonomy.chain.base import registry_contracts
-from operate.ledger.profiles import CONTRACTS
-from operate.utils.gnosis import MultiSendOperation
 from web3 import Web3
 
 from operate.bridge.providers.bridge_provider import (
@@ -44,11 +43,11 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     L1StandardBridge,
 )
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
-from operate.operate_types import Chain, ChainType
-from autonomy.chain.config import ContractConfigs
+from operate.operate_types import Chain
 
 
 BLOCK_CHUNK_SIZE = 5000
+GAS_ESTIMATE_BUFFER = 1.10
 
 NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
     (Chain.ETHEREUM.value, Chain.BASE.value): {
@@ -191,10 +190,13 @@ class NativeBridgeProvider(BridgeProvider):
                 min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
-        self.logger.info(f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}.")
-        self._update_with_gas_estimate(bridge_tx, ledger_api)
-        self.logger.info(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
         self._update_with_gas_pricing(bridge_tx, ledger_api)
+        self.logger.debug(
+            f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}."
+        )
+        self._update_with_gas_estimate(bridge_tx, ledger_api)
+        self.logger.debug(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
+        bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
 
     def _get_approve_tx(
@@ -226,12 +228,15 @@ class NativeBridgeProvider(BridgeProvider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        self.logger.info(
+        self._update_with_gas_pricing(approve_tx, ledger_api)
+        self.logger.debug(
             f"[NATIVE BRIDGE] Gas before updating {approve_tx.get('gas')}."
         )
         self._update_with_gas_estimate(approve_tx, ledger_api)
-        self.logger.info(f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}.")
-        self._update_with_gas_pricing(approve_tx, ledger_api)
+        self.logger.debug(
+            f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}."
+        )
+        approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
     def _get_transactions(
@@ -314,9 +319,7 @@ class NativeBridgeProvider(BridgeProvider):
                 return
 
             # Get the timestamp of the bridge_tx on the 'from' chain
-            bridge_tx_receipt = from_w3.eth.get_transaction_receipt(
-                from_tx_hash
-            )
+            bridge_tx_receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             bridge_tx_block = from_w3.eth.get_block(bridge_tx_receipt.blockNumber)
             bridge_tx_ts = bridge_tx_block.timestamp
 

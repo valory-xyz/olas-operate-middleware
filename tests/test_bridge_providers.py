@@ -24,11 +24,11 @@ import os
 import time
 from pathlib import Path
 
-from operate import wallet
 import pytest
 from deepdiff import DeepDiff
 from web3 import Web3
 
+from operate import wallet
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
     BridgeRequest,
     LiFiBridgeProvider,
@@ -536,6 +536,7 @@ class TestNativeBridge:
 
         for _ in range(2):
             bridge.quote(bridge_request=bridge_request)
+            assert bridge_request.quote_data is not None, "Wrong bridge request."
             expected_quote_data.timestamp = bridge_request.quote_data.timestamp
             assert bridge_request == expected_request, "Wrong bridge request."
             sj = bridge.status_json(bridge_request)
@@ -574,6 +575,7 @@ class TestNativeBridge:
         expected_request.status = BridgeRequestStatus.EXECUTION_DONE
 
         bridge.execute(bridge_request=bridge_request)
+        assert bridge_request.execution_data is not None, "Wrong bridge request."
         expected_execution_data.timestamp = bridge_request.execution_data.timestamp
 
         assert bridge_request == expected_request, "Wrong bridge request."
@@ -676,6 +678,7 @@ class TestNativeBridge:
 
         for _ in range(2):
             bridge.quote(bridge_request=bridge_request)
+            assert bridge_request.quote_data is not None, "Wrong bridge request."
             expected_quote_data.timestamp = bridge_request.quote_data.timestamp
             assert bridge_request == expected_request, "Wrong bridge request."
             sj = bridge.status_json(bridge_request)
@@ -692,9 +695,16 @@ class TestNativeBridge:
 
         # Get requirements
         br = bridge.bridge_requirements(bridge_request)
-        assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong bridge requirements."
+        assert (
+            br["ethereum"][wallet_address][ZERO_ADDRESS] > 0
+        ), "Wrong bridge requirements."
         expected_br = {
-            "ethereum": {wallet_address: {ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS], OLAS[Chain.ETHEREUM]: 1000000000000000000}}
+            "ethereum": {
+                wallet_address: {
+                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
+                    OLAS[Chain.ETHEREUM]: 1000000000000000000,
+                }
+            }
         }
         diff = DeepDiff(br, expected_br)
         if diff:
@@ -715,8 +725,11 @@ class TestNativeBridge:
         expected_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
         bridge.execute(bridge_request=bridge_request)
+        assert bridge_request.execution_data is not None, "Wrong bridge request."
         expected_execution_data.message = bridge_request.execution_data.message
-        expected_execution_data.elapsed_time = bridge_request.execution_data.elapsed_time
+        expected_execution_data.elapsed_time = (
+            bridge_request.execution_data.elapsed_time
+        )
         expected_execution_data.timestamp = bridge_request.execution_data.timestamp
 
         assert bridge_request == expected_request, "Wrong bridge request."
@@ -891,10 +904,10 @@ class TestNativeBridge:
 
         bridge.status_json(bridge_request)
 
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_DONE, "Wrong execution status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
-
-
 
     @pytest.mark.parametrize(
         ("params, request_id, from_tx_hash, expected_to_tx_hash"),
@@ -1024,5 +1037,7 @@ class TestNativeBridge:
 
         bridge.status_json(bridge_request)
 
-        assert bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED, "Wrong execution status."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
+        ), "Wrong execution status."
         assert execution_data.to_tx_hash is None, "Wrong to_tx_hash."

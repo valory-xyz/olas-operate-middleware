@@ -32,7 +32,6 @@ from typing import cast
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 
-from merge_dicts import merge_sum_dicts, subtract_dicts
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
 from operate.bridge.providers.native_bridge_provider import (
@@ -43,6 +42,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
+from operate.utils import merge_sum_dicts, subtract_dicts
 from operate.wallet.master import MasterWalletManager
 
 
@@ -243,7 +243,7 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements = subtract_dicts(bridge_total_requirements, balances)
+        bridge_refill_requirements: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = subtract_dicts(bridge_total_requirements, balances)
 
         is_refill_required = any(
             amount > 0

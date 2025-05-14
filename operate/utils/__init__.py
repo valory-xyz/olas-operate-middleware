@@ -51,7 +51,7 @@ def create_backup(path: Path) -> Path:
 NestedDict = t.Union[int, t.Dict[str, "NestedDict"]]
 
 
-def merge_sum_dicts(*dicts: NestedDict) -> NestedDict:
+def merge_sum_dicts(*dicts: t.List[t.Dict[str, NestedDict]]) -> t.Dict[str, NestedDict]:
     """
     Merge a list of nested dicts by summing all innermost `int` values.
 
@@ -59,20 +59,20 @@ def merge_sum_dicts(*dicts: NestedDict) -> NestedDict:
     Missing values are treated as 0.
     All `dicts` must follow the same nesting structure.
     """
-    if all(isinstance(o, int) for o in dicts):
-        return sum(dicts)  # type: ignore
 
     result: t.Dict[str, NestedDict] = {}
     for d in dicts:
         for k, v in d.items():  # type: ignore
             if isinstance(v, dict):
-                result[k] = merge_sum_dicts(result.get(k, {}), v)
+                result[k] = merge_sum_dicts(result.get(k, {}), v)  # type: ignore
             elif isinstance(v, int):
                 result[k] = result.get(k, 0) + v  # type: ignore
     return result
 
 
-def subtract_dicts(a: NestedDict, b: NestedDict) -> NestedDict:
+def subtract_dicts(
+    a: t.Dict[str, NestedDict], b: t.Dict[str, NestedDict]
+) -> t.Dict[str, NestedDict]:
     """
     Recursively subtract values in `b` from `a`. Negative results are upper bounded at 0.
 
@@ -80,17 +80,14 @@ def subtract_dicts(a: NestedDict, b: NestedDict) -> NestedDict:
     Missing values are treated as 0.
     All `dicts` must follow the same nesting structure.
     """
-    if isinstance(a, int) and isinstance(b, int):
-        return max(a - b, 0)  # type: ignore
 
-    result = {}
+    result: t.Dict[str, NestedDict] = {}
     for key in a.keys() | b.keys():  # type: ignore
         va = a.get(key)  # type: ignore
         vb = b.get(key)  # type: ignore
         if isinstance(va, dict) or isinstance(vb, dict):
             result[key] = subtract_dicts(
-                va if isinstance(va, dict) else {},
-                vb if isinstance(vb, dict) else {}
+                va if isinstance(va, dict) else {}, vb if isinstance(vb, dict) else {}
             )
         else:
             result[key] = max((va or 0) - (vb or 0), 0)  # type: ignore

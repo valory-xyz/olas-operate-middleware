@@ -316,7 +316,7 @@ class LiFiBridgeProvider(BridgeProvider):
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
-                f"[LI.FI BRIDGE] Failed to update bridge status for {tx_hash}: {e}"
+                f"[LI.FI BRIDGE] Failed to update bridge status for {bridge_request.id}: {e}"
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:

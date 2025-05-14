@@ -19,13 +19,25 @@
 
 """This module contains the class to connect to the `L1StandardBridge` contract."""
 
+from math import ceil
+
 from aea.common import JSONLike
 from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 
 
-DEFAULT_BRIDGE_MIN_GAS_LIMIT = 300000
+PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+
+# Minimum gas required for L2 execution when bridging from L1.
+# Prevents underfunded messages that could fail on L2.
+DEFAULT_BRIDGE_MIN_GAS_LIMIT = 300_000
+
+DEFAULT_GAS_BRIDGE_ETH_TO = 800_000
+DEFAULT_GAS_BRIDGE_ERC20_TO = 800_000
+
+# By simulations, nonzero-ERC20-bridge gas ~ 1.05 zero-ERC20-bridge gas
+NONZERO_ERC20_GAS_FACTOR = 1.15
 
 
 class L1StandardBridge(Contract):
@@ -55,7 +67,7 @@ class L1StandardBridge(Contract):
             {
                 "from": sender,
                 "value": amount,
-                "gas": 1_000_000,
+                "gas": DEFAULT_GAS_BRIDGE_ETH_TO,
                 "gasPrice": ledger_api.api.eth.gas_price,
                 "nonce": ledger_api.api.eth.get_transaction_count(sender),
             }
@@ -88,12 +100,39 @@ class L1StandardBridge(Contract):
         ).build_transaction(
             {
                 "from": sender,
-                "gas": 1_000_000,
+                "gas": 1,
                 "gasPrice": ledger_api.api.eth.gas_price,
                 "nonce": ledger_api.api.eth.get_transaction_count(sender),
             }
         )
-        return ledger_api.update_with_gas_estimate(
+
+        ledger_api.update_with_gas_estimate(
             transaction=tx,
             raise_on_try=raise_on_try,
         )
+
+        if tx["gas"] > 1:
+            return tx
+
+        tx_zero = contract_instance.functions.bridgeERC20To(
+            local_token, remote_token, to, 0, min_gas_limit, extra_data
+        ).build_transaction(
+            {
+                "from": PLACEHOLDER_NATIVE_TOKEN_ADDRESS,
+                "gas": 1,
+                "gasPrice": ledger_api.api.eth.gas_price,
+                "nonce": ledger_api.api.eth.get_transaction_count(sender),
+            }
+        )
+
+        ledger_api.update_with_gas_estimate(
+            transaction=tx_zero,
+            raise_on_try=raise_on_try,
+        )
+
+        if tx_zero["gas"] > 1:
+            tx["gas"] = ceil(tx_zero["gas"] * NONZERO_ERC20_GAS_FACTOR)
+            return tx
+
+        tx["gas"] = DEFAULT_GAS_BRIDGE_ERC20_TO
+        return tx

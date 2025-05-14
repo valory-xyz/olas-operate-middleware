@@ -28,6 +28,7 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
@@ -43,6 +44,8 @@ from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
+
+PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "b-"
@@ -109,12 +112,13 @@ class BridgeProvider(ABC):
     """(Abstract) BridgeProvider.
 
     Expected usage:
-        1. params = {...}
-        2. request = bridge.create_request(params)
-        3. bridge.quote(request)
-        4. bridge.requirements(request)
-        5. bridge.execute(request)
-        6. bridge.status_json(request)
+        params = {...}
+
+        1. request = bridge.create_request(params)
+        2. bridge.quote(request)
+        3. bridge.requirements(request)
+        4. bridge.execute(request)
+        5. bridge.status_json(request)
 
     Derived classes must implement the following methods:
         - description
@@ -433,35 +437,19 @@ class BridgeProvider(ABC):
     # TODO backport to open aea/autonomy
     @staticmethod
     def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-
-        from icecream import ic
-        ic(tx)
         original_gas = tx.get("gas", 1)
         tx["gas"] = 1
         ledger_api.update_with_gas_estimate(tx)
 
         if tx["gas"] > 1:
-            print("!!!!!!!!!!!!   WORKED 1 !!!!!!!!!!!!!")
-            ic(tx)
             return
 
-
-        # **********************
-        # Try to estimate gas with a funded address
         original_from = tx["from"]
-        tx["from"] = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+        tx["from"] = PLACEHOLDER_NATIVE_TOKEN_ADDRESS
         ledger_api.update_with_gas_estimate(tx)
         tx["from"] = original_from
 
-
         if tx["gas"] > 1:
-            print("!!!!!!!!!!!!   WORKED 2 !!!!!!!!!!!!!")
-            ic(tx)
             return
-        print("---------------- FAILED GAS ESTIMATION 2--------------------")
-        # **********************
-
 
         tx["gas"] = original_gas
-        print("NOT WORKED")
-        ic(tx)
