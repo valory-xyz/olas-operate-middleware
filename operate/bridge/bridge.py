@@ -243,9 +243,10 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements: t.Dict[
-            str, t.Dict[str, t.Dict[str, int]]
-        ] = subtract_dicts(bridge_total_requirements, balances)
+        bridge_refill_requirements = cast(
+            t.Dict[str, t.Dict[str, t.Dict[str, int]]],
+            subtract_dicts(bridge_total_requirements, balances),
+        )
 
         is_refill_required = any(
             amount > 0

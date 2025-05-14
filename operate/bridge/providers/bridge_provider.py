@@ -28,7 +28,6 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
@@ -248,17 +247,20 @@ class BridgeProvider(ABC):
         total_token = 0
 
         for tx_label, tx in transactions:
+            self.logger.debug(
+                f"[BRIDGE PROVIDER] Processing transaction {tx_label} for bridge request {bridge_request.id}."
+            )
             self._update_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
             total_native += tx_value + gas_fees
 
-            self.logger.info(
-                f"[BRIDGE PROVIDER] Transaction {tx_label}: {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
+            self.logger.debug(
+                f"[BRIDGE PROVIDER] Transaction {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
             )
-            self.logger.info(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.gas_price=}")
-            self.logger.info(
+            self.logger.debug(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.gas_price=}")
+            self.logger.debug(
                 f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
             )
 

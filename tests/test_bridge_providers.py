@@ -28,7 +28,6 @@ import pytest
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate import wallet
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
     BridgeRequest,
     LiFiBridgeProvider,
@@ -777,7 +776,7 @@ class TestNativeBridge:
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
     @pytest.mark.parametrize(
-        ("params, request_id, from_tx_hash, expected_to_tx_hash"),
+        ("params", "request_id", "from_tx_hash", "expected_to_tx_hash"),
         [
             (
                 {
@@ -910,7 +909,7 @@ class TestNativeBridge:
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
 
     @pytest.mark.parametrize(
-        ("params, request_id, from_tx_hash, expected_to_tx_hash"),
+        ("params", "request_id", "from_tx_hash", "expected_to_tx_hash"),
         [
             (
                 {
