@@ -44,7 +44,7 @@ from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
 
-PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "b-"

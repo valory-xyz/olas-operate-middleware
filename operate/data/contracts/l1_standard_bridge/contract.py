@@ -27,7 +27,7 @@ from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 
 
-PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"
+PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
 
 # Minimum gas required for L2 execution when bridging from L1.
 # Prevents underfunded messages that could fail on L2.
