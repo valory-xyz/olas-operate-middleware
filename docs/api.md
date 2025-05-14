@@ -901,6 +901,18 @@ The refill requirements are computed based on the fund requirements present on t
         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
       }
     },
+    "total_requirements": {
+      "gnosis": {
+        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
+          "0x0000000000000000000000000000000000000000": 10000000000000000000,
+          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+        },
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+         "0x0000000000000000000000000000000000000000": 500000000000000000,
+         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+        }
+      }
+    }
   }
   ```
 

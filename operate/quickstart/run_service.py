@@ -491,33 +491,34 @@ def ask_funds_in_address(
     chain: str,
 ) -> None:
     """Ask for funds in address."""
-    if required_balance > get_asset_balance(
-        ledger_api, asset_address, recipient_address
-    ):
-        print(
-            f"[{chain}] Please make sure {recipient_name} {recipient_address} "
-            f"has at least {wei_to_token(required_balance, chain, asset_address)}",
-        )
-        waiting_for_amount = required_balance - get_asset_balance(
+    if required_balance == 0:
+        return
+
+    current_balance = get_asset_balance(ledger_api, asset_address, recipient_address)
+    print(
+        f"[{chain}] Please transfer at least {wei_to_token(required_balance, chain, asset_address)} "
+        f"to the {recipient_name} {recipient_address} "
+    )
+    spinner = Halo(
+        text=f"[{chain}] Waiting for at least {wei_to_token(required_balance, chain, asset_address)}...",
+        spinner="dots",
+    )
+    spinner.start()
+
+    while True:
+        time.sleep(1)
+        updated_balance = get_asset_balance(
             ledger_api, asset_address, recipient_address
         )
-        spinner = Halo(
-            text=f"[{chain}] Waiting for at least {wei_to_token(waiting_for_amount, chain, asset_address)}...",
-            spinner="dots",
-        )
-        spinner.start()
+        if updated_balance >= current_balance + required_balance:
+            break
 
-        while True:
-            time.sleep(1)
-            updated_balance = get_asset_balance(
-                ledger_api, asset_address, recipient_address
-            )
-            if updated_balance >= required_balance:
-                break
+        remaining_requirement = current_balance + required_balance - updated_balance
+        spinner.text = f"[{chain}] Waiting for at least {wei_to_token(remaining_requirement, chain, asset_address)}..."
 
-        spinner.succeed(
-            f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}."
-        )
+    spinner.succeed(
+        f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}."
+    )
 
 
 def _ask_funds_from_requirements(
@@ -568,6 +569,9 @@ def _ask_funds_from_requirements(
             rpc=service.chain_configs[chain_name].ledger_config.rpc,
         )
         for wallet_address, requirements in chain_requirements.items():
+            if wallet_address in ("master_safe", "service_safe"):
+                continue  # we can't ask funds in placeholder addresses
+
             for asset_address, requirement in requirements.items():
                 ask_funds_in_address(
                     ledger_api=ledger_api,

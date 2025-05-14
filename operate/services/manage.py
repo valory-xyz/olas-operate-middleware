@@ -690,21 +690,8 @@ class ServiceManager:
                 }
             )
 
-        # TODO: yet another agent specific logic for memeooorr, which should be abstracted
-        if all(
-            var in service.env_variables
-            for var in [
-                "TWIKIT_USERNAME",
-                "TWIKIT_EMAIL",
-                "TWIKIT_PASSWORD",
-            ]
-        ):
-            store_path = service.path / "persistent_data"
-            store_path.mkdir(parents=True, exist_ok=True)
-            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
-
-        # TODO yet another computed variable for modius
-        if "optimus" in service.name.lower():
+        # TODO: yet another agent specific logic for memeooorr and optimus, which should be abstracted
+        if "memeooorr" in service.name.lower() or "optimus" in service.name.lower():
             store_path = service.path / "persistent_data"
             store_path.mkdir(parents=True, exist_ok=True)
             env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
@@ -2310,7 +2297,9 @@ class ServiceManager:
             )
 
             # TODO this is a patch for the case when excess balance is in MasterEOA
-            # and MasterSafe is not created (typically for onboarding bridging)
+            # and MasterSafe is not created (typically for onboarding bridging).
+            # It simulates the "balance in the future" for both addesses when
+            # transfering the excess assets.
             if master_safe == "master_safe":
                 eoa_funding_values = self.get_master_eoa_native_funding_values(
                     master_safe_exists=master_safe_exists,
@@ -2325,12 +2314,15 @@ class ServiceManager:
                             - eoa_funding_values["topup"],
                             0,
                         )
-                        # This line would keep the sum of balances constant, but then it will not be able to transfer the correct amount to MasterSafe: balances[chain][master_eoa][asset] = min(balances[chain][master_eoa][asset], eoa_funding_values["topup"])
+                        balances[chain][master_eoa][asset] = min(
+                            balances[chain][master_eoa][asset],
+                            eoa_funding_values["topup"],
+                        )
                     else:
                         balances[chain][master_safe][asset] = balances[chain][
                             master_eoa
                         ][asset]
-                        # This line would keep the sum of balances constant, but then it will not be able to transfer the correct amount to MasterSafe: balances[chain][master_eoa][asset] = 0
+                        balances[chain][master_eoa][asset] = 0
 
             # TODO this is a balances patch to count wrapped native asset as
             # native assets for the service safe
