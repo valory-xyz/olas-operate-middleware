@@ -290,6 +290,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
+        agent_runner_log_file = (Path(self._work_directory).parent.parent.parent / "agent_runner.log").open("a+")
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
                 self._agent_runner_bin,
@@ -297,8 +298,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
                 "run",
             ],  # TODO: Patch for Windows failing hash
             cwd=working_dir / "agent",
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=agent_runner_log_file,
+            stderr=agent_runner_log_file,
             env=env,
             creationflags=(
                 0x00000200 if platform.system() == "Windows" else 0
