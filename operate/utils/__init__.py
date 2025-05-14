@@ -51,7 +51,7 @@ def create_backup(path: Path) -> Path:
 NestedDict = t.Union[int, t.Dict[str, "NestedDict"]]
 
 
-def merge_sum_dicts(*dicts: t.List[t.Dict[str, NestedDict]]) -> t.Dict[str, NestedDict]:
+def merge_sum_dicts(*dicts: t.Dict[str, NestedDict]) -> t.Dict[str, NestedDict]:
     """
     Merge a list of nested dicts by summing all innermost `int` values.
 

@@ -243,7 +243,9 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = subtract_dicts(bridge_total_requirements, balances)
+        bridge_refill_requirements: t.Dict[
+            str, t.Dict[str, t.Dict[str, int]]
+        ] = subtract_dicts(bridge_total_requirements, balances)
 
         is_refill_required = any(
             amount > 0
@@ -340,7 +342,7 @@ class BridgeManager:
             bridge = self._bridge_providers[request.bridge_provider_id]
             requirements.append(bridge.bridge_requirements(request))
 
-        return merge_sum_dicts(requirements)
+        return merge_sum_dicts(*requirements)
 
     def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
         """Update the bundle with the quotes."""
