@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, cast
 
 from operate.constants import SAFE_WEBAPP_URL
 from operate.ledger.profiles import get_staking_contract
-from operate.operate_types import LedgerType
 from operate.quickstart.run_service import (
     ask_password_if_needed,
     configure_local_config,
@@ -113,11 +112,7 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         logging.error(e)
         return
 
-    wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     service_safe_address = chain_config.chain_data.multisig
-    print_title(f"Claim transaction done. Hash: {tx_hash}")
+    print_title(f"Claim transaction done. Hash: {tx_hash.hex()}")
     print(f"Claimed staking transferred to your service Safe {service_safe_address}.\n")
-    print(
-        f"You can use your Master EOA (address {wallet.crypto.address}) to connect your Safe at"
-        f"{SAFE_WEBAPP_URL}{service_safe_address}"
-    )
+    print(f"You may connect to service Safe at {SAFE_WEBAPP_URL}{service_safe_address}")
