@@ -50,6 +50,7 @@ from operate.keys import Key, KeysManager
 from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
     OLAS,
     STAKING,
@@ -2243,6 +2244,7 @@ class ServiceManager:
         bonded_assets: t.Dict = {}
         protocol_asset_requirements: t.Dict = {}
         refill_requirements: t.Dict = {}
+        total_requirements: t.Dict = {}
         allow_start_agent = True
         is_refill_required = False
 
@@ -2294,6 +2296,34 @@ class ServiceManager:
                 raise_on_invalid_address=False,
             )
 
+            # TODO this is a patch for the case when excess balance is in MasterEOA
+            # and MasterSafe is not created (typically for onboarding bridging).
+            # It simulates the "balance in the future" for both addesses when
+            # transfering the excess assets.
+            if master_safe == "master_safe":
+                eoa_funding_values = self.get_master_eoa_native_funding_values(
+                    master_safe_exists=master_safe_exists,
+                    chain=Chain(chain),
+                    balance=balances[chain][master_eoa][ZERO_ADDRESS],
+                )
+
+                for asset in balances[chain][master_safe]:
+                    if asset == ZERO_ADDRESS:
+                        balances[chain][master_safe][asset] = max(
+                            balances[chain][master_eoa][asset]
+                            - eoa_funding_values["topup"],
+                            0,
+                        )
+                        balances[chain][master_eoa][asset] = min(
+                            balances[chain][master_eoa][asset],
+                            eoa_funding_values["topup"],
+                        )
+                    else:
+                        balances[chain][master_safe][asset] = balances[chain][
+                            master_eoa
+                        ][asset]
+                        balances[chain][master_eoa][asset] = 0
+
             # TODO this is a balances patch to count wrapped native asset as
             # native assets for the service safe
             if Chain(chain) in WRAPPED_NATIVE_ASSET:
@@ -2307,6 +2337,7 @@ class ServiceManager:
 
             # Refill requirements
             refill_requirements[chain] = {}
+            total_requirements[chain] = {}
 
             # Refill requirements for Master Safe
             for asset_address in (
@@ -2350,6 +2381,17 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
+                total_requirements[chain].setdefault(master_safe, {})[
+                    asset_address
+                ] = sum(
+                    agent_asset_funding_values[address]["topup"]
+                    for address in agent_asset_funding_values
+                ) + protocol_asset_requirements[
+                    chain
+                ].get(
+                    asset_address, 0
+                )
+
                 if asset_address == ZERO_ADDRESS and any(
                     balances[chain][master_safe][asset_address] == 0
                     and balances[chain][address][asset_address] == 0
@@ -2358,11 +2400,8 @@ class ServiceManager:
                 ):
                     allow_start_agent = False
 
-            # Remove placeholder value
-            refill_requirements[chain].pop("master_safe", None)
-
             # Refill requirements for Master EOA
-            eoa_funding_values = self._get_master_eoa_native_funding_values(
+            eoa_funding_values = self.get_master_eoa_native_funding_values(
                 master_safe_exists=master_safe_exists,
                 chain=Chain(chain),
                 balance=balances[chain][master_eoa][ZERO_ADDRESS],
@@ -2379,6 +2418,10 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
+            total_requirements[chain].setdefault(master_eoa, {})[
+                ZERO_ADDRESS
+            ] = eoa_funding_values["topup"]
+
         is_refill_required = any(
             amount > 0
             for chain in refill_requirements.values()
@@ -2389,6 +2432,7 @@ class ServiceManager:
         return {
             "balances": balances,
             "bonded_assets": bonded_assets,
+            "total_requirements": total_requirements,
             "refill_requirements": refill_requirements,
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
@@ -2630,44 +2674,11 @@ class ServiceManager:
         }
 
     @staticmethod
-    def _get_master_eoa_native_funding_values(
+    def get_master_eoa_native_funding_values(
         master_safe_exists: bool, chain: Chain, balance: int
     ) -> t.Dict:
-        funding_values = {
-            True: {
-                Chain.ETHEREUM: {
-                    "topup": 20000000000000000,
-                    "threshold": 10000000000000000,
-                },
-                Chain.GNOSIS: {
-                    "topup": 1500000000000000000,
-                    "threshold": 750000000000000000,
-                },
-                Chain.OPTIMISTIC: {
-                    "topup": 5000000000000000,
-                    "threshold": 2500000000000000,
-                },
-                Chain.BASE: {"topup": 5000000000000000, "threshold": 2500000000000000},
-                Chain.MODE: {"topup": 500000000000000, "threshold": 250000000000000},
-            },
-            False: {
-                Chain.ETHEREUM: {
-                    "topup": 20000000000000000,
-                    "threshold": 20000000000000000,
-                },
-                Chain.GNOSIS: {
-                    "topup": 1500000000000000000,
-                    "threshold": 1500000000000000000,
-                },
-                Chain.OPTIMISTIC: {
-                    "topup": 5000000000000000,
-                    "threshold": 5000000000000000,
-                },
-                Chain.BASE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-                Chain.MODE: {"topup": 5000000000000000, "threshold": 5000000000000000},
-            },
-        }
+        """Get Master EOA native funding values."""
 
-        values = funding_values[master_safe_exists][chain]
-        values["balance"] = balance
-        return values
+        topup = DEFAULT_MASTER_EOA_FUNDS[chain][ZERO_ADDRESS]
+        threshold = topup / 2 if master_safe_exists else topup
+        return {"topup": topup, "threshold": threshold, "balance": balance}

@@ -336,10 +336,35 @@ Creates a Gnosis safe for given chain.
 <details>
   <summary>Request</summary>
 
-```js
+Using default new safe funding:
+
+```json
 {
-  "chain": Chain,
-  "fund_amount": 10000000000000000
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
+}
+```
+
+Specify new safe funding:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "initial_funds": {
+    "0x0000000000000000000000000000000000000000": 1000000000000000000,
+    "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+  }
+}
+```
+
+Transfer all excess assets (except operational Master EOA balance) to the new safe:
+
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
+  "transfer_excess_assets": true
 }
 ```
 
@@ -352,15 +377,13 @@ Creates a Gnosis safe for given chain.
 
   ```json
   {
-    "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "safe_chains": [
-      "gnosis"
-    ],
-    "ledger_type": 0,
-    "safes": {
-      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
+    "create_tx": "0xac14dcd5938c71cd97388307c41477dc2f2a4e97b6b2641cef123a769898bd03",
+    "transfer_txs": {
+      "0x0000000000000000000000000000000000000000": "0x0036489a4a27b4ee1b7e4a37ae5597b895bf43e4cda25c7e6c0f1d02f8c098aa",
+      "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": "0x45304084049916535419d4b175074cdfcaeea59e3a5d34010854b3ac049261b2"
     },
-    "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
+    "safe": "0x29e23F7705d849F368855947691cB133CD770752",
+    "message": "Safe created!"
   }
   ```
 
@@ -878,6 +901,18 @@ The refill requirements are computed based on the fund requirements present on t
         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
       }
     },
+    "total_requirements": {
+      "gnosis": {
+        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
+          "0x0000000000000000000000000000000000000000": 10000000000000000000,
+          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
+        },
+        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
+         "0x0000000000000000000000000000000000000000": 500000000000000000,
+         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
+        }
+      }
+    }
   }
   ```
 
