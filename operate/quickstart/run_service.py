@@ -507,7 +507,9 @@ def ask_funds_in_address(
 
     while True:
         time.sleep(1)
-        updated_balance = get_asset_balance(ledger_api, asset_address, recipient_address)
+        updated_balance = get_asset_balance(
+            ledger_api, asset_address, recipient_address
+        )
         if updated_balance >= current_balance + required_balance:
             break
 
