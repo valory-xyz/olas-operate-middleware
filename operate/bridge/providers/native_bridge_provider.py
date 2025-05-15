@@ -25,7 +25,6 @@ import typing as t
 from math import ceil
 
 import eth_abi
-from aea.crypto.base import LedgerApi
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
 
@@ -33,6 +32,9 @@ from operate.bridge.providers.bridge_provider import (
     BridgeProvider,
     BridgeRequest,
     BridgeRequestStatus,
+    MESSAGE_EXECUTION_FAILED,
+    MESSAGE_EXECUTION_FAILED_ETA,
+    MESSAGE_EXECUTION_FAILED_REVERTED,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
@@ -136,20 +138,16 @@ class NativeBridgeProvider(BridgeProvider):
             message = MESSAGE_QUOTE_ZERO
 
         quote_data = QuoteData(
-            attempts=0,
             bridge_eta=bridge_eta,
             elapsed_time=0,
             message=message,
-            response=None,
-            response_status=0,
+            provider_data=None,
             timestamp=int(time.time()),
         )
         bridge_request.quote_data = quote_data
         bridge_request.status = BridgeRequestStatus.QUOTE_DONE
 
-    def _get_bridge_tx(
-        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
-    ) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
         self.logger.info(
             f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
         )
@@ -166,11 +164,13 @@ class NativeBridgeProvider(BridgeProvider):
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
+        from_ledger_api = self._from_ledger_api(bridge_request)
+
         extra_data = Web3.keccak(text=bridge_request.id)
 
         if from_token == ZERO_ADDRESS:
             bridge_tx = L1_STANDARD_BRIDGE_CONTRACT.build_bridge_eth_to_tx(
-                ledger_api=ledger_api,
+                ledger_api=from_ledger_api,
                 contract_address=from_bridge,
                 sender=from_address,
                 to=to_address,
@@ -180,7 +180,7 @@ class NativeBridgeProvider(BridgeProvider):
             )
         else:
             bridge_tx = L1_STANDARD_BRIDGE_CONTRACT.build_bridge_erc20_to_tx(
-                ledger_api=ledger_api,
+                ledger_api=from_ledger_api,
                 contract_address=from_bridge,
                 sender=from_address,
                 local_token=from_token,
@@ -190,18 +190,16 @@ class NativeBridgeProvider(BridgeProvider):
                 min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
-        self._update_with_gas_pricing(bridge_tx, ledger_api)
+        self._update_with_gas_pricing(bridge_tx, from_ledger_api)
         self.logger.debug(
             f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}."
         )
-        self._update_with_gas_estimate(bridge_tx, ledger_api)
+        self._update_with_gas_estimate(bridge_tx, from_ledger_api)
         self.logger.debug(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
         bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
 
-    def _get_approve_tx(
-        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
-    ) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
         self.logger.info(
             f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
         )
@@ -216,23 +214,24 @@ class NativeBridgeProvider(BridgeProvider):
         to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
         from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
+        from_ledger_api = self._from_ledger_api(bridge_request)
 
         if from_token == ZERO_ADDRESS:
             return None
 
         approve_tx = registry_contracts.erc20.get_approve_tx(
-            ledger_api=ledger_api,
+            ledger_api=from_ledger_api,
             contract_address=from_token,
             spender=from_bridge,
             sender=from_address,
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        self._update_with_gas_pricing(approve_tx, ledger_api)
+        self._update_with_gas_pricing(approve_tx, from_ledger_api)
         self.logger.debug(
             f"[NATIVE BRIDGE] Gas before updating {approve_tx.get('gas')}."
         )
-        self._update_with_gas_estimate(approve_tx, ledger_api)
+        self._update_with_gas_estimate(approve_tx, from_ledger_api)
         self.logger.debug(
             f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}."
         )
@@ -255,34 +254,29 @@ class NativeBridgeProvider(BridgeProvider):
         if bridge_request.params["to"]["amount"] == 0:
             return []
 
-        from_ledger_api = self._from_ledger_api(bridge_request)
-
-        bridge_tx = self._get_bridge_tx(bridge_request, from_ledger_api)
+        bridge_tx = self._get_bridge_tx(bridge_request)
 
         if not bridge_tx:
             return []
 
-        approve_tx = self._get_approve_tx(bridge_request, from_ledger_api)
+        approve_tx = self._get_approve_tx(bridge_request)
 
-        if approve_tx:
-            bridge_tx["nonce"] = approve_tx["nonce"] + 1
+        if not approve_tx:
             return [
-                ("ERC20 Approve transaction", approve_tx),
-                ("Bridge transaction", bridge_tx),
+                ("bridge_tx", bridge_tx),
             ]
 
+        bridge_tx["nonce"] = approve_tx["nonce"] + 1
         return [
-            ("Bridge transaction", bridge_tx),
+            ("approve_tx", approve_tx),
+            ("bridge_tx", bridge_tx),
         ]
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
         self._validate(bridge_request)
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.EXECUTION_PENDING,
-            # BridgeRequestStatus.EXECUTION_UNKNOWN,
-        ):
+        if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING,):
             return
 
         self.logger.info(
@@ -295,6 +289,9 @@ class NativeBridgeProvider(BridgeProvider):
             )
 
         if not bridge_request.execution_data.from_tx_hash:
+            bridge_request.execution_data.message = (
+                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
+            )
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
             return
 
@@ -315,6 +312,9 @@ class NativeBridgeProvider(BridgeProvider):
             from_tx_hash = bridge_request.execution_data.from_tx_hash
             receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             if receipt.status == 0:
+                bridge_request.execution_data.message = (
+                    MESSAGE_EXECUTION_FAILED_REVERTED
+                )
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
                 return
 
@@ -379,14 +379,16 @@ class NativeBridgeProvider(BridgeProvider):
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution failed for {bridge_request.id}: bridge exceeds 2*ETA."
                     )
+                    bridge_request.execution_data.message = MESSAGE_EXECUTION_FAILED_ETA
                     bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
                     return
 
         except Exception as e:
             self.logger.error(f"Error updating execution status: {e}")
-            bridge_request.status = (
-                BridgeRequestStatus.EXECUTION_FAILED
-            )  # TODO EXECUTION_UNKNOWN ?
+            bridge_request.execution_data.message = (
+                f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
+            )
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
     @staticmethod
     def _find_transaction_in_range(

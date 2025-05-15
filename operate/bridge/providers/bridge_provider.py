@@ -50,6 +50,16 @@ DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "b-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
+MESSAGE_EXECUTION_FAILED = "Execution failed:"
+MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} ETA exceeded."
+MESSAGE_EXECUTION_FAILED_QUOTE_FAILED = f"{MESSAGE_EXECUTION_FAILED} quote failed."
+MESSAGE_EXECUTION_FAILED_REVERTED = (
+    f"{MESSAGE_EXECUTION_FAILED} bridge transaction reverted."
+)
+MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
+    f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
+)
+
 ERC20_APPROVE_SELECTOR = (
     "0x095ea7b3"  # 4 first bytes of Keccak('approve(address,uint256)')
 )
@@ -59,13 +69,11 @@ ERC20_APPROVE_SELECTOR = (
 class QuoteData(LocalResource):
     """QuoteData"""
 
-    attempts: int
     bridge_eta: t.Optional[int]
     elapsed_time: float
     message: t.Optional[str]
-    response: t.Optional[t.Dict]
-    response_status: int
     timestamp: int
+    provider_data: t.Optional[t.Dict]  # Provider-specific data
 
 
 @dataclass
@@ -325,6 +333,9 @@ class BridgeProvider(ABC):
             if bridge_request.status == BridgeRequestStatus.QUOTE_DONE:
                 bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
             else:
+                bridge_request.execution_data.message = (
+                    MESSAGE_EXECUTION_FAILED_QUOTE_FAILED
+                )
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
             return
 
@@ -368,13 +379,16 @@ class BridgeProvider(ABC):
             if len(tx_hashes) == len(txs):
                 bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
             else:
+                bridge_request.execution_data.message = (
+                    MESSAGE_EXECUTION_FAILED_SETTLEMENT
+                )
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[BRIDGE] Error executing bridge request: {e}")
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
-                message=f"Error executing quote: {str(e)}",
+                message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
                 timestamp=int(timestamp),
                 from_tx_hash=None,
                 to_tx_hash=None,

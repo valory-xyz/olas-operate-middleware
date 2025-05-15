@@ -35,6 +35,7 @@ from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE
 from operate.bridge.providers.bridge_provider import (
     BridgeRequestStatus,
     ExecutionData,
+    MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_SKIPPED,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
@@ -522,12 +523,10 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            attempts=0,
             bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
             elapsed_time=0,
             message=MESSAGE_QUOTE_ZERO,
-            response=None,
-            response_status=0,
+            provider_data=None,
             timestamp=int(time.time()),
         )
         expected_request.quote_data = expected_quote_data
@@ -664,12 +663,10 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            attempts=0,
             bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
             elapsed_time=0,
             message=None,
-            response=None,
-            response_status=0,
+            provider_data=None,
             timestamp=int(time.time()),
         )
         expected_request.quote_data = expected_quote_data
@@ -733,7 +730,7 @@ class TestNativeBridge:
 
         assert bridge_request == expected_request, "Wrong bridge request."
         sj = bridge.status_json(bridge_request)
-        assert "Error executing quote" in sj["message"], "Wrong execution data."
+        assert MESSAGE_EXECUTION_FAILED in sj["message"], "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,  # type: ignore
@@ -875,12 +872,10 @@ class TestNativeBridge:
         bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
-            attempts=0,
             bridge_eta=0,
             elapsed_time=0,
             message=None,
-            response=None,
-            response_status=0,
+            provider_data=None,
             timestamp=0,
         )
 
@@ -1008,12 +1003,10 @@ class TestNativeBridge:
         bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
-            attempts=0,
             bridge_eta=0,
             elapsed_time=0,
             message=None,
-            response=None,
-            response_status=0,
+            provider_data=None,
             timestamp=0,
         )
 
