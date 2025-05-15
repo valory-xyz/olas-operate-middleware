@@ -235,6 +235,10 @@ class BridgeProvider(ABC):
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
         """Gets the bridge requirements to execute the quote, with updated gas estimation."""
+        self.logger.info(
+            f"[BRIDGE PROVIDER] Bridge requirements for request {bridge_request.id}."
+        )
+
         self._validate(bridge_request)
 
         from_chain = bridge_request.params["from"]["chain"]
@@ -298,7 +302,6 @@ class BridgeProvider(ABC):
 
     def execute(self, bridge_request: BridgeRequest) -> None:
         """Execute the request."""
-
         self.logger.info(
             f"[BRIDGE PROVIDER] Executing bridge request {bridge_request.id}."
         )
@@ -420,6 +423,8 @@ class BridgeProvider(ABC):
 
     def status_json(self, bridge_request: BridgeRequest) -> t.Dict:
         """JSON representation of the status."""
+        self._validate(bridge_request)
+
         if bridge_request.execution_data:
             self._update_execution_status(bridge_request)
             tx_hash = None

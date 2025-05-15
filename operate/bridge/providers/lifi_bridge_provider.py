@@ -274,8 +274,6 @@ class LiFiBridgeProvider(BridgeProvider):
             f"[LI.FI BRIDGE] Get transactions for bridge request {bridge_request.id}."
         )
 
-        self._validate(bridge_request)
-
         if not bridge_request.quote_data:
             return []
 
@@ -302,7 +300,6 @@ class LiFiBridgeProvider(BridgeProvider):
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
-        self._validate(bridge_request)
 
         if bridge_request.status not in (
             BridgeRequestStatus.EXECUTION_PENDING,
