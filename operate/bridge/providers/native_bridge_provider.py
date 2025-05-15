@@ -278,8 +278,9 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        if not bridge_request.execution_data.from_tx_hash:
-            bridge_request.execution_data.message = (
+        execution_data = bridge_request.execution_data
+        if not execution_data.from_tx_hash:
+            execution_data.message = (
                 f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
@@ -297,14 +298,13 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_eta = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"])
 
         try:
-            from_w3 = self._from_ledger_api(bridge_request).api
+            from_ledger_api = self._from_ledger_api(bridge_request)
+            from_w3 = from_ledger_api.api
 
-            from_tx_hash = bridge_request.execution_data.from_tx_hash
+            from_tx_hash = execution_data.from_tx_hash
             receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             if receipt.status == 0:
-                bridge_request.execution_data.message = (
-                    MESSAGE_EXECUTION_FAILED_REVERTED
-                )
+                execution_data.message = MESSAGE_EXECUTION_FAILED_REVERTED
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
                 return
 
@@ -340,7 +340,8 @@ class NativeBridgeProvider(BridgeProvider):
                 ]
 
             # Find the event on the 'to' chain
-            to_w3 = self._to_ledger_api(bridge_request).api
+            to_ledger_api = self._to_ledger_api(bridge_request)
+            to_w3 = to_ledger_api.api
             starting_block = self._find_block_before_timestamp(to_w3, bridge_tx_ts)
             starting_block_ts = to_w3.eth.get_block(starting_block).timestamp
             latest_block = to_w3.eth.block_number
@@ -360,7 +361,10 @@ class NativeBridgeProvider(BridgeProvider):
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution done for {bridge_request.id}."
                     )
-                    bridge_request.execution_data.to_tx_hash = to_tx_hash
+                    execution_data.to_tx_hash = to_tx_hash
+                    execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+                        to_tx_hash, to_ledger_api
+                    ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
                     bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
                     return
 
@@ -369,15 +373,13 @@ class NativeBridgeProvider(BridgeProvider):
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution failed for {bridge_request.id}: bridge exceeds 2*ETA."
                     )
-                    bridge_request.execution_data.message = MESSAGE_EXECUTION_FAILED_ETA
+                    execution_data.message = MESSAGE_EXECUTION_FAILED_ETA
                     bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
                     return
 
         except Exception as e:
             self.logger.error(f"Error updating execution status: {e}")
-            bridge_request.execution_data.message = (
-                f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
-            )
+            execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
     @staticmethod

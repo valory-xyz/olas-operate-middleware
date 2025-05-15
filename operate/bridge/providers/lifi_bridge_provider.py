@@ -306,19 +306,19 @@ class LiFiBridgeProvider(BridgeProvider):
         ):
             return
 
-        if not bridge_request.execution_data:
+        execution_data = bridge_request.execution_data
+        if not execution_data:
             raise RuntimeError(
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        execution = bridge_request.execution_data
-        if not execution.from_tx_hash:
+        if not execution_data.from_tx_hash:
             return
 
         url = "https://li.quest/v1/status"
         headers = {"accept": "application/json"}
         params = {
-            "txHash": execution.from_tx_hash,
+            "txHash": execution_data.from_tx_hash,
         }
 
         try:
@@ -328,7 +328,7 @@ class LiFiBridgeProvider(BridgeProvider):
             lifi_status = response_json.get(
                 "status", str(LiFiTransactionStatus.UNKNOWN)
             )
-            execution.message = response_json.get(
+            execution_data.message = response_json.get(
                 "substatusMessage", response_json.get("message")
             )
             response.raise_for_status()
@@ -338,6 +338,15 @@ class LiFiBridgeProvider(BridgeProvider):
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:
+            self.logger.info(f"[LI.FI BRIDGE] Execution done for {bridge_request.id}.")
+            from_ledger_api = self._from_ledger_api(bridge_request)
+            from_tx_hash = execution_data.from_tx_hash
+            to_ledger_api = self._to_ledger_api(bridge_request)
+            to_tx_hash = response_json.get("receiving", {}).get("txHash")
+            execution_data.to_tx_hash = to_tx_hash
+            execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+                to_tx_hash, to_ledger_api
+            ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
             bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
         elif lifi_status == LiFiTransactionStatus.FAILED:
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED

@@ -22,6 +22,7 @@
 
 import os
 import time
+import typing as t
 from pathlib import Path
 
 import pytest
@@ -33,9 +34,11 @@ from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE
     LiFiBridgeProvider,
 )
 from operate.bridge.providers.bridge_provider import (
+    BridgeProvider,
     BridgeRequestStatus,
     ExecutionData,
     MESSAGE_EXECUTION_FAILED,
+    MESSAGE_EXECUTION_FAILED_QUOTE_FAILED,
     MESSAGE_EXECUTION_SKIPPED,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
@@ -311,7 +314,9 @@ class TestLiFiBridge:
         assert ed is not None, "Missing execution data."
         assert ed.elapsed_time == 0, "Wrong execution data."
         assert ed.message is not None, "Wrong execution data."
-        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
+        assert (
+            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in ed.message
+        ), "Wrong execution data."
         assert timestamp <= ed.timestamp, "Wrong quote data."
         assert ed.timestamp <= int(time.time()), "Wrong quote data."
         assert ed.from_tx_hash is None, "Wrong execution data."
@@ -325,7 +330,9 @@ class TestLiFiBridge:
         ), "Wrong status."
 
         sj = bridge.status_json(bridge_request)
-        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
+        assert (
+            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in sj["message"]
+        ), "Wrong execution data."
         expected_sj = {
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,
@@ -417,7 +424,9 @@ class TestLiFiBridge:
             print(diff)
 
         assert not diff, "Wrong status."
-        assert bridge_request.quote_data.provider_data is not None, "Missing quote data."
+        assert (
+            bridge_request.quote_data.provider_data is not None
+        ), "Missing quote data."
 
         quote = bridge_request.quote_data.provider_data.get("response")
         br = bridge.bridge_requirements(bridge_request)
@@ -774,10 +783,46 @@ class TestNativeBridge:
         block = NativeBridgeProvider._find_block_before_timestamp(w3, timestamp)
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
+
+class TestBridgeProvider:
+    """Tests for bridge.providers.BridgeProvider class."""
+
     @pytest.mark.parametrize(
-        ("params", "request_id", "from_tx_hash", "expected_to_tx_hash"),
+        (
+            "bridge_provider_class",
+            "params",
+            "request_id",
+            "from_tx_hash",
+            "expected_status",
+            "expected_to_tx_hash",
+            "expected_elapsed_time",
+        ),
         [
+            # LiFiBridgeProvider - EXECUTION_DONE tests
             (
+                LiFiBridgeProvider,
+                {
+                    "from": {
+                        "chain": "gnosis",
+                        "address": "0xE95866Fa91ce81109aA900550133654A4795C20e",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "base",
+                        "address": "0xE95866Fa91ce81109aA900550133654A4795C20e",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 10000000000000,
+                    },
+                },
+                "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
+                "0x333f5a51163576c9d90599bffa6b038dbec45f4f6f761b87e29ab59235403861",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x6cd9176f1da953e4464adb8bdc81fbe4133ebcd1bb6aeac49946a38ff025e623",
+                374,
+            ),
+            # NativeBridgeProvider - EXECUTION_DONE tests
+            (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -793,9 +838,12 @@ class TestNativeBridge:
                 },
                 "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
                 "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
+                BridgeRequestStatus.EXECUTION_DONE,
                 "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
+                178,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -811,9 +859,12 @@ class TestNativeBridge:
                 },
                 "b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
                 "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
+                BridgeRequestStatus.EXECUTION_DONE,
                 "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
+                184,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -829,9 +880,12 @@ class TestNativeBridge:
                 },
                 "b-7ca71220-4336-414f-985e-bdfe11707c71",
                 "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
+                BridgeRequestStatus.EXECUTION_DONE,
                 "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
+                198,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -847,68 +901,13 @@ class TestNativeBridge:
                 },
                 "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
                 "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+                BridgeRequestStatus.EXECUTION_DONE,
                 "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
+                186,
             ),
-        ],
-    )
-    def test_update_execution_status(
-        self,
-        tmp_path: Path,
-        password: str,
-        request_id: str,
-        params: dict,
-        from_tx_hash: str,
-        expected_to_tx_hash: str,
-    ) -> None:
-        """Parametrized test for update_execution_status."""
-
-        DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
-        DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
-
-        operate = OperateApp(home=tmp_path / OPERATE)
-        operate.setup()
-        operate.create_user_account(password=password)
-        operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
-        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
-
-        quote_data = QuoteData(
-            bridge_eta=0,
-            elapsed_time=0,
-            message=None,
-            provider_data=None,
-            timestamp=0,
-        )
-
-        execution_data = ExecutionData(
-            elapsed_time=0,
-            message=None,
-            timestamp=0,
-            from_tx_hash=from_tx_hash,
-            to_tx_hash=None,
-        )
-
-        bridge_request = BridgeRequest(
-            params=params,
-            bridge_provider_id=NativeBridgeProvider.id(),
-            id=request_id,
-            status=BridgeRequestStatus.EXECUTION_PENDING,
-            quote_data=quote_data,
-            execution_data=execution_data,
-        )
-
-        bridge.status_json(bridge_request)
-
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong execution status."
-        assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
-
-    @pytest.mark.parametrize(
-        ("params", "request_id", "from_tx_hash", "expected_to_tx_hash"),
-        [
+            # NativeBridgeProvider - EXECUTION_FAILED tests
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -924,9 +923,12 @@ class TestNativeBridge:
                 },
                 "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
                 "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
-                "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
+                BridgeRequestStatus.EXECUTION_FAILED,
+                None,
+                0,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -942,9 +944,12 @@ class TestNativeBridge:
                 },
                 "b-42",  # Wrong id
                 "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
-                "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
+                BridgeRequestStatus.EXECUTION_FAILED,
+                None,
+                0,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -960,9 +965,12 @@ class TestNativeBridge:
                 },
                 "b-7ca71220-4336-414f-985e-bdfe11707c71",
                 "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
-                "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
+                BridgeRequestStatus.EXECUTION_FAILED,
+                None,
+                0,
             ),
             (
+                NativeBridgeProvider,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -978,20 +986,25 @@ class TestNativeBridge:
                 },
                 "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
                 "0x7cefa52970f4e1b12a07b9795b8f03de2bbc2ee7c42cba5913d923316e96b3c5",  # Wrong from_tx_hash
-                "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
+                BridgeRequestStatus.EXECUTION_FAILED,
+                None,
+                0,
             ),
         ],
     )
-    def test_update_execution_status_fail(
+    def test_update_execution_status(
         self,
         tmp_path: Path,
         password: str,
-        request_id: str,
+        bridge_provider_class: t.Type[BridgeProvider],
         params: dict,
+        request_id: str,
         from_tx_hash: str,
+        expected_status: BridgeRequestStatus,
         expected_to_tx_hash: str,
+        expected_elapsed_time: int,
     ) -> None:
-        """Parametrized test for update_execution_status."""
+        """test_update_execution_status"""
 
         DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
         DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
@@ -1002,7 +1015,7 @@ class TestNativeBridge:
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
-        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = bridge_provider_class(wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
             bridge_eta=0,
@@ -1022,7 +1035,7 @@ class TestNativeBridge:
 
         bridge_request = BridgeRequest(
             params=params,
-            bridge_provider_id=NativeBridgeProvider.id(),
+            bridge_provider_id=bridge_provider_class.id(),
             id=request_id,
             status=BridgeRequestStatus.EXECUTION_PENDING,
             quote_data=quote_data,
@@ -1031,7 +1044,6 @@ class TestNativeBridge:
 
         bridge.status_json(bridge_request)
 
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
-        ), "Wrong execution status."
-        assert execution_data.to_tx_hash is None, "Wrong to_tx_hash."
+        assert bridge_request.status == expected_status, "Wrong execution status."
+        assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
+        assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."

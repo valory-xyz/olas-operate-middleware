@@ -297,13 +297,30 @@ class BridgeProvider(ABC):
         return result
 
     def execute(self, bridge_request: BridgeRequest) -> None:
-        """Execute the quote."""
+        """Execute the request."""
+
+        self.logger.info(
+            f"[BRIDGE PROVIDER] Executing bridge request {bridge_request.id}."
+        )
+
         self._validate(bridge_request)
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.QUOTE_DONE,
-            BridgeRequestStatus.QUOTE_FAILED,
-        ):
+        if bridge_request.status in (BridgeRequestStatus.QUOTE_FAILED):
+            self.logger.info(
+                f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}."
+            )
+            execution_data = ExecutionData(
+                elapsed_time=0,
+                message=f"{MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}",
+                timestamp=int(time.time()),
+                from_tx_hash=None,
+                to_tx_hash=None,
+            )
+            bridge_request.execution_data = execution_data
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            return
+
+        if bridge_request.status not in (BridgeRequestStatus.QUOTE_DONE,):
             raise RuntimeError(
                 f"Cannot execute bridge request {bridge_request.id} with status {bridge_request.status}."
             )
@@ -316,33 +333,26 @@ class BridgeProvider(ABC):
                 f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
-        timestamp = time.time()
         txs = self._get_transactions(bridge_request)
 
         if not txs:
             self.logger.info(
-                f"[LI.FI BRIDGE] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
+                f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
             )
             execution_data = ExecutionData(
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
-                timestamp=int(timestamp),
+                timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
             )
             bridge_request.execution_data = execution_data
-
-            if bridge_request.status == BridgeRequestStatus.QUOTE_DONE:
-                bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
-            else:
-                bridge_request.execution_data.message = (
-                    MESSAGE_EXECUTION_FAILED_QUOTE_FAILED
-                )
-                bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
             return
 
         try:
             self.logger.info(f"[BRIDGE] Executing bridge request {bridge_request.id}.")
+            timestamp = time.time()
             chain = Chain(bridge_request.params["from"]["chain"])
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(bridge_request)
@@ -391,7 +401,7 @@ class BridgeProvider(ABC):
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
-                timestamp=int(timestamp),
+                timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
             )
@@ -431,6 +441,12 @@ class BridgeProvider(ABC):
             }
 
         return {"message": None, "status": bridge_request.status.value}
+
+    @staticmethod
+    def _tx_timestamp(tx_hash: str, ledger_api: LedgerApi) -> int:
+        receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
+        block = ledger_api.api.eth.get_block(receipt.blockNumber)
+        return block.timestamp
 
     # TODO backport to open aea/autonomy
     # TODO This gas pricing management should possibly be done at a lower level in the library
