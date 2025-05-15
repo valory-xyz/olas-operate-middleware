@@ -32,6 +32,7 @@ from operate.bridge.providers.bridge_provider import (
     BridgeProvider,
     BridgeRequest,
     BridgeRequestStatus,
+    GAS_ESTIMATE_BUFFER,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
@@ -49,7 +50,6 @@ from operate.operate_types import Chain
 
 
 BLOCK_CHUNK_SIZE = 5000
-GAS_ESTIMATE_BUFFER = 1.10
 
 NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
     (Chain.ETHEREUM.value, Chain.BASE.value): {
@@ -190,12 +190,8 @@ class NativeBridgeProvider(BridgeProvider):
                 min_gas_limit=DEFAULT_BRIDGE_MIN_GAS_LIMIT,
                 extra_data=extra_data,
             )
-        self._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        self.logger.debug(
-            f"[NATIVE BRIDGE] Gas before updating {bridge_tx.get('gas')}."
-        )
-        self._update_with_gas_estimate(bridge_tx, from_ledger_api)
-        self.logger.debug(f"[NATIVE BRIDGE] Gas after updating {bridge_tx.get('gas')}.")
+        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
 
@@ -227,14 +223,8 @@ class NativeBridgeProvider(BridgeProvider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        self._update_with_gas_pricing(approve_tx, from_ledger_api)
-        self.logger.debug(
-            f"[NATIVE BRIDGE] Gas before updating {approve_tx.get('gas')}."
-        )
-        self._update_with_gas_estimate(approve_tx, from_ledger_api)
-        self.logger.debug(
-            f"[NATIVE BRIDGE] Gas after updating {approve_tx.get('gas')}."
-        )
+        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 

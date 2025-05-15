@@ -27,7 +27,6 @@ from http import HTTPStatus
 from urllib.parse import urlencode
 
 import requests
-from aea.crypto.base import LedgerApi
 from autonomy.chain.base import registry_contracts
 
 from operate.bridge.providers.bridge_provider import (
@@ -93,12 +92,10 @@ class LiFiBridgeProvider(BridgeProvider):
         if to_amount == 0:
             self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
-                attempts=0,
                 bridge_eta=None,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
-                response=None,
-                response_status=0,
+                provider_data=None,
                 timestamp=int(time.time()),
             )
             bridge_request.quote_data = quote_data
@@ -127,12 +124,14 @@ class LiFiBridgeProvider(BridgeProvider):
                 response.raise_for_status()
                 response_json = response.json()
                 quote_data = QuoteData(
-                    attempts=attempt,
                     bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=None,
-                    response=response_json,
-                    response_status=response.status_code,
+                    provider_data={
+                        "attempts": attempt,
+                        "response": response_json,
+                        "response_status": response.status_code,
+                    },
                     timestamp=int(time.time()),
                 )
                 bridge_request.quote_data = quote_data
@@ -143,12 +142,14 @@ class LiFiBridgeProvider(BridgeProvider):
                     f"[LI.FI BRIDGE] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 quote_data = QuoteData(
-                    attempts=attempt,
                     bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
-                    response=None,
-                    response_status=HTTPStatus.GATEWAY_TIMEOUT,
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.GATEWAY_TIMEOUT,
+                    },
                     timestamp=int(time.time()),
                 )
             except requests.RequestException as e:
@@ -157,14 +158,16 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
                 response_json = response.json()
                 quote_data = QuoteData(
-                    attempts=attempt,
                     bridge_eta=None,
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
-                    response=response_json,
-                    response_status=getattr(
-                        response, "status_code", HTTPStatus.BAD_GATEWAY
-                    ),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": response_json,
+                        "response_status": getattr(
+                            response, "status_code", HTTPStatus.BAD_GATEWAY
+                        ),
+                    },
                     timestamp=int(time.time()),
                 )
             if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
@@ -177,14 +180,19 @@ class LiFiBridgeProvider(BridgeProvider):
 
             time.sleep(2)
 
-    def _get_bridge_tx(
-        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
-    ) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        self.logger.info(
+            f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
+        )
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
 
-        quote = quote_data.response
+        if not quote_data.provider_data:
+            return None
+
+        quote = quote_data.provider_data.get("response")
         if not quote:
             return None
 
@@ -195,6 +203,8 @@ class LiFiBridgeProvider(BridgeProvider):
         if not transaction_request:
             return None
 
+        from_ledger_api = self._from_ledger_api(bridge_request)
+
         bridge_tx = {
             "value": int(transaction_request["value"], 16),
             "to": transaction_request["to"],
@@ -203,22 +213,27 @@ class LiFiBridgeProvider(BridgeProvider):
             "chainId": transaction_request["chainId"],
             "gasPrice": int(transaction_request["gasPrice"], 16),
             "gas": int(transaction_request["gasLimit"], 16),
-            "nonce": ledger_api.api.eth.get_transaction_count(
+            "nonce": from_ledger_api.api.eth.get_transaction_count(
                 transaction_request["from"]
             ),
         }
-        self._update_with_gas_estimate(bridge_tx, ledger_api)
-        self._update_with_gas_pricing(bridge_tx, ledger_api)
+        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
-    def _get_approve_tx(
-        self, bridge_request: BridgeRequest, ledger_api: LedgerApi
-    ) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        self.logger.info(
+            f"[LI.FI BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
+        )
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
 
-        quote = quote_data.response
+        if not quote_data.provider_data:
+            return None
+
+        quote = quote_data.provider_data.get("response")
         if not quote:
             return None
 
@@ -234,48 +249,51 @@ class LiFiBridgeProvider(BridgeProvider):
             return None
 
         from_amount = int(quote["action"]["fromAmount"])
+        from_ledger_api = self._from_ledger_api(bridge_request)
 
         approve_tx = registry_contracts.erc20.get_approve_tx(
-            ledger_api=ledger_api,
+            ledger_api=from_ledger_api,
             contract_address=from_token,
             spender=transaction_request["to"],
             sender=transaction_request["from"],
             amount=from_amount,
         )
-        self._update_with_gas_estimate(approve_tx, ledger_api)
-        self._update_with_gas_pricing(approve_tx, ledger_api)
+        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
         return approve_tx
 
     def _get_transactions(
         self, bridge_request: BridgeRequest
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Get the sorted list of transactions to execute the bridge request."""
+        self.logger.info(
+            f"[LI.FI BRIDGE] Get transactions for bridge request {bridge_request.id}."
+        )
+
         self._validate(bridge_request)
 
         if not bridge_request.quote_data:
             return []
 
-        from_chain = bridge_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
+        if bridge_request.params["to"]["amount"] == 0:
+            return []
 
-        bridge_tx = self._get_bridge_tx(bridge_request, ledger_api)
+        bridge_tx = self._get_bridge_tx(bridge_request)
 
         if not bridge_tx:
             return []
 
-        approve_tx = self._get_approve_tx(bridge_request, ledger_api)
+        approve_tx = self._get_approve_tx(bridge_request)
 
-        if approve_tx:
-            bridge_tx["nonce"] = approve_tx["nonce"] + 1
+        if not approve_tx:
             return [
-                ("ERC20 Approve transaction", approve_tx),
-                ("Bridge transaction", bridge_tx),
+                ("bridge_tx", bridge_tx),
             ]
 
+        bridge_tx["nonce"] = approve_tx["nonce"] + 1
         return [
-            ("Bridge transaction", bridge_tx),
+            ("approve_tx", approve_tx),
+            ("bridge_tx", bridge_tx),
         ]
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:

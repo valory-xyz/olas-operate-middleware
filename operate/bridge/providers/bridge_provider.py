@@ -64,6 +64,8 @@ ERC20_APPROVE_SELECTOR = (
     "0x095ea7b3"  # 4 first bytes of Keccak('approve(address,uint256)')
 )
 
+GAS_ESTIMATE_BUFFER = 1.10
+
 
 @dataclass
 class QuoteData(LocalResource):

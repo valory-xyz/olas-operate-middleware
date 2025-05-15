@@ -117,11 +117,10 @@ class TestLiFiBridge:
             bridge.quote(bridge_request=bridge_request)
             qd = bridge_request.quote_data
             assert qd is not None, "Missing quote data."
-            assert qd.attempts == 0, "Wrong quote data."
             assert qd.bridge_eta is None, "Wrong quote data."
             assert qd.elapsed_time == 0, "Wrong quote data."
             assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-            assert qd.response is None, "Wrong quote data."
+            assert qd.provider_data is None, "Wrong quote data."
             assert timestamp <= qd.timestamp, "Wrong quote data."
             assert qd.timestamp <= int(time.time()), "Wrong quote data."
             assert (
@@ -152,11 +151,10 @@ class TestLiFiBridge:
 
         qd = bridge_request.quote_data
         assert qd is not None, "Missing quote data."
-        assert qd.attempts == 0, "Wrong quote data."
         assert qd.bridge_eta is None, "Wrong quote data."
         assert qd.elapsed_time == 0, "Wrong quote data."
         assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-        assert qd.response is None, "Wrong quote data."
+        assert qd.provider_data is None, "Wrong quote data."
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
         assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
@@ -254,11 +252,12 @@ class TestLiFiBridge:
             bridge.quote(bridge_request=bridge_request)
             qd = bridge_request.quote_data
             assert qd is not None, "Missing quote data."
-            assert qd.attempts > 0, "Wrong quote data."
             assert qd.bridge_eta is None, "Wrong quote data."
             assert qd.elapsed_time > 0, "Wrong quote data."
             assert qd.message is not None, "Wrong quote data."
-            assert qd.response is not None, "Wrong quote data."
+            assert qd.provider_data is not None, "Wrong quote data."
+            assert qd.provider_data.get("response") is not None, "Wrong quote data."
+            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
             assert timestamp <= qd.timestamp, "Wrong quote data."
             assert qd.timestamp <= int(time.time()), "Wrong quote data."
             assert (
@@ -289,11 +288,12 @@ class TestLiFiBridge:
 
         qd = bridge_request.quote_data
         assert qd is not None, "Missing quote data."
-        assert qd.attempts > 0, "Wrong quote data."
         assert qd.bridge_eta is None, "Wrong quote data."
         assert qd.elapsed_time > 0, "Wrong quote data."
         assert qd.message is not None, "Wrong quote data."
-        assert qd.response is not None, "Wrong quote data."
+        assert qd.provider_data is not None, "Wrong quote data."
+        assert qd.provider_data.get("response") is not None, "Wrong quote data."
+        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
         assert (
             bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
@@ -394,11 +394,12 @@ class TestLiFiBridge:
             bridge.quote(bridge_request=bridge_request)
             qd = bridge_request.quote_data
             assert qd is not None, "Missing quote data."
-            assert qd.attempts > 0, "Wrong quote data."
             assert qd.bridge_eta is None, "Wrong quote data."
             assert qd.elapsed_time > 0, "Wrong quote data."
             assert qd.message is None, "Wrong quote data."
-            assert qd.response is not None, "Wrong quote data."
+            assert qd.provider_data is not None, "Wrong quote data."
+            assert qd.provider_data.get("response") is not None, "Wrong quote data."
+            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
             assert timestamp <= qd.timestamp, "Wrong quote data."
             assert qd.timestamp <= int(time.time()), "Wrong quote data."
             assert (
@@ -416,9 +417,9 @@ class TestLiFiBridge:
             print(diff)
 
         assert not diff, "Wrong status."
-        assert bridge_request.quote_data.response is not None, "Missing quote data."
+        assert bridge_request.quote_data.provider_data is not None, "Missing quote data."
 
-        quote = bridge_request.quote_data.response
+        quote = bridge_request.quote_data.provider_data.get("response")
         br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "gnosis": {
@@ -436,11 +437,12 @@ class TestLiFiBridge:
 
         qd = bridge_request.quote_data
         assert qd is not None, "Missing quote data."
-        assert qd.attempts > 0, "Wrong quote data."
         assert qd.bridge_eta is None, "Wrong quote data."
         assert qd.elapsed_time > 0, "Wrong quote data."
         assert qd.message is None, "Wrong quote data."
-        assert qd.response is not None, "Wrong quote data."
+        assert qd.provider_data is not None, "Wrong quote data."
+        assert qd.provider_data.get("response") is not None, "Wrong quote data."
+        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
         assert qd.timestamp <= int(time.time()), "Wrong quote data."
         assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
