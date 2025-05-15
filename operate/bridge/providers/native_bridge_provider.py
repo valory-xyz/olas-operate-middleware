@@ -56,7 +56,12 @@ NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 5 * 60,
-    }
+    },
+    (Chain.ETHEREUM.value, Chain.MODE.value): {
+        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 5 * 60,
+    },
 }
 
 L1_STANDARD_BRIDGE_CONTRACT = t.cast(
@@ -65,21 +70,15 @@ L1_STANDARD_BRIDGE_CONTRACT = t.cast(
         directory=str(DATA_DIR / "contracts" / "l1_standard_bridge"),
     ),
 )
-L2_STANDARD_BRIDGE_CONTRACT = t.cast(
-    L2StandardBridge,
-    L2StandardBridge.from_dir(
-        directory=str(DATA_DIR / "contracts" / "l2_standard_bridge"),
-    ),
-)
 
-ETH_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
+EVENT_ETH_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
     text="ETHBridgeFinalized(address,address,uint256,bytes)"
 ).hex()
-ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["uint256", "bytes"]
-ERC20_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
+EVENT_ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["uint256", "bytes"]
+EVENT_ERC20_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
     text="ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
 ).hex()
-ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["address", "uint256", "bytes"]
+EVENT_ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["address", "uint256", "bytes"]
 
 
 class NativeBridgeProvider(BridgeProvider):
@@ -316,23 +315,23 @@ class NativeBridgeProvider(BridgeProvider):
             # Prepare the event data
             if from_token == ZERO_ADDRESS:
                 topics = [
-                    ETH_BRIDGE_FINALIZED_TOPIC0,  # ETHBridgeFinalized
+                    EVENT_ETH_BRIDGE_FINALIZED_TOPIC0,  # ETHBridgeFinalized
                     "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
                     "0x" + to_address.lower()[2:].rjust(64, "0"),  # from
                 ]
-                non_indexed_types = ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES
+                non_indexed_types = EVENT_ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES
                 non_indexed_values = [
                     to_amount,  # amount
                     Web3.keccak(text=bridge_request.id),  # extraData
                 ]
             else:
                 topics = [
-                    ERC20_BRIDGE_FINALIZED_TOPIC0,  # ERC20BridgeFinalized
+                    EVENT_ERC20_BRIDGE_FINALIZED_TOPIC0,  # ERC20BridgeFinalized
                     "0x" + to_token.lower()[2:].rjust(64, "0"),  # localToken
                     "0x" + from_token.lower()[2:].rjust(64, "0"),  # remoteToken
                     "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
                 ]
-                non_indexed_types = ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES
+                non_indexed_types = EVENT_ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES
                 non_indexed_values = [
                     to_address.lower(),  # to
                     to_amount,  # amount
