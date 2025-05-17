@@ -156,18 +156,20 @@ class BridgeProvider(ABC):
         return self.__class__.__name__
 
     def _validate(self, bridge_request: BridgeRequest) -> None:
-        """Validate the bridge request."""
+        """Validate theat the bridge request was created by this bridge."""
         if bridge_request.bridge_provider_id != self.id():
             raise ValueError(
                 f"Bridge request provider id {bridge_request.bridge_provider_id} does not match the bridge provider id {self.id()}"
             )
 
-    def create_request(self, params: t.Dict) -> BridgeRequest:
-        """Create a bridge request."""
+    def can_handle_request(self, params: t.Dict) -> bool:
+        """Returns 'true' if the bridge can handle a request for 'params'."""
+
         if "from" not in params or "to" not in params:
-            raise ValueError(
-                "Invalid input: All requests must contain exactly one 'from' and one 'to' sender."
+            self.logger.error(
+                "[BRIDGE PROVIDER] Invalid input: All requests must contain exactly one 'from' and one 'to' sender."
             )
+            return False
 
         from_ = params["from"]
         to = params["to"]
@@ -178,9 +180,10 @@ class BridgeProvider(ABC):
             or "address" not in from_
             or "token" not in from_
         ):
-            raise ValueError(
-                "Invalid input: 'from' must contain 'chain', 'address', and 'token'."
+            self.logger.error(
+                "[BRIDGE PROVIDER] Invalid input: 'from' must contain 'chain', 'address', and 'token'."
             )
+            return False
 
         if (
             not isinstance(to, t.Dict)
@@ -189,9 +192,18 @@ class BridgeProvider(ABC):
             or "token" not in to
             or "amount" not in to
         ):
-            raise ValueError(
-                "Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
+            self.logger.error(
+                "[BRIDGE PROVIDER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
+            return False
+
+        return True
+
+    def create_request(self, params: t.Dict) -> BridgeRequest:
+        """Create a bridge request."""
+
+        if not self.can_handle_request(params):
+            raise ValueError("Invalid input: Cannot process bridge request.")
 
         params = copy.deepcopy(params)
         params["to"]["amount"] = int(params["to"]["amount"])
@@ -258,6 +270,7 @@ class BridgeProvider(ABC):
             }
 
         total_native = 0
+        total_gas_fees = 0
         total_token = 0
 
         for tx_label, tx in transactions:
@@ -268,6 +281,7 @@ class BridgeProvider(ABC):
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
+            total_gas_fees += gas_fees
             total_native += tx_value + gas_fees
 
             self.logger.debug(
@@ -286,6 +300,10 @@ class BridgeProvider(ABC):
                     total_token += amount
                 except Exception as e:
                     raise RuntimeError("Malformed ERC20 approve transaction.") from e
+
+        self.logger.info(
+            f"[BRIDGE PROVIDER] Total gas fees for bridge request {bridge_request.id}: {total_gas_fees} native units."
+        )
 
         result = {
             from_chain: {
@@ -354,7 +372,9 @@ class BridgeProvider(ABC):
             return
 
         try:
-            self.logger.info(f"[BRIDGE] Executing bridge request {bridge_request.id}.")
+            self.logger.info(
+                f"[BRIDGE PROVIDER] Executing bridge request {bridge_request.id}."
+            )
             timestamp = time.time()
             chain = Chain(bridge_request.params["from"]["chain"])
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -400,7 +420,7 @@ class BridgeProvider(ABC):
                 bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.error(f"[BRIDGE] Error executing bridge request: {e}")
+            self.logger.error(f"[BRIDGE PROVIDER] Error executing bridge request: {e}")
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",

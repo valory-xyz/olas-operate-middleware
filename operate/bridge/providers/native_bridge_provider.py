@@ -45,19 +45,25 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     DEFAULT_BRIDGE_MIN_GAS_LIMIT,
     L1StandardBridge,
 )
+from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain
 
 
 BLOCK_CHUNK_SIZE = 5000
 
 NATIVE_BRIDGE_ENDPOINTS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
-    (Chain.ETHEREUM.value, Chain.BASE.value): {
+    (Chain.ETHEREUM, Chain.BASE): {
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 5 * 60,
     },
-    (Chain.ETHEREUM.value, Chain.MODE.value): {
+    (Chain.ETHEREUM, Chain.MODE): {
         "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 5 * 60,
+    },
+    (Chain.ETHEREUM, Chain.OPTIMISTIC): {
+        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 5 * 60,
     },
@@ -83,25 +89,39 @@ EVENT_ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["address", "uint256", "bytes"]
 class NativeBridgeProvider(BridgeProvider):
     """Native bridge provider."""
 
-    def _validate(self, bridge_request: BridgeRequest) -> None:
-        """Validate the bridge request."""
-        from_chain = bridge_request.params["from"]["chain"]
-        to_chain = bridge_request.params["to"]["chain"]
+    def can_handle_request(self, params: t.Dict) -> bool:
+        """Returns 'true' if the bridge can handle a request for 'params'."""
+
+        if not super().can_handle_request(params):
+            return False
+
+        from_chain = Chain(params["from"]["chain"])
+        from_token = params["from"]["token"]
+        to_chain = Chain(params["to"]["chain"])
+        to_token = params["to"]["token"]
 
         if (from_chain, to_chain) not in NATIVE_BRIDGE_ENDPOINTS:
-            raise ValueError(f"Unsupported bridge from {from_chain} to {to_chain}.")
+            self.logger.warning(
+                f"[NATIVE BRIDGE] Unsupported bridge from {from_chain} to {to_chain}."
+            )
+            return False
 
-        super()._validate(bridge_request)
+        if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
+            return True
 
-    def create_request(self, params: t.Dict) -> BridgeRequest:
-        """Create a bridge request."""
-        from_chain = params["from"]["chain"]
-        to_chain = params["to"]["chain"]
+        for token_map in ERC20_TOKENS:
+            if (
+                from_chain in token_map
+                and to_chain in token_map
+                and token_map[from_chain].lower() == from_token.lower()
+                and token_map[to_chain].lower() == to_token.lower()
+            ):
+                return True
 
-        if (from_chain, to_chain) not in NATIVE_BRIDGE_ENDPOINTS:
-            raise ValueError(f"Unsupported bridge from {from_chain} to {to_chain}.")
-
-        return super().create_request(params)
+        self.logger.warning(
+            f"[NATIVE BRIDGE] Unsupported token pair: {from_chain} {from_token} -> {to_chain} {to_token}"
+        )
+        return False
 
     def description(self) -> str:
         """Get a human-readable description of the bridge provider."""
@@ -128,7 +148,9 @@ class NativeBridgeProvider(BridgeProvider):
         from_chain = bridge_request.params["from"]["chain"]
         to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
-        bridge_eta = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"]
+        bridge_eta = NATIVE_BRIDGE_ENDPOINTS[(Chain(from_chain), Chain(to_chain))][
+            "bridge_eta"
+        ]
 
         message = None
         if to_amount == 0:
@@ -161,7 +183,9 @@ class NativeBridgeProvider(BridgeProvider):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
+        from_bridge = NATIVE_BRIDGE_ENDPOINTS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
         extra_data = Web3.keccak(text=bridge_request.id)
@@ -207,7 +231,9 @@ class NativeBridgeProvider(BridgeProvider):
         from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["from_bridge"]
+        from_bridge = NATIVE_BRIDGE_ENDPOINTS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
         if from_token == ZERO_ADDRESS:
@@ -289,8 +315,12 @@ class NativeBridgeProvider(BridgeProvider):
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
 
-        to_bridge = NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["to_bridge"]
-        bridge_eta = int(NATIVE_BRIDGE_ENDPOINTS[(from_chain, to_chain)]["bridge_eta"])
+        to_bridge = NATIVE_BRIDGE_ENDPOINTS[(Chain(from_chain), Chain(to_chain))][
+            "to_bridge"
+        ]
+        bridge_eta = NATIVE_BRIDGE_ENDPOINTS[(Chain(from_chain), Chain(to_chain))][
+            "bridge_eta"
+        ]
 
         try:
             from_ledger_api = self._from_ledger_api(bridge_request)

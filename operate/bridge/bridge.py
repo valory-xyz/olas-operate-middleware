@@ -34,10 +34,7 @@ from deepdiff import DeepDiff
 
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
-from operate.bridge.providers.native_bridge_provider import (
-    NATIVE_BRIDGE_ENDPOINTS,
-    NativeBridgeProvider,
-)
+from operate.bridge.providers.native_bridge_provider import NativeBridgeProvider
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 from operate.resource import LocalResource
@@ -178,16 +175,22 @@ class BridgeManager:
         if not bundle or create_new_bundle:
             self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
 
+            bridge_providers = [  # Sorted in order of preference
+                self._bridge_providers[NativeBridgeProvider.id()],
+                self._bridge_providers[LiFiBridgeProvider.id()],
+            ]
             bridge_requests = []
             for params in requests_params:
-                from_chain = params["from"]["chain"]
-                to_chain = params["to"]["chain"]
-
-                if (from_chain, to_chain) in NATIVE_BRIDGE_ENDPOINTS:
-                    bridge = self._bridge_providers[NativeBridgeProvider.id()]
+                for bridge_provider in bridge_providers:
+                    if bridge_provider.can_handle_request(params):
+                        bridge_requests.append(
+                            bridge_provider.create_request(params=params)
+                        )
+                        break
                 else:
-                    bridge = self._bridge_providers[LiFiBridgeProvider.id()]
-                bridge_requests.append(bridge.create_request(params=params))
+                    raise RuntimeError(
+                        f"Cannot find an appropriate bridge provider for params {params}."
+                    )
 
             bundle = BridgeRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
