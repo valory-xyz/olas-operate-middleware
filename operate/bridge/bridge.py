@@ -1,0 +1,353 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2024 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+"""Bridge manager."""
+
+
+import json
+import logging
+import time
+import typing as t
+import uuid
+from dataclasses import dataclass
+from pathlib import Path
+from typing import cast
+
+from aea.helpers.logging import setup_logger
+from deepdiff import DeepDiff
+
+from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
+from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
+from operate.bridge.providers.native_bridge_provider import (
+    NATIVE_BRIDGE_ENDPOINTS,
+    NativeBridgeProvider,
+)
+from operate.constants import ZERO_ADDRESS
+from operate.operate_types import Chain
+from operate.resource import LocalResource
+from operate.services.manage import get_assets_balances
+from operate.utils import merge_sum_dicts, subtract_dicts
+from operate.wallet.master import MasterWalletManager
+
+
+DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
+EXECUTED_BUNDLES_PATH = "executed"
+BRIDGE_REQUEST_BUNDLE_PREFIX = "br-"
+
+
+@dataclass
+class BridgeRequestBundle(LocalResource):
+    """BridgeRequestBundle"""
+
+    requests_params: t.List[t.Dict]
+    bridge_requests: t.List[BridgeRequest]
+    timestamp: int
+    id: str
+
+    def get_from_chains(self) -> set[Chain]:
+        """Get 'from' chains."""
+        return {
+            Chain(request.params["from"]["chain"]) for request in self.bridge_requests
+        }
+
+    def get_from_addresses(self, chain: Chain) -> set[str]:
+        """Get 'from' addresses."""
+        chain_str = chain.value
+        return {
+            request.params["from"]["address"]
+            for request in self.bridge_requests
+            if request.params["from"]["chain"] == chain_str
+        }
+
+    def get_from_tokens(self, chain: Chain) -> set[str]:
+        """Get 'from' tokens."""
+        chain_str = chain.value
+        return {
+            request.params["from"]["token"]
+            for request in self.bridge_requests
+            if request.params["from"]["chain"] == chain_str
+        }
+
+
+@dataclass
+class BridgeManagerData(LocalResource):
+    """BridgeManagerData"""
+
+    path: Path
+    version: int = 1
+    last_requested_bundle: t.Optional[BridgeRequestBundle] = None
+
+    _file = "bridge.json"
+
+    # TODO Migrate to LocalResource?
+    # It can be inconvenient that all local resources create an empty resource
+    # if the file is corrupted. For example, if a service configuration is
+    # corrupted, we might want to halt execution, because otherwise, the application
+    # could continue as if the user is creatig a service from scratch.
+    # For the bridge manager data, it's harmless, because its memory
+    # is limited to the process of getting and executing a quote.
+    @classmethod  # Overrides from LocalResource
+    def load(cls, path: Path) -> "LocalResource":
+        """Load local resource."""
+
+        file = path / cls._file
+        if not file.exists():
+            BridgeManagerData(path=path).store()
+
+        try:
+            super().load(path=file)
+        except (json.JSONDecodeError, KeyError):
+            new_file = path / f"invalid_{int(time.time())}_{cls._file}"
+            file.rename(new_file)
+            BridgeManagerData(path=path).store()
+
+        return super().load(path)
+
+
+class BridgeManager:
+    """BridgeManager"""
+
+    _bridge_providers: t.Dict[str, BridgeProvider]
+
+    def __init__(
+        self,
+        path: Path,
+        wallet_manager: MasterWalletManager,
+        logger: t.Optional[logging.Logger] = None,
+        quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
+    ) -> None:
+        """Initialize bridge manager."""
+        self.path = path
+        self.wallet_manager = wallet_manager
+        self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
+        self.quote_validity_period = quote_validity_period
+        self.path.mkdir(exist_ok=True)
+        (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)
+        self.data: BridgeManagerData = cast(
+            BridgeManagerData, BridgeManagerData.load(path)
+        )
+        self._bridge_providers = {
+            LiFiBridgeProvider.id(): LiFiBridgeProvider(wallet_manager, logger),
+            NativeBridgeProvider.id(): NativeBridgeProvider(wallet_manager, logger),
+        }
+
+    def _store_data(self) -> None:
+        self.logger.info("[BRIDGE MANAGER] Storing data to file.")
+        self.data.store()
+
+    def _get_updated_bundle(
+        self, requests_params: t.List[t.Dict], force_update: bool
+    ) -> BridgeRequestBundle:
+        """Ensures to return a valid (non expired) bundle for the given inputs."""
+
+        now = int(time.time())
+        bundle = self.data.last_requested_bundle
+        create_new_bundle = False
+
+        if not bundle:
+            self.logger.info("[BRIDGE MANAGER] No last bundle.")
+            create_new_bundle = True
+        elif DeepDiff(requests_params, bundle.requests_params):
+            self.logger.info("[BRIDGE MANAGER] Different requests params.")
+            create_new_bundle = True
+        elif force_update:
+            self.logger.info("[BRIDGE MANAGER] Force bundle update.")
+            self.quote_bundle(bundle)
+            self._store_data()
+        elif now > bundle.timestamp + self.quote_validity_period:
+            self.logger.info("[BRIDGE MANAGER] Bundle expired.")
+            self.quote_bundle(bundle)
+            self._store_data()
+
+        if not bundle or create_new_bundle:
+            self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
+
+            bridge_requests = []
+            for params in requests_params:
+                from_chain = params["from"]["chain"]
+                to_chain = params["to"]["chain"]
+
+                if (from_chain, to_chain) in NATIVE_BRIDGE_ENDPOINTS:
+                    bridge = self._bridge_providers[NativeBridgeProvider.id()]
+                else:
+                    bridge = self._bridge_providers[LiFiBridgeProvider.id()]
+                bridge_requests.append(bridge.create_request(params=params))
+
+            bundle = BridgeRequestBundle(
+                id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
+                requests_params=requests_params,
+                bridge_requests=bridge_requests,
+                timestamp=now,
+            )
+
+            self.data.last_requested_bundle = bundle
+            self.quote_bundle(bundle)
+            self._store_data()
+
+        return bundle
+
+    def _raise_if_invalid(self, requests_params: t.List) -> None:
+        """Preprocess quote requests."""
+
+        for params in requests_params:
+            from_chain = params["from"]["chain"]
+            from_address = params["from"]["address"]
+
+            wallet = self.wallet_manager.load(Chain(from_chain).ledger_type)
+            wallet_address = wallet.address
+            safe_address = wallet.safes.get(Chain(from_chain))
+
+            if from_address is None or not (
+                from_address == wallet_address or from_address == safe_address
+            ):
+                raise ValueError(
+                    f"Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
+                )
+
+    def bridge_refill_requirements(
+        self, requests_params: t.List[t.Dict], force_update: bool = False
+    ) -> t.Dict:
+        """Get bridge refill requirements."""
+
+        self._raise_if_invalid(requests_params)
+        self.logger.info(
+            f"[BRIDGE MANAGER] Quote requests count: {len(requests_params)}."
+        )
+
+        bundle = self._get_updated_bundle(requests_params, force_update)
+
+        balances = {}
+        for chain in bundle.get_from_chains():
+            ledger_api = self.wallet_manager.load(chain.ledger_type).ledger_api(chain)
+            balances[chain.value] = get_assets_balances(
+                ledger_api=ledger_api,
+                asset_addresses={ZERO_ADDRESS} | bundle.get_from_tokens(chain),
+                addresses=bundle.get_from_addresses(chain),
+            )
+
+        bridge_total_requirements = self.bridge_total_requirements(bundle)
+
+        bridge_refill_requirements = cast(
+            t.Dict[str, t.Dict[str, t.Dict[str, int]]],
+            subtract_dicts(bridge_total_requirements, balances),
+        )
+
+        is_refill_required = any(
+            amount > 0
+            for from_addresses in bridge_refill_requirements.values()
+            for from_tokens in from_addresses.values()
+            for amount in from_tokens.values()
+        )
+
+        status_json = self.get_status_json(bundle.id)
+        status_json.update(
+            {
+                "balances": balances,
+                "bridge_refill_requirements": bridge_refill_requirements,
+                "bridge_total_requirements": bridge_total_requirements,
+                "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
+                "is_refill_required": is_refill_required,
+            }
+        )
+        return status_json
+
+    def execute_bundle(self, bundle_id: str) -> t.Dict:
+        """Execute the bundle"""
+
+        bundle = self.data.last_requested_bundle
+
+        if not bundle:
+            raise RuntimeError("[BRIDGE MANAGER] No bundle.")
+
+        if bundle.id != bundle_id:
+            raise RuntimeError(
+                f"Quote bundle id {bundle_id} does not match last requested bundle id {bundle.id}."
+            )
+
+        requirements = self.bridge_refill_requirements(bundle.requests_params)
+        self.data.last_requested_bundle = None
+        bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle.id}.json"
+        bundle.path = bundle_path
+        bundle.store()
+
+        if requirements["is_refill_required"]:
+            self.logger.warning(
+                f"[BRIDGE MANAGER] Refill requirements not satisfied for bundle id {bundle_id}."
+            )
+
+        self.logger.info("[BRIDGE MANAGER] Executing quotes.")
+
+        for request in bundle.bridge_requests:
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge.execute(request)
+            self._store_data()
+
+        self._store_data()
+        bundle.store()
+        self.logger.info(f"[BRIDGE MANAGER] Bundle id {bundle_id} executed.")
+        return self.get_status_json(bundle_id)
+
+    def get_status_json(self, bundle_id: str) -> t.Dict:
+        """Get execution status of bundle."""
+        bundle = self.data.last_requested_bundle
+
+        if bundle is not None and bundle.id == bundle_id:
+            pass
+        else:
+            bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle_id}.json"
+            if bundle_path.exists():
+                bundle = cast(
+                    BridgeRequestBundle, BridgeRequestBundle.load(bundle_path)
+                )
+                bundle.path = bundle_path  # TODO backport to resource.py ?
+            else:
+                raise FileNotFoundError(f"Bundle with ID {bundle_id} does not exist.")
+
+        initial_status = [request.status for request in bundle.bridge_requests]
+
+        bridge_request_status = []
+        for request in bundle.bridge_requests:
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            bridge_request_status.append(bridge.status_json(request))
+
+        updated_status = [request.status for request in bundle.bridge_requests]
+
+        if initial_status != updated_status and bundle.path is not None:
+            bundle.store()
+
+        return {
+            "id": bundle.id,
+            "bridge_request_status": bridge_request_status,
+        }
+
+    def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
+        """Sum bridge requirements."""
+        requirements = []
+        for request in bundle.bridge_requests:
+            bridge = self._bridge_providers[request.bridge_provider_id]
+            requirements.append(bridge.bridge_requirements(request))
+
+        return merge_sum_dicts(*requirements)
+
+    def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
+        """Update the bundle with the quotes."""
+        for bridge_request in bundle.bridge_requests:
+            bridge = self._bridge_providers[bridge_request.bridge_provider_id]
+            bridge.quote(bridge_request)
+        bundle.timestamp = int(time.time())
