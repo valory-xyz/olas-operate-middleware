@@ -534,7 +534,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
+            bridge_eta=NATIVE_BRIDGE_ENDPOINTS[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=MESSAGE_QUOTE_ZERO,
             provider_data=None,
@@ -674,7 +674,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=NATIVE_BRIDGE_ENDPOINTS["ethereum", "base"]["bridge_eta"],
+            bridge_eta=NATIVE_BRIDGE_ENDPOINTS[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=None,
             provider_data=None,
