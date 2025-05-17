@@ -24,7 +24,6 @@ import time
 import typing as t
 from math import ceil
 
-import eth_abi
 from autonomy.chain.base import registry_contracts
 from web3 import Web3
 
@@ -45,6 +44,7 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     DEFAULT_BRIDGE_MIN_GAS_LIMIT,
     L1StandardBridge,
 )
+from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain
 
@@ -75,15 +75,12 @@ L1_STANDARD_BRIDGE_CONTRACT = t.cast(
         directory=str(DATA_DIR / "contracts" / "l1_standard_bridge"),
     ),
 )
-
-EVENT_ETH_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
-    text="ETHBridgeFinalized(address,address,uint256,bytes)"
-).hex()
-EVENT_ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["uint256", "bytes"]
-EVENT_ERC20_BRIDGE_FINALIZED_TOPIC0 = Web3.keccak(
-    text="ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
-).hex()
-EVENT_ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES = ["address", "uint256", "bytes"]
+L2_STANDARD_BRIDGE_CONTRACT = t.cast(
+    L2StandardBridge,
+    L2StandardBridge.from_dir(
+        directory=str(DATA_DIR / "contracts" / "l2_standard_bridge"),
+    ),
+)
 
 
 class NativeBridgeProvider(BridgeProvider):
@@ -338,32 +335,6 @@ class NativeBridgeProvider(BridgeProvider):
             bridge_tx_block = from_w3.eth.get_block(bridge_tx_receipt.blockNumber)
             bridge_tx_ts = bridge_tx_block.timestamp
 
-            # Prepare the event data
-            if from_token == ZERO_ADDRESS:
-                topics = [
-                    EVENT_ETH_BRIDGE_FINALIZED_TOPIC0,  # ETHBridgeFinalized
-                    "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
-                    "0x" + to_address.lower()[2:].rjust(64, "0"),  # from
-                ]
-                non_indexed_types = EVENT_ETH_BRIDGE_FINALIZED_NON_INDEXED_TYPES
-                non_indexed_values = [
-                    to_amount,  # amount
-                    Web3.keccak(text=bridge_request.id),  # extraData
-                ]
-            else:
-                topics = [
-                    EVENT_ERC20_BRIDGE_FINALIZED_TOPIC0,  # ERC20BridgeFinalized
-                    "0x" + to_token.lower()[2:].rjust(64, "0"),  # localToken
-                    "0x" + from_token.lower()[2:].rjust(64, "0"),  # remoteToken
-                    "0x" + from_address.lower()[2:].rjust(64, "0"),  # from
-                ]
-                non_indexed_types = EVENT_ERC20_BRIDGE_FINALIZED_NON_INDEXED_TYPES
-                non_indexed_values = [
-                    to_address.lower(),  # to
-                    to_amount,  # amount
-                    Web3.keccak(text=bridge_request.id),  # extraData
-                ]
-
             # Find the event on the 'to' chain
             to_ledger_api = self._to_ledger_api(bridge_request)
             to_w3 = to_ledger_api.api
@@ -373,15 +344,36 @@ class NativeBridgeProvider(BridgeProvider):
 
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
-                to_tx_hash = self._find_transaction_in_range(
-                    w3=to_w3,
-                    contract_address=to_bridge,
-                    from_block=from_block,
-                    to_block=to_block,
-                    topics=topics,
-                    non_indexed_types=non_indexed_types,
-                    non_indexed_values=non_indexed_values,
-                )
+
+                if from_token == ZERO_ADDRESS:
+                    to_tx_hash = (
+                        L2_STANDARD_BRIDGE_CONTRACT.find_eth_bridge_finalized_tx(
+                            ledger_api=to_ledger_api,
+                            contract_address=to_bridge,
+                            from_block=from_block,
+                            to_block=to_block,
+                            from_=from_address,
+                            to=to_address,
+                            amount=to_amount,
+                            extra_data=Web3.keccak(text=bridge_request.id),
+                        )
+                    )
+                else:
+                    to_tx_hash = (
+                        L2_STANDARD_BRIDGE_CONTRACT.find_erc20_bridge_finalized_tx(
+                            ledger_api=to_ledger_api,
+                            contract_address=to_bridge,
+                            from_block=from_block,
+                            to_block=to_block,
+                            local_token=to_token,
+                            remote_token=from_token,
+                            from_=from_address,
+                            to=to_address,
+                            amount=to_amount,
+                            extra_data=Web3.keccak(text=bridge_request.id),
+                        )
+                    )
+
                 if to_tx_hash:
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution done for {bridge_request.id}."
@@ -406,33 +398,6 @@ class NativeBridgeProvider(BridgeProvider):
             self.logger.error(f"Error updating execution status: {e}")
             execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
-
-    @staticmethod
-    def _find_transaction_in_range(
-        w3: Web3,
-        contract_address: str,
-        from_block: int,
-        to_block: int,
-        topics: list[str],
-        non_indexed_types: list[str],
-        non_indexed_values: list[t.Any],
-    ) -> t.Optional[str]:
-        """Return the transaction hash of a matching event in the given block range, if any."""
-        logs = w3.eth.get_logs(
-            {
-                "fromBlock": from_block,
-                "toBlock": to_block,
-                "address": contract_address,
-                "topics": topics,
-            }
-        )
-
-        for log in logs:
-            decoded = eth_abi.decode(non_indexed_types, log["data"])
-            if all(a == b for a, b in zip(decoded, non_indexed_values)):
-                return log["transactionHash"].hex()
-
-        return None
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:

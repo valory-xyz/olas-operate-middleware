@@ -41,7 +41,7 @@ NONZERO_ERC20_GAS_FACTOR = 1.15
 
 
 class L1StandardBridge(Contract):
-    """The Service Staking contract."""
+    """Optimism L1StandardBridge."""
 
     contract_id = PublicId.from_str("valory/l1_standard_bridge:0.1.0")
 
