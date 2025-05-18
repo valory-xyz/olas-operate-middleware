@@ -44,7 +44,7 @@ from operate.bridge.providers.bridge_provider import (
     QuoteData,
 )
 from operate.bridge.providers.native_bridge_provider import (
-    NATIVE_BRIDGE_ENDPOINTS,
+    OPTIMISM_BRIDGE_DATA,
     NativeBridgeProvider,
     OptimismContractAdaptor,
 )
@@ -538,7 +538,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=NATIVE_BRIDGE_ENDPOINTS[Chain.ETHEREUM, Chain.BASE][
+            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE][
                 "bridge_eta"
             ],
             elapsed_time=0,
@@ -683,7 +683,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=NATIVE_BRIDGE_ENDPOINTS[Chain.ETHEREUM, Chain.BASE][
+            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE][
                 "bridge_eta"
             ],
             elapsed_time=0,
