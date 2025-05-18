@@ -25,6 +25,7 @@ from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 from aea_ledger_ethereum import EthereumApi
+from web3.types import BlockIdentifier
 
 
 class L2StandardBridge(Contract):
@@ -37,12 +38,12 @@ class L2StandardBridge(Contract):
         cls,
         ledger_api: LedgerApi,
         contract_address: str,
-        from_block: int,
-        to_block: int,
         from_: str,
         to: str,
         amount: int,
         extra_data: bytes,
+        from_block: BlockIdentifier = "earliest",
+        to_block: BlockIdentifier = "latest",
     ) -> Optional[str]:
         """Return the transaction hash for the matching ETHBridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)

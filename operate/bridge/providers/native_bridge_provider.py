@@ -350,12 +350,12 @@ class NativeBridgeProvider(BridgeProvider):
                         L2_STANDARD_BRIDGE_CONTRACT.find_eth_bridge_finalized_tx(
                             ledger_api=to_ledger_api,
                             contract_address=to_bridge,
-                            from_block=from_block,
-                            to_block=to_block,
                             from_=from_address,
                             to=to_address,
                             amount=to_amount,
                             extra_data=Web3.keccak(text=bridge_request.id),
+                            from_block=from_block,
+                            to_block=to_block,
                         )
                     )
                 else:
@@ -363,14 +363,14 @@ class NativeBridgeProvider(BridgeProvider):
                         L2_STANDARD_BRIDGE_CONTRACT.find_erc20_bridge_finalized_tx(
                             ledger_api=to_ledger_api,
                             contract_address=to_bridge,
-                            from_block=from_block,
-                            to_block=to_block,
                             local_token=to_token,
                             remote_token=from_token,
                             from_=from_address,
                             to=to_address,
                             amount=to_amount,
                             extra_data=Web3.keccak(text=bridge_request.id),
+                            from_block=from_block,
+                            to_block=to_block,
                         )
                     )
 
