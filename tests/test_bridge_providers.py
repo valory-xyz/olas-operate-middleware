@@ -46,6 +46,7 @@ from operate.bridge.providers.bridge_provider import (
 from operate.bridge.providers.native_bridge_provider import (
     NATIVE_BRIDGE_ENDPOINTS,
     NativeBridgeProvider,
+    OptimismContractAdaptor,
 )
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
@@ -496,7 +497,10 @@ class TestNativeBridge:
             },
         }
 
-        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = NativeBridgeProvider(
+            bridge_contract_adaptor=OptimismContractAdaptor(),
+            wallet_manager=operate.wallet_manager,
+        )
 
         # Create
         bridge_request = bridge.create_request(params)
@@ -638,7 +642,10 @@ class TestNativeBridge:
             },
         }
 
-        bridge = NativeBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = NativeBridgeProvider(
+            bridge_contract_adaptor=OptimismContractAdaptor(),
+            wallet_manager=operate.wallet_manager,
+        )
 
         # Create
         bridge_request = bridge.create_request(params)
@@ -1019,7 +1026,13 @@ class TestBridgeProvider:
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
-        bridge = bridge_provider_class(wallet_manager=operate.wallet_manager)
+        if bridge_provider_class == NativeBridgeProvider:
+            bridge: BridgeProvider = NativeBridgeProvider(
+                bridge_contract_adaptor=OptimismContractAdaptor(),
+                wallet_manager=operate.wallet_manager,
+            )
+        else:
+            bridge = bridge_provider_class(wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
             bridge_eta=0,

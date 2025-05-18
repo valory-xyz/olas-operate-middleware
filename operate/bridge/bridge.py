@@ -34,7 +34,10 @@ from deepdiff import DeepDiff
 
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
-from operate.bridge.providers.native_bridge_provider import NativeBridgeProvider
+from operate.bridge.providers.native_bridge_provider import (
+    NativeBridgeProvider,
+    OptimismContractAdaptor,
+)
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 from operate.resource import LocalResource
@@ -141,7 +144,9 @@ class BridgeManager:
         )
         self._bridge_providers = {
             LiFiBridgeProvider.id(): LiFiBridgeProvider(wallet_manager, logger),
-            NativeBridgeProvider.id(): NativeBridgeProvider(wallet_manager, logger),
+            NativeBridgeProvider.id(): NativeBridgeProvider(
+                OptimismContractAdaptor(), wallet_manager, logger
+            ),
         }
 
     def _store_data(self) -> None:

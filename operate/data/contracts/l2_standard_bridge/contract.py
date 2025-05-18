@@ -45,7 +45,7 @@ class L2StandardBridge(Contract):
         from_block: BlockIdentifier = "earliest",
         to_block: BlockIdentifier = "latest",
     ) -> Optional[str]:
-        """Return the transaction hash for the matching ETHBridgeFinalized event in the given block range."""
+        """Return the transaction hash of the matching ETHBridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
         contract_instance = cls.get_instance(ledger_api, contract_address)
         entries = contract_instance.events.ETHBridgeFinalized.create_filter(
@@ -68,16 +68,16 @@ class L2StandardBridge(Contract):
         cls,
         ledger_api: LedgerApi,
         contract_address: str,
-        from_block: int,
-        to_block: int,
         local_token: str,
         remote_token: str,
         from_: str,
         to: str,
         amount: int,
         extra_data: bytes,
+        from_block: BlockIdentifier = "earliest",
+        to_block: BlockIdentifier = "latest",
     ) -> Optional[str]:
-        """Return the transaction hash for the matching ERC20BridgeFinalized event in the given block range."""
+        """Return the transaction hash of the matching ERC20BridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
         contract_instance = cls.get_instance(ledger_api, contract_address)
         entries = contract_instance.events.ERC20BridgeFinalized.create_filter(
