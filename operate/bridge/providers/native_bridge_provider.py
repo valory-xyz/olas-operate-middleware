@@ -88,14 +88,14 @@ class BridgeContractAdaptor(ABC):
 
     @abstractmethod
     def build_bridge_native_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge native asset transaction."""
         raise NotImplementedError()
 
     @abstractmethod
     def build_bridge_erc20_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge ERC20 asset transaction."""
         raise NotImplementedError()
@@ -103,7 +103,8 @@ class BridgeContractAdaptor(ABC):
     @abstractmethod
     def find_native_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
@@ -114,7 +115,8 @@ class BridgeContractAdaptor(ABC):
     @abstractmethod
     def find_erc20_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
@@ -140,7 +142,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
     )
 
     def build_bridge_native_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge native asset transaction."""
         from_chain = bridge_request.params["from"]["chain"]
@@ -151,7 +153,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l1_standard_bridge_contract.build_bridge_eth_to_tx(
-            ledger_api=ledger_api,
+            ledger_api=from_ledger_api,
             contract_address=from_bridge,
             sender=from_address,
             to=to_address,
@@ -161,7 +163,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         )
 
     def build_bridge_erc20_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge ERC20 asset transaction."""
         from_chain = bridge_request.params["from"]["chain"]
@@ -174,7 +176,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l1_standard_bridge_contract.build_bridge_erc20_to_tx(
-            ledger_api=ledger_api,
+            ledger_api=from_ledger_api,
             contract_address=from_bridge,
             sender=from_address,
             local_token=from_token,
@@ -187,7 +189,8 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
 
     def find_native_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
@@ -201,7 +204,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l2_standard_bridge_contract.find_eth_bridge_finalized_tx(
-            ledger_api=ledger_api,
+            ledger_api=to_ledger_api,
             contract_address=to_bridge,
             from_=from_address,
             to=to_address,
@@ -213,7 +216,8 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
 
     def find_erc20_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
@@ -229,7 +233,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l2_standard_bridge_contract.find_erc20_bridge_finalized_tx(
-            ledger_api=ledger_api,
+            ledger_api=to_ledger_api,
             contract_address=to_bridge,
             local_token=to_token,
             remote_token=from_token,
@@ -260,48 +264,62 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
     )
 
     def build_bridge_native_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge native asset transaction."""
-        raise NotImplementedError("NotImplementedError")
+        raise NotImplementedError(f"{self.__class__.__name__} does not support this method.")
 
     def build_bridge_erc20_tx(
-        self, ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge ERC20 asset transaction."""
         raise NotImplementedError("NotImplementedError")
 
     def find_native_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating native bridge completion."""
-        raise NotImplementedError("NotImplementedError")
+        raise NotImplementedError(f"{self.__class__.__name__} does not support this method.")
 
     def find_erc20_bridge_finalized_tx(
         self,
-        ledger_api: LedgerApi,
+        from_ledger_api: LedgerApi,
+        to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating ERC20 bridge completion."""
         from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+        from_tx_hash = bridge_request.execution_data.from_tx_hash
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
+        from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
         to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
 
-        message_id = bytes.fromhex(
-            "000500004AC82B41BD819DD871590B510316F2385CB196FB000000000002AA74"
+        message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
+            ledger_api=from_ledger_api,
+            contract_address=from_bridge,
+            tx_hash=from_tx_hash,
+            token=from_token,
+            sender=from_address,
+            value=to_amount,
         )
 
+        if not message_id:
+            raise RuntimeError(f"Cannot find 'messageId' in transaction {from_tx_hash}.")
+
         return self._home_omnibridge.find_tokens_bridged_tx(
-            ledger_api=ledger_api,
+            ledger_api=to_ledger_api,
             contract_address=to_bridge,
             token=to_token,
             recipient=to_address,
@@ -418,11 +436,11 @@ class NativeBridgeProvider(BridgeProvider):
 
         if from_token == ZERO_ADDRESS:
             bridge_tx = self.bridge_contract_adaptor.build_bridge_native_tx(
-                ledger_api=from_ledger_api, bridge_request=bridge_request
+                from_ledger_api=from_ledger_api, bridge_request=bridge_request
             )
         else:
             bridge_tx = self.bridge_contract_adaptor.build_bridge_erc20_tx(
-                ledger_api=from_ledger_api, bridge_request=bridge_request
+                from_ledger_api=from_ledger_api, bridge_request=bridge_request
             )
 
         BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
@@ -552,7 +570,8 @@ class NativeBridgeProvider(BridgeProvider):
                 if from_token == ZERO_ADDRESS:
                     to_tx_hash = (
                         self.bridge_contract_adaptor.find_native_bridge_finalized_tx(
-                            ledger_api=to_ledger_api,
+                            from_ledger_api=from_ledger_api,
+                            to_ledger_api=to_ledger_api,
                             bridge_request=bridge_request,
                             from_block=from_block,
                             to_block=to_block,
@@ -561,7 +580,8 @@ class NativeBridgeProvider(BridgeProvider):
                 else:
                     to_tx_hash = (
                         self.bridge_contract_adaptor.find_erc20_bridge_finalized_tx(
-                            ledger_api=to_ledger_api,
+                            from_ledger_api=from_ledger_api,
+                            to_ledger_api=to_ledger_api,
                             bridge_request=bridge_request,
                             from_block=from_block,
                             to_block=to_block,

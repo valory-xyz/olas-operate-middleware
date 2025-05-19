@@ -20,6 +20,7 @@
 """This module contains the class to connect to the `ForeignOmnibridge` contract."""
 
 from math import ceil
+from typing import Optional
 
 from aea.common import JSONLike
 from aea.configurations.base import PublicId
@@ -40,38 +41,6 @@ class ForeignOmnibridge(Contract):
     """ForeignOmnibridge."""
 
     contract_id = PublicId.from_str("valory/foreign_omnibridge:0.1.0")
-
-    # @classmethod
-    # def build_bridge_eth_to_tx(
-    #     cls,
-    #     ledger_api: LedgerApi,
-    #     contract_address: str,
-    #     sender: str,
-    #     to: str,
-    #     amount: int,
-    #     min_gas_limit: int,
-    #     extra_data: bytes,
-    #     raise_on_try: bool = False,
-    # ) -> JSONLike:
-    #     """Build bridgeETHTo tx."""
-    #     contract_instance = cls.get_instance(
-    #         ledger_api=ledger_api, contract_address=contract_address
-    #     )
-    #     tx = contract_instance.functions.bridgeETHTo(
-    #         to, min_gas_limit, extra_data
-    #     ).build_transaction(
-    #         {
-    #             "from": sender,
-    #             "value": amount,
-    #             "gas": DEFAULT_GAS_BRIDGE_ETH_TO,
-    #             "gasPrice": ledger_api.api.eth.gas_price,
-    #             "nonce": ledger_api.api.eth.get_transaction_count(sender),
-    #         }
-    #     )
-    #     return ledger_api.update_with_gas_estimate(
-    #         transaction=tx,
-    #         raise_on_try=raise_on_try,
-    #     )
 
     @classmethod
     def build_relay_tokens_tx(
@@ -129,3 +98,33 @@ class ForeignOmnibridge(Contract):
 
         tx["gas"] = DEFAULT_GAS_RELAY_TOKENS
         return tx
+
+    @classmethod
+    def get_tokens_bridging_initiated_message_id(
+        cls,
+        ledger_api: LedgerApi,
+        contract_address: str,
+        tx_hash: str,
+        token: str,
+        sender: str,
+        value: int,
+        raise_on_try: bool = False,
+    ) -> Optional[bytes]:
+        """Get the 'messageId' for the matching 'TokensBridgingInitiated' within the transaction 'tx_hash'."""
+        contract_instance = cls.get_instance(
+            ledger_api=ledger_api, contract_address=contract_address
+        )
+        receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
+        event = contract_instance.events.TokensBridgingInitiated()
+        events = event.process_receipt(receipt)
+
+        for e in events:
+            args = e["args"]
+            if (
+                args["token"].lower() == token.lower()
+                and args["sender"].lower() == sender.lower()
+                and int(args["value"]) == value
+            ):
+                return args["messageId"]
+
+        return None
