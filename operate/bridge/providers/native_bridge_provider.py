@@ -243,24 +243,21 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         )
 
 
-class OmnibridgeContractAdaptor(ABC):
+class OmnibridgeContractAdaptor(BridgeContractAdaptor):
     """Adaptor class for Omnibridge contract packages."""
 
-    @abstractmethod
     def build_bridge_native_tx(
         self, ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge native asset transaction."""
         raise NotImplementedError()
 
-    @abstractmethod
     def build_bridge_erc20_tx(
         self, ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge ERC20 asset transaction."""
         raise NotImplementedError()
 
-    @abstractmethod
     def find_native_bridge_finalized_tx(
         self,
         ledger_api: LedgerApi,
@@ -271,7 +268,6 @@ class OmnibridgeContractAdaptor(ABC):
         """Return the transaction hash of the event indicating native bridge completion."""
         raise NotImplementedError()
 
-    @abstractmethod
     def find_erc20_bridge_finalized_tx(
         self,
         ledger_api: LedgerApi,
@@ -283,19 +279,21 @@ class OmnibridgeContractAdaptor(ABC):
         raise NotImplementedError()
 
 
-
 class NativeBridgeProvider(BridgeProvider):
     """Native bridge provider"""
 
     def __init__(
         self,
         bridge_contract_adaptor: BridgeContractAdaptor,
+        provider_id: str,
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize the bridge provider."""
         self.bridge_contract_adaptor = bridge_contract_adaptor
-        super().__init__(wallet_manager=wallet_manager, logger=logger)
+        super().__init__(
+            wallet_manager=wallet_manager, provider_id=provider_id, logger=logger
+        )
 
     def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the bridge can handle a request for 'params'."""
@@ -525,18 +523,22 @@ class NativeBridgeProvider(BridgeProvider):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
 
                 if from_token == ZERO_ADDRESS:
-                    to_tx_hash = self.bridge_contract_adaptor.find_native_bridge_finalized_tx(
-                        ledger_api=to_ledger_api,
-                        bridge_request=bridge_request,
-                        from_block=from_block,
-                        to_block=to_block,
+                    to_tx_hash = (
+                        self.bridge_contract_adaptor.find_native_bridge_finalized_tx(
+                            ledger_api=to_ledger_api,
+                            bridge_request=bridge_request,
+                            from_block=from_block,
+                            to_block=to_block,
+                        )
                     )
                 else:
-                    to_tx_hash = self.bridge_contract_adaptor.find_erc20_bridge_finalized_tx(
-                        ledger_api=to_ledger_api,
-                        bridge_request=bridge_request,
-                        from_block=from_block,
-                        to_block=to_block,
+                    to_tx_hash = (
+                        self.bridge_contract_adaptor.find_erc20_bridge_finalized_tx(
+                            ledger_api=to_ledger_api,
+                            bridge_request=bridge_request,
+                            from_block=from_block,
+                            to_block=to_block,
+                        )
                     )
                 if to_tx_hash:
                     self.logger.info(

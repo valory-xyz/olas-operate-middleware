@@ -44,8 +44,8 @@ from operate.bridge.providers.bridge_provider import (
     QuoteData,
 )
 from operate.bridge.providers.native_bridge_provider import (
-    OPTIMISM_BRIDGE_DATA,
     NativeBridgeProvider,
+    OPTIMISM_BRIDGE_DATA,
     OptimismContractAdaptor,
 )
 from operate.cli import OperateApp
@@ -95,11 +95,13 @@ class TestLiFiBridge:
             },
         }
 
-        bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = LiFiBridgeProvider(
+            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
+        )
         bridge_request = BridgeRequest(
             params=params,
-            bridge_provider_id=bridge.id(),
             id="test-id",
+            bridge_provider_id=bridge.provider_id,
             quote_data=None,
             execution_data=None,
             status=BridgeRequestStatus.CREATED,
@@ -230,11 +232,13 @@ class TestLiFiBridge:
             },
         }
 
-        bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = LiFiBridgeProvider(
+            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
+        )
         bridge_request = BridgeRequest(
             params=params,
-            bridge_provider_id=bridge.id(),
             id="test-id",
+            bridge_provider_id=bridge.provider_id,
             quote_data=None,
             execution_data=None,
             status=BridgeRequestStatus.CREATED,
@@ -376,11 +380,13 @@ class TestLiFiBridge:
             },
         }
 
-        bridge = LiFiBridgeProvider(wallet_manager=operate.wallet_manager)
+        bridge = LiFiBridgeProvider(
+            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
+        )
         bridge_request = BridgeRequest(
             params=params,
-            bridge_provider_id=bridge.id(),
             id="test-id",
+            bridge_provider_id=bridge.provider_id,
             quote_data=None,
             execution_data=None,
             status=BridgeRequestStatus.CREATED,
@@ -498,6 +504,7 @@ class TestNativeBridge:
         }
 
         bridge = NativeBridgeProvider(
+            provider_id="NativeBridgeProvider",
             bridge_contract_adaptor=OptimismContractAdaptor(),
             wallet_manager=operate.wallet_manager,
         )
@@ -518,7 +525,7 @@ class TestNativeBridge:
                     "amount": 0,
                 },
             },
-            bridge_provider_id=NativeBridgeProvider.id(),
+            bridge_provider_id=bridge.provider_id,
             id=bridge_request.id,
             status=BridgeRequestStatus.CREATED,
             quote_data=None,
@@ -538,9 +545,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE][
-                "bridge_eta"
-            ],
+            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=MESSAGE_QUOTE_ZERO,
             provider_data=None,
@@ -643,6 +648,7 @@ class TestNativeBridge:
         }
 
         bridge = NativeBridgeProvider(
+            provider_id="NativeBridgeProvider",
             bridge_contract_adaptor=OptimismContractAdaptor(),
             wallet_manager=operate.wallet_manager,
         )
@@ -663,8 +669,8 @@ class TestNativeBridge:
                     "amount": 1000000000000000000,
                 },
             },
-            bridge_provider_id=NativeBridgeProvider.id(),
             id=bridge_request.id,
+            bridge_provider_id=bridge.provider_id,
             status=BridgeRequestStatus.CREATED,
             quote_data=None,
             execution_data=None,
@@ -683,9 +689,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE][
-                "bridge_eta"
-            ],
+            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=None,
             provider_data=None,
@@ -1028,11 +1032,12 @@ class TestBridgeProvider:
 
         if bridge_provider_class == NativeBridgeProvider:
             bridge: BridgeProvider = NativeBridgeProvider(
+                provider_id="NativeBridgeProvider",
                 bridge_contract_adaptor=OptimismContractAdaptor(),
                 wallet_manager=operate.wallet_manager,
             )
         else:
-            bridge = bridge_provider_class(wallet_manager=operate.wallet_manager)
+            bridge = bridge_provider_class(provider_id="", wallet_manager=operate.wallet_manager)
 
         quote_data = QuoteData(
             bridge_eta=0,
@@ -1052,7 +1057,7 @@ class TestBridgeProvider:
 
         bridge_request = BridgeRequest(
             params=params,
-            bridge_provider_id=bridge_provider_class.id(),
+            bridge_provider_id=bridge.provider_id,
             id=request_id,
             status=BridgeRequestStatus.EXECUTION_PENDING,
             quote_data=quote_data,

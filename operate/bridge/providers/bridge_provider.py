@@ -140,16 +140,13 @@ class BridgeProvider(ABC):
     def __init__(
         self,
         wallet_manager: MasterWalletManager,
+        provider_id: str,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize the bridge provider."""
         self.wallet_manager = wallet_manager
+        self.provider_id = provider_id
         self.logger = logger or setup_logger(name="operate.bridge.BridgeProvider")
-
-    @classmethod
-    def id(cls) -> str:
-        """Get the id of the bridge provider."""
-        return f"{cls.__module__}.{cls.__qualname__}"
 
     def description(self) -> str:
         """Get a human-readable description of the bridge provider."""
@@ -157,9 +154,9 @@ class BridgeProvider(ABC):
 
     def _validate(self, bridge_request: BridgeRequest) -> None:
         """Validate theat the bridge request was created by this bridge."""
-        if bridge_request.bridge_provider_id != self.id():
+        if bridge_request.bridge_provider_id != self.provider_id:
             raise ValueError(
-                f"Bridge request provider id {bridge_request.bridge_provider_id} does not match the bridge provider id {self.id()}"
+                f"Bridge request provider id {bridge_request.bridge_provider_id} does not match the bridge provider id {self.provider_id}"
             )
 
     def can_handle_request(self, params: t.Dict) -> bool:
@@ -210,7 +207,7 @@ class BridgeProvider(ABC):
 
         return BridgeRequest(
             params=params,
-            bridge_provider_id=self.id(),
+            bridge_provider_id=self.provider_id,
             id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
             quote_data=None,
             execution_data=None,

@@ -36,6 +36,7 @@ from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeReque
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
+    OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
 from operate.constants import ZERO_ADDRESS
@@ -143,9 +144,20 @@ class BridgeManager:
             BridgeManagerData, BridgeManagerData.load(path)
         )
         self._bridge_providers = {
-            LiFiBridgeProvider.id(): LiFiBridgeProvider(wallet_manager, logger),
-            NativeBridgeProvider.id(): NativeBridgeProvider(
-                OptimismContractAdaptor(), wallet_manager, logger
+            "LiFiBridgeProvider": LiFiBridgeProvider(
+                wallet_manager, "LiFiBridgeProvider", logger
+            ),
+            "NativeBridgeProvider.Optimism": NativeBridgeProvider(
+                OptimismContractAdaptor(),
+                "NativeBridgeProvider.Optimism",
+                wallet_manager,
+                logger,
+            ),
+            "NativeBridgeProvider.Omnibridge": NativeBridgeProvider(
+                OmnibridgeContractAdaptor(),
+                "NativeBridgeProvider.Omnibridge",
+                wallet_manager,
+                logger,
             ),
         }
 
@@ -181,8 +193,8 @@ class BridgeManager:
             self.logger.info("[BRIDGE MANAGER] Creating new bridge request bundle.")
 
             bridge_providers = [  # Sorted in order of preference
-                self._bridge_providers[NativeBridgeProvider.id()],
-                self._bridge_providers[LiFiBridgeProvider.id()],
+                self._bridge_providers["NativeBridgeProvider.Optimism"],
+                self._bridge_providers["LiFiBridgeProvider"],
             ]
             bridge_requests = []
             for params in requests_params:
