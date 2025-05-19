@@ -365,24 +365,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         await asyncio.sleep(0.3)
         return {"stopped": True}
 
-    @app.post("/api/v2/services/stop")
-    @app.get("/stop_all_services")
-    async def _stop_all_services(request: Request) -> JSONResponse:
-        """Kill backend server from inside."""
-
-        # No authentication required to stop services.
-
-        try:
-            logger.info("Stopping services on demand...")
-            pause_all_services()
-            logger.info("Stopping services on demand done.")
-            return JSONResponse(content={"message": "Services stopped."})
-        except Exception as e:  # pylint: disable=broad-except
-            return JSONResponse(
-                content={"error": str(e), "traceback": traceback.format_exc()},
-                status_code=500,
-            )
-
     @app.get("/api")
     @with_retries
     async def _get_api(request: Request) -> JSONResponse:
@@ -501,21 +483,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         for wallet in operate.wallet_manager:
             wallets.append(wallet.json)
         return JSONResponse(content=wallets)
-
-    @app.get("/api/wallet/{chain}")
-    @with_retries
-    async def _get_wallet_by_chain(request: Request) -> t.List[t.Dict]:
-        """Create wallet safe"""
-        ledger_type = Chain.from_string(request.path_params["chain"]).ledger_type
-        manager = operate.wallet_manager
-        if not manager.exists(ledger_type=ledger_type):
-            return JSONResponse(
-                content={"error": "Wallet does not exist"},
-                status_code=404,
-            )
-        return JSONResponse(
-            content=manager.load(ledger_type=ledger_type).json,
-        )
 
     @app.post("/api/wallet")
     @with_retries
@@ -885,19 +852,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         return JSONResponse(content=output.json)
-
-    @app.put("/api/v2/services")
-    @with_retries
-    async def _update_all_services(request: Request) -> JSONResponse:
-        """Update all services of matching the public id referenced in the hash."""
-        if operate.password is None:
-            return USER_NOT_LOGGED_IN_ERROR
-
-        manager = operate.service_manager()
-        template = await request.json()
-        updated_services = manager.update_all_matching(service_template=template)
-
-        return JSONResponse(content=updated_services)
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
     @with_retries
