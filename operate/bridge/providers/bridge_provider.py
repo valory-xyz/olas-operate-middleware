@@ -32,6 +32,7 @@ from dataclasses import dataclass
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
+from web3 import Web3
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -202,7 +203,12 @@ class BridgeProvider(ABC):
         if not self.can_handle_request(params):
             raise ValueError("Invalid input: Cannot process bridge request.")
 
+        w3 = Web3()
         params = copy.deepcopy(params)
+        params["from"]["address"] = w3.to_checksum_address(params["from"]["address"])
+        params["from"]["token"] = w3.to_checksum_address(params["from"]["token"])
+        params["to"]["address"] = w3.to_checksum_address(params["to"]["address"])
+        params["to"]["token"] = w3.to_checksum_address(params["to"]["token"])
         params["to"]["amount"] = int(params["to"]["amount"])
 
         return BridgeRequest(
