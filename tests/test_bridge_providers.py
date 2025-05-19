@@ -47,7 +47,6 @@ from operate.bridge.providers.native_bridge_provider import (
     BRIDGE_DATA,
     BridgeContractAdaptor,
     NativeBridgeProvider,
-    OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
 from operate.cli import OperateApp
