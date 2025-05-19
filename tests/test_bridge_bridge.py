@@ -31,6 +31,7 @@ from operate.bridge.providers.bridge_provider import (
     BridgeRequestStatus,
     MESSAGE_QUOTE_ZERO,
 )
+from operate.bridge.providers.lifi_bridge_provider import LIFI_DEFAULT_ETA
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS
@@ -107,10 +108,12 @@ class TestBridgeManager:
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
+                    "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
                     "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
                 {
+                    "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
                     "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
@@ -212,10 +215,12 @@ class TestBridgeManager:
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
+                    "eta": None,
                     "message": brr["bridge_request_status"][0]["message"],
                     "status": BridgeRequestStatus.QUOTE_FAILED.value,
                 },
                 {
+                    "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
                     "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
@@ -334,8 +339,16 @@ class TestBridgeManager:
             },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
-                {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
-                {"message": None, "status": BridgeRequestStatus.QUOTE_DONE.value},
+                {
+                    "eta": LIFI_DEFAULT_ETA,
+                    "message": None,
+                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                },
+                {
+                    "eta": LIFI_DEFAULT_ETA,
+                    "message": None,
+                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
             "expiration_timestamp": brr["expiration_timestamp"],

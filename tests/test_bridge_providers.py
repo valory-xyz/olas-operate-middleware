@@ -43,10 +43,11 @@ from operate.bridge.providers.bridge_provider import (
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
+from operate.bridge.providers.lifi_bridge_provider import LIFI_DEFAULT_ETA
 from operate.bridge.providers.native_bridge_provider import (
-    BRIDGE_DATA,
     BridgeContractAdaptor,
     NativeBridgeProvider,
+    OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
 from operate.cli import OperateApp
@@ -124,7 +125,7 @@ class TestLiFiBridge:
             bridge.quote(bridge_request=bridge_request)
             qd = bridge_request.quote_data
             assert qd is not None, "Missing quote data."
-            assert qd.bridge_eta is None, "Wrong quote data."
+            assert qd.bridge_eta == 0, "Wrong quote data."
             assert qd.elapsed_time == 0, "Wrong quote data."
             assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
             assert qd.provider_data is None, "Wrong quote data."
@@ -136,6 +137,7 @@ class TestLiFiBridge:
 
         sj = bridge.status_json(bridge_request)
         expected_sj = {
+            "eta": 0,
             "message": MESSAGE_QUOTE_ZERO,
             "status": BridgeRequestStatus.QUOTE_DONE.value,
         }
@@ -158,7 +160,7 @@ class TestLiFiBridge:
 
         qd = bridge_request.quote_data
         assert qd is not None, "Missing quote data."
-        assert qd.bridge_eta is None, "Wrong quote data."
+        assert qd.bridge_eta == 0, "Wrong quote data."
         assert qd.elapsed_time == 0, "Wrong quote data."
         assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
         assert qd.provider_data is None, "Wrong quote data."
@@ -193,6 +195,7 @@ class TestLiFiBridge:
         sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
+            "eta": 0,
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,  # type: ignore
             "message": sj["message"],
@@ -276,6 +279,7 @@ class TestLiFiBridge:
         assert bridge_request.quote_data is not None, "Wrong quote data."
         sj = bridge.status_json(bridge_request)
         expected_sj = {
+            "eta": None,
             "message": bridge_request.quote_data.message,
             "status": BridgeRequestStatus.QUOTE_FAILED.value,
         }
@@ -340,6 +344,7 @@ class TestLiFiBridge:
             MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in sj["message"]
         ), "Wrong execution data."
         expected_sj = {
+            "eta": None,
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,
             "message": sj["message"],
@@ -409,7 +414,7 @@ class TestLiFiBridge:
             bridge.quote(bridge_request=bridge_request)
             qd = bridge_request.quote_data
             assert qd is not None, "Missing quote data."
-            assert qd.bridge_eta is None, "Wrong quote data."
+            assert qd.bridge_eta == LIFI_DEFAULT_ETA, "Wrong quote data."
             assert qd.elapsed_time > 0, "Wrong quote data."
             assert qd.message is None, "Wrong quote data."
             assert qd.provider_data is not None, "Wrong quote data."
@@ -424,6 +429,7 @@ class TestLiFiBridge:
         assert bridge_request.quote_data is not None, "Wrong quote data."
         sj = bridge.status_json(bridge_request)
         expected_sj = {
+            "eta": LIFI_DEFAULT_ETA,
             "message": bridge_request.quote_data.message,
             "status": BridgeRequestStatus.QUOTE_DONE.value,
         }
@@ -454,7 +460,7 @@ class TestLiFiBridge:
 
         qd = bridge_request.quote_data
         assert qd is not None, "Missing quote data."
-        assert qd.bridge_eta is None, "Wrong quote data."
+        assert qd.bridge_eta == LIFI_DEFAULT_ETA, "Wrong quote data."
         assert qd.elapsed_time > 0, "Wrong quote data."
         assert qd.message is None, "Wrong quote data."
         assert qd.provider_data is not None, "Wrong quote data."
@@ -472,8 +478,6 @@ class TestLiFiBridge:
 
 class TestNativeBridge:
     """Tests for bridge.providers.NativeBridgeProvider class."""
-
-    # TODO: test existing executions: failed and done
 
     def test_bridge_zero(
         self,
@@ -546,7 +550,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
+            bridge_eta=0,
             elapsed_time=0,
             message=MESSAGE_QUOTE_ZERO,
             provider_data=None,
@@ -562,6 +566,7 @@ class TestNativeBridge:
             assert bridge_request == expected_request, "Wrong bridge request."
             sj = bridge.status_json(bridge_request)
             expected_sj = {
+                "eta": 0,
                 "message": MESSAGE_QUOTE_ZERO,
                 "status": BridgeRequestStatus.QUOTE_DONE.value,
             }
@@ -603,6 +608,7 @@ class TestNativeBridge:
         sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
+            "eta": 0,
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,  # type: ignore
             "message": sj["message"],
@@ -690,7 +696,9 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
+            bridge_eta=bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
+                Chain.ETHEREUM, Chain.BASE
+            ]["bridge_eta"],
             elapsed_time=0,
             message=None,
             provider_data=None,
@@ -706,6 +714,9 @@ class TestNativeBridge:
             assert bridge_request == expected_request, "Wrong bridge request."
             sj = bridge.status_json(bridge_request)
             expected_sj = {
+                "eta": bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
+                    Chain.ETHEREUM, Chain.BASE
+                ]["bridge_eta"],
                 "message": None,
                 "status": BridgeRequestStatus.QUOTE_DONE.value,
             }
@@ -759,6 +770,9 @@ class TestNativeBridge:
         sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_FAILED in sj["message"], "Wrong execution data."
         expected_sj = {
+            "eta": bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
+                Chain.ETHEREUM, Chain.BASE
+            ]["bridge_eta"],
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,  # type: ignore
             "message": sj["message"],
@@ -816,6 +830,28 @@ class TestBridgeProvider:
         ),
         [
             # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
+            (
+                NativeBridgeProvider,
+                OmnibridgeContractAdaptor,
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+                    },
+                    "to": {
+                        "chain": "gnosis",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                        "amount": 1000000000000000000,
+                    },
+                },
+                "b-b5648bc4-15c0-4792-9970-cc692851ce50",
+                "0x8b7646a46e06b3fd4f61f592f6da0f66b5f29a71b13cfce4ce8a8dd2095b7827",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0xc8905a2193d86a58bb92f2bbe3640ef340aacfe4273efc50ad80115f3ed20206",
+                2195,
+            ),
             # LiFiBridgeProvider - EXECUTION_DONE tests
             (
                 LiFiBridgeProvider,

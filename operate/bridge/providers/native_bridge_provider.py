@@ -544,7 +544,6 @@ class NativeBridgeProvider(BridgeProvider):
             return
 
         from_chain = bridge_request.params["from"]["chain"]
-        from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
         bridge_eta = self.bridge_contract_adaptor.BRIDGE_PARAMS[
             (Chain(from_chain), Chain(to_chain))
@@ -576,14 +575,12 @@ class NativeBridgeProvider(BridgeProvider):
             for from_block in range(starting_block, latest_block + 1, BLOCK_CHUNK_SIZE):
                 to_block = min(from_block + BLOCK_CHUNK_SIZE - 1, latest_block)
 
-                to_tx_hash = (
-                    self.bridge_contract_adaptor.find_bridge_finalized_tx(
-                        from_ledger_api=from_ledger_api,
-                        to_ledger_api=to_ledger_api,
-                        bridge_request=bridge_request,
-                        from_block=from_block,
-                        to_block=to_block,
-                    )
+                to_tx_hash = self.bridge_contract_adaptor.find_bridge_finalized_tx(
+                    from_ledger_api=from_ledger_api,
+                    to_ledger_api=to_ledger_api,
+                    bridge_request=bridge_request,
+                    from_block=from_block,
+                    to_block=to_block,
                 )
 
                 if to_tx_hash:
