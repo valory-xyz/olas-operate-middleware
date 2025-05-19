@@ -6,9 +6,9 @@ description: ForeignOmnibridge
 license: Apache-2.0
 aea_version: '>=1.0.0, <2.0.0'
 fingerprint:
-  __init__.py: bafybeifsbxn6hlccnpgqnpvaz3ph6ajl4is4mcyerr6aqp7heggagcphye
-  build/L1StandardBridge.json: bafybeidq6jt7zmedtuxbbyggiqhu7w6543bunyd2vrbibg6y2svxsi2q5m
-  contract.py: bafybeib2kiztts3436vccvraeura3jb23oihgzxgrt3biakbed24edcaai
+  __init__.py: bafybeibsmumov3s36vfo24xp2niilcp3ywju2d4yqfadllyjncqtgtndly
+  build/ForeignOmnibridge.json: bafybeibmcflt7w5p5szgii7glbtrvjahweclowz2k7e6qjq7yfbvszy6em
+  contract.py: bafybeieldprlj4civ7bxsgt4xi5qhpqoj7z6tqeop23mqbd6ervr5szjda
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: ForeignOmnibridge
