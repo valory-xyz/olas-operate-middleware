@@ -468,6 +468,7 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                     service_template=template,
                 )
 
+            service.binary_path = template["binary_path"]
             service.env_variables = template["env_variables"]
             service.update_user_params_from_template(service_template=template)
             service.store()
@@ -666,10 +667,17 @@ def run_service(
     manager.fund_service(service_config_id=service.service_config_id)
 
     print_section("Deploying the service")
+    if service.binary_path is None:
+        use_docker = True
+        use_k8s = True
+    else:
+        use_docker = False
+        use_k8s = False
+
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=True,
-        use_kubernetes=True,
+        use_docker=use_docker,
+        use_kubernetes=use_k8s,
         build_only=build_only,
     )
     if build_only:
