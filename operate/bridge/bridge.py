@@ -194,6 +194,7 @@ class BridgeManager:
 
             bridge_providers = [  # Sorted in order of preference
                 self._bridge_providers["NativeBridgeProvider.Optimism"],
+                self._bridge_providers["NativeBridgeProvider.Omnibridge"],
                 self._bridge_providers["LiFiBridgeProvider"],
             ]
             bridge_requests = []

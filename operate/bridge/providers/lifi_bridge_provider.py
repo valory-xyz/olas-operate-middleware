@@ -43,6 +43,9 @@ from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 
 
+LIFI_DEFAULT_ETA = 5 * 60
+
+
 class LiFiTransactionStatus(str, enum.Enum):
     """LI.FI transaction status."""
 
@@ -94,7 +97,7 @@ class LiFiBridgeProvider(BridgeProvider):
         if to_amount == 0:
             self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
-                bridge_eta=None,
+                bridge_eta=0,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
                 provider_data=None,
@@ -126,7 +129,7 @@ class LiFiBridgeProvider(BridgeProvider):
                 response.raise_for_status()
                 response_json = response.json()
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    bridge_eta=LIFI_DEFAULT_ETA,
                     elapsed_time=time.time() - start,
                     message=None,
                     provider_data={

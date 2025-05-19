@@ -457,6 +457,7 @@ class BridgeProvider(ABC):
                 explorer_link = self._get_explorer_link(tx_hash)
 
             return {
+                "eta": bridge_request.quote_data.bridge_eta,
                 "explorer_link": explorer_link,
                 "message": bridge_request.execution_data.message,
                 "status": bridge_request.status.value,
@@ -464,6 +465,7 @@ class BridgeProvider(ABC):
             }
         if bridge_request.quote_data:
             return {
+                "eta": bridge_request.quote_data.bridge_eta,
                 "message": bridge_request.quote_data.message,
                 "status": bridge_request.status.value,
             }

@@ -52,39 +52,44 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     L1StandardBridge,
 )
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
-from operate.ledger.profiles import ERC20_TOKENS
+from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC, WRAPPED_NATIVE_ASSET
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
 
 
 BLOCK_CHUNK_SIZE = 5000
 
-BRIDGE_DATA: t.Dict[t.Any, t.Dict[str, t.Any]] = {
-    (Chain.ETHEREUM, Chain.BASE): {
-        "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
-        "to_bridge": "0x4200000000000000000000000000000000000010",
-        "bridge_eta": 5 * 60,
-    },
-    (Chain.ETHEREUM, Chain.MODE): {
-        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
-        "to_bridge": "0x4200000000000000000000000000000000000010",
-        "bridge_eta": 5 * 60,
-    },
-    (Chain.ETHEREUM, Chain.OPTIMISTIC): {
-        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
-        "to_bridge": "0x4200000000000000000000000000000000000010",
-        "bridge_eta": 5 * 60,
-    },
-    (Chain.ETHEREUM, Chain.GNOSIS): {
-        "from_bridge": "0x88ad09518695c6c3712AC10a214bE5109a655671",
-        "to_bridge": "0xf6A78083ca3e2a662D6dd1703c939c8aCE2e268d",
-        "bridge_eta": 30 * 60,
-    },
-}
-
 
 class BridgeContractAdaptor(ABC):
     """Adaptor class for bridge contract packages."""
+
+    BRIDGE_PARAMS: t.Dict
+
+    def can_handle_request(self, params: t.Dict) -> bool:
+        """Returns 'true' if the contract adaptor can handle a request for 'params'."""
+        from_chain = Chain(params["from"]["chain"])
+        from_token = params["from"]["token"]
+        to_chain = Chain(params["to"]["chain"])
+        to_token = params["to"]["token"]
+
+        if (from_chain, to_chain) not in self.BRIDGE_PARAMS:
+            return False
+
+        bridge_params = self.BRIDGE_PARAMS[(from_chain, to_chain)]
+
+        if from_token not in bridge_params["supported_from_tokens"]:
+            return False
+
+        for token_map in ERC20_TOKENS:
+            if (
+                from_chain in token_map
+                and to_chain in token_map
+                and token_map[from_chain].lower() == from_token.lower()
+                and token_map[to_chain].lower() == to_token.lower()
+            ):
+                return True
+
+        return False
 
     @abstractmethod
     def build_bridge_native_tx(
@@ -128,6 +133,42 @@ class BridgeContractAdaptor(ABC):
 class OptimismContractAdaptor(BridgeContractAdaptor):
     """Adaptor class for Optimism contract packages."""
 
+    BRIDGE_PARAMS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
+        (Chain.ETHEREUM, Chain.BASE): {
+            "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
+            "to_bridge": "0x4200000000000000000000000000000000000010",
+            "bridge_eta": 5 * 60,
+            "supported_from_tokens": (
+                ZERO_ADDRESS,
+                WRAPPED_NATIVE_ASSET[Chain.ETHEREUM],
+                OLAS[Chain.ETHEREUM],
+                USDC[Chain.ETHEREUM],
+            ),
+        },
+        (Chain.ETHEREUM, Chain.MODE): {
+            "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
+            "to_bridge": "0x4200000000000000000000000000000000000010",
+            "bridge_eta": 5 * 60,
+            "supported_from_tokens": (
+                ZERO_ADDRESS,
+                WRAPPED_NATIVE_ASSET[Chain.ETHEREUM],
+                OLAS[Chain.ETHEREUM],
+                USDC[Chain.ETHEREUM],
+            ),
+        },
+        (Chain.ETHEREUM, Chain.OPTIMISTIC): {
+            "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
+            "to_bridge": "0x4200000000000000000000000000000000000010",
+            "bridge_eta": 5 * 60,
+            "supported_from_tokens": (
+                ZERO_ADDRESS,
+                WRAPPED_NATIVE_ASSET[Chain.ETHEREUM],
+                OLAS[Chain.ETHEREUM],
+                USDC[Chain.ETHEREUM],
+            ),
+        },
+    }
+
     _l1_standard_bridge_contract = t.cast(
         L1StandardBridge,
         L1StandardBridge.from_dir(
@@ -150,7 +191,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
+        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l1_standard_bridge_contract.build_bridge_eth_to_tx(
             ledger_api=from_ledger_api,
@@ -173,7 +216,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
+        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l1_standard_bridge_contract.build_bridge_erc20_to_tx(
             ledger_api=from_ledger_api,
@@ -201,7 +246,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_amount = bridge_request.params["to"]["amount"]
-        to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
+        to_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "to_bridge"
+        ]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l2_standard_bridge_contract.find_eth_bridge_finalized_tx(
             ledger_api=to_ledger_api,
@@ -230,7 +277,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
+        to_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "to_bridge"
+        ]
         extra_data = Web3.keccak(text=bridge_request.id)
         return self._l2_standard_bridge_contract.find_erc20_bridge_finalized_tx(
             ledger_api=to_ledger_api,
@@ -248,6 +297,19 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
 
 class OmnibridgeContractAdaptor(BridgeContractAdaptor):
     """Adaptor class for Omnibridge contract packages."""
+
+    BRIDGE_PARAMS: t.Dict[t.Any, t.Dict[str, t.Any]] = {
+        (Chain.ETHEREUM, Chain.GNOSIS): {
+            "from_bridge": "0x88ad09518695c6c3712AC10a214bE5109a655671",
+            "to_bridge": "0xf6A78083ca3e2a662D6dd1703c939c8aCE2e268d",
+            "bridge_eta": 30 * 60,
+            "supported_from_tokens": (
+                WRAPPED_NATIVE_ASSET[Chain.ETHEREUM],
+                OLAS[Chain.ETHEREUM],
+                USDC[Chain.ETHEREUM],
+            ),
+        },
+    }
 
     _foreign_omnibridge = t.cast(
         ForeignOmnibridge,
@@ -267,13 +329,32 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge native asset transaction."""
-        raise NotImplementedError(f"{self.__class__.__name__} does not support this method.")
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support this method."
+        )
 
     def build_bridge_erc20_tx(
         self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge ERC20 asset transaction."""
-        raise NotImplementedError("NotImplementedError")
+        from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+        to_chain = bridge_request.params["to"]["chain"]
+        to_address = bridge_request.params["to"]["address"]
+        to_amount = bridge_request.params["to"]["amount"]
+        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
+
+        return self._foreign_omnibridge.build_relay_tokens_tx(
+            ledger_api=from_ledger_api,
+            contract_address=from_bridge,
+            sender=from_address,
+            token=from_token,
+            receiver=to_address,
+            amount=to_amount,
+        )
 
     def find_native_bridge_finalized_tx(
         self,
@@ -284,7 +365,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating native bridge completion."""
-        raise NotImplementedError(f"{self.__class__.__name__} does not support this method.")
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support this method."
+        )
 
     def find_erc20_bridge_finalized_tx(
         self,
@@ -303,8 +386,12 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
-        to_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
+        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
+        to_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "to_bridge"
+        ]
 
         message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
             ledger_api=from_ledger_api,
@@ -316,7 +403,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         )
 
         if not message_id:
-            raise RuntimeError(f"Cannot find 'messageId' in transaction {from_tx_hash}.")
+            raise RuntimeError(
+                f"Cannot find 'messageId' in transaction {from_tx_hash}."
+            )
 
         return self._home_omnibridge.find_tokens_bridged_tx(
             ledger_api=to_ledger_api,
@@ -352,33 +441,10 @@ class NativeBridgeProvider(BridgeProvider):
         if not super().can_handle_request(params):
             return False
 
-        from_chain = Chain(params["from"]["chain"])
-        from_token = params["from"]["token"]
-        to_chain = Chain(params["to"]["chain"])
-        to_token = params["to"]["token"]
-
-        if (from_chain, to_chain) not in BRIDGE_DATA:
-            self.logger.warning(
-                f"[NATIVE BRIDGE] Unsupported bridge from {from_chain} to {to_chain}."
-            )
+        if not self.bridge_contract_adaptor.can_handle_request(params):
             return False
 
-        if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
-            return True
-
-        for token_map in ERC20_TOKENS:
-            if (
-                from_chain in token_map
-                and to_chain in token_map
-                and token_map[from_chain].lower() == from_token.lower()
-                and token_map[to_chain].lower() == to_token.lower()
-            ):
-                return True
-
-        self.logger.warning(
-            f"[NATIVE BRIDGE] Unsupported token pair: {from_chain} {from_token} -> {to_chain} {to_token}"
-        )
-        return False
+        return True
 
     def description(self) -> str:
         """Get a human-readable description of the bridge provider."""
@@ -405,7 +471,9 @@ class NativeBridgeProvider(BridgeProvider):
         from_chain = bridge_request.params["from"]["chain"]
         to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
-        bridge_eta = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["bridge_eta"]
+        bridge_eta = self.bridge_contract_adaptor.BRIDGE_PARAMS[
+            (Chain(from_chain), Chain(to_chain))
+        ]["bridge_eta"]
 
         message = None
         if to_amount == 0:
@@ -462,7 +530,9 @@ class NativeBridgeProvider(BridgeProvider):
         from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["from_bridge"]
+        from_bridge = self.bridge_contract_adaptor.BRIDGE_PARAMS[
+            (Chain(from_chain), Chain(to_chain))
+        ]["from_bridge"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
         if from_token == ZERO_ADDRESS:
@@ -539,7 +609,9 @@ class NativeBridgeProvider(BridgeProvider):
         from_chain = bridge_request.params["from"]["chain"]
         from_token = bridge_request.params["from"]["token"]
         to_chain = bridge_request.params["to"]["chain"]
-        bridge_eta = BRIDGE_DATA[(Chain(from_chain), Chain(to_chain))]["bridge_eta"]
+        bridge_eta = self.bridge_contract_adaptor.BRIDGE_PARAMS[
+            (Chain(from_chain), Chain(to_chain))
+        ]["bridge_eta"]
 
         try:
             from_ledger_api = self._from_ledger_api(bridge_request)
