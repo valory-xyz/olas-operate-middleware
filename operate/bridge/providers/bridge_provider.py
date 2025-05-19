@@ -34,6 +34,7 @@ from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 
+from operate.bridge import bridge
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -448,7 +449,7 @@ class BridgeProvider(ABC):
         """JSON representation of the status."""
         self._validate(bridge_request)
 
-        if bridge_request.execution_data:
+        if bridge_request.execution_data and bridge_request.quote_data:
             self._update_execution_status(bridge_request)
             tx_hash = None
             explorer_link = None

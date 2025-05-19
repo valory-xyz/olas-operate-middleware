@@ -316,6 +316,12 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating bridge completion."""
+        if not bridge_request.execution_data:
+            raise RuntimeError("Execution data not present")
+
+        if not bridge_request.execution_data.from_tx_hash:
+            raise RuntimeError("Source chain transaction hash not present")
+
         from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
