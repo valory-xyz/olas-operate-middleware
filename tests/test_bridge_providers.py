@@ -44,8 +44,10 @@ from operate.bridge.providers.bridge_provider import (
     QuoteData,
 )
 from operate.bridge.providers.native_bridge_provider import (
+    BRIDGE_DATA,
+    BridgeContractAdaptor,
     NativeBridgeProvider,
-    OPTIMISM_BRIDGE_DATA,
+    OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
 from operate.cli import OperateApp
@@ -545,7 +547,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
+            bridge_eta=BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=MESSAGE_QUOTE_ZERO,
             provider_data=None,
@@ -689,7 +691,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=OPTIMISM_BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
+            bridge_eta=BRIDGE_DATA[Chain.ETHEREUM, Chain.BASE]["bridge_eta"],
             elapsed_time=0,
             message=None,
             provider_data=None,
@@ -805,6 +807,7 @@ class TestBridgeProvider:
     @pytest.mark.parametrize(
         (
             "bridge_provider_class",
+            "contract_adaptor_class",
             "params",
             "request_id",
             "from_tx_hash",
@@ -813,9 +816,11 @@ class TestBridgeProvider:
             "expected_elapsed_time",
         ),
         [
+            # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
             # LiFiBridgeProvider - EXECUTION_DONE tests
             (
                 LiFiBridgeProvider,
+                None,
                 {
                     "from": {
                         "chain": "gnosis",
@@ -835,9 +840,10 @@ class TestBridgeProvider:
                 "0x6cd9176f1da953e4464adb8bdc81fbe4133ebcd1bb6aeac49946a38ff025e623",
                 374,
             ),
-            # NativeBridgeProvider - EXECUTION_DONE tests
+            # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -859,6 +865,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -880,6 +887,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -901,6 +909,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -920,9 +929,10 @@ class TestBridgeProvider:
                 "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
                 186,
             ),
-            # NativeBridgeProvider - EXECUTION_FAILED tests
+            # NativeBridgeProvider (Optimism bridge) - EXECUTION_FAILED tests
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -944,6 +954,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -965,6 +976,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -986,6 +998,7 @@ class TestBridgeProvider:
             ),
             (
                 NativeBridgeProvider,
+                OptimismContractAdaptor,
                 {
                     "from": {
                         "chain": "ethereum",
@@ -1012,6 +1025,7 @@ class TestBridgeProvider:
         tmp_path: Path,
         password: str,
         bridge_provider_class: t.Type[BridgeProvider],
+        contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
         params: dict,
         request_id: str,
         from_tx_hash: str,
@@ -1030,14 +1044,16 @@ class TestBridgeProvider:
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
-        if bridge_provider_class == NativeBridgeProvider:
+        if contract_adaptor_class is not None:
             bridge: BridgeProvider = NativeBridgeProvider(
                 provider_id="NativeBridgeProvider",
-                bridge_contract_adaptor=OptimismContractAdaptor(),
+                bridge_contract_adaptor=contract_adaptor_class(),
                 wallet_manager=operate.wallet_manager,
             )
         else:
-            bridge = bridge_provider_class(provider_id="", wallet_manager=operate.wallet_manager)
+            bridge = bridge_provider_class(
+                provider_id="", wallet_manager=operate.wallet_manager
+            )
 
         quote_data = QuoteData(
             bridge_eta=0,
