@@ -25,6 +25,8 @@ from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 from aea_ledger_ethereum import EthereumApi
+import eth_abi
+from web3 import Web3
 from web3.types import BlockIdentifier
 
 
@@ -47,20 +49,32 @@ class L2StandardBridge(Contract):
     ) -> Optional[str]:
         """Return the transaction hash of the matching ETHBridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
-        contract_instance = cls.get_instance(ledger_api, contract_address)
-        entries = contract_instance.events.ETHBridgeFinalized.create_filter(
-            fromBlock=from_block,
-            toBlock=to_block,
-            argument_filters={
-                "from": from_,
-                "to": to,
-            },
-        ).get_all_entries()
+        event_signature = "ETHBridgeFinalized(address,address,uint256,bytes)"
+        event_signature_hash = Web3.keccak(text=event_signature).hex()
 
-        for entry in entries:
-            args = entry["args"]
-            if args["amount"] == amount and args["extraData"] == extra_data:
-                return entry["transactionHash"].hex()
+        topics = [
+            event_signature_hash,  # ETHBridgeFinalized
+            "0x" + from_.lower()[2:].rjust(64, "0"),  # from
+            "0x" + to.lower()[2:].rjust(64, "0"),  # to
+        ]
+        non_indexed_types = ["uint256", "bytes"]
+        non_indexed_values = [
+            amount,  # amount
+            extra_data,  # extraData
+        ]
+
+        logs = ledger_api.api.eth.get_logs({
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": contract_address,
+            "topics": topics,
+        })
+
+        for log in logs:
+            decoded = eth_abi.decode(non_indexed_types, log["data"])
+            if all(a == b for a, b in zip(decoded, non_indexed_values)):
+                return log["transactionHash"].hex()
+
         return None
 
     @classmethod
@@ -79,23 +93,32 @@ class L2StandardBridge(Contract):
     ) -> Optional[str]:
         """Return the transaction hash of the matching ERC20BridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
-        contract_instance = cls.get_instance(ledger_api, contract_address)
-        entries = contract_instance.events.ERC20BridgeFinalized.create_filter(
-            fromBlock=from_block,
-            toBlock=to_block,
-            argument_filters={
-                "localToken": local_token,
-                "remoteToken": remote_token,
-                "from": from_,
-            },
-        ).get_all_entries()
+        event_signature = "ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
+        event_signature_hash = Web3.keccak(text=event_signature).hex()
 
-        for entry in entries:
-            args = entry["args"]
-            if (
-                args["to"].lower() == to.lower()
-                and args["amount"] == amount
-                and args["extraData"] == extra_data
-            ):
-                return entry["transactionHash"].hex()
+        topics = [
+            event_signature_hash,  # ERC20BridgeFinalized
+            "0x" + local_token.lower()[2:].rjust(64, "0"),  # localToken
+            "0x" + remote_token.lower()[2:].rjust(64, "0"),  # remoteToken
+            "0x" + from_.lower()[2:].rjust(64, "0"),  # from
+        ]
+        non_indexed_types = ["address", "uint256", "bytes"]
+        non_indexed_values = [
+            to.lower(),  # to
+            amount,  # amount
+            extra_data,  # extraData
+        ]
+
+        logs = ledger_api.api.eth.get_logs({
+            "fromBlock": from_block,
+            "toBlock": to_block,
+            "address": contract_address,
+            "topics": topics,
+        })
+
+        for log in logs:
+            decoded = eth_abi.decode(non_indexed_types, log["data"])
+            if all(a == b for a, b in zip(decoded, non_indexed_values)):
+                return log["transactionHash"].hex()
+
         return None
