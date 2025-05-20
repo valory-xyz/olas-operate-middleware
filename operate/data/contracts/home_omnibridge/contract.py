@@ -21,13 +21,13 @@
 
 from typing import Optional, cast
 
+import eth_abi
 from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 from aea_ledger_ethereum import EthereumApi
-import eth_abi
-from web3.types import BlockIdentifier
 from web3 import Web3
+from web3.types import BlockIdentifier
 
 
 class HomeOmnibridge(Contract):
@@ -56,19 +56,21 @@ class HomeOmnibridge(Contract):
             event_signature_hash,  # TokensBridged
             "0x" + token.lower()[2:].rjust(64, "0"),  # token
             "0x" + recipient.lower()[2:].rjust(64, "0"),  # recipient
-            "0x" + message_id.hex().rjust(64, "0")
+            "0x" + message_id.hex().rjust(64, "0"),  # messageId
         ]
         non_indexed_types = ["uint256"]
         non_indexed_values = [
             value,  # value
         ]
 
-        logs = ledger_api.api.eth.get_logs({
-            "fromBlock": from_block,
-            "toBlock": to_block,
-            "address": contract_address,
-            "topics": topics,
-        })
+        logs = ledger_api.api.eth.get_logs(
+            {
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": contract_address,
+                "topics": topics,
+            }
+        )
 
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])

@@ -21,11 +21,11 @@
 
 from typing import Optional, cast
 
+import eth_abi
 from aea.configurations.base import PublicId
 from aea.contracts.base import Contract
 from aea.crypto.base import LedgerApi
 from aea_ledger_ethereum import EthereumApi
-import eth_abi
 from web3 import Web3
 from web3.types import BlockIdentifier
 
@@ -63,12 +63,14 @@ class L2StandardBridge(Contract):
             extra_data,  # extraData
         ]
 
-        logs = ledger_api.api.eth.get_logs({
-            "fromBlock": from_block,
-            "toBlock": to_block,
-            "address": contract_address,
-            "topics": topics,
-        })
+        logs = ledger_api.api.eth.get_logs(
+            {
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": contract_address,
+                "topics": topics,
+            }
+        )
 
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
@@ -93,7 +95,9 @@ class L2StandardBridge(Contract):
     ) -> Optional[str]:
         """Return the transaction hash of the matching ERC20BridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
-        event_signature = "ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
+        event_signature = (
+            "ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
+        )
         event_signature_hash = Web3.keccak(text=event_signature).hex()
 
         topics = [
@@ -109,12 +113,14 @@ class L2StandardBridge(Contract):
             extra_data,  # extraData
         ]
 
-        logs = ledger_api.api.eth.get_logs({
-            "fromBlock": from_block,
-            "toBlock": to_block,
-            "address": contract_address,
-            "topics": topics,
-        })
+        logs = ledger_api.api.eth.get_logs(
+            {
+                "fromBlock": from_block,
+                "toBlock": to_block,
+                "address": contract_address,
+                "topics": topics,
+            }
+        )
 
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
