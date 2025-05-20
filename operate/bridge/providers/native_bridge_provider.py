@@ -76,6 +76,9 @@ class BridgeContractAdaptor(ABC):
         if (from_chain, to_chain) not in cls.BRIDGE_PARAMS:
             return False
 
+        if from_token == ZERO_ADDRESS:
+            return True
+
         bridge_params = cls.BRIDGE_PARAMS[(from_chain, to_chain)]
 
         if from_token not in bridge_params["supported_from_tokens"]:
@@ -303,6 +306,15 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
             directory=str(DATA_DIR / "contracts" / "home_omnibridge"),
         ),
     )
+
+    @classmethod
+    def can_handle_request(cls, params: t.Dict) -> bool:
+        """Returns 'true' if the contract adaptor can handle a request for 'params'."""
+        from_token = Web3.to_checksum_address(params["from"]["token"])
+        if from_token == ZERO_ADDRESS:
+            return False
+
+        return super().can_handle_request(params)
 
     @classmethod
     def build_bridge_tx(

@@ -22,19 +22,30 @@
 
 import os
 import time
+import typing as t
 from pathlib import Path
 
 import pytest
 from deepdiff import DeepDiff
 
 from operate.bridge.providers.bridge_provider import (
+    BridgeProvider,
     BridgeRequestStatus,
     MESSAGE_QUOTE_ZERO,
 )
-from operate.bridge.providers.lifi_bridge_provider import LIFI_DEFAULT_ETA
+from operate.bridge.providers.lifi_bridge_provider import (
+    LIFI_DEFAULT_ETA,
+    LiFiBridgeProvider,
+)
+from operate.bridge.providers.native_bridge_provider import (
+    BridgeContractAdaptor,
+    NativeBridgeProvider,
+    OmnibridgeContractAdaptor,
+    OptimismContractAdaptor,
+)
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
-from operate.ledger.profiles import OLAS
+from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
 
@@ -387,3 +398,174 @@ class TestBridgeManager:
             print(diff)
 
         assert not diff, "Wrong bridge refill requirements."
+
+    @pytest.mark.parametrize(
+        (
+            "from_chain",
+            "from_token",
+            "to_chain",
+            "to_token",
+            "expected_provider_cls",
+            "expected_contract_adaptor_cls",
+        ),
+        [
+            # Base
+            (
+                Chain.ETHEREUM.value,
+                ZERO_ADDRESS,
+                "base",
+                ZERO_ADDRESS,
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                OLAS[Chain.ETHEREUM],
+                "base",
+                OLAS[Chain.BASE],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                USDC[Chain.ETHEREUM],
+                "base",
+                USDC[Chain.BASE],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            # Mode
+            (
+                Chain.ETHEREUM.value,
+                ZERO_ADDRESS,
+                Chain.MODE.value,
+                ZERO_ADDRESS,
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                OLAS[Chain.ETHEREUM],
+                Chain.MODE.value,
+                OLAS[Chain.MODE],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                USDC[Chain.ETHEREUM],
+                Chain.MODE.value,
+                USDC[Chain.MODE],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            # Optimism
+            (
+                Chain.ETHEREUM.value,
+                ZERO_ADDRESS,
+                Chain.OPTIMISTIC.value,
+                ZERO_ADDRESS,
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                OLAS[Chain.ETHEREUM],
+                Chain.OPTIMISTIC.value,
+                OLAS[Chain.OPTIMISTIC],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                USDC[Chain.ETHEREUM],
+                Chain.OPTIMISTIC.value,
+                USDC[Chain.OPTIMISTIC],
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+            ),
+            # Gnosis
+            (
+                Chain.ETHEREUM.value,
+                ZERO_ADDRESS,
+                Chain.GNOSIS.value,
+                ZERO_ADDRESS,
+                LiFiBridgeProvider,
+                None,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                OLAS[Chain.ETHEREUM],
+                Chain.GNOSIS.value,
+                OLAS[Chain.GNOSIS],
+                NativeBridgeProvider,
+                OmnibridgeContractAdaptor,
+            ),
+            (
+                Chain.ETHEREUM.value,
+                USDC[Chain.ETHEREUM],
+                Chain.GNOSIS.value,
+                USDC[Chain.GNOSIS],
+                NativeBridgeProvider,
+                OmnibridgeContractAdaptor,
+            ),
+        ],
+    )
+    def test_correct_providers(
+        self,
+        tmp_path: Path,
+        password: str,
+        from_chain: str,
+        from_token: str,
+        to_chain: str,
+        to_token: str,
+        expected_provider_cls: t.Type[BridgeProvider],
+        expected_contract_adaptor_cls: t.Type[BridgeContractAdaptor],
+    ) -> None:
+        """test_correct_providers"""
+        operate = OperateApp(
+            home=tmp_path / OPERATE,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+        bridge_manager = operate.bridge_manager()
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params = [
+            {
+                "from": {
+                    "chain": from_chain,
+                    "address": wallet_address,
+                    "token": from_token,
+                },
+                "to": {
+                    "chain": to_chain,
+                    "address": wallet_address,
+                    "token": to_token,
+                    "amount": 0,
+                },
+            },
+        ]
+
+        bundle = bridge_manager.data.last_requested_bundle
+        assert bundle is None, "Wrong bundle."
+        bridge_manager.bridge_refill_requirements(
+            requests_params=params, force_update=False
+        )
+
+        bundle = bridge_manager.data.last_requested_bundle
+        assert bundle is not None, "Wrong bundle."
+        assert len(bundle.bridge_requests) == 1, "Wrong bundle."
+        bridge_request = bundle.bridge_requests[0]
+        bridge = bridge_manager._bridge_providers[bridge_request.bridge_provider_id]
+
+        assert isinstance(
+            bridge, expected_provider_cls
+        ), f"Expected provider {expected_provider_cls}, got {type(bridge)}"
+
+        if isinstance(bridge, NativeBridgeProvider):
+            assert isinstance(
+                bridge.bridge_contract_adaptor, expected_contract_adaptor_cls
+            ), f"Expected adaptor {expected_contract_adaptor_cls}, got {type(bridge.contract_adaptor)}"
