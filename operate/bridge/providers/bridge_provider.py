@@ -48,7 +48,7 @@ from operate.wallet.master import MasterWalletManager
 PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
-BRIDGE_REQUEST_PREFIX = "b-"
+BRIDGE_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
 MESSAGE_EXECUTION_FAILED = "Execution failed:"

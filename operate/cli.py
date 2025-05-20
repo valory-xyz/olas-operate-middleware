@@ -1007,6 +1007,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    @app.get("/api/bridge/last_executed_bundle_id")
+    @with_retries
+    async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
+        """Get last executed bundle id."""
+        content = {"id": operate.bridge_manager().last_executed_bundle_id()}
+        return JSONResponse(content=content, status_code=HTTPStatus.OK)
+
     @app.get("/api/bridge/status/{id}")
     @with_retries
     async def _bridge_status(request: Request) -> JSONResponse:

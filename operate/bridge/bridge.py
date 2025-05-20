@@ -49,7 +49,7 @@ from operate.wallet.master import MasterWalletManager
 
 DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
 EXECUTED_BUNDLES_PATH = "executed"
-BRIDGE_REQUEST_BUNDLE_PREFIX = "br-"
+BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
 
 @dataclass
@@ -93,6 +93,7 @@ class BridgeManagerData(LocalResource):
     path: Path
     version: int = 1
     last_requested_bundle: t.Optional[BridgeRequestBundle] = None
+    last_executed_bundle_id: t.Optional[str] = None
 
     _file = "bridge.json"
 
@@ -303,8 +304,10 @@ class BridgeManager:
 
         requirements = self.bridge_refill_requirements(bundle.requests_params)
         self.data.last_requested_bundle = None
+        self.data.last_executed_bundle_id = bundle_id
         bundle_path = self.path / EXECUTED_BUNDLES_PATH / f"{bundle.id}.json"
         bundle.path = bundle_path
+        self._store_data()
         bundle.store()
 
         if requirements["is_refill_required"]:
@@ -372,3 +375,7 @@ class BridgeManager:
             bridge = self._bridge_providers[bridge_request.bridge_provider_id]
             bridge.quote(bridge_request)
         bundle.timestamp = int(time.time())
+
+    def last_executed_bundle_id(self) -> t.Optional[str]:
+        """Get the last executed bundle id."""
+        return self.data.last_executed_bundle_id

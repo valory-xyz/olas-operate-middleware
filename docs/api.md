@@ -1027,6 +1027,23 @@ Gets the status of a quote bundle. Individual bridge request status:
 
 ---
 
+### `GET /api/bridge/last_executed_bundle_id`
+
+Gets the last executed quote bundle id.
+
+<details>
+  <summary>Response</summary>
+
+  ```json
+  {
+    "id": "br-52e3f945-b495-49bd-8ea2-cafa67468ed3"
+  }
+  ```
+
+</details>
+
+---
+
 ## Unused endpoints
 
 ### `POST /api/services/{service}/onchain/deploy`
