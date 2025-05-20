@@ -9,6 +9,8 @@ Reused packages from other repositories:
 New packages from this repository:
 
 - `contracts/dual_staking_token`
+- `contracts/foreign_omnibridge`
+- `contracts/home_omnibridge`
 - `contracts/l1_standard_bridge`
 - `contracts/l2_standard_bridge`
 - `contracts/requester_activity_checker`

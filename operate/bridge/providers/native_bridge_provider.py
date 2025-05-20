@@ -65,17 +65,18 @@ class BridgeContractAdaptor(ABC):
 
     BRIDGE_PARAMS: t.Dict
 
-    def can_handle_request(self, params: t.Dict) -> bool:
+    @classmethod
+    def can_handle_request(cls, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_chain = Chain(params["from"]["chain"])
         from_token = params["from"]["token"]
         to_chain = Chain(params["to"]["chain"])
         to_token = params["to"]["token"]
 
-        if (from_chain, to_chain) not in self.BRIDGE_PARAMS:
+        if (from_chain, to_chain) not in cls.BRIDGE_PARAMS:
             return False
 
-        bridge_params = self.BRIDGE_PARAMS[(from_chain, to_chain)]
+        bridge_params = cls.BRIDGE_PARAMS[(from_chain, to_chain)]
 
         if from_token not in bridge_params["supported_from_tokens"]:
             return False
@@ -91,16 +92,18 @@ class BridgeContractAdaptor(ABC):
 
         return False
 
+    @classmethod
     @abstractmethod
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge transaction."""
         raise NotImplementedError()
 
+    @classmethod
     @abstractmethod
     def find_bridge_finalized_tx(
-        self,
+        cls,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
@@ -163,8 +166,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         ),
     )
 
+    @classmethod
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge transaction."""
         from_chain = bridge_request.params["from"]["chain"]
@@ -174,13 +178,13 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+        from_bridge = cls.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
             "from_bridge"
         ]
         extra_data = Web3.keccak(text=bridge_request.id)
 
         if from_token == ZERO_ADDRESS:
-            return self._l1_standard_bridge_contract.build_bridge_eth_to_tx(
+            return cls._l1_standard_bridge_contract.build_bridge_eth_to_tx(
                 ledger_api=from_ledger_api,
                 contract_address=from_bridge,
                 sender=from_address,
@@ -190,7 +194,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
                 extra_data=extra_data,
             )
 
-        return self._l1_standard_bridge_contract.build_bridge_erc20_to_tx(
+        return cls._l1_standard_bridge_contract.build_bridge_erc20_to_tx(
             ledger_api=from_ledger_api,
             contract_address=from_bridge,
             sender=from_address,
@@ -202,8 +206,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
             extra_data=extra_data,
         )
 
+    @classmethod
     def find_bridge_finalized_tx(
-        self,
+        cls,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
@@ -218,13 +223,11 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        to_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
-            "to_bridge"
-        ]
+        to_bridge = cls.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
         extra_data = Web3.keccak(text=bridge_request.id)
 
         if from_token == ZERO_ADDRESS:
-            return self._l2_standard_bridge_contract.find_eth_bridge_finalized_tx(
+            return cls._l2_standard_bridge_contract.find_eth_bridge_finalized_tx(
                 ledger_api=to_ledger_api,
                 contract_address=to_bridge,
                 from_=from_address,
@@ -235,7 +238,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
                 to_block=to_block,
             )
 
-        return self._l2_standard_bridge_contract.find_erc20_bridge_finalized_tx(
+        return cls._l2_standard_bridge_contract.find_erc20_bridge_finalized_tx(
             ledger_api=to_ledger_api,
             contract_address=to_bridge,
             local_token=to_token,
@@ -279,8 +282,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ),
     )
 
+    @classmethod
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> JSONLike:
         """Build bridge transaction."""
         from_chain = bridge_request.params["from"]["chain"]
@@ -289,16 +293,16 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+        from_bridge = cls.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
             "from_bridge"
         ]
 
         if from_token == ZERO_ADDRESS:
             raise NotImplementedError(
-                f"{self.__class__.__name__} does not support bridge native tokens."
+                f"{cls.__class__.__name__} does not support bridge native tokens."
             )
 
-        return self._foreign_omnibridge.build_relay_tokens_tx(
+        return cls._foreign_omnibridge.build_relay_tokens_tx(
             ledger_api=from_ledger_api,
             contract_address=from_bridge,
             sender=from_address,
@@ -307,8 +311,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
             amount=to_amount,
         )
 
+    @classmethod
     def find_bridge_finalized_tx(
-        self,
+        cls,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
         bridge_request: BridgeRequest,
@@ -316,47 +321,30 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating bridge completion."""
-        if not bridge_request.execution_data:
-            raise RuntimeError("Execution data not present")
-
-        if not bridge_request.execution_data.from_tx_hash:
-            raise RuntimeError("Source chain transaction hash not present")
-
         from_chain = bridge_request.params["from"]["chain"]
-        from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
-        from_tx_hash = bridge_request.execution_data.from_tx_hash
         to_chain = bridge_request.params["to"]["chain"]
         to_address = bridge_request.params["to"]["address"]
         to_token = bridge_request.params["to"]["token"]
         to_amount = bridge_request.params["to"]["amount"]
-        from_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
-            "from_bridge"
-        ]
-        to_bridge = self.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
-            "to_bridge"
-        ]
+        to_bridge = cls.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))]["to_bridge"]
 
         if from_token == ZERO_ADDRESS:
             raise NotImplementedError(
-                f"{self.__class__.__name__} does not support bridge native tokens."
+                f"{cls.__class__.__name__} does not support bridge native tokens."
             )
 
-        message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
-            ledger_api=from_ledger_api,
-            contract_address=from_bridge,
-            tx_hash=from_tx_hash,
-            token=from_token,
-            sender=from_address,
-            value=to_amount,
+        message_id = cls.get_message_id(
+            from_ledger_api=from_ledger_api,
+            bridge_request=bridge_request,
         )
 
         if not message_id:
             raise RuntimeError(
-                f"Cannot find 'messageId' in transaction {from_tx_hash}."
+                f"Cannot find 'messageId' for bridge request {bridge_request.id}."
             )
 
-        return self._home_omnibridge.find_tokens_bridged_tx(
+        return cls._home_omnibridge.find_tokens_bridged_tx(
             ledger_api=to_ledger_api,
             contract_address=to_bridge,
             token=to_token,
@@ -366,6 +354,48 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
             from_block=from_block,
             to_block=to_block,
         )
+
+    @classmethod
+    def get_message_id(
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+    ) -> t.Optional[bytes]:
+        """Get the bridge message id."""
+        if not bridge_request.execution_data:
+            raise RuntimeError("Execution data not present")
+
+        if not bridge_request.execution_data.from_tx_hash:
+            raise RuntimeError("Source chain transaction hash not present")
+
+        if (
+            bridge_request.execution_data.provider_data
+            and "message_id" in bridge_request.execution_data.provider_data
+        ):
+            return bridge_request.execution_data.provider_data.get("message_id", None)
+
+        from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+        from_tx_hash = bridge_request.execution_data.from_tx_hash
+        to_chain = bridge_request.params["to"]["chain"]
+        to_amount = bridge_request.params["to"]["amount"]
+        from_bridge = cls.BRIDGE_PARAMS[(Chain(from_chain), Chain(to_chain))][
+            "from_bridge"
+        ]
+
+        message_id = cls._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
+            ledger_api=from_ledger_api,
+            contract_address=from_bridge,
+            tx_hash=from_tx_hash,
+            token=from_token,
+            sender=from_address,
+            value=to_amount,
+        )
+
+        if not bridge_request.execution_data.provider_data:
+            bridge_request.execution_data.provider_data = {}
+
+        bridge_request.execution_data.provider_data["message_id"] = message_id
+        return message_id
 
 
 class NativeBridgeProvider(BridgeProvider):
@@ -611,6 +641,9 @@ class NativeBridgeProvider(BridgeProvider):
 
         except Exception as e:
             self.logger.error(f"Error updating execution status: {e}")
+            import traceback
+
+            traceback.print_exc()
             execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
 
@@ -630,6 +663,20 @@ class NativeBridgeProvider(BridgeProvider):
                 high = mid - 1
         return best
 
-    def _get_explorer_link(self, tx_hash: str) -> str:
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> str:
         """Get the explorer link for a transaction."""
+
+        if isinstance(self.bridge_contract_adaptor, OmnibridgeContractAdaptor):
+            from_ledger_api = self._from_ledger_api(bridge_request)
+            message_id = self.bridge_contract_adaptor.get_message_id(
+                from_ledger_api, bridge_request
+            )
+            if not message_id:
+                return "https://bridge.gnosischain.com/bridge-explorer/"
+            return f"https://bridge.gnosischain.com/bridge-explorer/transaction/0x{message_id.hex()}"
+
+        tx_hash = None
+        if bridge_request.execution_data and bridge_request.execution_data.from_tx_hash:
+            tx_hash = bridge_request.execution_data.from_tx_hash
+
         return f"https://etherscan.io/tx/{tx_hash}"  # TODO this bridge should return None here - discuss with FE

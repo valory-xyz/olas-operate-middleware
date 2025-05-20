@@ -596,6 +596,7 @@ class TestNativeBridge:
             timestamp=0,
             from_tx_hash=None,
             to_tx_hash=None,
+            provider_data=None,
         )
         expected_request.execution_data = expected_execution_data
         expected_request.status = BridgeRequestStatus.EXECUTION_DONE
@@ -754,6 +755,7 @@ class TestNativeBridge:
             timestamp=0,
             from_tx_hash=None,
             to_tx_hash=None,
+            provider_data=None,
         )
         expected_request.execution_data = expected_execution_data
         expected_request.status = BridgeRequestStatus.EXECUTION_FAILED
@@ -1104,6 +1106,7 @@ class TestBridgeProvider:
             timestamp=0,
             from_tx_hash=from_tx_hash,
             to_tx_hash=None,
+            provider_data=None,
         )
 
         bridge_request = BridgeRequest(

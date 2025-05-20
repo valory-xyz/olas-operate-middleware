@@ -34,7 +34,6 @@ from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 
-from operate.bridge import bridge
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
@@ -89,6 +88,7 @@ class ExecutionData(LocalResource):
     timestamp: int
     from_tx_hash: t.Optional[str]
     to_tx_hash: t.Optional[str]
+    provider_data: t.Optional[t.Dict]  # Provider-specific data
 
 
 class BridgeRequestStatus(str, enum.Enum):
@@ -340,6 +340,7 @@ class BridgeProvider(ABC):
                 timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
+                provider_data=None,
             )
             bridge_request.execution_data = execution_data
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
@@ -370,6 +371,7 @@ class BridgeProvider(ABC):
                 timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
+                provider_data=None,
             )
             bridge_request.execution_data = execution_data
             bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
@@ -413,6 +415,7 @@ class BridgeProvider(ABC):
                 timestamp=int(timestamp),
                 from_tx_hash=tx_hashes[-1],
                 to_tx_hash=None,
+                provider_data=None,
             )
             bridge_request.execution_data = execution_data
             if len(tx_hashes) == len(txs):
@@ -431,6 +434,7 @@ class BridgeProvider(ABC):
                 timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
+                provider_data=None,
             )
             bridge_request.execution_data = execution_data
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
@@ -441,7 +445,7 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_explorer_link(self, tx_hash: str) -> str:
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> str:
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 
@@ -452,14 +456,12 @@ class BridgeProvider(ABC):
         if bridge_request.execution_data and bridge_request.quote_data:
             self._update_execution_status(bridge_request)
             tx_hash = None
-            explorer_link = None
             if bridge_request.execution_data.from_tx_hash:
                 tx_hash = bridge_request.execution_data.from_tx_hash
-                explorer_link = self._get_explorer_link(tx_hash)
 
             return {
                 "eta": bridge_request.quote_data.bridge_eta,
-                "explorer_link": explorer_link,
+                "explorer_link": self._get_explorer_link(bridge_request),
                 "message": bridge_request.execution_data.message,
                 "status": bridge_request.status.value,
                 "tx_hash": tx_hash,
