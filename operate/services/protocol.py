@@ -332,6 +332,9 @@ class StakingManager(OnChainHelper):
         # we make use of the ERC20 contract to build the approval transaction
         # since it has the same interface as ERC721 we might want to create
         # a ERC721 contract package
+        # this is very bad way to do it but it works because the ERC721 contract expects two arguments
+        # for approve call (spender, token_id), and the ERC20 contract wrapper used here from open-autonomy
+        # passes the amount as the second argument.
         def _build_approval_tx(  # pylint: disable=unused-argument
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
@@ -340,7 +343,7 @@ class StakingManager(OnChainHelper):
                 contract_address=service_registry,
                 spender=staking_contract,
                 sender=self.crypto.address,
-                amount=service_id,
+                amount=service_id,  # TODO: This is a workaround and it should be fixed
             )
 
         setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
