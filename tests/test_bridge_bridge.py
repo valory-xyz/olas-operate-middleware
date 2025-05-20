@@ -568,4 +568,4 @@ class TestBridgeManager:
         if isinstance(bridge, NativeBridgeProvider):
             assert isinstance(
                 bridge.bridge_contract_adaptor, expected_contract_adaptor_cls
-            ), f"Expected adaptor {expected_contract_adaptor_cls}, got {type(bridge.contract_adaptor)}"
+            ), f"Expected adaptor {expected_contract_adaptor_cls}, got {type(bridge.bridge_contract_adaptor)}"
