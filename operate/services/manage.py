@@ -2173,29 +2173,6 @@ class ServiceManager:
         )
         return service
 
-    def update_all_matching(
-        self,
-        service_template: ServiceTemplate,
-    ) -> t.List[t.Dict]:
-        """Update all services with service id matching the service id from the template hash."""
-
-        self.logger.info("update_all_matching")
-        self.logger.info(f"{service_template['hash']=}")
-        updated_services: t.List[t.Dict] = []
-        for service in self._get_all_services():
-            try:
-                service.update(service_template=service_template)
-                updated_services.append(service.json)
-                self.logger.info(
-                    f"Updated service_config_id={service.service_config_id}"
-                )
-            except ValueError:
-                self.logger.info(
-                    f"Not updated service_config_id={service.service_config_id}"
-                )
-
-        return updated_services
-
     def migrate_service_configs(self) -> None:
         """Migrate old service config formats to new ones, if applies."""
 
