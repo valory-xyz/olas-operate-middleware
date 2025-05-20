@@ -113,6 +113,14 @@ class BridgeContractAdaptor(ABC):
         """Return the transaction hash of the event indicating bridge completion."""
         raise NotImplementedError()
 
+    @classmethod
+    @abstractmethod
+    def get_explorer_link(
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+    ) -> t.Optional[str]:
+        """Get the explorer link for a transaction."""
+        raise NotImplementedError()
+
 
 class OptimismContractAdaptor(BridgeContractAdaptor):
     """Adaptor class for Optimism contract packages."""
@@ -251,6 +259,20 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
             to_block=to_block,
         )
 
+    @classmethod
+    def get_explorer_link(
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+    ) -> t.Optional[str]:
+        """Get the explorer link for a transaction."""
+        if not bridge_request.execution_data:
+            return None
+
+        tx_hash = bridge_request.execution_data.from_tx_hash
+        if not tx_hash:
+            return None
+
+        return f"https://etherscan.io/tx/{tx_hash}"
+
 
 class OmnibridgeContractAdaptor(BridgeContractAdaptor):
     """Adaptor class for Omnibridge contract packages."""
@@ -361,10 +383,10 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
     ) -> t.Optional[bytes]:
         """Get the bridge message id."""
         if not bridge_request.execution_data:
-            raise RuntimeError("Execution data not present")
+            return None
 
         if not bridge_request.execution_data.from_tx_hash:
-            raise RuntimeError("Source chain transaction hash not present")
+            return None
 
         if (
             bridge_request.execution_data.provider_data
@@ -396,6 +418,16 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
 
         bridge_request.execution_data.provider_data["message_id"] = message_id
         return message_id
+
+    @classmethod
+    def get_explorer_link(
+        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+    ) -> t.Optional[str]:
+        """Get the explorer link for a transaction."""
+        message_id = cls.get_message_id(from_ledger_api, bridge_request)
+        if not message_id:
+            return None
+        return f"https://bridge.gnosischain.com/bridge-explorer/transaction/0x{message_id.hex()}"
 
 
 class NativeBridgeProvider(BridgeProvider):
@@ -663,20 +695,9 @@ class NativeBridgeProvider(BridgeProvider):
                 high = mid - 1
         return best
 
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> str:
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-
-        if isinstance(self.bridge_contract_adaptor, OmnibridgeContractAdaptor):
-            from_ledger_api = self._from_ledger_api(bridge_request)
-            message_id = self.bridge_contract_adaptor.get_message_id(
-                from_ledger_api, bridge_request
-            )
-            if not message_id:
-                return "https://bridge.gnosischain.com/bridge-explorer/"
-            return f"https://bridge.gnosischain.com/bridge-explorer/transaction/0x{message_id.hex()}"
-
-        tx_hash = None
-        if bridge_request.execution_data and bridge_request.execution_data.from_tx_hash:
-            tx_hash = bridge_request.execution_data.from_tx_hash
-
-        return f"https://etherscan.io/tx/{tx_hash}"  # TODO this bridge should return None here - discuss with FE
+        from_ledger_api = self._from_ledger_api(bridge_request)
+        return self.bridge_contract_adaptor.get_explorer_link(
+            from_ledger_api=from_ledger_api, bridge_request=bridge_request
+        )

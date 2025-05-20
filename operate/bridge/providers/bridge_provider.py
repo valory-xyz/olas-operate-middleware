@@ -445,7 +445,7 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> str:
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 

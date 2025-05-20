@@ -345,7 +345,7 @@ class TestLiFiBridge:
         ), "Wrong execution data."
         expected_sj = {
             "eta": None,
-            "explorer_link": sj["explorer_link"],
+            "explorer_link": None,
             "tx_hash": None,
             "message": sj["message"],
             "status": BridgeRequestStatus.EXECUTION_FAILED.value,
@@ -610,7 +610,7 @@ class TestNativeBridge:
         assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
         expected_sj = {
             "eta": 0,
-            "explorer_link": sj["explorer_link"],
+            "explorer_link": None,
             "tx_hash": None,  # type: ignore
             "message": sj["message"],
             "status": BridgeRequestStatus.EXECUTION_DONE.value,

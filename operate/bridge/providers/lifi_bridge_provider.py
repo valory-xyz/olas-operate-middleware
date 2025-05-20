@@ -359,10 +359,13 @@ class LiFiBridgeProvider(BridgeProvider):
         else:
             bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
 
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> str:
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        tx_hash = None
-        if bridge_request.execution_data and bridge_request.execution_data.from_tx_hash:
-            tx_hash = bridge_request.execution_data.from_tx_hash
+        if not bridge_request.execution_data:
+            return None
+
+        tx_hash = bridge_request.execution_data.from_tx_hash
+        if not tx_hash:
+            return None
 
         return f"https://scan.li.fi/tx/{tx_hash}"
