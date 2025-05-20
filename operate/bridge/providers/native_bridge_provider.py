@@ -69,9 +69,9 @@ class BridgeContractAdaptor(ABC):
     def can_handle_request(cls, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_chain = Chain(params["from"]["chain"])
-        from_token = params["from"]["token"]
+        from_token = Web3.to_checksum_address(params["from"]["token"])
         to_chain = Chain(params["to"]["chain"])
-        to_token = params["to"]["token"]
+        to_token = Web3.to_checksum_address(params["to"]["token"])
 
         if (from_chain, to_chain) not in cls.BRIDGE_PARAMS:
             return False
