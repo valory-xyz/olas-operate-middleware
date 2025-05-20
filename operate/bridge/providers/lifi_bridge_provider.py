@@ -368,4 +368,4 @@ class LiFiBridgeProvider(BridgeProvider):
         if not tx_hash:
             return None
 
-        return f"https://scan.li.fi/tx/S"
+        return f"https://scan.li.fi/tx/{tx_hash}"
