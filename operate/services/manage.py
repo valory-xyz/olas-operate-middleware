@@ -2239,7 +2239,9 @@ class ServiceManager:
             master_safe = wallet.safes.get(Chain(chain), "master_safe")
 
             agent_addresses = {key.address for key in service.keys}
-            service_safe = chain_data.multisig if chain_data.multisig else "service_safe"
+            service_safe = (
+                chain_data.multisig if chain_data.multisig else "service_safe"
+            )
 
             if not master_safe_exists:
                 allow_start_agent = False
