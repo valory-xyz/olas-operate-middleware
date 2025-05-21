@@ -52,7 +52,7 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     L1StandardBridge,
 )
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
-from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC, WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
 
@@ -63,8 +63,6 @@ BLOCK_CHUNK_SIZE = 5000
 class BridgeContractAdaptor(ABC):
     """Adaptor class for bridge contract packages."""
 
-    # BRIDGE_PARAMS: t.Dict
-
     def __init__(
         self,
         from_chain: str,
@@ -73,6 +71,7 @@ class BridgeContractAdaptor(ABC):
         to_bridge: str,
         bridge_eta: int,
     ) -> None:
+        """Initialize the bridge contract adaptor."""
         super().__init__()
         self.from_chain = from_chain
         self.from_bridge = from_bridge
@@ -80,33 +79,28 @@ class BridgeContractAdaptor(ABC):
         self.to_bridge = to_bridge
         self.bridge_eta = bridge_eta
 
-    # def can_handle_request(self, from_chain: str, from_token:str, to_chain:str, to_token: str) -> bool:
-    #     return True
-
     def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
-        from_chain = Chain(params["from"]["chain"])
+        from_chain = params["from"]["chain"]
         from_token = Web3.to_checksum_address(params["from"]["token"])
-        to_chain = Chain(params["to"]["chain"])
+        to_chain = params["to"]["chain"]
         to_token = Web3.to_checksum_address(params["to"]["token"])
 
-        # if (from_chain, to_chain) not in self.BRIDGE_PARAMS:
-        #     return False
+        if from_chain != self.from_chain:
+            return False
+
+        if to_chain != self.to_chain:
+            return False
 
         if from_token == ZERO_ADDRESS:
             return True
 
-        # bridge_params = self.BRIDGE_PARAMS[(from_chain, to_chain)]
-
-        # if from_token not in bridge_params["supported_from_tokens"]:
-        #     return False
-
         for token_map in ERC20_TOKENS:
             if (
-                from_chain in token_map
-                and to_chain in token_map
-                and token_map[from_chain].lower() == from_token.lower()
-                and token_map[to_chain].lower() == to_token.lower()
+                Chain(from_chain) in token_map
+                and Chain(to_chain) in token_map
+                and token_map[Chain(from_chain)].lower() == from_token.lower()
+                and token_map[Chain(to_chain)].lower() == to_token.lower()
             ):
                 return True
 
@@ -352,11 +346,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ):
             return bridge_request.execution_data.provider_data.get("message_id", None)
 
-        from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
         from_tx_hash = bridge_request.execution_data.from_tx_hash
-        to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
         from_bridge = self.from_bridge
 
@@ -375,12 +367,11 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         bridge_request.execution_data.provider_data["message_id"] = message_id
         return message_id
 
-    @classmethod
     def get_explorer_link(
-        cls, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
     ) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        message_id = cls.get_message_id(from_ledger_api, bridge_request)
+        message_id = self.get_message_id(from_ledger_api, bridge_request)
         if not message_id:
             return None
         return f"https://bridge.gnosischain.com/bridge-explorer/transaction/0x{message_id.hex()}"
@@ -435,8 +426,6 @@ class NativeBridgeProvider(BridgeProvider):
                 f"Cannot quote bridge request {bridge_request.id}: execution already present."
             )
 
-        from_chain = bridge_request.params["from"]["chain"]
-        to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
         bridge_eta = self.bridge_contract_adaptor.bridge_eta
 
@@ -484,10 +473,8 @@ class NativeBridgeProvider(BridgeProvider):
         if not quote_data:
             return None
 
-        from_chain = bridge_request.params["from"]["chain"]
         from_address = bridge_request.params["from"]["address"]
         from_token = bridge_request.params["from"]["token"]
-        to_chain = bridge_request.params["to"]["chain"]
         to_amount = bridge_request.params["to"]["amount"]
         from_bridge = self.bridge_contract_adaptor.from_bridge
         from_ledger_api = self._from_ledger_api(bridge_request)
@@ -563,8 +550,6 @@ class NativeBridgeProvider(BridgeProvider):
             bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
             return
 
-        from_chain = bridge_request.params["from"]["chain"]
-        to_chain = bridge_request.params["to"]["chain"]
         bridge_eta = self.bridge_contract_adaptor.bridge_eta
 
         try:

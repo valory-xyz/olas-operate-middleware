@@ -30,6 +30,7 @@ from deepdiff import DeepDiff
 from web3 import Web3
 
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
+    BRIDGE_CONFIGS,
     BridgeRequest,
     LiFiBridgeProvider,
 )
@@ -508,9 +509,16 @@ class TestNativeBridge:
             },
         }
 
+        bridge_key = "native-ethereum-to-base"
         bridge = NativeBridgeProvider(
             provider_id="NativeBridgeProvider",
-            bridge_contract_adaptor=OptimismContractAdaptor(),
+            bridge_contract_adaptor=OptimismContractAdaptor(
+                from_chain=BRIDGE_CONFIGS[bridge_key]["from_chain"],
+                from_bridge=BRIDGE_CONFIGS[bridge_key]["from_bridge"],
+                to_chain=BRIDGE_CONFIGS[bridge_key]["to_chain"],
+                to_bridge=BRIDGE_CONFIGS[bridge_key]["to_bridge"],
+                bridge_eta=BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
+            ),
             wallet_manager=operate.wallet_manager,
         )
 
@@ -655,9 +663,16 @@ class TestNativeBridge:
             },
         }
 
+        bridge_key = "native-ethereum-to-base"
         bridge = NativeBridgeProvider(
             provider_id="NativeBridgeProvider",
-            bridge_contract_adaptor=OptimismContractAdaptor(),
+            bridge_contract_adaptor=OptimismContractAdaptor(
+                from_chain=BRIDGE_CONFIGS[bridge_key]["from_chain"],
+                from_bridge=BRIDGE_CONFIGS[bridge_key]["from_bridge"],
+                to_chain=BRIDGE_CONFIGS[bridge_key]["to_chain"],
+                to_bridge=BRIDGE_CONFIGS[bridge_key]["to_bridge"],
+                bridge_eta=BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
+            ),
             wallet_manager=operate.wallet_manager,
         )
 
@@ -697,9 +712,7 @@ class TestNativeBridge:
 
         # Quote
         expected_quote_data = QuoteData(
-            bridge_eta=bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
-                Chain.ETHEREUM, Chain.BASE
-            ]["bridge_eta"],
+            bridge_eta=bridge.bridge_contract_adaptor.bridge_eta,
             elapsed_time=0,
             message=None,
             provider_data=None,
@@ -715,9 +728,7 @@ class TestNativeBridge:
             assert bridge_request == expected_request, "Wrong bridge request."
             sj = bridge.status_json(bridge_request)
             expected_sj = {
-                "eta": bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
-                    Chain.ETHEREUM, Chain.BASE
-                ]["bridge_eta"],
+                "eta": bridge.bridge_contract_adaptor.bridge_eta,
                 "message": None,
                 "status": BridgeRequestStatus.QUOTE_DONE.value,
             }
@@ -772,9 +783,7 @@ class TestNativeBridge:
         sj = bridge.status_json(bridge_request)
         assert MESSAGE_EXECUTION_FAILED in sj["message"], "Wrong execution data."
         expected_sj = {
-            "eta": bridge.bridge_contract_adaptor.BRIDGE_PARAMS[
-                Chain.ETHEREUM, Chain.BASE
-            ]["bridge_eta"],
+            "eta": bridge.bridge_contract_adaptor.bridge_eta,
             "explorer_link": sj["explorer_link"],
             "tx_hash": None,  # type: ignore
             "message": sj["message"],
@@ -1082,9 +1091,16 @@ class TestBridgeProvider:
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
 
         if contract_adaptor_class is not None:
+            bridge_key = "native-ethereum-to-base"
             bridge: BridgeProvider = NativeBridgeProvider(
                 provider_id="NativeBridgeProvider",
-                bridge_contract_adaptor=contract_adaptor_class(),
+                bridge_contract_adaptor=OptimismContractAdaptor(
+                    from_chain=BRIDGE_CONFIGS[bridge_key]["from_chain"],
+                    from_bridge=BRIDGE_CONFIGS[bridge_key]["from_bridge"],
+                    to_chain=BRIDGE_CONFIGS[bridge_key]["to_chain"],
+                    to_bridge=BRIDGE_CONFIGS[bridge_key]["to_bridge"],
+                    bridge_eta=BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
+                ),
                 wallet_manager=operate.wallet_manager,
             )
         else:

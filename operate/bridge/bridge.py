@@ -52,7 +52,7 @@ EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
 
-BRIDGE_CONFIGS = {
+BRIDGE_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
         "from_chain": "ethereum",
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",

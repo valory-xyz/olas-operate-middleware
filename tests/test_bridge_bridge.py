@@ -333,12 +333,12 @@ class TestBridgeManager:
         assert bundle is not None, "Unexpected bundle."
 
         request = bundle.bridge_requests[0]
-        bridge = bridge_manager._bridge_providers[request.bridge_provider_id]
+        bridge = bridge_manager._get_bridge_provider(request)
         assert (
             len(bridge._get_transactions(request)) == 1
         ), "Wrong number of transactions."
         request = bundle.bridge_requests[1]
-        bridge = bridge_manager._bridge_providers[request.bridge_provider_id]
+        bridge = bridge_manager._get_bridge_provider(request)
         assert (
             len(bridge._get_transactions(request)) == 2
         ), "Wrong number of transactions."
@@ -559,7 +559,7 @@ class TestBridgeManager:
         assert bundle is not None, "Wrong bundle."
         assert len(bundle.bridge_requests) == 1, "Wrong bundle."
         bridge_request = bundle.bridge_requests[0]
-        bridge = bridge_manager._bridge_providers[bridge_request.bridge_provider_id]
+        bridge = bridge_manager._get_bridge_provider(bridge_request)
 
         assert isinstance(
             bridge, expected_provider_cls
