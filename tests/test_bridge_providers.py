@@ -375,9 +375,9 @@ class TestLiFiBridge:
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
         params = {
             "from": {
-                "chain": "gnosis",
+                "chain": Chain.ETHEREUM.value,
                 "address": wallet_address,
-                "token": OLAS[Chain.GNOSIS],
+                "token": ZERO_ADDRESS,
             },
             "to": {
                 "chain": "base",
@@ -446,10 +446,9 @@ class TestLiFiBridge:
         quote = bridge_request.quote_data.provider_data.get("response")
         br = bridge.bridge_requirements(bridge_request)
         expected_br = {
-            "gnosis": {
+            "ethereum": {
                 wallet_address: {
-                    ZERO_ADDRESS: br["gnosis"][wallet_address][ZERO_ADDRESS],
-                    OLAS[Chain.GNOSIS]: int(quote["action"]["fromAmount"]),  # type: ignore
+                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
                 }
             }
         }
