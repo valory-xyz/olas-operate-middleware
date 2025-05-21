@@ -2240,9 +2240,7 @@ class ServiceManager:
 
             agent_addresses = {key.address for key in service.keys}
             service_safe = (
-                chain_data.multisig
-                if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
-                else "service_safe"
+                chain_data.multisig if chain_data.multisig else "service_safe"
             )
 
             if not master_safe_exists:
