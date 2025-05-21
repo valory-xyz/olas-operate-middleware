@@ -97,10 +97,10 @@ SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
 DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 6
+SERVICE_CONFIG_VERSION = 7
 SERVICE_CONFIG_PREFIX = "sc-"
 
-NON_EXISTENT_MULTISIG = "0xm"
+NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
 DEFAULT_TRADER_ENV_VARS = {
@@ -931,25 +931,31 @@ class Service(LocalResource):
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
 
-        data["version"] = SERVICE_CONFIG_VERSION
+        if version < 6:
+            # Redownload service path
+            if "service_path" in data:
+                package_absolute_path = path / Path(data["service_path"]).name
+                data.pop("service_path")
+            else:
+                package_absolute_path = path / data["package_path"]
 
-        # Redownload service path
-        if "service_path" in data:
-            package_absolute_path = path / Path(data["service_path"]).name
-            data.pop("service_path")
-        else:
-            package_absolute_path = path / data["package_path"]
+            if package_absolute_path.exists() and package_absolute_path.is_dir():
+                shutil.rmtree(package_absolute_path)
 
-        if package_absolute_path.exists() and package_absolute_path.is_dir():
-            shutil.rmtree(package_absolute_path)
-
-        package_absolute_path = Path(
-            IPFSTool().download(
-                hash_id=data["hash"],
-                target_dir=path,
+            package_absolute_path = Path(
+                IPFSTool().download(
+                    hash_id=data["hash"],
+                    target_dir=path,
+                )
             )
-        )
-        data["package_path"] = str(package_absolute_path.name)
+            data["package_path"] = str(package_absolute_path.name)
+
+        if version < 7:
+            for _, chain_data in data.get("chain_configs", {}).items():
+                if chain_data["chain_data"]["multisig"] == "0xm":
+                    chain_data["chain_data"]["multisig"] = NON_EXISTENT_MULTISIG
+
+        data["version"] = SERVICE_CONFIG_VERSION
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
