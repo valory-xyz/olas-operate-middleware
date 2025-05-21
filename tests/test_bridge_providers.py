@@ -443,7 +443,6 @@ class TestLiFiBridge:
             bridge_request.quote_data.provider_data is not None
         ), "Missing quote data."
 
-        quote = bridge_request.quote_data.provider_data.get("response")
         br = bridge.bridge_requirements(bridge_request)
         expected_br = {
             "ethereum": {
