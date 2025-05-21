@@ -30,9 +30,9 @@ from deepdiff import DeepDiff
 from web3 import Web3
 
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
-    BRIDGE_CONFIGS,
     BridgeRequest,
     LiFiBridgeProvider,
+    NATIVE_BRIDGE_CONFIGS,
 )
 from operate.bridge.providers.bridge_provider import (
     BridgeProvider,
@@ -512,11 +512,11 @@ class TestNativeBridge:
         bridge = NativeBridgeProvider(
             provider_id="NativeBridgeProvider",
             bridge_contract_adaptor=OptimismContractAdaptor(
-                from_chain=BRIDGE_CONFIGS[bridge_key]["from_chain"],
-                from_bridge=BRIDGE_CONFIGS[bridge_key]["from_bridge"],
-                to_chain=BRIDGE_CONFIGS[bridge_key]["to_chain"],
-                to_bridge=BRIDGE_CONFIGS[bridge_key]["to_bridge"],
-                bridge_eta=BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
+                from_chain=NATIVE_BRIDGE_CONFIGS[bridge_key]["from_chain"],
+                from_bridge=NATIVE_BRIDGE_CONFIGS[bridge_key]["from_bridge"],
+                to_chain=NATIVE_BRIDGE_CONFIGS[bridge_key]["to_chain"],
+                to_bridge=NATIVE_BRIDGE_CONFIGS[bridge_key]["to_bridge"],
+                bridge_eta=NATIVE_BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
             ),
             wallet_manager=operate.wallet_manager,
         )
@@ -666,11 +666,11 @@ class TestNativeBridge:
         bridge = NativeBridgeProvider(
             provider_id="NativeBridgeProvider",
             bridge_contract_adaptor=OptimismContractAdaptor(
-                from_chain=BRIDGE_CONFIGS[bridge_key]["from_chain"],
-                from_bridge=BRIDGE_CONFIGS[bridge_key]["from_bridge"],
-                to_chain=BRIDGE_CONFIGS[bridge_key]["to_chain"],
-                to_bridge=BRIDGE_CONFIGS[bridge_key]["to_bridge"],
-                bridge_eta=BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
+                from_chain=NATIVE_BRIDGE_CONFIGS[bridge_key]["from_chain"],
+                from_bridge=NATIVE_BRIDGE_CONFIGS[bridge_key]["from_bridge"],
+                to_chain=NATIVE_BRIDGE_CONFIGS[bridge_key]["to_chain"],
+                to_bridge=NATIVE_BRIDGE_CONFIGS[bridge_key]["to_bridge"],
+                bridge_eta=NATIVE_BRIDGE_CONFIGS[bridge_key]["bridge_eta"],
             ),
             wallet_manager=operate.wallet_manager,
         )
@@ -1096,11 +1096,11 @@ class TestBridgeProvider:
             bridge: BridgeProvider = NativeBridgeProvider(
                 provider_id=provider_id,
                 bridge_contract_adaptor=contract_adaptor_class(
-                    from_chain=BRIDGE_CONFIGS[provider_id]["from_chain"],
-                    from_bridge=BRIDGE_CONFIGS[provider_id]["from_bridge"],
-                    to_chain=BRIDGE_CONFIGS[provider_id]["to_chain"],
-                    to_bridge=BRIDGE_CONFIGS[provider_id]["to_bridge"],
-                    bridge_eta=BRIDGE_CONFIGS[provider_id]["bridge_eta"],
+                    from_chain=NATIVE_BRIDGE_CONFIGS[provider_id]["from_chain"],
+                    from_bridge=NATIVE_BRIDGE_CONFIGS[provider_id]["from_bridge"],
+                    to_chain=NATIVE_BRIDGE_CONFIGS[provider_id]["to_chain"],
+                    to_bridge=NATIVE_BRIDGE_CONFIGS[provider_id]["to_bridge"],
+                    bridge_eta=NATIVE_BRIDGE_CONFIGS[provider_id]["bridge_eta"],
                 ),
                 wallet_manager=operate.wallet_manager,
             )

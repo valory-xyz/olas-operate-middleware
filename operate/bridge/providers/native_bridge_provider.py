@@ -623,7 +623,7 @@ class NativeBridgeProvider(BridgeProvider):
         while low <= high:
             mid = (low + high) // 2
             block = w3.eth.get_block(mid)
-            if block.timestamp < timestamp:
+            if block["timestamp"] < timestamp:
                 best = mid
                 low = mid + 1
             else:
