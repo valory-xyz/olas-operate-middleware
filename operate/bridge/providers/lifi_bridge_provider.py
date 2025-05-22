@@ -185,48 +185,8 @@ class LiFiBridgeProvider(BridgeProvider):
 
             time.sleep(2)
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        self.logger.info(
-            f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
-        )
-
-        quote_data = bridge_request.quote_data
-        if not quote_data:
-            return None
-
-        if not quote_data.provider_data:
-            return None
-
-        quote = quote_data.provider_data.get("response")
-        if not quote:
-            return None
-
-        if "action" not in quote:
-            return None
-
-        transaction_request = quote.get("transactionRequest")
-        if not transaction_request:
-            return None
-
-        from_ledger_api = self._from_ledger_api(bridge_request)
-
-        bridge_tx = {
-            "value": int(transaction_request["value"], 16),
-            "to": transaction_request["to"],
-            "data": transaction_request["data"],  # TODO remove bytes?
-            "from": transaction_request["from"],
-            "chainId": transaction_request["chainId"],
-            "gasPrice": int(transaction_request["gasPrice"], 16),
-            "gas": int(transaction_request["gasLimit"], 16),
-            "nonce": from_ledger_api.api.eth.get_transaction_count(
-                transaction_request["from"]
-            ),
-        }
-        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
-        return bridge_tx
-
     def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the approve transaction."""
         self.logger.info(
             f"[LI.FI BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
         )
@@ -269,37 +229,47 @@ class LiFiBridgeProvider(BridgeProvider):
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
-    def _get_transactions(
-        self, bridge_request: BridgeRequest
-    ) -> t.List[t.Tuple[str, t.Dict]]:
-        """Get the sorted list of transactions to execute the bridge request."""
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the bridge transaction."""
         self.logger.info(
-            f"[LI.FI BRIDGE] Get transactions for bridge request {bridge_request.id}."
+            f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
         )
 
-        if not bridge_request.quote_data:
-            return []
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            return None
 
-        if bridge_request.params["to"]["amount"] == 0:
-            return []
+        if not quote_data.provider_data:
+            return None
 
-        bridge_tx = self._get_bridge_tx(bridge_request)
+        quote = quote_data.provider_data.get("response")
+        if not quote:
+            return None
 
-        if not bridge_tx:
-            return []
+        if "action" not in quote:
+            return None
 
-        approve_tx = self._get_approve_tx(bridge_request)
+        transaction_request = quote.get("transactionRequest")
+        if not transaction_request:
+            return None
 
-        if not approve_tx:
-            return [
-                ("bridge_tx", bridge_tx),
-            ]
+        from_ledger_api = self._from_ledger_api(bridge_request)
 
-        bridge_tx["nonce"] = approve_tx["nonce"] + 1
-        return [
-            ("approve_tx", approve_tx),
-            ("bridge_tx", bridge_tx),
-        ]
+        bridge_tx = {
+            "value": int(transaction_request["value"], 16),
+            "to": transaction_request["to"],
+            "data": transaction_request["data"],  # TODO remove bytes?
+            "from": transaction_request["from"],
+            "chainId": transaction_request["chainId"],
+            "gasPrice": int(transaction_request["gasPrice"], 16),
+            "gas": int(transaction_request["gasLimit"], 16),
+            "nonce": from_ledger_api.api.eth.get_transaction_count(
+                transaction_request["from"]
+            ),
+        }
+        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        return bridge_tx
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""

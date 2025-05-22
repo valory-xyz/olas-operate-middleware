@@ -445,26 +445,8 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_request.quote_data = quote_data
         bridge_request.status = BridgeRequestStatus.QUOTE_DONE
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        self.logger.info(
-            f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
-        )
-
-        quote_data = bridge_request.quote_data
-        if not quote_data:
-            return None
-
-        from_ledger_api = self._from_ledger_api(bridge_request)
-        bridge_tx = self.bridge_contract_adaptor.build_bridge_tx(
-            from_ledger_api=from_ledger_api, bridge_request=bridge_request
-        )
-
-        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
-        bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
-        return bridge_tx
-
     def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the approve transaction."""
         self.logger.info(
             f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
         )
@@ -495,37 +477,25 @@ class NativeBridgeProvider(BridgeProvider):
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
-    def _get_transactions(
-        self, bridge_request: BridgeRequest
-    ) -> t.List[t.Tuple[str, t.Dict]]:
-        """Get the sorted list of transactions to execute the bridge request."""
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the bridge transaction."""
         self.logger.info(
-            f"[NATIVE BRIDGE] Get transactions for bridge request {bridge_request.id}."
+            f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
         )
 
-        if not bridge_request.quote_data:
-            return []
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            return None
 
-        if bridge_request.params["to"]["amount"] == 0:
-            return []
+        from_ledger_api = self._from_ledger_api(bridge_request)
+        bridge_tx = self.bridge_contract_adaptor.build_bridge_tx(
+            from_ledger_api=from_ledger_api, bridge_request=bridge_request
+        )
 
-        bridge_tx = self._get_bridge_tx(bridge_request)
-
-        if not bridge_tx:
-            return []
-
-        approve_tx = self._get_approve_tx(bridge_request)
-
-        if not approve_tx:
-            return [
-                ("bridge_tx", bridge_tx),
-            ]
-
-        bridge_tx["nonce"] = approve_tx["nonce"] + 1
-        return [
-            ("approve_tx", approve_tx),
-            ("bridge_tx", bridge_tx),
-        ]
+        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
+        return bridge_tx
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status. Returns `True` if the status changed."""
