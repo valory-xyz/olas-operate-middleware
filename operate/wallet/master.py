@@ -268,9 +268,9 @@ class EthereumMasterWallet(MasterWallet):
                 chain_id=chain.id,
                 raise_on_try=True,
                 max_fee_per_gas=int(max_fee_per_gas) if max_fee_per_gas else None,
-                max_priority_fee_per_gas=int(max_priority_fee_per_gas)
-                if max_priority_fee_per_gas
-                else None,
+                max_priority_fee_per_gas=(
+                    int(max_priority_fee_per_gas) if max_priority_fee_per_gas else None
+                ),
             )
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,

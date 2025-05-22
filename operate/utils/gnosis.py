@@ -221,9 +221,11 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=[crypto.address]
-            if backup_owner is None
-            else [crypto.address, backup_owner],
+            owners=(
+                [crypto.address]
+                if backup_owner is None
+                else [crypto.address, backup_owner]
+            ),
             threshold=1,
             salt_nonce=salt_nonce,
         )
