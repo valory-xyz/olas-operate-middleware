@@ -61,9 +61,7 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
     f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
 )
 
-ERC20_APPROVE_SELECTOR = (
-    "0x095ea7b3"  # First4 bytes of Keccak('approve(address,uint256)')
-)
+ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
 
 GAS_ESTIMATE_BUFFER = 1.10
 
@@ -135,7 +133,8 @@ class BridgeProvider(ABC):
         - description
         - quote
         - _update_execution_status
-        - _get_transactions
+        - _get_approve_tx
+        - _get_bridge_tx
         - _get_explorer_link
     """
 
@@ -243,10 +242,13 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_transactions(
-        self, bridge_request: BridgeRequest
-    ) -> t.List[t.Tuple[str, t.Dict]]:
-        """Get the sorted list of transactions to execute the bridge request."""
+    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the approve transaction."""
+        raise NotImplementedError()
+
+    @abstractmethod
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+        """Get the bridge transaction."""
         raise NotImplementedError()
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
@@ -262,8 +264,16 @@ class BridgeProvider(ABC):
         from_token = bridge_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
-        transactions = self._get_transactions(bridge_request)
-        if not transactions:
+        txs = []
+
+        approve_tx = self._get_approve_tx(bridge_request)
+        if approve_tx:
+            txs.append(("approve_tx", approve_tx))
+        bridge_tx = self._get_bridge_tx(bridge_request)
+        if bridge_tx:
+            txs.append(("bridge_tx", bridge_tx))
+
+        if not txs:
             return {
                 from_chain: {
                     from_address: {
@@ -277,7 +287,7 @@ class BridgeProvider(ABC):
         total_gas_fees = 0
         total_token = 0
 
-        for tx_label, tx in transactions:
+        for tx_label, tx in txs:
             self.logger.debug(
                 f"[BRIDGE PROVIDER] Processing transaction {tx_label} for bridge request {bridge_request.id}."
             )
@@ -359,7 +369,14 @@ class BridgeProvider(ABC):
                 f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
-        txs = self._get_transactions(bridge_request)
+        txs = []
+
+        approve_tx = self._get_approve_tx(bridge_request)
+        if approve_tx:
+            txs.append(("approve_tx", approve_tx))
+        bridge_tx = self._get_bridge_tx(bridge_request)
+        if bridge_tx:
+            txs.append(("bridge_tx", bridge_tx))
 
         if not txs:
             self.logger.info(
