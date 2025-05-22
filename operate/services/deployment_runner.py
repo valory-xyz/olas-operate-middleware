@@ -30,7 +30,7 @@ import typing as t
 from abc import ABC, ABCMeta, abstractmethod
 from pathlib import Path
 from traceback import print_exc
-from typing import Any
+from typing import Any, List
 from venv import main as venv_cli
 
 import psutil
@@ -103,7 +103,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         cmd = " ".join(args)
         print("Runnin aea command: ", cmd, " at ", str(cwd))
         p = multiprocessing.Process(
-            target=self.__class__._call_aea_command,
+            target=self.__class__._call_aea_command,  # pylint: disable=protected-access
             args=(cwd, args),
         )
         p.start()
@@ -114,15 +114,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             )
 
     @staticmethod
-    def _call_aea_command(cwd, args):
+    def _call_aea_command(cwd: str | Path, args: List[str]) -> None:
         try:
-            import os
+            import os  # pylint: disable=redefined-outer-name,reimported,import-outside-toplevel
 
             os.chdir(cwd)
+            # pylint: disable-next=import-outside-toplevel
             from aea.cli.core import cli as call_aea
 
-            call_aea(args, standalone_mode=False)
-        except:
+            call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
+                args, standalone_mode=False
+            )
+        except Exception:
             print_exc()
             raise
 
@@ -290,7 +293,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
-        agent_runner_log_file = (Path(self._work_directory).parent.parent.parent / "agent_runner.log").open("a+")
+        agent_runner_log_file = (
+            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
+        ).open("a+")
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
                 self._agent_runner_bin,

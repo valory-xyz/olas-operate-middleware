@@ -19,12 +19,10 @@
 
 """Operate app CLI module."""
 import asyncio
-import contextlib
 import logging
 import multiprocessing
 import os
 import signal
-import sys
 import traceback
 import typing as t
 import uuid
