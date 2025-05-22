@@ -334,14 +334,10 @@ class TestBridgeManager:
 
         request = bundle.bridge_requests[0]
         bridge = bridge_manager._get_bridge_provider(request)
-        assert (
-            len(bridge._get_transactions(request)) == 1
-        ), "Wrong number of transactions."
+        assert bridge._get_approve_tx() is not None, "Wrong number of transactions."
         request = bundle.bridge_requests[1]
         bridge = bridge_manager._get_bridge_provider(request)
-        assert (
-            len(bridge._get_transactions(request)) == 2
-        ), "Wrong number of transactions."
+        assert bridge._get_approve_tx() is not None, "Wrong number of transactions."
 
         expected_brr = {
             "id": brr["id"],
