@@ -31,9 +31,9 @@ from dataclasses import dataclass
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
+from autonomy.chain.tx import TxSettler
 from web3 import Web3
 
-from operate.bridge.tx import TxSettler
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
