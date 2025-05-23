@@ -191,6 +191,9 @@ class LiFiBridgeProvider(BridgeProvider):
             f"[LI.FI BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
         )
 
+        if bridge_request.params["to"]["amount"] == 0:
+            return None
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
@@ -234,6 +237,9 @@ class LiFiBridgeProvider(BridgeProvider):
         self.logger.info(
             f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
         )
+
+        if bridge_request.params["to"]["amount"] == 0:
+            return None
 
         quote_data = bridge_request.quote_data
         if not quote_data:

@@ -451,6 +451,9 @@ class NativeBridgeProvider(BridgeProvider):
             f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
         )
 
+        if bridge_request.params["to"]["amount"] == 0:
+            return None
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             return None
@@ -482,6 +485,9 @@ class NativeBridgeProvider(BridgeProvider):
         self.logger.info(
             f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
         )
+
+        if bridge_request.params["to"]["amount"] == 0:
+            return None
 
         quote_data = bridge_request.quote_data
         if not quote_data:
