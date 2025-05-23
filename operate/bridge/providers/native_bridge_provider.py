@@ -92,7 +92,7 @@ class BridgeContractAdaptor(ABC):
         if to_chain != self.to_chain:
             return False
 
-        if from_token == ZERO_ADDRESS:
+        if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
             return True
 
         for token_map in ERC20_TOKENS:
