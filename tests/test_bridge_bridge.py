@@ -23,9 +23,11 @@
 import os
 import time
 import typing as t
+from functools import cache
 from pathlib import Path
 
 import pytest
+import requests
 from deepdiff import DeepDiff
 
 from operate.bridge.providers.bridge_provider import (
@@ -56,9 +58,68 @@ RUNNING_IN_CI = (
     or os.getenv("CI", "").lower() == "true"
 )
 
+COINGECKO_PLATFORM_IDS = {
+    "ethereum": "ethereum",
+    "polygon": "polygon-pos",
+    "arbitrum": "arbitrum-one",
+    "optimistic": "optimistic-ethereum",
+    "binance": "binance-smart-chain",
+    "avalanche": "avalanche",
+    "fantom": "fantom",
+    "base": "base",
+    "mode": "mode",
+    "gnosis": "xdai",
+}
+
+COINGECKO_NATIVE_IDS = {
+    "ethereum": "ethereum",
+    "polygon": "matic-network",
+    "arbitrum": "ethereum",
+    "optimistic": "ethereum",
+    "binance": "binancecoin",
+    "avalanche": "avalanche-2",
+    "fantom": "fantom",
+    "base": "ethereum",
+    "mode": "ethereum",
+    "gnosis": "xdai",
+}
+
 
 class TestBridgeManager:
     """Tests for bridge.bridge.BridgeManager class."""
+
+    @staticmethod
+    @cache
+    def _get_token_price_usd(chain: str, token_address: str) -> t.Optional[float]:
+        print(f"Calling _get_token_price_usd {chain=} {token_address=}")
+        chain = chain.lower()
+        if token_address == ZERO_ADDRESS:
+            coingecko_id = COINGECKO_NATIVE_IDS.get(chain)
+            if not coingecko_id:
+                return None
+            url = "https://api.coingecko.com/api/v3/simple/price"
+            print(f"Fetching {url}")
+            params = {"ids": coingecko_id, "vs_currencies": "usd"}
+            r = requests.get(url, params=params, timeout=30)
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            print(r.json())
+            return data.get(coingecko_id, {}).get("usd")
+
+        platform_id = COINGECKO_PLATFORM_IDS.get(chain)
+        if not platform_id:
+            return None
+        token_address = token_address.lower()
+        url = f"https://api.coingecko.com/api/v3/simple/token_price/{platform_id}"
+        params = {"contract_addresses": token_address, "vs_currencies": "usd"}
+        print(f"Fetching {url}")
+        r = requests.get(url, params=params, timeout=30)
+        if r.status_code != 200:
+            return None
+        data = r.json()
+        print(r.json())
+        return data.get(token_address, {}).get("usd")
 
     def test_bundle_zero(
         self,
@@ -334,10 +395,19 @@ class TestBridgeManager:
 
         request = bundle.bridge_requests[0]
         bridge = bridge_manager._get_bridge_provider(request)
-        assert bridge._get_approve_tx() is not None, "Wrong number of transactions."
+        assert bridge._get_approve_tx(request) is None, "Wrong number of transactions."
+        assert (
+            bridge._get_bridge_tx(request) is not None
+        ), "Wrong number of transactions."
+
         request = bundle.bridge_requests[1]
         bridge = bridge_manager._get_bridge_provider(request)
-        assert bridge._get_approve_tx() is not None, "Wrong number of transactions."
+        assert (
+            bridge._get_approve_tx(request) is not None
+        ), "Wrong number of transactions."
+        assert (
+            bridge._get_approve_tx(request) is not None
+        ), "Wrong number of transactions."
 
         expected_brr = {
             "id": brr["id"],
@@ -396,118 +466,98 @@ class TestBridgeManager:
         assert not diff, "Wrong bridge refill requirements."
 
     @pytest.mark.parametrize(
-        (
-            "from_chain",
-            "from_token",
-            "to_chain",
-            "to_token",
-            "expected_provider_cls",
-            "expected_contract_adaptor_cls",
-        ),
-        [
-            # Base
-            (
-                Chain.ETHEREUM.value,
-                ZERO_ADDRESS,
-                "base",
-                ZERO_ADDRESS,
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                OLAS[Chain.ETHEREUM],
-                "base",
-                OLAS[Chain.BASE],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                USDC[Chain.ETHEREUM],
-                "base",
-                USDC[Chain.BASE],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            # Mode
-            (
-                Chain.ETHEREUM.value,
-                ZERO_ADDRESS,
-                Chain.MODE.value,
-                ZERO_ADDRESS,
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                OLAS[Chain.ETHEREUM],
-                Chain.MODE.value,
-                OLAS[Chain.MODE],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                USDC[Chain.ETHEREUM],
-                Chain.MODE.value,
-                USDC[Chain.MODE],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            # Optimism
-            (
-                Chain.ETHEREUM.value,
-                ZERO_ADDRESS,
-                Chain.OPTIMISTIC.value,
-                ZERO_ADDRESS,
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                OLAS[Chain.ETHEREUM],
-                Chain.OPTIMISTIC.value,
-                OLAS[Chain.OPTIMISTIC],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                USDC[Chain.ETHEREUM],
-                Chain.OPTIMISTIC.value,
-                USDC[Chain.OPTIMISTIC],
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-            ),
-            # Gnosis
-            (
-                Chain.ETHEREUM.value,
-                ZERO_ADDRESS,
-                Chain.GNOSIS.value,
-                ZERO_ADDRESS,
-                LiFiBridgeProvider,
-                None,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                OLAS[Chain.ETHEREUM],
-                Chain.GNOSIS.value,
-                OLAS[Chain.GNOSIS],
-                NativeBridgeProvider,
-                OmnibridgeContractAdaptor,
-            ),
-            (
-                Chain.ETHEREUM.value,
-                USDC[Chain.ETHEREUM],
-                Chain.GNOSIS.value,
-                USDC[Chain.GNOSIS],
-                NativeBridgeProvider,
-                OmnibridgeContractAdaptor,
-            ),
-        ],
+        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC]
     )
-    def test_correct_providers(
+    def test_correct_providers_bridge_native(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain_enum: Chain,
+    ) -> None:
+        """test_correct_providers_bridge_native"""
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=Chain.ETHEREUM.value,
+            from_token=ZERO_ADDRESS,
+            to_chain=to_chain_enum.value,
+            to_token=ZERO_ADDRESS,
+            expected_provider_cls=NativeBridgeProvider,
+            expected_contract_adaptor_cls=OptimismContractAdaptor,
+        )
+
+    @pytest.mark.parametrize("to_chain_enum", [Chain.GNOSIS])
+    def test_correct_providers_swap_native(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain_enum: Chain,
+    ) -> None:
+        """test_correct_providers_swap_native"""
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=Chain.ETHEREUM.value,
+            from_token=ZERO_ADDRESS,
+            to_chain=to_chain_enum.value,
+            to_token=ZERO_ADDRESS,
+            expected_provider_cls=LiFiBridgeProvider,
+            expected_contract_adaptor_cls=None,
+        )
+
+    @pytest.mark.parametrize(
+        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC, Chain.GNOSIS]
+    )
+    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
+    def test_correct_providers_bridge_token(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain_enum: Chain,
+        token_dict: t.Dict,
+    ) -> None:
+        """test_correct_providers_bridge_token"""
+        expected_contract_adaptor_cls: type[BridgeContractAdaptor]
+        if to_chain_enum == Chain.GNOSIS:
+            expected_contract_adaptor_cls = OmnibridgeContractAdaptor
+        else:
+            expected_contract_adaptor_cls = OptimismContractAdaptor
+
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=Chain.ETHEREUM.value,
+            from_token=token_dict[Chain.ETHEREUM],
+            to_chain=to_chain_enum.value,
+            to_token=token_dict[to_chain_enum],
+            expected_provider_cls=NativeBridgeProvider,
+            expected_contract_adaptor_cls=expected_contract_adaptor_cls,
+        )
+
+    @pytest.mark.parametrize(
+        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC, Chain.GNOSIS]
+    )
+    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
+    def test_correct_providers_swap_token(
+        self,
+        tmp_path: Path,
+        password: str,
+        to_chain_enum: Chain,
+        token_dict: t.Dict,
+    ) -> None:
+        """test_correct_providers_swap_token"""
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=Chain.ETHEREUM.value,
+            from_token=ZERO_ADDRESS,
+            to_chain=to_chain_enum.value,
+            to_token=token_dict[to_chain_enum],
+            expected_provider_cls=LiFiBridgeProvider,
+            expected_contract_adaptor_cls=None,
+        )
+
+    def _main_test_correct_providers(
         self,
         tmp_path: Path,
         password: str,
@@ -516,9 +566,11 @@ class TestBridgeManager:
         to_chain: str,
         to_token: str,
         expected_provider_cls: t.Type[BridgeProvider],
-        expected_contract_adaptor_cls: t.Type[BridgeContractAdaptor],
+        expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]],
+        check_price: bool = True,
+        margin: float = 0.15,
     ) -> None:
-        """test_correct_providers"""
+        """_main_test_correct_providers"""
         operate = OperateApp(
             home=tmp_path / OPERATE,
         )
@@ -529,6 +581,18 @@ class TestBridgeManager:
         bridge_manager = operate.bridge_manager()
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+
+        amount_unit = 100
+        if to_token in USDC.values():
+            to_decimals = 6
+        else:
+            to_decimals = 18
+
+        if from_token in USDC.values():
+            from_decimals = 6
+        else:
+            from_decimals = 18
+
         params = [
             {
                 "from": {
@@ -540,16 +604,21 @@ class TestBridgeManager:
                     "chain": to_chain,
                     "address": wallet_address,
                     "token": to_token,
-                    "amount": 0,
+                    "amount": amount_unit * (10**to_decimals),
                 },
             },
         ]
 
         bundle = bridge_manager.data.last_requested_bundle
         assert bundle is None, "Wrong bundle."
-        bridge_manager.bridge_refill_requirements(
+        refill_requirements = bridge_manager.bridge_refill_requirements(
             requests_params=params, force_update=False
         )
+
+        for request_status in refill_requirements["bridge_request_status"]:
+            assert (
+                request_status["status"] == BridgeRequestStatus.QUOTE_DONE
+            ), f"Wrong bundle for params\n{params}"
 
         bundle = bridge_manager.data.last_requested_bundle
         assert bundle is not None, "Wrong bundle."
@@ -562,6 +631,40 @@ class TestBridgeManager:
         ), f"Expected provider {expected_provider_cls}, got {type(bridge)}"
 
         if isinstance(bridge, NativeBridgeProvider):
+            assert expected_contract_adaptor_cls is not None, "Wrong contract adaptor."
             assert isinstance(
                 bridge.bridge_contract_adaptor, expected_contract_adaptor_cls
             ), f"Expected adaptor {expected_contract_adaptor_cls}, got {type(bridge.bridge_contract_adaptor)}"
+
+        if check_price:
+            to_price_usd = self._get_token_price_usd(to_chain, to_token)
+            from_price_usd = self._get_token_price_usd(from_chain, from_token)
+            print(f"{to_price_usd=}")
+            print(f"{from_price_usd=}")
+
+            if to_price_usd is None or from_price_usd is None:
+                pytest.skip("Token price could not be retrieved; skipping price check.")
+                return
+
+            refill_amount = refill_requirements["bridge_total_requirements"][
+                from_chain
+            ][wallet_address][from_token]
+
+            print(f"{refill_amount=}")
+
+            quoted_from_cost_usd = (
+                refill_amount * from_price_usd / (10**from_decimals)
+            )
+            expected_to_cost_usd = amount_unit * to_price_usd
+            print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")
+            print(f"Quoted cost on {from_chain}: {quoted_from_cost_usd}")
+
+            overpaid_usd = max(quoted_from_cost_usd - expected_to_cost_usd, 0)
+            overpaid_percent = (overpaid_usd / expected_to_cost_usd) * 100
+            print(
+                f"Overpaid {overpaid_usd:.2f} USD ({overpaid_percent:.2f}% < {margin*100:.2f}%)"
+            )
+
+            assert quoted_from_cost_usd <= expected_to_cost_usd * (
+                1.0 + margin
+            ), f"Quoted cost exceeds {margin*100:.2f}% margin"
