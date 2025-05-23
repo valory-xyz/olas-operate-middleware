@@ -1,0 +1,23 @@
+name: l1_standard_bridge
+author: valory
+version: 0.1.0
+type: contract
+description: Optimism L1 Standard Bridge
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeifsbxn6hlccnpgqnpvaz3ph6ajl4is4mcyerr6aqp7heggagcphye
+  build/L1StandardBridge.json: bafybeidq6jt7zmedtuxbbyggiqhu7w6543bunyd2vrbibg6y2svxsi2q5m
+  contract.py: bafybeib2kiztts3436vccvraeura3jb23oihgzxgrt3biakbed24edcaai
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: L1StandardBridge
+contract_interface_paths:
+  ethereum: build/L1StandardBridge.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: ==1.60.0
+  open-aea-test-autonomy:
+    version: ==0.18.3
+  web3:
+    version: <7,>=6.0.0
