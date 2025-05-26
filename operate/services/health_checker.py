@@ -87,27 +87,39 @@ class HealthChecker:
                 f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
             )
 
-    @classmethod
     async def check_service_health(
-        cls, service_config_id: str, service_path: t.Optional[Path] = None
+        self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health"""
         del service_config_id
-        timeout = aiohttp.ClientTimeout(total=cls.REQUEST_TIMEOUT_DEFAULT)
+        timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(cls.HEALTH_CHECK_URL) as resp:
-                status = resp.status
-                response_json = await resp.json()
+            async with session.get(self.HEALTH_CHECK_URL) as resp:
+                try:
+                    status = resp.status
 
-                if service_path:
-                    healthcheck_json_path = service_path / "healthcheck.json"
-                    healthcheck_json_path.write_text(
-                        json.dumps(response_json, indent=2), encoding="utf-8"
+                    if status != HTTP_OK:
+                        # not HTTP OK -> not healthy for sure
+                        content = await resp.text()
+                        self.logger.warning(
+                            f"[HEALTH_CHECKER] Bad http status code : {status} content: {content}. not healthy!"
+                        )
+                        return False
+
+                    response_json = await resp.json()
+
+                    if service_path:
+                        healthcheck_json_path = service_path / "healthcheck.json"
+                        healthcheck_json_path.write_text(
+                            json.dumps(response_json, indent=2), encoding="utf-8"
+                        )
+
+                    return response_json.get("is_transitioning_fast", False)
+                except Exception as e:  # pylint: disable=broad-except
+                    self.logger.error(
+                        f"[HEALTH_CHECKER] error {e}. set not healthy!", exc_info=True
                     )
-
-                return status == HTTP_OK and response_json.get(
-                    "is_transitioning_fast", False
-                )
+                    return False
 
     async def healthcheck_job(
         self,
