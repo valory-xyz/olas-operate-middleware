@@ -21,6 +21,7 @@
 
 import enum
 import json
+import os
 import shutil
 import types
 import typing as t
@@ -141,7 +142,8 @@ class LocalResource:
         if path.exists() and not bak0.exists():
             shutil.copy2(path, bak0)
 
-        path.write_text(
+        tmp_path = path.parent / f".{path.name}.tmp"
+        tmp_path.write_text(
             json.dumps(
                 self.json,
                 indent=2,
@@ -149,6 +151,7 @@ class LocalResource:
             encoding="utf-8",
         )
 
+        os.replace(tmp_path, path)  # atomic replace to avoid corruption
         self.load(self.path)  # Validate before making backup
 
         for i in reversed(range(N_BACKUPS - 1)):
