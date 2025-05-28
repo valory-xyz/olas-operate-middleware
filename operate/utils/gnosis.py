@@ -22,9 +22,7 @@
 import binascii
 import itertools
 import secrets
-import time
 import typing as t
-from datetime import datetime
 from enum import Enum
 
 from aea.crypto.base import Crypto, LedgerApi
@@ -34,7 +32,6 @@ from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -65,48 +62,6 @@ class MultiSendOperation(Enum):
 
     CALL = 0
     DELEGATE_CALL = 1
-
-
-def settle_raw_transaction(
-    ledger_api: LedgerApi, build_and_send_tx: t.Callable[[], t.Optional[str]]
-) -> t.Dict:
-    """Settle the transaction.
-
-    Args:
-        ledger_api: The ledger api.
-        send_tx: The function to send the transaction and return tx digest or receipt.
-
-    Returns:
-        The transaction receipt
-    """
-    retries = 0
-    deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-    while retries < ON_CHAIN_INTERACT_RETRIES or datetime.now().timestamp() < deadline:
-        try:
-            digest_or_receipt = build_and_send_tx()
-        except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Error sending the transaction: {e}")
-            digest_or_receipt = None
-
-        if isinstance(digest_or_receipt, str):  # it's a digest
-            logger.info(f"Transaction hash: {digest_or_receipt}")
-            try:
-                receipt = ledger_api.api.eth.wait_for_transaction_receipt(
-                    digest_or_receipt
-                )
-            except TimeExhausted:
-                receipt = None
-
-        else:
-            receipt = digest_or_receipt
-
-        if receipt is not None and receipt["status"] != 0:
-            return receipt
-
-        time.sleep(ON_CHAIN_INTERACT_SLEEP)
-        retries += 1
-
-    raise RuntimeError("Timeout while waiting for safe transaction to go through")
 
 
 def hash_payload_to_hex(  # pylint: disable=too-many-arguments,too-many-locals
@@ -280,7 +235,9 @@ def send_safe_txs(
     )
     to_address = to or safe
 
-    def _build_and_send_tx() -> t.Optional[str]:
+    def _build_tx(  # pylint: disable=unused-argument
+        *args: t.Any, **kwargs: t.Any
+    ) -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -299,7 +256,7 @@ def send_safe_txs(
                 is_deprecated_mode=True,
             )[2:]
         }
-        transaction = registry_contracts.gnosis_safe.get_raw_safe_transaction(
+        return registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=ledger_api,
             contract_address=safe,
             sender_address=owner,
@@ -312,13 +269,20 @@ def send_safe_txs(
             operation=SafeOperation.CALL.value,
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
-        return ledger_api.send_signed_transaction(
-            crypto.sign_transaction(transaction),
-        )
 
-    tx_receipt = settle_raw_transaction(
+    tx_settler = TxSettler(
         ledger_api=ledger_api,
-        build_and_send_tx=_build_and_send_tx,
+        crypto=crypto,
+        chain_type=Chain.from_id(
+            ledger_api._chain_id  # pylint: disable=protected-access
+        ),
+    )
+    setattr(tx_settler, "build", _build_tx)  # noqa: B010
+    tx_receipt = tx_settler.transact(
+        method=lambda: {},
+        contract="",
+        kwargs={},
+        dry_run=False,
     )
     tx_hash = tx_receipt.get("transactionHash", "").hex()
     return tx_hash
@@ -440,7 +404,9 @@ def transfer(
         crypto.address,
     )
 
-    def _build_and_send_tx() -> t.Optional[str]:
+    def _build_tx(  # pylint: disable=unused-argument
+        *args: t.Any, **kwargs: t.Any
+    ) -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -459,7 +425,7 @@ def transfer(
                 is_deprecated_mode=True,
             )[2:]
         }
-        transaction = registry_contracts.gnosis_safe.get_raw_safe_transaction(
+        return registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=ledger_api,
             contract_address=safe,
             sender_address=owner,
@@ -472,13 +438,20 @@ def transfer(
             operation=SafeOperation.CALL.value,
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
-        return ledger_api.send_signed_transaction(
-            crypto.sign_transaction(transaction),
-        )
 
-    tx_receipt = settle_raw_transaction(
+    tx_settler = TxSettler(
         ledger_api=ledger_api,
-        build_and_send_tx=_build_and_send_tx,
+        crypto=crypto,
+        chain_type=Chain.from_id(
+            ledger_api._chain_id  # pylint: disable=protected-access
+        ),
+    )
+    setattr(tx_settler, "build", _build_tx)  # noqa: B010
+    tx_receipt = tx_settler.transact(
+        method=lambda: {},
+        contract="",
+        kwargs={},
+        dry_run=False,
     )
     tx_hash = tx_receipt.get("transactionHash", "").hex()
     return tx_hash
@@ -519,7 +492,7 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> None:
+) -> str:
     """Drain all the native tokens from the crypto wallet."""
     tx_helper = TxSettler(
         ledger_api=ledger_api,
@@ -570,10 +543,14 @@ def drain_eoa(
         return tx
 
     setattr(tx_helper, "build", _build_tx)  # noqa: B010
-    settle_raw_transaction(
-        ledger_api=ledger_api,
-        build_and_send_tx=lambda: tx_helper.transact(lambda x: x, "", kwargs={}),
+    tx_receipt = tx_helper.transact(
+        method=lambda: {},
+        contract="",
+        kwargs={},
+        dry_run=False,
     )
+    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    return tx_hash
 
 
 def get_asset_balance(

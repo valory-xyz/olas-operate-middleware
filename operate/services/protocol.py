@@ -72,7 +72,6 @@ from operate.utils.gnosis import (
     NULL_ADDRESS,
     SafeOperation,
     hash_payload_to_hex,
-    settle_raw_transaction,
     skill_input_hex_to_payload,
 )
 from operate.wallet.master import MasterWallet
@@ -105,14 +104,15 @@ class GnosisSafeTransaction:
         self.chain_type = chain_type
         self.safe = safe
         self._txs: t.List[t.Dict] = []
-        self.tx: t.Optional[t.Dict] = None
 
     def add(self, tx: t.Dict) -> "GnosisSafeTransaction":
         """Add a transaction"""
         self._txs.append(tx)
         return self
 
-    def build(self) -> t.Dict:
+    def build(  # pylint: disable=unused-argument
+        self, *args: t.Any, **kwargs: t.Any
+    ) -> t.Dict:
         """Build the transaction."""
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
@@ -160,16 +160,21 @@ class GnosisSafeTransaction:
             operation=SafeOperation.DELEGATE_CALL.value,
             nonce=self.ledger_api.api.eth.get_transaction_count(owner),
         )
-        self.tx = self.crypto.sign_transaction(tx)
-        return t.cast(t.Dict, self.tx)
+        return t.cast(t.Dict, tx)
 
     def settle(self) -> t.Dict:
         """Settle the transaction."""
-        return settle_raw_transaction(
+        tx_settler = TxSettler(
             ledger_api=self.ledger_api,
-            build_and_send_tx=lambda: self.ledger_api.send_signed_transaction(
-                self.build()
-            ),
+            crypto=self.crypto,
+            chain_type=self.chain_type,
+        )
+        setattr(tx_settler, "build", self.build)  # noqa: B010
+        return tx_settler.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
         )
 
 
