@@ -1097,7 +1097,7 @@ class ServiceManager:
         staking_chain = None
         for chain_, config in service.chain_configs.items():
             if config.chain_data.user_params.use_staking:
-                staking_chain = chain_
+                staking_chain = chain_.replace("optimistic", "optimism")  # TODO: remove this hack, when it's renamed in open-autonomy
                 break
 
         service.update_env_variables_values(
@@ -1108,7 +1108,7 @@ class ServiceManager:
                         for chain, config in service.chain_configs.items()
                     },
                     separators=(",", ":"),
-                ),
+                ).replace("optimistic", "optimism"),  # TODO: remove this hack, when it's renamed in open-autonomy
                 "STAKING_CHAIN": staking_chain,
             }
         )
