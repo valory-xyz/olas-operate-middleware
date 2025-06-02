@@ -28,6 +28,7 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from web3.middleware import geth_poa_middleware
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
@@ -52,7 +53,7 @@ BRIDGE_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
 MESSAGE_EXECUTION_FAILED = "Execution failed:"
-MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} ETA exceeded."
+MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} bridge ETA exceeded."
 MESSAGE_EXECUTION_FAILED_QUOTE_FAILED = f"{MESSAGE_EXECUTION_FAILED} quote failed."
 MESSAGE_EXECUTION_FAILED_REVERTED = (
     f"{MESSAGE_EXECUTION_FAILED} bridge transaction reverted."
@@ -226,6 +227,11 @@ class BridgeProvider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
+
+        # TODO: Backport to open aea/autonomy
+        if chain == Chain.OPTIMISTIC:
+            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
+
         return ledger_api
 
     def _to_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
@@ -234,6 +240,11 @@ class BridgeProvider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
+
+        # TODO: Backport to open aea/autonomy
+        if chain == Chain.OPTIMISTIC:
+            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
+
         return ledger_api
 
     @abstractmethod

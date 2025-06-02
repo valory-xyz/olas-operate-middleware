@@ -566,6 +566,7 @@ class NativeBridgeProvider(BridgeProvider):
                     self.logger.info(
                         f"[NATIVE BRIDGE] Execution done for {bridge_request.id}."
                     )
+                    execution_data.message = None
                     execution_data.to_tx_hash = to_tx_hash
                     execution_data.elapsed_time = BridgeProvider._tx_timestamp(
                         to_tx_hash, to_ledger_api

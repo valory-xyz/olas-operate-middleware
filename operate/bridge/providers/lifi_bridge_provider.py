@@ -323,6 +323,7 @@ class LiFiBridgeProvider(BridgeProvider):
             from_tx_hash = execution_data.from_tx_hash
             to_ledger_api = self._to_ledger_api(bridge_request)
             to_tx_hash = response_json.get("receiving", {}).get("txHash")
+            execution_data.message = None
             execution_data.to_tx_hash = to_tx_hash
             execution_data.elapsed_time = BridgeProvider._tx_timestamp(
                 to_tx_hash, to_ledger_api

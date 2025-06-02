@@ -398,7 +398,7 @@ class BridgeManager:
         if bridge:
             return bridge
 
-        return self._fallback_bridge_provider
+        raise RuntimeError(f"Bridge request {request.id} does not have a valid provider.")
 
     def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
         """Sum bridge requirements."""
