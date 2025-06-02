@@ -829,6 +829,10 @@ class Service(LocalResource):
                             ),
                             "token": data.get("chain_data", {}).get("token"),
                             "multisig": data.get("chain_data", {}).get("multisig"),
+                            "staked": data.get("chain_data", {}).get("staked", False),
+                            "on_chain_state": data.get("chain_data", {}).get(
+                                "on_chain_state", 3
+                            ),
                             "user_params": {
                                 "staking_program_id": "pearl_alpha",
                                 "nft": data.get("chain_data", {})

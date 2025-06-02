@@ -41,6 +41,8 @@ DEFAULT_CONFIG_KWARGS = {
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "hash_timestamp": 1704063600,
     "token": 42,
+    "staked": True,
+    "on_chain_state": 4,
     "staking_program_id": "staking_program_1",
     "threshold": 1,
     "agent_id": 25,
@@ -76,6 +78,8 @@ def get_config_json_data_v0(**kwargs: t.Any) -> t.Dict[str, t.Any]:
             "instances": [kwargs.get("instance_0")],
             "token": kwargs.get("token"),
             "multisig": kwargs.get("multisig"),
+            "staked": True,
+            "on_chain_state": kwargs.get("on_chain_state"),
             "user_params": {
                 "nft": kwargs.get("nft"),
                 "agent_id": kwargs.get("agent_id"),
@@ -116,6 +120,8 @@ def get_config_json_data_v2(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "instances": [kwargs.get("instance_0")],
                     "token": kwargs.get("token"),
                     "multisig": kwargs.get("multisig"),
+                    "staked": True,
+                    "on_chain_state": kwargs.get("on_chain_state"),
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
@@ -156,6 +162,8 @@ def get_config_json_data_v3(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "instances": [kwargs.get("instance_0")],
                     "token": kwargs.get("token"),
                     "multisig": kwargs.get("multisig"),
+                    "staked": True,
+                    "on_chain_state": kwargs.get("on_chain_state"),
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
@@ -199,6 +207,8 @@ def get_config_json_data_v4(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "instances": [kwargs.get("instance_0")],
                     "token": kwargs.get("token"),
                     "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
@@ -245,6 +255,8 @@ def get_config_json_data_v5(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "instances": [kwargs.get("instance_0")],
                     "token": kwargs.get("token"),
                     "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
@@ -293,6 +305,8 @@ def get_config_json_data_v6(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "instances": [kwargs.get("instance_0")],
                     "token": kwargs.get("token"),
                     "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
