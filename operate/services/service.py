@@ -81,7 +81,6 @@ from operate.operate_types import (
     LedgerConfig,
     LedgerConfigs,
     OnChainData,
-    OnChainState,
     OnChainUserParams,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -1037,8 +1036,6 @@ class Service(LocalResource):
                 instances=[],
                 token=NON_EXISTENT_TOKEN,
                 multisig=NON_EXISTENT_MULTISIG,
-                staked=False,
-                on_chain_state=OnChainState.NON_EXISTENT,
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
@@ -1223,8 +1220,6 @@ class Service(LocalResource):
                     instances=[],
                     token=NON_EXISTENT_TOKEN,
                     multisig=NON_EXISTENT_MULTISIG,
-                    staked=False,
-                    on_chain_state=OnChainState.NON_EXISTENT,
                     user_params=OnChainUserParams.from_json(new_config),  # type: ignore
                 )
 
