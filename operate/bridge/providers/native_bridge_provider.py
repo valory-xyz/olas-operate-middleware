@@ -52,6 +52,9 @@ from operate.data.contracts.l1_standard_bridge.contract import (
     L1StandardBridge,
 )
 from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
+from operate.data.contracts.optimism_mintable_erc20.contract import (
+    OptimismMintableERC20,
+)
 from operate.ledger.profiles import ERC20_TOKENS
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
@@ -79,7 +82,7 @@ class BridgeContractAdaptor(ABC):
         self.to_bridge = to_bridge
         self.bridge_eta = bridge_eta
 
-    def can_handle_request(self, params: t.Dict) -> bool:
+    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_chain = params["from"]["chain"]
         from_token = Web3.to_checksum_address(params["from"]["token"])
@@ -148,6 +151,33 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
             directory=str(DATA_DIR / "contracts" / "l2_standard_bridge"),
         ),
     )
+
+    _optimism_mintable_erc20_contract = t.cast(
+        OptimismMintableERC20,
+        OptimismMintableERC20.from_dir(
+            directory=str(DATA_DIR / "contracts" / "optimism_mintable_erc20"),
+        ),
+    )
+
+    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
+        """Returns 'true' if the contract adaptor can handle a request for 'params'."""
+
+        from_token = Web3.to_checksum_address(params["from"]["token"])
+        to_token = Web3.to_checksum_address(params["to"]["token"])
+
+        if to_token != ZERO_ADDRESS:
+            try:
+                l1_token = self._optimism_mintable_erc20_contract.l1_token(
+                    ledger_api=to_ledger_api,
+                    contract_address=to_token,
+                )["data"]
+
+                if l1_token != from_token:
+                    return False
+            except Exception:  # pylint: disable=broad-except
+                return False
+
+        return super().can_handle_request(to_ledger_api, params)
 
     def build_bridge_tx(
         self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
@@ -257,13 +287,13 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ),
     )
 
-    def can_handle_request(self, params: t.Dict) -> bool:
+    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_token = Web3.to_checksum_address(params["from"]["token"])
         if from_token == ZERO_ADDRESS:
             return False
 
-        return super().can_handle_request(params)
+        return super().can_handle_request(to_ledger_api, params)
 
     def build_bridge_tx(
         self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
@@ -399,7 +429,12 @@ class NativeBridgeProvider(BridgeProvider):
         if not super().can_handle_request(params):
             return False
 
-        if not self.bridge_contract_adaptor.can_handle_request(params):
+        to_chain = params["to"]["chain"]
+        chain = Chain(to_chain)
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        to_ledger_api = wallet.ledger_api(chain)
+
+        if not self.bridge_contract_adaptor.can_handle_request(to_ledger_api, params):
             return False
 
         return True

@@ -28,12 +28,12 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from web3.middleware import geth_poa_middleware
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
+from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
