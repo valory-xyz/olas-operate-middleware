@@ -55,7 +55,7 @@ from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.data.contracts.optimism_mintable_erc20.contract import (
     OptimismMintableERC20,
 )
-from operate.ledger.profiles import ERC20_TOKENS
+from operate.ledger.profiles import ERC20_TOKENS, EXPLORER_URL
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
 
@@ -175,6 +175,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
                 if l1_token != from_token:
                     return False
             except Exception:  # pylint: disable=broad-except
+                import traceback
+
+                traceback.print_exc()
                 return False
 
         return super().can_handle_request(to_ledger_api, params)
@@ -267,7 +270,9 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         if not tx_hash:
             return None
 
-        return f"https://etherscan.io/tx/{tx_hash}"
+        chain = Chain(bridge_request.params["from"]["chain"])
+        url = EXPLORER_URL[chain]["tx"]
+        return url.format(tx_hash=tx_hash)
 
 
 class OmnibridgeContractAdaptor(BridgeContractAdaptor):
@@ -539,9 +544,9 @@ class NativeBridgeProvider(BridgeProvider):
         return bridge_tx
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
-        """Update the execution status. Returns `True` if the status changed."""
+        """Update the execution status."""
 
-        if bridge_request.status not in (BridgeRequestStatus.EXECUTION_PENDING,):
+        if bridge_request.status != BridgeRequestStatus.EXECUTION_PENDING:
             return
 
         self.logger.info(

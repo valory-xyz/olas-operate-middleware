@@ -137,7 +137,7 @@ class BridgeManagerData(LocalResource):
     # It can be inconvenient that all local resources create an empty resource
     # if the file is corrupted. For example, if a service configuration is
     # corrupted, we might want to halt execution, because otherwise, the application
-    # could continue as if the user is creatig a service from scratch.
+    # could continue as if the user is creating a service from scratch.
     # For the bridge manager data, it's harmless, because its memory
     # is limited to the process of getting and executing a quote.
     @classmethod  # Overrides from LocalResource

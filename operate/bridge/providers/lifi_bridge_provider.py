@@ -278,7 +278,7 @@ class LiFiBridgeProvider(BridgeProvider):
         return bridge_tx
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
-        """Update the execution status. Returns `True` if the status changed."""
+        """Update the execution status."""
 
         if bridge_request.status not in (
             BridgeRequestStatus.EXECUTION_PENDING,

@@ -203,6 +203,29 @@ DEFAULT_MASTER_EOA_FUNDS = {
     Chain.OPTIMISTIC: {ZERO_ADDRESS: 5_000_000_000_000_000},
 }
 
+EXPLORER_URL = {
+    Chain.BASE: {
+        "tx": "https://basescan.org/tx/{tx_hash}",
+        "address": "https://basescan.org/address/{address}",
+    },
+    Chain.ETHEREUM: {
+        "tx": "https://etherscan.io/tx/{tx_hash}",
+        "address": "https://etherscan.io/address/{address}",
+    },
+    Chain.GNOSIS: {
+        "tx": "https://gnosisscan.io/tx/{tx_hash}",
+        "address": "https://gnosisscan.io/address/{address}",
+    },
+    Chain.MODE: {
+        "tx": "https://modescan.io/tx/{tx_hash}",
+        "address": "https://modescan.io/address/{address}",
+    },
+    Chain.OPTIMISTIC: {
+        "tx": "https://optimistic.etherscan.io/tx/{tx_hash}",
+        "address": "https://optimistic.etherscan.io/address/{address}",
+    },
+}
+
 
 def get_staking_contract(
     chain: str, staking_program_id: t.Optional[str]
