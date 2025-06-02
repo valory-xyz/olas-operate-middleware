@@ -62,6 +62,7 @@ from operate.operate_types import (
     Chain,
     FundingValues,
     LedgerConfig,
+    OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
@@ -73,7 +74,6 @@ from operate.services.service import (
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
     OnChainData,
-    OnChainState,
     SERVICE_CONFIG_PREFIX,
     Service,
 )
