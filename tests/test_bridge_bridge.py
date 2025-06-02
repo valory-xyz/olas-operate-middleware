@@ -517,11 +517,20 @@ class TestBridgeManager:
         token_dict: t.Dict,
     ) -> None:
         """test_correct_providers_bridge_token"""
+        expected_provider_cls = NativeBridgeProvider
         expected_contract_adaptor_cls: type[BridgeContractAdaptor]
         if to_chain_enum == Chain.GNOSIS:
             expected_contract_adaptor_cls = OmnibridgeContractAdaptor
         else:
             expected_contract_adaptor_cls = OptimismContractAdaptor
+
+        if to_chain_enum == Chain.BASE and token_dict == USDC:
+            expected_provider_cls = LiFiBridgeProvider
+            expected_contract_adaptor_cls = None
+
+        if to_chain_enum == Chain.OPTIMISTIC and token_dict == USDC:
+            expected_provider_cls = LiFiBridgeProvider
+            expected_contract_adaptor_cls = None
 
         self._main_test_correct_providers(
             tmp_path=tmp_path,
@@ -530,7 +539,7 @@ class TestBridgeManager:
             from_token=token_dict[Chain.ETHEREUM],
             to_chain=to_chain_enum.value,
             to_token=token_dict[to_chain_enum],
-            expected_provider_cls=NativeBridgeProvider,
+            expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
         )
 
