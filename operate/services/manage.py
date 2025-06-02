@@ -277,17 +277,11 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
         if chain_data.token == NON_EXISTENT_TOKEN:
-            service_state = OnChainState.NON_EXISTENT
-            chain_data.on_chain_state = service_state
-            service.store()
-            return service_state
+            return OnChainState.NON_EXISTENT
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         info = sftxb.info(token_id=chain_data.token)
-        service_state = OnChainState(info["service_state"])
-        chain_data.on_chain_state = service_state
-        service.store()
-        return service_state
+        return OnChainState(info["service_state"])
 
     def _get_on_chain_metadata(self, chain_config: ChainConfig) -> t.Dict:
         chain_data = chain_config.chain_data
@@ -346,11 +340,11 @@ class ServiceManager:
         if chain_data.token > -1:
             self.logger.info("Syncing service state")
             info = ocm.info(token_id=chain_data.token)
-            chain_data.on_chain_state = OnChainState(info["service_state"])
+            on_chain_state = OnChainState(info["service_state"])
             chain_data.instances = info["instances"]
             chain_data.multisig = info["multisig"]
             service.store()
-        self.logger.info(f"Service state: {chain_data.on_chain_state.name}")
+        self.logger.info(f"Service state: {on_chain_state.name}")
 
         if user_params.use_staking:
             staking_params = ocm.get_staking_params(
@@ -375,7 +369,7 @@ class ServiceManager:
             # TODO: Missing check when the service is currently staked in a program, but needs to be staked
             # in a different target program. The In this case, balance = currently staked balance + safe balance
 
-            if chain_data.on_chain_state in (
+            if on_chain_state in (
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
@@ -383,7 +377,7 @@ class ServiceManager:
                     staking_params["min_staking_deposit"]
                     + staking_params["min_staking_deposit"]  # bond = staking
                 )
-            elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
+            elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
                 required_olas = staking_params["min_staking_deposit"]
             else:
                 required_olas = 0
@@ -434,7 +428,7 @@ class ServiceManager:
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
-        if chain_data.on_chain_state == OnChainState.NON_EXISTENT:
+        if on_chain_state == OnChainState.NON_EXISTENT:
             self.logger.info("Minting service")
             chain_data.token = t.cast(
                 int,
@@ -457,25 +451,24 @@ class ServiceManager:
                     skip_dependency_check=self.skip_depencency_check,
                 ).get("token"),
             )
-            chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
+            on_chain_state = OnChainState.PRE_REGISTRATION
             service.store()
 
         info = ocm.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
+        on_chain_state = OnChainState(info["service_state"])
 
-        if chain_data.on_chain_state == OnChainState.PRE_REGISTRATION:
+        if on_chain_state == OnChainState.PRE_REGISTRATION:
             self.logger.info("Activating service")
             ocm.activate(
                 service_id=chain_data.token,
                 token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
             )
-            chain_data.on_chain_state = OnChainState.ACTIVE_REGISTRATION
-            service.store()
+            on_chain_state = OnChainState.ACTIVE_REGISTRATION
 
         info = ocm.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
+        on_chain_state = OnChainState(info["service_state"])
 
-        if chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
+        if on_chain_state == OnChainState.ACTIVE_REGISTRATION:
             self.logger.info("Registering agent instances")
             agent_id = staking_params["agent_ids"][0]
             ocm.register(
@@ -484,29 +477,25 @@ class ServiceManager:
                 agents=[agent_id for _ in instances],
                 token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
             )
-            chain_data.on_chain_state = OnChainState.FINISHED_REGISTRATION
-            service.store()
+            on_chain_state = OnChainState.FINISHED_REGISTRATION
 
         info = ocm.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
+        on_chain_state = OnChainState(info["service_state"])
 
-        if chain_data.on_chain_state == OnChainState.FINISHED_REGISTRATION:
+        if on_chain_state == OnChainState.FINISHED_REGISTRATION:
             self.logger.info("Deploying service")
             ocm.deploy(
                 service_id=chain_data.token,
                 reuse_multisig=is_update,
                 token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
             )
-            chain_data.on_chain_state = OnChainState.DEPLOYED
-            service.store()
+            on_chain_state = OnChainState.DEPLOYED
 
         info = ocm.info(token_id=chain_data.token)
         chain_data = OnChainData(
             token=chain_data.token,
             instances=info["instances"],
             multisig=info["multisig"],
-            staked=False,
-            on_chain_state=chain_data.on_chain_state,
             user_params=chain_data.user_params,
         )
         service.store()
@@ -551,12 +540,12 @@ class ServiceManager:
         if chain_data.token > -1:
             self.logger.info("Syncing service state")
             info = sftxb.info(token_id=chain_data.token)
-            chain_data.on_chain_state = OnChainState(info["service_state"])
+            on_chain_state = OnChainState(info["service_state"])
             chain_data.instances = info["instances"]
             chain_data.multisig = info["multisig"]
             current_agent_id = info["canonical_agents"][0]  # TODO Allow multiple agents
             service.store()
-        self.logger.info(f"Service state: {chain_data.on_chain_state.name}")
+        self.logger.info(f"Service state: {on_chain_state.name}")
 
         current_staking_program = self._get_current_staking_program(service, chain)
         fallback_params = dict(  # nosec
@@ -704,14 +693,14 @@ class ServiceManager:
             # TODO: Missing check when the service is currently staked in a program, but needs to be staked
             # in a different target program. The In this case, balance = currently staked balance + safe balance
 
-            if chain_data.on_chain_state in (
+            if on_chain_state in (
                 OnChainState.NON_EXISTENT,
                 OnChainState.PRE_REGISTRATION,
             ):
                 protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
-            elif chain_data.on_chain_state == OnChainState.ACTIVE_REGISTRATION:
+            elif on_chain_state == OnChainState.ACTIVE_REGISTRATION:
                 protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
@@ -828,8 +817,6 @@ class ServiceManager:
                         receipt=receipt,
                     ).get("events"),
                 )
-                chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
-                service.store()
 
         # Mint service
         if (
@@ -881,7 +868,6 @@ class ServiceManager:
                 ).get("events"),
             )
             chain_data.token = event_data["args"]["serviceId"]
-            chain_data.on_chain_state = OnChainState.PRE_REGISTRATION
             service.store()
 
         if (
@@ -946,8 +932,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-            chain_data.on_chain_state = OnChainState.ACTIVE_REGISTRATION
-            service.store()
 
         if (
             self._get_on_chain_state(service=service, chain=chain)
@@ -1014,8 +998,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-            chain_data.on_chain_state = OnChainState.FINISHED_REGISTRATION
-            service.store()
 
         if (
             self._get_on_chain_state(service=service, chain=chain)
@@ -1040,14 +1022,10 @@ class ServiceManager:
                 tx.add(message)
             tx.settle()
 
-            chain_data.on_chain_state = OnChainState.DEPLOYED
-            service.store()
-
         # Update local Service
         info = sftxb.info(token_id=chain_data.token)
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
-        chain_data.on_chain_state = OnChainState(info["service_state"])
 
         # TODO: yet another agent specific logic for mech, which should be abstracted
         if all(
@@ -1137,9 +1115,8 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
         info = ocm.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
 
-        if chain_data.on_chain_state != OnChainState.DEPLOYED:
+        if OnChainState(info["service_state"]) != OnChainState.DEPLOYED:
             self.logger.info("Cannot terminate service")
             return
 
@@ -1152,8 +1129,6 @@ class ServiceManager:
                 else None
             ),
         )
-        chain_data.on_chain_state = OnChainState.TERMINATED_BONDED
-        service.store()
 
     def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
         self,
@@ -1177,8 +1152,6 @@ class ServiceManager:
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        info = sftxb.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
 
         # Determine if the service is staked in a known staking program
         current_staking_program = self._get_current_staking_program(
@@ -1385,9 +1358,8 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
         info = ocm.info(token_id=chain_data.token)
-        chain_data.on_chain_state = OnChainState(info["service_state"])
 
-        if chain_data.on_chain_state != OnChainState.TERMINATED_BONDED:
+        if OnChainState(info["service_state"]) != OnChainState.TERMINATED_BONDED:
             self.logger.info("Cannot unbond service")
             return
 
@@ -1400,8 +1372,6 @@ class ServiceManager:
                 else None
             ),
         )
-        chain_data.on_chain_state = OnChainState.UNBONDED
-        service.store()
 
     def stake_service_on_chain(self, hash: str) -> None:
         """
@@ -1464,8 +1434,6 @@ class ServiceManager:
                     staking_program_id=current_staking_program,
                 )
 
-            info = sftxb.info(token_id=chain_config.chain_data.token)
-            chain_config.chain_data.on_chain_state = OnChainState(info["service_state"])
             staking_state = sftxb.staking_status(
                 service_id=chain_data.token,
                 staking_contract=current_staking_contract,
@@ -1591,8 +1559,6 @@ class ServiceManager:
                     staking_contract=target_staking_contract,
                 )
             ).settle()
-            chain_config.chain_data.staked = True
-            service.store()
 
         current_staking_program = self._get_current_staking_program(
             service,
@@ -1623,8 +1589,6 @@ class ServiceManager:
         self.logger.info(f"Staking status for service {chain_data.token}: {state}")
         if state not in {StakingState.STAKED, StakingState.EVICTED}:
             self.logger.info("Cannot unstake service, it's not staked")
-            chain_data.staked = False
-            service.store()
             return
 
         self.logger.info(f"Unstaking service: {chain_data.token}")
@@ -1635,8 +1599,6 @@ class ServiceManager:
                 staking_program_id=chain_data.user_params.staking_program_id,
             ),
         )
-        chain_data.staked = False
-        service.store()
 
     def unstake_service_on_chain_from_safe(
         self,
@@ -1670,8 +1632,6 @@ class ServiceManager:
         self.logger.info(f"Staking status for service {chain_data.token}: {state}")
         if state not in {StakingState.STAKED, StakingState.EVICTED}:
             self.logger.info("Cannot unstake service, it's not staked")
-            chain_data.staked = False
-            service.store()
             return
 
         self.logger.info(f"Unstaking service: {chain_data.token}")
@@ -1685,8 +1645,6 @@ class ServiceManager:
                 force=force,
             )
         ).settle()
-        chain_data.staked = False
-        service.store()
 
     def claim_on_chain_from_safe(
         self,

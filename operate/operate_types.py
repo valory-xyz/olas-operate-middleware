@@ -295,8 +295,6 @@ class OnChainData(LocalResource):
     instances: t.List[str]  # Agent instances registered as safe owners
     token: int
     multisig: str
-    staked: bool
-    on_chain_state: OnChainState
     user_params: OnChainUserParams
 
 

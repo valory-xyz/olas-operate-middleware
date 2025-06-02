@@ -81,7 +81,6 @@ from operate.operate_types import (
     LedgerConfig,
     LedgerConfigs,
     OnChainData,
-    OnChainState,
     OnChainUserParams,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -830,10 +829,6 @@ class Service(LocalResource):
                             ),
                             "token": data.get("chain_data", {}).get("token"),
                             "multisig": data.get("chain_data", {}).get("multisig"),
-                            "staked": data.get("chain_data", {}).get("staked", False),
-                            "on_chain_state": data.get("chain_data", {}).get(
-                                "on_chain_state", 3
-                            ),
                             "user_params": {
                                 "staking_program_id": "pearl_alpha",
                                 "nft": data.get("chain_data", {})
@@ -1037,8 +1032,6 @@ class Service(LocalResource):
                 instances=[],
                 token=NON_EXISTENT_TOKEN,
                 multisig=NON_EXISTENT_MULTISIG,
-                staked=False,
-                on_chain_state=OnChainState.NON_EXISTENT,
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
@@ -1223,8 +1216,6 @@ class Service(LocalResource):
                     instances=[],
                     token=NON_EXISTENT_TOKEN,
                     multisig=NON_EXISTENT_MULTISIG,
-                    staked=False,
-                    on_chain_state=OnChainState.NON_EXISTENT,
                     user_params=OnChainUserParams.from_json(new_config),  # type: ignore
                 )
 
