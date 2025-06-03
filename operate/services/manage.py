@@ -337,6 +337,7 @@ class ServiceManager:
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
         current_agent_id = None
+        on_chain_state = OnChainState.NON_EXISTENT
         if chain_data.token > -1:
             self.logger.info("Syncing service state")
             info = ocm.info(token_id=chain_data.token)
@@ -537,6 +538,7 @@ class ServiceManager:
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
         current_agent_id = None
+        on_chain_state = OnChainState.NON_EXISTENT
         if chain_data.token > -1:
             self.logger.info("Syncing service state")
             info = sftxb.info(token_id=chain_data.token)
