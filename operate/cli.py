@@ -178,6 +178,7 @@ class OperateApp:
         manager.setup()
         return manager
 
+    @property
     def bridge_manager(self) -> BridgeManager:
         """Load master wallet."""
         manager = BridgeManager(
@@ -963,7 +964,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             data = await request.json()
-            output = operate.bridge_manager().bridge_refill_requirements(
+            output = operate.bridge_manager.bridge_refill_requirements(
                 requests_params=data["bridge_requests"],
                 force_update=data.get("force_update", False),
             )
@@ -991,7 +992,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             data = await request.json()
-            output = operate.bridge_manager().execute_bundle(bundle_id=data["id"])
+            output = operate.bridge_manager.execute_bundle(bundle_id=data["id"])
 
             return JSONResponse(
                 content=output,
@@ -1011,7 +1012,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
         """Get last executed bundle id."""
-        content = {"id": operate.bridge_manager().last_executed_bundle_id()}
+        content = {"id": operate.bridge_manager.last_executed_bundle_id()}
         return JSONResponse(content=content, status_code=HTTPStatus.OK)
 
     @app.get("/api/bridge/status/{id}")
@@ -1022,7 +1023,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         quote_bundle_id = request.path_params["id"]
 
         try:
-            output = operate.bridge_manager().get_status_json(bundle_id=quote_bundle_id)
+            output = operate.bridge_manager.get_status_json(bundle_id=quote_bundle_id)
 
             return JSONResponse(
                 content=output,

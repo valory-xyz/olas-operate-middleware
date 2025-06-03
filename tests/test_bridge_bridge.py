@@ -135,7 +135,7 @@ class TestBridgeManager:
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-        bridge_manager = operate.bridge_manager()
+        bridge_manager = operate.bridge_manager
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
         params = [
@@ -242,7 +242,7 @@ class TestBridgeManager:
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-        bridge_manager = operate.bridge_manager()
+        bridge_manager = operate.bridge_manager
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
         params = [
@@ -350,7 +350,7 @@ class TestBridgeManager:
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-        bridge_manager = operate.bridge_manager()
+        bridge_manager = operate.bridge_manager
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
         params = [
@@ -587,7 +587,7 @@ class TestBridgeManager:
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-        bridge_manager = operate.bridge_manager()
+        bridge_manager = operate.bridge_manager
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
 
