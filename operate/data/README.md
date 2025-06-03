@@ -13,6 +13,7 @@ New packages from this repository:
 - `contracts/home_omnibridge`
 - `contracts/l1_standard_bridge`
 - `contracts/l2_standard_bridge`
+- `contracts/optimism_mintable_erc20`
 - `contracts/requester_activity_checker`
 
 TODO: Have a better way to import and reuse packages in the middleware.
