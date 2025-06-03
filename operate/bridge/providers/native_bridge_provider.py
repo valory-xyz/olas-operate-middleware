@@ -175,9 +175,6 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
                 if l1_token != from_token:
                     return False
             except Exception:  # pylint: disable=broad-except
-                import traceback
-
-                traceback.print_exc()
                 return False
 
         return super().can_handle_request(to_ledger_api, params)

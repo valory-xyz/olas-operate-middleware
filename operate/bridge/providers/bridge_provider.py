@@ -411,6 +411,7 @@ class BridgeProvider(ABC):
             )
             timestamp = time.time()
             chain = Chain(bridge_request.params["from"]["chain"])
+            from_address = bridge_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(bridge_request)
             tx_settler = TxSettler(
@@ -425,6 +426,8 @@ class BridgeProvider(ABC):
 
             for tx_label, tx in txs:
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
+                nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
+                tx["nonce"] = nonce  # TODO: backport to TxSettler
                 setattr(  # noqa: B010
                     tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
                 )
