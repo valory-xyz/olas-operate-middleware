@@ -175,6 +175,21 @@ class LiFiBridgeProvider(BridgeProvider):
                     },
                     timestamp=int(time.time()),
                 )
+            except Exception as e:  # pylint:disable=broad-except
+                self.logger.warning(
+                    f"[LI.FI BRIDGE] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    bridge_eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.INTERNAL_SERVER_ERROR,
+                    },
+                    timestamp=int(time.time()),
+                )
             if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
                 self.logger.error(
                     f"[LI.FI BRIDGE] Request failed after {DEFAULT_MAX_QUOTE_RETRIES} attempts."
