@@ -34,7 +34,7 @@ SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solan
 BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_PUBLIC_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
 OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
+MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
 
 ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
 GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
@@ -42,7 +42,7 @@ SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
 OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-MODE_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
+MODE_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
 
 PUBLIC_RPCS = {
     Chain.ETHEREUM: ETHEREUM_PUBLIC_RPC,
