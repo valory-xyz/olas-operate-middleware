@@ -556,11 +556,6 @@ class TestBridgeManager:
         token_dict: t.Dict,
     ) -> None:
         """test_correct_providers_swap_token"""
-
-        print(f"GITHUB_ACTIONS={os.getenv('GITHUB_ACTIONS', '')}")
-        print(f"CI={os.getenv('CI', '')}")
-        print(f"RUNNING_IN_CI={RUNNING_IN_CI}")
-
         self._main_test_correct_providers(
             tmp_path=tmp_path,
             password=password,

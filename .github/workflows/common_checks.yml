@@ -71,7 +71,5 @@ jobs:
 
       - name: Run unit tests
         run: |
-          echo "GITHUB_ACTIONS=${GITHUB_ACTIONS}"
-          echo "CI=${CI}"
           pip install tomte[tox]==0.2.15
           tox -e unit-tests
