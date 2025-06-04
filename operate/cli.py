@@ -19,6 +19,7 @@
 
 """Operate app CLI module."""
 import asyncio
+import atexit
 import logging
 import multiprocessing
 import os
@@ -324,6 +325,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # on backend app started we assume there are now started agents, so we force to pause all
     pause_all_services_on_startup()
+
+    # stop all services at  middleware exit
+    atexit.register(pause_all_services)
 
     app = FastAPI()
 
