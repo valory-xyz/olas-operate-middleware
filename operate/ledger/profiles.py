@@ -114,7 +114,10 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
     },
     Chain.OPTIMISTIC: {
-        "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
+        "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
+        "optimus_alpha_2": "0xBCA056952D2A7a8dD4A002079219807CFDF9fd29",
+        "optimus_alpha_3": "0x0f69f35652B1acdbD769049334f1AC580927E139",
+        "optimus_alpha_4": "0x6891Cf116f9a3bDbD1e89413118eF81F69D298C3",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
