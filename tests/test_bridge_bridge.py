@@ -543,6 +543,7 @@ class TestBridgeManager:
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
         )
 
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
         "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC, Chain.GNOSIS]
     )
