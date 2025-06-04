@@ -2430,17 +2430,17 @@ class ServiceManager:
 
         # Determine bonded token amount for staking programs
         current_staking_program = self._get_current_staking_program(service, chain)
+        target_staking_program = user_params.staking_program_id
+        staking_contract = get_staking_contract(
+            chain=ledger_config.chain,
+            staking_program_id=current_staking_program or target_staking_program,
+        )
 
-        if not current_staking_program:
+        if not staking_contract:
             return dict(bonded_assets)
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        staking_params = sftxb.get_staking_params(
-            staking_contract=get_staking_contract(
-                chain=ledger_config.chain,
-                staking_program_id=user_params.staking_program_id,
-            ),
-        )
+        staking_params = sftxb.get_staking_params(staking_contract=staking_contract)
         service_registry_token_utility_address = staking_params[
             "service_registry_token_utility"
         ]
