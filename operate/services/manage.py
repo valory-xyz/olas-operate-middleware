@@ -30,6 +30,7 @@ import typing as t
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
+from http import HTTPStatus
 from pathlib import Path
 
 import requests
@@ -295,7 +296,7 @@ class ServiceManager:
         url = f"{IPFS_GATEWAY}f01701220{config_hash}"
         self.logger.info(f"Fetching {url=}...")
         res = requests.get(url, timeout=30)
-        if res.status_code == 200:
+        if res.status_code == HTTPStatus.OK:
             return res.json()
         raise ValueError(
             f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"

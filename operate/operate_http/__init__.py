@@ -23,6 +23,7 @@ import json
 import traceback
 import typing as t
 from abc import ABC
+from http import HTTPStatus
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -142,7 +143,7 @@ class Resource(
             tb = traceback.format_exc()
             response = JSONResponse(
                 content={"error": str(e), "traceback": tb},
-                status_code=500,
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
             print(tb)
         await response(scope=scope, receive=receive, send=send)
