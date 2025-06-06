@@ -100,7 +100,7 @@ class OperateApp:
         self.setup()
 
         self.logger = logger or setup_logger(name="operate")
-        self.keys_manager = services.manage.KeysManager(
+        services.manage.KeysManager(
             path=self._keys,
             logger=self.logger,
         )
@@ -154,7 +154,6 @@ class OperateApp:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
-            keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
             skip_dependency_check=skip_dependency_check,

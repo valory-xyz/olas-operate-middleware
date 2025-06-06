@@ -68,7 +68,7 @@ from operate.constants import (
     KEYS_JSON,
     ZERO_ADDRESS,
 )
-from operate.keys import Keys
+from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
@@ -481,14 +481,7 @@ class Deployment(LocalResource):
         keys_file = self.path / KEYS_JSON
         keys_file.write_text(
             json.dumps(
-                [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
-                ],
+                [KeysManager().get(key).json for key in service.keys],
                 indent=4,
             ),
             encoding="utf-8",
@@ -608,14 +601,7 @@ class Deployment(LocalResource):
         keys_file = self.path / KEYS_JSON
         keys_file.write_text(
             json.dumps(
-                [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
-                ],
+                [KeysManager().get(key).json for key in service.keys],
                 indent=4,
             ),
             encoding="utf-8",
@@ -743,7 +729,7 @@ class Service(LocalResource):
     service_config_id: str
     hash: str
     hash_history: t.Dict[int, str]
-    keys: Keys
+    keys: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
@@ -959,6 +945,8 @@ class Service(LocalResource):
                 if chain_data["chain_data"]["multisig"] == "0xm":
                     chain_data["chain_data"]["multisig"] = NON_EXISTENT_MULTISIG
 
+            data["keys"] = [key["address"] for key in data["keys"]]
+
         data["version"] = SERVICE_CONFIG_VERSION
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
@@ -1020,7 +1008,7 @@ class Service(LocalResource):
 
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        keys: Keys,
+        keys: t.List[str],
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
