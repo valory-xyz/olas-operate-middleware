@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2023 Valory AG
+#   Copyright 2024 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,36 +17,4 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Exceptions."""
-
-from http import HTTPStatus
-
-
-class ResourceException(Exception):
-    """Base resource exceptio."""
-
-    code: int
-
-
-class BadRequest(ResourceException):
-    """Bad request error."""
-
-    code = HTTPStatus.BAD_REQUEST
-
-
-class ResourceAlreadyExists(ResourceException):
-    """Bad request error."""
-
-    code = HTTPStatus.CONFLICT
-
-
-class NotFound(ResourceException):
-    """Not found error."""
-
-    code = HTTPStatus.NOT_FOUND
-
-
-class NotAllowed(ResourceException):
-    """Not allowed error."""
-
-    code = HTTPStatus.METHOD_NOT_ALLOWED
+"""This module contains the support resources for the `HomeOmnibridge` contract."""

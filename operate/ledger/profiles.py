@@ -114,7 +114,10 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
     },
     Chain.OPTIMISTIC: {
-        "optimus_alpha": "0x88996bbdE7f982D93214881756840cE2c77C4992",
+        "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
+        "optimus_alpha_2": "0xBCA056952D2A7a8dD4A002079219807CFDF9fd29",
+        "optimus_alpha_3": "0x0f69f35652B1acdbD769049334f1AC580927E139",
+        "optimus_alpha_4": "0x6891Cf116f9a3bDbD1e89413118eF81F69D298C3",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
@@ -201,6 +204,29 @@ DEFAULT_MASTER_EOA_FUNDS = {
     Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
     Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
     Chain.OPTIMISTIC: {ZERO_ADDRESS: 5_000_000_000_000_000},
+}
+
+EXPLORER_URL = {
+    Chain.BASE: {
+        "tx": "https://basescan.org/tx/{tx_hash}",
+        "address": "https://basescan.org/address/{address}",
+    },
+    Chain.ETHEREUM: {
+        "tx": "https://etherscan.io/tx/{tx_hash}",
+        "address": "https://etherscan.io/address/{address}",
+    },
+    Chain.GNOSIS: {
+        "tx": "https://gnosisscan.io/tx/{tx_hash}",
+        "address": "https://gnosisscan.io/address/{address}",
+    },
+    Chain.MODE: {
+        "tx": "https://modescan.io/tx/{tx_hash}",
+        "address": "https://modescan.io/address/{address}",
+    },
+    Chain.OPTIMISTIC: {
+        "tx": "https://optimistic.etherscan.io/tx/{tx_hash}",
+        "address": "https://optimistic.etherscan.io/address/{address}",
+    },
 }
 
 

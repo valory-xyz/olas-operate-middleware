@@ -16,37 +16,22 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
+"""Read-write script for testing key file integrity."""
 
-"""Exceptions."""
+import os
+from pathlib import Path
 
-from http import HTTPStatus
-
-
-class ResourceException(Exception):
-    """Base resource exceptio."""
-
-    code: int
+from operate.keys import Key
 
 
-class BadRequest(ResourceException):
-    """Bad request error."""
-
-    code = HTTPStatus.BAD_REQUEST
-
-
-class ResourceAlreadyExists(ResourceException):
-    """Bad request error."""
-
-    code = HTTPStatus.CONFLICT
+def main() -> None:
+    """Main function to run the read-write operation."""
+    while True:
+        resource = Key.load(Path("key.json"))
+        resource.path = Path("key.json")
+        resource.store()
 
 
-class NotFound(ResourceException):
-    """Not found error."""
-
-    code = HTTPStatus.NOT_FOUND
-
-
-class NotAllowed(ResourceException):
-    """Not allowed error."""
-
-    code = HTTPStatus.METHOD_NOT_ALLOWED
+if __name__ == "__main__":
+    print(f"Subprocess ID: {os.getpid()}")
+    main()

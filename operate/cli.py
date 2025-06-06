@@ -20,12 +20,14 @@
 """Operate app CLI module."""
 import asyncio
 import logging
+import multiprocessing
 import os
 import signal
 import traceback
 import typing as t
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
@@ -42,6 +44,7 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
+from operate.bridge.bridge import BridgeManager
 from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
@@ -68,14 +71,15 @@ DEFAULT_HARDHAT_KEY = (
 ).encode()
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
-    content={"error": "User not logged in!"}, status_code=401
+    content={"error": "User not logged in!"}, status_code=HTTPStatus.UNAUTHORIZED
 )
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
     """Service not found error response"""
     return JSONResponse(
-        content={"error": f"Service {service_config_id} not found"}, status_code=404
+        content={"error": f"Service {service_config_id} not found"},
+        status_code=HTTPStatus.NOT_FOUND,
     )
 
 
@@ -173,6 +177,15 @@ class OperateApp:
             password=self.password,
         )
         manager.setup()
+        return manager
+
+    @property
+    def bridge_manager(self) -> BridgeManager:
+        """Load master wallet."""
+        manager = BridgeManager(
+            path=self._path / "bridge",
+            wallet_manager=self.wallet_manager,
+        )
         return manager
 
     def setup(self) -> None:
@@ -339,14 +352,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     else:
                         error["error"] = str(e)
                     errors.append(error)
-                    return JSONResponse(content={"errors": errors}, status_code=500)
+                    return JSONResponse(
+                        content={"errors": errors},
+                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    )
                 except Exception as e:  # pylint: disable=broad-except
                     errors.append(
                         {"error": str(e.args[0]), "traceback": traceback.format_exc()}
                     )
                     logger.error(f"Error {str(e.args[0])}\n{traceback.format_exc()}")
                 retries += 1
-            return JSONResponse(content={"errors": errors}, status_code=500)
+            return JSONResponse(
+                content={"errors": errors}, status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+            )
 
         return _call
 
@@ -384,7 +402,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is not None:
             return JSONResponse(
                 content={"error": "Account already exists"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         data = await request.json()
@@ -402,7 +420,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Account does not exist."},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         data = await request.json()
@@ -415,7 +433,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={
                     "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase).",
                 },
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if old_password and mnemonic:
@@ -423,7 +441,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={
                     "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
                 },
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         try:
@@ -445,11 +463,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={"error": None, "message": "Password not updated."}
             )
         except ValueError as e:
-            return JSONResponse(content={"error": str(e)}, status_code=400)
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
         except Exception as e:  # pylint: disable=broad-except
             return JSONResponse(
                 content={"error": str(e), "traceback": traceback.format_exc()},
-                status_code=400,
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
     @app.post("/api/account/login")
@@ -459,20 +479,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Account does not exist"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
                 content={"error": "Password is not valid"},
-                status_code=401,
+                status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         operate.password = data["password"]
         return JSONResponse(
             content={"message": "Login successful"},
-            status_code=200,
+            status_code=HTTPStatus.OK,
         )
 
     @app.get("/api/wallet")
@@ -491,13 +511,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Cannot create wallet; User account does not exist!"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if operate.password is None:
             return JSONResponse(
                 content={"error": "You need to login before creating a wallet"},
-                status_code=401,
+                status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         data = await request.json()
@@ -544,7 +564,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
                 content={"error": "Wallet does not exist"},
-                status_code=404,
+                status_code=HTTPStatus.NOT_FOUND,
             )
         safes = manager.load(ledger_type=ledger_type).safes
         if safes is None or safes.get(chain) is None:
@@ -564,13 +584,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Cannot create safe; User account does not exist!"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if operate.password is None:
             return JSONResponse(
                 content={"error": "You need to login before creating a safe"},
-                status_code=401,
+                status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         data = await request.json()
@@ -580,7 +600,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 content={
                     "error": "You can only specify 'initial_funds' or 'transfer_excess_assets', but not both."
                 },
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         logger.info(f"POST /api/wallet/safe {data=}")
@@ -656,7 +676,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except Exception as e:  # pylint: disable=broad-except
             logger.error(traceback.format_exc())
             return JSONResponse(
-                status_code=500,
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 content={"error": str(e), "traceback": traceback.format_exc()},
             )
 
@@ -668,13 +688,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Cannot update safe; User account does not exist!"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if operate.password is None:
             return JSONResponse(
                 content={"error": "You need to login before updating a safe."},
-                status_code=401,
+                status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         data = await request.json()
@@ -682,7 +702,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if "chain" not in data:
             return JSONResponse(
                 content={"error": "You need to specify a chain to update a safe."},
-                status_code=401,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         chain = Chain(data["chain"])
@@ -691,7 +711,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
                 content={"error": "Wallet does not exist"},
-                status_code=401,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         wallet = manager.load(ledger_type=ledger_type)
@@ -894,7 +914,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if withdrawal_address is None:
             return JSONResponse(
                 content={"error": "withdrawal_address is required"},
-                status_code=400,
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         try:
@@ -937,11 +957,95 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except Exception as e:  # pylint: disable=broad-except
             logger.error(traceback.format_exc())
             return JSONResponse(
-                status_code=500,
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 content={"error": str(e), "traceback": traceback.format_exc()},
             )
 
         return JSONResponse(content={"error": None})
+
+    @app.post("/api/bridge/bridge_refill_requirements")
+    @with_retries
+    async def _bridge_refill_requirements(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        try:
+            data = await request.json()
+            output = operate.bridge_manager.bridge_refill_requirements(
+                requests_params=data["bridge_requests"],
+                force_update=data.get("force_update", False),
+            )
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/bridge/execute")
+    @with_retries
+    async def _bridge_execute(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        try:
+            data = await request.json()
+            output = operate.bridge_manager.execute_bundle(bundle_id=data["id"])
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/bridge/last_executed_bundle_id")
+    @with_retries
+    async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
+        """Get last executed bundle id."""
+        content = {"id": operate.bridge_manager.last_executed_bundle_id()}
+        return JSONResponse(content=content, status_code=HTTPStatus.OK)
+
+    @app.get("/api/bridge/status/{id}")
+    @with_retries
+    async def _bridge_status(request: Request) -> JSONResponse:
+        """Get the bridge refill requirements."""
+
+        quote_bundle_id = request.path_params["id"]
+
+        try:
+            output = operate.bridge_manager.get_status_json(bundle_id=quote_bundle_id)
+
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)}, status_code=HTTPStatus.BAD_REQUEST
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            return JSONResponse(
+                content={"error": str(e), "traceback": traceback.format_exc()},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     return app
 
@@ -1138,6 +1242,8 @@ def qs_analyse_logs(  # pylint: disable=too-many-arguments
 
 def main() -> None:
     """CLI entry point."""
+    if "freeze_support" in multiprocessing.__dict__:
+        multiprocessing.freeze_support()
     run(cli=_operate)
 
 

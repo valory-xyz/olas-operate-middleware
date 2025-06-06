@@ -1,0 +1,23 @@
+name: optimism_mintable_erc20
+author: valory
+version: 0.1.0
+type: contract
+description: Optimism Mintable ERC20
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeiffqotbwpjde3htgfuplg62x4btoekvitqrkrlx2vkjpciwzov6sy
+  build/OptimismMintableERC20.json: bafybeieuzn55dh5zlg4ygtuifqso6hwbhsjvidxkjkh2vnah5psxqup62i
+  contract.py: bafybeiauq7vas7xuyb2zt4m5mb6i2g2nrwtptv6muivur5u3c5lwckys4q
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: OptimismMintableERC20
+contract_interface_paths:
+  ethereum: build/OptimismMintableERC20.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: ==1.60.0
+  open-aea-test-autonomy:
+    version: ==0.18.3
+  web3:
+    version: <7,>=6.0.0

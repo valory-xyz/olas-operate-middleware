@@ -25,6 +25,7 @@ import textwrap
 import time
 import typing as t
 import warnings
+from http import HTTPStatus
 
 import requests
 from aea.crypto.registries import make_ledger_api
@@ -96,7 +97,9 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_demand_alpha_2": "mech",
     },
     Chain.OPTIMISTIC: {
-        "optimus_alpha": "optimus",
+        "optimus_alpha_2": "optimus",
+        "optimus_alpha_3": "optimus",
+        "optimus_alpha_4": "optimus",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
@@ -245,7 +248,7 @@ def configure_local_config(
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
                     response = requests.get(ipfs_address)
-                    if response.status_code != 200:
+                    if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
                         )
