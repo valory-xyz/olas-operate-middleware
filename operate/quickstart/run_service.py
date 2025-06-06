@@ -25,6 +25,7 @@ import textwrap
 import time
 import typing as t
 import warnings
+from http import HTTPStatus
 
 import requests
 from aea.crypto.registries import make_ledger_api
@@ -247,7 +248,7 @@ def configure_local_config(
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
                     response = requests.get(ipfs_address)
-                    if response.status_code != 200:
+                    if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
                         )

@@ -30,7 +30,7 @@ from aea.crypto.base import LedgerApi
 
 PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
 
-#DEFAULT_GAS_BRIDGE_ETH_TO = 800_000
+# DEFAULT_GAS_BRIDGE_ETH_TO = 800_000
 DEFAULT_GAS_RELAY_TOKENS = 800_000
 
 # By simulations, nonzero-ERC20-bridge gas ~ 1.05 zero-ERC20-bridge gas

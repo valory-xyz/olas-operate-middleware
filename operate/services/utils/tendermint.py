@@ -31,6 +31,7 @@ import stat
 import subprocess  # nosec:
 import sys
 import traceback
+from http import HTTPStatus
 from logging import Logger
 from pathlib import Path
 from threading import Event, Thread
@@ -581,9 +582,15 @@ def create_app(  # pylint: disable=too-many-statements
         try:
             tendermint_node.stop()
             tendermint_node.start()
-            return jsonify({"message": "Reset successful.", "status": True}), 200
+            return (
+                jsonify({"message": "Reset successful.", "status": True}),
+                HTTPStatus.OK,
+            )
         except Exception as e:  # pylint: disable=W0703
-            return jsonify({"message": f"Reset failed: {e}", "status": False}), 200
+            return (
+                jsonify({"message": f"Reset failed: {e}", "status": False}),
+                HTTPStatus.OK,
+            )
 
     @app.route("/app_hash")
     def app_hash() -> Tuple[Any, int]:
@@ -624,21 +631,33 @@ def create_app(  # pylint: disable=too-many-statements
                 request.args.get("period_count", "0"),
             )
             tendermint_node.start()
-            return jsonify({"message": "Reset successful.", "status": True}), 200
+            return (
+                jsonify({"message": "Reset successful.", "status": True}),
+                HTTPStatus.OK,
+            )
         except Exception as e:  # pylint: disable=W0703
-            return jsonify({"message": f"Reset failed: {e}", "status": False}), 200
+            return (
+                jsonify({"message": f"Reset failed: {e}", "status": False}),
+                HTTPStatus.OK,
+            )
 
-    @app.errorhandler(404)  # type: ignore
+    @app.errorhandler(HTTPStatus.NOT_FOUND)  # type: ignore
     def handle_notfound(e: NotFound) -> Response:
         """Handle server error."""
         cast(logging.Logger, app.logger).info(e)  # pylint: disable=E
-        return Response("Not Found", status=404, mimetype="application/json")
+        return Response(
+            "Not Found", status=HTTPStatus.NOT_FOUND, mimetype="application/json"
+        )
 
-    @app.errorhandler(500)  # type: ignore
+    @app.errorhandler(HTTPStatus.INTERNAL_SERVER_ERROR)  # type: ignore
     def handle_server_error(e: InternalServerError) -> Response:
         """Handle server error."""
         cast(logging.Logger, app.logger).info(e)  # pylint: disable=E
-        return Response("Error Closing Node", status=500, mimetype="application/json")
+        return Response(
+            "Error Closing Node",
+            status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            mimetype="application/json",
+        )
 
     return app, tendermint_node
 
