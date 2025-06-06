@@ -31,6 +31,7 @@ from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
+from operate.utils import SingletonMeta
 
 
 @dataclass
@@ -47,15 +48,12 @@ class Key(LocalResource):
         return super().load(path)  # type: ignore
 
 
-Keys = t.List[Key]
-
-
-class KeysManager:
+class KeysManager(metaclass=SingletonMeta):
     """Keys manager."""
 
     def __init__(
         self,
-        path: Path,
+        path: t.Optional[Path] = None,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """
@@ -64,11 +62,9 @@ class KeysManager:
         :param path: Path to keys storage.
         :param logger: logging.Logger object.
         """
+        assert path is not None, "Path must be provided for KeysManager"  # nosec
         self.path = path
         self.logger = logger or setup_logger(name="operate.keys")
-
-    def setup(self) -> None:
-        """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
     def get(self, key: str) -> Key:
