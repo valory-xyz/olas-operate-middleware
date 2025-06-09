@@ -62,7 +62,9 @@ class KeysManager(metaclass=SingletonMeta):
         :param path: Path to keys storage.
         :param logger: logging.Logger object.
         """
-        assert path is not None, "Path must be provided for KeysManager"  # nosec
+        if path is None:
+            raise ValueError("Path must be provided for KeysManager")
+
         self.path = path
         self.logger = logger or setup_logger(name="operate.keys")
         self.path.mkdir(exist_ok=True)
