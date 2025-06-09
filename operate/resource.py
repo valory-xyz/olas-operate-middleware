@@ -47,6 +47,8 @@ def serialize(obj: t.Any) -> t.Any:
         return [serialize(obj=value) for value in obj]
     if isinstance(obj, enum.Enum):
         return obj.value
+    if isinstance(obj, bytes):
+        return obj.hex()
     return obj
 
 
@@ -85,6 +87,8 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
         return Path(obj)
     if is_dataclass(otype):
         return otype.from_json(obj)
+    if otype is bytes:
+        return bytes.fromhex(obj)
     return obj
 
 
