@@ -8,7 +8,7 @@ aea_version: '>=1.0.0, <2.0.0'
 fingerprint:
   __init__.py: bafybeigrlrmwk3dhnoe4o5ovygtmudik7ybhsx2etqqjpvdi65rtlfpuhe
   build/HomeOmnibridge.json: bafybeihm4ff4mhoca2iwcogg5srqe2x6p674uxxc3v5dcci4emxfgc7qpm
-  contract.py: bafybeignqvstktpvbliopzztan4a46crvf3ig5o4yt4fxhjpgljtlyrzga
+  contract.py: bafybeifukdlnhzey6olh43qjclbf3wpne5dp7xtxxxtvbvfk6roy6vfnie
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: HomeOmnibridge
