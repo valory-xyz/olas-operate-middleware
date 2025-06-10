@@ -406,7 +406,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         message_id = self.get_message_id(from_ledger_api, bridge_request)
         if not message_id:
             return None
-        return f"https://bridge.gnosischain.com/bridge-explorer/transaction/{message_id}"
+        return (
+            f"https://bridge.gnosischain.com/bridge-explorer/transaction/{message_id}"
+        )
 
 
 class NativeBridgeProvider(BridgeProvider):
