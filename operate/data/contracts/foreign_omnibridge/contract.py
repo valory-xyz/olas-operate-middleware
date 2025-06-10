@@ -109,7 +109,7 @@ class ForeignOmnibridge(Contract):
         sender: str,
         value: int,
         raise_on_try: bool = False,
-    ) -> Optional[bytes]:
+    ) -> Optional[str]:
         """Get the 'messageId' for the matching 'TokensBridgingInitiated' within the transaction 'tx_hash'."""
         contract_instance = cls.get_instance(
             ledger_api=ledger_api, contract_address=contract_address
@@ -125,6 +125,6 @@ class ForeignOmnibridge(Contract):
                 and args["sender"].lower() == sender.lower()
                 and int(args["value"]) == value
             ):
-                return args["messageId"]
+                return "0x" + args["messageId"].hex()
 
         return None
