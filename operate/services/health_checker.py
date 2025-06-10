@@ -22,6 +22,7 @@ import asyncio
 import json
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from pathlib import Path
 from traceback import print_exc
 
@@ -32,7 +33,7 @@ from operate.constants import HEALTH_CHECK_URL
 from operate.services.manage import ServiceManager  # type: ignore
 
 
-HTTP_OK = 200
+HTTP_OK = HTTPStatus.OK
 
 
 class HealthChecker:

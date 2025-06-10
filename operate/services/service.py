@@ -559,7 +559,10 @@ class Deployment(LocalResource):
                 new_mappings = []
                 for mapping in deployment["services"][node]["volumes"]:
                     if mapping.startswith("./data"):
-                        mapping = "." + mapping
+                        (self.path / "persistent_data").mkdir(
+                            exist_ok=True, parents=True
+                        )
+                        mapping = mapping.replace("./data", "../persistent_data")
 
                     new_mappings.append(mapping)
 
@@ -670,14 +673,16 @@ class Deployment(LocalResource):
         # TODO: Maybe remove usage of chain and use home_chain always?
         original_env = os.environ.copy()
         service = Service.load(path=self.path)
-        service.consume_env_variables()
 
         if use_docker or use_kubernetes:
+            service.update_env_variables_values({"STORE_PATH": "/data"})
+            service.consume_env_variables()
             if use_docker:
                 self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
         else:
+            service.consume_env_variables()
             self._build_host(force=force, chain=chain)
 
         os.environ.clear()
