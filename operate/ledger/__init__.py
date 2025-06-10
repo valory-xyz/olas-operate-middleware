@@ -20,12 +20,8 @@
 """Ledger helpers."""
 
 import os
-import typing as t
 
-from operate.ledger.base import LedgerHelper
-from operate.ledger.ethereum import Ethereum
-from operate.ledger.solana import Solana
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain
 
 
 ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
@@ -64,21 +60,6 @@ DEFAULT_RPCS = {
     Chain.MODE: MODE_RPC,
 }
 
-CHAIN_HELPERS: t.Dict[Chain, t.Type[LedgerHelper]] = {
-    Chain.ETHEREUM: Ethereum,
-    Chain.GNOSIS: Ethereum,
-    Chain.SOLANA: Solana,
-    Chain.BASE: Ethereum,
-    Chain.CELO: Ethereum,
-    Chain.OPTIMISTIC: Ethereum,
-    Chain.MODE: Ethereum,
-}
-
-LEDGER_HELPERS: t.Dict[LedgerType, t.Type[LedgerHelper]] = {
-    LedgerType.ETHEREUM: Ethereum,
-    LedgerType.SOLANA: Solana,
-}
-
 # Base currency for each chain
 CURRENCY_DENOMS = {
     Chain.ETHEREUM: "ETH",
@@ -105,16 +86,6 @@ CURRENCY_SMALLEST_UNITS = {
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
     return DEFAULT_RPCS.get(chain, ETHEREUM_RPC)
-
-
-def get_ledger_helper_by_chain(rpc: str, chain: Chain) -> LedgerHelper:
-    """Get ledger helper by chain type."""
-    return CHAIN_HELPERS.get(chain, Ethereum)(rpc=rpc)
-
-
-def get_ledger_helper_by_ledger(rpc: str, ledger: LedgerHelper) -> LedgerHelper:
-    """Get ledger helper by ledger type."""
-    return LEDGER_HELPERS.get(ledger, Ethereum)(rpc=rpc)  # type: ignore
 
 
 def get_currency_denom(chain: Chain) -> str:
