@@ -18,6 +18,7 @@
 #
 # ------------------------------------------------------------------------------
 """Source code to run and stop deployments created."""
+import ctypes
 import json
 import multiprocessing
 import os
@@ -30,7 +31,7 @@ import typing as t
 from abc import ABC, ABCMeta, abstractmethod
 from pathlib import Path
 from traceback import print_exc
-from typing import Any, List
+from typing import Any, Dict, List
 from venv import main as venv_cli
 
 import psutil
@@ -300,27 +301,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             encoding="utf-8",
         )
 
-    def _start_agent_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
         """Start agent process."""
         raise NotImplementedError
-        agent_runner_log_file = (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("a+")
-        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[
-                self._agent_runner_bin,
-                "-s",
-                "run",
-            ],  # TODO: Patch for Windows failing hash
-            cwd=working_dir / "agent",
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
-            env=env,
-            creationflags=(
-                0x00000200 if platform.system() == "Windows" else 0
-            ),  # Detach process from the main process
-        )
-        return process
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -341,19 +324,21 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             encoding="utf-8",
         )
 
-    def _start_tendermint_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_tendermint_process(
+        self, env: Dict, working_dir: Path
+    ) -> subprocess.Popen:
         raise NotImplementedError
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
 
-    def _start_agent_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
         """Start agent process."""
         agent_runner_log_file = (
             Path(self._work_directory).parent.parent.parent / "agent_runner.log"
         ).open("a+")
-        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
+        process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[
                 self._agent_runner_bin,
                 "-s",
@@ -363,24 +348,26 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             stdout=agent_runner_log_file,
             stderr=agent_runner_log_file,
             env=env,
-            preexec_fn=os.setpgrp,  # set process group terminate subprocess if main process terminated
+            preexec_fn=os.setpgrp,
         )
         return process
 
-    def _start_tendermint_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_tendermint_process(
+        self, env: Dict, working_dir: Path
+    ) -> subprocess.Popen:
         """Start tendermint process."""
         env = {
             **env,
         }
         env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
 
-        process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
+        process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=env,
-            preexec_fn=os.setpgrp,  # set process group terminate subprocess if main process terminated
+            preexec_fn=os.setpgrp,  # pylint: disable=subprocess-popen-preexec-fn # nosec
         )
         return process
 
@@ -389,15 +376,22 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
 
     def __init__(self, work_directory: Path) -> None:
+        """Init the runner."""
         super().__init__(work_directory)
         self._job = self.set_windows_object_job()
 
-    def set_windows_object_job(self):
-        import ctypes.wintypes
-        from ctypes import wintypes
-        kernel32 = ctypes.windll.kernel32
-        import ctypes
-        class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
+    @staticmethod
+    def set_windows_object_job() -> Any:
+        """Set windows job object to handle sub processes."""
+        from ctypes import (  # type: ignore # pylint:disable=import-outside-toplevel,reimported
+            wintypes,
+        )
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore
+
+        class JOBOBJECT_BASIC_LIMIT_INFORMATION(
+            ctypes.Structure
+        ):  # pylint: disable=missing-class-docstring
             _fields_ = [
                 ("PerProcessUserTimeLimit", wintypes.LARGE_INTEGER),
                 ("PerJobUserTimeLimit", wintypes.LARGE_INTEGER),
@@ -410,7 +404,7 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
                 ("SchedulingClass", wintypes.DWORD),
             ]
 
-        class IO_COUNTERS(ctypes.Structure):
+        class IO_COUNTERS(ctypes.Structure):  # pylint: disable=missing-class-docstring
             _fields_ = [
                 ("ReadOperationCount", ctypes.c_ulonglong),
                 ("WriteOperationCount", ctypes.c_ulonglong),
@@ -420,7 +414,9 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
                 ("OtherTransferCount", ctypes.c_ulonglong),
             ]
 
-        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
+        class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(
+            ctypes.Structure
+        ):  # pylint: disable=missing-class-docstring
             _fields_ = [
                 ("BasicLimitInformation", JOBOBJECT_BASIC_LIMIT_INFORMATION),
                 ("IoInfo", IO_COUNTERS),
@@ -430,39 +426,38 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
                 ("PeakJobMemoryUsed", ctypes.c_size_t),
             ]
 
-
         # Создаем Job Object
         job = kernel32.CreateJobObjectW(None, None)
         if not job:
-            raise ctypes.WinError()
+            raise ctypes.WinError()  # type: ignore
 
         # Настраиваем автоматическое завершение процессов при закрытии Job
         info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
-        info.BasicLimitInformation.LimitFlags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        info.BasicLimitInformation.LimitFlags = (
+            0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        )
 
         if not kernel32.SetInformationJobObject(
             job,
             9,  # JobObjectExtendedLimitInformation
             ctypes.byref(info),
-            ctypes.sizeof(info)
+            ctypes.sizeof(info),
         ):
             kernel32.CloseHandle(job)
-            raise ctypes.WinError()
+            raise ctypes.WinError()  # type: ignore
 
         return job
 
-    def assign_to_job(self, pid):
+    def assign_to_job(self, pid: int) -> None:
         """Windows-only: привязывает процесс к Job Object."""
-        import ctypes
-
-        ctypes.windll.kernel32.AssignProcessToJobObject(self._job, pid)
+        ctypes.windll.kernel32.AssignProcessToJobObject(self._job, pid)  # type: ignore
 
     @property
     def _tendermint_bin(self) -> str:
         """Return tendermint path."""
         return str(Path(os.path.dirname(sys.executable)) / "tendermint_win.exe")  # type: ignore # pylint: disable=protected-access
 
-    def _start_agent_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
         """Start agent process."""
         agent_runner_log_file = (
             Path(self._work_directory).parent.parent.parent / "agent_runner.log"
@@ -479,10 +474,12 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
-        self.assign_to_job(process._handle)
+        self.assign_to_job(process._handle)  # type: ignore # pylint: disable=protected-access
         return process
 
-    def _start_tendermint_process(self, env, working_dir) -> subprocess.Popen:
+    def _start_tendermint_process(
+        self, env: Dict, working_dir: Path
+    ) -> subprocess.Popen:
         """Start tendermint process."""
         env = {
             **env,
@@ -497,7 +494,7 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
-        self.assign_to_job(process._handle)
+        self.assign_to_job(process._handle)  # type: ignore # pylint: disable=protected-access
         return process
 
 
