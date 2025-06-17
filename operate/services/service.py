@@ -315,13 +315,18 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         tendermint_executable = str(
             shutil.which("tendermint"),
         )
+        env = {}
+        env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
         tendermint_executable = str(
             Path(os.path.dirname(sys.executable)) / "tendermint"
         )
+        tendermint_executable = "tendermint"
         if platform.system() == "Windows":
+            env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
             tendermint_executable = str(
                 Path(os.path.dirname(sys.executable)) / "tendermint.exe"
             )
+            tendermint_executable = "tendermint.exe"
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
                 tendermint_executable,

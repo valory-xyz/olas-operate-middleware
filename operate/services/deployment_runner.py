@@ -102,7 +102,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
         cmd = " ".join(args)
-        print("Runnin aea command: ", cmd, " at ", str(cwd))
+        print("Running aea command: ", cmd, " at ", str(cwd))
         p = multiprocessing.Process(
             target=self.__class__._call_aea_command,  # pylint: disable=protected-access
             args=(cwd, args),
@@ -512,6 +512,9 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
+        agent_runner_log_file = (
+            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
+        ).open("a+")
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
@@ -521,6 +524,8 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             ],  # TODO: Patch for Windows failing hash
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
+            stdout=agent_runner_log_file,
+            stderr=agent_runner_log_file,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
@@ -588,15 +593,19 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
 
     def _setup_agent(self) -> None:
         """Prepare agent."""
+        multiprocessing.set_start_method("spawn")
         self._setup_venv()
         super()._setup_agent()
         # Install agent dependencies
-        self._run_aea_command(
-            "-v",
-            "debug",
-            "install",
-            "--timeout",
-            "600",
+        self._run_cmd(
+            args=[
+                self._agent_runner_bin,
+                "-v",
+                "debug",
+                "install",
+                "--timeout",
+                "600",
+            ],
             cwd=self._work_directory / "agent",
         )
 
