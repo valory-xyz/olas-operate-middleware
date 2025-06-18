@@ -29,6 +29,7 @@ import sys  # nosec
 import time
 import typing as t
 from abc import ABC, ABCMeta, abstractmethod
+from io import TextIOWrapper
 from pathlib import Path
 from traceback import print_exc
 from typing import Any, Dict, List
@@ -98,6 +99,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
+
+    def _open_agent_runner_log_file(self) -> TextIOWrapper:
+        """Open agent_runner.log file."""
+        return (
+            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
+        ).open("w+")
 
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
@@ -335,9 +342,7 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 
     def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("a+")
+        agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[
                 self._agent_runner_bin,
@@ -459,9 +464,7 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
 
     def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("a+")
+        agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
                 self._agent_runner_bin,
@@ -512,9 +515,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
-        agent_runner_log_file = (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("a+")
+        agent_runner_log_file = self._open_agent_runner_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[
