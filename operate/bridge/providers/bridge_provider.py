@@ -22,7 +22,6 @@
 
 import copy
 import enum
-import functools
 import logging
 import time
 import typing as t
@@ -135,8 +134,7 @@ class BridgeProvider(ABC):
         - description
         - quote
         - _update_execution_status
-        - _get_approve_tx
-        - _get_bridge_tx
+        - _get_tx_builders
         - _get_explorer_link
     """
 
@@ -254,13 +252,10 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_approve_tx(self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any) -> t.Optional[t.Dict]:
-        """Get the approve transaction."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def _get_bridge_tx(self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any) -> t.Optional[t.Dict]:
-        """Get the bridge transaction."""
+    def _get_tx_builders(
+        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Callable]]:
+        """Get the sorted list of transaction builders to execute the quote."""
         raise NotImplementedError()
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
@@ -276,16 +271,9 @@ class BridgeProvider(ABC):
         from_token = bridge_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
-        txs = []
+        tx_builders = self._get_tx_builders(bridge_request)
 
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
-
-        if not txs:
+        if not tx_builders:
             return {
                 from_chain: {
                     from_address: {
@@ -299,11 +287,11 @@ class BridgeProvider(ABC):
         total_gas_fees = 0
         total_token = 0
 
-        for tx_label, tx in txs:
+        for tx_label, build_tx in tx_builders:
             self.logger.debug(
                 f"[BRIDGE PROVIDER] Processing transaction {tx_label} for bridge request {bridge_request.id}."
             )
-            self._update_with_gas_pricing(tx, from_ledger_api)
+            tx = build_tx()
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
@@ -381,14 +369,9 @@ class BridgeProvider(ABC):
                 f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
-        txs = []
+        tx_builders = self._get_tx_builders(bridge_request)
 
-        if self._get_approve_tx(bridge_request):
-            txs.append(("approve_tx", self._get_approve_tx))
-        if self._get_bridge_tx(bridge_request):
-            txs.append(("bridge_tx", self._get_bridge_tx))
-
-        if not txs:
+        if not tx_builders:
             self.logger.info(
                 f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
             )
@@ -422,9 +405,9 @@ class BridgeProvider(ABC):
             )
             tx_hashes = []
 
-            for tx_label, tx_builder in txs:
+            for tx_label, build_tx in tx_builders:
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
-                setattr(tx_settler, "build", functools.partial(tx_builder, bridge_request))
+                setattr(tx_settler, "build", build_tx)  # noqa: B010
 
                 tx_receipt = tx_settler.transact(
                     method=lambda: {},
@@ -444,7 +427,7 @@ class BridgeProvider(ABC):
                 provider_data=None,
             )
             bridge_request.execution_data = execution_data
-            if len(tx_hashes) == len(txs):
+            if len(tx_hashes) == len(tx_builders):
                 bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
             else:
                 bridge_request.execution_data.message = (
