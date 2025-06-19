@@ -484,7 +484,7 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_request.quote_data = quote_data
         bridge_request.status = BridgeRequestStatus.QUOTE_DONE
 
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest, *args, **kwargs) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         self.logger.info(
             f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
@@ -519,7 +519,7 @@ class NativeBridgeProvider(BridgeProvider):
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest, *args, **kwargs) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         self.logger.info(
             f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."

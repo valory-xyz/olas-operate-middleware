@@ -22,6 +22,7 @@
 
 import copy
 import enum
+import functools
 import logging
 import time
 import typing as t
@@ -253,12 +254,12 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         raise NotImplementedError()
 
@@ -382,12 +383,10 @@ class BridgeProvider(ABC):
 
         txs = []
 
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
+        if self._get_approve_tx(bridge_request):
+            txs.append(("approve_tx", self._get_approve_tx))
+        if self._get_bridge_tx(bridge_request):
+            txs.append(("bridge_tx", self._get_bridge_tx))
 
         if not txs:
             self.logger.info(
@@ -411,7 +410,6 @@ class BridgeProvider(ABC):
             )
             timestamp = time.time()
             chain = Chain(bridge_request.params["from"]["chain"])
-            from_address = bridge_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(bridge_request)
             tx_settler = TxSettler(
@@ -424,13 +422,10 @@ class BridgeProvider(ABC):
             )
             tx_hashes = []
 
-            for tx_label, tx in txs:
+            for tx_label, tx_builder in txs:
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
-                nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
-                tx["nonce"] = nonce  # TODO: backport to TxSettler
-                setattr(  # noqa: B010
-                    tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
-                )
+                setattr(tx_settler, "build", functools.partial(tx_builder, bridge_request))
+
                 tx_receipt = tx_settler.transact(
                     method=lambda: {},
                     contract="",

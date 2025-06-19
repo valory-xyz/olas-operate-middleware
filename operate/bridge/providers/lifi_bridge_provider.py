@@ -200,7 +200,7 @@ class LiFiBridgeProvider(BridgeProvider):
 
             time.sleep(2)
 
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest, *args, **kwargs) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         self.logger.info(
             f"[LI.FI BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
@@ -247,7 +247,7 @@ class LiFiBridgeProvider(BridgeProvider):
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest, *args, **kwargs) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         self.logger.info(
             f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
