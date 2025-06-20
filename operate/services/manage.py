@@ -2462,6 +2462,14 @@ class ServiceManager:
             ).call()
             agent_bonds += num_agent_instances * agent_bond
 
+        if service_state == OnChainState.TERMINATED_BONDED:
+            num_agent_instances = service_info[5]
+            token_bond = service_registry_token_utility.functions.getOperatorBalance(
+                master_safe,
+                service_id,
+            ).call()
+            agent_bonds += num_agent_instances * token_bond
+
         security_deposit = 0
         if (
             OnChainState.ACTIVE_REGISTRATION
