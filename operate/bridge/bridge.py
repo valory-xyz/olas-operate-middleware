@@ -39,6 +39,7 @@ from operate.bridge.providers.native_bridge_provider import (
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
+from operate.bridge.providers.relay_bridge_provider import RelayBridgeProvider
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain
 from operate.resource import LocalResource
@@ -199,6 +200,11 @@ class BridgeManager:
             )
             for bridge_id, config in NATIVE_BRIDGE_CONFIGS.items()
         }
+
+        self._native_bridge_providers["relay"] = RelayBridgeProvider(wallet_manager, "relay")
+
+
+
 
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
