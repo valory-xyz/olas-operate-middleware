@@ -227,7 +227,6 @@ class ServiceManager:
         if not service.keys:
             service.keys = [
                 self.keys_manager.get(self.keys_manager.create())
-                for _ in range(service.helper.config.number_of_agents)
             ]
             service.store()
 
@@ -267,7 +266,6 @@ class ServiceManager:
         if not service.keys:
             service.keys = [
                 self.keys_manager.get(self.keys_manager.create())
-                for _ in range(service.helper.config.number_of_agents)
             ]
             service.store()
 
@@ -437,7 +435,7 @@ class ServiceManager:
                 ocm.mint(
                     package_path=service.package_absolute_path_absolute_path,
                     agent_id=staking_params["agent_ids"][0],
-                    number_of_slots=service.helper.config.number_of_agents,
+                    number_of_slots=1,
                     cost_of_bond=(
                         staking_params["min_staking_deposit"]
                         if user_params.use_staking
@@ -709,7 +707,6 @@ class ServiceManager:
                 )
                 protocol_asset_requirements[target_staking_params["staking_token"]] = (
                     target_staking_params["min_staking_deposit"]
-                    * service.helper.config.number_of_agents
                 )
             else:
                 protocol_asset_requirements = {}
@@ -791,7 +788,7 @@ class ServiceManager:
                         sftxb.get_mint_tx_data(
                             package_path=service.package_absolute_path,
                             agent_id=agent_id,
-                            number_of_slots=service.helper.config.number_of_agents,
+                            number_of_slots=1,
                             cost_of_bond=(
                                 target_staking_params["min_staking_deposit"]
                                 if user_params.use_staking
@@ -841,7 +838,7 @@ class ServiceManager:
                     sftxb.get_mint_tx_data(
                         package_path=service.package_absolute_path,
                         agent_id=agent_id,
-                        number_of_slots=service.helper.config.number_of_agents,
+                        number_of_slots=1,
                         cost_of_bond=(
                             target_staking_params["min_staking_deposit"]
                             if user_params.use_staking
@@ -2504,7 +2501,7 @@ class ServiceManager:
         chain_config = service.chain_configs[chain]
         user_params = chain_config.chain_data.user_params
         ledger_config = chain_config.ledger_config
-        number_of_agents = service.helper.config.number_of_agents
+        number_of_agents = 1
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         service_asset_requirements: defaultdict = defaultdict(int)
