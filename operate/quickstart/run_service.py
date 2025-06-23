@@ -99,8 +99,6 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_8": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
-        "marketplace_demand_alpha_1": "mech",
-        "marketplace_demand_alpha_2": "mech",
     },
     Chain.OPTIMISTIC: {
         "optimus_alpha_2": "optimus",
@@ -111,8 +109,6 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.BASE: {
         "meme_base_alpha_2": "memeooorr",
         "marketplace_supply_alpha": "mech",
-        "marketplace_demand_alpha_1": "mech",
-        "marketplace_demand_alpha_2": "mech",
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
