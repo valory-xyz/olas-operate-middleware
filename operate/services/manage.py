@@ -225,9 +225,7 @@ class ServiceManager:
         )
 
         if not service.keys:
-            service.keys = [
-                self.keys_manager.get(self.keys_manager.create())
-            ]
+            service.keys = [self.keys_manager.get(self.keys_manager.create())]
             service.store()
 
         return service
@@ -264,9 +262,7 @@ class ServiceManager:
         )
 
         if not service.keys:
-            service.keys = [
-                self.keys_manager.get(self.keys_manager.create())
-            ]
+            service.keys = [self.keys_manager.get(self.keys_manager.create())]
             service.store()
 
         return service
@@ -705,9 +701,9 @@ class ServiceManager:
                 protocol_asset_requirements = self._compute_protocol_asset_requirements(
                     service_config_id, chain
                 )
-                protocol_asset_requirements[target_staking_params["staking_token"]] = (
-                    target_staking_params["min_staking_deposit"]
-                )
+                protocol_asset_requirements[
+                    target_staking_params["staking_token"]
+                ] = target_staking_params["min_staking_deposit"]
             else:
                 protocol_asset_requirements = {}
 
