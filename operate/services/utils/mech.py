@@ -74,9 +74,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
         mech_type
     ]
 
-    # 0.01xDAI hardcoded for price
-    # better to be configurable and part of local config
-    mech_request_price = unit_to_wei(0.01)
+    mech_request_price = unit_to_wei(float(service.env_variables.get("MECH_REQUEST_PRICE", {}).get("value", 0.01)))
     contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
