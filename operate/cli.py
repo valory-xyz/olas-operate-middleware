@@ -543,7 +543,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get Master EOA private key."""
         if operate.user_account is None:
             return JSONResponse(
-                content={"error": "Cannot retrieve private key; User account does not exist!"},
+                content={
+                    "error": "Cannot retrieve private key; User account does not exist!"
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
