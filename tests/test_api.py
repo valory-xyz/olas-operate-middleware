@@ -31,26 +31,20 @@ from operate.operate_types import LedgerType
 
 
 @pytest.fixture
-def mock_password() -> str:
-    """Fixture to provide a mock password for testing."""
-    return "test_password"
-
-
-@pytest.fixture
 def logged_in() -> bool:
     """Fixture to configure the client to be logged in."""
     return True
 
 
 @pytest.fixture
-def client(mock_password: str, logged_in: bool, tmp_path: Path) -> TestClient:
+def client(password: str, logged_in: bool, tmp_path: Path) -> TestClient:
     """Create a test client for the FastAPI app."""
     temp_dir = Path(tmp_path)
     app = create_app(home=temp_dir)
     client = TestClient(app)
     client.post(
         url="/api/account",
-        json={"password": mock_password},
+        json={"password": password},
     )
     client.post(
         url="/api/wallet",
@@ -67,13 +61,17 @@ def client(mock_password: str, logged_in: bool, tmp_path: Path) -> TestClient:
 @pytest.mark.parametrize(
     "case",
     [
-        ("test_password", True),
-        ("wrong_password", False),
+        (lambda pw: pw, True),
+        (lambda pw: "wrong" + pw, False),
+        (lambda pw: None, False),
     ],
 )
-def test_get_private_key(client: TestClient, logged_in: bool, case: Tuple) -> None:
+def test_get_private_key(
+    client: TestClient, logged_in: bool, case: Tuple, password: str
+) -> None:
     """Test the /private_key endpoint."""
-    password, should_succeed = case
+    password_modifier, should_succeed = case
+    password = password_modifier(password)
     response = client.post(
         url="/api/wallet/private_key",
         json={"password": password, "ledger_type": LedgerType.ETHEREUM},
