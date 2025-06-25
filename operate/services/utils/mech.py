@@ -74,9 +74,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
         mech_type
     ]
 
-    mech_request_price = unit_to_wei(
-        float(service.env_variables.get("MECH_REQUEST_PRICE", {}).get("value", 0.01))
-    )
+    mech_request_price = float(service.env_variables.get("MECH_REQUEST_PRICE", {}).get("value", 10000000000000000))
     contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
