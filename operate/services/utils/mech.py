@@ -26,7 +26,7 @@ from aea_ledger_ethereum import Web3
 
 from operate.constants import MECH_MARKETPLACE_JSON_URL
 from operate.operate_types import Chain
-from operate.quickstart.utils import print_section, unit_to_wei
+from operate.quickstart.utils import print_section
 from operate.services.protocol import EthSafeTxBuilder
 from operate.services.service import Service
 from operate.utils.gnosis import SafeOperation
@@ -74,7 +74,11 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
         mech_type
     ]
 
-    mech_request_price = float(service.env_variables.get("MECH_REQUEST_PRICE", {}).get("value", 10000000000000000))
+    mech_request_price = int(
+        service.env_variables.get("MECH_REQUEST_PRICE", {}).get(
+            "value", 10000000000000000
+        )
+    )
     contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
