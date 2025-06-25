@@ -108,7 +108,7 @@ IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
 DEFAULT_TOPUP_THRESHOLD = 0.5
 # At the moment, we only support running one agent per service locally on a machine.
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
-SUPPORTED_NUM_OF_AGENTS = 1
+NUM_LOCAL_AGENT_INSTANCES = 1
 
 
 class ServiceManager:
@@ -230,7 +230,7 @@ class ServiceManager:
         if not service.keys:
             service.keys = [
                 self.keys_manager.get(self.keys_manager.create())
-                for _ in range(SUPPORTED_NUM_OF_AGENTS)
+                for _ in range(NUM_LOCAL_AGENT_INSTANCES)
             ]
             service.store()
 
@@ -270,7 +270,7 @@ class ServiceManager:
         if not service.keys:
             service.keys = [
                 self.keys_manager.get(self.keys_manager.create())
-                for _ in range(SUPPORTED_NUM_OF_AGENTS)
+                for _ in range(NUM_LOCAL_AGENT_INSTANCES)
             ]
             service.store()
 
@@ -440,7 +440,7 @@ class ServiceManager:
                 ocm.mint(
                     package_path=service.package_absolute_path_absolute_path,
                     agent_id=staking_params["agent_ids"][0],
-                    number_of_slots=SUPPORTED_NUM_OF_AGENTS,
+                    number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
                     cost_of_bond=(
                         staking_params["min_staking_deposit"]
                         if user_params.use_staking
@@ -712,7 +712,7 @@ class ServiceManager:
                 )
                 protocol_asset_requirements[target_staking_params["staking_token"]] = (
                     target_staking_params["min_staking_deposit"]
-                    * SUPPORTED_NUM_OF_AGENTS
+                    * NUM_LOCAL_AGENT_INSTANCES
                 )
             else:
                 protocol_asset_requirements = {}
@@ -794,7 +794,7 @@ class ServiceManager:
                         sftxb.get_mint_tx_data(
                             package_path=service.package_absolute_path,
                             agent_id=agent_id,
-                            number_of_slots=SUPPORTED_NUM_OF_AGENTS,
+                            number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
                             cost_of_bond=(
                                 target_staking_params["min_staking_deposit"]
                                 if user_params.use_staking
@@ -844,7 +844,7 @@ class ServiceManager:
                     sftxb.get_mint_tx_data(
                         package_path=service.package_absolute_path,
                         agent_id=agent_id,
-                        number_of_slots=SUPPORTED_NUM_OF_AGENTS,
+                        number_of_slots=NUM_LOCAL_AGENT_INSTANCES,
                         cost_of_bond=(
                             target_staking_params["min_staking_deposit"]
                             if user_params.use_staking
@@ -2507,7 +2507,7 @@ class ServiceManager:
         chain_config = service.chain_configs[chain]
         user_params = chain_config.chain_data.user_params
         ledger_config = chain_config.ledger_config
-        number_of_agents = SUPPORTED_NUM_OF_AGENTS
+        number_of_agents = NUM_LOCAL_AGENT_INSTANCES
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         service_asset_requirements: defaultdict = defaultdict(int)
