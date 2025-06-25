@@ -188,8 +188,12 @@ def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
     if os.environ.get("ATTENDED", "true").lower() != "true":
         return True
-    response = input(f"{question} (yes/no): ").strip().lower()
-    return response in ["yes", "y"]
+    while True:
+        response = input(f"{question} (yes/no): ").strip().lower()
+        if response.lower() in ("yes", "y"):
+            return True
+        if response.lower() in ("no", "n"):
+            return False
 
 
 def ask_or_get_from_env(

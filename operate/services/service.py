@@ -1251,6 +1251,8 @@ class Service(LocalResource):
                 config  # type: ignore
             )
 
+            self.chain_configs[chain].ledger_config.rpc = config["rpc"]
+
         self.store()
 
     def consume_env_variables(self) -> None:

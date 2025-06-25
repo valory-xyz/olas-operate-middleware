@@ -56,6 +56,7 @@ from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
+from operate.quickstart.reset_configs import reset_configs
 from operate.quickstart.reset_password import reset_password
 from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import run_service
@@ -1172,6 +1173,20 @@ def qs_claim(
     operate = OperateApp()
     operate.setup()
     claim_staking_rewards(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-configs")
+def qs_reset_configs(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Reset configs."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    reset_configs(operate=operate, config_path=config)
 
 
 @_operate.command(name="reset-staking")
