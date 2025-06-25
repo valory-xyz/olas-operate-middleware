@@ -537,6 +537,35 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         wallet, mnemonic = manager.create(ledger_type=ledger_type)
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
 
+    @app.post("/api/wallet/private_key")
+    @with_retries
+    async def _get_private_key(request: Request) -> t.List[t.Dict]:
+        """Get Master EOA private key."""
+        if operate.user_account is None:
+            return JSONResponse(
+                content={
+                    "error": "Cannot retrieve private key; User account does not exist!"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        data = await request.json()
+        password = data.get("password")
+        error = None
+        if operate.password is None:
+            error = {"error": "You need to login before retrieving the private key"}
+        if operate.password != password:
+            error = {"error": "Password is not valid"}
+        if error is not None:
+            return JSONResponse(
+                content=error,
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
+        wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
+        return JSONResponse(content={"private_key": wallet.crypto.private_key})
+
     @app.get("/api/extended/wallet")
     @with_retries
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
