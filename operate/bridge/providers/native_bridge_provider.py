@@ -517,8 +517,8 @@ class NativeBridgeProvider(BridgeProvider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
+        self._update_with_gas_pricing(approve_tx, from_ledger_api)
+        self._update_with_gas_estimate(approve_tx, from_ledger_api)
         approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
@@ -542,8 +542,8 @@ class NativeBridgeProvider(BridgeProvider):
             from_ledger_api=from_ledger_api, bridge_request=bridge_request
         )
 
-        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        self._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        self._update_with_gas_estimate(bridge_tx, from_ledger_api)
         bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
 

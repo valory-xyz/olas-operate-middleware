@@ -201,10 +201,9 @@ class BridgeManager:
             for bridge_id, config in NATIVE_BRIDGE_CONFIGS.items()
         }
 
-        self._native_bridge_providers["relay"] = RelayBridgeProvider(wallet_manager, "relay")
-
-
-
+        self._native_bridge_providers["relay"] = RelayBridgeProvider(
+            wallet_manager, "relay"
+        )
 
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")

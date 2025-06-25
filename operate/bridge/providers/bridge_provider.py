@@ -46,6 +46,7 @@ from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
 
+# PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xC99E3c3F2A91AA972f30Ee5C93084DAd3DD40C4E"  # nosec
 PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
@@ -492,8 +493,7 @@ class BridgeProvider(ABC):
 
     # TODO backport to open aea/autonomy
     # TODO This gas pricing management should possibly be done at a lower level in the library
-    @staticmethod
-    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    def _update_with_gas_pricing(self, tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx.pop("maxFeePerGas", None)
         tx.pop("gasPrice", None)
         tx.pop("maxPriorityFeePerGas", None)
@@ -511,21 +511,28 @@ class BridgeProvider(ABC):
             raise RuntimeError("Retrieved invalid gas pricing.")
 
     # TODO backport to open aea/autonomy
-    @staticmethod
-    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    def _update_with_gas_estimate(self, tx: t.Dict, ledger_api: LedgerApi) -> None:
         original_gas = tx.get("gas", 1)
         tx["gas"] = 1
-        ledger_api.update_with_gas_estimate(tx)
 
+        self.logger.info(
+            f"[BRIDGE PROVIDER] Trying to update transaction with gas estimate ({original_gas=})."
+        )
+        ledger_api.update_with_gas_estimate(tx)
         if tx["gas"] > 1:
             return
 
         original_from = tx["from"]
         tx["from"] = PLACEHOLDER_NATIVE_TOKEN_ADDRESS
+        self.logger.warning(
+            f"[BRIDGE PROVIDER] Unable to estimate gas. Trying to estimate with placeholder {tx['from']=}."
+        )
         ledger_api.update_with_gas_estimate(tx)
         tx["from"] = original_from
-
         if tx["gas"] > 1:
             return
 
+        self.logger.warning(
+            f"[BRIDGE PROVIDER] Unable to estimate gas. Restoring {original_gas=}."
+        )
         tx["gas"] = original_gas
