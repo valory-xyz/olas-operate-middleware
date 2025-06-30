@@ -68,7 +68,7 @@ from operate.constants import (
     KEYS_JSON,
     ZERO_ADDRESS,
 )
-from operate.keys import Keys
+from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
@@ -450,7 +450,7 @@ class Deployment(LocalResource):
         builder = ServiceBuilder.from_dir(
             path=service.package_absolute_path,
             keys_file=self.path / KEYS_JSON,
-            number_of_agents=len(service.keys),
+            number_of_agents=len(service.agent_addresses),
         )
         builder.deplopyment_type = KubernetesGenerator.deployment_type
         (
@@ -493,12 +493,8 @@ class Deployment(LocalResource):
         keys_file.write_text(
             json.dumps(
                 [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
                 ],
                 indent=4,
             ),
@@ -508,7 +504,7 @@ class Deployment(LocalResource):
             builder = ServiceBuilder.from_dir(
                 path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -620,12 +616,8 @@ class Deployment(LocalResource):
         keys_file.write_text(
             json.dumps(
                 [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
                 ],
                 indent=4,
             ),
@@ -635,7 +627,7 @@ class Deployment(LocalResource):
             builder = ServiceBuilder.from_dir(
                 path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = HostDeploymentGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -754,7 +746,7 @@ class Service(LocalResource):
     service_config_id: str
     hash: str
     hash_history: t.Dict[int, str]
-    keys: Keys
+    agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
@@ -970,6 +962,8 @@ class Service(LocalResource):
                 if chain_data["chain_data"]["multisig"] == "0xm":
                     chain_data["chain_data"]["multisig"] = NON_EXISTENT_MULTISIG
 
+            data["keys"] = [key["address"] for key in data["keys"]]
+
         data["version"] = SERVICE_CONFIG_VERSION
 
         with open(path / Service._file, "w", encoding="utf-8") as file:
@@ -1031,7 +1025,7 @@ class Service(LocalResource):
 
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        keys: Keys,
+        agent_addresses: t.List[str],
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
@@ -1073,7 +1067,7 @@ class Service(LocalResource):
             name=service_template["name"],
             description=service_template["description"],
             hash=service_template["hash"],
-            keys=keys,
+            agent_addresses=agent_addresses,
             home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,

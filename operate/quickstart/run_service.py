@@ -550,7 +550,7 @@ def _ask_funds_from_requirements(
             chain_config.chain_data.multisig: "Service Safe"
             for chain_config in service.chain_configs.values()
         }
-        | {key.address: "Agent EOA" for key in service.keys}
+        | {address: "Agent EOA" for address in service.agent_addresses}
     )
 
     if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
