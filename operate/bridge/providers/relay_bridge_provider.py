@@ -199,7 +199,7 @@ class RelayBridgeProvider(BridgeProvider):
                 # This happens when 'from_address'
                 #   * does not have enough funds/ERC20,
                 #   * requires to approve an ERC20 before another transaction.
-                # Use the default 'from_address' placeholder used by Relay DApp.
+                # Call the API again using the default 'from_address' placeholder used by Relay DApp.
                 gas_missing = any(
                     "gas" not in item.get("data", {})
                     for step in response_json.get("steps", [])
@@ -358,7 +358,6 @@ class RelayBridgeProvider(BridgeProvider):
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
 
         if bridge_request.status not in (
             BridgeRequestStatus.EXECUTION_PENDING,
