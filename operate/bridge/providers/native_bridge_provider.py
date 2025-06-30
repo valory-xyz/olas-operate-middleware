@@ -25,7 +25,6 @@ import logging
 import time
 import typing as t
 from abc import ABC, abstractmethod
-from math import ceil
 
 from aea.common import JSONLike
 from aea.crypto.base import LedgerApi
@@ -37,7 +36,6 @@ from operate.bridge.providers.bridge_provider import (
     BridgeProvider,
     BridgeRequest,
     BridgeRequestStatus,
-    GAS_ESTIMATE_BUFFER,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
@@ -519,7 +517,6 @@ class NativeBridgeProvider(BridgeProvider):
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         self._update_with_gas_pricing(approve_tx, from_ledger_api)
         self._update_with_gas_estimate(approve_tx, from_ledger_api)
-        approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
     def _build_bridge_tx(
@@ -544,7 +541,6 @@ class NativeBridgeProvider(BridgeProvider):
 
         self._update_with_gas_pricing(bridge_tx, from_ledger_api)
         self._update_with_gas_estimate(bridge_tx, from_ledger_api)
-        bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
 
     def _get_tx_builders(

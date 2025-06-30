@@ -1,0 +1,457 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# ------------------------------------------------------------------------------
+#
+#   Copyright 2024 Valory AG
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# ------------------------------------------------------------------------------
+"""Relay Bridge provider."""
+
+
+import enum
+import functools
+import json
+import math
+import time
+import typing as t
+from http import HTTPStatus
+from urllib.parse import urlencode
+
+import requests
+
+from operate.bridge.providers.bridge_provider import (
+    BridgeProvider,
+    BridgeRequest,
+    BridgeRequestStatus,
+    DEFAULT_MAX_QUOTE_RETRIES,
+    MESSAGE_QUOTE_ZERO,
+    QuoteData,
+)
+from operate.operate_types import Chain
+
+
+GAS_ESTIMATE_FALLBACK_ADDRESS = "0x000000000000000000000000000000000000dEaD"
+RELAY_DEFAULT_GAS = {
+    Chain.ETHEREUM: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
+    Chain.BASE: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
+    Chain.CELO: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
+    Chain.GNOSIS: {
+        "deposit": 350_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 500_000,
+        "send": 1,
+    },
+    Chain.MODE: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 1_500_000,
+        "send": 1,
+    },
+    Chain.OPTIMISTIC: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
+}
+
+
+class RelayExecutionStatus(str, enum.Enum):
+    """Relay execution status."""
+
+    REFUND = "refund"
+    DELAYED = "delayed"
+    WAITING = "waiting"
+    FAILURE = "failure"
+    PENDING = "pending"
+    SUCCESS = "success"
+
+    def __str__(self) -> str:
+        """__str__"""
+        return self.value
+
+
+class RelayBridgeProvider(BridgeProvider):
+    """Relay bridge provider."""
+
+    def description(self) -> str:
+        """Get a human-readable description of the bridge provider."""
+        return "Relay Protocol https://www.relay.link/"
+
+    def can_handle_request(self, params: t.Dict) -> bool:
+        """Returns 'true' if the bridge can handle a request for 'params'."""
+        if not super().can_handle_request(params):
+            return False
+
+        return True
+
+    def quote(self, bridge_request: BridgeRequest) -> None:
+        """Update the request with the quote."""
+        self._validate(bridge_request)
+
+        if bridge_request.status not in (
+            BridgeRequestStatus.CREATED,
+            BridgeRequestStatus.QUOTE_DONE,
+            BridgeRequestStatus.QUOTE_FAILED,
+        ):
+            raise RuntimeError(
+                f"Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
+            )
+
+        if bridge_request.execution_data:
+            raise RuntimeError(
+                f"Cannot quote bridge request {bridge_request.id}: execution already present."
+            )
+
+        from_chain = bridge_request.params["from"]["chain"]
+        from_address = bridge_request.params["from"]["address"]
+        from_token = bridge_request.params["from"]["token"]
+        to_chain = bridge_request.params["to"]["chain"]
+        to_address = bridge_request.params["to"]["address"]
+        to_token = bridge_request.params["to"]["token"]
+        to_amount = bridge_request.params["to"]["amount"]
+
+        if to_amount == 0:
+            self.logger.info(f"[RELAY PROVIDER] {MESSAGE_QUOTE_ZERO}")
+            quote_data = QuoteData(
+                bridge_eta=0,
+                elapsed_time=0,
+                message=MESSAGE_QUOTE_ZERO,
+                provider_data=None,
+                timestamp=int(time.time()),
+            )
+            bridge_request.quote_data = quote_data
+            bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+            return
+
+        url = "https://api.relay.link/quote"
+        headers = {"Content-Type": "application/json"}
+        payload = {
+            "originChainId": Chain(from_chain).id,
+            "user": from_address,
+            "originCurrency": from_token,
+            "destinationChainId": Chain(to_chain).id,
+            "recipient": to_address,
+            "destinationCurrency": to_token,
+            "amount": to_amount,
+            "tradeType": "EXACT_OUTPUT",
+            "enableTrueExactOutput": False,
+        }
+        for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
+            start = time.time()
+            try:
+                self.logger.info(f"[RELAY PROVIDER] POST {url}")
+                self.logger.info(
+                    f"[RELAY PROVIDER] BODY {json.dumps(payload, indent=2, sort_keys=True)}"
+                )
+                response = requests.post(
+                    url=url, headers=headers, json=payload, timeout=30
+                )
+                response.raise_for_status()
+                response_json = response.json()
+
+                # Gas will be returned as 0 (unable to estimate) by the API endpoint when simulation fails.
+                # This happens when 'from_address'
+                #   * does not have enough funds/ERC20,
+                #   * requires to approve an ERC20 before another transaction.
+                # Use the default 'from_address' placeholder used by Relay DApp.
+                gas_missing = any(
+                    "gas" not in item.get("data", {})
+                    for step in response_json.get("steps", [])
+                    for item in step.get("items", [])
+                )
+
+                if gas_missing:
+                    placeholder_payload = payload.copy()
+                    placeholder_payload["user"] = GAS_ESTIMATE_FALLBACK_ADDRESS
+                    self.logger.info(f"[RELAY PROVIDER] POST {url}")
+                    self.logger.info(
+                        f"[RELAY PROVIDER] BODY {json.dumps(placeholder_payload, indent=2, sort_keys=True)}"
+                    )
+                    placeholder_response = requests.post(
+                        url=url, headers=headers, json=placeholder_payload, timeout=30
+                    )
+                    response_json_placeholder = placeholder_response.json()
+
+                    for i, step in enumerate(response_json.get("steps", [])):
+                        for j, item in enumerate(step.get("items", [])):
+                            if "gas" not in item.get("data", {}):
+                                placeholder_gas = (
+                                    response_json_placeholder.get("steps", [])[i]
+                                    .get("items", [])[j]
+                                    .get("data", {})
+                                    .get("gas")
+                                )
+                                item["data"]["gas"] = (
+                                    placeholder_gas
+                                    or RELAY_DEFAULT_GAS[Chain(from_chain)][step["id"]]
+                                )
+
+                quote_data = QuoteData(
+                    bridge_eta=math.ceil(response_json["details"]["timeEstimate"]),
+                    elapsed_time=time.time() - start,
+                    message=None,
+                    provider_data={
+                        "attempts": attempt,
+                        "response": response_json,
+                        "response_status": response.status_code,
+                    },
+                    timestamp=int(time.time()),
+                )
+                bridge_request.quote_data = quote_data
+                bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+                return
+            except requests.Timeout as e:
+                self.logger.warning(
+                    f"[RELAY PROVIDER] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    bridge_eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.GATEWAY_TIMEOUT,
+                    },
+                    timestamp=int(time.time()),
+                )
+            except requests.RequestException as e:
+                self.logger.warning(
+                    f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                response_json = response.json()
+                quote_data = QuoteData(
+                    bridge_eta=None,
+                    elapsed_time=time.time() - start,
+                    message=response_json.get("message") or str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": response_json,
+                        "response_status": getattr(
+                            response, "status_code", HTTPStatus.BAD_GATEWAY
+                        ),
+                    },
+                    timestamp=int(time.time()),
+                )
+            except Exception as e:  # pylint:disable=broad-except
+                self.logger.warning(
+                    f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                )
+                quote_data = QuoteData(
+                    bridge_eta=None,
+                    elapsed_time=time.time() - start,
+                    message=str(e),
+                    provider_data={
+                        "attempts": attempt,
+                        "response": None,
+                        "response_status": HTTPStatus.INTERNAL_SERVER_ERROR,
+                    },
+                    timestamp=int(time.time()),
+                )
+            if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
+                self.logger.error(
+                    f"[RELAY PROVIDER] Request failed after {DEFAULT_MAX_QUOTE_RETRIES} attempts."
+                )
+                bridge_request.quote_data = quote_data
+                bridge_request.status = BridgeRequestStatus.QUOTE_FAILED
+                return
+
+            time.sleep(2)
+
+    def _get_tx_builders(
+        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Callable]]:
+        """Get the sorted list of transaction builders to execute the quote."""
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            raise RuntimeError(
+                f"Cannot get transaction builders {bridge_request.id}: quote data not present."
+            )
+
+        provider_data = quote_data.provider_data
+        if not provider_data:
+            raise RuntimeError(
+                f"Cannot get transaction builders {bridge_request.id}: provider data not present."
+            )
+
+        tx_builders: t.List[t.Tuple[str, t.Callable]] = []
+
+        response = provider_data.get("response")
+        if not response:
+            return tx_builders
+
+        steps = response.get("steps", [])
+        from_ledger_api = self._from_ledger_api(bridge_request)
+
+        for step in steps:
+            for i, item in enumerate(step["items"]):
+                tx_data = item["data"].copy()
+
+                def build_tx(tx_data: t.Dict, *args: t.Any, **kwargs: t.Any) -> t.Dict:
+                    tx = tx_data
+                    tx["value"] = int(tx.get("value", 0))
+                    tx["gas"] = int(tx.get("gas", 1))
+                    tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
+                    tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
+                    tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(
+                        tx["from"]
+                    )
+                    self._update_with_gas_pricing(tx, from_ledger_api)
+                    self._update_with_gas_estimate(tx, from_ledger_api)
+                    return tx
+
+                tx_builders.append(
+                    (f"{step['id']}-{i}", functools.partial(build_tx, tx_data))
+                )
+
+        return tx_builders
+
+    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
+        """Update the execution status."""
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
+        if bridge_request.status not in (
+            BridgeRequestStatus.EXECUTION_PENDING,
+            BridgeRequestStatus.EXECUTION_UNKNOWN,
+        ):
+            return
+
+        execution_data = bridge_request.execution_data
+        if not execution_data:
+            raise RuntimeError(
+                f"Cannot update bridge request {bridge_request.id}: execution data not present."
+            )
+
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            raise RuntimeError(
+                f"Cannot update bridge request {bridge_request.id}: quote data not present."
+            )
+
+        provider_data = quote_data.provider_data
+        if not provider_data:
+            raise RuntimeError(
+                f"Cannot update bridge request {bridge_request.id}: provider data not present."
+            )
+
+        url = "https://api.relay.link/intents/status/v2"
+        headers = {"accept": "application/json"}
+        params = {
+            "requestId": provider_data.get("response", {})
+            .get("steps", [])[-1]
+            .get("requestId"),
+        }
+
+        try:
+            self.logger.info(f"[RELAY PROVIDER] GET {url}?{urlencode(params)}")
+            response = requests.get(url=url, headers=headers, params=params, timeout=30)
+            response_json = response.json()
+            relay_status = response_json.get(
+                "status", str(RelayExecutionStatus.WAITING)
+            )
+            execution_data.message = str(relay_status)
+            response.raise_for_status()
+        except Exception as e:
+            self.logger.error(
+                f"[RELAY PROVIDER] Failed to update status for request {bridge_request.id}: {e}"
+            )
+
+        if relay_status == RelayExecutionStatus.SUCCESS:
+            self.logger.info(
+                f"[RELAY PROVIDER] Execution done for {bridge_request.id}."
+            )
+            from_ledger_api = self._from_ledger_api(bridge_request)
+            from_tx_hash = response_json.get("inTxHashes", None)[-1]
+            to_ledger_api = self._to_ledger_api(bridge_request)
+
+            if response_json.get("txHashes"):
+                to_tx_hash = response_json.get("txHashes", [])[-1]
+            else:
+                to_tx_hash = response_json.get("inTxHashes", None)[-1]
+
+            execution_data.message = response_json.get("details", None)
+            execution_data.to_tx_hash = to_tx_hash
+            execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+                to_tx_hash, to_ledger_api
+            ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
+            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+        elif relay_status in (
+            RelayExecutionStatus.FAILURE,
+            RelayExecutionStatus.REFUND,
+        ):
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+        elif relay_status in (
+            RelayExecutionStatus.PENDING,
+            RelayExecutionStatus.DELAYED,
+        ):
+            bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
+        else:
+            bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
+
+    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
+        """Get the explorer link for a transaction."""
+        if not bridge_request.execution_data:
+            return None
+
+        quote_data = bridge_request.quote_data
+        if not quote_data:
+            raise RuntimeError(
+                f"Cannot get explorer link for request {bridge_request.id}: quote data not present."
+            )
+
+        provider_data = quote_data.provider_data
+        if not provider_data:
+            raise RuntimeError(
+                f"Cannot get explorer link for request {bridge_request.id}: provider data not present."
+            )
+
+        request_id = (
+            provider_data.get("response", {}).get("steps", [])[-1].get("requestId")
+        )
+        return f"https://relay.link/transaction/{request_id}"

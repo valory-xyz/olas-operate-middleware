@@ -20,7 +20,6 @@
 """Bridge provider."""
 
 
-import copy
 import enum
 import logging
 import time
@@ -28,11 +27,11 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
-from web3 import Web3
 from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
@@ -46,8 +45,10 @@ from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
 
-# PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xC99E3c3F2A91AA972f30Ee5C93084DAd3DD40C4E"  # nosec
-PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "r-"
@@ -62,6 +63,7 @@ MESSAGE_EXECUTION_FAILED_REVERTED = (
 MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
     f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
 )
+MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
 ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
 
@@ -203,14 +205,6 @@ class BridgeProvider(ABC):
 
         if not self.can_handle_request(params):
             raise ValueError("Invalid input: Cannot process bridge request.")
-
-        w3 = Web3()
-        params = copy.deepcopy(params)
-        params["from"]["address"] = w3.to_checksum_address(params["from"]["address"])
-        params["from"]["token"] = w3.to_checksum_address(params["from"]["token"])
-        params["to"]["address"] = w3.to_checksum_address(params["to"]["address"])
-        params["to"]["token"] = w3.to_checksum_address(params["to"]["token"])
-        params["to"]["amount"] = int(params["to"]["amount"])
 
         return BridgeRequest(
             params=params,
@@ -512,27 +506,26 @@ class BridgeProvider(ABC):
 
     # TODO backport to open aea/autonomy
     def _update_with_gas_estimate(self, tx: t.Dict, ledger_api: LedgerApi) -> None:
-        original_gas = tx.get("gas", 1)
-        tx["gas"] = 1
-
         self.logger.info(
-            f"[BRIDGE PROVIDER] Trying to update transaction with gas estimate ({original_gas=})."
+            f"[BRIDGE PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
         )
-        ledger_api.update_with_gas_estimate(tx)
-        if tx["gas"] > 1:
-            return
-
         original_from = tx["from"]
-        tx["from"] = PLACEHOLDER_NATIVE_TOKEN_ADDRESS
-        self.logger.warning(
-            f"[BRIDGE PROVIDER] Unable to estimate gas. Trying to estimate with placeholder {tx['from']=}."
-        )
-        ledger_api.update_with_gas_estimate(tx)
-        tx["from"] = original_from
-        if tx["gas"] > 1:
-            return
+        original_gas = tx.get("gas", 1)
 
-        self.logger.warning(
-            f"[BRIDGE PROVIDER] Unable to estimate gas. Restoring {original_gas=}."
-        )
-        tx["gas"] = original_gas
+        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+            tx["from"] = address
+            tx["gas"] = 1
+            ledger_api.update_with_gas_estimate(tx)
+            if tx["gas"] > 1:
+                self.logger.info(
+                    f"[BRIDGE PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
+                )
+                break
+
+        tx["from"] = original_from
+        if tx["gas"] == 1:
+            tx["gas"] = original_gas
+            self.logger.warning(
+                f"[BRIDGE PROVIDER] Unable to estimate gas. Restored {tx['gas']=}."
+            )
+        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

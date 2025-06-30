@@ -25,7 +25,6 @@ import functools
 import time
 import typing as t
 from http import HTTPStatus
-from math import ceil
 from urllib.parse import urlencode
 
 import requests
@@ -36,7 +35,6 @@ from operate.bridge.providers.bridge_provider import (
     BridgeRequest,
     BridgeRequestStatus,
     DEFAULT_MAX_QUOTE_RETRIES,
-    GAS_ESTIMATE_BUFFER,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
@@ -247,7 +245,6 @@ class LiFiBridgeProvider(BridgeProvider):
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         self._update_with_gas_pricing(approve_tx, from_ledger_api)
         self._update_with_gas_estimate(approve_tx, from_ledger_api)
-        approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
     def _build_bridge_tx(
@@ -355,7 +352,7 @@ class LiFiBridgeProvider(BridgeProvider):
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
-                f"[LI.FI BRIDGE] Failed to update bridge status for {bridge_request.id}: {e}"
+                f"[LI.FI BRIDGE] Failed to update status for request {bridge_request.id}: {e}"
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:
