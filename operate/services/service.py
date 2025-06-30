@@ -450,7 +450,7 @@ class Deployment(LocalResource):
         builder = ServiceBuilder.from_dir(
             path=service.package_absolute_path,
             keys_file=self.path / KEYS_JSON,
-            number_of_agents=len(service.keys),
+            number_of_agents=len(service.agent_addresses),
         )
         builder.deplopyment_type = KubernetesGenerator.deployment_type
         (
@@ -492,7 +492,10 @@ class Deployment(LocalResource):
         keys_file = self.path / KEYS_JSON
         keys_file.write_text(
             json.dumps(
-                [KeysManager().get(key).json for key in service.keys],
+                [
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
+                ],
                 indent=4,
             ),
             encoding="utf-8",
@@ -501,7 +504,7 @@ class Deployment(LocalResource):
             builder = ServiceBuilder.from_dir(
                 path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -612,7 +615,10 @@ class Deployment(LocalResource):
         keys_file = self.path / KEYS_JSON
         keys_file.write_text(
             json.dumps(
-                [KeysManager().get(key).json for key in service.keys],
+                [
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
+                ],
                 indent=4,
             ),
             encoding="utf-8",
@@ -621,7 +627,7 @@ class Deployment(LocalResource):
             builder = ServiceBuilder.from_dir(
                 path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = HostDeploymentGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -740,7 +746,7 @@ class Service(LocalResource):
     service_config_id: str
     hash: str
     hash_history: t.Dict[int, str]
-    keys: t.List[str]
+    agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
@@ -1019,7 +1025,7 @@ class Service(LocalResource):
 
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        keys: t.List[str],
+        agent_addresses: t.List[str],
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
@@ -1061,7 +1067,7 @@ class Service(LocalResource):
             name=service_template["name"],
             description=service_template["description"],
             hash=service_template["hash"],
-            keys=keys,
+            agent_addresses=agent_addresses,
             home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
