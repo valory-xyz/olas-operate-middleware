@@ -224,6 +224,33 @@ Returns a list of available wallets
 
 ---
 
+### `POST /api/wallet/private_key`
+
+Returns a the decrypted private key of Master EOA using the provided password for the given ledger type.
+
+<details>
+  <summary>Request</summary>
+
+```json
+{
+  "password": "test_password",
+  "ledger_type": "ethereum"
+}
+```
+</details>
+
+<details>
+  <summary>Response</summary>
+
+```json
+{
+  "private_key": "test_password"
+}
+```
+</details>
+
+---
+
 ### `GET /api/extended/wallet`
 
 Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes

@@ -22,6 +22,7 @@
 import json
 import logging
 import os
+import shutil
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
@@ -83,21 +84,25 @@ class KeysManager(metaclass=SingletonMeta):
     def create(self) -> str:
         """Creates new key."""
         crypto = EthereumCrypto()
-        path = self.path / crypto.address
-        if path.is_file():
-            return crypto.address
+        for path in (
+            self.path / f"{crypto.address}.bak",
+            self.path / crypto.address,
+        ):
+            if path.is_file():
+                continue
 
-        path.write_text(
-            json.dumps(
-                Key(
-                    ledger=LedgerType.ETHEREUM,
-                    address=crypto.address,
-                    private_key=crypto.private_key,
-                ).json,
-                indent=4,
-            ),
-            encoding="utf-8",
-        )
+            path.write_text(
+                json.dumps(
+                    Key(
+                        ledger=LedgerType.ETHEREUM,
+                        address=crypto.address,
+                        private_key=crypto.private_key,
+                    ).json,
+                    indent=4,
+                ),
+                encoding="utf-8",
+            )
+
         return crypto.address
 
     def delete(self, key: str) -> None:
@@ -107,17 +112,22 @@ class KeysManager(metaclass=SingletonMeta):
     @classmethod
     def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
+        migrated = False
+        backup_path = path.with_suffix(".bak")
+        if not backup_path.is_file():
+            shutil.copyfile(path, backup_path)
+            migrated = True
+
         with open(path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         old_to_new_ledgers = {0: "ethereum", 1: "solana"}
-
-        migrated = False
         if data.get("ledger") in old_to_new_ledgers:
             data["ledger"] = old_to_new_ledgers.get(data["ledger"])
             migrated = True
 
-        with open(path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2)
+        if migrated:
+            with open(path, "w", encoding="utf-8") as file:
+                json.dump(data, file, indent=2)
 
         return migrated

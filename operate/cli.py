@@ -19,6 +19,7 @@
 
 """Operate app CLI module."""
 import asyncio
+import atexit
 import logging
 import multiprocessing
 import os
@@ -55,6 +56,7 @@ from operate.migration import MigrationManager
 from operate.operate_types import Chain, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
+from operate.quickstart.reset_configs import reset_configs
 from operate.quickstart.reset_password import reset_password
 from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import run_service
@@ -324,6 +326,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # on backend app started we assume there are now started agents, so we force to pause all
     pause_all_services_on_startup()
 
+    # stop all services at  middleware exit
+    atexit.register(pause_all_services)
+
     app = FastAPI()
 
     app.add_middleware(
@@ -531,6 +536,35 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         wallet, mnemonic = manager.create(ledger_type=ledger_type)
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
+
+    @app.post("/api/wallet/private_key")
+    @with_retries
+    async def _get_private_key(request: Request) -> t.List[t.Dict]:
+        """Get Master EOA private key."""
+        if operate.user_account is None:
+            return JSONResponse(
+                content={
+                    "error": "Cannot retrieve private key; User account does not exist!"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        data = await request.json()
+        password = data.get("password")
+        error = None
+        if operate.password is None:
+            error = {"error": "You need to login before retrieving the private key"}
+        if operate.password != password:
+            error = {"error": "Password is not valid"}
+        if error is not None:
+            return JSONResponse(
+                content=error,
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
+        wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
+        return JSONResponse(content={"private_key": wallet.crypto.private_key})
 
     @app.get("/api/extended/wallet")
     @with_retries
@@ -1138,6 +1172,20 @@ def qs_claim(
     operate = OperateApp()
     operate.setup()
     claim_staking_rewards(operate=operate, config_path=config)
+
+
+@_operate.command(name="reset-configs")
+def qs_reset_configs(
+    config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
+) -> None:
+    """Reset configs."""
+    os.environ["ATTENDED"] = attended.lower()
+    operate = OperateApp()
+    operate.setup()
+    reset_configs(operate=operate, config_path=config)
 
 
 @_operate.command(name="reset-staking")

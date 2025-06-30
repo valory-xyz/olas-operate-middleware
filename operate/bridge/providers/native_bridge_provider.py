@@ -364,7 +364,7 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
 
     def get_message_id(
         self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
-    ) -> t.Optional[bytes]:
+    ) -> t.Optional[str]:
         """Get the bridge message id."""
         if not bridge_request.execution_data:
             return None
@@ -406,7 +406,9 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         message_id = self.get_message_id(from_ledger_api, bridge_request)
         if not message_id:
             return None
-        return f"https://bridge.gnosischain.com/bridge-explorer/transaction/0x{message_id.hex()}"
+        return (
+            f"https://bridge.gnosischain.com/bridge-explorer/transaction/{message_id}"
+        )
 
 
 class NativeBridgeProvider(BridgeProvider):

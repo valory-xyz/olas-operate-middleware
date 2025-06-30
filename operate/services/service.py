@@ -315,13 +315,24 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         tendermint_executable = str(
             shutil.which("tendermint"),
         )
+        env = {}
+        env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
         tendermint_executable = str(
             Path(os.path.dirname(sys.executable)) / "tendermint"
         )
+
         if platform.system() == "Windows":
+            env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
             tendermint_executable = str(
                 Path(os.path.dirname(sys.executable)) / "tendermint.exe"
             )
+
+        if not (getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")):
+            # we dont run inside pyinstaller, mean DEV mode!
+            tendermint_executable = "tendermint"
+            if platform.system() == "Windows":
+                tendermint_executable = "tendermint.exe"
+
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
                 tendermint_executable,
@@ -1239,6 +1250,8 @@ class Service(LocalResource):
             ].chain_data.user_params = OnChainUserParams.from_json(
                 config  # type: ignore
             )
+
+            self.chain_configs[chain].ledger_config.rpc = config["rpc"]
 
         self.store()
 

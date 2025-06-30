@@ -43,7 +43,7 @@ class HomeOmnibridge(Contract):
         token: str,
         recipient: str,
         value: int,
-        message_id: bytes,
+        message_id: str,
         from_block: BlockIdentifier = "earliest",
         to_block: BlockIdentifier = "latest",
     ) -> Optional[str]:
@@ -56,7 +56,7 @@ class HomeOmnibridge(Contract):
             event_signature_hash,  # TokensBridged
             "0x" + token.lower()[2:].rjust(64, "0"),  # token
             "0x" + recipient.lower()[2:].rjust(64, "0"),  # recipient
-            "0x" + message_id.hex().rjust(64, "0"),  # messageId
+            "0x" + message_id.lower()[2:].rjust(64, "0"),  # messageId
         ]
         non_indexed_types = ["uint256"]
         non_indexed_values = [
