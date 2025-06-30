@@ -100,6 +100,12 @@ ROUTES = {
         Chain.OPTIMISTIC,
         USDC[Chain.OPTIMISTIC],
     ): LIFI_PROVIDER_ID,
+    (
+        Chain.ETHEREUM,
+        USDC[Chain.ETHEREUM],
+        Chain.BASE,
+        USDC[Chain.BASE],
+    ): LIFI_PROVIDER_ID,
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): LIFI_PROVIDER_ID,
 }
 

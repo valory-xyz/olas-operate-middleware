@@ -308,6 +308,10 @@ class RelayBridgeProvider(BridgeProvider):
         self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Callable]]:
         """Get the sorted list of transaction builders to execute the quote."""
+
+        if bridge_request.params["to"]["amount"] == 0:
+            return []
+
         quote_data = bridge_request.quote_data
         if not quote_data:
             raise RuntimeError(
