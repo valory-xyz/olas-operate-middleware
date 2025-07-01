@@ -21,7 +21,6 @@
 
 
 import enum
-import functools
 import json
 import math
 import time
@@ -340,9 +339,7 @@ class RelayBridgeProvider(BridgeProvider):
                 tx["gas"] = int(tx.get("gas", 1))
                 tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
                 tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
-                tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(
-                    tx["from"]
-                )
+                tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(tx["from"])
                 BridgeProvider._update_with_gas_pricing(tx, from_ledger_api)
                 BridgeProvider._update_with_gas_estimate(tx, from_ledger_api)
                 txs.append((f"{step['id']}-{i}", tx))

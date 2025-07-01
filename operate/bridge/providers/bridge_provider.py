@@ -541,7 +541,5 @@ class BridgeProvider(ABC):
         tx["from"] = original_from
         if tx["gas"] == 1:
             tx["gas"] = original_gas
-            print(
-                f"[BRIDGE PROVIDER] Unable to estimate gas. Restored {tx['gas']=}."
-            )
+            print(f"[BRIDGE PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
         tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
