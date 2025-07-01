@@ -862,6 +862,29 @@ class TestBridgeProvider:
                 "0xb34dae5b77bd9f25add15690a4460983d1579c0c6cc45104efa3863dd3a49cc9",
                 9,
             ),
+            # RelayBridgeProvider - EXECUTION_FAILED tests
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "ethereum",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "gnosis",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 1000000000000000000,
+                    },
+                },
+                "r-bfb51822-e689-4141-8328-134f0a877fdf",
+                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+                BridgeRequestStatus.EXECUTION_UNKNOWN,
+                None,
+                0,
+            ),
             # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
             (
                 NativeBridgeProvider,
