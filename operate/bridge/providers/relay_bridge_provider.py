@@ -408,6 +408,9 @@ class RelayBridgeProvider(BridgeProvider):
                 to_tx_hash, to_ledger_api
             ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
             bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+            execution_data.provider_data = {
+                "response": response_json,
+            }
         elif relay_status in (
             RelayExecutionStatus.FAILURE,
             RelayExecutionStatus.REFUND,

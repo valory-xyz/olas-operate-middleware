@@ -845,22 +845,22 @@ class TestBridgeProvider:
                 None,
                 {
                     "from": {
-                        "chain": "ethereum",
+                        "chain": "optimistic",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
                     "to": {
-                        "chain": "gnosis",
+                        "chain": "mode",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                         "amount": 1000000000000000000,
                     },
                 },
                 "r-bfb51822-e689-4141-8328-134f0a877fdf",
-                "0x7f3a6ed034b2e295d9e4b2e4d942ef88fff0749febf69842e92f9e2007b606f4",
+                "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb",
                 BridgeRequestStatus.EXECUTION_DONE,
-                "0xb34dae5b77bd9f25add15690a4460983d1579c0c6cc45104efa3863dd3a49cc9",
-                9,
+                "0x0fb271e795c84da71e50549c390965648610aebd8560766a5fb420e0043b0518",
+                8,
             ),
             # RelayBridgeProvider - EXECUTION_FAILED tests
             (
