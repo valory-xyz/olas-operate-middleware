@@ -20,7 +20,6 @@
 """Native bridge provider."""
 
 
-import functools
 import logging
 import time
 import typing as t
@@ -483,9 +482,7 @@ class NativeBridgeProvider(BridgeProvider):
         bridge_request.quote_data = quote_data
         bridge_request.status = BridgeRequestStatus.QUOTE_DONE
 
-    def _build_approve_tx(
-        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         self.logger.info(
             f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
@@ -515,13 +512,11 @@ class NativeBridgeProvider(BridgeProvider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        self._update_with_gas_pricing(approve_tx, from_ledger_api)
-        self._update_with_gas_estimate(approve_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
         return approve_tx
 
-    def _build_bridge_tx(
-        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         self.logger.info(
             f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
@@ -539,30 +534,22 @@ class NativeBridgeProvider(BridgeProvider):
             from_ledger_api=from_ledger_api, bridge_request=bridge_request
         )
 
-        self._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        self._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
-    def _get_tx_builders(
+    def _get_txs(
         self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
-    ) -> t.List[t.Tuple[str, t.Callable]]:
-        """Get the sorted list of transaction builders to execute the quote."""
-        tx_builders: t.List[t.Tuple[str, t.Callable]] = []
-
-        # TODO optimize this, that is, determine if the builder should be returned in the array without calling it.
-        if self._build_approve_tx(bridge_request):
-            tx_builders.append(
-                (
-                    "approve_tx",
-                    functools.partial(self._build_approve_tx, bridge_request),
-                )
-            )
-        if self._build_bridge_tx(bridge_request):
-            tx_builders.append(
-                ("bridge_tx", functools.partial(self._build_bridge_tx, bridge_request))
-            )
-
-        return tx_builders
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
+        txs = []
+        approve_tx = self._get_approve_tx(bridge_request)
+        if approve_tx:
+            txs.append(("approve_tx", approve_tx))
+        bridge_tx = self._get_bridge_tx(bridge_request)
+        if bridge_tx:
+            txs.append(("bridge_tx", bridge_tx))
+        return txs
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""

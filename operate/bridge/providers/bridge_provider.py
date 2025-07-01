@@ -139,7 +139,7 @@ class BridgeProvider(ABC):
         - description
         - quote
         - _update_execution_status
-        - _get_tx_builders
+        - _get_txs
         - _get_explorer_link
     """
 
@@ -257,10 +257,10 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_tx_builders(
+    def _get_txs(
         self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
-    ) -> t.List[t.Tuple[str, t.Callable]]:
-        """Get the sorted list of transaction builders to execute the quote."""
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
@@ -276,9 +276,9 @@ class BridgeProvider(ABC):
         from_token = bridge_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
-        tx_builders = self._get_tx_builders(bridge_request)
+        txs = self._get_txs(bridge_request)
 
-        if not tx_builders:
+        if not txs:
             return {
                 from_chain: {
                     from_address: {
@@ -292,11 +292,11 @@ class BridgeProvider(ABC):
         total_gas_fees = 0
         total_token = 0
 
-        for tx_label, build_tx in tx_builders:
+        for tx_label, tx in txs:
             self.logger.debug(
                 f"[BRIDGE PROVIDER] Processing transaction {tx_label} for bridge request {bridge_request.id}."
             )
-            tx = build_tx()
+            self._update_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
@@ -374,9 +374,9 @@ class BridgeProvider(ABC):
                 f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
-        tx_builders = self._get_tx_builders(bridge_request)
+        txs = self._get_txs(bridge_request)
 
-        if not tx_builders:
+        if not txs:
             self.logger.info(
                 f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
             )
@@ -398,6 +398,7 @@ class BridgeProvider(ABC):
             )
             timestamp = time.time()
             chain = Chain(bridge_request.params["from"]["chain"])
+            from_address = bridge_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(bridge_request)
             tx_settler = TxSettler(
@@ -410,10 +411,13 @@ class BridgeProvider(ABC):
             )
             tx_hashes = []
 
-            for tx_label, build_tx in tx_builders:
+            for tx_label, tx in txs:
                 self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
-                setattr(tx_settler, "build", build_tx)  # noqa: B010
-
+                nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
+                tx["nonce"] = nonce  # TODO: backport to TxSettler
+                setattr(  # noqa: B010
+                    tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
+                )
                 tx_receipt = tx_settler.transact(
                     method=lambda: {},
                     contract="",
@@ -432,7 +436,7 @@ class BridgeProvider(ABC):
                 provider_data=None,
             )
             bridge_request.execution_data = execution_data
-            if len(tx_hashes) == len(tx_builders):
+            if len(tx_hashes) == len(txs):
                 bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
             else:
                 bridge_request.execution_data.message = (
@@ -497,7 +501,8 @@ class BridgeProvider(ABC):
 
     # TODO backport to open aea/autonomy
     # TODO This gas pricing management should possibly be done at a lower level in the library
-    def _update_with_gas_pricing(self, tx: t.Dict, ledger_api: LedgerApi) -> None:
+    @staticmethod
+    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx.pop("maxFeePerGas", None)
         tx.pop("gasPrice", None)
         tx.pop("maxPriorityFeePerGas", None)
@@ -515,8 +520,9 @@ class BridgeProvider(ABC):
             raise RuntimeError("Retrieved invalid gas pricing.")
 
     # TODO backport to open aea/autonomy
-    def _update_with_gas_estimate(self, tx: t.Dict, ledger_api: LedgerApi) -> None:
-        self.logger.info(
+    @staticmethod
+    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+        print(
             f"[BRIDGE PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
         )
         original_from = tx["from"]
@@ -527,7 +533,7 @@ class BridgeProvider(ABC):
             tx["gas"] = 1
             ledger_api.update_with_gas_estimate(tx)
             if tx["gas"] > 1:
-                self.logger.info(
+                print(
                     f"[BRIDGE PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
                 )
                 break
@@ -535,7 +541,7 @@ class BridgeProvider(ABC):
         tx["from"] = original_from
         if tx["gas"] == 1:
             tx["gas"] = original_gas
-            self.logger.warning(
+            print(
                 f"[BRIDGE PROVIDER] Unable to estimate gas. Restored {tx['gas']=}."
             )
         tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

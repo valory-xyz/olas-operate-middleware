@@ -304,10 +304,10 @@ class RelayBridgeProvider(BridgeProvider):
 
             time.sleep(2)
 
-    def _get_tx_builders(
+    def _get_txs(
         self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
-    ) -> t.List[t.Tuple[str, t.Callable]]:
-        """Get the sorted list of transaction builders to execute the quote."""
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
 
         if bridge_request.params["to"]["amount"] == 0:
             return []
@@ -324,37 +324,30 @@ class RelayBridgeProvider(BridgeProvider):
                 f"Cannot get transaction builders {bridge_request.id}: provider data not present."
             )
 
-        tx_builders: t.List[t.Tuple[str, t.Callable]] = []
+        txs: t.List[t.Tuple[str, t.Dict]] = []
 
         response = provider_data.get("response")
         if not response:
-            return tx_builders
+            return txs
 
         steps = response.get("steps", [])
         from_ledger_api = self._from_ledger_api(bridge_request)
 
         for step in steps:
             for i, item in enumerate(step["items"]):
-                tx_data = item["data"].copy()
-
-                def build_tx(tx_data: t.Dict, *args: t.Any, **kwargs: t.Any) -> t.Dict:
-                    tx = tx_data
-                    tx["value"] = int(tx.get("value", 0))
-                    tx["gas"] = int(tx.get("gas", 1))
-                    tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
-                    tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
-                    tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(
-                        tx["from"]
-                    )
-                    self._update_with_gas_pricing(tx, from_ledger_api)
-                    self._update_with_gas_estimate(tx, from_ledger_api)
-                    return tx
-
-                tx_builders.append(
-                    (f"{step['id']}-{i}", functools.partial(build_tx, tx_data))
+                tx = item["data"].copy()
+                tx["value"] = int(tx.get("value", 0))
+                tx["gas"] = int(tx.get("gas", 1))
+                tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
+                tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
+                tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(
+                    tx["from"]
                 )
+                BridgeProvider._update_with_gas_pricing(tx, from_ledger_api)
+                BridgeProvider._update_with_gas_estimate(tx, from_ledger_api)
+                txs.append((f"{step['id']}-{i}", tx))
 
-        return tx_builders
+        return txs
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
