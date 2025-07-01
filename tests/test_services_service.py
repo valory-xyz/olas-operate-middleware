@@ -341,7 +341,7 @@ def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
         "service_config_id": kwargs.get("service_config_id"),
         "hash": kwargs.get("hash"),
         "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
-        "keys": [kwargs.get("keys_address_0")],
+        "agent_addresses": [kwargs.get("keys_address_0")],
         "home_chain": "gnosis",
         "chain_configs": {
             "gnosis": {

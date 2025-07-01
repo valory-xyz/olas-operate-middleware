@@ -962,7 +962,8 @@ class Service(LocalResource):
                 if chain_data["chain_data"]["multisig"] == "0xm":
                     chain_data["chain_data"]["multisig"] = NON_EXISTENT_MULTISIG
 
-            data["keys"] = [key["address"] for key in data["keys"]]
+            data["agent_addresses"] = [key["address"] for key in data["keys"]]
+            del data["keys"]
 
         data["version"] = SERVICE_CONFIG_VERSION
 
