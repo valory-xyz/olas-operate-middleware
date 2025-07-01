@@ -317,13 +317,15 @@ class LiFiBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        if not execution_data.from_tx_hash:
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
             return
 
+        lifi_status = LiFiTransactionStatus.UNKNOWN
         url = "https://li.quest/v1/status"
         headers = {"accept": "application/json"}
         params = {
-            "txHash": execution_data.from_tx_hash,
+            "txHash": from_tx_hash,
         }
 
         try:
@@ -345,7 +347,6 @@ class LiFiBridgeProvider(BridgeProvider):
         if lifi_status == LiFiTransactionStatus.DONE:
             self.logger.info(f"[LI.FI BRIDGE] Execution done for {bridge_request.id}.")
             from_ledger_api = self._from_ledger_api(bridge_request)
-            from_tx_hash = execution_data.from_tx_hash
             to_ledger_api = self._to_ledger_api(bridge_request)
             to_tx_hash = response_json.get("receiving", {}).get("txHash")
             execution_data.message = None

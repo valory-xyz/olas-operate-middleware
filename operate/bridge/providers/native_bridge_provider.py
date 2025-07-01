@@ -561,13 +561,14 @@ class NativeBridgeProvider(BridgeProvider):
             f"[NATIVE BRIDGE] Updating execution status for bridge request {bridge_request.id}."
         )
 
-        if not bridge_request.execution_data:
+        execution_data = bridge_request.execution_data
+        if not execution_data:
             raise RuntimeError(
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        execution_data = bridge_request.execution_data
-        if not execution_data.from_tx_hash:
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
             execution_data.message = (
                 f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
@@ -580,7 +581,6 @@ class NativeBridgeProvider(BridgeProvider):
             from_ledger_api = self._from_ledger_api(bridge_request)
             from_w3 = from_ledger_api.api
 
-            from_tx_hash = execution_data.from_tx_hash
             receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             if receipt.status == 0:
                 execution_data.message = MESSAGE_EXECUTION_FAILED_REVERTED

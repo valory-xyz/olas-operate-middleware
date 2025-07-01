@@ -35,6 +35,7 @@ from operate.bridge.providers.bridge_provider import (
     BridgeRequest,
     BridgeRequestStatus,
     DEFAULT_MAX_QUOTE_RETRIES,
+    MESSAGE_EXECUTION_FAILED,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
@@ -361,34 +362,32 @@ class RelayBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        quote_data = bridge_request.quote_data
-        if not quote_data:
-            raise RuntimeError(
-                f"Cannot update bridge request {bridge_request.id}: quote data not present."
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
+            execution_data.message = (
+                f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
+            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            return
 
-        provider_data = quote_data.provider_data
-        if not provider_data:
-            raise RuntimeError(
-                f"Cannot update bridge request {bridge_request.id}: provider data not present."
-            )
-
-        url = "https://api.relay.link/intents/status/v2"
+        relay_status = RelayExecutionStatus.WAITING
+        url = "https://api.relay.link/requests/v2"
         headers = {"accept": "application/json"}
         params = {
-            "requestId": provider_data.get("response", {})
-            .get("steps", [])[-1]
-            .get("requestId"),
+            "hash": from_tx_hash,
+            "sortBy": "createdAt",
         }
 
         try:
             self.logger.info(f"[RELAY PROVIDER] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
             response_json = response.json()
-            relay_status = response_json.get(
-                "status", str(RelayExecutionStatus.WAITING)
-            )
-            execution_data.message = str(relay_status)
+            relay_requests = response_json.get("requests")
+            if relay_requests:
+                relay_status = relay_requests[0].get(
+                    "status", str(RelayExecutionStatus.WAITING)
+                )
+                execution_data.message = str(relay_status)
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
@@ -400,14 +399,8 @@ class RelayBridgeProvider(BridgeProvider):
                 f"[RELAY PROVIDER] Execution done for {bridge_request.id}."
             )
             from_ledger_api = self._from_ledger_api(bridge_request)
-            from_tx_hash = response_json.get("inTxHashes", None)[-1]
             to_ledger_api = self._to_ledger_api(bridge_request)
-
-            if response_json.get("txHashes"):
-                to_tx_hash = response_json.get("txHashes", [])[-1]
-            else:
-                to_tx_hash = response_json.get("inTxHashes", None)[-1]
-
+            to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0]["hash"]
             execution_data.message = response_json.get("details", None)
             execution_data.to_tx_hash = to_tx_hash
             execution_data.elapsed_time = BridgeProvider._tx_timestamp(
@@ -440,9 +433,7 @@ class RelayBridgeProvider(BridgeProvider):
 
         provider_data = quote_data.provider_data
         if not provider_data:
-            raise RuntimeError(
-                f"Cannot get explorer link for request {bridge_request.id}: provider data not present."
-            )
+            return None
 
         request_id = (
             provider_data.get("response", {}).get("steps", [])[-1].get("requestId")
