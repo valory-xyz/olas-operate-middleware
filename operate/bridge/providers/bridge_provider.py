@@ -20,6 +20,7 @@
 """Bridge provider."""
 
 
+import copy
 import enum
 import logging
 import time
