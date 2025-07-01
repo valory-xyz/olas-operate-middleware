@@ -336,6 +336,7 @@ class RelayBridgeProvider(BridgeProvider):
         for step in steps:
             for i, item in enumerate(step["items"]):
                 tx = item["data"].copy()
+                tx["to"] = from_ledger_api.api.to_checksum_address(tx["to"])
                 tx["value"] = int(tx.get("value", 0))
                 tx["gas"] = int(tx.get("gas", 1))
                 tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
