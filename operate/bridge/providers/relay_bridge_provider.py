@@ -43,6 +43,8 @@ from operate.operate_types import Chain
 
 
 GAS_ESTIMATE_FALLBACK_ADDRESS = "0x000000000000000000000000000000000000dEaD"
+
+# The following constants were determined empirically (+ margin) from the Relay API/Dapp.
 RELAY_DEFAULT_GAS = {
     Chain.ETHEREUM: {
         "deposit": 50_000,
@@ -122,13 +124,6 @@ class RelayBridgeProvider(BridgeProvider):
     def description(self) -> str:
         """Get a human-readable description of the bridge provider."""
         return "Relay Protocol https://www.relay.link/"
-
-    def can_handle_request(self, params: t.Dict) -> bool:
-        """Returns 'true' if the bridge can handle a request for 'params'."""
-        if not super().can_handle_request(params):
-            return False
-
-        return True
 
     def quote(self, bridge_request: BridgeRequest) -> None:
         """Update the request with the quote."""
@@ -439,7 +434,9 @@ class RelayBridgeProvider(BridgeProvider):
         if not provider_data:
             return None
 
-        request_id = (
-            provider_data.get("response", {}).get("steps", [])[-1].get("requestId")
-        )
+        steps = provider_data.get("response", {}).get("steps", [])
+        if not steps:
+            return None
+
+        request_id = steps[-1].get("requestId")
         return f"https://relay.link/transaction/{request_id}"

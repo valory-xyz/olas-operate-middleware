@@ -276,7 +276,7 @@ class BridgeManager:
                             Chain(params["to"]["chain"]),
                             params["to"]["token"],
                         ),
-                        RELAY_PROVIDER_ID
+                        RELAY_PROVIDER_ID,
                     )
 
                     bridge_requests.append(
