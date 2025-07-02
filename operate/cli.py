@@ -46,7 +46,14 @@ from uvicorn.server import Server
 from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge import BridgeManager
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
+from operate.constants import (
+    KEY,
+    KEYS,
+    MIN_PASSWORD_LENGTH,
+    OPERATE_HOME,
+    SERVICES,
+    ZERO_ADDRESS,
+)
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -407,13 +414,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is not None:
             return JSONResponse(
                 content={"error": "Account already exists"},
+                status_code=HTTPStatus.CONFLICT,
+            )
+
+        password = (await request.json()).get("password")
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        data = await request.json()
-        operate.create_user_account(
-            password=data["password"],
-        )
+        operate.create_user_account(password=password)
         return JSONResponse(content={"error": None})
 
     @app.put("/api/account")
@@ -425,7 +438,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Account does not exist."},
-                status_code=HTTPStatus.BAD_REQUEST,
+                status_code=HTTPStatus.CONFLICT,
             )
 
         data = await request.json()
@@ -445,6 +458,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )

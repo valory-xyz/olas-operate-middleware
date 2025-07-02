@@ -87,6 +87,14 @@ Create a local user account.
   }
   ```
 
+- If password is too short:
+
+  ```json
+  {
+    "error": "Password must be at least 8 characters long."
+  }
+  ```
+
 </details>
 
 ---
@@ -146,12 +154,20 @@ or
 
 - If seed phrase is valid:
 
-```json
-{
-  "error": null,
-  "message": "Password updated using seed phrase."
-}
-```
+  ```json
+  {
+    "error": null,
+    "message": "Password updated using seed phrase."
+  }
+  ```
+
+- If new password is too short:
+
+  ```json
+  {
+    "error": "Password must be at least 8 characters long."
+  }
+  ```
 
 </details>
 
