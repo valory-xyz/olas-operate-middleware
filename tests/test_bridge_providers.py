@@ -65,6 +65,53 @@ RUNNING_IN_CI = (
     or os.getenv("CI", "").lower() == "true"
 )
 
+from web3 import Web3
+
+TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+
+
+def get_transfer_amount(w3: Web3, tx_hash: str, token_address: str, recipient: str) -> int:
+    """Get the transfer amount from a transaction, including internal native transfers."""
+    token_address = Web3.to_checksum_address(token_address)
+    recipient = Web3.to_checksum_address(recipient)
+
+    if token_address == ZERO_ADDRESS:
+        tx = w3.eth.get_transaction(tx_hash)
+        # Direct external transfer
+        if tx["to"] and Web3.to_checksum_address(tx["to"]) == recipient:
+            return tx["value"]
+
+        # Fallback: look for internal transfers
+        try:
+            trace = w3.provider.make_request("debug_traceTransaction", [tx_hash])
+            logs = trace.get("result", {}).get("structLogs", [])
+            total = 0
+            for log in logs:
+                if log["op"] == "CALL" and len(log.get("stack", [])) >= 7:
+                    call_stack = log["stack"]
+                    to_address_hex = call_stack[-2][-40:]
+                    value_wei = int(call_stack[-3], 16)
+                    to_address = Web3.to_checksum_address("0x" + to_address_hex)
+                    if to_address == recipient:
+                        total += value_wei
+
+            return total
+        except Exception as e:
+            print(f"debug_traceTransaction failed: {e}")
+            return 0
+    else:
+        # ERC-20 Transfer log parsing
+        receipt = w3.eth.get_transaction_receipt(tx_hash)
+        for log in receipt["logs"]:
+            if (
+                log["address"].lower() == token_address.lower()
+                and log["topics"][0].hex().lower() == TRANSFER_TOPIC.lower()
+                and Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:]) == recipient
+            ):
+                data = log["data"]
+                value = int(data.hex(), 16) if isinstance(data, bytes) else int(data, 16)
+                return value
+        return 0
 
 class TestNativeBridge:
     """Tests for bridge.providers.NativeBridgeProvider class."""
@@ -78,6 +125,10 @@ class TestNativeBridge:
 
         DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
         DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
+        DEFAULT_RPCS[Chain.CELO] = "https://forno.celo.org"
+        DEFAULT_RPCS[Chain.GNOSIS] = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+        DEFAULT_RPCS[Chain.MODE] = "https://mainnet.mode.network"
+        DEFAULT_RPCS[Chain.OPTIMISTIC] = "https://rpc-gate.autonolas.tech/optimism-rpc/"
 
         operate = OperateApp(
             home=tmp_path / OPERATE,
@@ -787,15 +838,81 @@ class TestBridgeProvider:
                     "to": {
                         "chain": "mode",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
+                        "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
                         "amount": 1000000000000000000,
                     },
                 },
-                "r-bfb51822-e689-4141-8328-134f0a877fdf",
+                "r-c8c78cb7-dc66-47c8-9c17-0b5a22db3d2d",
                 "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb",
                 BridgeRequestStatus.EXECUTION_DONE,
                 "0x0fb271e795c84da71e50549c390965648610aebd8560766a5fb420e0043b0518",
                 8,
+            ),
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimistic",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "mode",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",
+                        "amount": 1000000,
+                    },
+                },
+                "r-18b91fc9-6e0f-4e7e-98c8-f28dfbe289ba",
+                "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d",
+                2,
+            ),
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimistic",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "gnosis",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                        "amount": 1000000000000000000,
+                    },
+                },
+                "r-c8f00ad9-82a9-45a1-b873-dd80c2da4acb",
+                "0x5c5cbbdd466b388e04c4abbf4e366a2f49235cbead0eb265c0a197fa67b03d3b",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x005307a082e68a9a71534f15ef12dbc10c32c14b2d470574eb5c72beeaabf7b3",
+                11,
+            ),
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimistic",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "gnosis",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                        "amount": 1000000,
+                    },
+                },
+                "r-7ef5ef70-6052-40a0-b0f2-a71896668f95",
+                "0x2efeb443cbef94268073b11ef33f9c60f367f553eb16008e9766248427d8244e",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x35e19e09fe527a68eea7a811f3a95b088125838cc981f4fe5836a92e826194b0",
+                7,
             ),
             # RelayBridgeProvider - EXECUTION_FAILED tests
             (
@@ -1063,6 +1180,10 @@ class TestBridgeProvider:
 
         DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
         DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
+        DEFAULT_RPCS[Chain.CELO] = "https://forno.celo.org"
+        DEFAULT_RPCS[Chain.GNOSIS] = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
+        DEFAULT_RPCS[Chain.MODE] = "https://mainnet.mode.network"
+        DEFAULT_RPCS[Chain.OPTIMISTIC] = "https://rpc-gate.autonolas.tech/optimism-rpc/"
 
         operate = OperateApp(home=tmp_path / OPERATE)
         operate.setup()
@@ -1121,3 +1242,12 @@ class TestBridgeProvider:
         assert bridge_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
+
+        if bridge_request.status == BridgeRequestStatus.EXECUTION_DONE:
+            transfer_amount = get_transfer_amount(
+                w3=Web3(Web3.HTTPProvider(DEFAULT_RPCS[Chain(params["to"]["chain"])])),
+                tx_hash=expected_to_tx_hash,
+                token_address=params["to"]["token"],
+                recipient=params["to"]["address"]
+            )
+            assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
