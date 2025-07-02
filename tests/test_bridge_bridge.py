@@ -159,7 +159,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": ZERO_ADDRESS,
-                    "amount": 0,  # 1_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
             {
@@ -172,7 +172,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
@@ -279,7 +279,7 @@ class TestBridgeManager:
                     "chain": Chain.BASE.value,
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
