@@ -21,3 +21,9 @@ d8149e9b5b7bd6a7ed7bc1039900702f1d4f287b:operate/services/manage.py:generic-api-
 467e8e64f51fb3659e5af17ba53ab587ec24fc30:operate/services/manage.py:generic-api-key:290
 64afe2ea92daafa2515c054f0e09931622d99f31:operate/services/manage.py:generic-api-key:290
 64afe2ea92daafa2515c054f0e09931622d99f31:operate/services/manage.py:generic-api-key:289
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:172
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:190
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:211
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:249
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:265
+fda440c632783bea6966c423114ba6ee42553be5:tests/test_api.py:generic-api-key:283
