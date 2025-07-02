@@ -83,21 +83,18 @@ def get_transfer_amount(
 
         # Internal native transfers
         try:
-            trace = w3.provider.make_request("debug_traceTransaction", [tx_hash])
-            logs = trace.get("result", {}).get("structLogs", [])
-
-            for log in logs:
-                if log["op"] == "CALL" and len(log.get("stack", [])) >= 7:
-                    call_stack = log["stack"]
-                    to_address_hex = call_stack[-2][-40:]
-                    value_wei = int(call_stack[-3], 16)
-                    to_address = Web3.to_checksum_address("0x" + to_address_hex)
-                    if to_address == recipient:
-                        total += value_wei
-
+            # get internal trace with internal calls
+            trace = w3.provider.make_request("trace_transaction", [tx_hash])
+            calls = trace.get("result", [])
+            for call in calls:
+                # check if call is ETH transfer to recipient
+                if call.get("type") == "call":
+                    to_addr = Web3.to_checksum_address(call["action"]["to"])
+                    value = int(call["action"].get("value", "0x0"), 16)
+                    if to_addr == recipient and value > 0:
+                        total += value
         except Exception as e:
-            print(f"debug_traceTransaction failed: {e}")
-
+            print(f"trace_transaction failed: {e}")
         return total
 
     else:
@@ -843,6 +840,28 @@ class TestBridgeProvider:
                     "to": {
                         "chain": "mode",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 100000000000000,
+                    },
+                },
+                "r-abdb69ae-5d8b-48a1-bce3-e4ab15b7063b",
+                "0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab",
+                2,
+            ),
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimistic",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "mode",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
                         "amount": 1000000000000000000,
                     },
@@ -873,6 +892,28 @@ class TestBridgeProvider:
                 "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3",
                 BridgeRequestStatus.EXECUTION_DONE,
                 "0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d",
+                2,
+            ),
+            (
+                RelayBridgeProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimistic",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "gnosis",
+                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "token": "0x0000000000000000000000000000000000000000",
+                        "amount": 100000000000000,
+                    },
+                },
+                "r-a0b5253b-02fe-4389-9fe5-a5d17acae150",
+                "0xa6b7edc1d1fae03d43ed55158a57ee26f46628b2d698aa3fe1ff47179a9c68b9",
+                BridgeRequestStatus.EXECUTION_DONE,
+                "0x38ea49248bfed5673db9a94ce6563465eeb5ca59035f9dc8e5706b33d99b1de0",
                 2,
             ),
             (
