@@ -64,28 +64,28 @@ RUNNING_IN_CI = (
     os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     or os.getenv("CI", "").lower() == "true"
 )
-
-from web3 import Web3
-
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
 
 
-def get_transfer_amount(w3: Web3, tx_hash: str, token_address: str, recipient: str) -> int:
-    """Get the transfer amount from a transaction, including internal native transfers."""
+def get_transfer_amount(
+    w3: Web3, tx_hash: str, token_address: str, recipient: str
+) -> int:
+    """Get the transfer amount from a transaction, including direct and internal native transfers."""
     token_address = Web3.to_checksum_address(token_address)
     recipient = Web3.to_checksum_address(recipient)
 
     if token_address == ZERO_ADDRESS:
+        total = 0
         tx = w3.eth.get_transaction(tx_hash)
-        # Direct external transfer
+        # Direct native transfer
         if tx["to"] and Web3.to_checksum_address(tx["to"]) == recipient:
-            return tx["value"]
+            total += tx["value"]
 
-        # Fallback: look for internal transfers
+        # Internal native transfers
         try:
             trace = w3.provider.make_request("debug_traceTransaction", [tx_hash])
             logs = trace.get("result", {}).get("structLogs", [])
-            total = 0
+
             for log in logs:
                 if log["op"] == "CALL" and len(log.get("stack", [])) >= 7:
                     call_stack = log["stack"]
@@ -95,10 +95,11 @@ def get_transfer_amount(w3: Web3, tx_hash: str, token_address: str, recipient: s
                     if to_address == recipient:
                         total += value_wei
 
-            return total
         except Exception as e:
             print(f"debug_traceTransaction failed: {e}")
-            return 0
+
+        return total
+
     else:
         # ERC-20 Transfer log parsing
         receipt = w3.eth.get_transaction_receipt(tx_hash)
@@ -106,12 +107,16 @@ def get_transfer_amount(w3: Web3, tx_hash: str, token_address: str, recipient: s
             if (
                 log["address"].lower() == token_address.lower()
                 and log["topics"][0].hex().lower() == TRANSFER_TOPIC.lower()
-                and Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:]) == recipient
+                and Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
+                == recipient
             ):
                 data = log["data"]
-                value = int(data.hex(), 16) if isinstance(data, bytes) else int(data, 16)
+                value = (
+                    int(data.hex(), 16) if isinstance(data, bytes) else int(data, 16)
+                )
                 return value
         return 0
+
 
 class TestNativeBridge:
     """Tests for bridge.providers.NativeBridgeProvider class."""
@@ -1248,6 +1253,6 @@ class TestBridgeProvider:
                 w3=Web3(Web3.HTTPProvider(DEFAULT_RPCS[Chain(params["to"]["chain"])])),
                 tx_hash=expected_to_tx_hash,
                 token_address=params["to"]["token"],
-                recipient=params["to"]["address"]
+                recipient=params["to"]["address"],
             )
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
