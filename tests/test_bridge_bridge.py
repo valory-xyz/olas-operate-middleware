@@ -496,12 +496,16 @@ class TestBridgeManager:
             expected_contract_adaptor_cls=OptimismContractAdaptor,
         )
 
-    @pytest.mark.parametrize("to_chain_enum", [Chain.GNOSIS])
+    @pytest.mark.parametrize(
+        ("to_chain_enum", "expected_provider_cls"),
+        [(Chain.GNOSIS, RelayBridgeProvider)],
+    )
     def test_correct_providers_swap_native(
         self,
         tmp_path: Path,
         password: str,
         to_chain_enum: Chain,
+        expected_provider_cls: t.Type[BridgeProvider],
     ) -> None:
         """test_correct_providers_swap_native"""
         self._main_test_correct_providers(
@@ -511,7 +515,7 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=ZERO_ADDRESS,
-            expected_provider_cls=LiFiBridgeProvider,
+            expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=None,
         )
 
