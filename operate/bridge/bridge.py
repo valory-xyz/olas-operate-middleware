@@ -95,16 +95,16 @@ NATIVE_BRIDGE_CONFIGS: t.Dict[str, t.Any] = {
 
 ROUTES = {
     (
-        Chain.ETHEREUM,
-        USDC[Chain.ETHEREUM],
-        Chain.OPTIMISTIC,
-        USDC[Chain.OPTIMISTIC],
+        Chain.ETHEREUM,  # from_chain
+        USDC[Chain.ETHEREUM],  # from_token
+        Chain.OPTIMISTIC,  # to_chain
+        USDC[Chain.OPTIMISTIC],  # to_token
     ): LIFI_PROVIDER_ID,
     (
-        Chain.ETHEREUM,
-        USDC[Chain.ETHEREUM],
-        Chain.BASE,
-        USDC[Chain.BASE],
+        Chain.ETHEREUM,  # from_chain
+        USDC[Chain.ETHEREUM],  # from_token
+        Chain.BASE,  # to_chain
+        USDC[Chain.BASE],  # to_token
     ): LIFI_PROVIDER_ID,
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
 }
