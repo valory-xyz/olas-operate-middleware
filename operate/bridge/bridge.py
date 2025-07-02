@@ -275,11 +275,9 @@ class BridgeManager:
                             params["from"]["token"],
                             Chain(params["to"]["chain"]),
                             params["to"]["token"],
-                        )
+                        ),
+                        RELAY_PROVIDER_ID
                     )
-
-                    if provider_id is None:
-                        provider_id = RELAY_PROVIDER_ID
 
                     bridge_requests.append(
                         self._bridge_providers[provider_id].create_request(
