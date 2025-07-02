@@ -161,7 +161,7 @@ or
   }
   ```
 
-- If new password is too small:
+- If new password is too short:
 
   ```json
   {
