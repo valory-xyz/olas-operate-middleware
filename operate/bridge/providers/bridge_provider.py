@@ -28,6 +28,7 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
@@ -46,7 +47,10 @@ from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
 
-PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 BRIDGE_REQUEST_PREFIX = "r-"
@@ -61,6 +65,7 @@ MESSAGE_EXECUTION_FAILED_REVERTED = (
 MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
     f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
 )
+MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
 ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
 
@@ -134,8 +139,7 @@ class BridgeProvider(ABC):
         - description
         - quote
         - _update_execution_status
-        - _get_approve_tx
-        - _get_bridge_tx
+        - _get_txs
         - _get_explorer_link
     """
 
@@ -253,13 +257,10 @@ class BridgeProvider(ABC):
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        """Get the approve transaction."""
-        raise NotImplementedError()
-
-    @abstractmethod
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        """Get the bridge transaction."""
+    def _get_txs(
+        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
     def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
@@ -275,14 +276,7 @@ class BridgeProvider(ABC):
         from_token = bridge_request.params["from"]["token"]
         from_ledger_api = self._from_ledger_api(bridge_request)
 
-        txs = []
-
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
+        txs = self._get_txs(bridge_request)
 
         if not txs:
             return {
@@ -380,14 +374,7 @@ class BridgeProvider(ABC):
                 f"Cannot execute bridge request {bridge_request.id}: execution data already present."
             )
 
-        txs = []
-
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
+        txs = self._get_txs(bridge_request)
 
         if not txs:
             self.logger.info(
@@ -535,19 +522,24 @@ class BridgeProvider(ABC):
     # TODO backport to open aea/autonomy
     @staticmethod
     def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        original_gas = tx.get("gas", 1)
-        tx["gas"] = 1
-        ledger_api.update_with_gas_estimate(tx)
-
-        if tx["gas"] > 1:
-            return
-
+        print(
+            f"[BRIDGE PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
+        )
         original_from = tx["from"]
-        tx["from"] = PLACEHOLDER_NATIVE_TOKEN_ADDRESS
-        ledger_api.update_with_gas_estimate(tx)
+        original_gas = tx.get("gas", 1)
+
+        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+            tx["from"] = address
+            tx["gas"] = 1
+            ledger_api.update_with_gas_estimate(tx)
+            if tx["gas"] > 1:
+                print(
+                    f"[BRIDGE PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
+                )
+                break
+
         tx["from"] = original_from
-
-        if tx["gas"] > 1:
-            return
-
-        tx["gas"] = original_gas
+        if tx["gas"] == 1:
+            tx["gas"] = original_gas
+            print(f"[BRIDGE PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
+        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

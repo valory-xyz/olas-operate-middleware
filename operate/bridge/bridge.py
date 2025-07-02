@@ -31,6 +31,7 @@ from typing import cast
 
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
+from web3 import Web3
 
 from operate.bridge.providers.bridge_provider import BridgeProvider, BridgeRequest
 from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
@@ -39,7 +40,9 @@ from operate.bridge.providers.native_bridge_provider import (
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
+from operate.bridge.providers.relay_bridge_provider import RelayBridgeProvider
 from operate.constants import ZERO_ADDRESS
+from operate.ledger.profiles import USDC
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
@@ -51,6 +54,8 @@ DEFAULT_BUNDLE_VALIDITY_PERIOD = 3 * 60
 EXECUTED_BUNDLES_PATH = "executed"
 BRIDGE_REQUEST_BUNDLE_PREFIX = "rb-"
 
+LIFI_PROVIDER_ID = "lifi-provider"
+RELAY_PROVIDER_ID = "relay-provider"
 
 NATIVE_BRIDGE_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
@@ -85,6 +90,23 @@ NATIVE_BRIDGE_CONFIGS: t.Dict[str, t.Any] = {
         "bridge_eta": 1800,
         "bridge_contract_adaptor_class": OmnibridgeContractAdaptor,
     },
+}
+
+
+ROUTES = {
+    (
+        Chain.ETHEREUM,  # from_chain
+        USDC[Chain.ETHEREUM],  # from_token
+        Chain.OPTIMISTIC,  # to_chain
+        USDC[Chain.OPTIMISTIC],  # to_token
+    ): LIFI_PROVIDER_ID,
+    (
+        Chain.ETHEREUM,  # from_chain
+        USDC[Chain.ETHEREUM],  # from_token
+        Chain.BASE,  # to_chain
+        USDC[Chain.BASE],  # to_token
+    ): LIFI_PROVIDER_ID,
+    (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
 }
 
 
@@ -178,14 +200,8 @@ class BridgeManager:
         self.data: BridgeManagerData = cast(
             BridgeManagerData, BridgeManagerData.load(path)
         )
-        self._fallback_bridge_provider = LiFiBridgeProvider(
-            provider_id="LiFiBridgeProvider",
-            wallet_manager=wallet_manager,
-            logger=logger,
-        )
-
         self._native_bridge_providers = {
-            bridge_id: NativeBridgeProvider(
+            provider_id: NativeBridgeProvider(
                 config["bridge_contract_adaptor_class"](
                     from_chain=config["from_chain"],
                     to_chain=config["to_chain"],
@@ -193,12 +209,25 @@ class BridgeManager:
                     to_bridge=config["to_bridge"],
                     bridge_eta=config["bridge_eta"],
                 ),
-                bridge_id,
+                provider_id,
                 wallet_manager,
                 logger,
             )
-            for bridge_id, config in NATIVE_BRIDGE_CONFIGS.items()
+            for provider_id, config in NATIVE_BRIDGE_CONFIGS.items()
         }
+
+        self._bridge_providers: t.Dict[str, BridgeProvider] = {}
+        self._bridge_providers.update(self._native_bridge_providers)
+        self._bridge_providers[LIFI_PROVIDER_ID] = LiFiBridgeProvider(
+            provider_id=LIFI_PROVIDER_ID,
+            wallet_manager=wallet_manager,
+            logger=logger,
+        )
+        self._bridge_providers[RELAY_PROVIDER_ID] = RelayBridgeProvider(
+            provider_id=RELAY_PROVIDER_ID,
+            wallet_manager=wallet_manager,
+            logger=logger,
+        )
 
     def _store_data(self) -> None:
         self.logger.info("[BRIDGE MANAGER] Storing data to file.")
@@ -240,8 +269,20 @@ class BridgeManager:
                         )
                         break
                 else:
+                    provider_id = ROUTES.get(
+                        (
+                            Chain(params["from"]["chain"]),
+                            params["from"]["token"],
+                            Chain(params["to"]["chain"]),
+                            params["to"]["token"],
+                        ),
+                        RELAY_PROVIDER_ID,
+                    )
+
                     bridge_requests.append(
-                        self._fallback_bridge_provider.create_request(params=params)
+                        self._bridge_providers[provider_id].create_request(
+                            params=params
+                        )
                     )
 
             bundle = BridgeRequestBundle(
@@ -256,6 +297,18 @@ class BridgeManager:
             self._store_data()
 
         return bundle
+
+    def _sanitize(self, requests_params: t.List) -> None:
+        """Sanitize quote requests."""
+        w3 = Web3()
+        for params in requests_params:
+            params["from"]["address"] = w3.to_checksum_address(
+                params["from"]["address"]
+            )
+            params["from"]["token"] = w3.to_checksum_address(params["from"]["token"])
+            params["to"]["address"] = w3.to_checksum_address(params["to"]["address"])
+            params["to"]["token"] = w3.to_checksum_address(params["to"]["token"])
+            params["to"]["amount"] = int(params["to"]["amount"])
 
     def _raise_if_invalid(self, requests_params: t.List) -> None:
         """Preprocess quote requests."""
@@ -279,7 +332,7 @@ class BridgeManager:
         self, requests_params: t.List[t.Dict], force_update: bool = False
     ) -> t.Dict:
         """Get bridge refill requirements."""
-
+        self._sanitize(requests_params)
         self._raise_if_invalid(requests_params)
         self.logger.info(
             f"[BRIDGE MANAGER] Quote requests count: {len(requests_params)}."
@@ -351,7 +404,7 @@ class BridgeManager:
         self.logger.info("[BRIDGE MANAGER] Executing quotes.")
 
         for request in bundle.bridge_requests:
-            bridge = self._get_bridge_provider(request)
+            bridge = self._bridge_providers[request.bridge_provider_id]
             bridge.execute(request)
             self._store_data()
 
@@ -380,7 +433,7 @@ class BridgeManager:
 
         bridge_request_status = []
         for request in bundle.bridge_requests:
-            bridge = self._get_bridge_provider(request)
+            bridge = self._bridge_providers[request.bridge_provider_id]
             bridge_request_status.append(bridge.status_json(request))
 
         updated_status = [request.status for request in bundle.bridge_requests]
@@ -393,23 +446,11 @@ class BridgeManager:
             "bridge_request_status": bridge_request_status,
         }
 
-    def _get_bridge_provider(self, request: BridgeRequest) -> BridgeProvider:
-        bridge = self._native_bridge_providers.get(request.bridge_provider_id, None)
-        if bridge:
-            return bridge
-
-        if request.bridge_provider_id == self._fallback_bridge_provider.provider_id:
-            return self._fallback_bridge_provider
-
-        raise RuntimeError(
-            f"Bridge request {request.id} does not have a valid provider."
-        )
-
     def bridge_total_requirements(self, bundle: BridgeRequestBundle) -> t.Dict:
         """Sum bridge requirements."""
         requirements = []
         for bridge_request in bundle.bridge_requests:
-            bridge = self._get_bridge_provider(bridge_request)
+            bridge = self._bridge_providers[bridge_request.bridge_provider_id]
             requirements.append(bridge.bridge_requirements(bridge_request))
 
         return merge_sum_dicts(*requirements)
@@ -417,7 +458,7 @@ class BridgeManager:
     def quote_bundle(self, bundle: BridgeRequestBundle) -> None:
         """Update the bundle with the quotes."""
         for bridge_request in bundle.bridge_requests:
-            bridge = self._get_bridge_provider(bridge_request)
+            bridge = self._bridge_providers[bridge_request.bridge_provider_id]
             bridge.quote(bridge_request)
         bundle.timestamp = int(time.time())
 

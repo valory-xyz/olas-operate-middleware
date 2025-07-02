@@ -24,7 +24,6 @@ import logging
 import time
 import typing as t
 from abc import ABC, abstractmethod
-from math import ceil
 
 from aea.common import JSONLike
 from aea.crypto.base import LedgerApi
@@ -36,7 +35,6 @@ from operate.bridge.providers.bridge_provider import (
     BridgeProvider,
     BridgeRequest,
     BridgeRequestStatus,
-    GAS_ESTIMATE_BUFFER,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
@@ -516,7 +514,6 @@ class NativeBridgeProvider(BridgeProvider):
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
         BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
-        approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
     def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
@@ -539,8 +536,20 @@ class NativeBridgeProvider(BridgeProvider):
 
         BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
         BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
-        bridge_tx["gas"] = ceil(bridge_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return bridge_tx
+
+    def _get_txs(
+        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
+        txs = []
+        approve_tx = self._get_approve_tx(bridge_request)
+        if approve_tx:
+            txs.append(("approve_tx", approve_tx))
+        bridge_tx = self._get_bridge_tx(bridge_request)
+        if bridge_tx:
+            txs.append(("bridge_tx", bridge_tx))
+        return txs
 
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
@@ -552,13 +561,14 @@ class NativeBridgeProvider(BridgeProvider):
             f"[NATIVE BRIDGE] Updating execution status for bridge request {bridge_request.id}."
         )
 
-        if not bridge_request.execution_data:
+        execution_data = bridge_request.execution_data
+        if not execution_data:
             raise RuntimeError(
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        execution_data = bridge_request.execution_data
-        if not execution_data.from_tx_hash:
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
             execution_data.message = (
                 f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
@@ -571,7 +581,6 @@ class NativeBridgeProvider(BridgeProvider):
             from_ledger_api = self._from_ledger_api(bridge_request)
             from_w3 = from_ledger_api.api
 
-            from_tx_hash = execution_data.from_tx_hash
             receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             if receipt.status == 0:
                 execution_data.message = MESSAGE_EXECUTION_FAILED_REVERTED

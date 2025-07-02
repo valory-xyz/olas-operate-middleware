@@ -24,7 +24,6 @@ import enum
 import time
 import typing as t
 from http import HTTPStatus
-from math import ceil
 from urllib.parse import urlencode
 
 import requests
@@ -35,7 +34,6 @@ from operate.bridge.providers.bridge_provider import (
     BridgeRequest,
     BridgeRequestStatus,
     DEFAULT_MAX_QUOTE_RETRIES,
-    GAS_ESTIMATE_BUFFER,
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
@@ -244,7 +242,6 @@ class LiFiBridgeProvider(BridgeProvider):
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
         BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
-        approve_tx["gas"] = ceil(approve_tx["gas"] * GAS_ESTIMATE_BUFFER)
         return approve_tx
 
     def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
@@ -292,6 +289,19 @@ class LiFiBridgeProvider(BridgeProvider):
         BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
+    def _get_txs(
+        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
+        txs = []
+        approve_tx = self._get_approve_tx(bridge_request)
+        if approve_tx:
+            txs.append(("approve_tx", approve_tx))
+        bridge_tx = self._get_bridge_tx(bridge_request)
+        if bridge_tx:
+            txs.append(("bridge_tx", bridge_tx))
+        return txs
+
     def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
         """Update the execution status."""
 
@@ -307,13 +317,15 @@ class LiFiBridgeProvider(BridgeProvider):
                 f"Cannot update bridge request {bridge_request.id}: execution data not present."
             )
 
-        if not execution_data.from_tx_hash:
+        from_tx_hash = execution_data.from_tx_hash
+        if not from_tx_hash:
             return
 
+        lifi_status = LiFiTransactionStatus.UNKNOWN
         url = "https://li.quest/v1/status"
         headers = {"accept": "application/json"}
         params = {
-            "txHash": execution_data.from_tx_hash,
+            "txHash": from_tx_hash,
         }
 
         try:
@@ -329,13 +341,12 @@ class LiFiBridgeProvider(BridgeProvider):
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
-                f"[LI.FI BRIDGE] Failed to update bridge status for {bridge_request.id}: {e}"
+                f"[LI.FI BRIDGE] Failed to update status for request {bridge_request.id}: {e}"
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:
             self.logger.info(f"[LI.FI BRIDGE] Execution done for {bridge_request.id}.")
             from_ledger_api = self._from_ledger_api(bridge_request)
-            from_tx_hash = execution_data.from_tx_hash
             to_ledger_api = self._to_ledger_api(bridge_request)
             to_tx_hash = response_json.get("receiving", {}).get("txHash")
             execution_data.message = None

@@ -35,16 +35,14 @@ from operate.bridge.providers.bridge_provider import (
     BridgeRequestStatus,
     MESSAGE_QUOTE_ZERO,
 )
-from operate.bridge.providers.lifi_bridge_provider import (
-    LIFI_DEFAULT_ETA,
-    LiFiBridgeProvider,
-)
+from operate.bridge.providers.lifi_bridge_provider import LiFiBridgeProvider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
+from operate.bridge.providers.relay_bridge_provider import RelayBridgeProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
@@ -90,9 +88,21 @@ class TestBridgeManager:
 
     @staticmethod
     @cache
-    def _get_token_price_usd(chain: str, token_address: str) -> t.Optional[float]:
+    def _get_token_price_usd(
+        chain: str, token_address: str, amount: t.Optional[int] = None
+    ) -> t.Optional[float]:
         print(f"Calling _get_token_price_usd {chain=} {token_address=}")
         chain = chain.lower()
+
+        if token_address in USDC.values():
+            decimals = 6
+            if amount is None:
+                amount = 1000000
+        else:
+            decimals = 18
+            if amount is None:
+                amount = 1000000000000000000
+
         if token_address == ZERO_ADDRESS:
             coingecko_id = COINGECKO_NATIVE_IDS.get(chain)
             if not coingecko_id:
@@ -105,7 +115,7 @@ class TestBridgeManager:
                 return None
             data = r.json()
             print(r.json())
-            return data.get(coingecko_id, {}).get("usd")
+            return data.get(coingecko_id, {}).get("usd") * amount / (10**decimals)
 
         platform_id = COINGECKO_PLATFORM_IDS.get(chain)
         if not platform_id:
@@ -119,7 +129,7 @@ class TestBridgeManager:
             return None
         data = r.json()
         print(r.json())
-        return data.get(token_address, {}).get("usd")
+        return data.get(token_address, {}).get("usd") * amount / (10**decimals)
 
     def test_bundle_zero(
         self,
@@ -149,7 +159,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": ZERO_ADDRESS,
-                    "amount": 0,  # 1_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
             {
@@ -162,7 +172,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
@@ -248,28 +258,28 @@ class TestBridgeManager:
         params = [
             {
                 "from": {
-                    "chain": "gnosis",
+                    "chain": Chain.ETHEREUM.value,
                     "address": wallet_address,
-                    "token": ZERO_ADDRESS,
+                    "token": USDC[Chain.ETHEREUM],
                 },
                 "to": {
-                    "chain": "base",
+                    "chain": Chain.OPTIMISTIC.value,
                     "address": wallet_address,
-                    "token": ZERO_ADDRESS,
+                    "token": USDC[Chain.OPTIMISTIC],
                     "amount": 1,
                 },
             },
             {
                 "from": {
-                    "chain": "gnosis",
+                    "chain": Chain.GNOSIS.value,
                     "address": wallet_address,
                     "token": OLAS[Chain.GNOSIS],
                 },
                 "to": {
-                    "chain": "base",
+                    "chain": Chain.BASE.value,
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
@@ -282,9 +292,17 @@ class TestBridgeManager:
         expected_brr = {
             "id": brr["id"],
             "balances": {
-                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                },
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
             },
-            "bridge_refill_requirements": brr["bridge_refill_requirements"],
+            "bridge_refill_requirements": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                },
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
+            },
             "bridge_request_status": [
                 {
                     "eta": None,
@@ -394,20 +412,12 @@ class TestBridgeManager:
         assert bundle is not None, "Unexpected bundle."
 
         request = bundle.bridge_requests[0]
-        bridge = bridge_manager._get_bridge_provider(request)
-        assert bridge._get_approve_tx(request) is None, "Wrong number of transactions."
-        assert (
-            bridge._get_bridge_tx(request) is not None
-        ), "Wrong number of transactions."
+        bridge = bridge_manager._bridge_providers[request.bridge_provider_id]
+        assert len(bridge._get_txs(request)) == 1, "Wrong number of transactions."
 
         request = bundle.bridge_requests[1]
-        bridge = bridge_manager._get_bridge_provider(request)
-        assert (
-            bridge._get_approve_tx(request) is not None
-        ), "Wrong number of transactions."
-        assert (
-            bridge._get_approve_tx(request) is not None
-        ), "Wrong number of transactions."
+        bridge = bridge_manager._bridge_providers[request.bridge_provider_id]
+        assert len(bridge._get_txs(request)) == 2, "Wrong number of transactions."
 
         expected_brr = {
             "id": brr["id"],
@@ -417,12 +427,12 @@ class TestBridgeManager:
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
-                    "eta": LIFI_DEFAULT_ETA,
+                    "eta": brr["bridge_request_status"][0]["eta"],
                     "message": None,
                     "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
                 {
-                    "eta": LIFI_DEFAULT_ETA,
+                    "eta": brr["bridge_request_status"][1]["eta"],
                     "message": None,
                     "status": BridgeRequestStatus.QUOTE_DONE.value,
                 },
@@ -486,12 +496,16 @@ class TestBridgeManager:
             expected_contract_adaptor_cls=OptimismContractAdaptor,
         )
 
-    @pytest.mark.parametrize("to_chain_enum", [Chain.GNOSIS])
+    @pytest.mark.parametrize(
+        ("to_chain_enum", "expected_provider_cls"),
+        [(Chain.GNOSIS, RelayBridgeProvider)],
+    )
     def test_correct_providers_swap_native(
         self,
         tmp_path: Path,
         password: str,
         to_chain_enum: Chain,
+        expected_provider_cls: t.Type[BridgeProvider],
     ) -> None:
         """test_correct_providers_swap_native"""
         self._main_test_correct_providers(
@@ -501,7 +515,7 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=ZERO_ADDRESS,
-            expected_provider_cls=LiFiBridgeProvider,
+            expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=None,
         )
 
@@ -563,7 +577,7 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=token_dict[to_chain_enum],
-            expected_provider_cls=LiFiBridgeProvider,
+            expected_provider_cls=RelayBridgeProvider,
             expected_contract_adaptor_cls=None,
         )
 
@@ -633,8 +647,8 @@ class TestBridgeManager:
         bundle = bridge_manager.data.last_requested_bundle
         assert bundle is not None, "Wrong bundle."
         assert len(bundle.bridge_requests) == 1, "Wrong bundle."
-        bridge_request = bundle.bridge_requests[0]
-        bridge = bridge_manager._get_bridge_provider(bridge_request)
+        request = bundle.bridge_requests[0]
+        bridge = bridge_manager._bridge_providers[request.bridge_provider_id]
 
         assert isinstance(
             bridge, expected_provider_cls
