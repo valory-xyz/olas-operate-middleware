@@ -44,7 +44,6 @@ from operate.bridge.providers.bridge_provider import (
     MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
-from operate.bridge.providers.lifi_bridge_provider import LIFI_DEFAULT_ETA
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -65,415 +64,6 @@ RUNNING_IN_CI = (
     os.getenv("GITHUB_ACTIONS", "").lower() == "true"
     or os.getenv("CI", "").lower() == "true"
 )
-
-
-class TestLiFiBridge:
-    """Tests for bridge.providers.LiFiBridgeProvider class."""
-
-    def test_bridge_zero(
-        self,
-        tmp_path: Path,
-        password: str,
-    ) -> None:
-        """test_bridge_zero"""
-        operate = OperateApp(
-            home=tmp_path / OPERATE,
-        )
-        operate.setup()
-        operate.create_user_account(password=password)
-        operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
-        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
-        params = {
-            "from": {
-                "chain": "gnosis",
-                "address": wallet_address,
-                "token": OLAS[Chain.GNOSIS],
-            },
-            "to": {
-                "chain": "base",
-                "address": wallet_address,
-                "token": OLAS[Chain.BASE],
-                "amount": 0,
-            },
-        }
-
-        bridge = LiFiBridgeProvider(
-            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
-        )
-        bridge_request = BridgeRequest(
-            params=params,
-            id="test-id",
-            bridge_provider_id=bridge.provider_id,
-            quote_data=None,
-            execution_data=None,
-            status=BridgeRequestStatus.CREATED,
-        )
-
-        assert not bridge_request.quote_data, "Unexpected quote data."
-
-        with pytest.raises(RuntimeError):
-            bridge.execute(bridge_request)
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
-        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
-
-        for _ in range(2):
-            timestamp = int(time.time())
-            bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.bridge_eta == 0, "Wrong quote data."
-            assert qd.elapsed_time == 0, "Wrong quote data."
-            assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-            assert qd.provider_data is None, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
-            ), "Wrong status."
-
-        sj = bridge.status_json(bridge_request)
-        expected_sj = {
-            "eta": 0,
-            "message": MESSAGE_QUOTE_ZERO,
-            "status": BridgeRequestStatus.QUOTE_DONE.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-        assert bridge_request.quote_data is not None, "Missing quote data."
-
-        br = bridge.bridge_requirements(bridge_request)
-        expected_br = {
-            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
-        }
-        diff = DeepDiff(br, expected_br)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong bridge requirements."
-
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.bridge_eta == 0, "Wrong quote data."
-        assert qd.elapsed_time == 0, "Wrong quote data."
-        assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
-        assert qd.provider_data is None, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-
-        timestamp = int(time.time())
-        bridge.execute(bridge_request=bridge_request)
-        ed = bridge_request.execution_data
-        assert ed is not None, "Missing execution data."
-        assert ed.elapsed_time == 0, "Wrong execution data."
-        assert ed.message is not None, "Wrong execution data."
-        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
-        assert timestamp <= ed.timestamp, "Wrong quote data."
-        assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.from_tx_hash is None, "Wrong execution data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong status."
-
-        bridge._update_execution_status(bridge_request)
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
-        ), "Wrong status."
-
-        sj = bridge.status_json(bridge_request)
-        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
-        expected_sj = {
-            "eta": 0,
-            "explorer_link": sj["explorer_link"],
-            "tx_hash": None,  # type: ignore
-            "message": sj["message"],
-            "status": BridgeRequestStatus.EXECUTION_DONE.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-
-    def test_bridge_error(
-        self,
-        tmp_path: Path,
-        password: str,
-    ) -> None:
-        """test_bridge_error"""
-        operate = OperateApp(
-            home=tmp_path / OPERATE,
-        )
-        operate.setup()
-        operate.create_user_account(password=password)
-        operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
-        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
-        params = {
-            "from": {
-                "chain": "gnosis",
-                "address": wallet_address,
-                "token": OLAS[Chain.GNOSIS],
-            },
-            "to": {
-                "chain": "base",
-                "address": wallet_address,
-                "token": OLAS[Chain.BASE],
-                "amount": 1,  # This will cause a quote error
-            },
-        }
-
-        bridge = LiFiBridgeProvider(
-            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
-        )
-        bridge_request = BridgeRequest(
-            params=params,
-            id="test-id",
-            bridge_provider_id=bridge.provider_id,
-            quote_data=None,
-            execution_data=None,
-            status=BridgeRequestStatus.CREATED,
-        )
-
-        assert not bridge_request.quote_data, "Unexpected quote data."
-
-        with pytest.raises(RuntimeError):
-            bridge.execute(bridge_request)
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
-        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
-
-        for _ in range(2):
-            timestamp = int(time.time())
-            bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.bridge_eta is None, "Wrong quote data."
-            assert qd.elapsed_time > 0, "Wrong quote data."
-            assert qd.message is not None, "Wrong quote data."
-            assert qd.provider_data is not None, "Wrong quote data."
-            assert qd.provider_data.get("response") is not None, "Wrong quote data."
-            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
-            ), "Wrong status."
-
-        assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.status_json(bridge_request)
-        expected_sj = {
-            "eta": None,
-            "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_FAILED.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-
-        br = bridge.bridge_requirements(bridge_request)
-        expected_br = {
-            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
-        }
-        diff = DeepDiff(br, expected_br)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong bridge requirements."
-
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.bridge_eta is None, "Wrong quote data."
-        assert qd.elapsed_time > 0, "Wrong quote data."
-        assert qd.message is not None, "Wrong quote data."
-        assert qd.provider_data is not None, "Wrong quote data."
-        assert qd.provider_data.get("response") is not None, "Wrong quote data."
-        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
-        ), "Wrong status."
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
-
-        timestamp = int(time.time())
-        bridge.execute(bridge_request=bridge_request)
-        ed = bridge_request.execution_data
-        assert ed is not None, "Missing execution data."
-        assert ed.elapsed_time == 0, "Wrong execution data."
-        assert ed.message is not None, "Wrong execution data."
-        assert (
-            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in ed.message
-        ), "Wrong execution data."
-        assert timestamp <= ed.timestamp, "Wrong quote data."
-        assert ed.timestamp <= int(time.time()), "Wrong quote data."
-        assert ed.from_tx_hash is None, "Wrong execution data."
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
-        ), "Wrong status."
-
-        bridge._update_execution_status(bridge_request)
-        assert (
-            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
-        ), "Wrong status."
-
-        sj = bridge.status_json(bridge_request)
-        assert (
-            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in sj["message"]
-        ), "Wrong execution data."
-        expected_sj = {
-            "eta": None,
-            "explorer_link": None,
-            "tx_hash": None,
-            "message": sj["message"],
-            "status": BridgeRequestStatus.EXECUTION_FAILED.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
-    def test_bridge_quote(
-        self,
-        tmp_path: Path,
-        password: str,
-    ) -> None:
-        """test_bridge_quote"""
-        operate = OperateApp(
-            home=tmp_path / OPERATE,
-        )
-        operate.setup()
-        operate.create_user_account(password=password)
-        operate.password = password
-        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
-        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
-        params = {
-            "from": {
-                "chain": Chain.ETHEREUM.value,
-                "address": wallet_address,
-                "token": ZERO_ADDRESS,
-            },
-            "to": {
-                "chain": "base",
-                "address": wallet_address,
-                "token": OLAS[Chain.BASE],
-                "amount": 1_000_000_000_000_000_000,
-            },
-        }
-
-        bridge = LiFiBridgeProvider(
-            provider_id="LiFiBridgeProvider", wallet_manager=operate.wallet_manager
-        )
-        bridge_request = BridgeRequest(
-            params=params,
-            id="test-id",
-            bridge_provider_id=bridge.provider_id,
-            quote_data=None,
-            execution_data=None,
-            status=BridgeRequestStatus.CREATED,
-        )
-
-        assert not bridge_request.quote_data, "Unexpected quote data."
-
-        with pytest.raises(RuntimeError):
-            bridge.execute(bridge_request)
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
-        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
-
-        for _ in range(2):
-            timestamp = int(time.time())
-            bridge.quote(bridge_request=bridge_request)
-            qd = bridge_request.quote_data
-            assert qd is not None, "Missing quote data."
-            assert qd.bridge_eta == LIFI_DEFAULT_ETA, "Wrong quote data."
-            assert qd.elapsed_time > 0, "Wrong quote data."
-            assert qd.message is None, "Wrong quote data."
-            assert qd.provider_data is not None, "Wrong quote data."
-            assert qd.provider_data.get("response") is not None, "Wrong quote data."
-            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
-            assert timestamp <= qd.timestamp, "Wrong quote data."
-            assert qd.timestamp <= int(time.time()), "Wrong quote data."
-            assert (
-                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
-            ), "Wrong status."
-
-        assert bridge_request.quote_data is not None, "Wrong quote data."
-        sj = bridge.status_json(bridge_request)
-        expected_sj = {
-            "eta": LIFI_DEFAULT_ETA,
-            "message": bridge_request.quote_data.message,
-            "status": BridgeRequestStatus.QUOTE_DONE.value,
-        }
-        diff = DeepDiff(sj, expected_sj)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong status."
-        assert (
-            bridge_request.quote_data.provider_data is not None
-        ), "Missing quote data."
-
-        br = bridge.bridge_requirements(bridge_request)
-        expected_br = {
-            "ethereum": {
-                wallet_address: {
-                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                }
-            }
-        }
-        diff = DeepDiff(br, expected_br)
-        if diff:
-            print(diff)
-
-        assert not diff, "Wrong bridge requirements."
-
-        qd = bridge_request.quote_data
-        assert qd is not None, "Missing quote data."
-        assert qd.bridge_eta == LIFI_DEFAULT_ETA, "Wrong quote data."
-        assert qd.elapsed_time > 0, "Wrong quote data."
-        assert qd.message is None, "Wrong quote data."
-        assert qd.provider_data is not None, "Wrong quote data."
-        assert qd.provider_data.get("response") is not None, "Wrong quote data."
-        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
-        assert qd.timestamp <= int(time.time()), "Wrong quote data."
-        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-
-        status1 = bridge_request.status
-        bridge._update_execution_status(bridge_request)
-        status2 = bridge_request.status
-        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
-        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
 
 class TestNativeBridge:
@@ -826,6 +416,435 @@ class TestNativeBridge:
 
 class TestBridgeProvider:
     """Tests for bridge.providers.BridgeProvider class."""
+
+    @pytest.mark.parametrize(
+        "bridge_provider_class",
+        [
+            RelayBridgeProvider,
+            LiFiBridgeProvider,
+        ],
+    )
+    def test_bridge_zero(
+        self,
+        tmp_path: Path,
+        password: str,
+        bridge_provider_class: t.Type[BridgeProvider],
+    ) -> None:
+        """test_bridge_zero"""
+        operate = OperateApp(
+            home=tmp_path / OPERATE,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params = {
+            "from": {
+                "chain": "gnosis",
+                "address": wallet_address,
+                "token": OLAS[Chain.GNOSIS],
+            },
+            "to": {
+                "chain": "base",
+                "address": wallet_address,
+                "token": OLAS[Chain.BASE],
+                "amount": 0,
+            },
+        }
+
+        bridge = bridge_provider_class(
+            provider_id="test-provider", wallet_manager=operate.wallet_manager
+        )
+        bridge_request = BridgeRequest(
+            params=params,
+            id="test-id",
+            bridge_provider_id=bridge.provider_id,
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
+
+        assert not bridge_request.quote_data, "Unexpected quote data."
+
+        with pytest.raises(RuntimeError):
+            bridge.execute(bridge_request)
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
+
+        for _ in range(2):
+            timestamp = int(time.time())
+            bridge.quote(bridge_request=bridge_request)
+            qd = bridge_request.quote_data
+            assert qd is not None, "Missing quote data."
+            assert qd.bridge_eta == 0, "Wrong quote data."
+            assert qd.elapsed_time == 0, "Wrong quote data."
+            assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
+            assert qd.provider_data is None, "Wrong quote data."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
+            ), "Wrong status."
+
+        sj = bridge.status_json(bridge_request)
+        expected_sj = {
+            "eta": 0,
+            "message": MESSAGE_QUOTE_ZERO,
+            "status": BridgeRequestStatus.QUOTE_DONE.value,
+        }
+        diff = DeepDiff(sj, expected_sj)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong status."
+        assert bridge_request.quote_data is not None, "Missing quote data."
+
+        br = bridge.bridge_requirements(bridge_request)
+        expected_br = {
+            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
+        }
+        diff = DeepDiff(br, expected_br)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong bridge requirements."
+
+        qd = bridge_request.quote_data
+        assert qd is not None, "Missing quote data."
+        assert qd.bridge_eta == 0, "Wrong quote data."
+        assert qd.elapsed_time == 0, "Wrong quote data."
+        assert qd.message == MESSAGE_QUOTE_ZERO, "Wrong quote data."
+        assert qd.provider_data is None, "Wrong quote data."
+        assert qd.timestamp <= int(time.time()), "Wrong quote data."
+        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+
+        timestamp = int(time.time())
+        bridge.execute(bridge_request=bridge_request)
+        ed = bridge_request.execution_data
+        assert ed is not None, "Missing execution data."
+        assert ed.elapsed_time == 0, "Wrong execution data."
+        assert ed.message is not None, "Wrong execution data."
+        assert MESSAGE_EXECUTION_SKIPPED in ed.message, "Wrong execution data."
+        assert timestamp <= ed.timestamp, "Wrong quote data."
+        assert ed.timestamp <= int(time.time()), "Wrong quote data."
+        assert ed.from_tx_hash is None, "Wrong execution data."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong status."
+
+        bridge._update_execution_status(bridge_request)
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_DONE
+        ), "Wrong status."
+
+        sj = bridge.status_json(bridge_request)
+        assert MESSAGE_EXECUTION_SKIPPED in sj["message"], "Wrong execution data."
+        expected_sj = {
+            "eta": 0,
+            "explorer_link": sj["explorer_link"],
+            "tx_hash": None,  # type: ignore
+            "message": sj["message"],
+            "status": BridgeRequestStatus.EXECUTION_DONE.value,
+        }
+        diff = DeepDiff(sj, expected_sj)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong status."
+
+    @pytest.mark.parametrize(
+        "bridge_provider_class",
+        [
+            RelayBridgeProvider,
+            LiFiBridgeProvider,
+        ],
+    )
+    def test_bridge_error(
+        self,
+        tmp_path: Path,
+        password: str,
+        bridge_provider_class: t.Type[BridgeProvider],
+    ) -> None:
+        """test_bridge_error"""
+        operate = OperateApp(
+            home=tmp_path / OPERATE,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params = {
+            "from": {
+                "chain": "gnosis",
+                "address": wallet_address,
+                "token": OLAS[Chain.GNOSIS],
+            },
+            "to": {
+                "chain": "base",
+                "address": wallet_address,
+                "token": OLAS[Chain.BASE],
+                "amount": 1,  # This will cause a quote error
+            },
+        }
+
+        bridge = bridge_provider_class(
+            provider_id="test-provider", wallet_manager=operate.wallet_manager
+        )
+        bridge_request = BridgeRequest(
+            params=params,
+            id="test-id",
+            bridge_provider_id=bridge.provider_id,
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
+
+        assert not bridge_request.quote_data, "Unexpected quote data."
+
+        with pytest.raises(RuntimeError):
+            bridge.execute(bridge_request)
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
+
+        for _ in range(2):
+            timestamp = int(time.time())
+            bridge.quote(bridge_request=bridge_request)
+            qd = bridge_request.quote_data
+            assert qd is not None, "Missing quote data."
+            assert qd.bridge_eta is None, "Wrong quote data."
+            assert qd.elapsed_time > 0, "Wrong quote data."
+            assert qd.message is not None, "Wrong quote data."
+            assert qd.provider_data is not None, "Wrong quote data."
+            assert qd.provider_data.get("response") is not None, "Wrong quote data."
+            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
+            ), "Wrong status."
+
+        assert bridge_request.quote_data is not None, "Wrong quote data."
+        sj = bridge.status_json(bridge_request)
+        expected_sj = {
+            "eta": None,
+            "message": bridge_request.quote_data.message,
+            "status": BridgeRequestStatus.QUOTE_FAILED.value,
+        }
+        diff = DeepDiff(sj, expected_sj)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong status."
+
+        br = bridge.bridge_requirements(bridge_request)
+        expected_br = {
+            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
+        }
+        diff = DeepDiff(br, expected_br)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong bridge requirements."
+
+        qd = bridge_request.quote_data
+        assert qd is not None, "Missing quote data."
+        assert qd.bridge_eta is None, "Wrong quote data."
+        assert qd.elapsed_time > 0, "Wrong quote data."
+        assert qd.message is not None, "Wrong quote data."
+        assert qd.provider_data is not None, "Wrong quote data."
+        assert qd.provider_data.get("response") is not None, "Wrong quote data."
+        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
+        assert qd.timestamp <= int(time.time()), "Wrong quote data."
+        assert (
+            bridge_request.status == BridgeRequestStatus.QUOTE_FAILED
+        ), "Wrong status."
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_FAILED, "Wrong status."
+
+        timestamp = int(time.time())
+        bridge.execute(bridge_request=bridge_request)
+        ed = bridge_request.execution_data
+        assert ed is not None, "Missing execution data."
+        assert ed.elapsed_time == 0, "Wrong execution data."
+        assert ed.message is not None, "Wrong execution data."
+        assert (
+            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in ed.message
+        ), "Wrong execution data."
+        assert timestamp <= ed.timestamp, "Wrong quote data."
+        assert ed.timestamp <= int(time.time()), "Wrong quote data."
+        assert ed.from_tx_hash is None, "Wrong execution data."
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
+        ), "Wrong status."
+
+        bridge._update_execution_status(bridge_request)
+        assert (
+            bridge_request.status == BridgeRequestStatus.EXECUTION_FAILED
+        ), "Wrong status."
+
+        sj = bridge.status_json(bridge_request)
+        assert (
+            MESSAGE_EXECUTION_FAILED_QUOTE_FAILED in sj["message"]
+        ), "Wrong execution data."
+        expected_sj = {
+            "eta": None,
+            "explorer_link": None,
+            "tx_hash": None,
+            "message": sj["message"],
+            "status": BridgeRequestStatus.EXECUTION_FAILED.value,
+        }
+        diff = DeepDiff(sj, expected_sj)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong status."
+
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
+    @pytest.mark.parametrize(
+        "bridge_provider_class",
+        [
+            RelayBridgeProvider,
+            LiFiBridgeProvider,
+        ],
+    )
+    def test_bridge_quote(
+        self,
+        tmp_path: Path,
+        password: str,
+        bridge_provider_class: t.Type[BridgeProvider],
+    ) -> None:
+        """test_bridge_quote"""
+        operate = OperateApp(
+            home=tmp_path / OPERATE,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
+
+        wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
+        params = {
+            "from": {
+                "chain": Chain.ETHEREUM.value,
+                "address": wallet_address,
+                "token": ZERO_ADDRESS,
+            },
+            "to": {
+                "chain": "base",
+                "address": wallet_address,
+                "token": OLAS[Chain.BASE],
+                "amount": 1_000_000_000_000_000_000,
+            },
+        }
+
+        bridge = bridge_provider_class(
+            provider_id="test-provider", wallet_manager=operate.wallet_manager
+        )
+        bridge_request = BridgeRequest(
+            params=params,
+            id="test-id",
+            bridge_provider_id=bridge.provider_id,
+            quote_data=None,
+            execution_data=None,
+            status=BridgeRequestStatus.CREATED,
+        )
+
+        assert not bridge_request.quote_data, "Unexpected quote data."
+
+        with pytest.raises(RuntimeError):
+            bridge.execute(bridge_request)
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.CREATED, "Wrong status."
+        assert status2 == BridgeRequestStatus.CREATED, "Wrong status."
+
+        for _ in range(2):
+            timestamp = int(time.time())
+            bridge.quote(bridge_request=bridge_request)
+            qd = bridge_request.quote_data
+            assert qd is not None, "Missing quote data."
+            assert qd.bridge_eta > 0, "Wrong quote data."
+            assert qd.elapsed_time > 0, "Wrong quote data."
+            assert qd.message is None, "Wrong quote data."
+            assert qd.provider_data is not None, "Wrong quote data."
+            assert qd.provider_data.get("response") is not None, "Wrong quote data."
+            assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
+            assert timestamp <= qd.timestamp, "Wrong quote data."
+            assert qd.timestamp <= int(time.time()), "Wrong quote data."
+            assert (
+                bridge_request.status == BridgeRequestStatus.QUOTE_DONE
+            ), "Wrong status."
+
+        assert bridge_request.quote_data is not None, "Wrong quote data."
+        sj = bridge.status_json(bridge_request)
+        expected_sj = {
+            "eta": bridge_request.quote_data.bridge_eta,
+            "message": bridge_request.quote_data.message,
+            "status": BridgeRequestStatus.QUOTE_DONE.value,
+        }
+        diff = DeepDiff(sj, expected_sj)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong status."
+        assert (
+            bridge_request.quote_data.provider_data is not None
+        ), "Missing quote data."
+
+        br = bridge.bridge_requirements(bridge_request)
+        expected_br = {
+            "ethereum": {
+                wallet_address: {
+                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
+                }
+            }
+        }
+        diff = DeepDiff(br, expected_br)
+        if diff:
+            print(diff)
+
+        assert not diff, "Wrong bridge requirements."
+
+        qd = bridge_request.quote_data
+        assert qd is not None, "Missing quote data."
+        assert qd.bridge_eta > 0, "Wrong quote data."
+        assert qd.elapsed_time > 0, "Wrong quote data."
+        assert qd.message is None, "Wrong quote data."
+        assert qd.provider_data is not None, "Wrong quote data."
+        assert qd.provider_data.get("response") is not None, "Wrong quote data."
+        assert qd.provider_data.get("attempts", 0) > 0, "Wrong quote data."
+        assert qd.timestamp <= int(time.time()), "Wrong quote data."
+        assert bridge_request.status == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+
+        status1 = bridge_request.status
+        bridge._update_execution_status(bridge_request)
+        status2 = bridge_request.status
+        assert status1 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
+        assert status2 == BridgeRequestStatus.QUOTE_DONE, "Wrong status."
 
     @pytest.mark.parametrize(
         (
