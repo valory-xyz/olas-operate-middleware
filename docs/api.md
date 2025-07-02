@@ -87,7 +87,7 @@ Create a local user account.
   }
   ```
 
-- If password is too small:
+- If password is too short:
 
   ```json
   {
