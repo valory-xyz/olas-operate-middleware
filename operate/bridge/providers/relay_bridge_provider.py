@@ -217,8 +217,8 @@ class RelayBridgeProvider(BridgeProvider):
                         for j, item in enumerate(step.get("items", [])):
                             if "gas" not in item.get("data", {}):
                                 placeholder_gas = (
-                                    response_json_placeholder.get("steps", [])[i]
-                                    .get("items", [])[j]
+                                    response_json_placeholder.get("steps", {i: {}})[i]
+                                    .get("items", {j: {}})[j]
                                     .get("data", {})
                                     .get("gas")
                                 )
