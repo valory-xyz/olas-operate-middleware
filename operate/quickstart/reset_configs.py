@@ -70,9 +70,6 @@ def reset_configs(operate: "OperateApp", config_path: str) -> None:
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     print_title(f"Reset your {template['name']} configurations")
 
     # check if agent was started before
