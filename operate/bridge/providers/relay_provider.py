@@ -17,7 +17,7 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""Relay Bridge provider."""
+"""Relay provider."""
 
 
 import enum
@@ -30,10 +30,10 @@ from urllib.parse import urlencode
 
 import requests
 
-from operate.bridge.providers.bridge_provider import (
-    BridgeProvider,
-    BridgeRequest,
-    BridgeRequestStatus,
+from operate.bridge.providers.provider import (
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
     DEFAULT_MAX_QUOTE_RETRIES,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_QUOTE_ZERO,
@@ -118,50 +118,50 @@ class RelayExecutionStatus(str, enum.Enum):
         return self.value
 
 
-class RelayBridgeProvider(BridgeProvider):
-    """Relay bridge provider."""
+class RelayProvider(Provider):
+    """Relay provider."""
 
     def description(self) -> str:
-        """Get a human-readable description of the bridge provider."""
+        """Get a human-readable description of the provider."""
         return "Relay Protocol https://www.relay.link/"
 
-    def quote(self, bridge_request: BridgeRequest) -> None:
+    def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
-        self._validate(bridge_request)
+        self._validate(provider_request)
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.CREATED,
-            BridgeRequestStatus.QUOTE_DONE,
-            BridgeRequestStatus.QUOTE_FAILED,
+        if provider_request.status not in (
+            ProviderRequestStatus.CREATED,
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
         ):
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
             )
 
-        if bridge_request.execution_data:
+        if provider_request.execution_data:
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id}: execution already present."
+                f"Cannot quote request {provider_request.id}: execution already present."
             )
 
-        from_chain = bridge_request.params["from"]["chain"]
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_chain = bridge_request.params["to"]["chain"]
-        to_address = bridge_request.params["to"]["address"]
-        to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_chain = provider_request.params["from"]["chain"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_chain = provider_request.params["to"]["chain"]
+        to_address = provider_request.params["to"]["address"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
 
         if to_amount == 0:
             self.logger.info(f"[RELAY PROVIDER] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
-                bridge_eta=0,
+                eta=0,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
                 provider_data=None,
                 timestamp=int(time.time()),
             )
-            bridge_request.quote_data = quote_data
-            bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+            provider_request.quote_data = quote_data
+            provider_request.status = ProviderRequestStatus.QUOTE_DONE
             return
 
         url = "https://api.relay.link/quote"
@@ -228,7 +228,7 @@ class RelayBridgeProvider(BridgeProvider):
                                 )
 
                 quote_data = QuoteData(
-                    bridge_eta=math.ceil(response_json["details"]["timeEstimate"]),
+                    eta=math.ceil(response_json["details"]["timeEstimate"]),
                     elapsed_time=time.time() - start,
                     message=None,
                     provider_data={
@@ -238,15 +238,15 @@ class RelayBridgeProvider(BridgeProvider):
                     },
                     timestamp=int(time.time()),
                 )
-                bridge_request.quote_data = quote_data
-                bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_DONE
                 return
             except requests.Timeout as e:
                 self.logger.warning(
                     f"[RELAY PROVIDER] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     provider_data={
@@ -262,7 +262,7 @@ class RelayBridgeProvider(BridgeProvider):
                 )
                 response_json = response.json()
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
                     provider_data={
@@ -279,7 +279,7 @@ class RelayBridgeProvider(BridgeProvider):
                     f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     provider_data={
@@ -293,30 +293,30 @@ class RelayBridgeProvider(BridgeProvider):
                 self.logger.error(
                     f"[RELAY PROVIDER] Request failed after {DEFAULT_MAX_QUOTE_RETRIES} attempts."
                 )
-                bridge_request.quote_data = quote_data
-                bridge_request.status = BridgeRequestStatus.QUOTE_FAILED
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_FAILED
                 return
 
             time.sleep(2)
 
     def _get_txs(
-        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+        self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Get the sorted list of transactions to execute the quote."""
 
-        if bridge_request.params["to"]["amount"] == 0:
+        if provider_request.params["to"]["amount"] == 0:
             return []
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             raise RuntimeError(
-                f"Cannot get transaction builders {bridge_request.id}: quote data not present."
+                f"Cannot get transaction builders {provider_request.id}: quote data not present."
             )
 
         provider_data = quote_data.provider_data
         if not provider_data:
             raise RuntimeError(
-                f"Cannot get transaction builders {bridge_request.id}: provider data not present."
+                f"Cannot get transaction builders {provider_request.id}: provider data not present."
             )
 
         txs: t.List[t.Tuple[str, t.Dict]] = []
@@ -326,7 +326,7 @@ class RelayBridgeProvider(BridgeProvider):
             return txs
 
         steps = response.get("steps", [])
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
 
         for step in steps:
             for i, item in enumerate(step["items"]):
@@ -337,25 +337,25 @@ class RelayBridgeProvider(BridgeProvider):
                 tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
                 tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
                 tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(tx["from"])
-                BridgeProvider._update_with_gas_pricing(tx, from_ledger_api)
-                BridgeProvider._update_with_gas_estimate(tx, from_ledger_api)
+                Provider._update_with_gas_pricing(tx, from_ledger_api)
+                Provider._update_with_gas_estimate(tx, from_ledger_api)
                 txs.append((f"{step['id']}-{i}", tx))
 
         return txs
 
-    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Update the execution status."""
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.EXECUTION_PENDING,
-            BridgeRequestStatus.EXECUTION_UNKNOWN,
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
         ):
             return
 
-        execution_data = bridge_request.execution_data
+        execution_data = provider_request.execution_data
         if not execution_data:
             raise RuntimeError(
-                f"Cannot update bridge request {bridge_request.id}: execution data not present."
+                f"Cannot update request {provider_request.id}: execution data not present."
             )
 
         from_tx_hash = execution_data.from_tx_hash
@@ -363,7 +363,7 @@ class RelayBridgeProvider(BridgeProvider):
             execution_data.message = (
                 f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
         relay_status = RelayExecutionStatus.WAITING
@@ -387,22 +387,22 @@ class RelayBridgeProvider(BridgeProvider):
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
-                f"[RELAY PROVIDER] Failed to update status for request {bridge_request.id}: {e}"
+                f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
 
         if relay_status == RelayExecutionStatus.SUCCESS:
             self.logger.info(
-                f"[RELAY PROVIDER] Execution done for {bridge_request.id}."
+                f"[RELAY PROVIDER] Execution done for {provider_request.id}."
             )
-            from_ledger_api = self._from_ledger_api(bridge_request)
-            to_ledger_api = self._to_ledger_api(bridge_request)
+            from_ledger_api = self._from_ledger_api(provider_request)
+            to_ledger_api = self._to_ledger_api(provider_request)
             to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0]["hash"]
             execution_data.message = response_json.get("details", None)
             execution_data.to_tx_hash = to_tx_hash
-            execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+            execution_data.elapsed_time = Provider._tx_timestamp(
                 to_tx_hash, to_ledger_api
-            ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
-            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+            ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+            provider_request.status = ProviderRequestStatus.EXECUTION_DONE
             execution_data.provider_data = {
                 "response": response_json,
             }
@@ -410,24 +410,24 @@ class RelayBridgeProvider(BridgeProvider):
             RelayExecutionStatus.FAILURE,
             RelayExecutionStatus.REFUND,
         ):
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
         elif relay_status in (
             RelayExecutionStatus.PENDING,
             RelayExecutionStatus.DELAYED,
         ):
-            bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
+            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
         else:
-            bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
 
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
+    def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        if not bridge_request.execution_data:
+        if not provider_request.execution_data:
             return None
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             raise RuntimeError(
-                f"Cannot get explorer link for request {bridge_request.id}: quote data not present."
+                f"Cannot get explorer link for request {provider_request.id}: quote data not present."
             )
 
         provider_data = quote_data.provider_data
