@@ -44,9 +44,6 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     print_title("Reset your staking program preference")
 
     # check if agent was started before

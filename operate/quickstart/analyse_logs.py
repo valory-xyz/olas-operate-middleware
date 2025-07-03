@@ -107,9 +107,6 @@ def analyse_logs(
         print(f"Config file '{config_file}' not found.")
         sys.exit(1)
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # Auto-detect the logs directory
     build_dir = find_build_directory(config_file, operate)
     logs_dir = build_dir / "persistent_data" / "logs"

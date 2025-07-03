@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import shutil
 import time
 import traceback
 import typing as t
@@ -70,7 +69,6 @@ from operate.operate_types import (
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
-    DELETE_PREFIX,
     Deployment,
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
@@ -2121,37 +2119,6 @@ class ServiceManager:
             partial_update=partial_update,
         )
         return service
-
-    def migrate_service_configs(self) -> None:
-        """Migrate old service config formats to new ones, if applies."""
-
-        bafybei_count = sum(
-            1 for path in self.path.iterdir() if path.name.startswith("bafybei")
-        )
-        if bafybei_count > 1:
-            self.log_directories()
-            raise RuntimeError(
-                f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support."
-            )
-
-        paths = list(self.path.iterdir())
-        for path in paths:
-            try:
-                if path.name.startswith(DELETE_PREFIX):
-                    shutil.rmtree(path)
-                    self.logger.info(f"Deleted folder: {path.name}")
-
-                if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
-                    "bafybei"
-                ):
-                    self.logger.info(f"migrate_service_configs {str(path)}")
-                    migrated = Service.migrate_format(path)
-                    if migrated:
-                        self.logger.info(f"Folder {str(path)} has been migrated.")
-            except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(
-                    f"Failed to migrate service: {path.name}. Exception {e}: {traceback.format_exc()}"
-                )
 
     def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
         self, service_config_id: str

@@ -20,17 +20,19 @@
 """Tests for services.service module."""
 
 import json
+import logging
 import typing as t
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from deepdiff import DeepDiff
 
+from operate.migration import MigrationManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
-    Service,
 )
 
 
@@ -416,7 +418,8 @@ class TestService:
         old_config_json_data = get_config_json_data(**config_kwargs)
 
         # Emulate an existing service directory contents
-        service_config_dir = tmp_path / old_config_json_data.get(
+        service_dir = tmp_path / "services"
+        service_config_dir = service_dir / old_config_json_data.get(
             "service_config_id", old_config_json_data.get("hash")
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
@@ -425,11 +428,14 @@ class TestService:
         with open(config_json_path, "w", encoding="utf-8") as file:
             json.dump(old_config_json_data, file, indent=4)
 
-        # Migrate the service using Service.migrate_format and read the resulting
+        # Migrate the service using the MigrationManager and read the resulting
         # migrated data
-        Service.migrate_format(service_config_dir)
+        mm = MigrationManager(tmp_path, logging.getLogger("test"))
+        service_manager = Mock()
+        service_manager.path = service_dir
+        mm.migrate_services(service_manager)
 
-        migrated_config_dir = next(tmp_path.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
+        migrated_config_dir = next(service_dir.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
         new_config_json_path = migrated_config_dir / "config.json"
         with open(new_config_json_path, "r", encoding="utf-8") as file:
             migrated_data = json.load(file)
