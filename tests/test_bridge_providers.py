@@ -68,7 +68,7 @@ RUNNING_IN_CI = (
 DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
 DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
 DEFAULT_RPCS[Chain.CELO] = "https://forno.celo.org"
-DEFAULT_RPCS[Chain.GNOSIS] = "https://rpc.gnosischain.com"
+DEFAULT_RPCS[Chain.GNOSIS] = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
 DEFAULT_RPCS[Chain.MODE] = "https://mainnet.mode.network"
 DEFAULT_RPCS[Chain.OPTIMISTIC] = "https://rpc-gate.autonolas.tech/optimism-rpc/"
 
