@@ -31,14 +31,14 @@ from autonomy.chain.base import registry_contracts
 from eth_typing import BlockIdentifier
 from web3 import Web3
 
-from operate.bridge.providers.bridge_provider import (
-    BridgeProvider,
-    BridgeRequest,
-    BridgeRequestStatus,
+from operate.bridge.providers.provider import (
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
     MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
     QuoteData,
 )
 from operate.constants import ZERO_ADDRESS
@@ -109,7 +109,7 @@ class BridgeContractAdaptor(ABC):
 
     @abstractmethod
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> JSONLike:
         """Build bridge transaction."""
         raise NotImplementedError()
@@ -119,7 +119,7 @@ class BridgeContractAdaptor(ABC):
         self,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
-        bridge_request: BridgeRequest,
+        provider_request: ProviderRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
@@ -128,7 +128,7 @@ class BridgeContractAdaptor(ABC):
 
     @abstractmethod
     def get_explorer_link(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
@@ -178,16 +178,16 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         return super().can_handle_request(to_ledger_api, params)
 
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> JSONLike:
         """Build bridge transaction."""
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_address = bridge_request.params["to"]["address"]
-        to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_address = provider_request.params["to"]["address"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
         from_bridge = self.from_bridge
-        extra_data = Web3.keccak(text=bridge_request.id)
+        extra_data = Web3.keccak(text=provider_request.id)
 
         if from_token == ZERO_ADDRESS:
             return self._l1_standard_bridge_contract.build_bridge_eth_to_tx(
@@ -216,18 +216,18 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         self,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
-        bridge_request: BridgeRequest,
+        provider_request: ProviderRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating bridge completion."""
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_address = bridge_request.params["to"]["address"]
-        to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_address = provider_request.params["to"]["address"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
         to_bridge = self.to_bridge
-        extra_data = Web3.keccak(text=bridge_request.id)
+        extra_data = Web3.keccak(text=provider_request.id)
 
         if from_token == ZERO_ADDRESS:
             return self._l2_standard_bridge_contract.find_eth_bridge_finalized_tx(
@@ -255,17 +255,17 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         )
 
     def get_explorer_link(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        if not bridge_request.execution_data:
+        if not provider_request.execution_data:
             return None
 
-        tx_hash = bridge_request.execution_data.from_tx_hash
+        tx_hash = provider_request.execution_data.from_tx_hash
         if not tx_hash:
             return None
 
-        chain = Chain(bridge_request.params["from"]["chain"])
+        chain = Chain(provider_request.params["from"]["chain"])
         url = EXPLORER_URL[chain]["tx"]
         return url.format(tx_hash=tx_hash)
 
@@ -296,13 +296,13 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         return super().can_handle_request(to_ledger_api, params)
 
     def build_bridge_tx(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> JSONLike:
         """Build bridge transaction."""
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_address = bridge_request.params["to"]["address"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_address = provider_request.params["to"]["address"]
+        to_amount = provider_request.params["to"]["amount"]
         from_bridge = self.from_bridge
 
         if from_token == ZERO_ADDRESS:
@@ -323,15 +323,15 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         self,
         from_ledger_api: LedgerApi,
         to_ledger_api: LedgerApi,
-        bridge_request: BridgeRequest,
+        provider_request: ProviderRequest,
         from_block: BlockIdentifier,
         to_block: BlockIdentifier,
     ) -> t.Optional[str]:
         """Return the transaction hash of the event indicating bridge completion."""
-        from_token = bridge_request.params["from"]["token"]
-        to_address = bridge_request.params["to"]["address"]
-        to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_token = provider_request.params["from"]["token"]
+        to_address = provider_request.params["to"]["address"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
         to_bridge = self.to_bridge
 
         if from_token == ZERO_ADDRESS:
@@ -341,12 +341,12 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
 
         message_id = self.get_message_id(
             from_ledger_api=from_ledger_api,
-            bridge_request=bridge_request,
+            provider_request=provider_request,
         )
 
         if not message_id:
             raise RuntimeError(
-                f"Cannot find 'messageId' for bridge request {bridge_request.id}."
+                f"Cannot find 'messageId' for request {provider_request.id}."
             )
 
         return self._home_omnibridge.find_tokens_bridged_tx(
@@ -361,25 +361,25 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         )
 
     def get_message_id(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> t.Optional[str]:
         """Get the bridge message id."""
-        if not bridge_request.execution_data:
+        if not provider_request.execution_data:
             return None
 
-        if not bridge_request.execution_data.from_tx_hash:
+        if not provider_request.execution_data.from_tx_hash:
             return None
 
         if (
-            bridge_request.execution_data.provider_data
-            and "message_id" in bridge_request.execution_data.provider_data
+            provider_request.execution_data.provider_data
+            and "message_id" in provider_request.execution_data.provider_data
         ):
-            return bridge_request.execution_data.provider_data.get("message_id", None)
+            return provider_request.execution_data.provider_data.get("message_id", None)
 
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        from_tx_hash = bridge_request.execution_data.from_tx_hash
-        to_amount = bridge_request.params["to"]["amount"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        from_tx_hash = provider_request.execution_data.from_tx_hash
+        to_amount = provider_request.params["to"]["amount"]
         from_bridge = self.from_bridge
 
         message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
@@ -391,17 +391,17 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
             value=to_amount,
         )
 
-        if not bridge_request.execution_data.provider_data:
-            bridge_request.execution_data.provider_data = {}
+        if not provider_request.execution_data.provider_data:
+            provider_request.execution_data.provider_data = {}
 
-        bridge_request.execution_data.provider_data["message_id"] = message_id
+        provider_request.execution_data.provider_data["message_id"] = message_id
         return message_id
 
     def get_explorer_link(
-        self, from_ledger_api: LedgerApi, bridge_request: BridgeRequest
+        self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
     ) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        message_id = self.get_message_id(from_ledger_api, bridge_request)
+        message_id = self.get_message_id(from_ledger_api, provider_request)
         if not message_id:
             return None
         return (
@@ -409,7 +409,7 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         )
 
 
-class NativeBridgeProvider(BridgeProvider):
+class NativeBridgeProvider(Provider):
     """Native bridge provider"""
 
     def __init__(
@@ -419,14 +419,14 @@ class NativeBridgeProvider(BridgeProvider):
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
-        """Initialize the bridge provider."""
+        """Initialize the provider."""
         self.bridge_contract_adaptor = bridge_contract_adaptor
         super().__init__(
             wallet_manager=wallet_manager, provider_id=provider_id, logger=logger
         )
 
     def can_handle_request(self, params: t.Dict) -> bool:
-        """Returns 'true' if the bridge can handle a request for 'params'."""
+        """Returns 'true' if the provider can handle a request for 'params'."""
 
         if not super().can_handle_request(params):
             return False
@@ -442,64 +442,64 @@ class NativeBridgeProvider(BridgeProvider):
         return True
 
     def description(self) -> str:
-        """Get a human-readable description of the bridge provider."""
+        """Get a human-readable description of the provider."""
         return f"Native bridge provider ({self.bridge_contract_adaptor.__class__.__name__})."
 
-    def quote(self, bridge_request: BridgeRequest) -> None:
+    def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
-        self._validate(bridge_request)
+        self._validate(provider_request)
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.CREATED,
-            BridgeRequestStatus.QUOTE_DONE,
-            BridgeRequestStatus.QUOTE_FAILED,
+        if provider_request.status not in (
+            ProviderRequestStatus.CREATED,
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
         ):
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
             )
 
-        if bridge_request.execution_data:
+        if provider_request.execution_data:
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id}: execution already present."
+                f"Cannot quote request {provider_request.id}: execution already present."
             )
 
-        to_amount = bridge_request.params["to"]["amount"]
+        to_amount = provider_request.params["to"]["amount"]
         bridge_eta = self.bridge_contract_adaptor.bridge_eta
 
         message = None
         if to_amount == 0:
-            self.logger.info(f"[NATIVE BRIDGE] {MESSAGE_QUOTE_ZERO}")
+            self.logger.info(f"[NATIVE BRIDGE PROVIDER] {MESSAGE_QUOTE_ZERO}")
             bridge_eta = 0
             message = MESSAGE_QUOTE_ZERO
 
         quote_data = QuoteData(
-            bridge_eta=bridge_eta,
+            eta=bridge_eta,
             elapsed_time=0,
             message=message,
             provider_data=None,
             timestamp=int(time.time()),
         )
-        bridge_request.quote_data = quote_data
-        bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+        provider_request.quote_data = quote_data
+        provider_request.status = ProviderRequestStatus.QUOTE_DONE
 
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         self.logger.info(
-            f"[NATIVE BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
+            f"[NATIVE BRIDGE PROVIDER] Get appprove transaction for request {provider_request.id}."
         )
 
-        if bridge_request.params["to"]["amount"] == 0:
+        if provider_request.params["to"]["amount"] == 0:
             return None
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             return None
 
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
         from_bridge = self.bridge_contract_adaptor.from_bridge
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
 
         if from_token == ZERO_ADDRESS:
             return None
@@ -512,59 +512,59 @@ class NativeBridgeProvider(BridgeProvider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
+        Provider._update_with_gas_pricing(approve_tx, from_ledger_api)
+        Provider._update_with_gas_estimate(approve_tx, from_ledger_api)
         return approve_tx
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         self.logger.info(
-            f"[NATIVE BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
+            f"[NATIVE BRIDGE PROVIDER] Get bridge transaction for request {provider_request.id}."
         )
 
-        if bridge_request.params["to"]["amount"] == 0:
+        if provider_request.params["to"]["amount"] == 0:
             return None
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             return None
 
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
         bridge_tx = self.bridge_contract_adaptor.build_bridge_tx(
-            from_ledger_api=from_ledger_api, bridge_request=bridge_request
+            from_ledger_api=from_ledger_api, provider_request=provider_request
         )
 
-        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        Provider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        Provider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
     def _get_txs(
-        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+        self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Get the sorted list of transactions to execute the quote."""
         txs = []
-        approve_tx = self._get_approve_tx(bridge_request)
+        approve_tx = self._get_approve_tx(provider_request)
         if approve_tx:
             txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
+        bridge_tx = self._get_bridge_tx(provider_request)
         if bridge_tx:
             txs.append(("bridge_tx", bridge_tx))
         return txs
 
-    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Update the execution status."""
 
-        if bridge_request.status != BridgeRequestStatus.EXECUTION_PENDING:
+        if provider_request.status != ProviderRequestStatus.EXECUTION_PENDING:
             return
 
         self.logger.info(
-            f"[NATIVE BRIDGE] Updating execution status for bridge request {bridge_request.id}."
+            f"[NATIVE BRIDGE PROVIDER] Updating execution status for request {provider_request.id}."
         )
 
-        execution_data = bridge_request.execution_data
+        execution_data = provider_request.execution_data
         if not execution_data:
             raise RuntimeError(
-                f"Cannot update bridge request {bridge_request.id}: execution data not present."
+                f"Cannot update {provider_request.id}: execution data not present."
             )
 
         from_tx_hash = execution_data.from_tx_hash
@@ -572,19 +572,19 @@ class NativeBridgeProvider(BridgeProvider):
             execution_data.message = (
                 f"{MESSAGE_EXECUTION_FAILED} missing transaction hash."
             )
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
         bridge_eta = self.bridge_contract_adaptor.bridge_eta
 
         try:
-            from_ledger_api = self._from_ledger_api(bridge_request)
+            from_ledger_api = self._from_ledger_api(provider_request)
             from_w3 = from_ledger_api.api
 
             receipt = from_w3.eth.get_transaction_receipt(from_tx_hash)
             if receipt.status == 0:
                 execution_data.message = MESSAGE_EXECUTION_FAILED_REVERTED
-                bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                 return
 
             # Get the timestamp of the bridge_tx on the 'from' chain
@@ -593,7 +593,7 @@ class NativeBridgeProvider(BridgeProvider):
             bridge_tx_ts = bridge_tx_block.timestamp
 
             # Find the event on the 'to' chain
-            to_ledger_api = self._to_ledger_api(bridge_request)
+            to_ledger_api = self._to_ledger_api(provider_request)
             to_w3 = to_ledger_api.api
             starting_block = self._find_block_before_timestamp(to_w3, bridge_tx_ts)
             starting_block_ts = to_w3.eth.get_block(starting_block).timestamp
@@ -605,30 +605,30 @@ class NativeBridgeProvider(BridgeProvider):
                 to_tx_hash = self.bridge_contract_adaptor.find_bridge_finalized_tx(
                     from_ledger_api=from_ledger_api,
                     to_ledger_api=to_ledger_api,
-                    bridge_request=bridge_request,
+                    provider_request=provider_request,
                     from_block=from_block,
                     to_block=to_block,
                 )
 
                 if to_tx_hash:
                     self.logger.info(
-                        f"[NATIVE BRIDGE] Execution done for {bridge_request.id}."
+                        f"[NATIVE BRIDGE PROVIDER] Execution done for request {provider_request.id}."
                     )
                     execution_data.message = None
                     execution_data.to_tx_hash = to_tx_hash
-                    execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+                    execution_data.elapsed_time = Provider._tx_timestamp(
                         to_tx_hash, to_ledger_api
-                    ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
-                    bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+                    ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+                    provider_request.status = ProviderRequestStatus.EXECUTION_DONE
                     return
 
                 last_block_ts = to_w3.eth.get_block(to_block).timestamp
                 if last_block_ts > starting_block_ts + bridge_eta * 2:
                     self.logger.info(
-                        f"[NATIVE BRIDGE] Execution failed for {bridge_request.id}: bridge exceeds 2*ETA."
+                        f"[NATIVE BRIDGE PROVIDER] Execution failed for request {provider_request.id}: bridge exceeds 2*ETA."
                     )
                     execution_data.message = MESSAGE_EXECUTION_FAILED_ETA
-                    bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                     return
 
         except Exception as e:
@@ -637,7 +637,7 @@ class NativeBridgeProvider(BridgeProvider):
 
             traceback.print_exc()
             execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:
@@ -655,9 +655,9 @@ class NativeBridgeProvider(BridgeProvider):
                 high = mid - 1
         return best
 
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
+    def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
         return self.bridge_contract_adaptor.get_explorer_link(
-            from_ledger_api=from_ledger_api, bridge_request=bridge_request
+            from_ledger_api=from_ledger_api, provider_request=provider_request
         )

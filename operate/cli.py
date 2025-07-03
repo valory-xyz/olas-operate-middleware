@@ -45,7 +45,7 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.bridge.bridge import BridgeManager
+from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     KEY,
     KEYS,

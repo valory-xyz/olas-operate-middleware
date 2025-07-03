@@ -17,7 +17,7 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""LI.FI Bridge provider."""
+"""LI.FI provider."""
 
 
 import enum
@@ -29,12 +29,12 @@ from urllib.parse import urlencode
 import requests
 from autonomy.chain.base import registry_contracts
 
-from operate.bridge.providers.bridge_provider import (
-    BridgeProvider,
-    BridgeRequest,
-    BridgeRequestStatus,
+from operate.bridge.providers.provider import (
     DEFAULT_MAX_QUOTE_RETRIES,
     MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
     QuoteData,
 )
 from operate.constants import ZERO_ADDRESS
@@ -59,50 +59,50 @@ class LiFiTransactionStatus(str, enum.Enum):
         return self.value
 
 
-class LiFiBridgeProvider(BridgeProvider):
-    """LI.FI Bridge provider."""
+class LiFiProvider(Provider):
+    """LI.FI provider."""
 
     def description(self) -> str:
-        """Get a human-readable description of the bridge provider."""
+        """Get a human-readable description of the provider."""
         return "LI.FI Bridge & DEX Aggregation Protocol https://li.fi/"
 
-    def quote(self, bridge_request: BridgeRequest) -> None:
+    def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
-        self._validate(bridge_request)
+        self._validate(provider_request)
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.CREATED,
-            BridgeRequestStatus.QUOTE_DONE,
-            BridgeRequestStatus.QUOTE_FAILED,
+        if provider_request.status not in (
+            ProviderRequestStatus.CREATED,
+            ProviderRequestStatus.QUOTE_DONE,
+            ProviderRequestStatus.QUOTE_FAILED,
         ):
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot quote request {provider_request.id} with status {provider_request.status}."
             )
 
-        if bridge_request.execution_data:
+        if provider_request.execution_data:
             raise RuntimeError(
-                f"Cannot quote bridge request {bridge_request.id}: execution already present."
+                f"Cannot quote request {provider_request.id}: execution already present."
             )
 
-        from_chain = bridge_request.params["from"]["chain"]
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        to_chain = bridge_request.params["to"]["chain"]
-        to_address = bridge_request.params["to"]["address"]
-        to_token = bridge_request.params["to"]["token"]
-        to_amount = bridge_request.params["to"]["amount"]
+        from_chain = provider_request.params["from"]["chain"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        to_chain = provider_request.params["to"]["chain"]
+        to_address = provider_request.params["to"]["address"]
+        to_token = provider_request.params["to"]["token"]
+        to_amount = provider_request.params["to"]["amount"]
 
         if to_amount == 0:
-            self.logger.info(f"[LI.FI BRIDGE] {MESSAGE_QUOTE_ZERO}")
+            self.logger.info(f"[LI.FI PROVIDER] {MESSAGE_QUOTE_ZERO}")
             quote_data = QuoteData(
-                bridge_eta=0,
+                eta=0,
                 elapsed_time=0,
                 message=MESSAGE_QUOTE_ZERO,
                 provider_data=None,
                 timestamp=int(time.time()),
             )
-            bridge_request.quote_data = quote_data
-            bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+            provider_request.quote_data = quote_data
+            provider_request.status = ProviderRequestStatus.QUOTE_DONE
             return
 
         url = "https://li.quest/v1/quote/toAmount"
@@ -120,14 +120,14 @@ class LiFiBridgeProvider(BridgeProvider):
         for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
             start = time.time()
             try:
-                self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
+                self.logger.info(f"[LI.FI PROVIDER] GET {url}?{urlencode(params)}")
                 response = requests.get(
                     url=url, headers=headers, params=params, timeout=30
                 )
                 response.raise_for_status()
                 response_json = response.json()
                 quote_data = QuoteData(
-                    bridge_eta=LIFI_DEFAULT_ETA,
+                    eta=LIFI_DEFAULT_ETA,
                     elapsed_time=time.time() - start,
                     message=None,
                     provider_data={
@@ -137,15 +137,15 @@ class LiFiBridgeProvider(BridgeProvider):
                     },
                     timestamp=int(time.time()),
                 )
-                bridge_request.quote_data = quote_data
-                bridge_request.status = BridgeRequestStatus.QUOTE_DONE
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_DONE
                 return
             except requests.Timeout as e:
                 self.logger.warning(
-                    f"[LI.FI BRIDGE] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                    f"[LI.FI PROVIDER] Timeout request on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     provider_data={
@@ -157,11 +157,11 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
             except requests.RequestException as e:
                 self.logger.warning(
-                    f"[LI.FI BRIDGE] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                    f"[LI.FI PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 response_json = response.json()
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=response_json.get("message") or str(e),
                     provider_data={
@@ -175,10 +175,10 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
             except Exception as e:  # pylint:disable=broad-except
                 self.logger.warning(
-                    f"[LI.FI BRIDGE] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
+                    f"[LI.FI PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
                 )
                 quote_data = QuoteData(
-                    bridge_eta=None,
+                    eta=None,
                     elapsed_time=time.time() - start,
                     message=str(e),
                     provider_data={
@@ -190,24 +190,24 @@ class LiFiBridgeProvider(BridgeProvider):
                 )
             if attempt >= DEFAULT_MAX_QUOTE_RETRIES:
                 self.logger.error(
-                    f"[LI.FI BRIDGE] Request failed after {DEFAULT_MAX_QUOTE_RETRIES} attempts."
+                    f"[LI.FI PROVIDER] Request failed after {DEFAULT_MAX_QUOTE_RETRIES} attempts."
                 )
-                bridge_request.quote_data = quote_data
-                bridge_request.status = BridgeRequestStatus.QUOTE_FAILED
+                provider_request.quote_data = quote_data
+                provider_request.status = ProviderRequestStatus.QUOTE_FAILED
                 return
 
             time.sleep(2)
 
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_approve_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
         """Get the approve transaction."""
         self.logger.info(
-            f"[LI.FI BRIDGE] Get appprove transaction for bridge request {bridge_request.id}."
+            f"[LI.FI PROVIDER] Get appprove transaction for request {provider_request.id}."
         )
 
-        if bridge_request.params["to"]["amount"] == 0:
+        if provider_request.params["to"]["amount"] == 0:
             return None
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             return None
 
@@ -230,7 +230,7 @@ class LiFiBridgeProvider(BridgeProvider):
             return None
 
         from_amount = int(quote["action"]["fromAmount"])
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
 
         approve_tx = registry_contracts.erc20.get_approve_tx(
             ledger_api=from_ledger_api,
@@ -240,20 +240,20 @@ class LiFiBridgeProvider(BridgeProvider):
             amount=from_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        BridgeProvider._update_with_gas_pricing(approve_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(approve_tx, from_ledger_api)
+        Provider._update_with_gas_pricing(approve_tx, from_ledger_api)
+        Provider._update_with_gas_estimate(approve_tx, from_ledger_api)
         return approve_tx
 
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
+    def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
         """Get the bridge transaction."""
         self.logger.info(
-            f"[LI.FI BRIDGE] Get bridge transaction for bridge request {bridge_request.id}."
+            f"[LI.FI PROVIDER] Get bridge transaction for request {provider_request.id}."
         )
 
-        if bridge_request.params["to"]["amount"] == 0:
+        if provider_request.params["to"]["amount"] == 0:
             return None
 
-        quote_data = bridge_request.quote_data
+        quote_data = provider_request.quote_data
         if not quote_data:
             return None
 
@@ -271,7 +271,7 @@ class LiFiBridgeProvider(BridgeProvider):
         if not transaction_request:
             return None
 
-        from_ledger_api = self._from_ledger_api(bridge_request)
+        from_ledger_api = self._from_ledger_api(provider_request)
 
         bridge_tx = {
             "value": int(transaction_request["value"], 16),
@@ -285,36 +285,36 @@ class LiFiBridgeProvider(BridgeProvider):
                 transaction_request["from"]
             ),
         }
-        BridgeProvider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        BridgeProvider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        Provider._update_with_gas_pricing(bridge_tx, from_ledger_api)
+        Provider._update_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
     def _get_txs(
-        self, bridge_request: BridgeRequest, *args: t.Any, **kwargs: t.Any
+        self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
     ) -> t.List[t.Tuple[str, t.Dict]]:
         """Get the sorted list of transactions to execute the quote."""
         txs = []
-        approve_tx = self._get_approve_tx(bridge_request)
+        approve_tx = self._get_approve_tx(provider_request)
         if approve_tx:
             txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
+        bridge_tx = self._get_bridge_tx(provider_request)
         if bridge_tx:
             txs.append(("bridge_tx", bridge_tx))
         return txs
 
-    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Update the execution status."""
 
-        if bridge_request.status not in (
-            BridgeRequestStatus.EXECUTION_PENDING,
-            BridgeRequestStatus.EXECUTION_UNKNOWN,
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
         ):
             return
 
-        execution_data = bridge_request.execution_data
+        execution_data = provider_request.execution_data
         if not execution_data:
             raise RuntimeError(
-                f"Cannot update bridge request {bridge_request.id}: execution data not present."
+                f"Cannot update request {provider_request.id}: execution data not present."
             )
 
         from_tx_hash = execution_data.from_tx_hash
@@ -329,7 +329,7 @@ class LiFiBridgeProvider(BridgeProvider):
         }
 
         try:
-            self.logger.info(f"[LI.FI BRIDGE] GET {url}?{urlencode(params)}")
+            self.logger.info(f"[LI.FI PROVIDER] GET {url}?{urlencode(params)}")
             response = requests.get(url=url, headers=headers, params=params, timeout=30)
             response_json = response.json()
             lifi_status = response_json.get(
@@ -341,33 +341,35 @@ class LiFiBridgeProvider(BridgeProvider):
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
-                f"[LI.FI BRIDGE] Failed to update status for request {bridge_request.id}: {e}"
+                f"[LI.FI PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:
-            self.logger.info(f"[LI.FI BRIDGE] Execution done for {bridge_request.id}.")
-            from_ledger_api = self._from_ledger_api(bridge_request)
-            to_ledger_api = self._to_ledger_api(bridge_request)
+            self.logger.info(
+                f"[LI.FI PROVIDER] Execution done for {provider_request.id}."
+            )
+            from_ledger_api = self._from_ledger_api(provider_request)
+            to_ledger_api = self._to_ledger_api(provider_request)
             to_tx_hash = response_json.get("receiving", {}).get("txHash")
             execution_data.message = None
             execution_data.to_tx_hash = to_tx_hash
-            execution_data.elapsed_time = BridgeProvider._tx_timestamp(
+            execution_data.elapsed_time = Provider._tx_timestamp(
                 to_tx_hash, to_ledger_api
-            ) - BridgeProvider._tx_timestamp(from_tx_hash, from_ledger_api)
-            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+            ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+            provider_request.status = ProviderRequestStatus.EXECUTION_DONE
         elif lifi_status == LiFiTransactionStatus.FAILED:
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
         elif lifi_status == LiFiTransactionStatus.PENDING:
-            bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
+            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
         else:
-            bridge_request.status = BridgeRequestStatus.EXECUTION_UNKNOWN
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
 
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
+    def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
-        if not bridge_request.execution_data:
+        if not provider_request.execution_data:
             return None
 
-        tx_hash = bridge_request.execution_data.from_tx_hash
+        tx_hash = provider_request.execution_data.from_tx_hash
         if not tx_hash:
             return None
 
