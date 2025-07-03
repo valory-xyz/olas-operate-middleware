@@ -59,9 +59,7 @@ MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
 MESSAGE_EXECUTION_FAILED = "Execution failed:"
 MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} ETA exceeded."
 MESSAGE_EXECUTION_FAILED_QUOTE_FAILED = f"{MESSAGE_EXECUTION_FAILED} quote failed."
-MESSAGE_EXECUTION_FAILED_REVERTED = (
-    f"{MESSAGE_EXECUTION_FAILED} transaction reverted."
-)
+MESSAGE_EXECUTION_FAILED_REVERTED = f"{MESSAGE_EXECUTION_FAILED} transaction reverted."
 MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
     f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
 )
@@ -265,9 +263,7 @@ class Provider(ABC):
 
     def requirements(self, provider_request: ProviderRequest) -> t.Dict:
         """Gets the requirements to execute the quote, with updated gas estimation."""
-        self.logger.info(
-            f"[PROVIDER] Requirements for request {provider_request.id}."
-        )
+        self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
         self._validate(provider_request)
 
@@ -339,16 +335,12 @@ class Provider(ABC):
 
     def execute(self, provider_request: ProviderRequest) -> None:
         """Execute the request."""
-        self.logger.info(
-            f"[PROVIDER] Executing request {provider_request.id}."
-        )
+        self.logger.info(f"[PROVIDER] Executing request {provider_request.id}.")
 
         self._validate(provider_request)
 
         if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED):
-            self.logger.info(
-                f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}."
-            )
+            self.logger.info(f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}.")
             execution_data = ExecutionData(
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}",
@@ -393,9 +385,7 @@ class Provider(ABC):
             return
 
         try:
-            self.logger.info(
-                f"[PROVIDER] Executing request {provider_request.id}."
-            )
+            self.logger.info(f"[PROVIDER] Executing request {provider_request.id}.")
             timestamp = time.time()
             chain = Chain(provider_request.params["from"]["chain"])
             from_address = provider_request.params["from"]["address"]

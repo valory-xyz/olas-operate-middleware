@@ -30,25 +30,25 @@ from deepdiff import DeepDiff
 from web3 import Web3
 
 from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
-    ProviderRequest,
     LiFiProvider,
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
-)
-from operate.bridge.providers.provider import (
-    Provider,
-    ProviderRequestStatus,
-    ExecutionData,
-    MESSAGE_EXECUTION_FAILED,
-    MESSAGE_EXECUTION_FAILED_QUOTE_FAILED,
-    MESSAGE_EXECUTION_SKIPPED,
-    MESSAGE_QUOTE_ZERO,
-    QuoteData,
+    ProviderRequest,
 )
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
+)
+from operate.bridge.providers.provider import (
+    ExecutionData,
+    MESSAGE_EXECUTION_FAILED,
+    MESSAGE_EXECUTION_FAILED_QUOTE_FAILED,
+    MESSAGE_EXECUTION_SKIPPED,
+    MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequestStatus,
+    QuoteData,
 )
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
@@ -234,9 +234,7 @@ class TestNativeBridgeProvider:
 
         # Get requirements
         br = provider.requirements(provider_request)
-        assert (
-            br["ethereum"][wallet_address][ZERO_ADDRESS] > 0
-        ), "Wrong requirements."
+        assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong requirements."
         expected_br = {
             "ethereum": {
                 wallet_address: {
@@ -366,11 +364,17 @@ class TestProvider:
             provider = NativeBridgeProvider(
                 provider_id=provider_id,
                 bridge_contract_adaptor=OptimismContractAdaptor(
-                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["from_chain"],
-                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["from_bridge"],
+                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "from_chain"
+                    ],
+                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "from_bridge"
+                    ],
                     to_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_chain"],
                     to_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_bridge"],
-                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["bridge_eta"],
+                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "bridge_eta"
+                    ],
                 ),
                 wallet_manager=operate.wallet_manager,
             )
@@ -432,11 +436,11 @@ class TestProvider:
             assert provider_request.quote_data.eta == 0, "Wrong quote data."
             assert provider_request.quote_data.elapsed_time == 0, "Wrong quote data."
             assert provider_request.quote_data.timestamp > 0, "Wrong quote data."
-            expected_quote_data.eta = (
-                bridge_eta or provider_request.quote_data.eta
-            )
+            expected_quote_data.eta = bridge_eta or provider_request.quote_data.eta
             expected_quote_data.elapsed_time = provider_request.quote_data.elapsed_time
-            expected_quote_data.provider_data = provider_request.quote_data.provider_data
+            expected_quote_data.provider_data = (
+                provider_request.quote_data.provider_data
+            )
             expected_quote_data.timestamp = provider_request.quote_data.timestamp
             assert provider_request == expected_request, "Wrong request."
             sj = provider.status_json(provider_request)
@@ -708,11 +712,17 @@ class TestProvider:
             provider = NativeBridgeProvider(
                 provider_id=provider_id,
                 bridge_contract_adaptor=OptimismContractAdaptor(
-                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["from_chain"],
-                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["from_bridge"],
+                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "from_chain"
+                    ],
+                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "from_bridge"
+                    ],
                     to_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_chain"],
                     to_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_bridge"],
-                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["bridge_eta"],
+                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
+                        "bridge_eta"
+                    ],
                 ),
                 wallet_manager=operate.wallet_manager,
             )
@@ -775,11 +785,11 @@ class TestProvider:
             assert provider_request.quote_data.eta > 0, "Wrong quote data."
             assert provider_request.quote_data.elapsed_time >= 0, "Wrong quote data."
             assert provider_request.quote_data.timestamp > 0, "Wrong quote data."
-            expected_quote_data.eta = (
-                bridge_eta or provider_request.quote_data.eta
-            )
+            expected_quote_data.eta = bridge_eta or provider_request.quote_data.eta
             expected_quote_data.elapsed_time = provider_request.quote_data.elapsed_time
-            expected_quote_data.provider_data = provider_request.quote_data.provider_data
+            expected_quote_data.provider_data = (
+                provider_request.quote_data.provider_data
+            )
             expected_quote_data.timestamp = provider_request.quote_data.timestamp
             assert provider_request == expected_request, "Wrong request."
             sj = provider.status_json(provider_request)
@@ -1238,11 +1248,17 @@ class TestProvider:
             provider: Provider = NativeBridgeProvider(
                 provider_id=provider_id,
                 bridge_contract_adaptor=contract_adaptor_class(
-                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id]["from_chain"],
-                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id]["from_bridge"],
+                    from_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id][
+                        "from_chain"
+                    ],
+                    from_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id][
+                        "from_bridge"
+                    ],
                     to_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id]["to_chain"],
                     to_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id]["to_bridge"],
-                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id]["bridge_eta"],
+                    bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id][
+                        "bridge_eta"
+                    ],
                 ),
                 wallet_manager=operate.wallet_manager,
             )

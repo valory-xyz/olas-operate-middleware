@@ -31,12 +31,12 @@ from urllib.parse import urlencode
 import requests
 
 from operate.bridge.providers.provider import (
-    Provider,
-    ProviderRequest,
-    ProviderRequestStatus,
     DEFAULT_MAX_QUOTE_RETRIES,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
     QuoteData,
 )
 from operate.operate_types import Chain

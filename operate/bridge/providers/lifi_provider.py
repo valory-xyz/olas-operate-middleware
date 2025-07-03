@@ -30,11 +30,11 @@ import requests
 from autonomy.chain.base import registry_contracts
 
 from operate.bridge.providers.provider import (
+    DEFAULT_MAX_QUOTE_RETRIES,
+    MESSAGE_QUOTE_ZERO,
     Provider,
     ProviderRequest,
     ProviderRequestStatus,
-    DEFAULT_MAX_QUOTE_RETRIES,
-    MESSAGE_QUOTE_ZERO,
     QuoteData,
 )
 from operate.constants import ZERO_ADDRESS
@@ -345,7 +345,9 @@ class LiFiProvider(Provider):
             )
 
         if lifi_status == LiFiTransactionStatus.DONE:
-            self.logger.info(f"[LI.FI PROVIDER] Execution done for {provider_request.id}.")
+            self.logger.info(
+                f"[LI.FI PROVIDER] Execution done for {provider_request.id}."
+            )
             from_ledger_api = self._from_ledger_api(provider_request)
             to_ledger_api = self._to_ledger_api(provider_request)
             to_tx_hash = response_json.get("receiving", {}).get("txHash")

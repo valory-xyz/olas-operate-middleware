@@ -32,13 +32,13 @@ from eth_typing import BlockIdentifier
 from web3 import Web3
 
 from operate.bridge.providers.provider import (
-    Provider,
-    ProviderRequest,
-    ProviderRequestStatus,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_ETA,
     MESSAGE_EXECUTION_FAILED_REVERTED,
     MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequest,
+    ProviderRequestStatus,
     QuoteData,
 )
 from operate.constants import ZERO_ADDRESS

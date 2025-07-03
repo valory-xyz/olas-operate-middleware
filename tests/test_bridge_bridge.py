@@ -30,17 +30,17 @@ import pytest
 import requests
 from deepdiff import DeepDiff
 
-from operate.bridge.providers.provider import (
-    Provider,
-    ProviderRequestStatus,
-    MESSAGE_QUOTE_ZERO,
-)
 from operate.bridge.providers.lifi_provider import LiFiProvider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
+)
+from operate.bridge.providers.provider import (
+    MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequestStatus,
 )
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
@@ -224,9 +224,7 @@ class TestBridgeManager:
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
         ), "Wrong refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period
@@ -339,9 +337,7 @@ class TestBridgeManager:
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
         ), "Wrong refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period
@@ -461,9 +457,7 @@ class TestBridgeManager:
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
         ), "Wrong refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period

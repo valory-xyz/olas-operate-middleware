@@ -33,13 +33,13 @@ from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate.bridge.providers.provider import Provider, ProviderRequest
 from operate.bridge.providers.lifi_provider import LiFiProvider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
+from operate.bridge.providers.provider import Provider, ProviderRequest
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import USDC
@@ -264,9 +264,7 @@ class BridgeManager:
             for params in requests_params:
                 for provider in self._native_bridge_providers.values():
                     if provider.can_handle_request(params):
-                        provider_requests.append(
-                            provider.create_request(params=params)
-                        )
+                        provider_requests.append(provider.create_request(params=params))
                         break
                 else:
                     provider_id = ROUTES.get(
@@ -280,9 +278,7 @@ class BridgeManager:
                     )
 
                     provider_requests.append(
-                        self._providers[provider_id].create_request(
-                            params=params
-                        )
+                        self._providers[provider_id].create_request(params=params)
                     )
 
             bundle = ProviderRequestBundle(
