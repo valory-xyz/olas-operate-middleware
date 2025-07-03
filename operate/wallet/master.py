@@ -927,20 +927,3 @@ class MasterWalletManager:
             if not self.exists(ledger_type=ledger_type):
                 continue
             yield LEDGER_TYPE_TO_WALLET_CLASS[ledger_type].load(path=self.path)
-
-    def migrate_wallet_configs(self) -> None:
-        """Migrate old wallet config formats to new ones, if applies."""
-
-        print(self.path)
-
-        for ledger_type in LedgerType:
-            if not self.exists(ledger_type=ledger_type):
-                continue
-
-            wallet_class = LEDGER_TYPE_TO_WALLET_CLASS.get(ledger_type)
-            if wallet_class is None:
-                continue
-
-            migrated = wallet_class.migrate_format(path=self.path)
-            if migrated:
-                self.logger.info(f"Wallet {wallet_class} has been migrated.")

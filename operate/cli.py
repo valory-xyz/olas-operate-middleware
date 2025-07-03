@@ -110,6 +110,8 @@ class OperateApp:
 
         mm = MigrationManager(self._path, self.logger)
         mm.migrate_user_account()
+        mm.migrate_services(self.service_manager())
+        mm.migrate_wallets(self.wallet_manager)
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -220,16 +222,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     if HEALTH_CHECKER_OFF:
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
-
-    operate.service_manager().log_directories()
-    logger.info("Migrating service configs...")
-    operate.service_manager().migrate_service_configs()
-    logger.info("Migrating service configs done.")
-    operate.service_manager().log_directories()
-
-    logger.info("Migrating wallet configs...")
-    operate.wallet_manager.migrate_wallet_configs()
-    logger.info("Migrating wallet configs done.")
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(

@@ -44,9 +44,6 @@ def stop_service(operate: "OperateApp", config_path: str) -> None:
 
     print_title(f"Stop {template['name']} Quickstart")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # check if agent was started before
     config = load_local_config(
         operate=operate, service_name=cast(str, template["name"])

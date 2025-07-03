@@ -645,9 +645,6 @@ def run_service(
 
     print_title(f"{template['name']} quickstart")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
