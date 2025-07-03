@@ -53,7 +53,6 @@ from operate.bridge.providers.provider import (
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
-from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, LedgerType
 
@@ -65,12 +64,14 @@ RUNNING_IN_CI = (
     or os.getenv("CI", "").lower() == "true"
 )
 
-DEFAULT_RPCS[Chain.ETHEREUM] = "https://rpc-gate.autonolas.tech/ethereum-rpc/"
-DEFAULT_RPCS[Chain.BASE] = "https://rpc-gate.autonolas.tech/base-rpc/"
-DEFAULT_RPCS[Chain.CELO] = "https://forno.celo.org"
-DEFAULT_RPCS[Chain.GNOSIS] = "https://rpc-gate.autonolas.tech/gnosis-rpc/"
-DEFAULT_RPCS[Chain.MODE] = "https://mainnet.mode.network"
-DEFAULT_RPCS[Chain.OPTIMISTIC] = "https://rpc-gate.autonolas.tech/optimism-rpc/"
+TEST_RPCS = {
+    Chain.ETHEREUM: "https://rpc-gate.autonolas.tech/ethereum-rpc/",
+    Chain.BASE: "https://rpc-gate.autonolas.tech/base-rpc/",
+    Chain.CELO: "https://forno.celo.org",
+    Chain.GNOSIS: "https://rpc-gate.autonolas.tech/gnosis-rpc/",
+    Chain.MODE: "https://mainnet.mode.network",
+    Chain.OPTIMISTIC: "https://rpc-gate.autonolas.tech/optimism-rpc/",
+}
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
 
@@ -1301,7 +1302,7 @@ class TestProvider:
 
         if provider_request.status == ProviderRequestStatus.EXECUTION_DONE:
             transfer_amount = get_transfer_amount(
-                w3=Web3(Web3.HTTPProvider(DEFAULT_RPCS[Chain(params["to"]["chain"])])),
+                w3=Web3(Web3.HTTPProvider(TEST_RPCS[Chain(params["to"]["chain"])])),
                 tx_hash=expected_to_tx_hash,
                 token_address=params["to"]["token"],
                 recipient=params["to"]["address"],
