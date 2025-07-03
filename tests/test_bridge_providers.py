@@ -29,7 +29,7 @@ import pytest
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate.bridge.bridge import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
+from operate.bridge.bridge_manager import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
     LiFiProvider,
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
