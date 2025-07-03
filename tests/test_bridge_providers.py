@@ -1225,6 +1225,7 @@ class TestProvider:
         self,
         tmp_path: Path,
         password: str,
+        monkeypatch: pytest.MonkeyPatch,
         provider_class: t.Type[Provider],
         contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
         params: dict,
@@ -1235,6 +1236,7 @@ class TestProvider:
         expected_elapsed_time: int,
     ) -> None:
         """test_update_execution_status"""
+        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TEST_RPCS)
 
         operate = OperateApp(home=tmp_path / OPERATE)
         operate.setup()
