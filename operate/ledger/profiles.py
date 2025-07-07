@@ -19,6 +19,7 @@
 
 """Chain profiles."""
 
+import enum
 import typing as t
 
 from operate.constants import ZERO_ADDRESS
@@ -154,7 +155,28 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     },
 }
 
-DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH = "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053"
+
+class StakingProgramMechType(enum.Enum):
+    """Staking program mech type."""
+
+    LEGACY_MECH = "legacy_mech"
+    LEGACY_MECH_MARKETPLACE = "legacy_mech_marketplace"
+    MECH_MARKETPLACE = "mech_marketplace"
+
+    def __str__(self) -> str:
+        """Get the string representation of the enum."""
+        return self.value
+
+
+DEFAULT_PRIORITY_MECH_ADDRESS = {
+    StakingProgramMechType.LEGACY_MECH: "0x77af31De935740567Cf4fF1986D04B2c964A786a",
+    StakingProgramMechType.LEGACY_MECH_MARKETPLACE: "0x552cEA7Bc33CbBEb9f1D90c1D11D2C6daefFd053",
+    StakingProgramMechType.MECH_MARKETPLACE: "0xC05e7412439bD7e91730a6880E18d5D5873F632C",
+}
+DEFAULT_PRIORITY_MECH_SERVICE_ID = {
+    StakingProgramMechType.LEGACY_MECH_MARKETPLACE: 975,
+    StakingProgramMechType.MECH_MARKETPLACE: 2182,
+}
 
 
 # ERC20 token addresses
@@ -247,3 +269,17 @@ def get_staking_contract(
         staking_program_id,
         staking_program_id,
     )
+
+
+def get_staking_program_mech_type(
+    staking_program_id: t.Optional[str],
+) -> StakingProgramMechType:
+    """Get the staking program mech type based on the staking program ID."""
+    if staking_program_id is None:
+        return StakingProgramMechType.LEGACY_MECH
+
+    if staking_program_id.startswith("quickstart_beta_mech_marketplace_expert"):
+        return StakingProgramMechType.MECH_MARKETPLACE
+    if "mech_marketplace" in staking_program_id:
+        return StakingProgramMechType.LEGACY_MECH_MARKETPLACE
+    return StakingProgramMechType.LEGACY_MECH

@@ -52,12 +52,14 @@ from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MASTER_EOA_FUNDS,
-    DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH,
+    DEFAULT_PRIORITY_MECH_ADDRESS,
+    DEFAULT_PRIORITY_MECH_SERVICE_ID,
     OLAS,
     STAKING,
     USDC,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
+    get_staking_program_mech_type,
 )
 from operate.operate_types import (
     Chain,
@@ -554,6 +556,10 @@ class ServiceManager:
         self.logger.info(f"Service state: {on_chain_state.name}")
 
         current_staking_program = self._get_current_staking_program(service, chain)
+        staking_program_mech_type = get_staking_program_mech_type(
+            user_params.staking_program_id
+        )
+        self.logger.info(f"{staking_program_mech_type=}")
         fallback_params = dict(  # nosec
             staking_contract=NULL_ADDRESS,
             agent_ids=[user_params.agent_id],
@@ -602,6 +608,7 @@ class ServiceManager:
                 use_mech_marketplace = False
                 mech_marketplace_address = ZERO_ADDRESS
                 priority_mech_address = ZERO_ADDRESS
+                priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(staking_program_mech_type, 0)
 
             except Exception:  # pylint: disable=broad-except
                 # Try if activity checker is a RequesterActivityChecker contract
@@ -638,17 +645,35 @@ class ServiceManager:
                     else:
                         agent_mech = (
                             priority_mech_address
-                        ) = DEFAULT_MECH_MARKETPLACE_PRIORITY_MECH
+                        ) = DEFAULT_PRIORITY_MECH_ADDRESS[staking_program_mech_type]
+
+                    if (
+                        "PRIORITY_MECH_SERVICE_ID" in service.env_variables
+                        and service.env_variables["PRIORITY_MECH_SERVICE_ID"][
+                            "provision_type"
+                        ]
+                        == ServiceEnvProvisionType.USER
+                    ):
+                        priority_mech_service_id = service.env_variables[
+                            "PRIORITY_MECH_SERVICE_ID"
+                        ]["value"]
+                    else:
+                        priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(
+                            staking_program_mech_type, 0
+                        )
 
                 except Exception:  # pylint: disable=broad-except
                     self.logger.warning(
                         "Cannot determine type of activity checker contract. Using default parameters. "
                         "NOTE: This will be an exception in the future!"
                     )
-                    agent_mech = "0x77af31De935740567Cf4fF1986D04B2c964A786a"  # nosec
+                    agent_mech = DEFAULT_PRIORITY_MECH_ADDRESS[
+                        staking_program_mech_type
+                    ]
                     use_mech_marketplace = False
                     mech_marketplace_address = ZERO_ADDRESS
                     priority_mech_address = ZERO_ADDRESS
+                    priority_mech_service_id = 0
 
             env_var_to_value.update(
                 {
@@ -669,7 +694,7 @@ class ServiceManager:
                         f'{{"mech_marketplace_address":"{mech_marketplace_address}",'
                         f'"priority_mech_address":"{priority_mech_address}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
-                        f'"priority_mech_service_id":{service.env_variables.get("PRIORITY_MECH_SERVICE_ID", {"value": 975})["value"]},'
+                        f'"priority_mech_service_id":{priority_mech_service_id},'
                         f'"requester_staking_instance_address":"{target_staking_params.get("staking_contract")}",'
                         f'"response_timeout":300}}'
                     ),
