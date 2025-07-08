@@ -1114,20 +1114,35 @@ def _operate() -> None:
 def _daemon(
     host: Annotated[str, params.String(help="HTTP server host string")] = "localhost",
     port: Annotated[int, params.Integer(help="HTTP server port")] = 8000,
+    ssl_keyfile: Annotated[str, params.String(help="Path to SSL key file")] = "",
+    ssl_certfile: Annotated[
+        str, params.String(help="Path to SSL certificate file")
+    ] = "",
     home: Annotated[
         t.Optional[Path], params.Directory(long_flag="--home", help="Home directory")
     ] = None,
 ) -> None:
     """Launch operate daemon."""
     app = create_app(home=home)
+    logger = setup_logger(name="daemon")
 
-    server = Server(
-        Config(
-            app=app,
-            host=host,
-            port=port,
+    config_kwargs = {
+        "app": app,
+        "host": host,
+        "port": port,
+    }
+
+    # Use SSL certificates if ssl_keyfile and ssl_certfile are provided
+    if ssl_keyfile and ssl_certfile:
+        logger.info(f"Using SSL certificates: {ssl_certfile}")
+        config_kwargs.update(
+            {
+                "ssl_keyfile": ssl_keyfile,
+                "ssl_certfile": ssl_certfile,
+            }
         )
-    )
+
+    server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
     server.run()
 
