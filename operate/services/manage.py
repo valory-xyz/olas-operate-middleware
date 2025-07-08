@@ -608,7 +608,9 @@ class ServiceManager:
                 use_mech_marketplace = False
                 mech_marketplace_address = ZERO_ADDRESS
                 priority_mech_address = ZERO_ADDRESS
-                priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(staking_program_mech_type, 0)
+                priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(
+                    staking_program_mech_type, 0
+                )
 
             except Exception:  # pylint: disable=broad-except
                 # Try if activity checker is a RequesterActivityChecker contract
