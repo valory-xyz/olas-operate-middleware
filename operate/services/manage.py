@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import shutil
 import time
 import traceback
 import typing as t
@@ -47,7 +46,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.keys import Key, KeysManager
+from operate.keys import KeysManager
 from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
@@ -72,7 +71,6 @@ from operate.operate_types import (
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
-    DELETE_PREFIX,
     Deployment,
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
@@ -119,7 +117,6 @@ class ServiceManager:
     def __init__(
         self,
         path: Path,
-        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         logger: t.Optional[logging.Logger] = None,
         skip_dependency_check: t.Optional[bool] = False,
@@ -133,7 +130,7 @@ class ServiceManager:
         :param logger: logging.Logger object.
         """
         self.path = path
-        self.keys_manager = keys_manager
+        self.keys_manager = KeysManager()
         self.wallet_manager = wallet_manager
         self.logger = logger or setup_logger(name="operate.manager")
         self.skip_depencency_check = skip_dependency_check
@@ -197,14 +194,14 @@ class ServiceManager:
         self,
         hash: str,
         service_template: t.Optional[ServiceTemplate] = None,
-        keys: t.Optional[t.List[Key]] = None,
+        agent_addresses: t.Optional[t.List[str]] = None,
     ) -> Service:
         """
         Create or load a service
 
         :param hash: Service hash
         :param service_template: Service template
-        :param keys: Keys
+        :param agent_addresses: Agents' addresses to be used for the service.
         :return: Service instance
         """
         path = self.path / hash
@@ -223,20 +220,9 @@ class ServiceManager:
                 "'service_template' cannot be None when creating a new service"
             )
 
-        service = Service.new(
-            keys=keys or [],
-            storage=self.path,
-            service_template=service_template,
+        return self.create(
+            service_template=service_template, agent_addresses=agent_addresses
         )
-
-        if not service.keys:
-            service.keys = [
-                self.keys_manager.get(self.keys_manager.create())
-                for _ in range(NUM_LOCAL_AGENT_INSTANCES)
-            ]
-            service.store()
-
-        return service
 
     def load(
         self,
@@ -254,25 +240,24 @@ class ServiceManager:
     def create(
         self,
         service_template: ServiceTemplate,
-        keys: t.Optional[t.List[Key]] = None,
+        agent_addresses: t.Optional[t.List[str]] = None,
     ) -> Service:
         """
         Create a service
 
         :param service_template: Service template
-        :param keys: Keys
+        :param agent_addresses: Agents' addresses to be used for the service.
         :return: Service instance
         """
         service = Service.new(
-            keys=keys or [],
+            agent_addresses=agent_addresses or [],
             storage=self.path,
             service_template=service_template,
         )
 
-        if not service.keys:
-            service.keys = [
-                self.keys_manager.get(self.keys_manager.create())
-                for _ in range(NUM_LOCAL_AGENT_INSTANCES)
+        if not service.agent_addresses:
+            service.agent_addresses = [
+                self.keys_manager.create() for _ in range(NUM_LOCAL_AGENT_INSTANCES)
             ]
             service.store()
 
@@ -335,8 +320,6 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         user_params = chain_config.chain_data.user_params
-        keys = service.keys
-        instances = [key.address for key in keys]
         ocm = self.get_on_chain_manager(ledger_config=ledger_config)
 
         # TODO fix this
@@ -480,8 +463,8 @@ class ServiceManager:
             agent_id = staking_params["agent_ids"][0]
             ocm.register(
                 service_id=chain_data.token,
-                instances=instances,
-                agents=[agent_id for _ in instances],
+                instances=service.agent_addresses,
+                agents=[agent_id for _ in service.agent_addresses],
                 token=(OLAS[ledger_config.chain] if user_params.use_staking else None),
             )
             on_chain_state = OnChainState.FINISHED_REGISTRATION
@@ -534,8 +517,6 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         user_params = chain_config.chain_data.user_params
-        keys = service.keys
-        instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         safe = wallet.safes[Chain(chain)]
@@ -1006,10 +987,10 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                cost_of_bond = 1 * len(instances)
+                cost_of_bond = 1 * len(service.agent_addresses)
 
             self.logger.info(
-                f"Registering agent instances: {chain_data.token} -> {instances}"
+                f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
             )
 
             native_balance = get_asset_balance(
@@ -1026,8 +1007,8 @@ class ServiceManager:
             sftxb.new_tx().add(
                 sftxb.get_register_instances_data(
                     service_id=chain_data.token,
-                    instances=instances,
-                    agents=[agent_id for _ in instances],
+                    instances=service.agent_addresses,
+                    agents=[agent_id for _ in service.agent_addresses],
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
@@ -1176,8 +1157,6 @@ class ServiceManager:
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
-        keys = service.keys
-        instances = [key.address for key in keys]
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         safe = wallet.safes[Chain(chain)]  # type: ignore
 
@@ -1242,7 +1221,7 @@ class ServiceManager:
         # Swap service safe
         current_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         counter_current_safe_owners = Counter(s.lower() for s in current_safe_owners)
-        counter_instances = Counter(s.lower() for s in instances)
+        counter_instances = Counter(s.lower() for s in service.agent_addresses)
 
         if withdrawal_address is not None:
             # we don't drain signer yet, because the owner swapping tx may need to happen
@@ -1772,11 +1751,11 @@ class ServiceManager:
                 on_chain_state = self._get_on_chain_state(service=service, chain=chain)
                 if on_chain_state != OnChainState.DEPLOYED:
                     if chain_data.user_params.use_staking:
-                        on_chain_operations_buffer = 1 + len(service.keys)
+                        on_chain_operations_buffer = 1 + len(service.agent_addresses)
                     else:
                         on_chain_operations_buffer = (
                             chain_data.user_params.cost_of_bond
-                            * (1 + len(service.keys))
+                            * (1 + len(service.agent_addresses))
                         )
 
             asset_funding_values = (
@@ -1790,21 +1769,21 @@ class ServiceManager:
                 else fund_requirements.agent
             )
 
-            for key in service.keys:
+            for agent_address in service.agent_addresses:
                 agent_balance = get_asset_balance(
                     ledger_api=ledger_api,
                     asset_address=asset_address,
-                    address=key.address,
+                    address=agent_address,
                 )
                 self.logger.info(
-                    f"[FUNDING_JOB] Agent {key.address} Asset: {asset_address} balance: {agent_balance}"
+                    f"[FUNDING_JOB] Agent {agent_address} Asset: {asset_address} balance: {agent_balance}"
                 )
                 if agent_fund_threshold > 0:
                     self.logger.info(
                         f"[FUNDING_JOB] Required balance: {agent_fund_threshold}"
                     )
                     if agent_balance < agent_fund_threshold:
-                        self.logger.info(f"[FUNDING_JOB] Funding agent {key.address}")
+                        self.logger.info(f"[FUNDING_JOB] Funding agent {agent_address}")
                         target_balance = (
                             asset_funding_values["agent"]["topup"]
                             if asset_funding_values is not None
@@ -1822,11 +1801,11 @@ class ServiceManager:
                             min(available_balance, target_balance - agent_balance), 0
                         )
                         self.logger.info(
-                            f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {key.address}"
+                            f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {agent_address}"
                         )
                         wallet.transfer_asset(
                             asset=asset_address,
-                            to=key.address,
+                            to=agent_address,
                             amount=int(to_transfer),
                             chain=ledger_config.chain,
                             from_safe=from_safe,
@@ -1928,9 +1907,9 @@ class ServiceManager:
             or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
         )
 
-        for key in service.keys:
-            agent_balance = ledger_api.get_balance(address=key.address)
-            self.logger.info(f"Agent {key.address} balance: {agent_balance}")
+        for agent_address in service.agent_addresses:
+            agent_balance = ledger_api.get_balance(address=agent_address)
+            self.logger.info(f"Agent {agent_address} balance: {agent_balance}")
             self.logger.info(f"Required balance: {agent_fund_threshold}")
             if agent_balance < agent_fund_threshold:
                 self.logger.info("Funding agents")
@@ -1938,10 +1917,10 @@ class ServiceManager:
                     agent_topup
                     or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
                 )
-                self.logger.info(f"Transferring {to_transfer} units to {key.address}")
+                self.logger.info(f"Transferring {to_transfer} units to {agent_address}")
                 wallet.transfer_erc20(
                     token=token,
-                    to=key.address,
+                    to=agent_address,
                     amount=int(to_transfer),
                     chain=ledger_config.chain,
                     from_safe=from_safe,
@@ -2168,44 +2147,6 @@ class ServiceManager:
         )
         return service
 
-    def migrate_service_configs(self) -> None:
-        """Migrate old service config formats to new ones, if applies."""
-
-        bafybei_count = sum(
-            1 for path in self.path.iterdir() if path.name.startswith("bafybei")
-        )
-        if bafybei_count > 1:
-            self.log_directories()
-            raise RuntimeError(
-                f"Your services folder contains {bafybei_count} folders starting with 'bafybei'. This is an unintended situation. Please contact support."
-            )
-
-        paths = list(self.path.iterdir())
-        for path in paths:
-            try:
-                if path.name.startswith(DELETE_PREFIX):
-                    shutil.rmtree(path)
-                    self.logger.info(f"Deleted folder: {path.name}")
-
-                if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
-                    "bafybei"
-                ):
-                    self.logger.info(f"migrate_service_configs {str(path)}")
-                    migrated = Service.migrate_format(path)
-                    if migrated:
-                        self.logger.info(f"Folder {str(path)} has been migrated.")
-            except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(
-                    f"Failed to migrate service: {path.name}. Exception {e}: {traceback.format_exc()}"
-                )
-                # Rename the invalid path
-                timestamp = int(time.time())
-                invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
-                os.rename(path, invalid_path)
-                self.logger.info(
-                    f"Renamed invalid service: {path.name} to {invalid_path.name}"
-                )
-
     def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
         self, service_config_id: str
     ) -> t.Dict:
@@ -2233,11 +2174,9 @@ class ServiceManager:
             master_safe_exists = wallet.safes.get(Chain(chain)) is not None
             master_safe = wallet.safes.get(Chain(chain), "master_safe")
 
-            agent_addresses = {key.address for key in service.keys}
+            agent_addresses = set(service.agent_addresses)
             service_safe = (
-                chain_data.multisig
-                if chain_data.multisig and chain_data.multisig != NON_EXISTENT_MULTISIG
-                else "service_safe"
+                chain_data.multisig if chain_data.multisig else "service_safe"
             )
 
             if not master_safe_exists:
