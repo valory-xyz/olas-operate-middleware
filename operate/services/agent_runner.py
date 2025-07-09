@@ -71,7 +71,7 @@ AGENTS_SUPPORTED = {
         owner="valory-xyz", repo="optimus", release="v0.0.103"
     ),
     "dvilela/memeooorr": AgentRelease(
-        owner="valory-xyz", repo="meme-ooorr-test", release="v0.0.101"
+        owner="valory-xyz", repo="meme-ooorr", release="v0.0.101"
     ),
 }
 
