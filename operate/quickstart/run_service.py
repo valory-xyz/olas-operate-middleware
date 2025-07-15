@@ -34,13 +34,12 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, OPERATE_HOME
+from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import (
     DEFAULT_PRIORITY_MECH_ADDRESS,
     DEFAULT_PRIORITY_MECH_SERVICE_ID,
-    NO_STAKING_PROGRAM_ID,
     STAKING,
     get_staking_contract,
     get_staking_program_mech_type,
@@ -373,14 +372,12 @@ def configure_local_config(
             template["configurations"][chain] |= {
                 "staking_program_id": config.staking_program_id,
                 "rpc": config.rpc[chain],
-                "use_staking": config.staking_program_id != NO_STAKING_PROGRAM_ID,
                 "cost_of_bond": min_staking_deposit,
             }
         else:
             template["configurations"][chain] |= {
                 "staking_program_id": NO_STAKING_PROGRAM_ID,
                 "rpc": config.rpc[chain],
-                "use_staking": False,
                 "cost_of_bond": 1,
             }
 

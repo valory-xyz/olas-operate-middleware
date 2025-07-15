@@ -22,7 +22,8 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, get_staking_contract
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.ledger.profiles import get_staking_contract
 from operate.quickstart.run_service import (
     CUSTOM_PROGRAM_ID,
     ask_password_if_needed,
