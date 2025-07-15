@@ -431,7 +431,7 @@ class ServiceManager:
                         if user_params.use_staking
                         else user_params.cost_of_bond
                     ),
-                    threshold=user_params.threshold,
+                    threshold=len(service.agent_addresses),
                     nft=IPFSHash(user_params.nft),
                     update_token=chain_data.token if is_update else None,
                     token=(
@@ -808,7 +808,7 @@ class ServiceManager:
                                 if user_params.use_staking
                                 else user_params.cost_of_bond
                             ),
-                            threshold=user_params.threshold,
+                            threshold=len(service.agent_addresses),
                             nft=IPFSHash(user_params.nft),
                             update_token=chain_data.token,
                             token=(
@@ -858,7 +858,7 @@ class ServiceManager:
                             if user_params.use_staking
                             else user_params.cost_of_bond
                         ),
-                        threshold=user_params.threshold,
+                        threshold=len(service.agent_addresses),
                         nft=IPFSHash(user_params.nft),
                         update_token=None,
                         token=(
