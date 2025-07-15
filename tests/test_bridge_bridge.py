@@ -30,21 +30,19 @@ import pytest
 import requests
 from deepdiff import DeepDiff
 
-from operate.bridge.providers.bridge_provider import (
-    BridgeProvider,
-    BridgeRequestStatus,
-    MESSAGE_QUOTE_ZERO,
-)
-from operate.bridge.providers.lifi_bridge_provider import (
-    LIFI_DEFAULT_ETA,
-    LiFiBridgeProvider,
-)
+from operate.bridge.providers.lifi_provider import LiFiProvider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
+from operate.bridge.providers.provider import (
+    MESSAGE_QUOTE_ZERO,
+    Provider,
+    ProviderRequestStatus,
+)
+from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
@@ -90,9 +88,21 @@ class TestBridgeManager:
 
     @staticmethod
     @cache
-    def _get_token_price_usd(chain: str, token_address: str) -> t.Optional[float]:
+    def _get_token_price_usd(
+        chain: str, token_address: str, amount: t.Optional[int] = None
+    ) -> t.Optional[float]:
         print(f"Calling _get_token_price_usd {chain=} {token_address=}")
         chain = chain.lower()
+
+        if token_address in USDC.values():
+            decimals = 6
+            if amount is None:
+                amount = 1000000
+        else:
+            decimals = 18
+            if amount is None:
+                amount = 1000000000000000000
+
         if token_address == ZERO_ADDRESS:
             coingecko_id = COINGECKO_NATIVE_IDS.get(chain)
             if not coingecko_id:
@@ -105,7 +115,7 @@ class TestBridgeManager:
                 return None
             data = r.json()
             print(r.json())
-            return data.get(coingecko_id, {}).get("usd")
+            return data.get(coingecko_id, {}).get("usd") * amount / (10**decimals)
 
         platform_id = COINGECKO_PLATFORM_IDS.get(chain)
         if not platform_id:
@@ -119,7 +129,7 @@ class TestBridgeManager:
             return None
         data = r.json()
         print(r.json())
-        return data.get(token_address, {}).get("usd")
+        return data.get(token_address, {}).get("usd") * amount / (10**decimals)
 
     def test_bundle_zero(
         self,
@@ -149,7 +159,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": ZERO_ADDRESS,
-                    "amount": 0,  # 1_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
             {
@@ -162,7 +172,7 @@ class TestBridgeManager:
                     "chain": "base",
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
@@ -182,12 +192,12 @@ class TestBridgeManager:
                 {
                     "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                    "status": ProviderRequestStatus.QUOTE_DONE.value,
                 },
                 {
                     "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                    "status": ProviderRequestStatus.QUOTE_DONE.value,
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
@@ -197,36 +207,34 @@ class TestBridgeManager:
 
         assert (
             brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
             == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
             == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
-        ), "Wrong bridge refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
         if diff:
             print(diff)
 
-        assert not diff, "Wrong bridge refill requirements."
+        assert not diff, "Wrong refill requirements."
 
     def test_bundle_error(
         self,
@@ -248,28 +256,28 @@ class TestBridgeManager:
         params = [
             {
                 "from": {
-                    "chain": "gnosis",
+                    "chain": Chain.ETHEREUM.value,
                     "address": wallet_address,
-                    "token": ZERO_ADDRESS,
+                    "token": USDC[Chain.ETHEREUM],
                 },
                 "to": {
-                    "chain": "base",
+                    "chain": Chain.OPTIMISTIC.value,
                     "address": wallet_address,
-                    "token": ZERO_ADDRESS,
+                    "token": USDC[Chain.OPTIMISTIC],
                     "amount": 1,
                 },
             },
             {
                 "from": {
-                    "chain": "gnosis",
+                    "chain": Chain.GNOSIS.value,
                     "address": wallet_address,
                     "token": OLAS[Chain.GNOSIS],
                 },
                 "to": {
-                    "chain": "base",
+                    "chain": Chain.BASE.value,
                     "address": wallet_address,
                     "token": OLAS[Chain.BASE],
-                    "amount": 0,  # 1_000_000_000_000_000_000,
+                    "amount": 0,
                 },
             },
         ]
@@ -282,19 +290,27 @@ class TestBridgeManager:
         expected_brr = {
             "id": brr["id"],
             "balances": {
-                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                },
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
             },
-            "bridge_refill_requirements": brr["bridge_refill_requirements"],
+            "bridge_refill_requirements": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                },
+                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
+            },
             "bridge_request_status": [
                 {
                     "eta": None,
                     "message": brr["bridge_request_status"][0]["message"],
-                    "status": BridgeRequestStatus.QUOTE_FAILED.value,
+                    "status": ProviderRequestStatus.QUOTE_FAILED.value,
                 },
                 {
                     "eta": 0,
                     "message": MESSAGE_QUOTE_ZERO,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                    "status": ProviderRequestStatus.QUOTE_DONE.value,
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
@@ -304,36 +320,34 @@ class TestBridgeManager:
 
         assert (
             brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
             == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
             == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
-        ), "Wrong bridge refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
         if diff:
             print(diff)
 
-        assert not diff, "Wrong bridge refill requirements."
+        assert not diff, "Wrong refill requirements."
 
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     def test_bundle_quote(
@@ -393,21 +407,13 @@ class TestBridgeManager:
         bundle = bridge_manager.data.last_requested_bundle
         assert bundle is not None, "Unexpected bundle."
 
-        request = bundle.bridge_requests[0]
-        bridge = bridge_manager._get_bridge_provider(request)
-        assert bridge._get_approve_tx(request) is None, "Wrong number of transactions."
-        assert (
-            bridge._get_bridge_tx(request) is not None
-        ), "Wrong number of transactions."
+        request = bundle.provider_requests[0]
+        bridge = bridge_manager._providers[request.provider_id]
+        assert len(bridge._get_txs(request)) == 1, "Wrong number of transactions."
 
-        request = bundle.bridge_requests[1]
-        bridge = bridge_manager._get_bridge_provider(request)
-        assert (
-            bridge._get_approve_tx(request) is not None
-        ), "Wrong number of transactions."
-        assert (
-            bridge._get_approve_tx(request) is not None
-        ), "Wrong number of transactions."
+        request = bundle.provider_requests[1]
+        bridge = bridge_manager._providers[request.provider_id]
+        assert len(bridge._get_txs(request)) == 2, "Wrong number of transactions."
 
         expected_brr = {
             "id": brr["id"],
@@ -417,14 +423,14 @@ class TestBridgeManager:
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
-                    "eta": LIFI_DEFAULT_ETA,
+                    "eta": brr["bridge_request_status"][0]["eta"],
                     "message": None,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                    "status": ProviderRequestStatus.QUOTE_DONE.value,
                 },
                 {
-                    "eta": LIFI_DEFAULT_ETA,
+                    "eta": brr["bridge_request_status"][1]["eta"],
                     "message": None,
-                    "status": BridgeRequestStatus.QUOTE_DONE.value,
+                    "status": ProviderRequestStatus.QUOTE_DONE.value,
                 },
             ],
             "bridge_total_requirements": brr["bridge_total_requirements"],
@@ -434,36 +440,34 @@ class TestBridgeManager:
 
         assert (
             brr["balances"]["ethereum"][wallet_address][ZERO_ADDRESS] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["balances"]["ethereum"][wallet_address][OLAS[Chain.ETHEREUM]] == 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["ethereum"][wallet_address][ZERO_ADDRESS]
             > 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["ethereum"][wallet_address][
                 OLAS[Chain.ETHEREUM]
             ]
             > 0
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
-        ), "Wrong bridge refill requirements."
-        assert (
-            brr["expiration_timestamp"] >= timestamp1
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
+        assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
             <= timestamp2 + bridge_manager.quote_validity_period
-        ), "Wrong bridge refill requirements."
+        ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
         if diff:
             print(diff)
 
-        assert not diff, "Wrong bridge refill requirements."
+        assert not diff, "Wrong refill requirements."
 
     @pytest.mark.parametrize(
         "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC]
@@ -486,12 +490,16 @@ class TestBridgeManager:
             expected_contract_adaptor_cls=OptimismContractAdaptor,
         )
 
-    @pytest.mark.parametrize("to_chain_enum", [Chain.GNOSIS])
+    @pytest.mark.parametrize(
+        ("to_chain_enum", "expected_provider_cls"),
+        [(Chain.GNOSIS, RelayProvider)],
+    )
     def test_correct_providers_swap_native(
         self,
         tmp_path: Path,
         password: str,
         to_chain_enum: Chain,
+        expected_provider_cls: t.Type[Provider],
     ) -> None:
         """test_correct_providers_swap_native"""
         self._main_test_correct_providers(
@@ -501,7 +509,7 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=ZERO_ADDRESS,
-            expected_provider_cls=LiFiBridgeProvider,
+            expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=None,
         )
 
@@ -517,7 +525,7 @@ class TestBridgeManager:
         token_dict: t.Dict,
     ) -> None:
         """test_correct_providers_bridge_token"""
-        expected_provider_cls: type[BridgeProvider] = NativeBridgeProvider
+        expected_provider_cls: type[Provider] = NativeBridgeProvider
         expected_contract_adaptor_cls: type[BridgeContractAdaptor]
         if to_chain_enum == Chain.GNOSIS:
             expected_contract_adaptor_cls = OmnibridgeContractAdaptor
@@ -525,11 +533,11 @@ class TestBridgeManager:
             expected_contract_adaptor_cls = OptimismContractAdaptor
 
         if to_chain_enum == Chain.BASE and token_dict == USDC:
-            expected_provider_cls = LiFiBridgeProvider
+            expected_provider_cls = LiFiProvider
             expected_contract_adaptor_cls = None  # type: ignore
 
         if to_chain_enum == Chain.OPTIMISTIC and token_dict == USDC:
-            expected_provider_cls = LiFiBridgeProvider
+            expected_provider_cls = LiFiProvider
             expected_contract_adaptor_cls = None  # type: ignore
 
         self._main_test_correct_providers(
@@ -563,7 +571,7 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=token_dict[to_chain_enum],
-            expected_provider_cls=LiFiBridgeProvider,
+            expected_provider_cls=RelayProvider,
             expected_contract_adaptor_cls=None,
         )
 
@@ -575,7 +583,7 @@ class TestBridgeManager:
         from_token: str,
         to_chain: str,
         to_token: str,
-        expected_provider_cls: t.Type[BridgeProvider],
+        expected_provider_cls: t.Type[Provider],
         expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]],
         check_price: bool = True,
         margin: float = 0.15,
@@ -627,14 +635,14 @@ class TestBridgeManager:
 
         for request_status in refill_requirements["bridge_request_status"]:
             assert (
-                request_status["status"] == BridgeRequestStatus.QUOTE_DONE
+                request_status["status"] == ProviderRequestStatus.QUOTE_DONE
             ), f"Wrong bundle for params\n{params}"
 
         bundle = bridge_manager.data.last_requested_bundle
         assert bundle is not None, "Wrong bundle."
-        assert len(bundle.bridge_requests) == 1, "Wrong bundle."
-        bridge_request = bundle.bridge_requests[0]
-        bridge = bridge_manager._get_bridge_provider(bridge_request)
+        assert len(bundle.provider_requests) == 1, "Wrong bundle."
+        request = bundle.provider_requests[0]
+        bridge = bridge_manager._providers[request.provider_id]
 
         assert isinstance(
             bridge, expected_provider_cls

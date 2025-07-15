@@ -37,7 +37,14 @@ from operate.account.user import UserAccount
 from operate.constants import IPFS_ADDRESS, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
+from operate.ledger.profiles import (
+    DEFAULT_PRIORITY_MECH_ADDRESS,
+    DEFAULT_PRIORITY_MECH_SERVICE_ID,
+    NO_STAKING_PROGRAM_ID,
+    STAKING,
+    get_staking_contract,
+    get_staking_program_mech_type,
+)
 from operate.operate_types import (
     Chain,
     LedgerType,
@@ -389,8 +396,31 @@ def configure_local_config(
     ):
         print_section("Please enter the arguments that will be used by the service.")
 
+    staking_program_mech_type = get_staking_program_mech_type(config.staking_program_id)
+
     for env_var_name, env_var_data in template["env_variables"].items():
         if env_var_data["provision_type"] == ServiceEnvProvisionType.USER:
+            # PRIORITY_MECH_ADDRESS and PRIORITY_MECH_SERVICE_ID are given dynamic default values
+            if env_var_name == "PRIORITY_MECH_ADDRESS":
+                env_var_data["value"] = DEFAULT_PRIORITY_MECH_ADDRESS[
+                    staking_program_mech_type
+                ]
+                if (
+                    env_var_name in config.user_provided_args
+                    and env_var_data["value"] != config.user_provided_args[env_var_name]
+                ):
+                    del config.user_provided_args[env_var_name]
+
+            if env_var_name == "PRIORITY_MECH_SERVICE_ID":
+                env_var_data["value"] = str(
+                    DEFAULT_PRIORITY_MECH_SERVICE_ID.get(staking_program_mech_type, 0)
+                )
+                if (
+                    env_var_name in config.user_provided_args
+                    and env_var_data["value"] != config.user_provided_args[env_var_name]
+                ):
+                    del config.user_provided_args[env_var_name]
+
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
                 if env_var_data["value"]:

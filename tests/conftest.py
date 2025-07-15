@@ -31,12 +31,21 @@ import random
 import string
 
 import pytest
+from web3 import Web3
 
 
 def random_string(length: int = 16) -> str:
     """Random string"""
     chars = string.ascii_letters + string.digits
     return "".join(random.choices(chars, k=length))  # nosec B311
+
+
+def random_mnemonic(num_words: int = 12) -> str:
+    """Generate a random BIP-39 mnemonic"""
+    w3 = Web3()
+    w3.eth.account.enable_unaudited_hdwallet_features()
+    _, mnemonic = w3.eth.account.create_with_mnemonic(num_words=num_words)
+    return mnemonic
 
 
 @pytest.fixture

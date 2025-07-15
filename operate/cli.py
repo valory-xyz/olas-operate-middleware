@@ -45,8 +45,15 @@ from uvicorn.server import Server
 
 from operate import services
 from operate.account.user import UserAccount
-from operate.bridge.bridge import BridgeManager
-from operate.constants import KEY, KEYS, OPERATE_HOME, SERVICES, ZERO_ADDRESS
+from operate.bridge.bridge_manager import BridgeManager
+from operate.constants import (
+    KEY,
+    KEYS,
+    MIN_PASSWORD_LENGTH,
+    OPERATE_HOME,
+    SERVICES,
+    ZERO_ADDRESS,
+)
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -398,13 +405,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is not None:
             return JSONResponse(
                 content={"error": "Account already exists"},
+                status_code=HTTPStatus.CONFLICT,
+            )
+
+        password = (await request.json()).get("password")
+        if not password or len(password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
-        data = await request.json()
-        operate.create_user_account(
-            password=data["password"],
-        )
+        operate.create_user_account(password=password)
         return JSONResponse(content={"error": None})
 
     @app.put("/api/account")
@@ -416,7 +429,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.user_account is None:
             return JSONResponse(
                 content={"error": "Account does not exist."},
-                status_code=HTTPStatus.BAD_REQUEST,
+                status_code=HTTPStatus.CONFLICT,
             )
 
         data = await request.json()
@@ -436,6 +449,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both.",
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1084,20 +1105,35 @@ def _operate() -> None:
 def _daemon(
     host: Annotated[str, params.String(help="HTTP server host string")] = "localhost",
     port: Annotated[int, params.Integer(help="HTTP server port")] = 8000,
+    ssl_keyfile: Annotated[str, params.String(help="Path to SSL key file")] = "",
+    ssl_certfile: Annotated[
+        str, params.String(help="Path to SSL certificate file")
+    ] = "",
     home: Annotated[
         t.Optional[Path], params.Directory(long_flag="--home", help="Home directory")
     ] = None,
 ) -> None:
     """Launch operate daemon."""
     app = create_app(home=home)
+    logger = setup_logger(name="daemon")
 
-    server = Server(
-        Config(
-            app=app,
-            host=host,
-            port=port,
+    config_kwargs = {
+        "app": app,
+        "host": host,
+        "port": port,
+    }
+
+    # Use SSL certificates if ssl_keyfile and ssl_certfile are provided
+    if ssl_keyfile and ssl_certfile:
+        logger.info(f"Using SSL certificates: {ssl_certfile}")
+        config_kwargs.update(
+            {
+                "ssl_keyfile": ssl_keyfile,
+                "ssl_certfile": ssl_certfile,
+            }
         )
-    )
+
+    server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
     server.run()
 

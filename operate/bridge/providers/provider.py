@@ -17,7 +17,7 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""Bridge provider."""
+"""Provider."""
 
 
 import copy
@@ -28,6 +28,7 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.helpers.logging import setup_logger
@@ -46,21 +47,23 @@ from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
 
-PLACEHOLDER_NATIVE_TOKEN_ADDRESS = "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE"  # nosec
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
-BRIDGE_REQUEST_PREFIX = "r-"
+PROVIDER_REQUEST_PREFIX = "r-"
 MESSAGE_QUOTE_ZERO = "Zero-amount quote requested."
 MESSAGE_EXECUTION_SKIPPED = "Execution skipped."
 MESSAGE_EXECUTION_FAILED = "Execution failed:"
-MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} bridge ETA exceeded."
+MESSAGE_EXECUTION_FAILED_ETA = f"{MESSAGE_EXECUTION_FAILED} ETA exceeded."
 MESSAGE_EXECUTION_FAILED_QUOTE_FAILED = f"{MESSAGE_EXECUTION_FAILED} quote failed."
-MESSAGE_EXECUTION_FAILED_REVERTED = (
-    f"{MESSAGE_EXECUTION_FAILED} bridge transaction reverted."
-)
+MESSAGE_EXECUTION_FAILED_REVERTED = f"{MESSAGE_EXECUTION_FAILED} transaction reverted."
 MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
     f"{MESSAGE_EXECUTION_FAILED} transaction settlement failed."
 )
+MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
 ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
 
@@ -71,7 +74,7 @@ GAS_ESTIMATE_BUFFER = 1.10
 class QuoteData(LocalResource):
     """QuoteData"""
 
-    bridge_eta: t.Optional[int]
+    eta: t.Optional[int]
     elapsed_time: float
     message: t.Optional[str]
     timestamp: int
@@ -90,8 +93,8 @@ class ExecutionData(LocalResource):
     provider_data: t.Optional[t.Dict]  # Provider-specific data
 
 
-class BridgeRequestStatus(str, enum.Enum):
-    """BridgeRequestStatus"""
+class ProviderRequestStatus(str, enum.Enum):
+    """ProviderRequestStatus"""
 
     CREATED = "CREATED"
     QUOTE_DONE = "QUOTE_DONE"
@@ -107,35 +110,34 @@ class BridgeRequestStatus(str, enum.Enum):
 
 
 @dataclass
-class BridgeRequest(LocalResource):
-    """BridgeRequest"""
+class ProviderRequest(LocalResource):
+    """ProviderRequest"""
 
     params: t.Dict
-    bridge_provider_id: str
+    provider_id: str
     id: str
-    status: BridgeRequestStatus
+    status: ProviderRequestStatus
     quote_data: t.Optional[QuoteData]
     execution_data: t.Optional[ExecutionData]
 
 
-class BridgeProvider(ABC):
-    """(Abstract) BridgeProvider.
+class Provider(ABC):
+    """(Abstract) Provider.
 
     Expected usage:
         params = {...}
 
-        1. request = bridge.create_request(params)
-        2. bridge.quote(request)
-        3. bridge.requirements(request)
-        4. bridge.execute(request)
-        5. bridge.status_json(request)
+        1. request = provider.create_request(params)
+        2. provider.quote(request)
+        3. provider.requirements(request)
+        4. provider.execute(request)
+        5. provider.status_json(request)
 
     Derived classes must implement the following methods:
         - description
         - quote
         - _update_execution_status
-        - _get_approve_tx
-        - _get_bridge_tx
+        - _get_txs
         - _get_explorer_link
     """
 
@@ -145,28 +147,28 @@ class BridgeProvider(ABC):
         provider_id: str,
         logger: t.Optional[logging.Logger] = None,
     ) -> None:
-        """Initialize the bridge provider."""
+        """Initialize the provider."""
         self.wallet_manager = wallet_manager
         self.provider_id = provider_id
-        self.logger = logger or setup_logger(name="operate.bridge.BridgeProvider")
+        self.logger = logger or setup_logger(name="operate.bridge.providers.Provider")
 
     def description(self) -> str:
-        """Get a human-readable description of the bridge provider."""
+        """Get a human-readable description of the provider."""
         return self.__class__.__name__
 
-    def _validate(self, bridge_request: BridgeRequest) -> None:
-        """Validate theat the bridge request was created by this bridge."""
-        if bridge_request.bridge_provider_id != self.provider_id:
+    def _validate(self, provider_request: ProviderRequest) -> None:
+        """Validate that the request was created by this provider."""
+        if provider_request.provider_id != self.provider_id:
             raise ValueError(
-                f"Bridge request provider id {bridge_request.bridge_provider_id} does not match the bridge provider id {self.provider_id}"
+                f"Request provider id {provider_request.provider_id} does not match the provider id {self.provider_id}"
             )
 
     def can_handle_request(self, params: t.Dict) -> bool:
-        """Returns 'true' if the bridge can handle a request for 'params'."""
+        """Returns 'true' if the provider can handle a request for 'params'."""
 
         if "from" not in params or "to" not in params:
             self.logger.error(
-                "[BRIDGE PROVIDER] Invalid input: All requests must contain exactly one 'from' and one 'to' sender."
+                "[PROVIDER] Invalid input: All requests must contain exactly one 'from' and one 'to' sender."
             )
             return False
 
@@ -180,7 +182,7 @@ class BridgeProvider(ABC):
             or "token" not in from_
         ):
             self.logger.error(
-                "[BRIDGE PROVIDER] Invalid input: 'from' must contain 'chain', 'address', and 'token'."
+                "[PROVIDER] Invalid input: 'from' must contain 'chain', 'address', and 'token'."
             )
             return False
 
@@ -192,17 +194,17 @@ class BridgeProvider(ABC):
             or "amount" not in to
         ):
             self.logger.error(
-                "[BRIDGE PROVIDER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
+                "[PROVIDER] Invalid input: 'to' must contain 'chain', 'address', 'token', and 'amount'."
             )
             return False
 
         return True
 
-    def create_request(self, params: t.Dict) -> BridgeRequest:
-        """Create a bridge request."""
+    def create_request(self, params: t.Dict) -> ProviderRequest:
+        """Create a request."""
 
         if not self.can_handle_request(params):
-            raise ValueError("Invalid input: Cannot process bridge request.")
+            raise ValueError("Invalid input: Cannot process request.")
 
         w3 = Web3()
         params = copy.deepcopy(params)
@@ -212,18 +214,18 @@ class BridgeProvider(ABC):
         params["to"]["token"] = w3.to_checksum_address(params["to"]["token"])
         params["to"]["amount"] = int(params["to"]["amount"])
 
-        return BridgeRequest(
+        return ProviderRequest(
             params=params,
-            bridge_provider_id=self.provider_id,
-            id=f"{BRIDGE_REQUEST_PREFIX}{uuid.uuid4()}",
+            provider_id=self.provider_id,
+            id=f"{PROVIDER_REQUEST_PREFIX}{uuid.uuid4()}",
             quote_data=None,
             execution_data=None,
-            status=BridgeRequestStatus.CREATED,
+            status=ProviderRequestStatus.CREATED,
         )
 
-    def _from_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
+    def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = bridge_request.params["from"]["chain"]
+        from_chain = provider_request.params["from"]["chain"]
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
@@ -234,9 +236,9 @@ class BridgeProvider(ABC):
 
         return ledger_api
 
-    def _to_ledger_api(self, bridge_request: BridgeRequest) -> LedgerApi:
+    def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = bridge_request.params["to"]["chain"]
+        from_chain = provider_request.params["to"]["chain"]
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
@@ -248,41 +250,29 @@ class BridgeProvider(ABC):
         return ledger_api
 
     @abstractmethod
-    def quote(self, bridge_request: BridgeRequest) -> None:
+    def quote(self, provider_request: ProviderRequest) -> None:
         """Update the request with the quote."""
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_approve_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        """Get the approve transaction."""
+    def _get_txs(
+        self, provider_request: ProviderRequest, *args: t.Any, **kwargs: t.Any
+    ) -> t.List[t.Tuple[str, t.Dict]]:
+        """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
-    @abstractmethod
-    def _get_bridge_tx(self, bridge_request: BridgeRequest) -> t.Optional[t.Dict]:
-        """Get the bridge transaction."""
-        raise NotImplementedError()
+    def requirements(self, provider_request: ProviderRequest) -> t.Dict:
+        """Gets the requirements to execute the quote, with updated gas estimation."""
+        self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
-    def bridge_requirements(self, bridge_request: BridgeRequest) -> t.Dict:
-        """Gets the bridge requirements to execute the quote, with updated gas estimation."""
-        self.logger.info(
-            f"[BRIDGE PROVIDER] Bridge requirements for request {bridge_request.id}."
-        )
+        self._validate(provider_request)
 
-        self._validate(bridge_request)
+        from_chain = provider_request.params["from"]["chain"]
+        from_address = provider_request.params["from"]["address"]
+        from_token = provider_request.params["from"]["token"]
+        from_ledger_api = self._from_ledger_api(provider_request)
 
-        from_chain = bridge_request.params["from"]["chain"]
-        from_address = bridge_request.params["from"]["address"]
-        from_token = bridge_request.params["from"]["token"]
-        from_ledger_api = self._from_ledger_api(bridge_request)
-
-        txs = []
-
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
+        txs = self._get_txs(provider_request)
 
         if not txs:
             return {
@@ -300,7 +290,7 @@ class BridgeProvider(ABC):
 
         for tx_label, tx in txs:
             self.logger.debug(
-                f"[BRIDGE PROVIDER] Processing transaction {tx_label} for bridge request {bridge_request.id}."
+                f"[PROVIDER] Processing transaction {tx_label} for request {provider_request.id}."
             )
             self._update_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
@@ -310,11 +300,11 @@ class BridgeProvider(ABC):
             total_native += tx_value + gas_fees
 
             self.logger.debug(
-                f"[BRIDGE PROVIDER] Transaction {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
+                f"[PROVIDER] Transaction {gas_key}={tx.get(gas_key, 0)} maxPriorityFeePerGas={tx.get('maxPriorityFeePerGas', -1)} gas={tx['gas']} {gas_fees=} {tx_value=}"
             )
-            self.logger.debug(f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.gas_price=}")
+            self.logger.debug(f"[PROVIDER] {from_ledger_api.api.eth.gas_price=}")
             self.logger.debug(
-                f"[BRIDGE PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
+                f"[PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
             )
 
             if tx.get("to", "").lower() == from_token.lower() and tx.get(
@@ -327,7 +317,7 @@ class BridgeProvider(ABC):
                     raise RuntimeError("Malformed ERC20 approve transaction.") from e
 
         self.logger.info(
-            f"[BRIDGE PROVIDER] Total gas fees for bridge request {bridge_request.id}: {total_gas_fees} native units."
+            f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."
         )
 
         result = {
@@ -343,18 +333,14 @@ class BridgeProvider(ABC):
 
         return result
 
-    def execute(self, bridge_request: BridgeRequest) -> None:
+    def execute(self, provider_request: ProviderRequest) -> None:
         """Execute the request."""
-        self.logger.info(
-            f"[BRIDGE PROVIDER] Executing bridge request {bridge_request.id}."
-        )
+        self.logger.info(f"[PROVIDER] Executing request {provider_request.id}.")
 
-        self._validate(bridge_request)
+        self._validate(provider_request)
 
-        if bridge_request.status in (BridgeRequestStatus.QUOTE_FAILED):
-            self.logger.info(
-                f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}."
-            )
+        if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED):
+            self.logger.info(f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}.")
             execution_data = ExecutionData(
                 elapsed_time=0,
                 message=f"{MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}",
@@ -363,61 +349,52 @@ class BridgeProvider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            bridge_request.execution_data = execution_data
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.execution_data = execution_data
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
-        if bridge_request.status not in (BridgeRequestStatus.QUOTE_DONE,):
+        if provider_request.status not in (ProviderRequestStatus.QUOTE_DONE,):
             raise RuntimeError(
-                f"Cannot execute bridge request {bridge_request.id} with status {bridge_request.status}."
+                f"Cannot execute request {provider_request.id} with status {provider_request.status}."
             )
-        if not bridge_request.quote_data:
+        if not provider_request.quote_data:
             raise RuntimeError(
-                f"Cannot execute bridge request {bridge_request.id}: quote data not present."
+                f"Cannot execute request {provider_request.id}: quote data not present."
             )
-        if bridge_request.execution_data:
+        if provider_request.execution_data:
             raise RuntimeError(
-                f"Cannot execute bridge request {bridge_request.id}: execution data already present."
+                f"Cannot execute request {provider_request.id}: execution data already present."
             )
 
-        txs = []
-
-        approve_tx = self._get_approve_tx(bridge_request)
-        if approve_tx:
-            txs.append(("approve_tx", approve_tx))
-        bridge_tx = self._get_bridge_tx(bridge_request)
-        if bridge_tx:
-            txs.append(("bridge_tx", bridge_tx))
+        txs = self._get_txs(provider_request)
 
         if not txs:
             self.logger.info(
-                f"[BRIDGE PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})"
+                f"[PROVIDER] {MESSAGE_EXECUTION_SKIPPED} ({provider_request.status=})"
             )
             execution_data = ExecutionData(
                 elapsed_time=0,
-                message=f"{MESSAGE_EXECUTION_SKIPPED} ({bridge_request.status=})",
+                message=f"{MESSAGE_EXECUTION_SKIPPED} ({provider_request.status=})",
                 timestamp=int(time.time()),
                 from_tx_hash=None,
                 to_tx_hash=None,
                 provider_data=None,
             )
-            bridge_request.execution_data = execution_data
-            bridge_request.status = BridgeRequestStatus.EXECUTION_DONE
+            provider_request.execution_data = execution_data
+            provider_request.status = ProviderRequestStatus.EXECUTION_DONE
             return
 
         try:
-            self.logger.info(
-                f"[BRIDGE PROVIDER] Executing bridge request {bridge_request.id}."
-            )
+            self.logger.info(f"[PROVIDER] Executing request {provider_request.id}.")
             timestamp = time.time()
-            chain = Chain(bridge_request.params["from"]["chain"])
-            from_address = bridge_request.params["from"]["address"]
+            chain = Chain(provider_request.params["from"]["chain"])
+            from_address = provider_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
-            from_ledger_api = self._from_ledger_api(bridge_request)
+            from_ledger_api = self._from_ledger_api(provider_request)
             tx_settler = TxSettler(
                 ledger_api=from_ledger_api,
                 crypto=wallet.crypto,
-                chain_type=Chain(bridge_request.params["from"]["chain"]),
+                chain_type=Chain(provider_request.params["from"]["chain"]),
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -425,7 +402,7 @@ class BridgeProvider(ABC):
             tx_hashes = []
 
             for tx_label, tx in txs:
-                self.logger.info(f"[BRIDGE] Executing transaction {tx_label}.")
+                self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
                 nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
                 tx["nonce"] = nonce  # TODO: backport to TxSettler
                 setattr(  # noqa: B010
@@ -437,7 +414,7 @@ class BridgeProvider(ABC):
                     kwargs={},
                     dry_run=False,
                 )
-                self.logger.info(f"[BRIDGE] Transaction {tx_label} settled.")
+                self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
                 tx_hashes.append(tx_receipt.get("transactionHash", "").hex())
 
             execution_data = ExecutionData(
@@ -448,17 +425,17 @@ class BridgeProvider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            bridge_request.execution_data = execution_data
+            provider_request.execution_data = execution_data
             if len(tx_hashes) == len(txs):
-                bridge_request.status = BridgeRequestStatus.EXECUTION_PENDING
+                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
             else:
-                bridge_request.execution_data.message = (
+                provider_request.execution_data.message = (
                     MESSAGE_EXECUTION_FAILED_SETTLEMENT
                 )
-                bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
         except Exception as e:  # pylint: disable=broad-except
-            self.logger.error(f"[BRIDGE PROVIDER] Error executing bridge request: {e}")
+            self.logger.error(f"[PROVIDER] Error executing request: {e}")
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=f"{MESSAGE_EXECUTION_FAILED} {str(e)}",
@@ -467,44 +444,44 @@ class BridgeProvider(ABC):
                 to_tx_hash=None,
                 provider_data=None,
             )
-            bridge_request.execution_data = execution_data
-            bridge_request.status = BridgeRequestStatus.EXECUTION_FAILED
+            provider_request.execution_data = execution_data
+            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
     @abstractmethod
-    def _update_execution_status(self, bridge_request: BridgeRequest) -> None:
+    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
         """Update the execution status."""
         raise NotImplementedError()
 
     @abstractmethod
-    def _get_explorer_link(self, bridge_request: BridgeRequest) -> t.Optional[str]:
+    def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""
         raise NotImplementedError()
 
-    def status_json(self, bridge_request: BridgeRequest) -> t.Dict:
+    def status_json(self, provider_request: ProviderRequest) -> t.Dict:
         """JSON representation of the status."""
-        self._validate(bridge_request)
+        self._validate(provider_request)
 
-        if bridge_request.execution_data and bridge_request.quote_data:
-            self._update_execution_status(bridge_request)
+        if provider_request.execution_data and provider_request.quote_data:
+            self._update_execution_status(provider_request)
             tx_hash = None
-            if bridge_request.execution_data.from_tx_hash:
-                tx_hash = bridge_request.execution_data.from_tx_hash
+            if provider_request.execution_data.from_tx_hash:
+                tx_hash = provider_request.execution_data.from_tx_hash
 
             return {
-                "eta": bridge_request.quote_data.bridge_eta,
-                "explorer_link": self._get_explorer_link(bridge_request),
-                "message": bridge_request.execution_data.message,
-                "status": bridge_request.status.value,
+                "eta": provider_request.quote_data.eta,
+                "explorer_link": self._get_explorer_link(provider_request),
+                "message": provider_request.execution_data.message,
+                "status": provider_request.status.value,
                 "tx_hash": tx_hash,
             }
-        if bridge_request.quote_data:
+        if provider_request.quote_data:
             return {
-                "eta": bridge_request.quote_data.bridge_eta,
-                "message": bridge_request.quote_data.message,
-                "status": bridge_request.status.value,
+                "eta": provider_request.quote_data.eta,
+                "message": provider_request.quote_data.message,
+                "status": provider_request.status.value,
             }
 
-        return {"message": None, "status": bridge_request.status.value}
+        return {"message": None, "status": provider_request.status.value}
 
     @staticmethod
     def _tx_timestamp(tx_hash: str, ledger_api: LedgerApi) -> int:
@@ -535,19 +512,24 @@ class BridgeProvider(ABC):
     # TODO backport to open aea/autonomy
     @staticmethod
     def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        original_gas = tx.get("gas", 1)
-        tx["gas"] = 1
-        ledger_api.update_with_gas_estimate(tx)
-
-        if tx["gas"] > 1:
-            return
-
+        print(
+            f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
+        )
         original_from = tx["from"]
-        tx["from"] = PLACEHOLDER_NATIVE_TOKEN_ADDRESS
-        ledger_api.update_with_gas_estimate(tx)
+        original_gas = tx.get("gas", 1)
+
+        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+            tx["from"] = address
+            tx["gas"] = 1
+            ledger_api.update_with_gas_estimate(tx)
+            if tx["gas"] > 1:
+                print(
+                    f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
+                )
+                break
+
         tx["from"] = original_from
-
-        if tx["gas"] > 1:
-            return
-
-        tx["gas"] = original_gas
+        if tx["gas"] == 1:
+            tx["gas"] = original_gas
+            print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
+        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
