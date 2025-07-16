@@ -124,16 +124,16 @@ class TestAccountCreation:
     @pytest.mark.parametrize(
         ("password_input", "expected_error"),
         [
-            ("", f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."),
+            ("", f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"),
             (
                 "short",
-                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.",
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long",
             ),
             (
                 "1234567",
-                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.",
+                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long",
             ),
-            (None, f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."),
+            (None, f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"),
         ],
     )
     def test_create_account_invalid_password(
@@ -176,7 +176,7 @@ class TestPasswordUpdate:
         )
 
         assert response.status_code == HTTPStatus.OK, response.json()
-        assert response.json() == {"error": None, "message": "Password updated."}
+        assert response.json() == {"error": None, "message": "Password updated successfully"}
 
     def test_update_password_with_mnemonic_success(
         self,
@@ -204,7 +204,7 @@ class TestPasswordUpdate:
         )
 
         assert response.status_code == HTTPStatus.CONFLICT
-        assert response.json() == {"error": "Account does not exist."}
+        assert response.json() == {"error": "Account does not exist"}
 
     def test_update_password_invalid_old_password(self, client: TestClient) -> None:
         """Test password update with invalid old password."""
@@ -215,21 +215,21 @@ class TestPasswordUpdate:
         )
 
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json() == {"error": "Password is not valid."}
+        assert response.json() == {"error": "Failed to update password: Password is not valid."}
 
     @pytest.mark.parametrize(
         ("new_password", "expected_error"),
         [
-            ("", f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."),
+            ("", f"New password must be at least {MIN_PASSWORD_LENGTH} characters long"),
             (
                 "short",
-                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.",
+                f"New password must be at least {MIN_PASSWORD_LENGTH} characters long",
             ),
             (
                 "1234567",
-                f"Password must be at least {MIN_PASSWORD_LENGTH} characters long.",
+                f"New password must be at least {MIN_PASSWORD_LENGTH} characters long",
             ),
-            (None, f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."),
+            (None, f"New password must be at least {MIN_PASSWORD_LENGTH} characters long"),
         ],
     )
     def test_update_password_invalid_new_password(
@@ -254,7 +254,7 @@ class TestPasswordUpdate:
 
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json() == {
-            "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase)."
+            "error": "You must provide either your current password or seed phrase"
         }
 
     def test_update_password_both_credentials(
@@ -274,7 +274,7 @@ class TestPasswordUpdate:
 
         assert response.status_code == HTTPStatus.BAD_REQUEST
         assert response.json() == {
-            "error": "You must provide exactly one of 'old_password' or 'mnemonic' (seed phrase), but not both."
+            "error": "Please provide either your current password or seed phrase, not both"
         }
 
     def test_update_password_invalid_mnemonic(self, client: TestClient) -> None:
@@ -287,7 +287,7 @@ class TestPasswordUpdate:
         )
 
         assert response.status_code == HTTPStatus.BAD_REQUEST
-        assert response.json() == {"error": "Seed phrase is not valid."}
+        assert response.json() == {"error": "Failed to update password: Seed phrase is not valid."}
 
     def test_update_password_minimum_valid_new_password(
         self, client: TestClient, password: str
@@ -300,7 +300,7 @@ class TestPasswordUpdate:
         )
 
         assert response.status_code == HTTPStatus.OK, response.json()
-        assert response.json() == {"error": None, "message": "Password updated."}
+        assert response.json() == {"error": None, "message": "Password updated successfully"}
 
 
 @pytest.mark.parametrize("logged_in", [True, False])
