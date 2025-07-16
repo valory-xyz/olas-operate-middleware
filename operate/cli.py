@@ -363,8 +363,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     logger.error(f"Error {str(e)}\n{traceback.format_exc()}")
                 retries += 1
             return JSONResponse(
-                content={"error": "Operation failed after multiple attempts. Please try again later."},
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR
+                content={
+                    "error": "Operation failed after multiple attempts. Please try again later."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
         return _call
@@ -409,7 +411,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         password = (await request.json()).get("password")
         if not password or len(password) < MIN_PASSWORD_LENGTH:
             return JSONResponse(
-                content={"error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"},
+                content={
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -435,19 +439,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if not old_password and not mnemonic:
             return JSONResponse(
-                content={"error": "You must provide either your current password or seed phrase"},
+                content={
+                    "error": "You must provide either your current password or seed phrase"
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if old_password and mnemonic:
             return JSONResponse(
-                content={"error": "Please provide either your current password or seed phrase, not both"},
+                content={
+                    "error": "Please provide either your current password or seed phrase, not both"
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
         if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
             return JSONResponse(
-                content={"error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long"},
+                content={
+                    "error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long"
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -460,7 +470,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if mnemonic:
                 operate.update_password_with_mnemonic(mnemonic, new_password)
                 return JSONResponse(
-                    content={"error": None, "message": "Password updated successfully using seed phrase"}
+                    content={
+                        "error": None,
+                        "message": "Password updated successfully using seed phrase",
+                    }
                 )
 
             return JSONResponse(
@@ -470,7 +483,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except ValueError as e:
             logger.error(f"Password update error: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={"error": f"Failed to update password: {str(e)}"}, status_code=HTTPStatus.BAD_REQUEST
+                content={"error": f"Failed to update password: {str(e)}"},
+                status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Password update error: {e}\n{traceback.format_exc()}")
@@ -602,7 +616,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         safes = manager.load(ledger_type=ledger_type).safes
         if safes is None or safes.get(chain) is None:
-            return JSONResponse(content={"error": "Please create a safe first for this chain"}, status_code=HTTPStatus.NOT_FOUND)
+            return JSONResponse(
+                content={"error": "Please create a safe first for this chain"},
+                status_code=HTTPStatus.NOT_FOUND,
+            )
 
         return JSONResponse(
             content={
@@ -631,7 +648,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         if "initial_funds" in data and "transfer_excess_assets" in data:
             return JSONResponse(
-                content={"error": "Please specify either 'initial_funds' or 'transfer_excess_assets', but not both."},
+                content={
+                    "error": "Please specify either 'initial_funds' or 'transfer_excess_assets', but not both."
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -641,7 +660,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         ledger_type = chain.ledger_type
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
-            return JSONResponse(content={"error": "Please create a wallet first"}, status_code=HTTPStatus.BAD_REQUEST)
+            return JSONResponse(
+                content={"error": "Please create a wallet first"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
 
         wallet = manager.load(ledger_type=ledger_type)
         if wallet.safes is not None and wallet.safes.get(chain) is not None:
@@ -1034,12 +1056,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Bridge refill requirements error: {e}")
             return JSONResponse(
                 content={"error": "Invalid bridge request parameters"},
-                status_code=HTTPStatus.BAD_REQUEST
+                status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Bridge refill requirements error: {e}\n{traceback.format_exc()}")
+            logger.error(
+                f"Bridge refill requirements error: {e}\n{traceback.format_exc()}"
+            )
             return JSONResponse(
-                content={"error": "Failed to get bridge requirements. Please check the logs."},
+                content={
+                    "error": "Failed to get bridge requirements. Please check the logs."
+                },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
@@ -1065,12 +1091,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Bridge execute error: {e}")
             return JSONResponse(
                 content={"error": "Invalid bundle ID or transaction failed"},
-                status_code=HTTPStatus.BAD_REQUEST
+                status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Bridge execute error: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={"error": "Failed to execute bridge transaction. Please check the logs."},
+                content={
+                    "error": "Failed to execute bridge transaction. Please check the logs."
+                },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
@@ -1099,12 +1127,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.error(f"Bridge status error: {e}")
             return JSONResponse(
                 content={"error": "Invalid bundle ID"},
-                status_code=HTTPStatus.BAD_REQUEST
+                status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Bridge status error: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={"error": "Failed to get bridge status. Please check the logs."},
+                content={
+                    "error": "Failed to get bridge status. Please check the logs."
+                },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
