@@ -1,1300 +1,1287 @@
 # Olas-Operate API reference
 
-## General
+## Authentication
+
+Most endpoints require authentication. Users must first create an account and log in to access protected resources.
+
+## Error Handling
+
+All endpoints return consistent error responses in JSON format:
+
+```json
+{
+  "error": "Error message description"
+}
+```
+
+The API uses appropriate HTTP status codes:
+- `400 Bad Request`: Invalid request parameters
+- `401 Unauthorized`: Authentication required or invalid credentials
+- `404 Not Found`: Resource not found
+- `409 Conflict`: Resource already exists
+- `500 Internal Server Error`: Server-side errors
+
+## General API Information
 
 ### `GET /api`
 
-Returns information of the operate daemon.
+Get basic API information.
 
-<details>
-  <summary>Response</summary>
-
+**Response (Success - 200):**
 ```json
 {
   "name": "Operate HTTP server",
   "version": "0.1.0.rc0",
-  "account": {
-    "key": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb9226a"
-  },
-  "home": "/Users/virajpatel/valory/olas-operate-middleware/.operate"
+  "home": "/path/to/operate/home"
 }
 ```
 
-</details>
-
----
-
-## Account
+## Account Management
 
 ### `GET /api/account`
 
-Returns account status.
+Get account setup status.
 
-<details>
-  <summary>Response</summary>
-
-- Before setup:
-
-    ```json
-    {
-      "is_setup": false
-    }
-    ```
-
-- After setup:
-
-  ```json
-  {
-    "is_setup": true
-  }
-  ```
-
-</details>
-
----
+**Response (Success - 200):**
+```json
+{
+  "is_setup": true
+}
+```
 
 ### `POST /api/account`
 
-Create a local user account.
+Create a new user account.
 
-<details>
-  <summary>Request</summary>
-
+**Request Body:**
 ```json
 {
-  "password": "Hello,World!",
+  "password": "your_password"
 }
 ```
 
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If account did not exist:
-
-  ```json
-  {
-    "error": null
-  }
-  ```
-
-- If account already exists:
-
-  ```json
-  {
-    "error": "Account already exists"
-  }
-  ```
-
-- If password is too short:
-
-  ```json
-  {
-    "error": "Password must be at least 8 characters long."
-  }
-  ```
-
-</details>
-
----
-
-### `PUT /api/account`
-
-Update account password by providing either current password or BIP-39 seed phrase.
-
-<details>
-  <summary>Request</summary>
-
-```json
-{
-  "old_password": "1234567890",
-  "new_password": "0987654321",
-}
-```
-
-or
-
-```json
-{
-  "mnemonic": "cousin weather coil range obey hungry",
-  "new_password": "0987654321",
-}
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If old password is not valid:
-
-  ```json
-  {
-    "error": "Password is not valid.",
-  }
-  ```
-
-- If old password is valid:
-
-  ```json
-  {
-    "error": null,
-    "message": "Password updated."
-  }
-  ```
-
-- If seed phrase is not valid:
-
-  ```json
-  {
-    "error": "Seed phrase is not valid.",
-  }
-  ```
-
-- If seed phrase is valid:
-
-  ```json
-  {
-    "error": null,
-    "message": "Password updated using seed phrase."
-  }
-  ```
-
-- If new password is too short:
-
-  ```json
-  {
-    "error": "Password must be at least 8 characters long."
-  }
-  ```
-
-</details>
-
----
-
-### `POST /api/account/login`
-
-Login and create a session.
-
-<details>
-  <summary>Request</summary>
-
-```json
-{
-  "password": "Hello,World",
-}
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If password is valid:
-
-  ```json
-  {
-    "message": "Login successful"
-  }
-  ```
-
-- If password is not valid:
-
-  ```json
-  {
-    "error": "Password is not valid"
-  }
-  ```
-
-</details>
-
----
-
-## Wallet
-
-### `GET /api/wallet`
-
-Returns a list of available wallets
-
-<details>
-  <summary>Response</summary>
-
-```json
-[
-  {
-    "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "safe_chains": [
-      "gnosis"
-    ],
-    "ledger_type": 0,
-    "safes": {
-      "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
-    },
-    "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
-  }
-]
-```
-
-</details>
-
----
-
-### `POST /api/wallet/private_key`
-
-Returns a the decrypted private key of Master EOA using the provided password for the given ledger type.
-
-<details>
-  <summary>Request</summary>
-
-```json
-{
-  "password": "test_password",
-  "ledger_type": "ethereum"
-}
-```
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-{
-  "private_key": "test_password"
-}
-```
-</details>
-
----
-
-### `GET /api/extended/wallet`
-
-Returns a list of available wallets with enriched information. It executes on-chain requests to populate the list of owners of each safe, and provides the attributes
-
-- `consistent_backup_owner`: This flag is `true` when all safes across the chains have exactly the same set of backup owner addresses. It ensures that ownership is identical across all safes, regardless of the number of owners.
-- `consistent_backup_owner_count`: This flag is `true` when all safes have exactly one backup owner.
-- `consistent_safe_address`: This flag is `true` when all chains have the same safe address. It ensures there is a single safe address consistently used across all chains.
-
-<details>
-  <summary>Response</summary>
-
-```json
-[
-  {
-    "address":"0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-    "consistent_backup_owner": false,
-    "consistent_backup_owner_count": false,
-    "consistent_safe_address": true,
-    "ledger_type":"ethereum",
-    "safe_chains":[
-      "gnosis",
-      "ethereum",
-      "base",
-      "optimistic"
-    ],
-    "safe_nonce":110558881674480320952254000342160989674913430251257716940579305238321962891821,
-    "safes":{
-      "base":{
-        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "backup_owners": [],  // Empty = no backup owners
-          "balances": {...}
-        }
-      },
-      "ethereum":{
-        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "backup_owners":[
-            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ],
-          "balances": {...}
-        }
-      },
-      "gnosis":{
-        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "backup_owners":[
-            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ],
-          "balances": {
-            "0x0000000000000000000000000000000000000000": 995899999999999999998, // xDAI
-            "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83": 0,                     // USDC
-            "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 960000000000000000000  // OLAS
-        }
-      },
-      "optimistic":{
-        "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23":{
-          "backup_owners":[
-            "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-          ],
-          "balances": {...}
-        }
-      }
-    },
-    "single_backup_owner_per_safe":false
-  }
-]
-```
-
-</details>
-
----
-
-### `POST /api/wallet`
-
-Creates a master wallet for a given ledger type. If a wallet already exists for a given ledger type, it returns the already existing wallet without creating an additional one.
-
-<details>
-  <summary>Request</summary>
-
-```json
-{
-  "ledger_type": LedgerType,
-}
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-{
-  "wallet": {
-    "address": "0xAafd5cb31a611C5e5aa65ea8c6226EB4328175E1",
-    "safe_chains": [],
-    "ledger_type": 0,
-    "safes": {},
-    "safe_nonce": null
-  },
-  "mnemonic": ["polar", "mail", "tattoo", "write", "track", ... ]
-}
-```
-
-</details>
-
----
-
-### `POST /api/wallet/safe`
-
-Creates a Gnosis safe for given chain.
-
-<details>
-  <summary>Request</summary>
-
-Using default new safe funding:
-
-```json
-{
-  "chain": "gnosis",
-  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b"
-}
-```
-
-Specify new safe funding:
-
-```json
-{
-  "chain": "gnosis",
-  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
-  "initial_funds": {
-    "0x0000000000000000000000000000000000000000": 1000000000000000000,
-    "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-  }
-}
-```
-
-Transfer all excess assets (except operational Master EOA balance) to the new safe:
-
-```json
-{
-  "chain": "gnosis",
-  "backup_owner": "0x46eC2E77Fe3E367252f1A8a77470CE8eEd2A985b",
-  "transfer_excess_assets": true
-}
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If Gnosis safe creation is successful:
-
-  ```json
-  {
-    "create_tx": "0xac14dcd5938c71cd97388307c41477dc2f2a4e97b6b2641cef123a769898bd03",
-    "transfer_txs": {
-      "0x0000000000000000000000000000000000000000": "0x0036489a4a27b4ee1b7e4a37ae5597b895bf43e4cda25c7e6c0f1d02f8c098aa",
-      "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": "0x45304084049916535419d4b175074cdfcaeea59e3a5d34010854b3ac049261b2"
-    },
-    "safe": "0x29e23F7705d849F368855947691cB133CD770752",
-    "message": "Safe created!"
-  }
-  ```
-
-- If Gnosis safe creation is not successful:
-
-  ```json
-  {
-    "error": "Error message",
-    "traceback": "Traceback message"
-  }
-  ```
-
-</details>
-
----
-
-### `PUT /api/wallet/safe`
-
-Upadtes a Gnosis safe for given chain. If no `backup_owner` is provided, it will assume a null value, that is, it will remove the backup owner from the safe.
-
-<details>
-  <summary>Request</summary>
-
-```js
-{
-  "chain": Chain,
-  "backup_owner": "0x650e83Bc808B8f405A9aF7CF68644cc817e084A6"  // Optional.
-}
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If Gnosis safe update is successful:
-
-  ```json
-  {
-    "backup_owner_updated": true,
-    "chain": "gnosis",
-    "message": "Backup owner updated.",
-    "wallet": {
-      "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-      "safe_chains": [
-        "gnosis"
-      ],
-      "ledger_type": 0,
-      "safes": {
-        "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
-      },
-      "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
-    }
-  }
-  ```
-
-- If Gnosis safe update is successful, but no changes required in the safe:
-
-  ```json
-  {
-    "backup_owner_updated": false,
-    "chain": "gnosis",
-    "message": "No changes on backup owner. The backup owner provided matches the current one.",
-    "wallet": {
-      "address": "0xFafd5cb31a611C5e5aa65ea8c6226EB4328175E7",
-      "safe_chains": [
-        "gnosis"
-      ],
-      "ledger_type": 0,
-      "safes": {
-        "gnosis": "0xd56fb274ce2C66008D5c4C09980c4f36Ab81ff23"
-      },
-      "safe_nonce": 110558881674480320952254000342160989674913430251257716940579305238321962891821
-    }
-  }
-  ```
-
-- If Gnosis safe creation is not successful:
-
-  ```json
-  {
-    "error": "Error message",
-    "traceback": "Traceback message"
-  }
-  ```
-
-</details>
-
----
-
-## Services
-
-### `GET /api/v2/services`
-
-Returns the list of existing service configurations.
-
-<details>
-  <summary>Response</summary>
-
-```json
-[
-  {
-    "chain_configs": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
-    "home_chain": "gnosis",
-    "keys": [...],
-    "name": "valory/trader_omen_gnosis",
-    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "package_path": "trader_pearl",
-    "version": 4
-  },
-  ...
-]
-```
-
-</details>
-
----
-
-#### `POST /api/v2/services`
-
-Create a service configuration using a template.
-
-<details>
-  <summary>Request</summary>
-
-```json
-  {
-    "configurations": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "home_chain": "gnosis",
-    "name": "valory/trader_omen_gnosis",
-    "service_version": "v0.18.4"
-  }
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-{
-  "chain_configs": {...},
-  "description": "Trader agent for omen prediction markets",
-  "env_variables": {...},
-  "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-  "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
-  "home_chain": "gnosis",
-  "keys": [...],
-  "name": "valory/trader_omen_gnosis",
-  "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "package_path": "trader_pearl",
-  "version": 4
-}
-```
-
-</details>
-
----
-
-## Service
-
-### `GET /api/v2/service/{service_config_id}`
-
-Returns the service configuration `service_config_id`.
-
-<details>
-  <summary>Response</summary>
-
-- If service configuration `service_config_id` exists:
-
-  ```json
-  {
-    "chain_configs": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
-    "home_chain": "gnosis",
-    "keys": [...],
-    "name": "valory/trader_omen_gnosis",
-    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "package_path": "trader_pearl",
-    "version": 4
-  }
-
-  ```
-
-- If service configuration `service_config_id` does not exist:
-  
-  ```json
-  {
-    "error": "Service foo not found"
-  }
-  ```
-
-</details>
-
----
-
-### `POST /api/v2/service/{service_config_id}`
-
-Deploy service with service configuration `service_config_id` on-chain and run local deployment. This endpoint executes the following tasks:
-
-1. Stops any running service.
-2. Ensures that the service is deployed on-chain on all the configured chains.
-3. Ensures that the the service is staked on all the configured chains.
-4. Runs the service locally.
-5. Starts funding job.
-6. Starts healthcheck job.
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-The response contains the updated service configuration following the on-chain operations, including service Gnosis safe, on-chain token, etc.
-
-```json
-{
-  "chain_configs": {...},
-  "description": "Trader agent for omen prediction markets",
-  "env_variables": {...},
-  "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-  "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u"},
-  "home_chain": "gnosis",
-  "keys": [...],
-  "name": "valory/trader_omen_gnosis",
-  "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-  "package_path": "trader_pearl"
-}
-
-```
-
-</details>
-
----
-
-### `PUT /api/v2/service/{service_config_id}`
-
-Update service configuration `service_config_id` with the provided template.
-
-<details>
-  <summary>Request</summary>
-
-```json
-  {
-    "configurations": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me",
-    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "home_chain": "gnosis",
-    "name": "valory/trader_omen_gnosis",
-    "service_version": "v0.19.0"
-  }
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If the update is successful, the response contains the updated service configuration:
-
-  ```json
-  {
-    "chain_configs": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u", "1731490000": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me"},
-    "home_chain": "gnosis",
-    "keys": [...],
-    "name": "valory/trader_omen_gnosis",
-    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "package_path": "trader_pearl"
-  }
-
-  ```
-
-- If the update is not successful:
-
-  ```json
-  {
-    "error": "Error message",
-    "traceback": "Traceback message"
-  }
-  ```
-
-</details>
-
----
-
-### `PATCH /api/v2/service/{service_config_id}`
-
-Partial update service configuration `service_config_id` with the provided (partial) template.
-
-![Partial updates](./images/partial_update_examples.png)
-
-<details>
-  <summary>Request</summary>
-
-```json
-  {
-    "configurations": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me",
-    "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
-    "home_chain": "gnosis",
-    "name": "valory/trader_omen_gnosis",
-    "service_version": "v0.19.0"
-  }
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-- If the update is successful, the response contains the updated service configuration:
-
-  ```json
-  {
-    "chain_configs": {...},
-    "description": "Trader agent for omen prediction markets",
-    "env_variables": {...},
-    "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "hash_history": {"1731487112": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u", "1731490000": "bafybeibpseosblmaw6sk6zsnic2kfxfsijrnfluuhkwboyqhx7ma7zw2me"},
-    "home_chain": "gnosis",
-    "keys": [...],
-    "name": "valory/trader_omen_gnosis",
-    "service_config_id": "sc-85a7a12a-8c6b-46b8-919a-b8a3b8e3ad39",
-    "package_path": "trader_pearl"
-  }
-
-  ```
-
-- If the update is not successful:
-
-  ```json
-  {
-    "error": "Error message",
-    "traceback": "Traceback message"
-  }
-  ```
-
-</details>
-
----
-
-### `POST /api/v2/service/{service_config_id}/deployment/stop`
-
-Stop service with service configuration `service_configuration_id`.
-
-<details>
-  <summary>Response</summary>
-
-```json
-  {
-    "nodes": {
-      "agent": [],
-      "tendermint": []
-    },
-    "status": 1
-  }
-```
-
-</details>
-
----
-
-### `GET /api/v2/service/{service_config_id}/refill_requirements`
-
-Returns the service refill requirements for `service_config_id`, in terms of refill requirements for the master safe and master signer. The output data structure returns the user refill requirements per chain, address and token.
-
-The refill requirements are computed based on the fund requirements present on the service template and the current balances of the agents, service safe, master signer and master safe.
-
-<details>
-  <summary>Response</summary>
-
-- If service configuration `service_config_id` exists:
-
-  ```json
-  {
-    "allow_start_agent": true,
-    "balances": {
-      "gnosis": {
-        "0x364fD50CB11B2fbc39706D4649f29508A7685538": {
-          "0x0000000000000000000000000000000000000000": 5420000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        },
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-          "0x0000000000000000000000000000000000000000": 977830935992610300,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        },
-        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
-          "0x0000000000000000000000000000000000000000": 995900000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 60000000000000000000
-        },
-        "0x28dD3709cF084D889f38d11dBC2435B31543294B": {
-          "0x0000000000000000000000000000000000000000": 100000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        }
-      }
-    },
-    "bonded_assets": {
-      "gnosis": {
-        "0x0000000000000000000000000000000000000000": 2,
-        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
-      }
-    },
-    "is_refill_required": false,
-    "refill_requirements": {
-      "gnosis": {
-        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
-          "0x0000000000000000000000000000000000000000": 0,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        },
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-         "0x0000000000000000000000000000000000000000": 0,
-         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        }
-      }
-    },
-    "service_asset_requirements": {
-      "gnosis": {
-        "0x0000000000000000000000000000000000000000": 2,
-        "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
-      }
-    },
-    "total_requirements": {
-      "gnosis": {
-        "0x28580196F52DB3C95C3d40Df88426e251d115842": {
-          "0x0000000000000000000000000000000000000000": 10000000000000000000,
-          "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 40000000000000000000
-        },
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-         "0x0000000000000000000000000000000000000000": 500000000000000000,
-         "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f": 0
-        }
-      }
-    }
-  }
-  ```
-
-- If service configuration `service_config_id` does not exist:
-  
-  ```json
-  {
-    "error": "Service foo not found"
-  }
-  ```
-
-</details>
-
----
-
-## Bridge
-
-### `POST /api/bridge/bridge_refill_requirements`
-
-Creates a quote bundle to fulfill the bridge requests and returns
-
-- the refill requirements on the source chain for bridging assets to target chains,
-- the quote bundle id to execute the request.
-
-<details>
-  <summary>Request</summary>
-
-```json
-  {
-    "bridge_requests": [
-      {
-        "from": {
-          "chain": "ethereum",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0x0000000000000000000000000000000000000000"
-        },
-        "to": {
-          "chain": "gnosis",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0x0000000000000000000000000000000000000000",
-          "amount": 10000000000000000000
-        },
-      },
-      {
-        "from": {
-          "chain": "ethereum",
-          "address": "0xDe6B572A049B27D349e89aD0cBEF102227e31473",
-          "token": "0x0000000000000000000000000000000000000000"
-        },
-        "to": {
-          "chain": "gnosis",
-          "address": "0x28580196F52DB3C95C3d40Df88426e251d115842",
-          "token": "0x0000000000000000000000000000000000000000",
-          "amount": 10000000000000000000
-        }
-      }
-    ],
-    "force_update": false
-  }
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-  ```json
-  {
-    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "balances": {
-      "ethereum": {
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-          "0x0000000000000000000000000000000000000000": 0,
-          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 0
-        }
-      }
-    },
-    "bridge_total_requirements": {
-      "ethereum": {
-        "0x0000000000000000000000000000000000000000": 10073082159280405,
-        "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
-      }
-    },
-    "bridge_refill_requirements": {
-      "ethereum": {
-        "0xDe6B572A049B27D349e89aD0cBEF102227e31473": {
-          "0x0000000000000000000000000000000000000000": 10073082159280405,
-          "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0": 61944358967139717502
-        }
-      }
-    },
-    "expiration_timestamp": 1743000251,
-    "is_refill_required": true,
-    "bridge_request_status": [
-      {
-        "message": "",
-        "status": "QUOTE_DONE",
-      },
-      {
-        "message": "",
-        "status": "QUOTE_DONE",
-      }
-    ],
-    "error": false
-  }
-  ```
-
-</details>
-
----
-
-### `POST /api/bridge/execute`
-
-Executes a quote bundle. See [GET /api/bridge/status/{quote_bundle_id}](#get-apibridgestatusquote_bundle_id) for status values.
-
-<details>
-  <summary>Request</summary>
-
-```json
-  {
-    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d"
-  }
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-  ```json
-  {
-    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "bridge_request_status": [
-      {
-        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-        "message": null,
-        "status": "EXECUTION_DONE",
-        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-      },
-      {
-        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-        "message": null,
-        "status": "EXECUTION_PENDING",
-        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-      }
-    ],
-    "error": false
-  }
-  ```
-
-</details>
-
----
-
-### `GET /api/bridge/status/{quote_bundle_id}`
-
-Gets the status of a quote bundle. Individual bridge request status:
-
-- `QUOTE_DONE`: A quote is available.
-- `QUOTE_FAILED`: Failed to request a quote.
-- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
-- `EXECUTION_DONE`: Execution finalized successfully.
-- `EXECUTION_FAILED`: Execution failed.
-
-<details>
-  <summary>Response</summary>
-
-  ```json
-  {
-    "id": "qb-bdaafd7f-0698-4e10-83dd-d742cc0e656d",
-    "bridge_request_status": [
-      {
-        "explorer_link": "https://scan.li.fi/tx/0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-        "message": null,
-        "status": "EXECUTION_DONE",
-        "tx_hash": "0x3795206347eae1537d852bea05e36c3e76b08cefdfa2d772e24bac2e24f31db3",
-      },
-      {
-        "explorer_link": "https://scan.li.fi/tx/0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-        "message": null,
-        "status": "EXECUTION_PENDING",
-        "tx_hash": "0x0e53f1b6aa5552f2d4cfe8e623dd95e54ca079c4b23b89d0c0aa6ed4a6442384",
-      }
-    ],
-    "error": false
-  }
-  ```
-
-</details>
-
----
-
-### `GET /api/bridge/last_executed_bundle_id`
-
-Gets the last executed quote bundle id.
-
-<details>
-  <summary>Response</summary>
-
-  ```json
-  {
-    "id": "br-52e3f945-b495-49bd-8ea2-cafa67468ed3"
-  }
-  ```
-
-</details>
-
----
-
-## Unused endpoints
-
-### `POST /api/services/{service}/onchain/deploy`
-
-**:warning: Deprecated**
-
-Deploy service on-chain
-
-<details>
-  <summary>Request</summary>
-
-```json
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-```
-
-</details>
-
----
-
-### `POST /api/services/{service}/onchain/stop`
-
-**:warning: Deprecated**
-
-Stop service on-chain
-
-<details>
-  <summary>Request</summary>
-
-```json
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-```
-
-</details>
-
----
-
-### `GET /api/services/{service}/deployment`
-
-**:warning: Deprecated**
-
-<details>
-  <summary>Response</summary>
-
-```json
-{
-  "status": 1,
-  "nodes": {
-    "agent": [
-      "traderomengnosis_abci_0"
-    ],
-    "tendermint": [
-      "traderomengnosis_tm_0"
-    ]
-  }
-}
-```
-
-</details>
-
----
-
-### `POST /api/services/{service}/deployment/build`
-
-**:warning: Deprecated**
-
-Build service locally
-
-<details>
-  <summary>Request</summary>
-
-```json
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-```
-
-</details>
-
----
-
-### `POST /api/services/{service}/deployment/start`
-
-**:warning: Deprecated**
-
-Start agent
-
-<details>
-  <summary>Request</summary>
-
-```json
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-```
-
-</details>
-
----
-
-### `POST /api/services/{service}/deployment/stop`
-
-**:warning: Deprecated**
-
-Stop agent
-
-```json
-```
-
----
-
-### `POST /api/services/{service}/deployment/delete`
-
-**:warning: Deprecated**
-
-Delete local deployment
-
-<details>
-  <summary>Request</summary>
-
-```json
-```
-
-</details>
-
-<details>
-  <summary>Response</summary>
-
-```json
-```
-
----
-#### `POST /api/services/{service}/onchain/withdraw`
-
-Withdraw all the funds from the service safe, service signer(s), master safe, and master signer.
-
-<details>
-  <summary>Request</summary>
-
-```json
-{
-  "withdrawal_address": "0x0000000000000000000000000000000000000000"
-}
-```
-
-</details>
-
-<details>
-  <summary>Response 200</summary>
-
+**Response (Success - 200):**
 ```json
 {
   "error": null
 }
 ```
 
-</details>
-
-<details>
-  <summary>Response 500</summary>
-
+**Response (Password too short - 400):**
 ```json
 {
-  "error": "Insufficient funds",
-  "traceback": "<a long stringified traceback here>"
+  "error": "Password must be at least 8 characters long."
 }
 ```
 
-</details>
-
-<!-- 
-
-<details>
-  <summary>Request</summary>
-
+**Response (Account exists - 409):**
 ```json
+{
+  "error": "Account already exists."
+}
 ```
 
-</details>
+### `PUT /api/account`
 
-<details>
-  <summary>Response</summary>
+Update account password.
 
+**Request Body (with current password):**
 ```json
+{
+  "old_password": "your_old_password",
+  "new_password": "your_new_password"
+}
 ```
-</details>
 
--->
+**Request Body (with mnemonic):**
+```json
+{
+  "mnemonic": "word1 word2 word3 ...",
+  "new_password": "your_new_password"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "error": null,
+  "message": "Password updated successfully."
+}
+```
+
+**Response (Success with mnemonic - 200):**
+```json
+{
+  "error": null,
+  "message": "Password updated successfully using seed phrase."
+}
+```
+
+**Response (Missing parameters - 400):**
+```json
+{
+  "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
+}
+```
+
+**Response (Both parameters provided - 400):**
+```json
+{
+  "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
+}
+```
+
+**Response (New password too short - 400):**
+```json
+{
+  "error": "New password must be at least 8 characters long."
+}
+```
+
+**Response (Invalid old password - 400):**
+```json
+{
+  "error": "Failed to update password: Password is not valid."
+}
+```
+
+**Response (Invalid mnemonic - 400):**
+```json
+{
+  "error": "Failed to update password: Seed phrase is not valid."
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Update failed - 500):**
+```json
+{
+  "error": "Failed to update password. Please check the logs."
+}
+```
+
+### `POST /api/account/login`
+
+Validate user credentials and establish a session.
+
+**Request Body:**
+```json
+{
+  "password": "your_password"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "message": "Login successful."
+}
+```
+
+**Response (Invalid password - 401):**
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+## Wallet Management
+
+### `GET /api/wallet`
+
+Get all wallets.
+
+**Response (Success - 200):**
+```json
+[
+  {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": "0x..."
+    }
+  }
+]
+```
+
+### `POST /api/wallet`
+
+Create a new wallet.
+
+**Request Body:**
+```json
+{
+  "ledger_type": "ethereum"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "wallet": {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": []
+  },
+  "mnemonic": "word1 word2 word3 ..."
+}
+```
+
+**Response (Wallet exists - 200):**
+```json
+{
+  "wallet": {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": "0x..."
+    }
+  },
+  "mnemonic": null
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+### `POST /api/wallet/private_key`
+
+Get Master EOA private key.
+
+**Request Body:**
+```json
+{
+  "password": "your_password",
+  "ledger_type": "ethereum"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "private_key": "0x..."
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid password - 401):**
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+### `GET /api/extended/wallet`
+
+Get extended wallet information including safes and additional metadata.
+
+**Response (Success - 200):**
+```json
+[
+  {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": {
+        "0x...": {
+          "backup_owners": ["0x..."],
+          "balances": {
+            "0x0000000000000000000000000000000000000000": 1000000000000000000,
+            "0x...": 500000000000000000
+          }
+        }
+      }
+    },
+    "extended_json": true,
+    "consistent_safe_address": true,
+    "consistent_backup_owner": true,
+    "consistent_backup_owner_count": true
+  }
+]
+```
+
+**Response (No safes - 200):**
+```json
+[
+  {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": []
+  }
+]
+```
+
+### `GET /api/wallet/safe`
+
+Get all safes for all wallets.
+
+**Response (Success - 200):**
+```json
+[
+  {
+    "ethereum": ["0x..."]
+  }
+]
+```
+
+## Safe Management
+
+### `GET /api/wallet/safe/{chain}`
+
+Get the safe address for a specific chain.
+
+**Response (Success - 200):**
+```json
+{
+  "safe": "0x..."
+}
+```
+
+**Response (No wallet - 404):**
+```json
+{
+  "error": "No Master EOA found for this chain."
+}
+```
+
+**Response (No safe - 404):**
+```json
+{
+  "error": "No Master Safe found for this chain."
+}
+```
+
+### `POST /api/wallet/safe`
+
+Create a new Gnosis Safe.
+
+**Request Body:**
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x...",
+  "initial_funds": {
+    "0x0000000000000000000000000000000000000000": "1000000000000000000"
+  }
+}
+```
+
+**Request Body (with asset transfer):**
+```json
+{
+  "chain": "gnosis", 
+  "backup_owner": "0x...",
+  "transfer_excess_assets": "true"
+}
+```
+
+**Response (Success - 201):**
+```json
+{
+  "create_tx": "0x...",
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "safe": "0x...",
+  "message": "Safe created successfully"
+}
+```
+
+**Response (Safe exists - 200):**
+```json
+{
+  "safe": "0x...",
+  "message": "Safe already exists for this chain."
+}
+```
+
+**Response (Invalid request - 400):**
+```json
+{
+  "error": "Only specify one of 'initial_funds' or 'transfer_excess_assets', but not both."
+}
+```
+
+**Response (No wallet - 404):**
+```json
+{
+  "error": "No Master EOA found for this chain."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Creation failed - 500):**
+```json
+{
+  "error": "Failed to create safe. Please check the logs."
+}
+```
+
+### `PUT /api/wallet/safe`
+
+Update safe settings, such as backup owner.
+
+**Request Body:**
+```json
+{
+  "chain": "gnosis",
+  "backup_owner": "0x..."
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "wallet": {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": "0x..."
+    }
+  },
+  "chain": "gnosis",
+  "backup_owner_updated": true,
+  "message": "Backup owner updated successfully"
+}
+```
+
+**Response (No changes - 200):**
+```json
+{
+  "wallet": {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": "0x..."
+    }
+  },
+  "chain": "gnosis",
+  "backup_owner_updated": false,
+  "message": "Backup owner is already set to this address"
+}
+```
+
+**Response (No account - 404):**
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (No chain specified - 400):**
+```json
+{
+  "error": "'chain' is required."
+}
+```
+
+**Response (No wallet - 400):**
+```json
+{
+  "error": "No Master EOA found for this chain."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+## Service Management
+
+### `GET /api/v2/services`
+
+Get all services.
+
+**Response (Success - 200):**
+```json
+[
+  {
+    "service_config_id": "service_123",
+    "name": "My Service",
+    "description": "Service description",
+    "hash": "bafybeic...",
+    "keys": [
+      {
+        "ledger": "ethereum",
+        "address": "0x...",
+        "private_key": "0x..."
+      }
+    ],
+    "home_chain": "gnosis",
+    "chain_configs": {
+      "gnosis": {
+        "ledger_config": {
+          "rpc": "https://rpc.gnosis.gateway.fm",
+          "chain": "gnosis"
+        },
+        "chain_data": {
+          "instances": ["0x..."],
+          "token": "123",
+          "multisig": "0x...",
+          "staked": true,
+          "on_chain_state": 3,
+          "user_params": {
+            "staking_program_id": "pearl_alpha",
+            "nft": "bafybei...",
+            "threshold": 1,
+            "use_staking": true,
+            "use_mech_marketplace": false,
+            "cost_of_bond": 10000000000000000000,
+            "fund_requirements": {
+              "0x0000000000000000000000000000000000000000": {
+                "agent": 100000000000000000,
+                "safe": 500000000000000000
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+]
+```
+
+### `GET /api/v2/service/{service_config_id}`
+
+Get a specific service.
+
+**Response (Success - 200):**
+```json
+{
+  "service_config_id": "service_123",
+  "name": "My Service",
+  "description": "Service description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `GET /api/v2/service/{service_config_id}/deployment`
+
+Get service deployment information.
+
+**Response (Success - 200):**
+```json
+{
+  "status": "DEPLOYED",
+  "nodes": {
+    "agent": ["service_abci_0"],
+    "tendermint": ["service_tm_0"]
+  },
+  "path": "/path/to/service",
+  "healthcheck": {
+    "is_transitioning_fast": false,
+    "period": 123,
+    "round": 456
+  }
+}
+```
+
+**Response (Success with empty healthcheck - 200):**
+```json
+{
+  "status": "BUILT",
+  "nodes": {
+    "agent": [],
+    "tendermint": []
+  },
+  "path": "/path/to/service",
+  "healthcheck": {}
+}
+```
+
+**Response (Success with healthcheck error - 200):**
+```json
+{
+  "status": "DEPLOYED",
+  "nodes": {
+    "agent": ["service_abci_0"],
+    "tendermint": ["service_tm_0"]
+  },
+  "path": "/path/to/service",
+  "healthcheck": {
+    "error": "Error reading healthcheck.json: [Errno 2] No such file or directory"
+  }
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `GET /api/v2/service/{service_config_id}/refill_requirements`
+
+Get service refill requirements.
+
+**Response (Success - 200):**
+```json
+{
+  "balances": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1000000000000000000
+      }
+    }
+  },
+  "bonded_assets": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 500000000000000000
+    }
+  },
+  "total_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 2000000000000000000
+      }
+    }
+  },
+  "refill_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "protocol_asset_requirements": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 1000000000000000000
+    }
+  },
+  "is_refill_required": true,
+  "allow_start_agent": true
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `POST /api/v2/service`
+
+Create a new service.
+
+**Request Body:**
+```json
+{
+  "name": "My Service",
+  "description": "Service description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "service_config_id": "service_123",
+  "name": "My Service",
+  "description": "Service description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+### `PUT /api/v2/service/{service_config_id}` / `PATCH /api/v2/service/{service_config_id}`
+
+Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.
+
+**Request Body:**
+```json
+{
+  "name": "Updated Service Name",
+  "description": "Updated description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  },
+  "allow_different_service_public_id": false
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "service_config_id": "service_123",
+  "name": "Updated Service Name",
+  "description": "Updated description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}`
+
+Deploy and run a service.
+
+**Response (Success - 200):**
+```json
+{
+  "service_config_id": "service_123",
+  "name": "My Service",
+  "description": "Service description",
+  "hash": "bafybeic...",
+  "keys": [
+    {
+      "ledger": "ethereum",
+      "address": "0x...",
+      "private_key": "0x..."
+    }
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Operation failed after retries - 500):**
+```json
+{
+  "error": "Service is already running."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/deployment/stop`
+
+Stop a running service deployment locally.
+
+**Response (Success - 200):**
+```json
+{
+  "status": "STOPPED",
+  "nodes": {
+    "agent": [],
+    "tendermint": []
+  },
+  "path": "/path/to/service",
+  "healthcheck": {}
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Operation failed after retries - 500):**
+```json
+{
+  "error": "Operation failed after multiple attempts. Please try again later."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/onchain/withdraw`
+
+Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the master safe and master signer.
+
+**Request Body:**
+```json
+{
+  "withdrawal_address": "0x..."
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "error": null,
+  "message": "Withdrawal successful"
+}
+```
+
+**Response (Service not found - 404):**
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Missing withdrawal address - 400):**
+```json
+{
+  "error": "'withdrawal_address' is required"
+}
+```
+
+**Response (Withdrawal failed - 500):**
+```json
+{
+  "error": "Failed to withdraw funds. Please check the logs."
+}
+```
+
+## Bridge Management
+
+### `POST /api/bridge/bridge_refill_requirements`
+
+Get bridge refill requirements for cross-chain transactions.
+
+**Request Body:**
+```json
+{
+  "bridge_requests": [
+    {
+      "source_chain": "ethereum",
+      "target_chain": "gnosis",
+      "amount": "1000000000000000000",
+      "asset": "0x0000000000000000000000000000000000000000"
+    }
+  ],
+  "force_update": false
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "balances": {
+    "ethereum": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1000000000000000000
+      }
+    }
+  },
+  "bridge_refill_requirements": {
+    "ethereum": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "bridge_total_requirements": {
+    "ethereum": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1500000000000000000
+      }
+    }
+  },
+  "expiration_timestamp": 1234567890,
+  "is_refill_required": true
+}
+```
+
+**Response (Invalid parameters - 400):**
+```json
+{
+  "error": "Invalid bridge request parameters."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+### `POST /api/bridge/execute`
+
+Execute bridge transaction.
+
+**Request Body:**
+```json
+{
+  "id": "bundle_123"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123",
+  "bridge_request_status": [
+    {
+      "eta": 1234567890,
+      "explorer_link": "https://gnosisscan.com/tx/0x...",
+      "message": "Transaction executed successfully",
+      "status": "EXECUTION_DONE",
+      "tx_hash": "0x...",
+    }
+  ]
+}
+```
+
+**Response (Invalid bundle ID - 400):**
+```json
+{
+  "error": "Invalid bundle ID or transaction failed."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Failed - 500):**
+```json
+{
+  "error": "Failed to execute bridge transaction. Please check the logs."
+}
+```
+
+### `GET /api/bridge/last_executed_bundle_id`
+
+Get the last executed bundle ID.
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123"
+}
+```
+
+### `GET /api/bridge/status/{id}`
+
+Get bridge transaction status.
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123",
+  "bridge_request_status": [
+    {
+      "eta": 1234567890,
+      "explorer_link": "https://gnosisscan.com/tx/0x...",
+      "message": "Transaction executed successfully",
+      "status": "EXECUTION_DONE",
+      "tx_hash": "0x...",
+    }
+  ]
+}
+```
+
+**Response (Invalid bundle ID - 400):**
+```json
+{
+  "error": "Invalid bundle ID."
+}
+```
+
+**Response (Failed - 500):**
+```json
+{
+  "error": "Failed to get bridge status. Please check the logs."
+}
+```
