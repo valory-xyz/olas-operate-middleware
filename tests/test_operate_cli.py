@@ -36,9 +36,9 @@ from tests.conftest import random_string
 
 ROOT_PATH = Path(__file__).resolve().parent
 
-MSG_NEW_PASSWORD_MISSING = "You must provide a new password"  # nosec
-MSG_INVALID_PASSWORD = "Password is not valid"  # nosec
-MSG_INVALID_MNEMONIC = "Seed phrase is not valid"  # nosec
+MSG_NEW_PASSWORD_MISSING = "'password' is required."  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
 
 def random_mnemonic(num_words: int = 12) -> str:

@@ -76,6 +76,13 @@ from operate.wallet.master import MasterWalletManager
 
 
 DEFAULT_MAX_RETRIES = 3
+USER_NOT_LOGGED_IN_ERROR = JSONResponse(
+    content={"error": "User not logged in."}, status_code=HTTPStatus.UNAUTHORIZED
+)
+ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
+    content={"error": "User account not found."},
+    status_code=HTTPStatus.NOT_FOUND,
+)
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
@@ -124,7 +131,7 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("You must provide a new password.")
+            raise ValueError("'password' is required.")
 
         if not (
             self.user_account.is_valid(old_password)
@@ -141,7 +148,7 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("You must provide a new password.")
+            raise ValueError("'password' is required.")
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
@@ -352,7 +359,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 except (APIError, ProjectError) as e:
                     logger.error(f"Error {e}\n{traceback.format_exc()}")
                     if "has active endpoints" in str(e):
-                        error_msg = "Service is already running"
+                        error_msg = "Service is already running."
                     else:
                         error_msg = "Service deployment failed. Please check the logs."
                     return JSONResponse(
@@ -404,7 +411,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Setup account."""
         if operate.user_account is not None:
             return JSONResponse(
-                content={"error": "Account already exists"},
+                content={"error": "Account already exists."},
                 status_code=HTTPStatus.CONFLICT,
             )
 
@@ -412,7 +419,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not password or len(password) < MIN_PASSWORD_LENGTH:
             return JSONResponse(
                 content={
-                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long"
+                    "error": f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -427,10 +434,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     ) -> t.Dict:
         """Update password."""
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Account does not exist"},
-                status_code=HTTPStatus.CONFLICT,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         data = await request.json()
         old_password = data.get("old_password")
@@ -440,7 +444,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not old_password and not mnemonic:
             return JSONResponse(
                 content={
-                    "error": "You must provide either your current password or seed phrase"
+                    "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required.",
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -448,7 +452,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if old_password and mnemonic:
             return JSONResponse(
                 content={
-                    "error": "Please provide either your current password or seed phrase, not both"
+                    "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required.",
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -456,7 +460,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
             return JSONResponse(
                 content={
-                    "error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long"
+                    "error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long."
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -465,19 +469,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if old_password:
                 operate.update_password(old_password, new_password)
                 return JSONResponse(
-                    content={"error": None, "message": "Password updated successfully"}
+                    content={"error": None, "message": "Password updated successfully."}
                 )
             if mnemonic:
                 operate.update_password_with_mnemonic(mnemonic, new_password)
                 return JSONResponse(
                     content={
                         "error": None,
-                        "message": "Password updated successfully using seed phrase",
+                        "message": "Password updated successfully using seed phrase.",
                     }
                 )
 
             return JSONResponse(
-                content={"error": "Password update failed"},
+                content={"error": "Password update failed."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except ValueError as e:
@@ -498,21 +502,18 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _validate_password(request: Request) -> t.Dict:
         """Validate password."""
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Account does not exist"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid"},
+                content={"error": "Password is not valid."},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         operate.password = data["password"]
         return JSONResponse(
-            content={"message": "Login successful"},
+            content={"message": "Login successful."},
             status_code=HTTPStatus.OK,
         )
 
@@ -530,16 +531,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _create_wallet(request: Request) -> t.List[t.Dict]:
         """Create wallet"""
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Please create an account first"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to create a wallet"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         data = await request.json()
         ledger_type = LedgerType(data["ledger_type"])
@@ -559,21 +554,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _get_private_key(request: Request) -> t.List[t.Dict]:
         """Get Master EOA private key."""
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Please create an account first"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         data = await request.json()
         password = data.get("password")
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to access private keys"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
         if operate.password != password:
             return JSONResponse(
-                content={"error": "Password is not valid"},
+                content={"error": "Password is not valid."},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -611,13 +600,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
-                content={"error": "Please create a wallet first"},
+                content={"error": "No Master EOA found for this chain."},
                 status_code=HTTPStatus.NOT_FOUND,
             )
         safes = manager.load(ledger_type=ledger_type).safes
         if safes is None or safes.get(chain) is None:
             return JSONResponse(
-                content={"error": "Please create a safe first for this chain"},
+                content={"error": "No Master Safe found for this chain."},
                 status_code=HTTPStatus.NOT_FOUND,
             )
 
@@ -633,23 +622,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     ) -> t.List[t.Dict]:
         """Create wallet safe"""
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Please create an account first"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to create a safe"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         data = await request.json()
 
         if "initial_funds" in data and "transfer_excess_assets" in data:
             return JSONResponse(
                 content={
-                    "error": "Please specify either 'initial_funds' or 'transfer_excess_assets', but not both."
+                    "error": "Only specify one of 'initial_funds' or 'transfer_excess_assets', but not both."
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -661,8 +644,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
-                content={"error": "Please create a wallet first"},
-                status_code=HTTPStatus.BAD_REQUEST,
+                content={"error": "No Master EOA found for this chain."},
+                status_code=HTTPStatus.NOT_FOUND,
             )
 
         wallet = manager.load(ledger_type=ledger_type)
@@ -670,9 +653,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "safe": wallet.safes.get(chain),
-                    "message": f"Safe already exists for {chain.value}",
-                },
-                status_code=HTTPStatus.CONFLICT,
+                    "message": "Safe already exists for this chain.",
+                }
             )
 
         ledger_api = wallet.ledger_api(chain=chain)
@@ -742,22 +724,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Update wallet safe"""
         # TODO: Extract login check as decorator
         if operate.user_account is None:
-            return JSONResponse(
-                content={"error": "Please create an account first"},
-                status_code=HTTPStatus.BAD_REQUEST,
-            )
+            return ACCOUNT_NOT_FOUND_ERROR
 
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to update a safe"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         data = await request.json()
 
         if "chain" not in data:
             return JSONResponse(
-                content={"error": "Please specify a 'chain' to update the safe"},
+                content={"error": "'chain' is required."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -766,7 +742,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         manager = operate.wallet_manager
         if not manager.exists(ledger_type=ledger_type):
             return JSONResponse(
-                content={"error": "This wallet does not exist"},
+                content={"error": "No Master EOA found for this chain."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -853,10 +829,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _create_services_v2(request: Request) -> JSONResponse:
         """Create a service."""
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to create a service"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
         manager = operate.service_manager()
         output = manager.create(service_template=template)
@@ -868,10 +841,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to deploy a service"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         pause_all_services()
         service_config_id = request.path_params["service_config_id"]
@@ -904,10 +874,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _update_service(request: Request) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to update a service"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         service_config_id = request.path_params["service_config_id"]
         manager = operate.service_manager()
@@ -967,10 +934,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Withdraw all the funds from a service."""
 
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to withdraw funds"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
@@ -981,7 +945,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         withdrawal_address = (await request.json()).get("withdrawal_address")
         if withdrawal_address is None:
             return JSONResponse(
-                content={"error": "Please specify the 'withdrawal_address'"},
+                content={"error": "'withdrawal_address' is required"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
@@ -1036,10 +1000,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _bridge_refill_requirements(request: Request) -> JSONResponse:
         """Get the bridge refill requirements."""
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to access bridge services"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         try:
             data = await request.json()
@@ -1055,7 +1016,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except ValueError as e:
             logger.error(f"Bridge refill requirements error: {e}")
             return JSONResponse(
-                content={"error": "Invalid bridge request parameters"},
+                content={"error": "Invalid bridge request parameters."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
@@ -1074,10 +1035,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _bridge_execute(request: Request) -> JSONResponse:
         """Execute bridge transaction."""
         if operate.password is None:
-            return JSONResponse(
-                content={"error": "Please log in to execute bridge transactions"},
-                status_code=HTTPStatus.UNAUTHORIZED,
-            )
+            return USER_NOT_LOGGED_IN_ERROR
 
         try:
             data = await request.json()
@@ -1090,7 +1048,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except ValueError as e:
             logger.error(f"Bridge execute error: {e}")
             return JSONResponse(
-                content={"error": "Invalid bundle ID or transaction failed"},
+                content={"error": "Invalid bundle ID or transaction failed."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
@@ -1126,7 +1084,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         except ValueError as e:
             logger.error(f"Bridge status error: {e}")
             return JSONResponse(
-                content={"error": "Invalid bundle ID"},
+                content={"error": "Invalid bundle ID."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except

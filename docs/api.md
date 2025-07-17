@@ -1,7 +1,5 @@
 # Olas-Operate API reference
 
-This document provides a comprehensive reference for the Olas-Operate API endpoints.
-
 ## Authentication
 
 Most endpoints require authentication. Users must first create an account and log in to access protected resources.
@@ -58,7 +56,7 @@ Create a new user account.
 **Request Body:**
 ```json
 {
-  "password": "your_secure_password"
+  "password": "your_password"
 }
 ```
 
@@ -72,14 +70,14 @@ Create a new user account.
 **Response (Password too short - 400):**
 ```json
 {
-  "error": "Password must be at least 8 characters long"
+  "error": "Password must be at least 8 characters long."
 }
 ```
 
 **Response (Account exists - 409):**
 ```json
 {
-  "error": "Account already exists"
+  "error": "Account already exists."
 }
 ```
 
@@ -90,8 +88,8 @@ Update account password.
 **Request Body (with current password):**
 ```json
 {
-  "old_password": "current_password",
-  "new_password": "new_secure_password"
+  "old_password": "your_old_password",
+  "new_password": "your_new_password"
 }
 ```
 
@@ -99,7 +97,7 @@ Update account password.
 ```json
 {
   "mnemonic": "word1 word2 word3 ...",
-  "new_password": "new_secure_password"
+  "new_password": "your_new_password"
 }
 ```
 
@@ -107,7 +105,7 @@ Update account password.
 ```json
 {
   "error": null,
-  "message": "Password updated successfully"
+  "message": "Password updated successfully."
 }
 ```
 
@@ -115,28 +113,28 @@ Update account password.
 ```json
 {
   "error": null,
-  "message": "Password updated successfully using seed phrase"
+  "message": "Password updated successfully using seed phrase."
 }
 ```
 
 **Response (Missing parameters - 400):**
 ```json
 {
-  "error": "You must provide either your current password or seed phrase"
+  "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
 }
 ```
 
 **Response (Both parameters provided - 400):**
 ```json
 {
-  "error": "Please provide either your current password or seed phrase, not both"
+  "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
 }
 ```
 
 **Response (New password too short - 400):**
 ```json
 {
-  "error": "New password must be at least 8 characters long"
+  "error": "New password must be at least 8 characters long."
 }
 ```
 
@@ -154,10 +152,10 @@ Update account password.
 }
 ```
 
-**Response (No account - 409):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Account does not exist"
+  "error": "User account not found."
 }
 ```
 
@@ -182,21 +180,21 @@ Validate user credentials and establish a session.
 **Response (Success - 200):**
 ```json
 {
-  "message": "Login successful"
+  "message": "Login successful."
 }
 ```
 
 **Response (Invalid password - 401):**
 ```json
 {
-  "error": "Password is not valid"
+  "error": "Password is not valid."
 }
 ```
 
-**Response (No account - 400):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Account does not exist"
+  "error": "User account not found."
 }
 ```
 
@@ -258,17 +256,17 @@ Create a new wallet.
 }
 ```
 
-**Response (No account - 400):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Please create an account first"
+  "error": "User account not found."
 }
 ```
 
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to create a wallet"
+  "error": "User not logged in."
 }
 ```
 
@@ -291,24 +289,24 @@ Get Master EOA private key.
 }
 ```
 
-**Response (No account - 400):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Please create an account first"
+  "error": "User account not found."
 }
 ```
 
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to access private keys"
+  "error": "User not logged in."
 }
 ```
 
 **Response (Invalid password - 401):**
 ```json
 {
-  "error": "Password is not valid"
+  "error": "Password is not valid."
 }
 ```
 
@@ -382,14 +380,14 @@ Get the safe address for a specific chain.
 **Response (No wallet - 404):**
 ```json
 {
-  "error": "Please create a wallet first"
+  "error": "No Master EOA found for this chain."
 }
 ```
 
 **Response (No safe - 404):**
 ```json
 {
-  "error": "Please create a safe first for this chain"
+  "error": "No Master Safe found for this chain."
 }
 ```
 
@@ -429,39 +427,39 @@ Create a new Gnosis Safe.
 }
 ```
 
-**Response (Safe exists - 409):**
+**Response (Safe exists - 200):**
 ```json
 {
   "safe": "0x...",
-  "message": "Safe already exists for gnosis"
+  "message": "Safe already exists for this chain."
 }
 ```
 
 **Response (Invalid request - 400):**
 ```json
 {
-  "error": "Please specify either 'initial_funds' or 'transfer_excess_assets', but not both."
+  "error": "Only specify one of 'initial_funds' or 'transfer_excess_assets', but not both."
 }
 ```
 
-**Response (No wallet - 400):**
+**Response (No wallet - 404):**
 ```json
 {
-  "error": "Please create a wallet first"
+  "error": "No Master EOA found for this chain."
 }
 ```
 
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to create a safe"
+  "error": "User not logged in."
 }
 ```
 
-**Response (No account - 400):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Please create an account first"
+  "error": "User account not found."
 }
 ```
 
@@ -518,31 +516,31 @@ Update safe settings, such as backup owner.
 }
 ```
 
-**Response (No account - 400):**
+**Response (No account - 404):**
 ```json
 {
-  "error": "Please create an account first"
+  "error": "User account not found."
 }
 ```
 
 **Response (No chain specified - 400):**
 ```json
 {
-  "error": "Please specify a 'chain' to update the safe"
+  "error": "'chain' is required."
 }
 ```
 
 **Response (No wallet - 400):**
 ```json
 {
-  "error": "This wallet does not exist"
+  "error": "No Master EOA found for this chain."
 }
 ```
 
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to update a safe"
+  "error": "User not logged in."
 }
 ```
 
@@ -865,7 +863,7 @@ Create a new service.
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to create a service"
+  "error": "User not logged in."
 }
 ```
 
@@ -977,7 +975,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to update a service"
+  "error": "User not logged in."
 }
 ```
 
@@ -1042,14 +1040,14 @@ Deploy and run a service.
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to deploy a service"
+  "error": "User not logged in."
 }
 ```
 
 **Response (Operation failed after retries - 500):**
 ```json
 {
-  "error": "Operation failed after multiple attempts. Please try again later."
+  "error": "Service is already running."
 }
 ```
 
@@ -1113,14 +1111,14 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to withdraw funds"
+  "error": "User not logged in."
 }
 ```
 
 **Response (Missing withdrawal address - 400):**
 ```json
 {
-  "error": "Please specify the 'withdrawal_address'"
+  "error": "'withdrawal_address' is required"
 }
 ```
 
@@ -1184,20 +1182,106 @@ Get bridge refill requirements for cross-chain transactions.
 **Response (Invalid parameters - 400):**
 ```json
 {
-  "error": "Invalid bridge request parameters"
+  "error": "Invalid bridge request parameters."
 }
 ```
 
 **Response (Not logged in - 401):**
 ```json
 {
-  "error": "Please log in to access bridge services"
+  "error": "User not logged in."
+}
+```
+
+### `POST /api/bridge/execute`
+
+Execute bridge transaction.
+
+**Request Body:**
+```json
+{
+  "id": "bundle_123"
+}
+```
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123",
+  "bridge_request_status": [
+    {
+      "eta": 1234567890,
+      "explorer_link": "https://gnosisscan.com/tx/0x...",
+      "message": "Transaction executed successfully",
+      "status": "EXECUTION_DONE",
+      "tx_hash": "0x...",
+    }
+  ]
+}
+```
+
+**Response (Invalid bundle ID - 400):**
+```json
+{
+  "error": "Invalid bundle ID or transaction failed."
+}
+```
+
+**Response (Not logged in - 401):**
+```json
+{
+  "error": "User not logged in."
 }
 ```
 
 **Response (Failed - 500):**
 ```json
 {
-  "error": "Failed to get bridge requirements. Please check the logs."
+  "error": "Failed to execute bridge transaction. Please check the logs."
+}
+```
+
+### `GET /api/bridge/last_executed_bundle_id`
+
+Get the last executed bundle ID.
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123"
+}
+```
+
+### `GET /api/bridge/status/{id}`
+
+Get bridge transaction status.
+
+**Response (Success - 200):**
+```json
+{
+  "id": "bundle_123",
+  "bridge_request_status": [
+    {
+      "eta": 1234567890,
+      "explorer_link": "https://gnosisscan.com/tx/0x...",
+      "message": "Transaction executed successfully",
+      "status": "EXECUTION_DONE",
+      "tx_hash": "0x...",
+    }
+  ]
+}
+```
+
+**Response (Invalid bundle ID - 400):**
+```json
+{
+  "error": "Invalid bundle ID."
+}
+```
+
+**Response (Failed - 500):**
+```json
+{
+  "error": "Failed to get bridge status. Please check the logs."
 }
 ```
