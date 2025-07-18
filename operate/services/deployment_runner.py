@@ -34,6 +34,7 @@ from pathlib import Path
 from traceback import print_exc
 from typing import Any, Dict, List
 from venv import main as venv_cli
+from aea.helpers.logging import setup_logger
 
 import psutil
 import requests
@@ -99,6 +100,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
+    START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
+    logger = setup_logger(name="operate.base_deployment_runner")
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
@@ -221,6 +224,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
 
     def start(self) -> None:
+        """Start the deployment with retries."""
+        for i in range(self.START_TRIES):
+            try:
+                self._start()
+                return
+            except Exception as e:
+                self.logger.exception(f"Error on starting deployment: {e}")
+        raise RuntimeError(
+            f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"
+        )
+
+    def _start(self) -> None:
         """Start the deployment."""
         self._setup_agent()
         self._start_tendermint()
