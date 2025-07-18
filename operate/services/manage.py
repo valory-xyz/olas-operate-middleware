@@ -36,7 +36,7 @@ from pathlib import Path
 import requests
 from aea.helpers.base import IPFSHash
 from aea.helpers.logging import setup_logger
-from aea_ledger_ethereum import EthereumCrypto
+from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 
@@ -52,19 +52,18 @@ from operate.ledger import PUBLIC_RPCS, get_currency_denom
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MASTER_EOA_FUNDS,
-    DEFAULT_PRIORITY_MECH_ADDRESS,
-    DEFAULT_PRIORITY_MECH_SERVICE_ID,
+    DEFAULT_PRIORITY_MECH,
     OLAS,
     STAKING,
     USDC,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
-    get_staking_program_mech_type,
 )
 from operate.operate_types import (
     Chain,
     FundingValues,
     LedgerConfig,
+    MechMarketplaceConfig,
     OnChainState,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -520,6 +519,103 @@ class ServiceManager:
                 chain=chain,
             )
 
+    def get_mech_configs(
+        self,
+        chain: str,
+        ledger_api: LedgerApi,
+        staking_program_id: str | None = None,
+    ) -> MechMarketplaceConfig:
+        """Get the mech configs."""
+        sftxb = self.get_eth_safe_tx_builder(
+            ledger_config=LedgerConfig(
+                chain=Chain(chain),
+                rpc=ledger_api.api.provider.endpoint_uri,
+            )
+        )
+        staking_contract = get_staking_contract(
+            chain=chain,
+            staking_program_id=staking_program_id,
+        )
+        if staking_contract is None:
+            return MechMarketplaceConfig(
+                use_mech_marketplace=False,
+                mech_marketplace_address=ZERO_ADDRESS,
+                priority_mech_address=ZERO_ADDRESS,
+                priority_mech_service_id=0,
+            )
+
+        target_staking_params = sftxb.get_staking_params(
+            staking_contract=get_staking_contract(
+                chain=chain,
+                staking_program_id=staking_program_id,
+            ),
+        )
+
+        try:
+            # Try if activity checker is a MechActivityChecker contract
+            mech_activity_contract = t.cast(
+                MechActivityContract,
+                MechActivityContract.from_dir(
+                    directory=str(DATA_DIR / "contracts" / "mech_activity")
+                ),
+            )
+
+            priority_mech_address = (
+                mech_activity_contract.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=target_staking_params["activity_checker"],
+                )
+                .functions.agentMech()
+                .call()
+            )
+            use_mech_marketplace = False
+            mech_marketplace_address = ZERO_ADDRESS
+            priority_mech_service_id = 0
+
+        except Exception:  # pylint: disable=broad-except
+            # Try if activity checker is a RequesterActivityChecker contract
+            try:
+                requester_activity_checker = t.cast(
+                    RequesterActivityCheckerContract,
+                    RequesterActivityCheckerContract.from_dir(
+                        directory=str(
+                            DATA_DIR / "contracts" / "requester_activity_checker"
+                        )
+                    ),
+                )
+
+                mech_marketplace_address = (
+                    requester_activity_checker.get_instance(
+                        ledger_api=ledger_api,
+                        contract_address=target_staking_params["activity_checker"],
+                    )
+                    .functions.mechMarketplace()
+                    .call()
+                )
+
+                use_mech_marketplace = True
+                priority_mech_address, priority_mech_service_id = DEFAULT_PRIORITY_MECH[
+                    mech_marketplace_address
+                ]
+
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error(f"{e}: {traceback.format_exc()}")
+                self.logger.warning(
+                    "Cannot determine type of activity checker contract. Using default parameters. "
+                    "NOTE: This will be an exception in the future!"
+                )
+                priority_mech_address = "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+                use_mech_marketplace = False
+                mech_marketplace_address = ZERO_ADDRESS
+                priority_mech_service_id = 0
+
+        return MechMarketplaceConfig(
+            use_mech_marketplace=use_mech_marketplace,
+            mech_marketplace_address=mech_marketplace_address,
+            priority_mech_address=priority_mech_address,
+            priority_mech_service_id=priority_mech_service_id,
+        )
+
     def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
         self,
         service_config_id: str,
@@ -556,10 +652,6 @@ class ServiceManager:
         self.logger.info(f"Service state: {on_chain_state.name}")
 
         current_staking_program = self._get_current_staking_program(service, chain)
-        staking_program_mech_type = get_staking_program_mech_type(
-            user_params.staking_program_id
-        )
-        self.logger.info(f"{staking_program_mech_type=}")
         fallback_params = dict(  # nosec
             staking_contract=NULL_ADDRESS,
             agent_ids=[user_params.agent_id],
@@ -588,94 +680,29 @@ class ServiceManager:
         # TODO A customized, arbitrary computation mechanism should be devised.
         env_var_to_value = {}
         if chain == service.home_chain:
-            # Try if activity checker is a MechActivityChecker contract
-            try:
-                mech_activity_contract = t.cast(
-                    MechActivityContract,
-                    MechActivityContract.from_dir(
-                        directory=str(DATA_DIR / "contracts" / "mech_activity")
-                    ),
-                )
+            mech_configs: MechMarketplaceConfig = self.get_mech_configs(
+                chain=chain,
+                ledger_api=sftxb.ledger_api,
+                staking_program_id=user_params.staking_program_id,
+            )
 
-                agent_mech = (
-                    mech_activity_contract.get_instance(
-                        ledger_api=sftxb.ledger_api,
-                        contract_address=target_staking_params["activity_checker"],
-                    )
-                    .functions.agentMech()
-                    .call()
-                )
-                use_mech_marketplace = False
-                mech_marketplace_address = ZERO_ADDRESS
-                priority_mech_address = ZERO_ADDRESS
-                priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(
-                    staking_program_mech_type, 0
-                )
+            if (
+                "PRIORITY_MECH_ADDRESS" in service.env_variables
+                and service.env_variables["PRIORITY_MECH_ADDRESS"]["provision_type"]
+                == ServiceEnvProvisionType.USER
+            ):
+                mech_configs.priority_mech_address = service.env_variables[
+                    "PRIORITY_MECH_ADDRESS"
+                ]["value"]
 
-            except Exception:  # pylint: disable=broad-except
-                # Try if activity checker is a RequesterActivityChecker contract
-                try:
-                    requester_activity_checker = t.cast(
-                        RequesterActivityCheckerContract,
-                        RequesterActivityCheckerContract.from_dir(
-                            directory=str(
-                                DATA_DIR / "contracts" / "requester_activity_checker"
-                            )
-                        ),
-                    )
-
-                    mech_marketplace_address = (
-                        requester_activity_checker.get_instance(
-                            ledger_api=sftxb.ledger_api,
-                            contract_address=target_staking_params["activity_checker"],
-                        )
-                        .functions.mechMarketplace()
-                        .call()
-                    )
-
-                    use_mech_marketplace = True
-                    if (
-                        "PRIORITY_MECH_ADDRESS" in service.env_variables
-                        and service.env_variables["PRIORITY_MECH_ADDRESS"][
-                            "provision_type"
-                        ]
-                        == ServiceEnvProvisionType.USER
-                    ):
-                        agent_mech = priority_mech_address = service.env_variables[
-                            "PRIORITY_MECH_ADDRESS"
-                        ]["value"]
-                    else:
-                        agent_mech = (
-                            priority_mech_address
-                        ) = DEFAULT_PRIORITY_MECH_ADDRESS[staking_program_mech_type]
-
-                    if (
-                        "PRIORITY_MECH_SERVICE_ID" in service.env_variables
-                        and service.env_variables["PRIORITY_MECH_SERVICE_ID"][
-                            "provision_type"
-                        ]
-                        == ServiceEnvProvisionType.USER
-                    ):
-                        priority_mech_service_id = service.env_variables[
-                            "PRIORITY_MECH_SERVICE_ID"
-                        ]["value"]
-                    else:
-                        priority_mech_service_id = DEFAULT_PRIORITY_MECH_SERVICE_ID.get(
-                            staking_program_mech_type, 0
-                        )
-
-                except Exception:  # pylint: disable=broad-except
-                    self.logger.warning(
-                        "Cannot determine type of activity checker contract. Using default parameters. "
-                        "NOTE: This will be an exception in the future!"
-                    )
-                    agent_mech = DEFAULT_PRIORITY_MECH_ADDRESS[
-                        staking_program_mech_type
-                    ]
-                    use_mech_marketplace = False
-                    mech_marketplace_address = ZERO_ADDRESS
-                    priority_mech_address = ZERO_ADDRESS
-                    priority_mech_service_id = 0
+            if (
+                "PRIORITY_MECH_SERVICE_ID" in service.env_variables
+                and service.env_variables["PRIORITY_MECH_SERVICE_ID"]["provision_type"]
+                == ServiceEnvProvisionType.USER
+            ):
+                mech_configs.priority_mech_service_id = service.env_variables[
+                    "PRIORITY_MECH_SERVICE_ID"
+                ]["value"]
 
             env_var_to_value.update(
                 {
@@ -693,10 +720,10 @@ class ServiceManager:
                         "staking_contract"
                     ),
                     "MECH_MARKETPLACE_CONFIG": (
-                        f'{{"mech_marketplace_address":"{mech_marketplace_address}",'
-                        f'"priority_mech_address":"{priority_mech_address}",'
+                        f'{{"mech_marketplace_address":"{mech_configs.mech_marketplace_address}",'
+                        f'"priority_mech_address":"{mech_configs.priority_mech_address}",'
                         f'"priority_mech_staking_instance_address":"0x998dEFafD094817EF329f6dc79c703f1CF18bC90",'
-                        f'"priority_mech_service_id":{priority_mech_service_id},'
+                        f'"priority_mech_service_id":{mech_configs.priority_mech_service_id},'
                         f'"requester_staking_instance_address":"{target_staking_params.get("staking_contract")}",'
                         f'"response_timeout":300}}'
                     ),
@@ -706,9 +733,9 @@ class ServiceManager:
                     "MECH_ACTIVITY_CHECKER_CONTRACT": target_staking_params.get(
                         "activity_checker"
                     ),
-                    "MECH_CONTRACT_ADDRESS": agent_mech,
+                    "MECH_CONTRACT_ADDRESS": mech_configs.priority_mech_address,
                     "MECH_REQUEST_PRICE": "10000000000000000",
-                    "USE_MECH_MARKETPLACE": use_mech_marketplace,
+                    "USE_MECH_MARKETPLACE": mech_configs.use_mech_marketplace,
                 }
             )
 

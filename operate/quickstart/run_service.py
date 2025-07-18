@@ -37,14 +37,7 @@ from operate.account.user import UserAccount
 from operate.constants import IPFS_ADDRESS, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import (
-    DEFAULT_PRIORITY_MECH_ADDRESS,
-    DEFAULT_PRIORITY_MECH_SERVICE_ID,
-    NO_STAKING_PROGRAM_ID,
-    STAKING,
-    get_staking_contract,
-    get_staking_program_mech_type,
-)
+from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,
@@ -207,9 +200,6 @@ def configure_local_config(
                 f"{chain.upper()}_LEDGER_RPC",
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
-
-    if config.password_migrated is None:
-        config.password_migrated = False
 
     config.principal_chain = template["home_chain"]
 
@@ -396,15 +386,18 @@ def configure_local_config(
     ):
         print_section("Please enter the arguments that will be used by the service.")
 
-    staking_program_mech_type = get_staking_program_mech_type(config.staking_program_id)
+    service_manager = operate.service_manager()
+    mech_configs = service_manager.get_mech_configs(
+        chain=config.principal_chain,
+        ledger_api=ledger_api,
+        staking_program_id=config.staking_program_id,
+    )
 
     for env_var_name, env_var_data in template["env_variables"].items():
         if env_var_data["provision_type"] == ServiceEnvProvisionType.USER:
             # PRIORITY_MECH_ADDRESS and PRIORITY_MECH_SERVICE_ID are given dynamic default values
             if env_var_name == "PRIORITY_MECH_ADDRESS":
-                env_var_data["value"] = DEFAULT_PRIORITY_MECH_ADDRESS[
-                    staking_program_mech_type
-                ]
+                env_var_data["value"] = mech_configs.priority_mech_address
                 if (
                     env_var_name in config.user_provided_args
                     and env_var_data["value"] != config.user_provided_args[env_var_name]
@@ -412,9 +405,7 @@ def configure_local_config(
                     del config.user_provided_args[env_var_name]
 
             if env_var_name == "PRIORITY_MECH_SERVICE_ID":
-                env_var_data["value"] = str(
-                    DEFAULT_PRIORITY_MECH_SERVICE_ID.get(staking_program_mech_type, 0)
-                )
+                env_var_data["value"] = mech_configs.priority_mech_service_id
                 if (
                     env_var_name in config.user_provided_args
                     and env_var_data["value"] != config.user_provided_args[env_var_name]
@@ -456,7 +447,7 @@ def configure_local_config(
     return config
 
 
-def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> None:
+def ask_password_if_needed(operate: "OperateApp") -> None:
     """Ask password if needed."""
     if operate.user_account is None:
         print_section("Set up local user account")
@@ -466,8 +457,6 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> N
             password=password,
             path=operate._path / "user.json",
         )
-        config.password_migrated = True
-        config.store()
     else:
         _password = None
         while _password is None:
@@ -620,8 +609,8 @@ def _ask_funds_from_requirements(
     return False
 
 
-def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
-    """Ensure enough funds."""
+def _maybe_create_master_eoa(operate: "OperateApp") -> None:
+    """Maybe create the Master EOA."""
     if not operate.wallet_manager.exists(ledger_type=LedgerType.ETHEREUM):
         print("Creating the Master EOA...")
         wallet, mnemonic = operate.wallet_manager.create(
@@ -636,9 +625,12 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
         ask_or_get_from_env(
             "Press enter to continue...", False, "CONTINUE", raise_if_missing=False
         )
-    else:
-        wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
+
+def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
+    """Ensure enough funds."""
+    _maybe_create_master_eoa(operate)
+    wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     manager = operate.service_manager()
 
     backup_owner = None
@@ -677,11 +669,12 @@ def run_service(
 
     operate.service_manager().migrate_service_configs()
     operate.wallet_manager.migrate_wallet_configs()
+    ask_password_if_needed(operate)
+    _maybe_create_master_eoa(operate)
 
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
-    ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)
