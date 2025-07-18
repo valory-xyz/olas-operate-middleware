@@ -22,11 +22,9 @@
 import enum
 import typing as t
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
 
-
-NO_STAKING_PROGRAM_ID = "no_staking"
 
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {
     Chain.GNOSIS: ContractAddresses(

@@ -20,16 +20,19 @@
 """Tests for services.service module."""
 
 import json
+import logging
 import typing as t
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from deepdiff import DeepDiff
 
+from operate.migration import MigrationManager
 from operate.services.service import (
+    NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
-    Service,
 )
 
 
@@ -55,7 +58,7 @@ DEFAULT_CONFIG_KWARGS = {
     "keys_address_0": "0x0000000000000000000000000000000000000001",
     "keys_private_key_0": "0x0000000000000000000000000000000000000000000000000000000000000001",
     "instance_0": "0x0000000000000000000000000000000000000001",
-    "multisig": "0x0000000000000000000000000000000000000020",
+    "multisig": "0xm",
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "package_path": "trader_pearl",
 }
@@ -332,7 +335,51 @@ def get_config_json_data_v6(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     }
 
 
-get_expected_data = get_config_json_data_v6
+def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    """get_config_json_data_v7"""
+
+    return {
+        "version": 7,
+        "service_config_id": kwargs.get("service_config_id"),
+        "hash": kwargs.get("hash"),
+        "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
+        "agent_addresses": [kwargs.get("keys_address_0")],
+        "home_chain": "gnosis",
+        "chain_configs": {
+            "gnosis": {
+                "ledger_config": {"rpc": kwargs.get("rpc"), "chain": "gnosis"},
+                "chain_data": {
+                    "instances": [kwargs.get("instance_0")],
+                    "token": kwargs.get("token"),
+                    "multisig": NON_EXISTENT_MULTISIG,
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
+                    "user_params": {
+                        "staking_program_id": kwargs.get("staking_program_id"),
+                        "nft": kwargs.get("nft"),
+                        "threshold": kwargs.get("threshold"),
+                        "agent_id": kwargs.get("agent_id"),
+                        "use_staking": kwargs.get("use_staking"),
+                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
+                        "fund_requirements": {
+                            "0x0000000000000000000000000000000000000000": {
+                                "agent": kwargs.get("fund_requirements_agent"),
+                                "safe": kwargs.get("fund_requirements_safe"),
+                            }
+                        },
+                    },
+                },
+            }
+        },
+        "description": kwargs.get("description"),
+        "env_variables": {},
+        "package_path": kwargs.get("package_path"),
+        "name": kwargs.get("name"),
+    }
+
+
+get_expected_data = get_config_json_data_v7
 
 
 class TestService:
@@ -351,6 +398,7 @@ class TestService:
             get_config_json_data_v3,
             get_config_json_data_v4,
             get_config_json_data_v5,
+            get_config_json_data_v6,
         ],
     )
     def test_service_migrate_format(
@@ -370,7 +418,8 @@ class TestService:
         old_config_json_data = get_config_json_data(**config_kwargs)
 
         # Emulate an existing service directory contents
-        service_config_dir = tmp_path / old_config_json_data.get(
+        service_dir = tmp_path / "services"
+        service_config_dir = service_dir / old_config_json_data.get(
             "service_config_id", old_config_json_data.get("hash")
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
@@ -379,11 +428,14 @@ class TestService:
         with open(config_json_path, "w", encoding="utf-8") as file:
             json.dump(old_config_json_data, file, indent=4)
 
-        # Migrate the service using Service.migrate_format and read the resulting
+        # Migrate the service using the MigrationManager and read the resulting
         # migrated data
-        Service.migrate_format(service_config_dir)
+        mm = MigrationManager(tmp_path, logging.getLogger("test"))
+        service_manager = Mock()
+        service_manager.path = service_dir
+        mm.migrate_services(service_manager)
 
-        migrated_config_dir = next(tmp_path.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
+        migrated_config_dir = next(service_dir.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
         new_config_json_path = migrated_config_dir / "config.json"
         with open(new_config_json_path, "r", encoding="utf-8") as file:
             migrated_data = json.load(file)
