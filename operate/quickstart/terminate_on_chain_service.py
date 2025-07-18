@@ -62,7 +62,7 @@ def terminate_service(operate: "OperateApp", config_path: str) -> None:
         return
 
     config = configure_local_config(template, operate)
-    ask_password_if_needed(operate, config)
+    ask_password_if_needed(operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     ensure_enough_funds(operate, service)
