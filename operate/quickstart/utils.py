@@ -277,7 +277,6 @@ class QuickstartConfig(LocalResource):
 
     path: Path
     rpc: Optional[Dict[str, str]] = None
-    password_migrated: Optional[bool] = None
     staking_program_id: Optional[str] = None
     principal_chain: Optional[str] = None
     user_provided_args: Optional[Dict[str, str]] = None
