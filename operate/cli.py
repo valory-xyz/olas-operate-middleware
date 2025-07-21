@@ -292,6 +292,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
+        service_manager = operate.service_manager()
+        if not service_manager.validate_services():
+            logger.error("Some services are not valid. Only pausing the valid services.")
+
         service_config_ids = [
             i["service_config_id"] for i in operate.service_manager().json
         ]
@@ -766,6 +770,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
+        service_manager = operate.service_manager()
+        if not service_manager.validate_services():
+            return JSONResponse(
+                content={
+                    "error": "Some services are not valid. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
         return JSONResponse(content=operate.service_manager().json)
 
     @app.get("/api/v2/service/{service_config_id}")
