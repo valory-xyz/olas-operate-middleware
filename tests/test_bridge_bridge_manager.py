@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tests for bridge.bridge module."""
+"""Tests for bridge.bridge_manager module."""
 
 
 import os
@@ -84,7 +84,7 @@ COINGECKO_NATIVE_IDS = {
 
 
 class TestBridgeManager:
-    """Tests for bridge.bridge.BridgeManager class."""
+    """Tests for bridge.bridge_manager.BridgeManager class."""
 
     @staticmethod
     @cache
@@ -264,7 +264,7 @@ class TestBridgeManager:
                     "chain": Chain.OPTIMISTIC.value,
                     "address": wallet_address,
                     "token": USDC[Chain.OPTIMISTIC],
-                    "amount": 1,
+                    "amount": int(1000*1e18),
                 },
             },
             {
@@ -347,6 +347,10 @@ class TestBridgeManager:
         if diff:
             print(diff)
 
+        from icecream import ic
+        ic(brr)
+        print(".........................")
+        ic(expected_brr)
         assert not diff, "Wrong refill requirements."
 
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
