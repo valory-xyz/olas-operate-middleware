@@ -332,3 +332,13 @@ class AssetFundingValues(TypedDict):
 
 
 FundingValues = t.Dict[str, AssetFundingValues]  # str is the asset address
+
+
+@dataclass
+class MechMarketplaceConfig:
+    """Mech Marketplace config."""
+
+    use_mech_marketplace: bool
+    mech_marketplace_address: str
+    priority_mech_address: str
+    priority_mech_service_id: int
