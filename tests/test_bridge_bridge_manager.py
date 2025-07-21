@@ -264,7 +264,7 @@ class TestBridgeManager:
                     "chain": Chain.OPTIMISTIC.value,
                     "address": wallet_address,
                     "token": USDC[Chain.OPTIMISTIC],
-                    "amount": int(1000*1e18),
+                    "amount": int(1000 * 1e18),
                 },
             },
             {
@@ -348,6 +348,7 @@ class TestBridgeManager:
             print(diff)
 
         from icecream import ic
+
         ic(brr)
         print(".........................")
         ic(expected_brr)
