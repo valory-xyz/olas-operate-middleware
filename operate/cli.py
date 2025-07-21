@@ -294,7 +294,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     def pause_all_services() -> None:
         service_manager = operate.service_manager()
         if not service_manager.validate_services():
-            logger.error("Some services are not valid. Only pausing the valid services.")
+            logger.error(
+                "Some services are not valid. Only pausing the valid services."
+            )
 
         service_config_ids = [
             i["service_config_id"] for i in operate.service_manager().json

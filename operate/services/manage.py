@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -69,13 +68,13 @@ from operate.operate_types import (
 )
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
-    SERVICE_CONFIG_VERSION,
     ChainConfig,
     Deployment,
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
     OnChainData,
     SERVICE_CONFIG_PREFIX,
+    SERVICE_CONFIG_VERSION,
     Service,
 )
 from operate.services.utils.mech import deploy_mech
