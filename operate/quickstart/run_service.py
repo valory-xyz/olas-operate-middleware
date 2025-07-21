@@ -37,7 +37,7 @@ from operate.account.user import UserAccount
 from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
+from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,

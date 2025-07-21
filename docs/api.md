@@ -599,6 +599,13 @@ Get all services.
 ]
 ```
 
+**Response (Invalid service configuration - 500):**
+```json
+{
+  "error": "Some services are not valid. Please check the logs."
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}`
 
 Get a specific service.

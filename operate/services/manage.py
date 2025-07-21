@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import time
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -75,6 +74,7 @@ from operate.services.service import (
     NON_EXISTENT_TOKEN,
     OnChainData,
     SERVICE_CONFIG_PREFIX,
+    SERVICE_CONFIG_VERSION,
     Service,
 )
 from operate.services.utils.mech import deploy_mech
@@ -138,34 +138,44 @@ class ServiceManager:
         """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
-    def _get_all_services(self) -> t.List[Service]:
+    def _get_all_services(self) -> t.Tuple[t.List[Service], bool]:
         services = []
+        success = True
         for path in self.path.iterdir():
             if not path.name.startswith(SERVICE_CONFIG_PREFIX):
                 continue
             try:
                 service = Service.load(path=path)
+                if service.version != SERVICE_CONFIG_VERSION:
+                    self.logger.warning(
+                        f"Service {path.name} has an unsupported version: {service.version}."
+                    )
+                    success = False
+                    continue
+
                 services.append(service)
-            except ValueError as e:
-                raise e
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.error(
                     f"Failed to load service: {path.name}. Exception {e}: {traceback.format_exc()}"
                 )
-                # Rename the invalid path
-                timestamp = int(time.time())
-                invalid_path = path.parent / f"invalid_{timestamp}_{path.name}"
-                os.rename(path, invalid_path)
-                self.logger.info(
-                    f"Renamed invalid service: {path.name} to {invalid_path.name}"
-                )
+                success = False
 
-        return services
+        return services, success
+
+    def validate_services(self) -> bool:
+        """
+        Validate all services.
+
+        :return: True if all services are valid, False otherwise.
+        """
+        _, success = self._get_all_services()
+        return success
 
     @property
     def json(self) -> t.List[t.Dict]:
         """Returns the list of available services."""
-        return [service.json for service in self._get_all_services()]
+        services, _ = self._get_all_services()
+        return [service.json for service in services]
 
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""
