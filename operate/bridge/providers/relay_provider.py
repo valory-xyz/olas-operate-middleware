@@ -173,7 +173,7 @@ class RelayProvider(Provider):
             "destinationChainId": Chain(to_chain).id,
             "recipient": to_address,
             "destinationCurrency": to_token,
-            "amount": to_amount,
+            "amount": str(to_amount),
             "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
