@@ -347,11 +347,6 @@ class TestBridgeManager:
         if diff:
             print(diff)
 
-        from icecream import ic
-
-        ic(brr)
-        print(".........................")
-        ic(expected_brr)
         assert not diff, "Wrong refill requirements."
 
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
