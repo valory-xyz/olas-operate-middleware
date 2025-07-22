@@ -88,6 +88,7 @@ from operate.operate_types import (
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
+from operate.utils.ssl import create_ssl_certificate
 
 
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals
@@ -686,13 +687,35 @@ class Deployment(LocalResource):
         service = Service.load(path=self.path)
 
         if use_docker or use_kubernetes:
-            service.update_env_variables_values({"STORE_PATH": "/data"})
+            ssl_key_path, ssl_cert_path = create_ssl_certificate(
+                ssl_dir=service.path / PERSISTENT_DATA_DIR / "ssl"
+            )
+            service.update_env_variables_values(
+                {
+                    "STORE_PATH": "/data",
+                    "SSL_KEY_PATH": (
+                        Path("/data") / "ssl" / ssl_key_path.name
+                    ).as_posix(),
+                    "SSL_CERT_PATH": (
+                        Path("/data") / "ssl" / ssl_cert_path.name
+                    ).as_posix(),
+                }
+            )
             service.consume_env_variables()
             if use_docker:
                 self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
         else:
+            ssl_key_path, ssl_cert_path = create_ssl_certificate(
+                ssl_dir=service.path / DEPLOYMENT / "ssl"
+            )
+            service.update_env_variables_values(
+                {
+                    "SSL_KEY_PATH": str(ssl_key_path),
+                    "SSL_CERT_PATH": str(ssl_cert_path),
+                }
+            )
             service.consume_env_variables()
             self._build_host(force=force, chain=chain)
 
