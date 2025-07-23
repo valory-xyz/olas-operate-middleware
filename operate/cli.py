@@ -20,6 +20,7 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
+from contextlib import suppress
 import logging
 import multiprocessing
 import os
@@ -39,6 +40,7 @@ from docker.errors import APIError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+import requests
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
@@ -83,6 +85,7 @@ ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
     content={"error": "User account not found."},
     status_code=HTTPStatus.NOT_FOUND,
 )
+TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE = True
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
@@ -1135,6 +1138,16 @@ def _daemon(
                 "ssl_certfile": ssl_certfile,
             }
         )
+
+    # try automatically shutdown previous instance
+    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
+        url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
+        logger.info(f"trying to stop  previous instance with {url}")
+        try:
+            requests.get(url, timeout=3, verify=False)
+            logger.info(f"previous instance stopped")
+        except Exception:
+            logger.exception(f"failed to stop previous instance. probably not running")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
