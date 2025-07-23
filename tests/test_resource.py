@@ -19,6 +19,7 @@
 """Read-write script for testing key file integrity."""
 
 import json
+import platform
 import subprocess  # nosec
 import sys
 from pathlib import Path
@@ -40,24 +41,64 @@ def _run_read_write() -> int:
     return process.pid
 
 
+def _terminate_process(pid: int) -> None:
+    """Terminate process in a platform-specific way."""
+    if platform.system() == "Windows":
+        # Use taskkill on Windows
+        subprocess.run(  # pylint: disable=subprocess-run-check # nosec
+            ["taskkill", "/F", "/PID", str(pid)],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        # Use kill on Unix-like systems
+        subprocess.run(  # pylint: disable=subprocess-run-check # nosec
+            ["kill", str(pid)],
+            check=False,
+        )
+
+
 def test_no_corruption() -> None:
     """Test that the key file is not corrupted during read-write operations."""
     # Create a temporary resource to store the key
     temp_resource = Key(LedgerType.ETHEREUM, ZERO_ADDRESS, "0xkey")
     temp_resource.path = Path("key.json")
     temp_resource.store()
+    success = True
 
     current_time = time()
     while time() - current_time < 60:
         pid = _run_read_write()
         sleep(1)
-        subprocess.run(  # pylint: disable=subprocess-run-check # nosec
-            ["kill", str(pid)]
-        )
+        _terminate_process(pid)
 
+        # On Windows, wait a bit longer for file handles to be released
+        if platform.system() == "Windows":
+            sleep(0.5)
+
+        try:
+            with open(temp_resource.path) as f:
+                final_key = json.load(f)  # this line should not fail for 60 seconds
+        except (json.JSONDecodeError, FileNotFoundError, PermissionError):
+            break
+
+    # Final validation
+    try:
         with open(temp_resource.path) as f:
-            final_key = json.load(f)  # this line should not fail for 60 seconds
+            final_key = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError, PermissionError):
+        success = False
 
-    assert len(final_key) == 3, "Key should not be empty after 60 seconds"
+    # Cleanup
     for file in Path(".").glob("key.json*"):
-        file.unlink()
+        try:
+            file.unlink()
+        except (PermissionError, FileNotFoundError):
+            # On Windows, files might still be locked
+            pass
+
+    assert success, "Key file should not be corrupted after read-write operations"
+    assert len(final_key) == 3, "Key should not be empty after 60 seconds"
+    assert final_key["address"] == ZERO_ADDRESS, "Key address should match"
+    assert final_key["ledger"] == LedgerType.ETHEREUM, "Ledger type should match"
+    assert final_key["private_key"] == "0xkey", "Public key should match"
