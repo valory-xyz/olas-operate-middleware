@@ -526,6 +526,7 @@ def drain_eoa(
             Chain.ARBITRUM_ONE,
             Chain.BASE,
             Chain.OPTIMISTIC,
+            Chain.MODE,
         ):
             chain_fee += ledger_api.get_l1_data_fee(tx)
 
