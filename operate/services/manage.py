@@ -24,6 +24,7 @@ import json
 import logging
 import os
 import shutil
+import tempfile
 import time
 import traceback
 import typing as t
@@ -1314,16 +1315,18 @@ class ServiceManager:
             )  # noqa: E800
 
         if withdrawal_address is not None:
+            # Create a temporary file with the private key from service.keys[0]
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
+                temp_file.write(service.keys[0].private_key)
+                temp_file.flush()
+                ethereum_crypto = EthereumCrypto(private_key_path=temp_file.name)
+
             # drain all native tokens from service signer key
             drain_eoa(
                 ledger_api=self.wallet_manager.load(
                     ledger_config.chain.ledger_type
                 ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
-                crypto=EthereumCrypto(
-                    private_key_path=service.path
-                    / "deployment"
-                    / "ethereum_private_key.txt",
-                ),
+                crypto=ethereum_crypto,
                 withdrawal_address=withdrawal_address,
                 chain_id=ledger_config.chain.id,
             )
@@ -2003,7 +2006,7 @@ class ServiceManager:
                 rpc=rpc or ledger_config.rpc,
             )
 
-    def drain_service_safe(
+    def drain_service_safe(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         withdrawal_address: str,
@@ -2019,9 +2022,11 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-        ethereum_crypto = EthereumCrypto(
-            private_key_path=service.path / "deployment" / "ethereum_private_key.txt",
-        )
+        # Create a temporary file with the private key from service.keys[0]
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
+            temp_file.write(service.keys[0].private_key)
+            temp_file.flush()
+            ethereum_crypto = EthereumCrypto(private_key_path=temp_file.name)
 
         # drain ERC20 tokens from service safe
         for token_name, token_address in (

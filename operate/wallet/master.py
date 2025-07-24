@@ -516,6 +516,9 @@ class EthereumMasterWallet(MasterWallet):
                 asset_address=asset,
                 address=self.safes[chain] if from_safe else self.crypto.address,
             )
+            if balance <= 0:
+                continue
+
             self.transfer_asset(
                 to=withdrawal_address,
                 amount=balance,
