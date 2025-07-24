@@ -34,11 +34,11 @@ from pathlib import Path
 from traceback import print_exc
 from typing import Any, Dict, List
 from venv import main as venv_cli
-from aea.helpers.logging import setup_logger
 
 import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
+from aea.helpers.logging import setup_logger
 from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
@@ -225,11 +225,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def start(self) -> None:
         """Start the deployment with retries."""
-        for i in range(self.START_TRIES):
+        for _ in range(self.START_TRIES):
             try:
                 self._start()
                 return
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 self.logger.exception(f"Error on starting deployment: {e}")
         raise RuntimeError(
             f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"

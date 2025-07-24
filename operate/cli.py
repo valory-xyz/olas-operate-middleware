@@ -20,7 +20,6 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
-from contextlib import suppress
 import logging
 import multiprocessing
 import os
@@ -29,10 +28,13 @@ import traceback
 import typing as t
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
+import psutil
+import requests
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from compose.project import ProjectError
@@ -40,7 +42,6 @@ from docker.errors import APIError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import requests
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
@@ -341,7 +342,48 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # stop all services at  middleware exit
     atexit.register(pause_all_services)
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Load the ML model
+        watchdog_task = set_parent_watchdog(app)
+        yield
+        # Clean up the ML models and release the resources
+
+        with suppress(Exception):
+            watchdog_task.cancel()
+
+        with suppress(Exception):
+            await watchdog_task
+
+    app = FastAPI(lifespan=lifespan)
+
+    def set_parent_watchdog(app):
+        async def stop_app():
+            logger.info("Stopping services on demand...")
+            pause_all_services()
+            logger.info("Stopping services on demand done.")
+            app._server.should_exit = True  # pylint: disable=protected-access
+            logger.info("Stopping app.")
+
+        async def check_parent_alive():
+            try:
+                logger.info(
+                    f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
+                )
+                while True:
+                    parent = psutil.Process(os.getpid()).parent()
+                    if not parent:
+                        logger.info("Parent is not alive, going to stop")
+                        await stop_app()
+                        break
+                    await asyncio.sleep(3)
+
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Parent alive check crashed!")
+
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(check_parent_alive())
+        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -1145,9 +1187,9 @@ def _daemon(
         logger.info(f"trying to stop  previous instance with {url}")
         try:
             requests.get(url, timeout=3, verify=False)
-            logger.info(f"previous instance stopped")
-        except Exception:
-            logger.exception(f"failed to stop previous instance. probably not running")
+            logger.info("previous instance stopped")
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("failed to stop previous instance. probably not running")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
@@ -1260,7 +1302,7 @@ def qs_reset_password(
 
 
 @_operate.command(name="analyse-logs")
-def qs_analyse_logs(  # pylint: disable=too-many-arguments
+def qs_analyse_logs(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     config: Annotated[str, params.String(help="Quickstart config file path")],
     from_dir: Annotated[
         str,
