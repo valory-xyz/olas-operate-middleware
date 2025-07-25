@@ -35,9 +35,6 @@ from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
 
-MAX_QUICKSTART_VERSION = 1
-
-
 def print_box(text: str, margin: int = 1, character: str = "=") -> None:
     """Print text centered within a box."""
 

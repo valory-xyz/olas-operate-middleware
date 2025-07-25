@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import shutil
 import time
 import traceback
 import typing as t
@@ -39,8 +38,9 @@ from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
+from autonomy.chain.metadata import IPFS_URI_PREFIX
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import IPFS_ADDRESS, ZERO_ADDRESS
 from operate.data import DATA_DIR
 from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
@@ -71,7 +71,6 @@ from operate.operate_types import (
 from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
 from operate.services.service import (
     ChainConfig,
-    DELETE_PREFIX,
     Deployment,
     NON_EXISTENT_MULTISIG,
     NON_EXISTENT_TOKEN,
@@ -80,32 +79,13 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.utils.gnosis import (
-    NULL_ADDRESS,
-    drain_eoa,
-    get_asset_balance,
-    get_assets_balances,
-)
+from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
 # pylint: disable=redefined-builtin
-
-OPERATE = ".operate"
-CONFIG = "config.json"
-SERVICES = "services"
-KEYS = "keys"
-DEPLOYMENT = "deployment"
-CONFIG = "config.json"
-KEY = "master-key.txt"
-KEYS_JSON = "keys.json"
-DOCKER_COMPOSE_YAML = "docker-compose.yaml"
-SERVICE_YAML = "service.yaml"
-HTTP_OK = 200
-URI_HASH_POSITION = 7
-IPFS_GATEWAY = "https://gateway.autonolas.tech/ipfs/"
 DEFAULT_TOPUP_THRESHOLD = 0.5
 # At the moment, we only support running one agent per service locally on a machine.
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
@@ -297,7 +277,7 @@ class ServiceManager:
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         info = sftxb.info(token_id=chain_data.token)
         config_hash = info["config_hash"]
-        url = f"{IPFS_GATEWAY}f01701220{config_hash}"
+        url = IPFS_ADDRESS.format(hash=config_hash)
         self.logger.info(f"Fetching {url=}...")
         res = requests.get(url, timeout=30)
         if res.status_code == HTTPStatus.OK:
@@ -403,7 +383,7 @@ class ServiceManager:
                 )
 
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
-        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
         on_chain_description = on_chain_metadata.get("description")
 
         current_agent_bond = staking_params[
@@ -653,13 +633,13 @@ class ServiceManager:
 
         current_staking_program = self._get_current_staking_program(service, chain)
         fallback_params = dict(  # nosec
-            staking_contract=NULL_ADDRESS,
+            staking_contract=ZERO_ADDRESS,
             agent_ids=[user_params.agent_id],
             service_registry="0x9338b5153AE39BB89f50468E608eD9d764B755fD",  # nosec
-            staking_token=NULL_ADDRESS,  # nosec
+            staking_token=ZERO_ADDRESS,  # nosec
             service_registry_token_utility="0xa45E64d13A30a51b91ae0eb182e88a40e9b18eD8",  # nosec
             min_staking_deposit=20000000000000000000,
-            activity_checker=NULL_ADDRESS,  # nosec
+            activity_checker=ZERO_ADDRESS,  # nosec
         )
 
         current_staking_params = sftxb.get_staking_params(
@@ -792,7 +772,7 @@ class ServiceManager:
         target_staking_params["agent_ids"] = [agent_id]
 
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
-        on_chain_hash = on_chain_metadata.get("code_uri", "")[URI_HASH_POSITION:]
+        on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
         on_chain_description = on_chain_metadata.get("description")
 
         current_agent_bond = sftxb.get_agent_bond(
@@ -1067,7 +1047,7 @@ class ServiceManager:
 
             reuse_multisig = True
             info = sftxb.info(token_id=chain_data.token)
-            if info["multisig"] == NULL_ADDRESS:
+            if info["multisig"] == ZERO_ADDRESS:
                 reuse_multisig = False
 
             self.logger.info(f"{reuse_multisig=}")
@@ -2210,10 +2190,6 @@ class ServiceManager:
         paths = list(self.path.iterdir())
         for path in paths:
             try:
-                if path.name.startswith(DELETE_PREFIX):
-                    shutil.rmtree(path)
-                    self.logger.info(f"Deleted folder: {path.name}")
-
                 if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
                     "bafybei"
                 ):

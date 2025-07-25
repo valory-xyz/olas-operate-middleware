@@ -61,6 +61,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
+    ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
@@ -69,7 +70,6 @@ from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
     MultiSendOperation,
-    NULL_ADDRESS,
     SafeOperation,
     hash_payload_to_hex,
     skill_input_hex_to_payload,
@@ -710,7 +710,7 @@ class _ChainUtil:
             token_id=service_id,
         )
 
-        if multisig_address == NULL_ADDRESS:
+        if multisig_address == ZERO_ADDRESS:
             return []
 
         return registry_contracts.gnosis_safe.get_owners(
@@ -1605,7 +1605,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         chain_type=chain_type,
         token_id=service_id,
     )
-    if multisig_address == NULL_ADDRESS:
+    if multisig_address == ZERO_ADDRESS:
         return None, None, "Cannot reuse multisig, No previous deployment exist!"
 
     multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
@@ -1723,8 +1723,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             0,  # safe tx gas
             0,  # bas gas
             0,  # safe gas price
-            NULL_ADDRESS,  # gas token
-            NULL_ADDRESS,  # refund receiver
+            ZERO_ADDRESS,  # gas token
+            ZERO_ADDRESS,  # refund receiver
             signature_bytes,  # signatures
         ],
     )

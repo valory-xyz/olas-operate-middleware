@@ -24,16 +24,11 @@ from pathlib import Path
 
 OPERATE = ".operate"
 OPERATE_HOME = Path.cwd() / OPERATE
-CONFIG = "config.json"
-SERVICES = "services"
-KEYS = "keys"
-DEPLOYMENT = "deployment"
+SERVICES_DIR = "services"
+KEYS_DIR = "keys"
+DEPLOYMENT_DIR = "deployment"
 DEPLOYMENT_JSON = "deployment.json"
-CONFIG = "config.json"
-KEY = "key"
-KEYS_JSON = "keys.json"
-DOCKER_COMPOSE_YAML = "docker-compose.yaml"
-SERVICE_YAML = "service.yaml"
+CONFIG_JSON = "config.json"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 ON_CHAIN_INTERACT_TIMEOUT = 120.0

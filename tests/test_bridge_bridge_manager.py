@@ -20,7 +20,6 @@
 """Tests for bridge.bridge_manager module."""
 
 
-import os
 import time
 import typing as t
 from functools import cache
@@ -48,13 +47,8 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
+from tests.conftest import OPERATE_TEST, RUNNING_IN_CI
 
-ROOT_PATH = Path(__file__).resolve().parent
-OPERATE = ".operate_test"
-RUNNING_IN_CI = (
-    os.getenv("GITHUB_ACTIONS", "").lower() == "true"
-    or os.getenv("CI", "").lower() == "true"
-)
 
 COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
@@ -139,7 +133,7 @@ class TestBridgeManager:
         """test_bundle"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -244,7 +238,7 @@ class TestBridgeManager:
         """test_bundle"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -358,7 +352,7 @@ class TestBridgeManager:
         """test_bundle"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -590,7 +584,7 @@ class TestBridgeManager:
     ) -> None:
         """_main_test_correct_providers"""
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)

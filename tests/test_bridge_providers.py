@@ -20,7 +20,6 @@
 """Tests for bridge.providers.* module."""
 
 
-import os
 import time
 import typing as t
 from pathlib import Path
@@ -56,22 +55,8 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, LedgerType
 
+from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, TEST_RPCS
 
-ROOT_PATH = Path(__file__).resolve().parent
-OPERATE = ".operate_test"
-RUNNING_IN_CI = (
-    os.getenv("GITHUB_ACTIONS", "").lower() == "true"
-    or os.getenv("CI", "").lower() == "true"
-)
-
-TEST_RPCS = {
-    Chain.ETHEREUM: "https://rpc-gate.autonolas.tech/ethereum-rpc/",
-    Chain.BASE: "https://rpc-gate.autonolas.tech/base-rpc/",
-    Chain.CELO: "https://forno.celo.org",
-    Chain.GNOSIS: "https://rpc-gate.autonolas.tech/gnosis-rpc/",
-    Chain.MODE: "https://mainnet.mode.network",
-    Chain.OPTIMISTIC: "https://rpc-gate.autonolas.tech/optimism-rpc/",
-}
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
 
@@ -135,7 +120,7 @@ class TestNativeBridgeProvider:
         """test_bridge_execute_error"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -336,7 +321,7 @@ class TestProvider:
     ) -> None:
         """test_bridge_zero"""
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -525,7 +510,7 @@ class TestProvider:
     ) -> None:
         """test_bridge_error"""
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -684,7 +669,7 @@ class TestProvider:
     ) -> None:
         """test_bridge_quote"""
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -1238,7 +1223,7 @@ class TestProvider:
         """test_update_execution_status"""
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TEST_RPCS)
 
-        operate = OperateApp(home=tmp_path / OPERATE)
+        operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
         operate.password = password
