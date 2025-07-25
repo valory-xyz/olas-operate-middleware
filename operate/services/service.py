@@ -45,7 +45,9 @@ from aea.configurations.constants import (
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
+from autonomy.configurations.constants import DEFAULT_SERVICE_CONFIG_FILE
 from autonomy.configurations.loader import apply_env_variables, load_service_config
+from autonomy.constants import DEFAULT_KEYS_FILE, DOCKER_COMPOSE_YAML
 from autonomy.deploy.base import BaseDeploymentGenerator
 from autonomy.deploy.base import ServiceBuilder as BaseServiceBuilder
 from autonomy.deploy.constants import (
@@ -61,13 +63,7 @@ from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerato
 from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
-from operate.constants import (
-    DEPLOYMENT,
-    DEPLOYMENT_JSON,
-    DOCKER_COMPOSE_YAML,
-    KEYS_JSON,
-    ZERO_ADDRESS,
-)
+from operate.constants import CONFIG_JSON, DEPLOYMENT_DIR, DEPLOYMENT_JSON, ZERO_ADDRESS
 from operate.keys import Keys
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
@@ -96,7 +92,6 @@ from operate.utils.ssl import create_ssl_certificate
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-DELETE_PREFIX = "delete_"
 SERVICE_CONFIG_VERSION = 6
 SERVICE_CONFIG_PREFIX = "sc-"
 
@@ -410,7 +405,7 @@ class Deployment(LocalResource):
     nodes: DeployedNodes
     path: Path
 
-    _file = "deployment.json"
+    _file = DEPLOYMENT_JSON
 
     @staticmethod
     def new(path: Path) -> "Deployment":
@@ -435,14 +430,14 @@ class Deployment(LocalResource):
 
     def copy_previous_agent_run_logs(self) -> None:
         """Copy previous agent logs."""
-        source_path = self.path / DEPLOYMENT / "agent" / "log.txt"
+        source_path = self.path / DEPLOYMENT_DIR / "agent" / "log.txt"
         destination_path = self.path / "prev_log.txt"
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
     def _build_kubernetes(self, force: bool = True) -> None:
         """Build kubernetes deployment."""
-        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
+        k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
             shutil.rmtree(k8s_build)
         mkdirs(build_dir=k8s_build)
@@ -450,7 +445,7 @@ class Deployment(LocalResource):
         service = Service.load(path=self.path)
         builder = ServiceBuilder.from_dir(
             path=service.package_absolute_path,
-            keys_file=self.path / KEYS_JSON,
+            keys_file=self.path / DEFAULT_KEYS_FILE,
             number_of_agents=len(service.keys),
         )
         builder.deplopyment_type = KubernetesGenerator.deployment_type
@@ -482,7 +477,7 @@ class Deployment(LocalResource):
             force=force,
         )
 
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
             return
         if build.exists() and force:
@@ -490,7 +485,7 @@ class Deployment(LocalResource):
             shutil.rmtree(build)
         mkdirs(build_dir=build)
 
-        keys_file = self.path / KEYS_JSON
+        keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
                 [
@@ -588,7 +583,7 @@ class Deployment(LocalResource):
 
     def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
         """Build host depployment."""
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
             return
 
@@ -617,7 +612,7 @@ class Deployment(LocalResource):
         chain_config = service.chain_configs[chain]
         chain_data = chain_config.chain_data
 
-        keys_file = self.path / KEYS_JSON
+        keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
                 [
@@ -708,7 +703,7 @@ class Deployment(LocalResource):
                 self._build_kubernetes(force=force)
         else:
             ssl_key_path, ssl_cert_path = create_ssl_certificate(
-                ssl_dir=service.path / DEPLOYMENT / "ssl"
+                ssl_dir=service.path / DEPLOYMENT_DIR / "ssl"
             )
             service.update_env_variables_values(
                 {
@@ -763,7 +758,7 @@ class Deployment(LocalResource):
 
     def delete(self) -> None:
         """Delete the deployment."""
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         shutil.rmtree(build)
         self.status = DeploymentStatus.DELETED
         self.store()
@@ -791,7 +786,7 @@ class Service(LocalResource):
     _helper: t.Optional[ServiceHelper] = None
     _deployment: t.Optional[Deployment] = None
 
-    _file = "config.json"
+    _file = CONFIG_JSON
 
     @staticmethod
     def _determine_agent_id(service_name: str) -> int:
@@ -1028,7 +1023,7 @@ class Service(LocalResource):
         package_absolute_path = self.path / self.package_path
         if (
             not package_absolute_path.exists()
-            or not (package_absolute_path / "service.yaml").exists()
+            or not (package_absolute_path / DEFAULT_SERVICE_CONFIG_FILE).exists()
         ):
             with tempfile.TemporaryDirectory(dir=self.path) as temp_dir:
                 package_temp_path = Path(
@@ -1103,7 +1098,7 @@ class Service(LocalResource):
 
     def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""
-        with (self.package_absolute_path / "service.yaml").open(
+        with (self.package_absolute_path / DEFAULT_SERVICE_CONFIG_FILE).open(
             "r", encoding="utf-8"
         ) as fp:
             service_yaml, *_ = yaml_load_all(fp)
@@ -1135,7 +1130,9 @@ class Service(LocalResource):
                 )
             )
 
-            with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
+            with (package_path / DEFAULT_SERVICE_CONFIG_FILE).open(
+                "r", encoding="utf-8"
+            ) as fp:
                 service_yaml, *_ = yaml_load_all(fp)
 
             public_id = f"{service_yaml['author']}/{service_yaml['name']}"
@@ -1321,10 +1318,3 @@ class Service(LocalResource):
 
         if updated:
             self.store()
-
-    def delete(self) -> None:
-        """Delete a service."""
-        parent_directory = self.path.parent
-        new_path = parent_directory / f"{DELETE_PREFIX}{self.path.name}"
-        shutil.move(self.path, new_path)
-        shutil.rmtree(new_path)

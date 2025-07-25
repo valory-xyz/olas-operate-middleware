@@ -47,11 +47,10 @@ from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
-    KEY,
-    KEYS,
+    KEYS_DIR,
     MIN_PASSWORD_LENGTH,
     OPERATE_HOME,
-    SERVICES,
+    SERVICES_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -104,9 +103,8 @@ class OperateApp:
         """Initialize object."""
         super().__init__()
         self._path = (home or OPERATE_HOME).resolve()
-        self._services = self._path / SERVICES
-        self._keys = self._path / KEYS
-        self._master_key = self._path / KEY
+        self._services = self._path / SERVICES_DIR
+        self._keys = self._path / KEYS_DIR
         self.setup()
 
         self.logger = logger or setup_logger(name="operate")

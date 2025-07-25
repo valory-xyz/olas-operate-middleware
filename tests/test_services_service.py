@@ -26,6 +26,7 @@ from pathlib import Path
 import pytest
 from deepdiff import DeepDiff
 
+from operate.constants import CONFIG_JSON
 from operate.services.service import (
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -375,7 +376,7 @@ class TestService:
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
 
-        config_json_path = service_config_dir / "config.json"
+        config_json_path = service_config_dir / CONFIG_JSON
         with open(config_json_path, "w", encoding="utf-8") as file:
             json.dump(old_config_json_data, file, indent=4)
 
@@ -384,7 +385,7 @@ class TestService:
         Service.migrate_format(service_config_dir)
 
         migrated_config_dir = next(tmp_path.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
-        new_config_json_path = migrated_config_dir / "config.json"
+        new_config_json_path = migrated_config_dir / CONFIG_JSON
         with open(new_config_json_path, "r", encoding="utf-8") as file:
             migrated_data = json.load(file)
 
