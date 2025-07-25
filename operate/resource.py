@@ -22,7 +22,9 @@
 import enum
 import json
 import os
+import platform
 import shutil
+import time
 import types
 import typing as t
 from dataclasses import asdict, is_dataclass
@@ -92,6 +94,23 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     return obj
 
 
+def _safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) -> None:
+    """Safely perform file operation with retries on Windows."""
+    max_retries = 3 if platform.system() == "Windows" else 1
+
+    for attempt in range(max_retries):
+        try:
+            operation(*args, **kwargs)
+            return
+        except (PermissionError, FileNotFoundError, OSError) as e:
+            if attempt == max_retries - 1:
+                raise e
+
+            if platform.system() == "Windows":
+                # On Windows, wait a bit and retry
+                time.sleep(0.1)
+
+
 class LocalResource:
     """Initialize local resource."""
 
@@ -144,9 +163,14 @@ class LocalResource:
         bak0 = path.with_name(f"{path.name}.0.bak")
 
         if path.exists() and not bak0.exists():
-            shutil.copy2(path, bak0)
+            _safe_file_operation(shutil.copy2, path, bak0)
 
         tmp_path = path.parent / f".{path.name}.tmp"
+
+        # Clean up any existing tmp file
+        if tmp_path.exists():
+            _safe_file_operation(tmp_path.unlink)
+
         tmp_path.write_text(
             json.dumps(
                 self.json,
@@ -155,15 +179,23 @@ class LocalResource:
             encoding="utf-8",
         )
 
-        os.replace(tmp_path, path)  # atomic replace to avoid corruption
+        # Atomic replace to avoid corruption
+        try:
+            _safe_file_operation(os.replace, tmp_path, path)
+        except (PermissionError, FileNotFoundError):
+            # On Windows, if the replace fails, clean up and skip
+            if platform.system() == "Windows":
+                _safe_file_operation(tmp_path.unlink)
+
         self.load(self.path)  # Validate before making backup
 
+        # Rotate backup files
         for i in reversed(range(N_BACKUPS - 1)):
             newer = path.with_name(f"{path.name}.{i}.bak")
             older = path.with_name(f"{path.name}.{i + 1}.bak")
             if newer.exists():
                 if older.exists():
-                    older.unlink()
-                newer.rename(older)
+                    _safe_file_operation(older.unlink)
+                _safe_file_operation(newer.rename, older)
 
-        shutil.copy2(path, bak0)
+        _safe_file_operation(shutil.copy2, path, bak0)
