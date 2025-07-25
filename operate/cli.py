@@ -110,7 +110,7 @@ class OperateApp:
         self.setup()
 
         self.logger = logger or setup_logger(name="operate")
-        self.keys_manager = services.manage.KeysManager(
+        services.manage.KeysManager(
             path=self._keys,
             logger=self.logger,
         )
@@ -118,6 +118,8 @@ class OperateApp:
 
         mm = MigrationManager(self._path, self.logger)
         mm.migrate_user_account()
+        mm.migrate_services(self.service_manager())
+        mm.migrate_wallets(self.wallet_manager)
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -164,7 +166,6 @@ class OperateApp:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
-            keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
             skip_dependency_check=skip_dependency_check,
@@ -230,16 +231,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
 
-    operate.service_manager().log_directories()
-    logger.info("Migrating service configs...")
-    operate.service_manager().migrate_service_configs()
-    logger.info("Migrating service configs done.")
-    operate.service_manager().log_directories()
-
-    logger.info("Migrating wallet configs...")
-    operate.wallet_manager.migrate_wallet_configs()
-    logger.info("Migrating wallet configs done.")
-
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails
@@ -301,6 +292,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
+        service_manager = operate.service_manager()
+        if not service_manager.validate_services():
+            logger.error(
+                "Some services are not valid. Only pausing the valid services."
+            )
+
         service_config_ids = [
             i["service_config_id"] for i in operate.service_manager().json
         ]
@@ -775,6 +772,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
+        service_manager = operate.service_manager()
+        if not service_manager.validate_services():
+            return JSONResponse(
+                content={
+                    "error": "Some services are not valid. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
         return JSONResponse(content=operate.service_manager().json)
 
     @app.get("/api/v2/service/{service_config_id}")
