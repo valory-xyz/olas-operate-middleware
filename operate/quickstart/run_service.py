@@ -414,7 +414,7 @@ def configure_local_config(
 
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
-                if env_var_data["value"]:
+                if env_var_data["value"] is not None and env_var_data["value"] != "":
                     print(f"Default: {env_var_data['value']}")
 
                 user_provided_arg = ask_or_get_from_env(
