@@ -690,7 +690,7 @@ class ServiceManager:
                     "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
                     "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
                     "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
-                    "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISTIC],
+                    "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISM],
                     "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
                     f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": target_staking_params.get(
@@ -1115,9 +1115,7 @@ class ServiceManager:
         staking_chain = None
         for chain_, config in service.chain_configs.items():
             if config.chain_data.user_params.use_staking:
-                staking_chain = chain_.replace(
-                    "optimistic", "optimism"
-                )  # TODO: remove this hack, when it's renamed in open-autonomy
+                staking_chain = chain_
                 break
 
         service.update_env_variables_values(
@@ -1128,9 +1126,7 @@ class ServiceManager:
                         for chain, config in service.chain_configs.items()
                     },
                     separators=(",", ":"),
-                ).replace(
-                    "optimistic", "optimism"
-                ),  # TODO: remove this hack, when it's renamed in open-autonomy
+                ),
                 "STAKING_CHAIN": staking_chain,
             }
         )

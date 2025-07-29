@@ -830,7 +830,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
@@ -852,7 +852,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
@@ -874,7 +874,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
@@ -896,7 +896,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
@@ -918,7 +918,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
@@ -940,7 +940,7 @@ class TestProvider:
                 None,
                 {
                     "from": {
-                        "chain": "optimistic",
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },

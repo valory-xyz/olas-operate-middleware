@@ -231,7 +231,7 @@ class Provider(ABC):
         ledger_api = wallet.ledger_api(chain)
 
         # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISTIC:
+        if chain == Chain.OPTIMISM:
             ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         return ledger_api
@@ -244,7 +244,7 @@ class Provider(ABC):
         ledger_api = wallet.ledger_api(chain)
 
         # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISTIC:
+        if chain == Chain.OPTIMISM:
             ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
         return ledger_api

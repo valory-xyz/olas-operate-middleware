@@ -70,10 +70,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print("")
 
+    ask_password_if_needed(operate)
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
-    ask_password_if_needed(operate)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()

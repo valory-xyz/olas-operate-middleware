@@ -523,7 +523,7 @@ def drain_eoa(
         if Chain.from_id(chain_id) in (
             Chain.ARBITRUM_ONE,
             Chain.BASE,
-            Chain.OPTIMISTIC,
+            Chain.OPTIMISM,
             Chain.MODE,
         ):
             chain_fee += ledger_api.get_l1_data_fee(tx)

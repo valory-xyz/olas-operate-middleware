@@ -51,7 +51,7 @@ TEST_RPCS = {
     Chain.CELO: "https://forno.celo.org",
     Chain.GNOSIS: "https://rpc-gate.autonolas.tech/gnosis-rpc/",
     Chain.MODE: "https://mainnet.mode.network",
-    Chain.OPTIMISTIC: "https://rpc-gate.autonolas.tech/optimism-rpc/",
+    Chain.OPTIMISM: "https://rpc-gate.autonolas.tech/optimism-rpc/",
 }
 
 

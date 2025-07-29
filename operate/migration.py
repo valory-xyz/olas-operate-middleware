@@ -61,3 +61,62 @@ class MigrationManager:
             json.dump(new_data, f, indent=4)
 
         self.logger.info("[MIGRATION MANAGER] Migrated user.json.")
+
+    def migrate_wallets(self) -> None:
+        """Migrates wallets."""
+
+        path = self._path / "wallets" / "ethereum.json"
+        if not path.exists():
+            return
+
+        migrated = False
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        if "optimistic" in data.get("safes", {}):
+            data["safes"]["optimism"] = data["safes"].pop("optimistic")
+            migrated = True
+
+        if "optimistic" in data.get("safe_chains"):
+            data["safe_chains"] = [
+                "optimism" if chain == "optimistic" else chain
+                for chain in data["safe_chains"]
+            ]
+            migrated = True
+
+        if not migrated:
+            return
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4)
+
+        self.logger.info("[MIGRATION MANAGER] Migrated wallets.")
+
+    def migrate_qs_configs(self) -> None:
+        """Migrates quickstart configs."""
+
+        for qs_config in self._path.glob("*-quickstart-config.json"):
+            if not qs_config.exists():
+                continue
+
+            migrated = False
+            with open(qs_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "optimistic" in data.get("rpc", {}):
+                data["rpc"]["optimism"] = data["rpc"].pop("optimistic")
+                migrated = True
+
+            if "optimistic" == data.get("principal_chain", ""):
+                data["principal_chain"] = "optimism"
+                migrated = True
+
+            if not migrated:
+                continue
+
+            with open(qs_config, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+            self.logger.info(
+                "[MIGRATION MANAGER] Migrated quickstart config: %s.", qs_config.name
+            )
