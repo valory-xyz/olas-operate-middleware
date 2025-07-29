@@ -77,7 +77,7 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-optimism": {
         "from_chain": "ethereum",
         "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
-        "to_chain": "optimistic",
+        "to_chain": "optimism",
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
@@ -97,8 +97,8 @@ ROUTES = {
     (
         Chain.ETHEREUM,  # from_chain
         USDC[Chain.ETHEREUM],  # from_token
-        Chain.OPTIMISTIC,  # to_chain
-        USDC[Chain.OPTIMISTIC],  # to_token
+        Chain.OPTIMISM,  # to_chain
+        USDC[Chain.OPTIMISM],  # to_token
     ): LIFI_PROVIDER_ID,
     (
         Chain.ETHEREUM,  # from_chain

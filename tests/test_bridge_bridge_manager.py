@@ -54,7 +54,7 @@ COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
     "polygon": "polygon-pos",
     "arbitrum": "arbitrum-one",
-    "optimistic": "optimistic-ethereum",
+    "optimism": "optimism-ethereum",
     "binance": "binance-smart-chain",
     "avalanche": "avalanche",
     "fantom": "fantom",
@@ -67,7 +67,7 @@ COINGECKO_NATIVE_IDS = {
     "ethereum": "ethereum",
     "polygon": "matic-network",
     "arbitrum": "ethereum",
-    "optimistic": "ethereum",
+    "optimism": "ethereum",
     "binance": "binancecoin",
     "avalanche": "avalanche-2",
     "fantom": "fantom",
@@ -255,9 +255,9 @@ class TestBridgeManager:
                     "token": USDC[Chain.ETHEREUM],
                 },
                 "to": {
-                    "chain": Chain.OPTIMISTIC.value,
+                    "chain": Chain.OPTIMISM.value,
                     "address": wallet_address,
-                    "token": USDC[Chain.OPTIMISTIC],
+                    "token": USDC[Chain.OPTIMISM],
                     "amount": int(1000 * 1e18),
                 },
             },
@@ -463,9 +463,7 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
-    @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC]
-    )
+    @pytest.mark.parametrize("to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM])
     def test_correct_providers_bridge_native(
         self,
         tmp_path: Path,
@@ -508,7 +506,7 @@ class TestBridgeManager:
         )
 
     @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC, Chain.GNOSIS]
+        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
     )
     @pytest.mark.parametrize("token_dict", [USDC, OLAS])
     def test_correct_providers_bridge_token(
@@ -530,7 +528,7 @@ class TestBridgeManager:
             expected_provider_cls = LiFiProvider
             expected_contract_adaptor_cls = None  # type: ignore
 
-        if to_chain_enum == Chain.OPTIMISTIC and token_dict == USDC:
+        if to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
             expected_provider_cls = LiFiProvider
             expected_contract_adaptor_cls = None  # type: ignore
 
@@ -547,7 +545,7 @@ class TestBridgeManager:
 
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISTIC, Chain.GNOSIS]
+        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
     )
     @pytest.mark.parametrize("token_dict", [USDC, OLAS])
     def test_correct_providers_swap_token(

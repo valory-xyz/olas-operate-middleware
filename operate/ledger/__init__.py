@@ -46,7 +46,7 @@ PUBLIC_RPCS = {
     Chain.SOLANA: SOLANA_PUBLIC_RPC,
     Chain.BASE: BASE_PUBLIC_RPC,
     Chain.CELO: CELO_PUBLIC_RPC,
-    Chain.OPTIMISTIC: OPTIMISM_PUBLIC_RPC,
+    Chain.OPTIMISM: OPTIMISM_PUBLIC_RPC,
     Chain.MODE: MODE_PUBLIC_RPC,
 }
 
@@ -56,7 +56,7 @@ DEFAULT_RPCS = {
     Chain.SOLANA: SOLANA_RPC,
     Chain.BASE: BASE_RPC,
     Chain.CELO: CELO_RPC,
-    Chain.OPTIMISTIC: OPTIMISM_RPC,
+    Chain.OPTIMISM: OPTIMISM_RPC,
     Chain.MODE: MODE_RPC,
 }
 
@@ -67,7 +67,7 @@ CURRENCY_DENOMS = {
     Chain.SOLANA: "SOL",
     Chain.BASE: "ETH",
     Chain.CELO: "CELO",
-    Chain.OPTIMISTIC: "ETH",
+    Chain.OPTIMISM: "ETH",
     Chain.MODE: "ETH",
 }
 
@@ -78,7 +78,7 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.SOLANA: "Lamport",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
-    Chain.OPTIMISTIC: "Wei",
+    Chain.OPTIMISM: "Wei",
     Chain.MODE: "Wei",
 }
 

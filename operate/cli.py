@@ -116,6 +116,8 @@ class OperateApp:
 
         mm = MigrationManager(self._path, self.logger)
         mm.migrate_user_account()
+        mm.migrate_wallets()
+        mm.migrate_qs_configs()
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""

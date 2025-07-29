@@ -116,20 +116,20 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
-    "optimistic": {
+    "optimism": {
         "name": "Optimism",
         "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
-        "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
+        "staking_bonding_token": OLAS[Chain.OPTIMISM],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            USDC[Chain.OPTIMISTIC]: {
+            USDC[Chain.OPTIMISM]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            OLAS[Chain.OPTIMISTIC]: {
+            OLAS[Chain.OPTIMISM]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             },

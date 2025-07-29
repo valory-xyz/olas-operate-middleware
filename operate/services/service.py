@@ -92,7 +92,7 @@ from operate.utils.ssl import create_ssl_certificate
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-SERVICE_CONFIG_VERSION = 6
+SERVICE_CONFIG_VERSION = 7
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = "0xm"
@@ -729,7 +729,11 @@ class Deployment(LocalResource):
 
         try:
             if use_docker:
-                run_deployment(build_dir=self.path / "deployment", detach=True)
+                run_deployment(
+                    build_dir=self.path / "deployment",
+                    detach=True,
+                    project_name=self.path.name,
+                )
             else:
                 run_host_deployment(build_dir=self.path / "deployment")
         except Exception:
@@ -749,7 +753,10 @@ class Deployment(LocalResource):
         self.store()
 
         if use_docker:
-            stop_deployment(build_dir=self.path / "deployment")
+            stop_deployment(
+                build_dir=self.path / "deployment",
+                project_name=self.path.name,
+            )
         else:
             stop_host_deployment(build_dir=self.path / "deployment")
 
@@ -928,7 +935,7 @@ class Service(LocalResource):
                 "goerli",
                 "gnosis",
                 "solana",
-                "optimistic",
+                "optimism",
                 "base",
                 "mode",
             ]
@@ -963,6 +970,19 @@ class Service(LocalResource):
 
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
+
+        if version < 7:
+            if data["home_chain"] == "optimistic":
+                data["home_chain"] = Chain.OPTIMISM.value
+
+            if "optimistic" in data["chain_configs"]:
+                data["chain_configs"]["optimism"] = data["chain_configs"].pop(
+                    "optimistic"
+                )
+
+            for _, chain_config in data["chain_configs"].items():
+                if chain_config["ledger_config"]["chain"] == "optimistic":
+                    chain_config["ledger_config"]["chain"] = Chain.OPTIMISM.value
 
         data["version"] = SERVICE_CONFIG_VERSION
 
