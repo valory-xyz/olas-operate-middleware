@@ -230,6 +230,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     )
 
     logger = setup_logger(name="operate")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    file_handler = logging.FileHandler(
+        os.path.expanduser("~/.operate/cli_proc_extra.log")
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
     if HEALTH_CHECKER_OFF:
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
@@ -323,7 +331,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if deployment.status == DeploymentStatus.DELETED:
                 continue
             logger.info(f"stopping service {service_config_id}")
-            deployment.stop(force=True)
+            try:
+                deployment.stop(force=True)
+            except Exception as e:
+                logger.exception(f"Deployment {service_config_id} stopping failed. but continue")
             logger.info(f"Cancelling funding job for {service_config_id}")
             cancel_funding_job(service_config_id=service_config_id)
             health_checker.stop_for_service(service_config_id=service_config_id)
@@ -361,6 +372,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         async def stop_app():
             logger.info("Stopping services on demand...")
             pause_all_services()
+            
             logger.info("Stopping services on demand done.")
             app._server.should_exit = True  # pylint: disable=protected-access
             logger.info("Stopping app.")
@@ -371,7 +383,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
                 )
                 while True:
+                    logger.info(
+                        f"111111111 Parent alive check: ppid is {os.getppid()} and own pid is {os.getpid()}"
+                    )
                     parent = psutil.Process(os.getpid()).parent()
+                    logger.info(
+                        f"222222222222 parent alive check: ppid is {os.getppid()} and own pid is {os.getpid()}"
+                    )
                     if not parent:
                         logger.info("Parent is not alive, going to stop")
                         await stop_app()
