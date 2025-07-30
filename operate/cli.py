@@ -72,6 +72,7 @@ from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
+from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -230,14 +231,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     )
 
     logger = setup_logger(name="operate")
-    formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    file_handler = logging.FileHandler(
-        os.path.expanduser("~/.operate/cli_proc_extra.log")
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
     if HEALTH_CHECKER_OFF:
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
@@ -261,7 +254,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     (operate._path / "operate.kill").write_text(  # pylint: disable=protected-access
         shutdown_endpoint
     )
-    thread_pool_executor = ThreadPoolExecutor()
+    thread_pool_executor = ThreadPoolExecutor(max_workers=12)
 
     async def run_in_executor(fn: t.Callable, *args: t.Any) -> t.Any:
         loop = asyncio.get_event_loop()
@@ -333,8 +326,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             logger.info(f"stopping service {service_config_id}")
             try:
                 deployment.stop(force=True)
-            except Exception as e:
-                logger.exception(f"Deployment {service_config_id} stopping failed. but continue")
+            except Exception:  # pylint: disable=broad-except
+                logger.exception(
+                    f"Deployment {service_config_id} stopping failed. but continue"
+                )
             logger.info(f"Cancelling funding job for {service_config_id}")
             cancel_funding_job(service_config_id=service_config_id)
             health_checker.stop_for_service(service_config_id=service_config_id)
@@ -371,8 +366,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     def set_parent_watchdog(app):
         async def stop_app():
             logger.info("Stopping services on demand...")
-            pause_all_services()
-            
+
+            stop_deployment_manager()  # TODO: make it async?
+            await run_in_executor(pause_all_services)
+
             logger.info("Stopping services on demand done.")
             app._server.should_exit = True  # pylint: disable=protected-access
             logger.info("Stopping app.")
@@ -383,17 +380,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
                 )
                 while True:
-                    logger.info(
-                        f"111111111 Parent alive check: ppid is {os.getppid()} and own pid is {os.getpid()}"
-                    )
                     parent = psutil.Process(os.getpid()).parent()
-                    logger.info(
-                        f"222222222222 parent alive check: ppid is {os.getppid()} and own pid is {os.getpid()}"
-                    )
                     if not parent:
                         logger.info("Parent is not alive, going to stop")
                         await stop_app()
-                        break
+                        return
                     await asyncio.sleep(3)
 
             except Exception:  # pylint: disable=broad-except
@@ -445,16 +436,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _kill_server(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
+        return JSONResponse(content={})
 
     @app.get("/shutdown")
     async def _shutdown(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         logger.info("Stopping services on demand...")
-        pause_all_services()
+        await run_in_executor(pause_all_services)
         logger.info("Stopping services on demand done.")
         app._server.should_exit = True  # pylint: disable=protected-access
         await asyncio.sleep(0.3)
-        return {"stopped": True}
+        return JSONResponse(content={"stopped": True})
 
     @app.get("/api")
     @with_retries
@@ -1204,7 +1196,7 @@ def _daemon(
         url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
         logger.info(f"trying to stop  previous instance with {url}")
         try:
-            requests.get(url, timeout=3, verify=False)
+            requests.get(url, timeout=3, verify=False)  # nosec
             logger.info("previous instance stopped")
         except Exception:  # pylint: disable=broad-except
             logger.exception("failed to stop previous instance. probably not running")
@@ -1320,7 +1312,7 @@ def qs_reset_password(
 
 
 @_operate.command(name="analyse-logs")
-def qs_analyse_logs(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def qs_analyse_logs(  # pylint: disable=too-many-arguments
     config: Annotated[str, params.String(help="Quickstart config file path")],
     from_dir: Annotated[
         str,
