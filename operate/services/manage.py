@@ -719,11 +719,14 @@ class ServiceManager:
                 }
             )
 
-        # TODO: yet another agent specific logic for memeooorr and optimus, which should be abstracted
-        if "memeooorr" in service.name.lower() or "optimus" in service.name.lower():
-            store_path = service.path / "persistent_data"
-            store_path.mkdir(parents=True, exist_ok=True)
-            env_var_to_value.update({"STORE_PATH": os.path.join(str(store_path), "")})
+        # Set environment variables for the service
+        for dir_name, env_var_name in (
+            ("persistent_data", "STORE_PATH"),
+            ("benchmarks", "LOG_DIR"),
+        ):
+            dir_path = service.path / dir_name
+            dir_path.mkdir(parents=True, exist_ok=True)
+            env_var_to_value.update({env_var_name: str(dir_path)})
 
         service.update_env_variables_values(env_var_to_value)
 

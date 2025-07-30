@@ -157,15 +157,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Prepare agent env, add keys, run aea commands."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
-        # Patch for trader agent
-        if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH" in env:
-            data_dir = working_dir / "data"
-            data_dir.mkdir(exist_ok=True)
-            env["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH"] = str(data_dir)
 
         # TODO: Dynamic port allocation, backport to service builder
-        env["CONNECTION_ABCI_CONFIG_HOST"] = "localhost"
-        env["CONNECTION_ABCI_CONFIG_PORT"] = "26658"
         env["PYTHONUTF8"] = "1"
         for var in env:
             # Fix tendermint connection params
@@ -177,11 +170,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
             if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_P2P_URL"):
                 env[var] = "localhost:26656"
-
-            if var.endswith("MODELS_BENCHMARK_TOOL_ARGS_LOG_DIR"):
-                benchmarks_dir = working_dir / "benchmarks"
-                benchmarks_dir.mkdir(exist_ok=True, parents=True)
-                env[var] = str(benchmarks_dir.resolve())
 
         (working_dir / "agent.json").write_text(
             json.dumps(env, indent=4),
