@@ -138,7 +138,20 @@ class ServiceManager:
         """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
-    def _get_all_services(self) -> t.Tuple[t.List[Service], bool]:
+    def get_all_service_ids(self) -> t.List[str]:
+        """
+        Get all service ids.
+
+        :return: List of service ids.
+        """
+        return [
+            path.name
+            for path in self.path.iterdir()
+            if path.is_dir() and path.name.startswith(SERVICE_CONFIG_PREFIX)
+        ]
+
+    def get_all_services(self) -> t.Tuple[t.List[Service], bool]:
+        """Get all services."""
         services = []
         success = True
         for path in self.path.iterdir():
@@ -168,13 +181,13 @@ class ServiceManager:
 
         :return: True if all services are valid, False otherwise.
         """
-        _, success = self._get_all_services()
+        _, success = self.get_all_services()
         return success
 
     @property
     def json(self) -> t.List[t.Dict]:
         """Returns the list of available services."""
-        services, _ = self._get_all_services()
+        services, _ = self.get_all_services()
         return [service.json for service in services]
 
     def exists(self, service_config_id: str) -> bool:

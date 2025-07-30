@@ -772,16 +772,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
-        service_manager = operate.service_manager()
-        if not service_manager.validate_services():
-            return JSONResponse(
-                content={
-                    "error": "Some services are not valid. Please check the logs."
-                },
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
-
         return JSONResponse(content=operate.service_manager().json)
+
+    @app.get("/api/v2/services/validate")
+    @with_retries
+    async def _validate_services(request: Request) -> JSONResponse:
+        """Validate all services."""
+        service_manager = operate.service_manager()
+        service_ids = service_manager.get_all_service_ids()
+        _services = [
+            service.service_config_id
+            for service in service_manager.get_all_services()[0]
+        ]
+
+        return JSONResponse(
+            content={service_id: service_id in _services for service_id in service_ids}
+        )
 
     @app.get("/api/v2/service/{service_config_id}")
     @with_retries
