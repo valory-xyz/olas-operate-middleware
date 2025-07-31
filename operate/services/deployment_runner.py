@@ -29,6 +29,7 @@ import sys  # nosec
 import time
 import typing as t
 from abc import ABC, ABCMeta, abstractmethod
+from contextlib import suppress
 from enum import Enum
 from io import TextIOWrapper
 from pathlib import Path
@@ -210,8 +211,22 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             cwd=working_dir,
         )
 
+        agent_alias_name = "agent"
+
+        agent_dir_full_path = Path(working_dir) / agent_alias_name
+
+        if agent_dir_full_path.exists():
+            # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
+            with suppress(Exception):
+                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+
         self._run_aea_command(
-            "-s", "fetch", env["AEA_AGENT"], "--alias", "agent", cwd=working_dir
+            "-s",
+            "fetch",
+            env["AEA_AGENT"],
+            "--alias",
+            agent_alias_name,
+            cwd=working_dir,
         )
 
         # Add keys
@@ -677,12 +692,40 @@ class DeploymentManager:
         """Get state of the deployment."""
         return self._states.get(build_dir) or States.NONE
 
+    def check_ipfs_connection_works(self) -> None:
+        """Check ipfs works and there is a good net connection."""
+        self.logger.info("Doing network connection check by test call to ipfs server.")
+        for i in range(3):
+            try:
+                requests.get(constants.IPFS_CHECK_URL, timeout=60)
+                return
+            except OSError:
+                self.logger.exception(
+                    "failed to connect to ipfs to test connection. OSError, critical!"
+                )
+                raise
+            except Exception:  # pylint: disable=broad-except
+                self.logger.exception(
+                    "failed to connect to ipfs to test connection. do another try"
+                )
+                time.sleep(i * 5)
+        self.logger.error(
+            "failed to connect to ipfs to test connection. no attempts left. raise error"
+        )
+        raise RuntimeError(
+            "Failed to perform test connection to ipfs to check network connection!"
+        )
+
     def run_deployment(self, build_dir: Path) -> None:
         """Run deployment."""
         if self._is_stopping:
             raise RuntimeError("deployment manager stopped")
         if self.get_state(build_dir=build_dir) in [States.STARTING, States.STOPPING]:
             raise ValueError("Service already in transition")
+
+        # doing pre check for ipfs works fine, also network connection is ok.
+        self.check_ipfs_connection_works()
+
         self.logger.info(f"Starting deployment {build_dir}...")
         self._states[build_dir] = States.STARTING
         try:
