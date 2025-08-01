@@ -677,4 +677,4 @@ class TestBridgeManager:
 
             assert quoted_from_cost_usd <= expected_to_cost_usd * (
                 1.0 + margin
-            ), f"Quoted cost exceeds {margin*100:.2f}% margin"
+            ), f"Quoted cost exceeds {margin * 100:.2f}% margin"
