@@ -22,7 +22,6 @@
 
 import copy
 import enum
-import json
 import logging
 import time
 import typing as t
@@ -493,9 +492,6 @@ class Provider(ABC):
     # TODO This gas pricing management should possibly be done at a lower level in the library
     @staticmethod
     def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        print(json.dumps(tx, indent=2))
-        print(ledger_api.api.provider.endpoint_uri)
-
         tx.pop("maxFeePerGas", None)
         tx.pop("gasPrice", None)
         tx.pop("maxPriorityFeePerGas", None)
