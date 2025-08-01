@@ -34,7 +34,6 @@ from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
@@ -100,7 +99,7 @@ class ServiceManager:
         path: Path,
         keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
         skip_dependency_check: t.Optional[bool] = False,
     ) -> None:
         """
@@ -114,7 +113,7 @@ class ServiceManager:
         self.path = path
         self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
-        self.logger = logger or setup_logger(name="operate.manager")
+        self.logger = logger
         self.skip_depencency_check = skip_dependency_check
 
     def setup(self) -> None:

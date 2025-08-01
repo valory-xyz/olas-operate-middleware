@@ -29,7 +29,6 @@ from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
@@ -825,13 +824,13 @@ class MasterWalletManager:
     def __init__(
         self,
         path: Path,
+        logger: logging.Logger,
         password: t.Optional[str] = None,
-        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize master wallet manager."""
         self.path = path
+        self.logger = logger
         self._password = password
-        self.logger = logger or setup_logger(name="operate.master_wallet_manager")
 
     @property
     def json(self) -> t.List[t.Dict]:

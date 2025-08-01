@@ -190,6 +190,7 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / "wallets",
             password=self.password,
+            logger=self.logger,
         )
         manager.setup()
         return manager
@@ -200,6 +201,7 @@ class OperateApp:
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
+            logger=self.logger,
         )
         return manager
 
@@ -247,7 +249,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
-        operate.service_manager(), number_of_fails=number_of_fails
+        operate.service_manager(), number_of_fails=number_of_fails, logger=logger
     )
     # Create shutdown endpoint
     shutdown_endpoint = uuid.uuid4().hex

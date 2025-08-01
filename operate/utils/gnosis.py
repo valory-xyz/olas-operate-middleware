@@ -42,7 +42,7 @@ from operate.constants import (
 from operate.operate_types import Chain
 
 
-logger = setup_logger(name="operate.manager")
+logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
 SENTINEL_OWNERS = "0x0000000000000000000000000000000000000001"
 

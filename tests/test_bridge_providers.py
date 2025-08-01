@@ -25,6 +25,7 @@ import typing as t
 from pathlib import Path
 
 import pytest
+from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 from web3 import Web3
 
@@ -59,6 +60,7 @@ from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, TEST_RPCS
 
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+LOGGER = setup_logger(name="test_bridge_providers")
 
 
 def get_transfer_amount(
@@ -153,6 +155,7 @@ class TestNativeBridgeProvider:
                 bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["bridge_eta"],
             ),
             wallet_manager=operate.wallet_manager,
+            logger=LOGGER,
         )
 
         # Create
@@ -363,10 +366,13 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
         else:
             provider = provider_class(
-                provider_id=provider_id, wallet_manager=operate.wallet_manager
+                provider_id=provider_id,
+                wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
         bridge_eta = 0
 
@@ -533,7 +539,9 @@ class TestProvider:
         }
 
         provider = provider_class(
-            provider_id="test-provider", wallet_manager=operate.wallet_manager
+            provider_id="test-provider",
+            wallet_manager=operate.wallet_manager,
+            logger=LOGGER,
         )
         provider_request = ProviderRequest(
             params=params,
@@ -711,11 +719,14 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
             bridge_eta = provider.bridge_contract_adaptor.bridge_eta
         else:
             provider = provider_class(
-                provider_id=provider_id, wallet_manager=operate.wallet_manager
+                provider_id=provider_id,
+                wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
             bridge_eta = 0
 
@@ -1249,10 +1260,11 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
         else:
             provider = provider_class(
-                provider_id="", wallet_manager=operate.wallet_manager
+                provider_id="", wallet_manager=operate.wallet_manager, logger=LOGGER
             )
 
         quote_data = QuoteData(

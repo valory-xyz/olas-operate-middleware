@@ -31,7 +31,6 @@ from dataclasses import dataclass
 from math import ceil
 
 from aea.crypto.base import LedgerApi
-from aea.helpers.logging import setup_logger
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
 from web3.middleware import geth_poa_middleware
@@ -145,12 +144,12 @@ class Provider(ABC):
         self,
         wallet_manager: MasterWalletManager,
         provider_id: str,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
     ) -> None:
         """Initialize the provider."""
         self.wallet_manager = wallet_manager
         self.provider_id = provider_id
-        self.logger = logger or setup_logger(name="operate.bridge.providers.Provider")
+        self.logger = logger
 
     def description(self) -> str:
         """Get a human-readable description of the provider."""
