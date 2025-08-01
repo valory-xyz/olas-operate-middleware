@@ -42,10 +42,8 @@ from operate.constants import (
 from operate.operate_types import Chain
 
 
-logger = setup_logger(name="operate.manager")
-NULL_ADDRESS: str = "0x" + "0" * 40
+logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
-ZERO_ETH = 0
 SENTINEL_OWNERS = "0x0000000000000000000000000000000000000001"
 
 
@@ -73,8 +71,8 @@ def hash_payload_to_hex(  # pylint: disable=too-many-arguments,too-many-locals
     operation: int = SafeOperation.CALL.value,
     base_gas: int = 0,
     safe_gas_price: int = 0,
-    gas_token: str = NULL_ADDRESS,
-    refund_receiver: str = NULL_ADDRESS,
+    gas_token: str = ZERO_ADDRESS,
+    refund_receiver: str = ZERO_ADDRESS,
     use_flashbots: bool = False,
     gas_limit: int = 0,
     raise_on_failed_simulation: bool = False,
@@ -525,7 +523,7 @@ def drain_eoa(
         if Chain.from_id(chain_id) in (
             Chain.ARBITRUM_ONE,
             Chain.BASE,
-            Chain.OPTIMISTIC,
+            Chain.OPTIMISM,
             Chain.MODE,
         ):
             chain_fee += ledger_api.get_l1_data_fee(tx)

@@ -28,10 +28,13 @@ import traceback
 import typing as t
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
+import psutil
+import requests
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from compose.project import ProjectError
@@ -47,11 +50,10 @@ from operate import services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
-    KEY,
-    KEYS,
+    KEYS_DIR,
     MIN_PASSWORD_LENGTH,
     OPERATE_HOME,
-    SERVICES,
+    SERVICES_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -69,6 +71,7 @@ from operate.quickstart.reset_staking import reset_staking
 from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
+from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -83,6 +86,7 @@ ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
     content={"error": "User account not found."},
     status_code=HTTPStatus.NOT_FOUND,
 )
+TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE = True
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
@@ -104,9 +108,8 @@ class OperateApp:
         """Initialize object."""
         super().__init__()
         self._path = (home or OPERATE_HOME).resolve()
-        self._services = self._path / SERVICES
-        self._keys = self._path / KEYS
-        self._master_key = self._path / KEY
+        self._services = self._path / SERVICES_DIR
+        self._keys = self._path / KEYS_DIR
         self.setup()
 
         self.logger = logger or setup_logger(name="operate")
@@ -120,6 +123,7 @@ class OperateApp:
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
+        mm.migrate_qs_configs()
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -186,6 +190,7 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / "wallets",
             password=self.password,
+            logger=self.logger,
         )
         manager.setup()
         return manager
@@ -196,6 +201,7 @@ class OperateApp:
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
+            logger=self.logger,
         )
         return manager
 
@@ -233,14 +239,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
-        operate.service_manager(), number_of_fails=number_of_fails
+        operate.service_manager(), number_of_fails=number_of_fails, logger=logger
     )
     # Create shutdown endpoint
     shutdown_endpoint = uuid.uuid4().hex
     (operate._path / "operate.kill").write_text(  # pylint: disable=protected-access
         shutdown_endpoint
     )
-    thread_pool_executor = ThreadPoolExecutor()
+    thread_pool_executor = ThreadPoolExecutor(max_workers=12)
 
     async def run_in_executor(fn: t.Callable, *args: t.Any) -> t.Any:
         loop = asyncio.get_event_loop()
@@ -316,7 +322,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             if deployment.status == DeploymentStatus.DELETED:
                 continue
             logger.info(f"stopping service {service_config_id}")
-            deployment.stop(force=True)
+            try:
+                deployment.stop(force=True)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception(
+                    f"Deployment {service_config_id} stopping failed. but continue"
+                )
             logger.info(f"Cancelling funding job for {service_config_id}")
             cancel_funding_job(service_config_id=service_config_id)
             health_checker.stop_for_service(service_config_id=service_config_id)
@@ -335,7 +346,51 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     # stop all services at  middleware exit
     atexit.register(pause_all_services)
 
-    app = FastAPI()
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Load the ML model
+        watchdog_task = set_parent_watchdog(app)
+        yield
+        # Clean up the ML models and release the resources
+
+        with suppress(Exception):
+            watchdog_task.cancel()
+
+        with suppress(Exception):
+            await watchdog_task
+
+    app = FastAPI(lifespan=lifespan)
+
+    def set_parent_watchdog(app):
+        async def stop_app():
+            logger.info("Stopping services on demand...")
+
+            stop_deployment_manager()  # TODO: make it async?
+            await run_in_executor(pause_all_services)
+
+            logger.info("Stopping services on demand done.")
+            app._server.should_exit = True  # pylint: disable=protected-access
+            logger.info("Stopping app.")
+
+        async def check_parent_alive():
+            try:
+                logger.info(
+                    f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
+                )
+                while True:
+                    parent = psutil.Process(os.getpid()).parent()
+                    if not parent:
+                        logger.info("Parent is not alive, going to stop")
+                        await stop_app()
+                        return
+                    await asyncio.sleep(3)
+
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Parent alive check crashed!")
+
+        loop = asyncio.get_running_loop()
+        task = loop.create_task(check_parent_alive())
+        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -379,16 +434,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _kill_server(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         os.kill(os.getpid(), signal.SIGINT)
+        return JSONResponse(content={})
 
     @app.get("/shutdown")
     async def _shutdown(request: Request) -> JSONResponse:
         """Kill backend server from inside."""
         logger.info("Stopping services on demand...")
-        pause_all_services()
+        await run_in_executor(pause_all_services)
         logger.info("Stopping services on demand done.")
         app._server.should_exit = True  # pylint: disable=protected-access
         await asyncio.sleep(0.3)
-        return {"stopped": True}
+        return JSONResponse(content={"stopped": True})
 
     @app.get("/api")
     @with_retries
@@ -1147,6 +1203,16 @@ def _daemon(
                 "ssl_certfile": ssl_certfile,
             }
         )
+
+    # try automatically shutdown previous instance
+    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
+        url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
+        logger.info(f"trying to stop  previous instance with {url}")
+        try:
+            requests.get(url, timeout=3, verify=False)  # nosec
+            logger.info("previous instance stopped")
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("failed to stop previous instance. probably not running")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access

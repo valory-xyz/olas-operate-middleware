@@ -100,7 +100,7 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
     },
-    Chain.OPTIMISTIC: {
+    Chain.OPTIMISM: {
         "optimus_alpha_2": "optimus",
         "optimus_alpha_3": "optimus",
         "optimus_alpha_4": "optimus",
@@ -412,7 +412,7 @@ def configure_local_config(
 
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
-                if env_var_data["value"]:
+                if env_var_data["value"] is not None and env_var_data["value"] != "":
                     print(f"Default: {env_var_data['value']}")
 
                 user_provided_arg = ask_or_get_from_env(

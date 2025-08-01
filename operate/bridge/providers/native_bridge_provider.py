@@ -417,7 +417,7 @@ class NativeBridgeProvider(Provider):
         bridge_contract_adaptor: BridgeContractAdaptor,
         provider_id: str,
         wallet_manager: MasterWalletManager,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
     ) -> None:
         """Initialize the provider."""
         self.bridge_contract_adaptor = bridge_contract_adaptor

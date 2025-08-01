@@ -32,13 +32,6 @@ from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.resource import LocalResource
 
 
-_ACTIONS = {
-    "status": 0,
-    "build": 1,
-    "deploy": 2,
-    "stop": 3,
-}
-
 CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
 
 _CHAIN_ID_TO_CHAIN_NAME = {
@@ -126,20 +119,6 @@ class ChainMixin:
 for name in dir(ChainMixin):
     if not name.startswith("__"):
         setattr(Chain, name, getattr(ChainMixin, name))
-
-
-class Action(enum.IntEnum):
-    """Action payload."""
-
-    STATUS = 0
-    BUILD = 1
-    DEPLOY = 2
-    STOP = 3
-
-    @classmethod
-    def from_string(cls, action: str) -> "Action":
-        """Load from string."""
-        return cls(_ACTIONS[action])
 
 
 class DeploymentStatus(enum.IntEnum):

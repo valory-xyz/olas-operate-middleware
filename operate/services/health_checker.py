@@ -20,6 +20,7 @@
 """Source code for checking aea is alive.."""
 import asyncio
 import json
+import logging
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
@@ -27,13 +28,9 @@ from pathlib import Path
 from traceback import print_exc
 
 import aiohttp  # type: ignore
-from aea.helpers.logging import setup_logger
 
 from operate.constants import HEALTH_CHECK_URL
 from operate.services.manage import ServiceManager  # type: ignore
-
-
-HTTP_OK = HTTPStatus.OK
 
 
 class HealthChecker:
@@ -43,19 +40,19 @@ class HealthChecker:
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90
     NUMBER_OF_FAILS_DEFAULT = 10
-    HEALTH_CHECK_URL = HEALTH_CHECK_URL
 
     def __init__(
         self,
         service_manager: ServiceManager,
+        logger: logging.Logger,
         port_up_timeout: int | None = None,
         sleep_period: int | None = None,
         number_of_fails: int | None = None,
     ) -> None:
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
-        self.logger = setup_logger(name="operate.health_checker")
         self._service_manager = service_manager
+        self.logger = logger
         self.port_up_timeout = port_up_timeout or self.PORT_UP_TIMEOUT_DEFAULT
         self.sleep_period = sleep_period or self.SLEEP_PERIOD_DEFAULT
         self.number_of_fails = number_of_fails or self.NUMBER_OF_FAILS_DEFAULT
@@ -95,11 +92,11 @@ class HealthChecker:
         del service_config_id
         timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(self.HEALTH_CHECK_URL) as resp:
+            async with session.get(HEALTH_CHECK_URL) as resp:
                 try:
                     status = resp.status
 
-                    if status != HTTP_OK:
+                    if status != HTTPStatus.OK:
                         # not HTTP OK -> not healthy for sure
                         content = await resp.text()
                         self.logger.warning(

@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 from web3 import Web3
 
@@ -77,7 +76,7 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-optimism": {
         "from_chain": "ethereum",
         "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
-        "to_chain": "optimistic",
+        "to_chain": "optimism",
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
@@ -97,8 +96,8 @@ ROUTES = {
     (
         Chain.ETHEREUM,  # from_chain
         USDC[Chain.ETHEREUM],  # from_token
-        Chain.OPTIMISTIC,  # to_chain
-        USDC[Chain.OPTIMISTIC],  # to_token
+        Chain.OPTIMISM,  # to_chain
+        USDC[Chain.OPTIMISM],  # to_token
     ): LIFI_PROVIDER_ID,
     (
         Chain.ETHEREUM,  # from_chain
@@ -187,13 +186,13 @@ class BridgeManager:
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
         quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
-        self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
+        self.logger = logger
         self.quote_validity_period = quote_validity_period
         self.path.mkdir(exist_ok=True)
         (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)

@@ -34,7 +34,6 @@ from operate.operate_types import Chain, LedgerType
 from operate.services.manage import ServiceManager
 from operate.services.service import (
     DEFAULT_TRADER_ENV_VARS,
-    DELETE_PREFIX,
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -241,7 +240,7 @@ class MigrationManager:
                 "goerli",
                 "gnosis",
                 "solana",
-                "optimistic",
+                "optimism",
                 "base",
                 "mode",
             ]
@@ -277,25 +276,6 @@ class MigrationManager:
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
 
-        if version < 6:
-            # Redownload service path
-            if "service_path" in data:
-                package_absolute_path = path / Path(data["service_path"]).name
-                data.pop("service_path")
-            else:
-                package_absolute_path = path / data["package_path"]
-
-            if package_absolute_path.exists() and package_absolute_path.is_dir():
-                shutil.rmtree(package_absolute_path)
-
-            package_absolute_path = Path(
-                IPFSTool().download(
-                    hash_id=data["hash"],
-                    target_dir=path,
-                )
-            )
-            data["package_path"] = str(package_absolute_path.name)
-
         if version < 7:
             for _, chain_data in data.get("chain_configs", {}).items():
                 if chain_data["chain_data"]["multisig"] == "0xm":
@@ -304,7 +284,38 @@ class MigrationManager:
             data["agent_addresses"] = [key["address"] for key in data["keys"]]
             del data["keys"]
 
+        if version < 8:
+            if data["home_chain"] == "optimistic":
+                data["home_chain"] = Chain.OPTIMISM.value
+
+            if "optimistic" in data["chain_configs"]:
+                data["chain_configs"]["optimism"] = data["chain_configs"].pop(
+                    "optimistic"
+                )
+
+            for _, chain_config in data["chain_configs"].items():
+                if chain_config["ledger_config"]["chain"] == "optimistic":
+                    chain_config["ledger_config"]["chain"] = Chain.OPTIMISM.value
+
         data["version"] = SERVICE_CONFIG_VERSION
+
+        # Redownload service path
+        if "service_path" in data:
+            package_absolute_path = path / Path(data["service_path"]).name
+            data.pop("service_path")
+        else:
+            package_absolute_path = path / data["package_path"]
+
+        if package_absolute_path.exists() and package_absolute_path.is_dir():
+            shutil.rmtree(package_absolute_path)
+
+        package_absolute_path = Path(
+            IPFSTool().download(
+                hash_id=data["hash"],
+                target_dir=path,
+            )
+        )
+        data["package_path"] = str(package_absolute_path.name)
 
         with open(
             path / Service._file,  # pylint: disable=protected-access
@@ -333,10 +344,6 @@ class MigrationManager:
         paths = list(service_manager.path.iterdir())
         for path in paths:
             try:
-                if path.name.startswith(DELETE_PREFIX):
-                    shutil.rmtree(path)
-                    self.logger.info(f"Deleted folder: {path.name}")
-
                 if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
                     "bafybei"
                 ):
@@ -351,3 +358,32 @@ class MigrationManager:
 
         self.logger.info("Migrating service configs done.")
         self.log_directories(service_manager.path)
+
+    def migrate_qs_configs(self) -> None:
+        """Migrates quickstart configs."""
+
+        for qs_config in self._path.glob("*-quickstart-config.json"):
+            if not qs_config.exists():
+                continue
+
+            migrated = False
+            with open(qs_config, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            if "optimistic" in data.get("rpc", {}):
+                data["rpc"]["optimism"] = data["rpc"].pop("optimistic")
+                migrated = True
+
+            if "optimistic" == data.get("principal_chain", ""):
+                data["principal_chain"] = "optimism"
+                migrated = True
+
+            if not migrated:
+                continue
+
+            with open(qs_config, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=2)
+
+            self.logger.info(
+                "[MIGRATION MANAGER] Migrated quickstart config: %s.", qs_config.name
+            )

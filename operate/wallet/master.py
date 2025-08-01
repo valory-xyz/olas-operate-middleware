@@ -29,7 +29,6 @@ from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
@@ -48,7 +47,7 @@ from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
-from operate.utils.gnosis import NULL_ADDRESS, add_owner
+from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     drain_eoa,
@@ -110,7 +109,7 @@ class MasterWallet(LocalResource):
     ) -> LedgerApi:
         """Get ledger api object."""
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISTIC):
+        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
             gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
                 5, GWEI
             )
@@ -717,7 +716,7 @@ class EthereumMasterWallet(MasterWallet):
             owners.remove(self.address)
 
             balances: t.Dict[str, int] = {}
-            balances[NULL_ADDRESS] = ledger_api.get_balance(safe) or 0
+            balances[ZERO_ADDRESS] = ledger_api.get_balance(safe) or 0
             for token in tokens:
                 balance = (
                     registry_contracts.erc20.get_instance(
@@ -781,7 +780,7 @@ class EthereumMasterWallet(MasterWallet):
             "goerli",
             "gnosis",
             "solana",
-            "optimistic",
+            "optimism",
             "base",
             "mode",
         ]
@@ -808,6 +807,17 @@ class EthereumMasterWallet(MasterWallet):
                 safes[chain] = address
         data["safes"] = safes
 
+        if "optimistic" in data.get("safes", {}):
+            data["safes"]["optimism"] = data["safes"].pop("optimistic")
+            migrated = True
+
+        if "optimistic" in data.get("safe_chains"):
+            data["safe_chains"] = [
+                "optimism" if chain == "optimistic" else chain
+                for chain in data["safe_chains"]
+            ]
+            migrated = True
+
         with open(wallet_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
 
@@ -825,13 +835,13 @@ class MasterWalletManager:
     def __init__(
         self,
         path: Path,
+        logger: logging.Logger,
         password: t.Optional[str] = None,
-        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize master wallet manager."""
         self.path = path
+        self.logger = logger
         self._password = password
-        self.logger = logger or setup_logger(name="operate.master_wallet_manager")
 
     @property
     def json(self) -> t.List[t.Dict]:

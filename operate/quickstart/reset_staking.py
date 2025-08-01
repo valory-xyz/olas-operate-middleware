@@ -55,6 +55,7 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         print("No previous agent setup found. Exiting.")
         return
 
+    ask_password_if_needed(operate)
     config = configure_local_config(template, operate)
     assert (  # nosec
         config.principal_chain is not None
@@ -80,7 +81,6 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
         print("Cancelled.")
         return
 
-    ask_password_if_needed(operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
 

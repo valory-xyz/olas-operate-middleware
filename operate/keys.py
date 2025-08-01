@@ -27,7 +27,6 @@ import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
@@ -54,8 +53,8 @@ class KeysManager(metaclass=SingletonMeta):
 
     def __init__(
         self,
-        path: t.Optional[Path] = None,
-        logger: t.Optional[logging.Logger] = None,
+        path: Path,
+        logger: logging.Logger,
     ) -> None:
         """
         Initialize keys manager
@@ -67,7 +66,10 @@ class KeysManager(metaclass=SingletonMeta):
             raise ValueError("Path must be provided for KeysManager")
 
         self.path = path
-        self.logger = logger or setup_logger(name="operate.keys")
+        self.logger = logger
+
+    def setup(self) -> None:
+        """Setup service manager."""
         self.path.mkdir(exist_ok=True)
 
     def get(self, key: str) -> Key:

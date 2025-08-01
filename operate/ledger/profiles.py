@@ -36,7 +36,7 @@ CONTRACTS: t.Dict[Chain, ContractAddresses] = {
             "multisend": "0x40A2aCCbd92BCA938b02010E17A5b8929b49130D",
         }
     ),
-    Chain.OPTIMISTIC: ContractAddresses(
+    Chain.OPTIMISM: ContractAddresses(
         {
             "service_manager": "0xFbBEc0C8b13B38a9aC0499694A69a10204c5E2aB",
             "service_registry": "0x3d77596beb0f130a4415df3D2D8232B3d3D31e44",
@@ -121,7 +121,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
         "marketplace_demand_alpha_2": "0x9fb17E549FefcCA630dd92Ea143703CeE4Ea4340",
     },
-    Chain.OPTIMISTIC: {
+    Chain.OPTIMISM: {
         "optimus_alpha_1": "0x88996bbdE7f982D93214881756840cE2c77C4992",
         "optimus_alpha_2": "0xBCA056952D2A7a8dD4A002079219807CFDF9fd29",
         "optimus_alpha_3": "0x0f69f35652B1acdbD769049334f1AC580927E139",
@@ -168,7 +168,7 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
 # ERC20 token addresses
 OLAS: t.Dict[Chain, str] = {
     Chain.GNOSIS: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-    Chain.OPTIMISTIC: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
+    Chain.OPTIMISM: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
     Chain.BASE: "0x54330d28ca3357F294334BDC454a032e7f353416",
     Chain.ETHEREUM: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
     Chain.MODE: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
@@ -176,7 +176,7 @@ OLAS: t.Dict[Chain, str] = {
 
 USDC: t.Dict[Chain, str] = {
     Chain.GNOSIS: "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
-    Chain.OPTIMISTIC: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    Chain.OPTIMISM: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
     Chain.BASE: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     Chain.ETHEREUM: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     Chain.MODE: "0xd988097fb8612cc24eeC14542bC03424c656005f",
@@ -184,7 +184,7 @@ USDC: t.Dict[Chain, str] = {
 
 WRAPPED_NATIVE_ASSET = {
     Chain.GNOSIS: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-    Chain.OPTIMISTIC: "0x4200000000000000000000000000000000000006",
+    Chain.OPTIMISM: "0x4200000000000000000000000000000000000006",
     Chain.BASE: "0x4200000000000000000000000000000000000006",
     Chain.ETHEREUM: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     Chain.MODE: "0x4200000000000000000000000000000000000006",
@@ -207,7 +207,7 @@ DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.MODE: {
         ZERO_ADDRESS: int(1e15 / 4),
     },
-    Chain.OPTIMISTIC: {
+    Chain.OPTIMISM: {
         ZERO_ADDRESS: int(1e15 / 4),
     },
 }
@@ -217,7 +217,7 @@ DEFAULT_MASTER_EOA_FUNDS = {
     Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
     Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
     Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
-    Chain.OPTIMISTIC: {ZERO_ADDRESS: 5_000_000_000_000_000},
+    Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
 }
 
 EXPLORER_URL = {
@@ -237,7 +237,7 @@ EXPLORER_URL = {
         "tx": "https://modescan.io/tx/{tx_hash}",
         "address": "https://modescan.io/address/{address}",
     },
-    Chain.OPTIMISTIC: {
+    Chain.OPTIMISM: {
         "tx": "https://optimistic.etherscan.io/tx/{tx_hash}",
         "address": "https://optimistic.etherscan.io/address/{address}",
     },
