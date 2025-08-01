@@ -548,7 +548,7 @@ Update safe settings, such as backup owner.
 
 ### `GET /api/v2/services`
 
-Get all services.
+Get all valid services.
 
 **Response (Success - 200):**
 ```json
@@ -597,6 +597,19 @@ Get all services.
     }
   }
 ]
+```
+
+### `GET /api/v2/services/validate`
+
+Check if all the services are valid and can be deployed.
+
+**Response (Success - 200):**
+```json
+{
+  "service_config_id1": true,
+  "service_config_id2": true,
+  "service_config_id3": false
+}
 ```
 
 ### `GET /api/v2/service/{service_config_id}`

@@ -20,17 +20,20 @@
 """Tests for services.service module."""
 
 import json
+import logging
 import typing as t
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from deepdiff import DeepDiff
 
 from operate.constants import CONFIG_JSON
+from operate.migration import MigrationManager
 from operate.services.service import (
+    NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
-    Service,
 )
 
 
@@ -56,7 +59,7 @@ DEFAULT_CONFIG_KWARGS = {
     "keys_address_0": "0x0000000000000000000000000000000000000001",
     "keys_private_key_0": "0x0000000000000000000000000000000000000000000000000000000000000001",
     "instance_0": "0x0000000000000000000000000000000000000001",
-    "multisig": "0x0000000000000000000000000000000000000020",
+    "multisig": NON_EXISTENT_MULTISIG,
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "package_path": "trader_pearl",
 }
@@ -341,13 +344,7 @@ def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
         "service_config_id": kwargs.get("service_config_id"),
         "hash": kwargs.get("hash"),
         "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
-        "keys": [
-            {
-                "ledger": "ethereum",
-                "address": kwargs.get("keys_address_0"),
-                "private_key": kwargs.get("keys_private_key_0"),
-            }
-        ],
+        "agent_addresses": [kwargs.get("keys_address_0")],
         "home_chain": "gnosis",
         "chain_configs": {
             "gnosis": {
@@ -383,7 +380,51 @@ def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     }
 
 
-get_expected_data = get_config_json_data_v7
+def get_config_json_data_v8(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    """get_config_json_data_v8"""
+
+    return {
+        "version": 8,
+        "service_config_id": kwargs.get("service_config_id"),
+        "hash": kwargs.get("hash"),
+        "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
+        "agent_addresses": [kwargs.get("keys_address_0")],
+        "home_chain": "gnosis",
+        "chain_configs": {
+            "gnosis": {
+                "ledger_config": {"rpc": kwargs.get("rpc"), "chain": "gnosis"},
+                "chain_data": {
+                    "instances": [kwargs.get("instance_0")],
+                    "token": kwargs.get("token"),
+                    "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
+                    "user_params": {
+                        "staking_program_id": kwargs.get("staking_program_id"),
+                        "nft": kwargs.get("nft"),
+                        "threshold": kwargs.get("threshold"),
+                        "agent_id": kwargs.get("agent_id"),
+                        "use_staking": kwargs.get("use_staking"),
+                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
+                        "fund_requirements": {
+                            "0x0000000000000000000000000000000000000000": {
+                                "agent": kwargs.get("fund_requirements_agent"),
+                                "safe": kwargs.get("fund_requirements_safe"),
+                            }
+                        },
+                    },
+                },
+            }
+        },
+        "description": kwargs.get("description"),
+        "env_variables": {},
+        "package_path": kwargs.get("package_path"),
+        "name": kwargs.get("name"),
+    }
+
+
+get_expected_data = get_config_json_data_v8
 
 
 class TestService:
@@ -403,6 +444,7 @@ class TestService:
             get_config_json_data_v4,
             get_config_json_data_v5,
             get_config_json_data_v6,
+            get_config_json_data_v7,
         ],
     )
     def test_service_migrate_format(
@@ -422,12 +464,13 @@ class TestService:
         old_config_json_data = get_config_json_data(**config_kwargs)
 
         # Emulate an existing service directory contents
-        service_config_dir = tmp_path / old_config_json_data.get(
+        service_dir = tmp_path / "services"
+        service_config_dir = service_dir / old_config_json_data.get(
             "service_config_id", old_config_json_data.get("hash")
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
 
-        if old_config_json_data.get("version", 0) == 6:
+        if old_config_json_data.get("version", 0) == 7:
             old_config_json_data["home_chain"] = "optimistic"
             old_config_json_data["chain_configs"]["optimistic"] = old_config_json_data[
                 "chain_configs"
@@ -440,11 +483,14 @@ class TestService:
         with open(config_json_path, "w", encoding="utf-8") as file:
             json.dump(old_config_json_data, file, indent=4)
 
-        # Migrate the service using Service.migrate_format and read the resulting
+        # Migrate the service using the MigrationManager and read the resulting
         # migrated data
-        Service.migrate_format(service_config_dir)
+        mm = MigrationManager(tmp_path, logging.getLogger("test"))
+        service_manager = Mock()
+        service_manager.path = service_dir
+        mm.migrate_services(service_manager)
 
-        migrated_config_dir = next(tmp_path.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
+        migrated_config_dir = next(service_dir.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
         new_config_json_path = migrated_config_dir / CONFIG_JSON
         with open(new_config_json_path, "r", encoding="utf-8") as file:
             migrated_data = json.load(file)
@@ -459,7 +505,7 @@ class TestService:
         if old_config_json_data.get("version", 0) < 4:
             config_kwargs["description"] = config_kwargs["name"]
 
-        if old_config_json_data.get("version", 0) == 6:
+        if old_config_json_data.get("version", 0) == 7:
             assert migrated_data["home_chain"] == "optimism"
             assert "optimism" in migrated_data["chain_configs"]
             assert "gnosis" not in migrated_data["chain_configs"]
