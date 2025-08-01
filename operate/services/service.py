@@ -63,11 +63,7 @@ from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerato
 from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
-from operate.constants import (
-    CONFIG_JSON,
-    DEPLOYMENT_DIR,
-    DEPLOYMENT_JSON,
-)
+from operate.constants import CONFIG_JSON, DEPLOYMENT_DIR, DEPLOYMENT_JSON
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
