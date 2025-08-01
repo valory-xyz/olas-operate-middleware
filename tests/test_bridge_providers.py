@@ -155,6 +155,7 @@ class TestNativeBridgeProvider:
                 bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["bridge_eta"],
             ),
             wallet_manager=operate.wallet_manager,
+            logger=LOGGER,
         )
 
         # Create
@@ -365,6 +366,7 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
         else:
             provider = provider_class(
@@ -717,6 +719,7 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
             bridge_eta = provider.bridge_contract_adaptor.bridge_eta
         else:
@@ -1257,6 +1260,7 @@ class TestProvider:
                     ],
                 ),
                 wallet_manager=operate.wallet_manager,
+                logger=LOGGER,
             )
         else:
             provider = provider_class(
