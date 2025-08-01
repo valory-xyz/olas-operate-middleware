@@ -29,7 +29,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
-from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 from web3 import Web3
 
@@ -187,13 +186,13 @@ class BridgeManager:
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
         quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
-        self.logger = logger or setup_logger(name="operate.bridge.BridgeManager")
+        self.logger = logger
         self.quote_validity_period = quote_validity_period
         self.path.mkdir(exist_ok=True)
         (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)

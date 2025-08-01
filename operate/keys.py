@@ -27,7 +27,6 @@ import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
@@ -57,7 +56,7 @@ class KeysManager:
     def __init__(
         self,
         path: Path,
-        logger: t.Optional[logging.Logger] = None,
+        logger: logging.Logger,
     ) -> None:
         """
         Initialize keys manager
@@ -66,7 +65,7 @@ class KeysManager:
         :param logger: logging.Logger object.
         """
         self.path = path
-        self.logger = logger or setup_logger(name="operate.keys")
+        self.logger = logger
 
     def setup(self) -> None:
         """Setup service manager."""
