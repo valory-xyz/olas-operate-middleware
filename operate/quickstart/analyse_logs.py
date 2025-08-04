@@ -25,7 +25,7 @@ import sys
 from pathlib import Path
 from typing import List, TYPE_CHECKING, Union
 
-from operate.constants import DEPLOYMENT
+from operate.constants import DEPLOYMENT_DIR
 
 
 if TYPE_CHECKING:
@@ -38,10 +38,10 @@ def find_build_directory(config_file: Path, operate: "OperateApp") -> Path:
         config = json.load(f)
         config_service_hash = config.get("hash")
 
-    services = operate.service_manager()._get_all_services()
+    services = operate.service_manager().get_all_services()
     for service in services:
         if service.hash == config_service_hash:
-            build_dir = service.path / DEPLOYMENT
+            build_dir = service.path / DEPLOYMENT_DIR
             if not build_dir.exists():
                 print(f"{config.get('name')} not deployed.")
                 sys.exit(1)
@@ -106,9 +106,6 @@ def analyse_logs(
     if not config_file.exists():
         print(f"Config file '{config_file}' not found.")
         sys.exit(1)
-
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
 
     # Auto-detect the logs directory
     build_dir = find_build_directory(config_file, operate)

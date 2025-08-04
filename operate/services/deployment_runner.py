@@ -29,15 +29,17 @@ import sys  # nosec
 import time
 import typing as t
 from abc import ABC, ABCMeta, abstractmethod
+from enum import Enum
 from io import TextIOWrapper
 from pathlib import Path
 from traceback import print_exc
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 from venv import main as venv_cli
 
 import psutil
 import requests
 from aea.__version__ import __version__ as aea_version
+from aea.helpers.logging import setup_logger
 from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
@@ -99,6 +101,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     TM_CONTROL_URL = constants.TM_CONTROL_URL
     SLEEP_BEFORE_TM_KILL = 2  # seconds
+    START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
+    logger = setup_logger(name="operate.base_deployment_runner")
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
@@ -109,7 +113,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
         cmd = " ".join(args)
-        print("Running aea command: ", cmd, " at ", str(cwd))
+        self.logger.info(f"Running aea command: {cmd} at {str(cwd)}")
         p = multiprocessing.Process(
             target=self.__class__._call_aea_command,  # pylint: disable=protected-access
             args=(cwd, args),
@@ -134,14 +138,14 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 args, standalone_mode=False
             )
         except Exception:
+            print(f"Error on calling aea command: {args}")
             print_exc()
             raise
 
-    @staticmethod
-    def _run_cmd(args: t.List[str], cwd: t.Optional[Path] = None) -> None:
+    def _run_cmd(self, args: t.List[str], cwd: t.Optional[Path] = None) -> None:
         """Run command in a subprocess."""
-        print(f"Running: {' '.join(args)}")
-        print(f"Working dir: {os.getcwd()}")
+        self.logger.info(f"Running: {' '.join(args)}")
+        self.logger.info(f"Working dir: {os.getcwd()}")
         result = subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=args,
             cwd=cwd,
@@ -157,15 +161,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Prepare agent env, add keys, run aea commands."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
-        # Patch for trader agent
-        if "SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH" in env:
-            data_dir = working_dir / "data"
-            data_dir.mkdir(exist_ok=True)
-            env["SKILL_TRADER_ABCI_MODELS_PARAMS_ARGS_STORE_PATH"] = str(data_dir)
 
         # TODO: Dynamic port allocation, backport to service builder
-        env["CONNECTION_ABCI_CONFIG_HOST"] = "localhost"
-        env["CONNECTION_ABCI_CONFIG_PORT"] = "26658"
         env["PYTHONUTF8"] = "1"
         for var in env:
             # Fix tendermint connection params
@@ -177,11 +174,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
             if var.endswith("MODELS_PARAMS_ARGS_TENDERMINT_P2P_URL"):
                 env[var] = "localhost:26656"
-
-            if var.endswith("MODELS_BENCHMARK_TOOL_ARGS_LOG_DIR"):
-                benchmarks_dir = working_dir / "benchmarks"
-                benchmarks_dir.mkdir(exist_ok=True, parents=True)
-                env[var] = str(benchmarks_dir.resolve())
 
         (working_dir / "agent.json").write_text(
             json.dumps(env, indent=4),
@@ -221,6 +213,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
 
     def start(self) -> None:
+        """Start the deployment with retries."""
+        for _ in range(self.START_TRIES):
+            try:
+                self._start()
+                return
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.exception(f"Error on starting deployment: {e}")
+        raise RuntimeError(
+            f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"
+        )
+
+    def _start(self) -> None:
         """Start the deployment."""
         self._setup_agent()
         self._start_tendermint()
@@ -247,9 +251,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             requests.get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
         except requests.ConnectionError:
-            print(f"No Tendermint process listening on {self._get_tm_exit_url()}.")
+            self.logger.error(
+                f"No Tendermint process listening on {self._get_tm_exit_url()}."
+            )
         except Exception:  # pylint: disable=broad-except
-            print_exc()
+            self.logger.exception("Exception on tendermint stop!")
 
         pid = self._work_directory / "tendermint.pid"
         if not pid.exists():
@@ -611,30 +617,113 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         )
 
 
-def _get_host_deployment_runner(build_dir: Path) -> BaseDeploymentRunner:
-    """Return depoyment runner according to running env."""
-    deployment_runner: BaseDeploymentRunner
+class States(Enum):
+    """Service deployment states."""
 
-    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # pyinstaller inside!
-        if platform.system() == "Darwin":
-            deployment_runner = PyInstallerHostDeploymentRunnerMac(build_dir)
-        elif platform.system() == "Windows":
-            deployment_runner = PyInstallerHostDeploymentRunnerWindows(build_dir)
-        else:
+    NONE = 0
+    STARTING = 1
+    STARTED = 2
+    STOPPING = 3
+    STOPPED = 4
+    ERROR = 5
+
+
+class DeploymentManager:
+    """Deployment manager to run and stop deployments."""
+
+    def __init__(self) -> None:
+        """Init the deployment manager."""
+        self._deployment_runner_class = self._get_host_deployment_runner_class()
+        self._is_stopping = False
+        self.logger = setup_logger(name="operate.deployment_manager")
+        self._states: Dict[Path, States] = {}
+
+    def _get_deployment_runner(self, build_dir: Path) -> BaseDeploymentRunner:
+        """Get deploymnent runner instance."""
+        return self._deployment_runner_class(build_dir)
+
+    @staticmethod
+    def _get_host_deployment_runner_class() -> Type[BaseDeploymentRunner]:
+        """Return depoyment runner class according to running env."""
+
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            # pyinstaller inside!
+            if platform.system() == "Darwin":
+                return PyInstallerHostDeploymentRunnerMac
+            if platform.system() == "Windows":
+                return PyInstallerHostDeploymentRunnerWindows
             raise ValueError(f"Platform not supported {platform.system()}")
-    else:
-        deployment_runner = HostPythonHostDeploymentRunner(build_dir)
-    return deployment_runner
+
+        return HostPythonHostDeploymentRunner
+
+    def stop(self) -> None:
+        """Stop deploment manager."""
+        self.logger.info("Stop deployment manager")
+        self._is_stopping = True
+
+    def get_state(self, build_dir: Path) -> States:
+        """Get state of the deployment."""
+        return self._states.get(build_dir) or States.NONE
+
+    def run_deployment(self, build_dir: Path) -> None:
+        """Run deployment."""
+        if self._is_stopping:
+            raise RuntimeError("deployment manager stopped")
+        if self.get_state(build_dir=build_dir) in [States.STARTING, States.STOPPING]:
+            raise ValueError("Service already in transition")
+        self.logger.info(f"Starting deployment {build_dir}...")
+        self._states[build_dir] = States.STARTING
+        try:
+            deployment_runner = self._get_deployment_runner(build_dir=build_dir)
+            deployment_runner.start()
+            self.logger.info(f"Started deployment {build_dir}")
+            self._states[build_dir] = States.STARTED
+        except Exception:  # pylint: disable=broad-except
+            self.logger.exception(
+                f"Starting deployment failed {build_dir}. so try to stop"
+            )
+            self._states[build_dir] = States.ERROR
+            self.stop_deployemnt(build_dir=build_dir, force=True)
+
+        if self._is_stopping:
+            self.logger.warning(
+                f"Deployment at {build_dir} started when it was  going to stop, so stop it"
+            )
+            self.stop_deployemnt(build_dir=build_dir, force=True)
+
+    def stop_deployemnt(self, build_dir: Path, force: bool = False) -> None:
+        """Stop the deployment."""
+        if (
+            self.get_state(build_dir=build_dir) in [States.STARTING, States.STOPPING]
+            and not force
+        ):
+            raise ValueError("Service already in transition")
+        self.logger.info(f"Stopping deployment {build_dir}...")
+        self._states[build_dir] = States.STOPPING
+        deployment_runner = self._get_deployment_runner(build_dir=build_dir)
+        try:
+            deployment_runner.stop()
+            self.logger.info(f"Stopped deployment {build_dir}...")
+            self._states[build_dir] = States.STOPPED
+        except Exception:
+            self.logger.exception(f"Stopping deployment  failed {build_dir}...")
+            self._states[build_dir] = States.ERROR
+            raise
+
+
+deployment_manager = DeploymentManager()
 
 
 def run_host_deployment(build_dir: Path) -> None:
     """Run host deployment."""
-    deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
-    deployment_runner.start()
+    deployment_manager.run_deployment(build_dir=build_dir)
 
 
 def stop_host_deployment(build_dir: Path) -> None:
     """Stop host deployment."""
-    deployment_runner = _get_host_deployment_runner(build_dir=build_dir)
-    deployment_runner.stop()
+    deployment_manager.stop_deployemnt(build_dir=build_dir)
+
+
+def stop_deployment_manager() -> None:
+    """Stop deployment manager."""
+    deployment_manager.stop()

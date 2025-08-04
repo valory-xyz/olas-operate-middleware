@@ -48,9 +48,6 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print_section(f"Claim staking rewards for {template['name']}")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # check if agent was started before
     config = load_local_config(
         operate=operate, service_name=cast(str, template["name"])
@@ -70,10 +67,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print("")
 
+    ask_password_if_needed(operate)
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
-    ask_password_if_needed(operate)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()

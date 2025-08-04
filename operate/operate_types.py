@@ -28,15 +28,9 @@ from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
 from typing_extensions import TypedDict
 
+from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.resource import LocalResource
 
-
-_ACTIONS = {
-    "status": 0,
-    "build": 1,
-    "deploy": 2,
-    "stop": 3,
-}
 
 CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
 
@@ -127,20 +121,6 @@ for name in dir(ChainMixin):
         setattr(Chain, name, getattr(ChainMixin, name))
 
 
-class Action(enum.IntEnum):
-    """Action payload."""
-
-    STATUS = 0
-    BUILD = 1
-    DEPLOY = 2
-    STOP = 3
-
-    @classmethod
-    def from_string(cls, action: str) -> "Action":
-        """Load from string."""
-        return cls(_ACTIONS[action])
-
-
 class DeploymentStatus(enum.IntEnum):
     """Status payload."""
 
@@ -208,9 +188,6 @@ class ConfigurationTemplate(TypedDict):
     nft: str
     rpc: str
     agent_id: int
-    threshold: int
-    use_staking: bool
-    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: t.Dict[str, FundRequirementsTemplate]
     fallback_chain_params: t.Optional[t.Dict]
@@ -275,12 +252,17 @@ class OnChainUserParams(LocalResource):
 
     staking_program_id: str
     nft: str
-    threshold: int
     agent_id: int
-    use_staking: bool
-    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: OnChainTokenRequirements
+
+    @property
+    def use_staking(self) -> bool:
+        """Check if staking is used."""
+        return (
+            self.staking_program_id is not None
+            and self.staking_program_id != NO_STAKING_PROGRAM_ID
+        )
 
     @classmethod
     def from_json(cls, obj: t.Dict) -> "OnChainUserParams":

@@ -23,6 +23,7 @@ import warnings
 from typing import TYPE_CHECKING, cast
 
 from operate.quickstart.run_service import (
+    ask_password_if_needed,
     configure_local_config,
     get_service,
     load_local_config,
@@ -44,9 +45,6 @@ def stop_service(operate: "OperateApp", config_path: str) -> None:
 
     print_title(f"Stop {template['name']} Quickstart")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # check if agent was started before
     config = load_local_config(
         operate=operate, service_name=cast(str, template["name"])
@@ -55,11 +53,12 @@ def stop_service(operate: "OperateApp", config_path: str) -> None:
         print("No previous agent setup found. Exiting.")
         return
 
+    ask_password_if_needed(operate)
     configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     manager.stop_service_locally(
-        service_config_id=service.service_config_id, delete=True, use_docker=True
+        service_config_id=service.service_config_id, use_docker=True
     )
 
     print()

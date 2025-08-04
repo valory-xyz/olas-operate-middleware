@@ -24,16 +24,11 @@ from pathlib import Path
 
 OPERATE = ".operate"
 OPERATE_HOME = Path.cwd() / OPERATE
-CONFIG = "config.json"
-SERVICES = "services"
-KEYS = "keys"
-DEPLOYMENT = "deployment"
+SERVICES_DIR = "services"
+KEYS_DIR = "keys"
+DEPLOYMENT_DIR = "deployment"
 DEPLOYMENT_JSON = "deployment.json"
-CONFIG = "config.json"
-KEY = "key"
-KEYS_JSON = "keys.json"
-DOCKER_COMPOSE_YAML = "docker-compose.yaml"
-SERVICE_YAML = "service.yaml"
+CONFIG_JSON = "config.json"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 ON_CHAIN_INTERACT_TIMEOUT = 120.0
@@ -53,3 +48,7 @@ MECH_ACTIVITY_CHECKER_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/a
 SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/open-autonomy/refs/tags/v0.18.4/packages/valory/contracts/service_registry_token_utility/build/ServiceRegistryTokenUtility.json"  # nosec
 MECH_AGENT_FACTORY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/ai-registry-mech/main/abis/0.8.25/AgentFactory.json"
 MECH_MARKETPLACE_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/mech-quickstart/refs/heads/main/contracts/MechMarketplace.json"
+NO_STAKING_PROGRAM_ID = "no_staking"
+
+
+DEPLOYMENT_START_TRIES_NUM = 3

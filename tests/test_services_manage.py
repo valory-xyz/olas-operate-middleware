@@ -30,10 +30,7 @@ from operate.operate_types import ServiceTemplate
 from operate.services.manage import ServiceManager
 
 from .test_services_service import DEFAULT_CONFIG_KWARGS
-
-
-ROOT_PATH = Path(__file__).resolve().parent
-OPERATE = ".operate_test"
+from tests.conftest import OPERATE_TEST
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:
@@ -103,7 +100,7 @@ class TestServiceManager:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)
@@ -194,7 +191,7 @@ class TestServiceManager:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / OPERATE,
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
         operate.create_user_account(password=password)

@@ -91,7 +91,7 @@ RELAY_DEFAULT_GAS = {
         "swap": 1_500_000,
         "send": 1,
     },
-    Chain.OPTIMISTIC: {
+    Chain.OPTIMISM: {
         "deposit": 50_000,
         "approve": 200_000,
         "authorize": 1,

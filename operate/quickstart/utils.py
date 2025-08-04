@@ -35,9 +35,6 @@ from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
 
-MAX_QUICKSTART_VERSION = 1
-
-
 def print_box(text: str, margin: int = 1, character: str = "=") -> None:
     """Print text centered within a box."""
 
@@ -119,20 +116,20 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
-    "optimistic": {
+    "optimism": {
         "name": "Optimism",
         "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
-        "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
+        "staking_bonding_token": OLAS[Chain.OPTIMISM],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            USDC[Chain.OPTIMISTIC]: {
+            USDC[Chain.OPTIMISM]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            OLAS[Chain.OPTIMISTIC]: {
+            OLAS[Chain.OPTIMISM]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             },

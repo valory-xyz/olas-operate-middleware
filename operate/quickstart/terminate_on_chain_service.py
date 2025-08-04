@@ -43,9 +43,6 @@ def terminate_service(operate: "OperateApp", config_path: str) -> None:
 
     print_title(f"Terminate {template['name']} on-chain service")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # check if agent was started before
     config = load_local_config(
         operate=operate, service_name=cast(str, template["name"])
@@ -61,8 +58,8 @@ def terminate_service(operate: "OperateApp", config_path: str) -> None:
         print("Cancelled.")
         return
 
-    config = configure_local_config(template, operate)
     ask_password_if_needed(operate)
+    config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     ensure_enough_funds(operate, service)
