@@ -1022,38 +1022,40 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service = service_manager.load(service_config_id=service_config_id)
 
             # terminate the service on chain
-            for chain in service.chain_configs:
+            for chain, chain_config in service.chain_configs.items():
                 service_manager.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
                     chain=chain,
                     withdrawal_address=withdrawal_address,
                 )
 
-            # drain the master safe and master signer for the home chain
-            chain = Chain(service.home_chain)
-            master_wallet = service_manager.wallet_manager.load(
-                ledger_type=chain.ledger_type
-            )
+                # drain the master safe and master signer for the home chain
+                chain = Chain(service.home_chain)
+                master_wallet = service_manager.wallet_manager.load(
+                    ledger_type=chain.ledger_type
+                )
 
-            # drain the master safe
-            logger.info(
-                f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
-            )
-            master_wallet.drain(
-                withdrawal_address=withdrawal_address,
-                chain=chain,
-                from_safe=True,
-            )
+                # drain the master safe
+                logger.info(
+                    f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
+                )
+                master_wallet.drain(
+                    withdrawal_address=withdrawal_address,
+                    chain=chain,
+                    from_safe=True,
+                    rpc=chain_config.ledger_config.rpc,
+                )
 
-            # drain the master signer
-            logger.info(
-                f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
-            )
-            master_wallet.drain(
-                withdrawal_address=withdrawal_address,
-                chain=chain,
-                from_safe=False,
-            )
+                # drain the master signer
+                logger.info(
+                    f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
+                )
+                master_wallet.drain(
+                    withdrawal_address=withdrawal_address,
+                    chain=chain,
+                    from_safe=False,
+                    rpc=chain_config.ledger_config.rpc,
+                )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Withdrawal failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
