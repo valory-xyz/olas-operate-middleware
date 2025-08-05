@@ -22,6 +22,7 @@
 import json
 import os
 import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -77,6 +78,22 @@ class KeysManager(metaclass=SingletonMeta):
                 )
             )
         )
+
+    def get_crypto_instance(self, address: str) -> EthereumCrypto:
+        """Get EthereumCrypto instance for the given address."""
+        key: Key = Key.from_json(  # type: ignore
+            obj=json.loads(
+                (self.path / address).read_text(
+                    encoding="utf-8",
+                )
+            )
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
+            temp_file.write(key.private_key)
+            temp_file.flush()
+            crypto = EthereumCrypto(private_key_path=temp_file.name)
+
+        return crypto
 
     def create(self) -> str:
         """Creates new key."""

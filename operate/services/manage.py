@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -34,7 +33,7 @@ from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
-from aea_ledger_ethereum import EthereumCrypto, LedgerApi
+from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
@@ -1297,12 +1296,9 @@ class ServiceManager:
             )  # noqa: E800
 
         if withdrawal_address is not None:
-            # Create a temporary file with the private key from service.keys[0]
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
-                temp_file.write(service.keys[0].private_key)
-                temp_file.flush()
-                ethereum_crypto = EthereumCrypto(private_key_path=temp_file.name)
-
+            ethereum_crypto = KeysManager().get_crypto_instance(
+                service.agent_addresses[0]
+            )
             # drain all native tokens from service signer key
             drain_eoa(
                 ledger_api=self.wallet_manager.load(
@@ -2004,11 +2000,7 @@ class ServiceManager:
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-        # Create a temporary file with the private key from service.keys[0]
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
-            temp_file.write(service.keys[0].private_key)
-            temp_file.flush()
-            ethereum_crypto = EthereumCrypto(private_key_path=temp_file.name)
+        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
 
         # drain ERC20 tokens from service safe
         for token_name, token_address in (
