@@ -153,6 +153,8 @@ class ContractAddresses(TypedDict):
     service_registry_token_utility: str
     gnosis_safe_proxy_factory: str
     gnosis_safe_same_address_multisig: str
+    safe_multisig_with_recovery_module: str
+    recovery_module: str
     multisend: str
 
 
