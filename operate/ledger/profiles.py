@@ -21,9 +21,10 @@
 
 import typing as t
 
+from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
+
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
-from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 
 NO_STAKING_PROGRAM_ID = "no_staking"
@@ -40,9 +41,9 @@ CHAINS = [
 ]
 
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
-for chain in CHAINS:
-    profile = CHAIN_PROFILES[chain.value]
-    CONTRACTS[chain] = ContractAddresses(
+for _chain in CHAINS:
+    profile = CHAIN_PROFILES[_chain.value]
+    CONTRACTS[_chain] = ContractAddresses(
         {
             "service_registry": profile["service_registry"],
             "service_registry_token_utility": profile["service_registry_token_utility"],
