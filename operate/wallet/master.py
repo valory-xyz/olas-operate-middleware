@@ -515,6 +515,9 @@ class EthereumMasterWallet(MasterWallet):
                 asset_address=asset,
                 address=self.safes[chain] if from_safe else self.crypto.address,
             )
+            if balance <= 0:
+                continue
+
             self.transfer_asset(
                 to=withdrawal_address,
                 amount=balance,
@@ -807,6 +810,17 @@ class EthereumMasterWallet(MasterWallet):
                 safes[chain] = address
         data["safes"] = safes
 
+        if "optimistic" in data.get("safes", {}):
+            data["safes"]["optimism"] = data["safes"].pop("optimistic")
+            migrated = True
+
+        if "optimistic" in data.get("safe_chains"):
+            data["safe_chains"] = [
+                "optimism" if chain == "optimistic" else chain
+                for chain in data["safe_chains"]
+            ]
+            migrated = True
+
         with open(wallet_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
 
@@ -926,20 +940,3 @@ class MasterWalletManager:
             if not self.exists(ledger_type=ledger_type):
                 continue
             yield LEDGER_TYPE_TO_WALLET_CLASS[ledger_type].load(path=self.path)
-
-    def migrate_wallet_configs(self) -> None:
-        """Migrate old wallet config formats to new ones, if applies."""
-
-        print(self.path)
-
-        for ledger_type in LedgerType:
-            if not self.exists(ledger_type=ledger_type):
-                continue
-
-            wallet_class = LEDGER_TYPE_TO_WALLET_CLASS.get(ledger_type)
-            if wallet_class is None:
-                continue
-
-            migrated = wallet_class.migrate_format(path=self.path)
-            if migrated:
-                self.logger.info(f"Wallet {wallet_class} has been migrated.")

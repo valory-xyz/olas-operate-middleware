@@ -34,10 +34,10 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, OPERATE_HOME
+from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
+from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,
@@ -363,14 +363,12 @@ def configure_local_config(
             template["configurations"][chain] |= {
                 "staking_program_id": config.staking_program_id,
                 "rpc": config.rpc[chain],
-                "use_staking": config.staking_program_id != NO_STAKING_PROGRAM_ID,
                 "cost_of_bond": min_staking_deposit,
             }
         else:
             template["configurations"][chain] |= {
                 "staking_program_id": NO_STAKING_PROGRAM_ID,
                 "rpc": config.rpc[chain],
-                "use_staking": False,
                 "cost_of_bond": 1,
             }
 
@@ -569,7 +567,7 @@ def _ask_funds_from_requirements(
             chain_config.chain_data.multisig: "Service Safe"
             for chain_config in service.chain_configs.values()
         }
-        | {key.address: "Agent EOA" for key in service.keys}
+        | {address: "Agent EOA" for address in service.agent_addresses}
     )
 
     if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
