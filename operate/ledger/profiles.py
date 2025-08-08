@@ -21,13 +21,14 @@
 
 import typing as t
 
-from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
+from autonomy.chain.constants import (
+    CHAIN_PROFILES,
+    DEFAULT_MULTISEND,
+    NO_STAKING_PROGRAM_ID,
+)
 
 from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
-
-
-NO_STAKING_PROGRAM_ID = "no_staking"
 
 
 # TODO: Refactor, remove the usage of CONTRACTS and use CHAIN_PROFILES from Open Autonomy instead.
