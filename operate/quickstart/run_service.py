@@ -665,8 +665,6 @@ def run_service(
 
     print_title(f"{template['name']} quickstart")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
     ask_password_if_needed(operate)
     _maybe_create_master_eoa(operate)
 
