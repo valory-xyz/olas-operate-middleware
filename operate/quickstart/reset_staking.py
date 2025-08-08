@@ -22,7 +22,8 @@ import json
 import os
 from typing import TYPE_CHECKING, cast
 
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, get_staking_contract
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.ledger.profiles import get_staking_contract
 from operate.quickstart.run_service import (
     CUSTOM_PROGRAM_ID,
     ask_password_if_needed,
@@ -43,9 +44,6 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     """Reset staking."""
     with open(config_path, "r") as config_file:
         template = json.load(config_file)
-
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
 
     print_title("Reset your staking program preference")
 

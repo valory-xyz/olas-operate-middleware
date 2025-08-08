@@ -20,17 +20,18 @@
 """Keys manager."""
 
 import json
-import logging
 import os
 import shutil
-import typing as t
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
+from operate.utils import SingletonMeta
 
 
 @dataclass
@@ -47,25 +48,21 @@ class Key(LocalResource):
         return super().load(path)  # type: ignore
 
 
-Keys = t.List[Key]
-
-
-class KeysManager:
+class KeysManager(metaclass=SingletonMeta):
     """Keys manager."""
 
-    def __init__(
-        self,
-        path: Path,
-        logger: logging.Logger,
-    ) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """
         Initialize keys manager
 
         :param path: Path to keys storage.
         :param logger: logging.Logger object.
         """
-        self.path = path
-        self.logger = logger
+        if "path" not in kwargs:
+            raise ValueError("Path must be provided for KeysManager")
+
+        self.path = kwargs["path"]
+        self.logger = kwargs["logger"]
 
     def setup(self) -> None:
         """Setup service manager."""
@@ -81,6 +78,22 @@ class KeysManager:
                 )
             )
         )
+
+    def get_crypto_instance(self, address: str) -> EthereumCrypto:
+        """Get EthereumCrypto instance for the given address."""
+        key: Key = Key.from_json(  # type: ignore
+            obj=json.loads(
+                (self.path / address).read_text(
+                    encoding="utf-8",
+                )
+            )
+        )
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
+            temp_file.write(key.private_key)
+            temp_file.flush()
+            crypto = EthereumCrypto(private_key_path=temp_file.name)
+
+        return crypto
 
     def create(self) -> str:
         """Creates new key."""

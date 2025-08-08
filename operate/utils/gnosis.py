@@ -490,7 +490,7 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> str:
+) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
     tx_helper = TxSettler(
         ledger_api=ledger_api,
@@ -516,7 +516,7 @@ def drain_eoa(
         )
         tx = ledger_api.update_with_gas_estimate(
             transaction=tx,
-            raise_on_try=True,
+            raise_on_try=False,
         )
 
         chain_fee = tx["gas"] * tx["maxFeePerGas"]
@@ -530,7 +530,6 @@ def drain_eoa(
 
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
         if tx["value"] <= 0:
-            logger.warning(f"No balance to drain from wallet: {crypto.address}")
             raise ChainInteractionError(
                 f"No balance to drain from wallet: {crypto.address}"
             )
@@ -542,14 +541,25 @@ def drain_eoa(
         return tx
 
     setattr(tx_helper, "build", _build_tx)  # noqa: B010
-    tx_receipt = tx_helper.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-        dry_run=False,
-    )
-    tx_hash = tx_receipt.get("transactionHash", "").hex()
-    return tx_hash
+    try:
+        tx_receipt = tx_helper.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
+        )
+    except ChainInteractionError as e:
+        if "No balance to drain from wallet" in str(e):
+            logger.warning(f"Failed to drain wallet {crypto.address} with error: {e}.")
+            return None
+
+        raise e
+
+    tx_hash = tx_receipt.get("transactionHash", None)
+    if tx_hash is not None:
+        return tx_hash.hex()
+
+    return None
 
 
 def get_asset_balance(

@@ -396,7 +396,15 @@ class RelayProvider(Provider):
             )
             from_ledger_api = self._from_ledger_api(provider_request)
             to_ledger_api = self._to_ledger_api(provider_request)
-            to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0]["hash"]
+
+            if (
+                response_json["requests"][0]["data"]["outTxs"][0]["chainId"]
+                == response_json["requests"][0]["data"]["inTxs"][0]["chainId"]
+            ):
+                to_tx_hash = from_tx_hash  # Should match response_json["requests"][0]["data"]["inTxs"][0]["hash"]
+            else:
+                to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0]["hash"]
+
             execution_data.message = response_json.get("details", None)
             execution_data.to_tx_hash = to_tx_hash
             execution_data.elapsed_time = Provider._tx_timestamp(

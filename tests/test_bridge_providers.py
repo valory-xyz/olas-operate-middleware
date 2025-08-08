@@ -842,6 +842,28 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "optimism",
+                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
+                        "token": "0x0000000000000000000000000000000000000000",
+                    },
+                    "to": {
+                        "chain": "optimism",
+                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
+                        "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                        "amount": 16000000,
+                    },
+                },
+                "r-ecfb8c21-e8d3-474b-9f10-0a2926da404d",
+                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
+                ProviderRequestStatus.EXECUTION_DONE,
+                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
+                0,
+            ),
+            (
+                RelayProvider,
+                None,
+                {
+                    "from": {
+                        "chain": "optimism",
                         "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
                         "token": "0x0000000000000000000000000000000000000000",
                     },

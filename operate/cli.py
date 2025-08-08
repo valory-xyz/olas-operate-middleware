@@ -113,7 +113,7 @@ class OperateApp:
         self.setup()
 
         self.logger = logger or setup_logger(name="operate")
-        self.keys_manager = services.manage.KeysManager(
+        services.manage.KeysManager(
             path=self._keys,
             logger=self.logger,
         )
@@ -121,7 +121,8 @@ class OperateApp:
 
         mm = MigrationManager(self._path, self.logger)
         mm.migrate_user_account()
-        mm.migrate_wallets()
+        mm.migrate_services(self.service_manager())
+        mm.migrate_wallets(self.wallet_manager)
         mm.migrate_qs_configs()
 
     def create_user_account(self, password: str) -> UserAccount:
@@ -169,7 +170,6 @@ class OperateApp:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
-            keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
             skip_dependency_check=skip_dependency_check,
@@ -237,16 +237,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home, logger=logger)
 
-    operate.service_manager().log_directories()
-    logger.info("Migrating service configs...")
-    operate.service_manager().migrate_service_configs()
-    logger.info("Migrating service configs done.")
-    operate.service_manager().log_directories()
-
-    logger.info("Migrating wallet configs...")
-    operate.wallet_manager.migrate_wallet_configs()
-    logger.info("Migrating wallet configs done.")
-
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
@@ -308,6 +298,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info("Stopping services on startup done.")
 
     def pause_all_services() -> None:
+        service_manager = operate.service_manager()
+        if not service_manager.validate_services():
+            logger.error(
+                "Some services are not valid. Only pausing the valid services."
+            )
+
         service_config_ids = [
             i["service_config_id"] for i in operate.service_manager().json
         ]
@@ -834,6 +830,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get all services."""
         return JSONResponse(content=operate.service_manager().json)
 
+    @app.get("/api/v2/services/validate")
+    @with_retries
+    async def _validate_services(request: Request) -> JSONResponse:
+        """Validate all services."""
+        service_manager = operate.service_manager()
+        service_ids = service_manager.get_all_service_ids()
+        _services = [
+            service.service_config_id
+            for service in service_manager.get_all_services()[0]
+        ]
+
+        return JSONResponse(
+            content={service_id: service_id in _services for service_id in service_ids}
+        )
+
     @app.get("/api/v2/service/{service_config_id}")
     @with_retries
     async def _get_service(request: Request) -> JSONResponse:
@@ -1011,38 +1022,40 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service = service_manager.load(service_config_id=service_config_id)
 
             # terminate the service on chain
-            for chain in service.chain_configs:
+            for chain, chain_config in service.chain_configs.items():
                 service_manager.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
                     chain=chain,
                     withdrawal_address=withdrawal_address,
                 )
 
-            # drain the master safe and master signer for the home chain
-            chain = Chain(service.home_chain)
-            master_wallet = service_manager.wallet_manager.load(
-                ledger_type=chain.ledger_type
-            )
+                # drain the master safe and master signer for the home chain
+                chain = Chain(service.home_chain)
+                master_wallet = service_manager.wallet_manager.load(
+                    ledger_type=chain.ledger_type
+                )
 
-            # drain the master safe
-            logger.info(
-                f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
-            )
-            master_wallet.drain(
-                withdrawal_address=withdrawal_address,
-                chain=chain,
-                from_safe=True,
-            )
+                # drain the master safe
+                logger.info(
+                    f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
+                )
+                master_wallet.drain(
+                    withdrawal_address=withdrawal_address,
+                    chain=chain,
+                    from_safe=True,
+                    rpc=chain_config.ledger_config.rpc,
+                )
 
-            # drain the master signer
-            logger.info(
-                f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
-            )
-            master_wallet.drain(
-                withdrawal_address=withdrawal_address,
-                chain=chain,
-                from_safe=False,
-            )
+                # drain the master signer
+                logger.info(
+                    f"Draining the Master Signer {master_wallet.address} on chain {chain.value} (withdrawal address {withdrawal_address})."
+                )
+                master_wallet.drain(
+                    withdrawal_address=withdrawal_address,
+                    chain=chain,
+                    from_safe=False,
+                    rpc=chain_config.ledger_config.rpc,
+                )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(f"Withdrawal failed: {e}\n{traceback.format_exc()}")
             return JSONResponse(
