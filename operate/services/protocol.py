@@ -1153,9 +1153,21 @@ class OnChainManager(_ChainUtil):
 class EthSafeTxBuilder(_ChainUtil):
     """Safe Transaction builder."""
 
-    def new_tx(self) -> GnosisSafeTransaction:
+    @classmethod
+    def _new_tx(
+        cls, ledger_api: LedgerApi, crypto: Crypto, chain_type: ChainType, safe: str
+    ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=chain_type,
+            safe=safe,
+        )
+
+    def new_tx(self) -> GnosisSafeTransaction:
+        """Create a new GnosisSafeTransaction instance."""
+        return EthSafeTxBuilder._new_tx(
             ledger_api=self.wallet.ledger_api(
                 chain=OperateChain.from_string(self.chain_type.value),
                 rpc=self.rpc,
@@ -1552,6 +1564,45 @@ class EthSafeTxBuilder(_ChainUtil):
         """Swap safe owner."""
         # TODO: Discuss implementation
         raise NotImplementedError()
+
+    def get_recover_access_data(self, service_id: int) -> t.Dict:
+        """Get recover access tx data."""
+        instance = registry_contracts.recovery_module.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=self.contracts["recovery_module"],
+        )
+        txd = instance.encodeABI(
+            fn_name="recoverAccess",
+            args=[service_id],
+        )
+        return {
+            "to": self.contracts["recovery_module"],
+            "data": txd[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+    def get_enable_module_data(
+        self,
+        safe_address: str,
+        module_address: str,
+    ) -> t.Dict:
+        """Get enable module tx data"""
+        self._patch()
+        instance = registry_contracts.gnosis_safe.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=safe_address,
+        )
+        txd = instance.encodeABI(
+            fn_name="enableModule",
+            args=[module_address],
+        )
+        return {
+            "to": safe_address,
+            "data": txd[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
 
 
 def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
