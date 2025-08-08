@@ -63,10 +63,7 @@ class KeysManager(metaclass=SingletonMeta):
 
         self.path = kwargs["path"]
         self.logger = kwargs["logger"]
-
-    def setup(self) -> None:
-        """Setup service manager."""
-        self.path.mkdir(exist_ok=True)
+        self.path.mkdir(exist_ok=True, parents=True)
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -88,15 +85,31 @@ class KeysManager(metaclass=SingletonMeta):
                 )
             )
         )
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".txt") as temp_file:
+        # Create temporary file with delete=False to handle it manually
+        with tempfile.NamedTemporaryFile(
+            dir=self.path,
+            mode="w",
+            suffix=".txt",
+            delete=False,  # Handle cleanup manually
+        ) as temp_file:
             temp_file.write(key.private_key)
             temp_file.flush()
+            temp_file.close()  # Close the file before reading
+
+            # Set proper file permissions (readable by owner only)
+            os.chmod(temp_file.name, 0o600)
             crypto = EthereumCrypto(private_key_path=temp_file.name)
+
+            try:
+                os.unlink(temp_file.name)  # Clean up the temporary file
+            except OSError as e:
+                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
 
         return crypto
 
     def create(self) -> str:
         """Creates new key."""
+        self.path.mkdir(exist_ok=True, parents=True)
         crypto = EthereumCrypto()
         for path in (
             self.path / f"{crypto.address}.bak",

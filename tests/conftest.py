@@ -30,7 +30,9 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 import os
 import random
 import string
+import tempfile
 from pathlib import Path
+from typing import Generator
 
 import pytest
 from web3 import Web3
@@ -73,3 +75,10 @@ def random_mnemonic(num_words: int = 12) -> str:
 def password() -> str:
     """Password fixture"""
     return random_string(16)
+
+
+@pytest.fixture
+def temp_keys_dir() -> Generator[Path, None, None]:
+    """Create a temporary directory for keys."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        yield Path(temp_dir)
