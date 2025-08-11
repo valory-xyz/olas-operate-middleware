@@ -18,8 +18,8 @@ include = [
 operate = "operate.cli:main"
 
 [tool.poetry.dependencies]
-python = "<3.12,>=3.9"
-open-autonomy = "^0.20.0"
+python = "<3.12,>=3.10"
+open-autonomy  = { path = "../open-autonomy", develop = true }
 open-aea-ledger-cosmos = "==1.65.0"
 open-aea-ledger-ethereum = "==1.65.0"
 open-aea-ledger-ethereum-flashbots = "==1.65.0"

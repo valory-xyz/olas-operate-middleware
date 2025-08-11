@@ -1373,7 +1373,8 @@ class ServiceManager:
                 "Recovery module is not enabled. Enabling recovery module in service Safe. (Not implemented)"
             )
             # TODO Enable recovery module when Safe owner = master Safe.
-            # This requires implement a transaction where the owner is another Safe.
+            # This is similar to _enable_recovery_module_from_agent, but
+            # requires implement a transaction where the owner is another Safe.
             return
 
         if (
