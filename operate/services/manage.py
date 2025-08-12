@@ -2133,7 +2133,11 @@ class ServiceManager:
         return deployment
 
     def stop_service_locally(
-        self, service_config_id: str, delete: bool = False, use_docker: bool = False
+        self,
+        service_config_id: str,
+        delete: bool = False,
+        use_docker: bool = False,
+        force: bool = False,
     ) -> Deployment:
         """
         Stop service locally
@@ -2145,7 +2149,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker)
+        deployment.stop(use_docker=use_docker, force=force)
         if delete:
             deployment.delete()
         return deployment

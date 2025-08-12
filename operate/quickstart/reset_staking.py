@@ -137,8 +137,9 @@ def reset_staking(operate: "OperateApp", config_path: str) -> None:
     config.staking_program_id = None
     config.store()
     config = configure_local_config(template, operate)
+    service = get_service(manager, template)
     manager.update(
-        service_config_id=manager.json[0]["service_config_id"],
+        service_config_id=service.service_config_id,
         service_template=template,
     )
     print("\nStaking preference has been reset successfully.")
