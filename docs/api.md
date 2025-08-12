@@ -1315,7 +1315,7 @@ Individual bridge request status:
 - `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
 - `EXECUTION_UNKNOWN`: Execution unknown.
 
-<sup>&#8224;</sup>Final states: bridge request status will not change after reaching this status.
+<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
 
 ```json
 {
@@ -1383,7 +1383,7 @@ Individual bridge request status:
 - `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
 - `EXECUTION_UNKNOWN`: Execution unknown.
 
-<sup>&#8224;</sup>Final states: bridge request status will not change after reaching this status.
+<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
 
 ```json
 {
