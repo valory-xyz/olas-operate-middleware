@@ -15,6 +15,7 @@ All endpoints return consistent error responses in JSON format:
 ```
 
 The API uses appropriate HTTP status codes:
+
 - `400 Bad Request`: Invalid request parameters
 - `401 Unauthorized`: Authentication required or invalid credentials
 - `404 Not Found`: Resource not found
@@ -28,6 +29,7 @@ The API uses appropriate HTTP status codes:
 Get basic API information.
 
 **Response (Success - 200):**
+
 ```json
 {
   "name": "Operate HTTP server",
@@ -43,6 +45,7 @@ Get basic API information.
 Get account setup status.
 
 **Response (Success - 200):**
+
 ```json
 {
   "is_setup": true
@@ -54,6 +57,7 @@ Get account setup status.
 Create a new user account.
 
 **Request Body:**
+
 ```json
 {
   "password": "your_password"
@@ -61,6 +65,7 @@ Create a new user account.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "error": null
@@ -68,6 +73,7 @@ Create a new user account.
 ```
 
 **Response (Password too short - 400):**
+
 ```json
 {
   "error": "Password must be at least 8 characters long."
@@ -75,6 +81,7 @@ Create a new user account.
 ```
 
 **Response (Account exists - 409):**
+
 ```json
 {
   "error": "Account already exists."
@@ -86,6 +93,7 @@ Create a new user account.
 Update account password.
 
 **Request Body (with current password):**
+
 ```json
 {
   "old_password": "your_old_password",
@@ -94,6 +102,7 @@ Update account password.
 ```
 
 **Request Body (with mnemonic):**
+
 ```json
 {
   "mnemonic": "word1 word2 word3 ...",
@@ -102,6 +111,7 @@ Update account password.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "error": null,
@@ -110,6 +120,7 @@ Update account password.
 ```
 
 **Response (Success with mnemonic - 200):**
+
 ```json
 {
   "error": null,
@@ -118,6 +129,7 @@ Update account password.
 ```
 
 **Response (Missing parameters - 400):**
+
 ```json
 {
   "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
@@ -125,6 +137,7 @@ Update account password.
 ```
 
 **Response (Both parameters provided - 400):**
+
 ```json
 {
   "error": "Exactly one of 'old_password' or 'mnemonic' (seed phrase) is required."
@@ -132,6 +145,7 @@ Update account password.
 ```
 
 **Response (New password too short - 400):**
+
 ```json
 {
   "error": "New password must be at least 8 characters long."
@@ -139,6 +153,7 @@ Update account password.
 ```
 
 **Response (Invalid old password - 400):**
+
 ```json
 {
   "error": "Failed to update password: Password is not valid."
@@ -146,6 +161,7 @@ Update account password.
 ```
 
 **Response (Invalid mnemonic - 400):**
+
 ```json
 {
   "error": "Failed to update password: Seed phrase is not valid."
@@ -153,6 +169,7 @@ Update account password.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -160,6 +177,7 @@ Update account password.
 ```
 
 **Response (Update failed - 500):**
+
 ```json
 {
   "error": "Failed to update password. Please check the logs."
@@ -171,6 +189,7 @@ Update account password.
 Validate user credentials and establish a session.
 
 **Request Body:**
+
 ```json
 {
   "password": "your_password"
@@ -178,6 +197,7 @@ Validate user credentials and establish a session.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "message": "Login successful."
@@ -185,6 +205,7 @@ Validate user credentials and establish a session.
 ```
 
 **Response (Invalid password - 401):**
+
 ```json
 {
   "error": "Password is not valid."
@@ -192,6 +213,7 @@ Validate user credentials and establish a session.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -205,6 +227,7 @@ Validate user credentials and establish a session.
 Get all wallets.
 
 **Response (Success - 200):**
+
 ```json
 [
   {
@@ -223,6 +246,7 @@ Get all wallets.
 Create a new wallet.
 
 **Request Body:**
+
 ```json
 {
   "ledger_type": "ethereum"
@@ -230,6 +254,7 @@ Create a new wallet.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "wallet": {
@@ -242,6 +267,7 @@ Create a new wallet.
 ```
 
 **Response (Wallet exists - 200):**
+
 ```json
 {
   "wallet": {
@@ -257,6 +283,7 @@ Create a new wallet.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -264,6 +291,7 @@ Create a new wallet.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -275,6 +303,7 @@ Create a new wallet.
 Get Master EOA private key.
 
 **Request Body:**
+
 ```json
 {
   "password": "your_password",
@@ -283,6 +312,7 @@ Get Master EOA private key.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "private_key": "0x..."
@@ -290,6 +320,7 @@ Get Master EOA private key.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -297,6 +328,7 @@ Get Master EOA private key.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -304,6 +336,7 @@ Get Master EOA private key.
 ```
 
 **Response (Invalid password - 401):**
+
 ```json
 {
   "error": "Password is not valid."
@@ -315,6 +348,7 @@ Get Master EOA private key.
 Get extended wallet information including safes and additional metadata.
 
 **Response (Success - 200):**
+
 ```json
 [
   {
@@ -341,6 +375,7 @@ Get extended wallet information including safes and additional metadata.
 ```
 
 **Response (No safes - 200):**
+
 ```json
 [
   {
@@ -356,6 +391,7 @@ Get extended wallet information including safes and additional metadata.
 Get all safes for all wallets.
 
 **Response (Success - 200):**
+
 ```json
 [
   {
@@ -371,6 +407,7 @@ Get all safes for all wallets.
 Get the safe address for a specific chain.
 
 **Response (Success - 200):**
+
 ```json
 {
   "safe": "0x..."
@@ -378,6 +415,7 @@ Get the safe address for a specific chain.
 ```
 
 **Response (No wallet - 404):**
+
 ```json
 {
   "error": "No Master EOA found for this chain."
@@ -385,6 +423,7 @@ Get the safe address for a specific chain.
 ```
 
 **Response (No safe - 404):**
+
 ```json
 {
   "error": "No Master Safe found for this chain."
@@ -396,6 +435,7 @@ Get the safe address for a specific chain.
 Create a new Gnosis Safe.
 
 **Request Body:**
+
 ```json
 {
   "chain": "gnosis",
@@ -407,6 +447,7 @@ Create a new Gnosis Safe.
 ```
 
 **Request Body (with asset transfer):**
+
 ```json
 {
   "chain": "gnosis", 
@@ -416,6 +457,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (Success - 201):**
+
 ```json
 {
   "create_tx": "0x...",
@@ -428,6 +470,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (Safe exists - 200):**
+
 ```json
 {
   "safe": "0x...",
@@ -436,6 +479,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (Invalid request - 400):**
+
 ```json
 {
   "error": "Only specify one of 'initial_funds' or 'transfer_excess_assets', but not both."
@@ -443,6 +487,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (No wallet - 404):**
+
 ```json
 {
   "error": "No Master EOA found for this chain."
@@ -450,6 +495,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -457,6 +503,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -464,6 +511,7 @@ Create a new Gnosis Safe.
 ```
 
 **Response (Creation failed - 500):**
+
 ```json
 {
   "error": "Failed to create safe. Please check the logs."
@@ -475,6 +523,7 @@ Create a new Gnosis Safe.
 Update safe settings, such as backup owner.
 
 **Request Body:**
+
 ```json
 {
   "chain": "gnosis",
@@ -483,6 +532,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "wallet": {
@@ -500,6 +550,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (No changes - 200):**
+
 ```json
 {
   "wallet": {
@@ -517,6 +568,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (No account - 404):**
+
 ```json
 {
   "error": "User account not found."
@@ -524,6 +576,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (No chain specified - 400):**
+
 ```json
 {
   "error": "'chain' is required."
@@ -531,6 +584,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (No wallet - 400):**
+
 ```json
 {
   "error": "No Master EOA found for this chain."
@@ -538,6 +592,7 @@ Update safe settings, such as backup owner.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -551,6 +606,7 @@ Update safe settings, such as backup owner.
 Get all valid services.
 
 **Response (Success - 200):**
+
 ```json
 [
   {
@@ -604,6 +660,7 @@ Get all valid services.
 Check if all the services are valid and can be deployed.
 
 **Response (Success - 200):**
+
 ```json
 {
   "service_config_id1": true,
@@ -617,6 +674,7 @@ Check if all the services are valid and can be deployed.
 Get a specific service.
 
 **Response (Success - 200):**
+
 ```json
 {
   "service_config_id": "service_123",
@@ -664,6 +722,7 @@ Get a specific service.
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -675,6 +734,7 @@ Get a specific service.
 Get service deployment information.
 
 **Response (Success - 200):**
+
 ```json
 {
   "status": "DEPLOYED",
@@ -692,6 +752,7 @@ Get service deployment information.
 ```
 
 **Response (Success with empty healthcheck - 200):**
+
 ```json
 {
   "status": "BUILT",
@@ -705,6 +766,7 @@ Get service deployment information.
 ```
 
 **Response (Success with healthcheck error - 200):**
+
 ```json
 {
   "status": "DEPLOYED",
@@ -720,6 +782,7 @@ Get service deployment information.
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -731,6 +794,7 @@ Get service deployment information.
 Get service refill requirements.
 
 **Response (Success - 200):**
+
 ```json
 {
   "balances": {
@@ -770,6 +834,7 @@ Get service refill requirements.
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -781,6 +846,7 @@ Get service refill requirements.
 Create a new service.
 
 **Request Body:**
+
 ```json
 {
   "name": "My Service",
@@ -827,6 +893,7 @@ Create a new service.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "service_config_id": "service_123",
@@ -874,6 +941,7 @@ Create a new service.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -885,6 +953,7 @@ Create a new service.
 Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.
 
 **Request Body:**
+
 ```json
 {
   "name": "Updated Service Name",
@@ -932,6 +1001,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "service_config_id": "service_123",
@@ -979,6 +1049,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -986,6 +1057,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -997,6 +1069,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 Deploy and run a service.
 
 **Response (Success - 200):**
+
 ```json
 {
   "service_config_id": "service_123",
@@ -1044,6 +1117,7 @@ Deploy and run a service.
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -1051,6 +1125,7 @@ Deploy and run a service.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -1058,6 +1133,7 @@ Deploy and run a service.
 ```
 
 **Response (Operation failed after retries - 500):**
+
 ```json
 {
   "error": "Service is already running."
@@ -1069,6 +1145,7 @@ Deploy and run a service.
 Stop a running service deployment locally.
 
 **Response (Success - 200):**
+
 ```json
 {
   "status": "STOPPED",
@@ -1082,6 +1159,7 @@ Stop a running service deployment locally.
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -1089,6 +1167,7 @@ Stop a running service deployment locally.
 ```
 
 **Response (Operation failed after retries - 500):**
+
 ```json
 {
   "error": "Operation failed after multiple attempts. Please try again later."
@@ -1100,6 +1179,7 @@ Stop a running service deployment locally.
 Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the master safe and master signer.
 
 **Request Body:**
+
 ```json
 {
   "withdrawal_address": "0x..."
@@ -1107,6 +1187,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "error": null,
@@ -1115,6 +1196,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```
 
 **Response (Service not found - 404):**
+
 ```json
 {
   "error": "Service service_123 not found"
@@ -1122,6 +1204,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -1129,6 +1212,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```
 
 **Response (Missing withdrawal address - 400):**
+
 ```json
 {
   "error": "'withdrawal_address' is required"
@@ -1136,6 +1220,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```
 
 **Response (Withdrawal failed - 500):**
+
 ```json
 {
   "error": "Failed to withdraw funds. Please check the logs."
@@ -1149,6 +1234,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 Get bridge refill requirements for cross-chain transactions.
 
 **Request Body:**
+
 ```json
 {
   "bridge_requests": [
@@ -1211,6 +1297,7 @@ Get bridge refill requirements for cross-chain transactions.
 Execute bridge transaction.
 
 **Request Body:**
+
 ```json
 {
   "id": "bundle_123"
@@ -1218,6 +1305,18 @@ Execute bridge transaction.
 ```
 
 **Response (Success - 200):**
+
+Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
+- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
+- `EXECUTION_UNKNOWN`: Execution unknown.
+
+<sup>&#8224;</sup>Final states: bridge request status will not change after reaching this status.
+
 ```json
 {
   "id": "bundle_123",
@@ -1234,6 +1333,7 @@ Execute bridge transaction.
 ```
 
 **Response (Invalid bundle ID - 400):**
+
 ```json
 {
   "error": "Invalid bundle ID or transaction failed."
@@ -1241,6 +1341,7 @@ Execute bridge transaction.
 ```
 
 **Response (Not logged in - 401):**
+
 ```json
 {
   "error": "User not logged in."
@@ -1248,6 +1349,7 @@ Execute bridge transaction.
 ```
 
 **Response (Failed - 500):**
+
 ```json
 {
   "error": "Failed to execute bridge transaction. Please check the logs."
@@ -1259,6 +1361,7 @@ Execute bridge transaction.
 Get the last executed bundle ID.
 
 **Response (Success - 200):**
+
 ```json
 {
   "id": "bundle_123"
@@ -1270,6 +1373,18 @@ Get the last executed bundle ID.
 Get bridge transaction status.
 
 **Response (Success - 200):**
+
+Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
+- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
+- `EXECUTION_UNKNOWN`: Execution unknown.
+
+<sup>&#8224;</sup>Final states: bridge request status will not change after reaching this status.
+
 ```json
 {
   "id": "bundle_123",
@@ -1286,6 +1401,7 @@ Get bridge transaction status.
 ```
 
 **Response (Invalid bundle ID - 400):**
+
 ```json
 {
   "error": "Invalid bundle ID."
@@ -1293,6 +1409,7 @@ Get bridge transaction status.
 ```
 
 **Response (Failed - 500):**
+
 ```json
 {
   "error": "Failed to get bridge status. Please check the logs."

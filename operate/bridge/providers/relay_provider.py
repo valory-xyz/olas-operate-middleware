@@ -103,6 +103,7 @@ RELAY_DEFAULT_GAS = {
 }
 
 
+# https://docs.relay.link/guides/bridging#status-values
 class RelayExecutionStatus(str, enum.Enum):
     """Relay execution status."""
 
@@ -422,6 +423,7 @@ class RelayProvider(Provider):
         elif relay_status in (
             RelayExecutionStatus.PENDING,
             RelayExecutionStatus.DELAYED,
+            RelayExecutionStatus.WAITING,
         ):
             provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
         else:
