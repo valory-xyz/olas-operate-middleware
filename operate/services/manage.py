@@ -408,8 +408,7 @@ class ServiceManager:
                 or current_agent_id != staking_params["agent_ids"][0]
                 or (
                     user_params.use_staking
-                    and current_agent_bond
-                    != target_staking_params["min_staking_deposit"]
+                    and current_agent_bond != staking_params["min_staking_deposit"]
                 )
                 or (
                     not user_params.use_staking
@@ -420,12 +419,16 @@ class ServiceManager:
         )
         current_staking_program = self._get_current_staking_program(service, chain)
 
+        self.logger.info(f"{chain_data.token=}")
+        self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{staking_params['agent_ids']=}")
+        self.logger.info(f"{current_agent_bond=}")
+        self.logger.info(f"{staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
@@ -825,12 +828,13 @@ class ServiceManager:
         )
 
         self.logger.info(f"{chain_data.token=}")
+        self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{target_staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{target_staking_params['agent_ids']=}")
         self.logger.info(f"{current_agent_bond=}")
         self.logger.info(f"{target_staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")
