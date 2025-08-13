@@ -406,7 +406,15 @@ class ServiceManager:
             and (
                 on_chain_hash != service.hash
                 or current_agent_id != staking_params["agent_ids"][0]
-                or current_agent_bond != staking_params["min_staking_deposit"]
+                or (
+                    user_params.use_staking
+                    and current_agent_bond
+                    != target_staking_params["min_staking_deposit"]
+                )
+                or (
+                    not user_params.use_staking
+                    and current_agent_bond != user_params.cost_of_bond
+                )
                 or on_chain_description != service.description
             )
         )
@@ -801,7 +809,15 @@ class ServiceManager:
                 # on_chain_hash != service.hash or  # noqa
                 current_agent_id != target_staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
-                or current_agent_bond != target_staking_params["min_staking_deposit"]
+                or (
+                    user_params.use_staking
+                    and current_agent_bond
+                    != target_staking_params["min_staking_deposit"]
+                )
+                or (
+                    not user_params.use_staking
+                    and current_agent_bond != user_params.cost_of_bond
+                )
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
