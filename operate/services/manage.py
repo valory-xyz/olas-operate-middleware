@@ -410,10 +410,10 @@ class ServiceManager:
                     user_params.use_staking
                     and current_agent_bond != staking_params["min_staking_deposit"]
                 )
-                or (
-                    not user_params.use_staking
-                    and current_agent_bond != user_params.cost_of_bond
-                )
+                # or (  # This does not work, because current_agent_bond only is correct for staking !
+                #     not user_params.use_staking
+                #     and current_agent_bond != user_params.cost_of_bond
+                # )
                 or on_chain_description != service.description
             )
         )
@@ -817,10 +817,10 @@ class ServiceManager:
                     and current_agent_bond
                     != target_staking_params["min_staking_deposit"]
                 )
-                or (
-                    not user_params.use_staking
-                    and current_agent_bond != user_params.cost_of_bond
-                )
+                # or (  # This does not work, because current_agent_bond only is correct for staking !
+                #     not user_params.use_staking
+                #     and current_agent_bond != user_params.cost_of_bond
+                # )
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
