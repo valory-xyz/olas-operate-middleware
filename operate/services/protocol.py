@@ -45,7 +45,7 @@ from autonomy.chain.constants import (
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
-    get_delployment_payload,
+    get_deployment_payload,
     get_reuse_multisig_payload,
     get_service_info,
     get_token_deposit_amount,
@@ -1331,7 +1331,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
             ).contracts[self.chain_type]
         else:
-            deployment_payload = get_delployment_payload()
+            deployment_payload = get_deployment_payload()
             gnosis_safe_multisig = ContractConfigs.get(
                 GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
             ).contracts[self.chain_type]
@@ -1381,7 +1381,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
             ).contracts[self.chain_type]
         else:
-            deployment_payload = get_delployment_payload()
+            deployment_payload = get_deployment_payload()
             gnosis_safe_multisig = ContractConfigs.get(
                 GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
             ).contracts[self.chain_type]
