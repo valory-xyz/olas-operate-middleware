@@ -1104,6 +1104,14 @@ class ServiceManager:
                             },
                             separators=(",", ":"),
                         ),
+                        "MECH_TO_MAX_DELIVERY_RATE": json.dumps(
+                            {
+                                mech_address: service.env_variables.get(
+                                    "MECH_REQUEST_PRICE", {}
+                                ).get("value", 10000000000000000)
+                            },
+                            separators=(",", ":"),
+                        ),
                     }
                 )
 
