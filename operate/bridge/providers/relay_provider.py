@@ -103,6 +103,7 @@ RELAY_DEFAULT_GAS = {
 }
 
 
+# https://docs.relay.link/guides/bridging#status-values
 class RelayExecutionStatus(str, enum.Enum):
     """Relay execution status."""
 
@@ -366,7 +367,6 @@ class RelayProvider(Provider):
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
-        relay_status = RelayExecutionStatus.WAITING
         url = "https://api.relay.link/requests/v2"
         headers = {"accept": "application/json"}
         params = {
@@ -384,11 +384,16 @@ class RelayProvider(Provider):
                     "status", str(RelayExecutionStatus.WAITING)
                 )
                 execution_data.message = str(relay_status)
+            else:
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                return
             response.raise_for_status()
         except Exception as e:
             self.logger.error(
                 f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            return
 
         if relay_status == RelayExecutionStatus.SUCCESS:
             self.logger.info(
@@ -422,6 +427,7 @@ class RelayProvider(Provider):
         elif relay_status in (
             RelayExecutionStatus.PENDING,
             RelayExecutionStatus.DELAYED,
+            RelayExecutionStatus.WAITING,
         ):
             provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
         else:

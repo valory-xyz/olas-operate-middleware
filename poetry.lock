@@ -2982,14 +2982,14 @@ open-aea-flashbots = "1.4.0"
 open-aea-ledger-ethereum = ">=1.65.0,<1.66.0"
 
 [[package]]
-name = "open-aea-ledger-ethereum-hwi"
-version = "1.65.0"
-description = "Python package wrapping the public and private key cryptography and support for hardware wallet interactions."
+name = "open-autonomy"
+version = "0.20.2"
+description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = "*"
 files = [
-    {file = "open_aea_ledger_ethereum_hwi-1.65.0-py3-none-any.whl", hash = "sha256:1700dd1f2888000900476fb8d61eeec9c908c29d0600c6967176f868de8bfa21"},
-    {file = "open_aea_ledger_ethereum_hwi-1.65.0.tar.gz", hash = "sha256:f1760fe0bf3d2b3accc611ed0337d1272b4da01c1dcfddb27734b55823330967"},
+    {file = "open_autonomy-0.20.2-py3-none-any.whl", hash = "sha256:c58d31cbbee9015e2b233a08dc89f741ff4e12b55c3d4a1c577de5e15338a981"},
+    {file = "open_autonomy-0.20.2.tar.gz", hash = "sha256:d26a214c803346474f8f4e428215f5c1fa590afa55b4a8387948d2d94cc344bd"},
 ]
 
 [package.dependencies]
@@ -5126,5 +5126,5 @@ type = ["pytest-mypy"]
 
 [metadata]
 lock-version = "2.0"
-python-versions = "<3.12,>=3.10"
-content-hash = "86c387c67f0c9e744dc3276a6b5f396881a2c833bba07ffb7e0e8145676a256d"
+python-versions = "<3.12,>=3.9"
+content-hash = "5e144196644973d896a8b7be7d6bc5648f3dd8194946f87fc91a309d41252ba3"

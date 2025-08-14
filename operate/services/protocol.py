@@ -49,6 +49,7 @@ from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
+    get_reuse_multisig_payload,
     get_service_info,
     get_token_deposit_amount,
 )

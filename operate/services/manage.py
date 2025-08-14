@@ -1116,6 +1116,14 @@ class ServiceManager:
                             },
                             separators=(",", ":"),
                         ),
+                        "MECH_TO_MAX_DELIVERY_RATE": json.dumps(
+                            {
+                                mech_address: service.env_variables.get(
+                                    "MECH_REQUEST_PRICE", {}
+                                ).get("value", 10000000000000000)
+                            },
+                            separators=(",", ":"),
+                        ),
                     }
                 )
 
@@ -2275,7 +2283,11 @@ class ServiceManager:
         return deployment
 
     def stop_service_locally(
-        self, service_config_id: str, delete: bool = False, use_docker: bool = False
+        self,
+        service_config_id: str,
+        delete: bool = False,
+        use_docker: bool = False,
+        force: bool = False,
     ) -> Deployment:
         """
         Stop service locally
@@ -2287,7 +2299,7 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker)
+        deployment.stop(use_docker=use_docker, force=force)
         if delete:
             deployment.delete()
         return deployment
