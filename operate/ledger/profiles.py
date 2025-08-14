@@ -21,12 +21,9 @@
 
 import typing as t
 
-from autonomy.chain.constants import (
-    CHAIN_PROFILES,
-    DEFAULT_MULTISEND,
-)
+from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
-from operate.constants import ZERO_ADDRESS, NO_STAKING_PROGRAM_ID
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.operate_types import Chain, ContractAddresses
 
 

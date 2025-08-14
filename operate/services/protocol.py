@@ -49,7 +49,6 @@ from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
-    get_reuse_multisig_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -68,6 +67,7 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
+from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
@@ -1568,10 +1568,21 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def get_recover_access_data(self, service_id: int) -> t.Dict:
         """Get recover access tx data."""
-        instance = registry_contracts.recovery_module.get_instance(
+        instance = t.cast(
+            RecoveryModule,
+            RecoveryModule.from_dir(
+                directory=str(DATA_DIR / "contracts" / "recovery_module"),
+            ),
+        ).get_instance(
             ledger_api=self.ledger_api,
             contract_address=self.contracts["recovery_module"],
         )
+        # TODO Replace the line above by this one once the recovery_module is
+        # included in the release of OpenAutonomy.
+        # instance = registry_contracts.recovery_module.get_instance(  # noqa: E800
+        #     ledger_api=self.ledger_api,  # noqa: E800
+        #     contract_address=self.contracts["recovery_module"],  # noqa: E800
+        # )  # noqa: E800
         txd = instance.encodeABI(
             fn_name="recoverAccess",
             args=[service_id],

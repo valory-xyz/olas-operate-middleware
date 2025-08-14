@@ -34,7 +34,7 @@ from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
-from aea_ledger_ethereum import LedgerApi
+from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
@@ -1364,11 +1364,11 @@ class ServiceManager:
             module_address=recovery_module_address,
         ).get("enabled")
 
-        print(f"Recovery module enabled: {recovery_module_is_enabled}")
-        print(type(recovery_module_is_enabled))
-
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         master_safe_is_service_safe_owner = service_safe_owners == [safe]
+
+        self.logger.info(f"{recovery_module_is_enabled=}")
+        self.logger.info(f"{master_safe_is_service_safe_owner=}")
 
         if not recovery_module_is_enabled and not master_safe_is_service_safe_owner:
             self.logger.info(
