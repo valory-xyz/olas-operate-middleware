@@ -244,8 +244,8 @@ EXPLORER_URL = {
         "address": "https://gnosisscan.io/address/{address}",
     },
     Chain.MODE: {
-        "tx": "https://modescan.io/tx/{tx_hash}",
-        "address": "https://modescan.io/address/{address}",
+        "tx": "https://explorer.mode.network/tx/{tx_hash}",
+        "address": "https://explorer.mode.network/address/{address}",
     },
     Chain.OPTIMISM: {
         "tx": "https://optimistic.etherscan.io/tx/{tx_hash}",

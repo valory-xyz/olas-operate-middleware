@@ -1427,9 +1427,10 @@ class ServiceManager:
         if recovery_module_is_enabled:
             self.logger.info("Recovery module is already enabled in service Safe.")
             return
-        else:
-            self.logger.info("Recovery module is not enabled.")
 
+        self.logger.info("Recovery module is not enabled.")
+
+        # NOTE Recovery from agent only works for single-agent services
         agent_address = service.keys[0].address
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         agent_is_service_safe_owner = service_safe_owners == [agent_address]
@@ -1454,6 +1455,10 @@ class ServiceManager:
                         safe_address=service_safe_address,
                     )
                 ).settle()
+                tmp_file.seek(0)
+                tmp_file.write("\0" * len(private_key))
+                tmp_file.flush()
+
             self.logger.info(
                 "(Agent) Recovery module enabled successfully in service Safe."
             )
