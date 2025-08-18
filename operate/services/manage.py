@@ -1310,10 +1310,10 @@ class ServiceManager:
                     },
                 )
 
-            self.logger.info("Swapping Safe owners")
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
+            self.logger.info("Swapping Safe owners")
             sftxb.swap(  # noqa: E800
                 service_id=chain_data.token,  # noqa: E800
                 multisig=chain_data.multisig,  # TODO this can be read from the registry
