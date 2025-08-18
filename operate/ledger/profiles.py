@@ -29,12 +29,14 @@ from operate.operate_types import Chain, ContractAddresses
 
 # TODO: Refactor, remove the usage of CONTRACTS and use CHAIN_PROFILES from Open Autonomy instead.
 CHAINS = [
+    Chain.ARBITRUM_ONE,
     Chain.BASE,
     Chain.CELO,
     Chain.ETHEREUM,
     Chain.GNOSIS,
     Chain.MODE,
     Chain.OPTIMISM,
+    Chain.POLYGON,
 ]
 
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
@@ -58,6 +60,7 @@ for _chain in CHAINS:
     )
 
 STAKING: t.Dict[Chain, t.Dict[str, str]] = {
+    Chain.ARBITRUM_ONE: {},
     Chain.GNOSIS: {
         "pearl_alpha": "0xEE9F19b5DF06c7E8Bfc7B28745dcf944C504198A",
         "pearl_beta": "0xeF44Fb0842DDeF59D37f85D61A1eF492bbA6135d",
@@ -129,6 +132,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
         "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
     },
+    Chain.POLYGON: {},
 }
 
 
@@ -146,24 +150,31 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
 
 # ERC20 token addresses
 OLAS: t.Dict[Chain, str] = {
+    Chain.ARBITRUM_ONE: "0x064F8B858C2A603e1b106a2039f5446D32dc81c1",
     Chain.BASE: "0x54330d28ca3357F294334BDC454a032e7f353416",
+    Chain.CELO: "0xaCFfAe8e57Ec6E394Eb1b41939A8CF7892DbDc51",
     Chain.ETHEREUM: "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
     Chain.GNOSIS: "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
     Chain.MODE: "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
     Chain.OPTIMISM: "0xFC2E6e6BCbd49ccf3A5f029c79984372DcBFE527",
+    Chain.POLYGON: "0xFEF5d947472e72Efbb2E388c730B7428406F2F95",
 }
 
 USDC: t.Dict[Chain, str] = {
+    Chain.ARBITRUM_ONE: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
     Chain.BASE: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    Chain.CELO: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
     Chain.ETHEREUM: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     Chain.GNOSIS: "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
     Chain.MODE: "0xd988097fb8612cc24eeC14542bC03424c656005f",
     Chain.OPTIMISM: "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+    Chain.POLYGON: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
 }
 
 WRAPPED_NATIVE_ASSET = {
     Chain.ARBITRUM_ONE: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     Chain.BASE: "0x4200000000000000000000000000000000000006",
+    Chain.CELO: "0x471EcE3750Da237f93B8E339c536989b8978a438",  # Dual token
     Chain.ETHEREUM: "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
     Chain.GNOSIS: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
     Chain.MODE: "0x4200000000000000000000000000000000000006",
@@ -174,8 +185,14 @@ WRAPPED_NATIVE_ASSET = {
 ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
 
 DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
+    Chain.ARBITRUM_ONE: {
+        ZERO_ADDRESS: int(1e15 / 4),
+    },
     Chain.BASE: {
         ZERO_ADDRESS: int(1e15 / 4),
+    },
+    Chain.CELO: {
+        ZERO_ADDRESS: int(1e18),
     },
     Chain.ETHEREUM: {
         ZERO_ADDRESS: int(1e15 / 4),
@@ -189,20 +206,34 @@ DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.OPTIMISM: {
         ZERO_ADDRESS: int(1e15 / 4),
     },
+    Chain.POLYGON: {
+        ZERO_ADDRESS: int(1e18),
+    },
 }
 
 DEFAULT_MASTER_EOA_FUNDS = {
+    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
     Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
+    Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
     Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
     Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
     Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
     Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
+    Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
 }
 
 EXPLORER_URL = {
+    Chain.ARBITRUM_ONE: {
+        "tx": "https://arbiscan.io/tx/{tx_hash}",
+        "address": "https://arbiscan.io/address/{address}",
+    },
     Chain.BASE: {
         "tx": "https://basescan.org/tx/{tx_hash}",
         "address": "https://basescan.org/address/{address}",
+    },
+    Chain.CELO: {
+        "tx": "https://celoscan.io/tx/{tx_hash}",
+        "address": "https://celoscan.io/address/{address}",
     },
     Chain.ETHEREUM: {
         "tx": "https://etherscan.io/tx/{tx_hash}",
@@ -219,6 +250,10 @@ EXPLORER_URL = {
     Chain.OPTIMISM: {
         "tx": "https://optimistic.etherscan.io/tx/{tx_hash}",
         "address": "https://optimistic.etherscan.io/address/{address}",
+    },
+    Chain.POLYGON: {
+        "tx": "https://polygonscan.com/tx/{tx_hash}",
+        "address": "https://polygonscan.com/address/{address}",
     },
 }
 
