@@ -625,9 +625,7 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        self._enable_recovery_module(
-            service_config_id=service_config_id, chain=chain
-        )
+        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
 
         current_agent_id = None
         on_chain_state = OnChainState.NON_EXISTENT
@@ -1376,6 +1374,11 @@ class ServiceManager:
             )
             return
 
+        if not recovery_module_is_enabled:
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
+
         if (
             not master_safe_is_service_safe_owner
             and on_chain_state == OnChainState.PRE_REGISTRATION
@@ -1451,16 +1454,21 @@ class ServiceManager:
                         safe_address=service_safe_address,
                     )
                 ).settle()
-            self.logger.info("(Agent) Recovery module enabled successfully in service Safe.")
+            self.logger.info(
+                "(Agent) Recovery module enabled successfully in service Safe."
+            )
         elif master_safe_is_service_safe_owner:
             # TODO Enable recovery module when Safe owner = master Safe.
             # This should be similar to the above code, but
-            # requires implement a transaction where the owner is another Safe.            
-            self.logger.info("(Service owner) Enabling recovery module in service Safe.")
+            # requires implement a transaction where the owner is another Safe.
+            self.logger.info(
+                "(Service owner) Enabling recovery module in service Safe."
+            )
             self.logger.info("[Not implemented]")
         else:
-            self.logger.error(f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners.")
-
+            self.logger.error(
+                f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
+            )
 
     def _get_current_staking_program(
         self, service: Service, chain: str
