@@ -625,7 +625,7 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
-        self._enable_recovery_module_from_agent(
+        self._enable_recovery_module(
             service_config_id=service_config_id, chain=chain
         )
 
@@ -1376,15 +1376,6 @@ class ServiceManager:
             )
             return
 
-        if not recovery_module_is_enabled:
-            self.logger.info(
-                "Recovery module is not enabled. Enabling recovery module in service Safe. (Not implemented)"
-            )
-            # TODO Enable recovery module when Safe owner = master Safe.
-            # This is similar to _enable_recovery_module_from_agent, but
-            # requires implement a transaction where the owner is another Safe.
-            return
-
         if (
             not master_safe_is_service_safe_owner
             and on_chain_state == OnChainState.PRE_REGISTRATION
@@ -1397,18 +1388,20 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module_from_agent(  # pylint: disable=too-many-locals
+    def _enable_recovery_module(  # pylint: disable=too-many-locals
         self,
         service_config_id: str,
         chain: str,
     ) -> None:
-        """Enable recovery module from agent"""
-        self.logger.info(f"_enable_recovery_module_from_agent {chain=}")
+        """Enable recovery module"""
+        self.logger.info(f"_enable_recovery_module {chain=}")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         chain_data = chain_config.chain_data
         ledger_config = chain_config.ledger_config
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        safe = wallet.safes[Chain(chain)]
 
         if chain_data.token == NON_EXISTENT_TOKEN:
             self.logger.info("Service is not minted.")
@@ -1431,34 +1424,43 @@ class ServiceManager:
         if recovery_module_is_enabled:
             self.logger.info("Recovery module is already enabled in service Safe.")
             return
+        else:
+            self.logger.info("Recovery module is not enabled.")
 
         agent_address = service.keys[0].address
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         agent_is_service_safe_owner = service_safe_owners == [agent_address]
+        master_safe_is_service_safe_owner = service_safe_owners == [safe]
 
-        if not agent_is_service_safe_owner:
-            self.logger.info("Agent is not service Safe owner.")
-            return
+        if agent_is_service_safe_owner:
+            self.logger.info("(Agent) Enabling recovery module in service Safe.")
+            with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
+                private_key = self.keys_manager.get(key=agent_address).private_key
+                tmp_file.write(private_key)
+                tmp_file.flush()
+                self.logger.info(tmp_file.name)
+                crypto = EthereumCrypto(private_key_path=tmp_file.name)
+                EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
+                    ledger_api=sftxb.ledger_api,
+                    crypto=crypto,
+                    chain_type=ChainType(chain),
+                    safe=service_safe_address,
+                ).add(
+                    sftxb.get_enable_module_data(
+                        module_address=recovery_module_address,
+                        safe_address=service_safe_address,
+                    )
+                ).settle()
+            self.logger.info("(Agent) Recovery module enabled successfully in service Safe.")
+        elif master_safe_is_service_safe_owner:
+            # TODO Enable recovery module when Safe owner = master Safe.
+            # This should be similar to the above code, but
+            # requires implement a transaction where the owner is another Safe.            
+            self.logger.info("(Service owner) Enabling recovery module in service Safe.")
+            self.logger.info("[Not implemented]")
+        else:
+            self.logger.error(f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners.")
 
-        self.logger.info("Enabling recovery module in service Safe.")
-        with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
-            private_key = self.keys_manager.get(key=agent_address).private_key
-            tmp_file.write(private_key)
-            tmp_file.flush()
-            self.logger.info(tmp_file.name)
-            crypto = EthereumCrypto(private_key_path=tmp_file.name)
-            EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
-                ledger_api=sftxb.ledger_api,
-                crypto=crypto,
-                chain_type=ChainType(chain),
-                safe=service_safe_address,
-            ).add(
-                sftxb.get_enable_module_data(
-                    module_address=recovery_module_address,
-                    safe_address=service_safe_address,
-                )
-            ).settle()
-        self.logger.info("Recovery module enabled successfully in service Safe.")
 
     def _get_current_staking_program(
         self, service: Service, chain: str
