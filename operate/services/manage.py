@@ -1300,6 +1300,9 @@ class ServiceManager:
                 )
 
             self.logger.info("Swapping Safe owners")
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
             sftxb.swap(  # noqa: E800
                 service_id=chain_data.token,  # noqa: E800
                 multisig=chain_data.multisig,  # TODO this can be read from the registry
@@ -1438,38 +1441,42 @@ class ServiceManager:
 
         if agent_is_service_safe_owner:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
-            with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
-                private_key = self.keys_manager.get(key=agent_address).private_key
-                tmp_file.write(private_key)
-                tmp_file.flush()
-                self.logger.info(tmp_file.name)
-                crypto = EthereumCrypto(private_key_path=tmp_file.name)
-                EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
-                    ledger_api=sftxb.ledger_api,
-                    crypto=crypto,
-                    chain_type=ChainType(chain),
-                    safe=service_safe_address,
-                ).add(
-                    sftxb.get_enable_module_data(
-                        module_address=recovery_module_address,
-                        safe_address=service_safe_address,
-                    )
-                ).settle()
-                tmp_file.seek(0)
-                tmp_file.write("\0" * len(private_key))
-                tmp_file.flush()
+            try:
+                with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
+                    private_key = self.keys_manager.get(key=agent_address).private_key
+                    tmp_file.write(private_key)
+                    tmp_file.flush()
+                    self.logger.info(tmp_file.name)
+                    crypto = EthereumCrypto(private_key_path=tmp_file.name)
+                    EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
+                        ledger_api=sftxb.ledger_api,
+                        crypto=crypto,
+                        chain_type=ChainType(chain),
+                        safe=service_safe_address,
+                    ).add(
+                        sftxb.get_enable_module_data(
+                            module_address=recovery_module_address,
+                            safe_address=service_safe_address,
+                        )
+                    ).settle()
+                    tmp_file.seek(0)
+                    tmp_file.write("\0" * len(private_key))
+                    tmp_file.flush()
 
-            self.logger.info(
-                "(Agent) Recovery module enabled successfully in service Safe."
-            )
+                self.logger.info(
+                    "(Agent) Recovery module enabled successfully in service Safe."
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error(
+                    f"Failed to enable recovery module in service Safe. Exception {e}: {traceback.format_exc()}"
+                )
         elif master_safe_is_service_safe_owner:
             # TODO Enable recovery module when Safe owner = master Safe.
             # This should be similar to the above code, but
             # requires implement a transaction where the owner is another Safe.
             self.logger.info(
-                "(Service owner) Enabling recovery module in service Safe."
+                "(Service owner) Enabling recovery module in service Safe. [Not implemented]"
             )
-            self.logger.info("[Not implemented]")
         else:
             self.logger.error(
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
