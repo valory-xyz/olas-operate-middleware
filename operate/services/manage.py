@@ -23,6 +23,7 @@ import asyncio
 import json
 import logging
 import os
+import tempfile
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -33,7 +34,7 @@ from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
-from aea_ledger_ethereum import LedgerApi
+from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
@@ -624,6 +625,8 @@ class ServiceManager:
         # TODO fix this
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
+        self._enable_recovery_module(service_config_id=service_config_id, chain=chain)
+
         current_agent_id = None
         on_chain_state = OnChainState.NON_EXISTENT
         if chain_data.token > -1:
@@ -829,6 +832,11 @@ class ServiceManager:
                 self._get_on_chain_state(service=service, chain=chain)
                 == OnChainState.PRE_REGISTRATION
             ):
+                self.logger.info("Execute recovery module operations")
+                self._execute_recovery_module_flow_from_safe(
+                    service_config_id=service_config_id, chain=chain
+                )
+
                 self.logger.info("Updating service")
                 receipt = (
                     sftxb.new_tx()
@@ -1047,6 +1055,7 @@ class ServiceManager:
                 )
             ).settle()
 
+        # Deploy service
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.FINISHED_REGISTRATION
@@ -1055,15 +1064,27 @@ class ServiceManager:
 
             reuse_multisig = True
             info = sftxb.info(token_id=chain_data.token)
-            if info["multisig"] == ZERO_ADDRESS:
+            service_safe_address = info["multisig"]
+            if service_safe_address == ZERO_ADDRESS:
                 reuse_multisig = False
 
             self.logger.info(f"{reuse_multisig=}")
+
+            is_recovery_module_enabled = (
+                registry_contracts.gnosis_safe.is_module_enabled(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=service_safe_address,
+                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                ).get("enabled")
+            )
+
+            self.logger.info(f"{is_recovery_module_enabled=}")
 
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
+                use_recovery_module=is_recovery_module_enabled,
             )
             tx = sftxb.new_tx()
             for message in messages:
@@ -1289,6 +1310,9 @@ class ServiceManager:
                     },
                 )
 
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
             self.logger.info("Swapping Safe owners")
             sftxb.swap(  # noqa: E800
                 service_id=chain_data.token,  # noqa: E800
@@ -1317,6 +1341,156 @@ class ServiceManager:
                 chain_id=ledger_config.chain.id,
             )
             self.logger.info(f"{service.name} signer drained")
+
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
+        self,
+        service_config_id: str,
+        chain: str,
+    ) -> None:
+        """Execute recovery module operations from Safe"""
+        self.logger.info(f"_execute_recovery_module_operations_from_safe {chain=}")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        chain_data = chain_config.chain_data
+        ledger_config = chain_config.ledger_config
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        safe = wallet.safes[Chain(chain)]
+
+        if chain_data.token == NON_EXISTENT_TOKEN:
+            self.logger.info("Service is not minted.")
+            return
+
+        info = sftxb.info(token_id=chain_data.token)
+        service_safe_address = info["multisig"]
+        on_chain_state = OnChainState(info["service_state"])
+
+        if service_safe_address == ZERO_ADDRESS:
+            self.logger.info("Service Safe is not deployed.")
+            return
+
+        recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
+        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+            ledger_api=sftxb.ledger_api,
+            contract_address=service_safe_address,
+            module_address=recovery_module_address,
+        ).get("enabled")
+
+        service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
+        master_safe_is_service_safe_owner = service_safe_owners == [safe]
+
+        self.logger.info(f"{is_recovery_module_enabled=}")
+        self.logger.info(f"{master_safe_is_service_safe_owner=}")
+
+        if not is_recovery_module_enabled and not master_safe_is_service_safe_owner:
+            self.logger.info(
+                "Recovery module is not enabled and Master Safe is not service Safe owner. Skipping recovery operations."
+            )
+            return
+
+        if not is_recovery_module_enabled:
+            self._enable_recovery_module(
+                service_config_id=service_config_id, chain=chain
+            )
+
+        if (
+            not master_safe_is_service_safe_owner
+            and on_chain_state == OnChainState.PRE_REGISTRATION
+        ):
+            self.logger.info("Recovering service Safe access through recovery module.")
+            sftxb.new_tx().add(
+                sftxb.get_recover_access_data(
+                    service_id=chain_data.token,
+                )
+            ).settle()
+            self.logger.info("Recovering service Safe done.")
+
+    def _enable_recovery_module(  # pylint: disable=too-many-locals
+        self,
+        service_config_id: str,
+        chain: str,
+    ) -> None:
+        """Enable recovery module"""
+        self.logger.info(f"_enable_recovery_module {chain=}")
+        service = self.load(service_config_id=service_config_id)
+        chain_config = service.chain_configs[chain]
+        chain_data = chain_config.chain_data
+        ledger_config = chain_config.ledger_config
+        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        safe = wallet.safes[Chain(chain)]
+
+        if chain_data.token == NON_EXISTENT_TOKEN:
+            self.logger.info("Service is not minted.")
+            return
+
+        info = sftxb.info(token_id=chain_data.token)
+        service_safe_address = info["multisig"]
+
+        if service_safe_address == ZERO_ADDRESS:
+            self.logger.info("Service Safe is not deployed.")
+            return
+
+        recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
+        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+            ledger_api=sftxb.ledger_api,
+            contract_address=service_safe_address,
+            module_address=recovery_module_address,
+        ).get("enabled")
+
+        if is_recovery_module_enabled:
+            self.logger.info("Recovery module is already enabled in service Safe.")
+            return
+
+        self.logger.info("Recovery module is not enabled.")
+
+        # NOTE Recovery from agent only works for single-agent services
+        agent_address = service.agent_addresses[0]
+        service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
+        agent_is_service_safe_owner = service_safe_owners == [agent_address]
+        master_safe_is_service_safe_owner = service_safe_owners == [safe]
+
+        if agent_is_service_safe_owner:
+            self.logger.info("(Agent) Enabling recovery module in service Safe.")
+            try:
+                with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
+                    private_key = self.keys_manager.get(key=agent_address).private_key
+                    tmp_file.write(private_key)
+                    tmp_file.flush()
+                    crypto = EthereumCrypto(private_key_path=tmp_file.name)
+                    EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
+                        ledger_api=sftxb.ledger_api,
+                        crypto=crypto,
+                        chain_type=ChainType(chain),
+                        safe=service_safe_address,
+                    ).add(
+                        sftxb.get_enable_module_data(
+                            module_address=recovery_module_address,
+                            safe_address=service_safe_address,
+                        )
+                    ).settle()
+                    tmp_file.seek(0)
+                    tmp_file.write("\0" * len(private_key))
+                    tmp_file.flush()
+
+                self.logger.info(
+                    "(Agent) Recovery module enabled successfully in service Safe."
+                )
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error(
+                    f"Failed to enable recovery module in service Safe. Exception {e}: {traceback.format_exc()}"
+                )
+        elif master_safe_is_service_safe_owner:
+            # TODO Enable recovery module when Safe owner = master Safe.
+            # This should be similar to the above code, but
+            # requires implement a transaction where the owner is another Safe.
+            self.logger.info(
+                "(Service owner) Enabling recovery module in service Safe. [Not implemented]"
+            )
+        else:
+            self.logger.error(
+                f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
+            )
 
     def _get_current_staking_program(
         self, service: Service, chain: str
