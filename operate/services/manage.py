@@ -1064,15 +1064,27 @@ class ServiceManager:
 
             reuse_multisig = True
             info = sftxb.info(token_id=chain_data.token)
-            if info["multisig"] == ZERO_ADDRESS:
+            service_safe_address = info["multisig"]
+            if service_safe_address == ZERO_ADDRESS:
                 reuse_multisig = False
 
             self.logger.info(f"{reuse_multisig=}")
+
+            is_recovery_module_enabled = (
+                registry_contracts.gnosis_safe.is_module_enabled(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=service_safe_address,
+                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                ).get("enabled")
+            )
+
+            self.logger.info(f"{is_recovery_module_enabled=}")
 
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
+                use_recovery_module=is_recovery_module_enabled,
             )
             tx = sftxb.new_tx()
             for message in messages:
@@ -1100,7 +1112,6 @@ class ServiceManager:
                 not service.env_variables["AGENT_ID"]["value"]
                 or not service.env_variables["MECH_TO_CONFIG"]["value"]
             ):
-                # TODO Is there anything to do here WRT Recovery module?
                 mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
                 service.update_env_variables_values(
                     {
@@ -1359,7 +1370,7 @@ class ServiceManager:
             return
 
         recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        recovery_module_is_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
             ledger_api=sftxb.ledger_api,
             contract_address=service_safe_address,
             module_address=recovery_module_address,
@@ -1368,16 +1379,16 @@ class ServiceManager:
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         master_safe_is_service_safe_owner = service_safe_owners == [safe]
 
-        self.logger.info(f"{recovery_module_is_enabled=}")
+        self.logger.info(f"{is_recovery_module_enabled=}")
         self.logger.info(f"{master_safe_is_service_safe_owner=}")
 
-        if not recovery_module_is_enabled and not master_safe_is_service_safe_owner:
+        if not is_recovery_module_enabled and not master_safe_is_service_safe_owner:
             self.logger.info(
                 "Recovery module is not enabled and Master Safe is not service Safe owner. Skipping recovery operations."
             )
             return
 
-        if not recovery_module_is_enabled:
+        if not is_recovery_module_enabled:
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
@@ -1421,13 +1432,13 @@ class ServiceManager:
             return
 
         recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
-        recovery_module_is_enabled = registry_contracts.gnosis_safe.is_module_enabled(
+        is_recovery_module_enabled = registry_contracts.gnosis_safe.is_module_enabled(
             ledger_api=sftxb.ledger_api,
             contract_address=service_safe_address,
             module_address=recovery_module_address,
         ).get("enabled")
 
-        if recovery_module_is_enabled:
+        if is_recovery_module_enabled:
             self.logger.info("Recovery module is already enabled in service Safe.")
             return
 
@@ -1446,7 +1457,6 @@ class ServiceManager:
                     private_key = self.keys_manager.get(key=agent_address).private_key
                     tmp_file.write(private_key)
                     tmp_file.flush()
-                    self.logger.info(tmp_file.name)
                     crypto = EthereumCrypto(private_key_path=tmp_file.name)
                     EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
                         ledger_api=sftxb.ledger_api,
