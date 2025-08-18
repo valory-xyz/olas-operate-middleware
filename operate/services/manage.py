@@ -1431,7 +1431,7 @@ class ServiceManager:
         self.logger.info("Recovery module is not enabled.")
 
         # NOTE Recovery from agent only works for single-agent services
-        agent_address = service.keys[0].address
+        agent_address = service.agent_addresses[0]
         service_safe_owners = sftxb.get_service_safe_owners(service_id=chain_data.token)
         agent_is_service_safe_owner = service_safe_owners == [agent_address]
         master_safe_is_service_safe_owner = service_safe_owners == [safe]
