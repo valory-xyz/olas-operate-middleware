@@ -38,6 +38,7 @@ from aea_ledger_ethereum import EthereumCrypto, LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
+from web3 import Web3
 
 from operate.constants import IPFS_ADDRESS, ZERO_ADDRESS
 from operate.data import DATA_DIR
@@ -1219,6 +1220,9 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         safe = wallet.safes[Chain(chain)]  # type: ignore
 
+        if withdrawal_address:
+            withdrawal_address = Web3.to_checksum_address(withdrawal_address)
+
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
 
@@ -2183,6 +2187,7 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
         ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+        withdrawal_address = Web3.to_checksum_address(withdrawal_address)
 
         # drain ERC20 tokens from service safe
         for token_name, token_address in (
