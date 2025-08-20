@@ -24,7 +24,9 @@ import os
 from operate.operate_types import Chain
 
 
-ARBITRUM_ONE_PUBLIC_RPC = os.environ.get("ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc")
+ARBITRUM_ONE_PUBLIC_RPC = os.environ.get(
+    "ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc"
+)
 BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_PUBLIC_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
 ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")

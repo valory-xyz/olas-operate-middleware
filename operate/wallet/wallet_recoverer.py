@@ -31,7 +31,7 @@ from operate.wallet.master import MasterWalletManager
 
 
 RECOVERY_BUNDLE_PREFIX = "eb-"
-NEW_OBJECTS_SUBPATH = "temp"
+NEW_OBJECTS_SUBPATH = "tmp"
 OLD_OBJECTS_SUBPATH = "old"
 
 
@@ -52,6 +52,14 @@ class WalletRecoverer:
     def recovery_step_1(self, new_password: str) -> t.Dict:
         """Recovery step 1"""
         self.logger.info("[WALLET RECOVERER] Recovery step 1")
+
+        try:
+            _ = self.wallet_manager.password
+        except ValueError:
+            pass
+        else:
+            raise RuntimeError("Wallet recovery cannot be executed while logged in.")
+
         bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
         new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
         new_root.mkdir(parents=True, exist_ok=False)
@@ -91,18 +99,18 @@ class WalletRecoverer:
         """Recovery step 2"""
         self.logger.info("[WALLET RECOVERER] Recovery step 2")
 
-        root = self.path.parent
-        wallets_path = root / "wallets"
-        new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
-        new_wallets_path = new_root / "wallets"
-        old_root = self.path / bundle_id / OLD_OBJECTS_SUBPATH
-
         try:
             _ = self.wallet_manager.password
         except ValueError:
             pass
         else:
             raise RuntimeError("Wallet recovery cannot be executed while logged in.")
+
+        root = self.path.parent
+        wallets_path = root / "wallets"
+        new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
+        new_wallets_path = new_root / "wallets"
+        old_root = self.path / bundle_id / OLD_OBJECTS_SUBPATH
 
         if not new_root.exists() or not new_root.is_dir():
             raise ValueError(f"Recovery bundle {bundle_id} does not exist.")
@@ -112,7 +120,7 @@ class WalletRecoverer:
 
         new_user_account = UserAccount.load(new_root / "user.json")
         if not new_user_account.is_valid(password=password):
-            raise ValueError("New password is not valid.")
+            raise ValueError("Provided password is not valid.")
 
         new_wallet_manager = MasterWalletManager(
             path=new_wallets_path, logger=self.logger, password=password
@@ -136,7 +144,7 @@ class WalletRecoverer:
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 if new_wallet.address not in owners:
                     raise RuntimeError(
-                        f"Wallet {new_wallet.address} is not an owner of {safe} on {chain}."
+                        f"Incorrect owners. Wallet {new_wallet.address} is not an owner of Safe {safe} on {chain}."
                     )
 
             new_wallet.safes = wallet.safes.copy()

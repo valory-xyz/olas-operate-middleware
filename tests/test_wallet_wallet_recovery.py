@@ -19,6 +19,8 @@
 
 """Tests for wallet.wallet_recoverer module."""
 
+import uuid
+
 from dotenv import load_dotenv
 
 
@@ -41,9 +43,12 @@ from operate.ledger import get_default_rpc
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner
 from operate.wallet.master import MasterWalletManager
-from operate.wallet.wallet_recoverer import OLD_OBJECTS_SUBPATH
+from operate.wallet.wallet_recoverer import OLD_OBJECTS_SUBPATH, RECOVERY_BUNDLE_PREFIX
 
-from tests.conftest import OPERATE_TEST, RUNNING_IN_CI
+from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, random_string
+
+
+LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
 
 
 def tenderly_add_balance(
@@ -92,6 +97,39 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverer.WalletRecoverer class."""
 
+    @staticmethod
+    def _assert_recovered(
+        old_wallet_manager: MasterWalletManager, wallet_manager: MasterWalletManager
+    ) -> None:
+        old_ledger_types = {item.ledger_type for item in old_wallet_manager}
+        ledger_types = {item.ledger_type for item in wallet_manager}
+
+        assert old_ledger_types == ledger_types
+
+        for old_wallet in old_wallet_manager:
+            wallet = next(
+                (w for w in wallet_manager if w.ledger_type == old_wallet.ledger_type)
+            )
+            assert old_wallet.safes == wallet.safes
+            assert old_wallet.safe_chains == wallet.safe_chains
+
+    @staticmethod
+    def _create_wallets(wallet_manager: MasterWalletManager) -> None:
+        for ledger_type in LEDGER_TO_CHAINS:
+            wallet_manager.create(ledger_type=ledger_type)
+
+    @staticmethod
+    def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
+        for ledger_type, chains in LEDGER_TO_CHAINS.items():
+            wallet = wallet_manager.load(ledger_type=ledger_type)
+            for chain in chains:
+                tenderly_add_balance(chain, wallet.address)
+                tenderly_add_balance(chain, backup_owner)
+                wallet.create_safe(
+                    chain=chain,
+                    backup_owner=backup_owner,
+                )
+
     def test_normal_flow(
         self,
         tmp_path: Path,
@@ -99,7 +137,6 @@ class TestWalletRecovery:
     ) -> None:
         """test_normal_flow"""
 
-        # tmp_path = Path(__file__).resolve().parent
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -108,19 +145,12 @@ class TestWalletRecovery:
         operate.password = password
         wallet_manager = operate.wallet_manager
         wallet_manager.setup()
-        wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
-
         backup_wallet: LocalAccount = Account().create()
-        wallet = wallet_manager.load(LedgerType.ETHEREUM)
-
-        chains = [Chain.GNOSIS, Chain.BASE]
-        for chain in chains:
-            tenderly_add_balance(chain, backup_wallet.address)
-            tenderly_add_balance(chain, wallet.address)
-            wallet.create_safe(
-                chain=chain,
-                backup_owner=backup_wallet.address,
-            )
+        TestWalletRecovery._create_wallets(wallet_manager=wallet_manager)
+        TestWalletRecovery._create_safes(
+            wallet_manager=wallet_manager,
+            backup_owner=backup_wallet.address,
+        )
 
         # Logout
         operate = OperateApp(
@@ -140,7 +170,10 @@ class TestWalletRecovery:
         for item in step_1_output["wallets"]:
             assert item.get("wallet") is not None
             assert item["wallet"].get("safes") is not None
-            assert set(item["wallet"]["safes"]) == {c.value for c in chains}
+            assert set(item["wallet"]["safes"]) == {
+                c.value
+                for c in LEDGER_TO_CHAINS[LedgerType(item["wallet"]["ledger_type"])]
+            }
             assert item.get("new_wallet") is not None
             assert item.get("new_mnemonic") is not None
             assert item["new_wallet"].get("safes") is not None
@@ -154,14 +187,17 @@ class TestWalletRecovery:
                 ledger_type=LedgerType(item["wallet"]["ledger_type"]),
                 private_key=backup_wallet.key.hex(),
             )
-            for chain in chains:
-                ledger_api = wallet.ledger_api(chain)
-                add_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=item["wallet"]["safes"][chain.value],
-                    owner=item["new_wallet"]["address"],
-                )
+
+            for ledger_type, chains in LEDGER_TO_CHAINS.items():
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                for chain in chains:
+                    ledger_api = wallet.ledger_api(chain)
+                    add_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["wallet"]["safes"][chain.value],
+                        owner=item["new_wallet"]["address"],
+                    )
 
         # Recovery step 2
         operate.wallet_recoverer.recovery_step_2(
@@ -177,26 +213,272 @@ class TestWalletRecovery:
         assert operate.user_account.is_valid(new_password)
         operate.password = new_password
         wallet_manager = operate.wallet_manager
+        old_wallet_manager_path = (
+            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+        )
         old_wallet_manager = MasterWalletManager(
-            path=operate.wallet_recoverer.path
-            / bundle_id
-            / OLD_OBJECTS_SUBPATH
-            / "wallets",
+            path=old_wallet_manager_path,
             logger=operate.logger,
             password=password,
         )
 
-        old_ledger_types = {item.ledger_type for item in old_wallet_manager}
-        ledger_types = {item.ledger_type for item in wallet_manager}
+        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
 
-        assert old_ledger_types == ledger_types
-
-        for old_wallet in old_wallet_manager:
-            wallet = next(
-                (w for w in wallet_manager if w.ledger_type == old_wallet.ledger_type)
+        # Attempt to do a recovery with the same bundle will result in error
+        with pytest.raises(
+            ValueError, match=f"Recovery bundle {bundle_id} has been executed already."
+        ):
+            operate = OperateApp(
+                home=tmp_path / OPERATE_TEST,
             )
-            assert old_wallet.safes == wallet.safes
-            assert old_wallet.safe_chains == wallet.safe_chains
+            operate.wallet_recoverer.recovery_step_2(
+                password=new_password, bundle_id=bundle_id
+            )
+
+    def test_resumed_flow(
+        self,
+        tmp_path: Path,
+        password: str,
+    ) -> None:
+        """test_incomplete_flow"""
+
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        wallet_manager = operate.wallet_manager
+        wallet_manager.setup()
+        backup_wallet: LocalAccount = Account().create()
+        TestWalletRecovery._create_wallets(wallet_manager=wallet_manager)
+        TestWalletRecovery._create_safes(
+            wallet_manager=wallet_manager,
+            backup_owner=backup_wallet.address,
+        )
+
+        # Logout
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+
+        # Recovery step 1
+        new_password = password[::-1]
+        step_1_output = operate.wallet_recoverer.recovery_step_1(
+            new_password=new_password
+        )
+
+        assert step_1_output.get("id") is not None
+        assert step_1_output.get("wallets") is not None
+        assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+
+        for item in step_1_output["wallets"]:
+            assert item.get("wallet") is not None
+            assert item["wallet"].get("safes") is not None
+            assert set(item["wallet"]["safes"]) == {
+                c.value
+                for c in LEDGER_TO_CHAINS[LedgerType(item["wallet"]["ledger_type"])]
+            }
+            assert item.get("new_wallet") is not None
+            assert item.get("new_mnemonic") is not None
+            assert item["new_wallet"].get("safes") is not None
+            assert set(item["new_wallet"]["safes"]) == set()
+
+        bundle_id = step_1_output["id"]
+
+        # Incompletely swap safe owners using backup wallet
+        ledger_to_chains_1 = {}
+        ledger_to_chains_2 = {}
+
+        for ledger, chains in LEDGER_TO_CHAINS.items():
+            mid = len(chains) // 2
+            ledger_to_chains_1[ledger] = chains[:mid]
+            ledger_to_chains_2[ledger] = chains[mid:]
+
+        for item in step_1_output["wallets"]:
+            crypto = create_crypto(
+                ledger_type=LedgerType(item["wallet"]["ledger_type"]),
+                private_key=backup_wallet.key.hex(),
+            )
+
+            for ledger_type, chains in ledger_to_chains_1.items():
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                for chain in chains:
+                    ledger_api = wallet.ledger_api(chain)
+                    add_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["wallet"]["safes"][chain.value],
+                        owner=item["new_wallet"]["address"],
+                    )
+
+        # Recovery step 2 - fail
+        with pytest.raises(RuntimeError, match="^Incorrect owners.*"):
+            operate.wallet_recoverer.recovery_step_2(
+                password=new_password,
+                bundle_id=bundle_id,
+            )
+
+        # Resume swapping safe owners using backup wallet
+        for item in step_1_output["wallets"]:
+            crypto = create_crypto(
+                ledger_type=LedgerType(item["wallet"]["ledger_type"]),
+                private_key=backup_wallet.key.hex(),
+            )
+
+            for ledger_type, chains in ledger_to_chains_2.items():
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                for chain in chains:
+                    ledger_api = wallet.ledger_api(chain)
+                    add_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["wallet"]["safes"][chain.value],
+                        owner=item["new_wallet"]["address"],
+                    )
+
+        # Recovery step 2
+        operate.wallet_recoverer.recovery_step_2(
+            password=new_password,
+            bundle_id=bundle_id,
+        )
+
+        # Test that recovery was successful
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+        assert operate.user_account is not None
+        assert operate.user_account.is_valid(new_password)
+        operate.password = new_password
+        wallet_manager = operate.wallet_manager
+        old_wallet_manager_path = (
+            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+        )
+        old_wallet_manager = MasterWalletManager(
+            path=old_wallet_manager_path,
+            logger=operate.logger,
+            password=password,
+        )
+
+        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
+
+    def test_exceptions(
+        self,
+        tmp_path: Path,
+        password: str,
+    ) -> None:
+        """test_exceptions"""
+
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        wallet_manager = operate.wallet_manager
+        wallet_manager.setup()
+        backup_wallet: LocalAccount = Account().create()
+        TestWalletRecovery._create_wallets(wallet_manager=wallet_manager)
+        TestWalletRecovery._create_safes(
+            wallet_manager=wallet_manager,
+            backup_owner=backup_wallet.address,
+        )
+
+        new_password = password[::-1]
+        with pytest.raises(
+            RuntimeError, match="Wallet recovery cannot be executed while logged in."
+        ):
+            operate.wallet_recoverer.recovery_step_1(new_password=new_password)
+
+        # Logout
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+
+        # Recovery step 1
+        step_1_output = operate.wallet_recoverer.recovery_step_1(
+            new_password=new_password
+        )
+
+        bundle_id = step_1_output["id"]
+
+        # Log in
+        operate.password = password
+
+        with pytest.raises(
+            RuntimeError, match="Wallet recovery cannot be executed while logged in."
+        ):
+            operate.wallet_recoverer.recovery_step_2(
+                password=new_password, bundle_id=bundle_id
+            )
+
+        # Logout
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+
+        random_bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
+        with pytest.raises(
+            ValueError, match=f"Recovery bundle {random_bundle_id} does not exist."
+        ):
+            operate.wallet_recoverer.recovery_step_2(
+                password=new_password, bundle_id=random_bundle_id
+            )
+
+        random_password = random_string(16)
+        with pytest.raises(ValueError, match="Provided password is not valid."):
+            operate.wallet_recoverer.recovery_step_2(
+                password=random_password, bundle_id=bundle_id
+            )
+
+        with pytest.raises(RuntimeError, match="^Incorrect owners.*"):
+            operate.wallet_recoverer.recovery_step_2(
+                password=new_password,
+                bundle_id=bundle_id,
+            )
+
+        # Swap safe owners using backup wallet
+        for item in step_1_output["wallets"]:
+            crypto = create_crypto(
+                ledger_type=LedgerType(item["wallet"]["ledger_type"]),
+                private_key=backup_wallet.key.hex(),
+            )
+
+            for ledger_type, chains in LEDGER_TO_CHAINS.items():
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                for chain in chains:
+                    ledger_api = wallet.ledger_api(chain)
+                    add_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["wallet"]["safes"][chain.value],
+                        owner=item["new_wallet"]["address"],
+                    )
+
+        # Recovery step 2
+        operate.wallet_recoverer.recovery_step_2(
+            password=new_password,
+            bundle_id=bundle_id,
+        )
+
+        # Test that recovery was successful
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+        assert operate.user_account is not None
+        assert operate.user_account.is_valid(new_password)
+        operate.password = new_password
+        wallet_manager = operate.wallet_manager
+        old_wallet_manager_path = (
+            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+        )
+        old_wallet_manager = MasterWalletManager(
+            path=old_wallet_manager_path,
+            logger=operate.logger,
+            password=password,
+        )
+
+        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
 
         # Attempt to do a recovery with the same bundle will result in error
         with pytest.raises(
