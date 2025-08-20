@@ -76,6 +76,7 @@ from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
+from operate.wallet.wallet_recoverer import WalletRecoverer
 
 
 DEFAULT_MAX_RETRIES = 3
@@ -186,7 +187,7 @@ class OperateApp:
 
     @property
     def wallet_manager(self) -> MasterWalletManager:
-        """Load master wallet."""
+        """Load wallet manager."""
         manager = MasterWalletManager(
             path=self._path / "wallets",
             password=self.password,
@@ -196,8 +197,18 @@ class OperateApp:
         return manager
 
     @property
+    def wallet_recoverer(self) -> WalletRecoverer:
+        """Load wallet recoverer."""
+        manager = WalletRecoverer(
+            path=self._path / "wallet_recovery",
+            wallet_manager=self.wallet_manager,
+            logger=self.logger,
+        )
+        return manager
+
+    @property
     def bridge_manager(self) -> BridgeManager:
-        """Load master wallet."""
+        """Load bridge manager."""
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
