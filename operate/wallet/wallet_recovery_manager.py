@@ -182,6 +182,7 @@ class WalletRecoveryManager:
 
             new_wallet.safes = wallet.safes.copy()
             new_wallet.safe_chains = wallet.safe_chains.copy()
+            new_wallet.safe_nonce = wallet.safe_nonce
             new_wallet.store()
 
         # Update configuration recovery

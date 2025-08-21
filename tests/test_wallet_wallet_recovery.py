@@ -134,6 +134,8 @@ class TestWalletRecovery:
                     backup_owner=backup_owner,
                 )
 
+    # TODO enable test in CI once Tenderly RPCS are set up.
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     def test_normal_flow(
         self,
         tmp_path: Path,

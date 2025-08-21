@@ -74,6 +74,7 @@ class MasterWallet(LocalResource):
     safes: t.Dict[Chain, str] = field(default_factory=dict)
     safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType
+    safe_nonce: t.Optional[int] = None
 
     _key: str
     _crypto: t.Optional[Crypto] = None
