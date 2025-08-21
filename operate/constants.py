@@ -26,9 +26,11 @@ OPERATE = ".operate"
 OPERATE_HOME = Path.cwd() / OPERATE
 SERVICES_DIR = "services"
 KEYS_DIR = "keys"
+WALLETS_DIR = "wallets"
 DEPLOYMENT_DIR = "deployment"
 DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"
+USER_JSON = "user.json"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 ON_CHAIN_INTERACT_TIMEOUT = 120.0

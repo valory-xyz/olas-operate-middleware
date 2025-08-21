@@ -54,6 +54,8 @@ from operate.constants import (
     MIN_PASSWORD_LENGTH,
     OPERATE_HOME,
     SERVICES_DIR,
+    USER_JSON,
+    WALLETS_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -131,7 +133,7 @@ class OperateApp:
         self.password = password
         return UserAccount.new(
             password=password,
-            path=self._path / "user.json",
+            path=self._path / USER_JSON,
         )
 
     def update_password(self, old_password: str, new_password: str) -> None:
@@ -179,17 +181,15 @@ class OperateApp:
     @property
     def user_account(self) -> t.Optional[UserAccount]:
         """Load user account."""
-        return (
-            UserAccount.load(self._path / "user.json")
-            if (self._path / "user.json").exists()
-            else None
-        )
+        if (self._path / USER_JSON).exists():
+           return UserAccount.load(self._path / USER_JSON)
+        return None
 
     @property
     def wallet_manager(self) -> MasterWalletManager:
         """Load wallet manager."""
         manager = MasterWalletManager(
-            path=self._path / "wallets",
+            path=self._path / WALLETS_DIR,
             password=self.password,
             logger=self.logger,
         )

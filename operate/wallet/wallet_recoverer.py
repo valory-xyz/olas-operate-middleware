@@ -26,6 +26,7 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
+from operate.constants import USER_JSON, WALLETS_DIR
 from operate.utils.gnosis import get_owners
 from operate.wallet.master import MasterWalletManager
 
@@ -51,7 +52,7 @@ class WalletRecoverer:
 
     def recovery_step_1(self, new_password: str) -> t.Dict:
         """Recovery step 1"""
-        self.logger.info("[WALLET RECOVERER] Recovery step 1")
+        self.logger.info("[WALLET RECOVERER] Recovery step 1 start")
 
         try:
             _ = self.wallet_manager.password
@@ -63,9 +64,9 @@ class WalletRecoverer:
         bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
         new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
         new_root.mkdir(parents=True, exist_ok=False)
-        UserAccount.new(new_password, new_root / "user.json")
+        UserAccount.new(new_password, new_root / USER_JSON)
 
-        new_wallets_path = new_root / "wallets"
+        new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(
             path=new_wallets_path, logger=self.logger, password=new_password
         )
@@ -78,7 +79,7 @@ class WalletRecoverer:
                 ledger_type=ledger_type
             )
             self.logger.info(
-                f"[WALLET RECOVERER] Created new wallet {new_wallet.address}"
+                f"[WALLET RECOVERER] Created new wallet {ledger_type=} {new_wallet.address=}"
             )
             output.append(
                 {
@@ -88,7 +89,7 @@ class WalletRecoverer:
                 }
             )
 
-        self.logger.info("[WALLET RECOVERER] Recovery step 1 done")
+        self.logger.info("[WALLET RECOVERER] Recovery step 1 finish")
 
         return {
             "id": bundle_id,
@@ -97,7 +98,7 @@ class WalletRecoverer:
 
     def recovery_step_2(self, password: str, bundle_id: str) -> None:
         """Recovery step 2"""
-        self.logger.info("[WALLET RECOVERER] Recovery step 2")
+        self.logger.info("[WALLET RECOVERER] Recovery step 2 start")
 
         try:
             _ = self.wallet_manager.password
@@ -106,10 +107,10 @@ class WalletRecoverer:
         else:
             raise RuntimeError("Wallet recovery cannot be executed while logged in.")
 
-        root = self.path.parent
-        wallets_path = root / "wallets"
+        root = self.path.parent  # .operate root
+        wallets_path = root / WALLETS_DIR
         new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
-        new_wallets_path = new_root / "wallets"
+        new_wallets_path = new_root / WALLETS_DIR
         old_root = self.path / bundle_id / OLD_OBJECTS_SUBPATH
 
         if not new_root.exists() or not new_root.is_dir():
@@ -118,7 +119,7 @@ class WalletRecoverer:
         if old_root.exists() and old_root.is_dir():
             raise ValueError(f"Recovery bundle {bundle_id} has been executed already.")
 
-        new_user_account = UserAccount.load(new_root / "user.json")
+        new_user_account = UserAccount.load(new_root / USER_JSON)
         if not new_user_account.is_valid(password=password):
             raise ValueError("Provided password is not valid.")
 
@@ -151,18 +152,18 @@ class WalletRecoverer:
             new_wallet.safe_chains = wallet.safe_chains.copy()
             new_wallet.store()
 
-        # Do recovery
+        # Update configuration recovery
         try:
             old_root.mkdir(parents=True, exist_ok=False)
             shutil.move(str(wallets_path), str(old_root))
-            for file in root.glob("user.json*"):
+            for file in root.glob(f"{USER_JSON}*"):
                 shutil.move(str(file), str(old_root / file.name))
 
             shutil.move(str(new_wallets_path), str(root))
-            for file in new_root.glob("user.json*"):
+            for file in new_root.glob(f"{USER_JSON}*"):
                 shutil.move(str(file), str(root / file.name))
 
         except Exception as e:
             raise RuntimeError from e
 
-        self.logger.info("[WALLET RECOVERER] Recovery step 2 done")
+        self.logger.info("[WALLET RECOVERER] Recovery step 2 finish")
