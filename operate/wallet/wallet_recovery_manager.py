@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Wallet recoverer"""
+"""Wallet recovery manager"""
 
 import shutil
 import typing as t
@@ -32,12 +32,16 @@ from operate.wallet.master import MasterWalletManager
 
 
 RECOVERY_BUNDLE_PREFIX = "eb-"
-NEW_OBJECTS_SUBPATH = "tmp"
-OLD_OBJECTS_SUBPATH = "old"
+RECOVERY_NEW_OBJECTS_DIR = "tmp"
+RECOVERY_OLD_OBJECTS_DIR = "old"
 
 
-class WalletRecoverer:
-    """WalletRecoverer"""
+class WalletRecoveryError(Exception):
+    """WalletRecoveryError"""
+
+
+class WalletRecoveryManager:
+    """WalletRecoveryManager"""
 
     def __init__(
         self,
@@ -50,19 +54,22 @@ class WalletRecoverer:
         self.logger = logger
         self.wallet_manager = wallet_manager
 
-    def recovery_step_1(self, new_password: str) -> t.Dict:
+    def initiate_recovery(self, new_password: str) -> t.Dict:
         """Recovery step 1"""
-        self.logger.info("[WALLET RECOVERER] Recovery step 1 start")
+        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 1 start")
 
         try:
             _ = self.wallet_manager.password
         except ValueError:
             pass
         else:
-            raise RuntimeError("Wallet recovery cannot be executed while logged in.")
+            raise WalletRecoveryError("Wallet recovery cannot be executed while logged in.")
+
+        if not new_password:
+            raise ValueError("'new_password' must be a non-empty string.")
 
         bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
-        new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
+        new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_root.mkdir(parents=True, exist_ok=False)
         UserAccount.new(new_password, new_root / USER_JSON)
 
@@ -79,7 +86,7 @@ class WalletRecoverer:
                 ledger_type=ledger_type
             )
             self.logger.info(
-                f"[WALLET RECOVERER] Created new wallet {ledger_type=} {new_wallet.address=}"
+                f"[WALLET RECOVERY MANAGER] Created new wallet {ledger_type=} {new_wallet.address=}"
             )
             output.append(
                 {
@@ -89,29 +96,38 @@ class WalletRecoverer:
                 }
             )
 
-        self.logger.info("[WALLET RECOVERER] Recovery step 1 finish")
+        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 1 finish")
 
         return {
             "id": bundle_id,
             "wallets": output,
         }
 
-    def recovery_step_2(self, password: str, bundle_id: str) -> None:
+    def complete_recovery(self, bundle_id: str, password: str, raise_if_inconsistent_owners: bool = False) -> None:
         """Recovery step 2"""
-        self.logger.info("[WALLET RECOVERER] Recovery step 2 start")
+        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 start")
+
+        def _report_issue(msg: str) -> None:
+            if raise_if_inconsistent_owners:
+                raise WalletRecoveryError(f"{msg}")
+            else:
+                self.logger.warning(f"[WALLET RECOVERY MANAGER] {msg}")
 
         try:
             _ = self.wallet_manager.password
         except ValueError:
             pass
         else:
-            raise RuntimeError("Wallet recovery cannot be executed while logged in.")
+            raise WalletRecoveryError("Wallet recovery cannot be executed while logged in.")
+
+        if not bundle_id:
+            raise ValueError("'bundle_id' must be a non-empty string.")
 
         root = self.path.parent  # .operate root
         wallets_path = root / WALLETS_DIR
-        new_root = self.path / bundle_id / NEW_OBJECTS_SUBPATH
+        new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_wallets_path = new_root / WALLETS_DIR
-        old_root = self.path / bundle_id / OLD_OBJECTS_SUBPATH
+        old_root = self.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR
 
         if not new_root.exists() or not new_root.is_dir():
             raise ValueError(f"Recovery bundle {bundle_id} does not exist.")
@@ -131,7 +147,7 @@ class WalletRecoverer:
         new_ledger_types = {item.ledger_type for item in new_wallet_manager}
 
         if ledger_types != new_ledger_types:
-            raise RuntimeError(
+            raise WalletRecoveryError(
                 f"Ledger type mismatch: {ledger_types=}, {new_ledger_types=}."
             )
 
@@ -144,8 +160,16 @@ class WalletRecoverer:
                 ledger_api = wallet.ledger_api(chain=chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 if new_wallet.address not in owners:
-                    raise RuntimeError(
-                        f"Incorrect owners. Wallet {new_wallet.address} is not an owner of Safe {safe} on {chain}."
+                    raise WalletRecoveryError(
+                        f"Incorrect owners. New wallet {new_wallet.address} is not an owner of Safe {safe} on {chain}."
+                    )
+                if wallet.address in owners:
+                    _report_issue(
+                        f"Inconsistent owners. Current wallet {wallet.address} is an owner of Safe {safe} on {chain}."
+                    )
+                if len(owners) != 2:
+                    _report_issue(
+                        f"Inconsistent owners. Safe {safe} on {chain} has {len(owners)} owners."
                     )
 
             new_wallet.safes = wallet.safes.copy()
@@ -166,4 +190,4 @@ class WalletRecoverer:
         except Exception as e:
             raise RuntimeError from e
 
-        self.logger.info("[WALLET RECOVERER] Recovery step 2 finish")
+        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 finish")

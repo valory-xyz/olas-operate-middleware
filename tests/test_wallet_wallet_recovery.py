@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tests for wallet.wallet_recoverer module."""
+"""Tests for wallet.wallet_recoverey_manager module."""
 
 import uuid
 
@@ -43,7 +43,7 @@ from operate.ledger import get_default_rpc
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner
 from operate.wallet.master import MasterWalletManager
-from operate.wallet.wallet_recoverer import OLD_OBJECTS_SUBPATH, RECOVERY_BUNDLE_PREFIX
+from operate.wallet.wallet_recovery_manager import RECOVERY_OLD_OBJECTS_DIR, RECOVERY_BUNDLE_PREFIX, WalletRecoveryError
 
 from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, random_string
 
@@ -95,7 +95,7 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
 
 
 class TestWalletRecovery:
-    """Tests for wallet.wallet_recoverer.WalletRecoverer class."""
+    """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @staticmethod
     def _assert_recovered(
@@ -159,7 +159,7 @@ class TestWalletRecovery:
 
         # Recovery step 1
         new_password = password[::-1]
-        step_1_output = operate.wallet_recoverer.recovery_step_1(
+        step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
 
@@ -200,7 +200,7 @@ class TestWalletRecovery:
                     )
 
         # Recovery step 2
-        operate.wallet_recoverer.recovery_step_2(
+        operate.wallet_recoverey_manager.complete_recovery(
             password=new_password,
             bundle_id=bundle_id,
         )
@@ -214,7 +214,7 @@ class TestWalletRecovery:
         operate.password = new_password
         wallet_manager = operate.wallet_manager
         old_wallet_manager_path = (
-            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+            operate.wallet_recoverey_manager.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR / "wallets"
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
@@ -231,7 +231,7 @@ class TestWalletRecovery:
             operate = OperateApp(
                 home=tmp_path / OPERATE_TEST,
             )
-            operate.wallet_recoverer.recovery_step_2(
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=bundle_id
             )
 
@@ -264,7 +264,7 @@ class TestWalletRecovery:
 
         # Recovery step 1
         new_password = password[::-1]
-        step_1_output = operate.wallet_recoverer.recovery_step_1(
+        step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
 
@@ -313,8 +313,8 @@ class TestWalletRecovery:
                     )
 
         # Recovery step 2 - fail
-        with pytest.raises(RuntimeError, match="^Incorrect owners.*"):
-            operate.wallet_recoverer.recovery_step_2(
+        with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password,
                 bundle_id=bundle_id,
             )
@@ -338,7 +338,7 @@ class TestWalletRecovery:
                     )
 
         # Recovery step 2
-        operate.wallet_recoverer.recovery_step_2(
+        operate.wallet_recoverey_manager.complete_recovery(
             password=new_password,
             bundle_id=bundle_id,
         )
@@ -352,7 +352,7 @@ class TestWalletRecovery:
         operate.password = new_password
         wallet_manager = operate.wallet_manager
         old_wallet_manager_path = (
-            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+            operate.wallet_recoverey_manager.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR / "wallets"
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
@@ -386,17 +386,27 @@ class TestWalletRecovery:
 
         new_password = password[::-1]
         with pytest.raises(
-            RuntimeError, match="Wallet recovery cannot be executed while logged in."
+            WalletRecoveryError, match="Wallet recovery cannot be executed while logged in."
         ):
-            operate.wallet_recoverer.recovery_step_1(new_password=new_password)
+            operate.wallet_recoverey_manager.initiate_recovery(new_password=new_password)
 
         # Logout
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
 
+        with pytest.raises(
+            ValueError, match="'new_password' must be a non-empty string."
+        ):
+            operate.wallet_recoverey_manager.initiate_recovery(new_password="")
+
+        with pytest.raises(
+            ValueError, match="'new_password' must be a non-empty string."
+        ):
+            operate.wallet_recoverey_manager.initiate_recovery(new_password=None)  # type: ignore
+
         # Recovery step 1
-        step_1_output = operate.wallet_recoverer.recovery_step_1(
+        step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
 
@@ -406,9 +416,9 @@ class TestWalletRecovery:
         operate.password = password
 
         with pytest.raises(
-            RuntimeError, match="Wallet recovery cannot be executed while logged in."
+            WalletRecoveryError, match="Wallet recovery cannot be executed while logged in."
         ):
-            operate.wallet_recoverer.recovery_step_2(
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=bundle_id
             )
 
@@ -421,18 +431,32 @@ class TestWalletRecovery:
         with pytest.raises(
             ValueError, match=f"Recovery bundle {random_bundle_id} does not exist."
         ):
-            operate.wallet_recoverer.recovery_step_2(
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=random_bundle_id
+            )
+
+        with pytest.raises(
+            ValueError, match="'bundle_id' must be a non-empty string."
+        ):
+            operate.wallet_recoverey_manager.complete_recovery(
+                password=new_password, bundle_id=""
+            )
+
+        with pytest.raises(
+            ValueError, match="'bundle_id' must be a non-empty string."
+        ):
+            operate.wallet_recoverey_manager.complete_recovery(
+                password=new_password, bundle_id=None  # type: ignore
             )
 
         random_password = random_string(16)
         with pytest.raises(ValueError, match="Provided password is not valid."):
-            operate.wallet_recoverer.recovery_step_2(
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=random_password, bundle_id=bundle_id
             )
 
-        with pytest.raises(RuntimeError, match="^Incorrect owners.*"):
-            operate.wallet_recoverer.recovery_step_2(
+        with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password,
                 bundle_id=bundle_id,
             )
@@ -455,8 +479,15 @@ class TestWalletRecovery:
                         owner=item["new_wallet"]["address"],
                     )
 
+        with pytest.raises(WalletRecoveryError, match="^Inconsistent owners.*"):
+            operate.wallet_recoverey_manager.complete_recovery(
+                password=new_password,
+                bundle_id=bundle_id,
+                raise_if_inconsistent_owners=True,
+            )
+
         # Recovery step 2
-        operate.wallet_recoverer.recovery_step_2(
+        operate.wallet_recoverey_manager.complete_recovery(
             password=new_password,
             bundle_id=bundle_id,
         )
@@ -470,7 +501,7 @@ class TestWalletRecovery:
         operate.password = new_password
         wallet_manager = operate.wallet_manager
         old_wallet_manager_path = (
-            operate.wallet_recoverer.path / bundle_id / OLD_OBJECTS_SUBPATH / "wallets"
+            operate.wallet_recoverey_manager.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR / "wallets"
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
@@ -487,6 +518,6 @@ class TestWalletRecovery:
             operate = OperateApp(
                 home=tmp_path / OPERATE_TEST,
             )
-            operate.wallet_recoverer.recovery_step_2(
+            operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=bundle_id
             )
