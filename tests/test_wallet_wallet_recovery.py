@@ -48,7 +48,9 @@ from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, random_string
 
 load_dotenv()
 
-from operate.ledger import get_default_rpc
+# TODO operate.ledger must be loaded after load_dotenv() due to RPC env vars.
+from operate.ledger import get_default_rpc  # noqa: E402
+
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
 
@@ -462,7 +464,7 @@ class TestWalletRecovery:
             )
 
         random_password = random_string(16)
-        with pytest.raises(ValueError, match="Provided password is not valid."):
+        with pytest.raises(ValueError, match="Password is not valid."):
             operate.wallet_recoverey_manager.complete_recovery(
                 password=random_password, bundle_id=bundle_id
             )
