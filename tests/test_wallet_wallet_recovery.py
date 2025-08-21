@@ -417,7 +417,7 @@ class TestWalletRecovery:
         with pytest.raises(
             ValueError, match="'new_password' must be a non-empty string."
         ):
-            operate.wallet_recoverey_manager.initiate_recovery(new_password="")
+            operate.wallet_recoverey_manager.initiate_recovery(new_password="")  # nosec
 
         with pytest.raises(
             ValueError, match="'new_password' must be a non-empty string."
