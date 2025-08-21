@@ -98,6 +98,8 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     return crypto
 
 
+# TODO enable test once Tenderly RPCs are set up on CI.
+@pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
@@ -134,8 +136,6 @@ class TestWalletRecovery:
                     backup_owner=backup_owner,
                 )
 
-    # TODO enable test in CI once Tenderly RPCS are set up.
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     def test_normal_flow(
         self,
         tmp_path: Path,
