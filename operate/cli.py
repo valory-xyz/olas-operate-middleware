@@ -78,12 +78,19 @@ from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
-from operate.wallet.wallet_recoverer import WalletRecoverer
+from operate.wallet.wallet_recovery_manager import (
+    WalletRecoveryError,
+    WalletRecoveryManager,
+)
 
 
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
     content={"error": "User not logged in."}, status_code=HTTPStatus.UNAUTHORIZED
+)
+USER_LOGGED_IN_ERROR = JSONResponse(
+    content={"error": "User must be logged out to perform this operation."},
+    status_code=HTTPStatus.FORBIDDEN,
 )
 ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
     content={"error": "User account not found."},
@@ -140,7 +147,7 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'password' is required.")
+            raise ValueError("'new_password' is required.")
 
         if not (
             self.user_account.is_valid(old_password)
@@ -182,7 +189,7 @@ class OperateApp:
     def user_account(self) -> t.Optional[UserAccount]:
         """Load user account."""
         if (self._path / USER_JSON).exists():
-           return UserAccount.load(self._path / USER_JSON)
+            return UserAccount.load(self._path / USER_JSON)
         return None
 
     @property
@@ -197,9 +204,9 @@ class OperateApp:
         return manager
 
     @property
-    def wallet_recoverer(self) -> WalletRecoverer:
-        """Load wallet recoverer."""
-        manager = WalletRecoverer(
+    def wallet_recoverey_manager(self) -> WalletRecoveryManager:
+        """Load wallet recovery manager."""
+        manager = WalletRecoveryManager(
             path=self._path / "wallet_recovery",
             wallet_manager=self.wallet_manager,
             logger=self.logger,
@@ -1173,6 +1180,90 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content={
                     "error": "Failed to get bridge status. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/wallet/recovery/initiate")
+    @with_retries
+    async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
+        """Initiate wallet recovery."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password:
+            return USER_LOGGED_IN_ERROR
+
+        data = await request.json()
+        new_password = data.get("new_password")
+
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            output = operate.wallet_recoverey_manager.initiate_recovery(
+                new_password=new_password
+            )
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except (ValueError, WalletRecoveryError) as e:
+            logger.error(f"_recovery_initiate error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to initiate recovery: {e}"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_initiate error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to initiate recovery. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/wallet/recovery/complete")
+    @with_retries
+    async def _wallet_recovery_complete(request: Request) -> JSONResponse:
+        """Complete wallet recovery."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password:
+            return USER_LOGGED_IN_ERROR
+
+        data = await request.json()
+        bundle_id = data.get("id")
+        password = data.get("password")
+        raise_if_inconsistent_owners = not data.get("allow_other_owners", True)
+
+        try:
+            operate.wallet_recoverey_manager.complete_recovery(
+                bundle_id=bundle_id,
+                password=password,
+                raise_if_inconsistent_owners=raise_if_inconsistent_owners,
+            )
+            return JSONResponse(
+                content=operate.wallet_manager.json,
+                status_code=HTTPStatus.OK,
+            )
+        except (ValueError, WalletRecoveryError) as e:
+            logger.error(f"_recovery_complete error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to complete recovery: {e}"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_complete error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to complete recovery. Please check the logs."
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )

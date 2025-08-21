@@ -63,7 +63,9 @@ class WalletRecoveryManager:
         except ValueError:
             pass
         else:
-            raise WalletRecoveryError("Wallet recovery cannot be executed while logged in.")
+            raise WalletRecoveryError(
+                "Wallet recovery cannot be executed while logged in."
+            )
 
         if not new_password:
             raise ValueError("'new_password' must be a non-empty string.")
@@ -90,7 +92,7 @@ class WalletRecoveryManager:
             )
             output.append(
                 {
-                    "wallet": wallet.json,
+                    "current_wallet": wallet.json,
                     "new_wallet": new_wallet.json,
                     "new_mnemonic": new_mnemonic,
                 }
@@ -103,22 +105,28 @@ class WalletRecoveryManager:
             "wallets": output,
         }
 
-    def complete_recovery(self, bundle_id: str, password: str, raise_if_inconsistent_owners: bool = False) -> None:
+    def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
+        self, bundle_id: str, password: str, raise_if_inconsistent_owners: bool = False
+    ) -> None:
         """Recovery step 2"""
         self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 start")
 
         def _report_issue(msg: str) -> None:
+            self.logger.warning(f"[WALLET RECOVERY MANAGER] {msg}")
             if raise_if_inconsistent_owners:
                 raise WalletRecoveryError(f"{msg}")
-            else:
-                self.logger.warning(f"[WALLET RECOVERY MANAGER] {msg}")
 
         try:
             _ = self.wallet_manager.password
         except ValueError:
             pass
         else:
-            raise WalletRecoveryError("Wallet recovery cannot be executed while logged in.")
+            raise WalletRecoveryError(
+                "Wallet recovery cannot be executed while logged in."
+            )
+
+        if not password:
+            raise ValueError("'password' must be a non-empty string.")
 
         if not bundle_id:
             raise ValueError("'bundle_id' must be a non-empty string.")
@@ -137,7 +145,7 @@ class WalletRecoveryManager:
 
         new_user_account = UserAccount.load(new_root / USER_JSON)
         if not new_user_account.is_valid(password=password):
-            raise ValueError("Provided password is not valid.")
+            raise ValueError("Password is not valid.")
 
         new_wallet_manager = MasterWalletManager(
             path=new_wallets_path, logger=self.logger, password=password
@@ -161,15 +169,15 @@ class WalletRecoveryManager:
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 if new_wallet.address not in owners:
                     raise WalletRecoveryError(
-                        f"Incorrect owners. New wallet {new_wallet.address} is not an owner of Safe {safe} on {chain}."
+                        f"Incorrect owners. Wallet {new_wallet.address} is not an owner of Safe {safe} on {chain}."
                     )
                 if wallet.address in owners:
                     _report_issue(
-                        f"Inconsistent owners. Current wallet {wallet.address} is an owner of Safe {safe} on {chain}."
+                        f"Inconsistent owners. Current wallet {wallet.address} is still an owner of Safe {safe} on {chain}."
                     )
                 if len(owners) != 2:
                     _report_issue(
-                        f"Inconsistent owners. Safe {safe} on {chain} has {len(owners)} owners."
+                        f"Inconsistent owners. Safe {safe} on {chain} has {len(owners)} != 2 owners."
                     )
 
             new_wallet.safes = wallet.safes.copy()
