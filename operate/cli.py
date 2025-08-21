@@ -164,7 +164,7 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'password' is required.")
+            raise ValueError("'new_password' is required.")
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
