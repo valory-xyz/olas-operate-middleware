@@ -153,6 +153,18 @@ DEFAULT_TRADER_ENV_VARS = {
         "value": "",
         "provision_type": "computed",
     },
+    "TOOLS_ACCURACY_HASH": {
+        "name": "Tools accuracy hash",
+        "description": "",
+        "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
+        "provision_type": "fixed",
+    },
+    "ACC_INFO_FIELDS_REQUESTS": {
+        "name": "Acc info fields requests",
+        "description": "",
+        "value": "nr_responses",
+        "provision_type": "fixed",
+    },
 }
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
