@@ -40,7 +40,14 @@ from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
 from web3 import Web3
 
-from operate.constants import IPFS_ADDRESS, ZERO_ADDRESS
+from operate.constants import (
+    AGENT_LOG_DIR,
+    AGENT_LOG_ENV_VAR,
+    AGENT_PERSISTENT_STORAGE_DIR,
+    AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    IPFS_ADDRESS,
+    ZERO_ADDRESS,
+)
 from operate.data import DATA_DIR
 from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
@@ -730,8 +737,8 @@ class ServiceManager:
 
         # Set environment variables for the service
         for dir_name, env_var_name in (
-            ("persistent_data", "STORE_PATH"),
-            ("benchmarks", "LOG_DIR"),
+            (AGENT_PERSISTENT_STORAGE_DIR, AGENT_PERSISTENT_STORAGE_ENV_VAR),
+            (AGENT_LOG_DIR, AGENT_LOG_ENV_VAR),
         ):
             dir_path = service.path / dir_name
             dir_path.mkdir(parents=True, exist_ok=True)
