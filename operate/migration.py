@@ -33,7 +33,6 @@ from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, LedgerType
 from operate.services.manage import ServiceManager
 from operate.services.service import (
-    DEFAULT_TRADER_ENV_VARS,
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -43,10 +42,66 @@ from operate.utils import create_backup
 from operate.wallet.master import LEDGER_TYPE_TO_WALLET_CLASS, MasterWalletManager
 
 
+DEFAULT_TRADER_ENV_VARS = {
+    "GNOSIS_LEDGER_RPC": {
+        "name": "Gnosis ledger RPC",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "STAKING_CONTRACT_ADDRESS": {
+        "name": "Staking contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_MARKETPLACE_CONFIG": {
+        "name": "Mech marketplace configuration",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_ACTIVITY_CHECKER_CONTRACT": {
+        "name": "Mech activity checker contract",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_CONTRACT_ADDRESS": {
+        "name": "Mech contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_REQUEST_PRICE": {
+        "name": "Mech request price",
+        "description": "",
+        "value": "10000000000000000",
+        "provision_type": "computed",
+    },
+    "USE_MECH_MARKETPLACE": {
+        "name": "Use Mech marketplace",
+        "description": "",
+        "value": "False",
+        "provision_type": "computed",
+    },
+    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
+        "name": "Requester staking instance address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "PRIORITY_MECH_ADDRESS": {
+        "name": "Priority Mech address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+}
+
+
 class MigrationManager:
     """MigrationManager"""
-
-    # TODO Backport here migration for services/config.json, etc.
 
     def __init__(
         self,
