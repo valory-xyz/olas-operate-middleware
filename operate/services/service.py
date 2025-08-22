@@ -958,8 +958,11 @@ class Service(LocalResource):
                     data = json.load(f)
                 if isinstance(data, dict):
                     agent_performance.update(data)
-            except (json.JSONDecodeError, OSError):
-                pass  # Keep default values if file is invalid
+            except (json.JSONDecodeError, OSError) as e:
+                # Keep default values if file is invalid
+                print(
+                    f"Error reading file 'agent_performance.json': {e}"
+                )  # TODO Use logger
 
         return dict(sorted(agent_performance.items()))
 
