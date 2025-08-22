@@ -789,6 +789,50 @@ Get service deployment information.
 }
 ```
 
+### `GET /api/v2/service/{service_config_id}/agent_performance`
+
+Get agent performance information.
+
+**Response (Success - 200):**
+
+```json
+{
+  "last_activity": {
+    "title": "Last activity title",
+    "description": "Last activity description",
+  },
+  "last_chat_message": "Agent last chat message",
+  "metrics": [
+    {
+      "description": "Metric description",
+      "is_primary": true,
+      "name": "Metric name",
+      "value": "Metric value"
+    }
+  ],
+  "timestamp": 1234567890
+}
+```
+
+**Response (Success with empty agent performance - 200):**
+
+```json
+{
+  "last_activity": null,
+  "last_chat_message": null,
+  "metrics": [],
+  "timestamp": null
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}/refill_requirements`
 
 Get service refill requirements.
@@ -948,7 +992,7 @@ Create a new service.
 }
 ```
 
-### `PUT /api/v2/service/{service_config_id}` / `PATCH /api/v2/service/{service_config_id}`
+### `PUT /api/v2/service/{service_config_id}` <br /> `PATCH /api/v2/service/{service_config_id}`
 
 Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.
 
