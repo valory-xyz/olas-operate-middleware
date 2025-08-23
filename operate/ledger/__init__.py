@@ -24,17 +24,17 @@ import os
 from operate.operate_types import Chain
 
 
-ARBITRUM_ONE_PUBLIC_RPC = os.environ.get(
-    "ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc"
-)
-BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
-CELO_PUBLIC_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
-ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
-GNOSIS_PUBLIC_RPC = os.environ.get("GNOSIS_RPC", "https://gnosis-rpc.publicnode.com")
-MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
-OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-POLYGON_PUBLIC_RPC = os.environ.get("POLYGON_RPC", "https://polygon-rpc.com")
-SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
+CHAINS = [
+    Chain.ARBITRUM_ONE,
+    Chain.BASE,
+    Chain.CELO,
+    Chain.ETHEREUM,
+    Chain.GNOSIS,
+    Chain.MODE,
+    Chain.OPTIMISM,
+    Chain.POLYGON,
+    Chain.SOLANA,
+]
 
 ARBITRUM_ONE_RPC = os.environ.get("ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc")
 BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
@@ -46,17 +46,6 @@ OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
 POLYGON_RPC = os.environ.get("POLYGON_RPC", "https://polygon-rpc.com")
 SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 
-PUBLIC_RPCS = {
-    Chain.ARBITRUM_ONE: ARBITRUM_ONE_PUBLIC_RPC,
-    Chain.BASE: BASE_PUBLIC_RPC,
-    Chain.CELO: CELO_PUBLIC_RPC,
-    Chain.ETHEREUM: ETHEREUM_PUBLIC_RPC,
-    Chain.GNOSIS: GNOSIS_PUBLIC_RPC,
-    Chain.MODE: MODE_PUBLIC_RPC,
-    Chain.OPTIMISM: OPTIMISM_PUBLIC_RPC,
-    Chain.POLYGON: POLYGON_PUBLIC_RPC,
-    Chain.SOLANA: SOLANA_PUBLIC_RPC,
-}
 
 DEFAULT_RPCS = {
     Chain.ARBITRUM_ONE: ARBITRUM_ONE_RPC,
@@ -85,14 +74,14 @@ CURRENCY_DENOMS = {
 
 # Smallest denomination for each chain
 CURRENCY_SMALLEST_UNITS = {
-    Chain.ARBITRUM_ONE: "",
+    Chain.ARBITRUM_ONE: "Wei",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
     Chain.ETHEREUM: "Wei",
     Chain.GNOSIS: "Wei",
     Chain.MODE: "Wei",
     Chain.OPTIMISM: "Wei",
-    Chain.POLYGON: "",
+    Chain.POLYGON: "Wei",
     Chain.SOLANA: "Lamport",
 }
 

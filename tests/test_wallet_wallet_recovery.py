@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tests for wallet.wallet_recoverey_manager module."""
+"""Tests for wallet.wallet_recovery_manager module."""
 
 import json
 import tempfile
@@ -28,12 +28,12 @@ import pytest
 import requests
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumCrypto
-from dotenv import load_dotenv
 from eth_account.signers.local import LocalAccount
 from web3 import Account
 
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
+from operate.ledger import get_default_rpc
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner
 from operate.wallet.master import MasterWalletManager
@@ -43,13 +43,8 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, random_string
-
-
-load_dotenv()
-
-# TODO operate.ledger must be loaded after load_dotenv() due to RPC env vars.
-from operate.ledger import get_default_rpc  # noqa: E402
+from tests.conftest import random_string
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
@@ -85,6 +80,12 @@ def tenderly_add_balance(
     )
     response.raise_for_status()
 
+    payload = response.json()
+    if "error" in payload:
+        raise RuntimeError(
+            f"Tenderly RPC call failed {rpc=} {TESTNET_RPCS}: {payload['error'].get('message')}."
+        )
+
 
 def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     """create_crypto"""
@@ -98,10 +99,12 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     return crypto
 
 
-# TODO enable test once Tenderly RPCs are set up on CI.
-@pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch):
+        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
 
     @staticmethod
     def _assert_recovered(
@@ -140,9 +143,9 @@ class TestWalletRecovery:
         self,
         tmp_path: Path,
         password: str,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """test_normal_flow"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -252,7 +255,6 @@ class TestWalletRecovery:
         password: str,
     ) -> None:
         """test_incomplete_flow"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -384,7 +386,6 @@ class TestWalletRecovery:
         password: str,
     ) -> None:
         """test_exceptions"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )

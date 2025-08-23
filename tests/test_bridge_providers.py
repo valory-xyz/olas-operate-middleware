@@ -29,7 +29,7 @@ from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
 from web3 import Web3
 
-from operate.bridge.bridge_manager import (  # MESSAGE_EXECUTION_SKIPPED,; MESSAGE_QUOTE_ZERO,
+from operate.bridge.bridge_manager import (
     LiFiProvider,
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
@@ -56,7 +56,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, LedgerType
 
-from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, TEST_RPCS
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
@@ -1243,7 +1243,6 @@ class TestProvider:
         self,
         tmp_path: Path,
         password: str,
-        monkeypatch: pytest.MonkeyPatch,
         provider_class: t.Type[Provider],
         contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
         params: dict,
@@ -1254,8 +1253,6 @@ class TestProvider:
         expected_elapsed_time: int,
     ) -> None:
         """test_update_execution_status"""
-        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TEST_RPCS)
-
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1323,7 +1320,7 @@ class TestProvider:
 
         if provider_request.status == ProviderRequestStatus.EXECUTION_DONE:
             transfer_amount = get_transfer_amount(
-                w3=Web3(Web3.HTTPProvider(TEST_RPCS[Chain(params["to"]["chain"])])),
+                w3=Web3(Web3.HTTPProvider(TESTNET_RPCS[Chain(params["to"]["chain"])])),
                 tx_hash=expected_to_tx_hash,
                 token_address=params["to"]["token"],
                 recipient=params["to"]["address"],
