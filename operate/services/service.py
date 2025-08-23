@@ -63,7 +63,12 @@ from autonomy.deploy.generators.docker_compose.base import DockerComposeGenerato
 from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
-from operate.constants import CONFIG_JSON, DEPLOYMENT_DIR, DEPLOYMENT_JSON
+from operate.constants import (
+    AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    CONFIG_JSON,
+    DEPLOYMENT_DIR,
+    DEPLOYMENT_JSON,
+)
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
@@ -926,6 +931,40 @@ class Service(LocalResource):
                 healthcheck_json_path.unlink()
             except Exception as e:  # pylint: disable=broad-except
                 print(f"Exception deleting {healthcheck_json_path}: {e}")
+
+    def get_agent_performance(self) -> t.Dict:
+        """Return the agent activity"""
+
+        # Default values
+        agent_performance: t.Dict[str, t.Any] = {
+            "timestamp": None,
+            "metrics": [],
+            "last_activity": None,
+            "last_chat_message": None,
+        }
+
+        agent_performance_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "agent_performance.json"
+        )
+
+        if agent_performance_json_path.exists():
+            try:
+                with open(agent_performance_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    agent_performance.update(data)
+            except (json.JSONDecodeError, OSError) as e:
+                # Keep default values if file is invalid
+                print(
+                    f"Error reading file 'agent_performance.json': {e}"
+                )  # TODO Use logger
+
+        return dict(sorted(agent_performance.items()))
 
     def update(
         self,
