@@ -53,10 +53,11 @@ from operate.bridge.providers.provider import (
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
+from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, LedgerType
 
-from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI
 
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
@@ -1320,7 +1321,9 @@ class TestProvider:
 
         if provider_request.status == ProviderRequestStatus.EXECUTION_DONE:
             transfer_amount = get_transfer_amount(
-                w3=Web3(Web3.HTTPProvider(TESTNET_RPCS[Chain(params["to"]["chain"])])),
+                w3=Web3(
+                    Web3.HTTPProvider(get_default_rpc(Chain(params["to"]["chain"])))
+                ),
                 tx_hash=expected_to_tx_hash,
                 token_address=params["to"]["token"],
                 recipient=params["to"]["address"],
