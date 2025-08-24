@@ -44,7 +44,7 @@ from operate.wallet.wallet_recovery_manager import (
 )
 
 from tests.conftest import random_string
-from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import OPERATE_TEST, TESTNET_RPCS
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
@@ -143,7 +143,6 @@ class TestWalletRecovery:
         self,
         tmp_path: Path,
         password: str,
-        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """test_normal_flow"""
         operate = OperateApp(
