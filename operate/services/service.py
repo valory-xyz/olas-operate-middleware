@@ -724,6 +724,7 @@ class Service(LocalResource):
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
+    agent_release: t.Dict
 
     path: Path
     package_path: Path
@@ -850,6 +851,7 @@ class Service(LocalResource):
             path=package_absolute_path.parent,
             package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
+            agent_release=service_template["agent_release"],
         )
         service.store()
         return service
