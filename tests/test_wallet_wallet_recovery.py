@@ -103,7 +103,7 @@ class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch):
+    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
 
     @staticmethod
