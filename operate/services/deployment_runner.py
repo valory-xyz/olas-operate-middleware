@@ -45,7 +45,7 @@ from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
 
-from .agent_runner import get_agent_runner_path
+from .agent_runner import AgentRelease, get_agent_runner_path
 
 
 class AbstractDeploymentRunner(ABC):
@@ -298,16 +298,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     @property
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        env = json.loads(
-            (self._work_directory / "agent.json").read_text(encoding="utf-8")
-        )
-
-        agent_publicid_str = env["AEA_AGENT"]
         service_dir = self._work_directory.parent
-
-        agent_runner_bin = get_agent_runner_path(
-            service_dir=service_dir, agent_public_id_str=agent_publicid_str
-        )
+        agent_runner_bin = get_agent_runner_path(service_dir=service_dir)
         return str(agent_runner_bin)
 
     @property
