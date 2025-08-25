@@ -81,9 +81,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Debug environment
-        run: env | sort
-
       - name: Run unit tests
         run: |
           pip install tomte[tox]==0.2.15
