@@ -27,7 +27,6 @@ package without needing to import them (pytest will automatically discover them)
 See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
-import os
 import random
 import string
 import tempfile
@@ -36,25 +35,6 @@ from typing import Generator
 
 import pytest
 from web3 import Web3
-
-from operate.operate_types import Chain
-
-
-ROOT_PATH = Path(__file__).resolve().parent
-OPERATE_TEST = ".operate_test"
-RUNNING_IN_CI = (
-    os.getenv("GITHUB_ACTIONS", "").lower() == "true"
-    or os.getenv("CI", "").lower() == "true"
-)
-
-TEST_RPCS = {
-    Chain.ETHEREUM: "https://rpc-gate.autonolas.tech/ethereum-rpc/",
-    Chain.BASE: "https://rpc-gate.autonolas.tech/base-rpc/",
-    Chain.CELO: "https://forno.celo.org",
-    Chain.GNOSIS: "https://rpc-gate.autonolas.tech/gnosis-rpc/",
-    Chain.MODE: "https://mainnet.mode.network",
-    Chain.OPTIMISM: "https://rpc-gate.autonolas.tech/optimism-rpc/",
-}
 
 
 def random_string(length: int = 16) -> str:

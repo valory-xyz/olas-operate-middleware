@@ -24,40 +24,33 @@ import typing as t
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
+from operate.ledger import CHAINS
 from operate.operate_types import Chain, ContractAddresses
 
 
 # TODO: Refactor, remove the usage of CONTRACTS and use CHAIN_PROFILES from Open Autonomy instead.
-CHAINS = [
-    Chain.ARBITRUM_ONE,
-    Chain.BASE,
-    Chain.CELO,
-    Chain.ETHEREUM,
-    Chain.GNOSIS,
-    Chain.MODE,
-    Chain.OPTIMISM,
-    Chain.POLYGON,
-]
-
 CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
 for _chain in CHAINS:
-    profile = CHAIN_PROFILES[_chain.value]
-    CONTRACTS[_chain] = ContractAddresses(
-        {
-            "service_registry": profile["service_registry"],
-            "service_registry_token_utility": profile["service_registry_token_utility"],
-            "service_manager": profile["service_manager_token"],
-            "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
-            "gnosis_safe_same_address_multisig": profile[
-                "gnosis_safe_same_address_multisig"
-            ],
-            "safe_multisig_with_recovery_module": profile[
-                "safe_multisig_with_recovery_module"
-            ],
-            "recovery_module": profile["recovery_module"],
-            "multisend": DEFAULT_MULTISEND,
-        }
-    )
+    if _chain.value in CHAIN_PROFILES:
+        profile = CHAIN_PROFILES[_chain.value]
+        CONTRACTS[_chain] = ContractAddresses(
+            {
+                "service_registry": profile["service_registry"],
+                "service_registry_token_utility": profile[
+                    "service_registry_token_utility"
+                ],
+                "service_manager": profile["service_manager_token"],
+                "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
+                "gnosis_safe_same_address_multisig": profile[
+                    "gnosis_safe_same_address_multisig"
+                ],
+                "safe_multisig_with_recovery_module": profile[
+                    "safe_multisig_with_recovery_module"
+                ],
+                "recovery_module": profile["recovery_module"],
+                "multisend": DEFAULT_MULTISEND,
+            }
+        )
 
 STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.ARBITRUM_ONE: {},
