@@ -29,7 +29,7 @@ from time import time
 
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import USER_JSON, ZERO_ADDRESS
 from operate.operate_types import Chain, LedgerType
 from operate.services.manage import ServiceManager
 from operate.services.service import (
@@ -122,7 +122,7 @@ class MigrationManager:
     def migrate_user_account(self) -> None:
         """Migrates user.json"""
 
-        path = self._path / "user.json"
+        path = self._path / USER_JSON
         if not path.exists():
             return
 
