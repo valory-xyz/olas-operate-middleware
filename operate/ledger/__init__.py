@@ -85,14 +85,14 @@ CURRENCY_DENOMS = {
 
 # Smallest denomination for each chain
 CURRENCY_SMALLEST_UNITS = {
-    Chain.ARBITRUM_ONE: "",
+    Chain.ARBITRUM_ONE: "Wei",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
     Chain.ETHEREUM: "Wei",
     Chain.GNOSIS: "Wei",
     Chain.MODE: "Wei",
     Chain.OPTIMISM: "Wei",
-    Chain.POLYGON: "",
+    Chain.POLYGON: "Wei",
     Chain.SOLANA: "Lamport",
 }
 
