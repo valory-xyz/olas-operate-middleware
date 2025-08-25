@@ -306,7 +306,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         service_dir = self._work_directory.parent
 
         agent_runner_bin = get_agent_runner_path(
-            service_dir=service_dir, agent_public_id_str=agent_publicid_str
+            service_dir=service_dir
         )
         return str(agent_runner_bin)
 
