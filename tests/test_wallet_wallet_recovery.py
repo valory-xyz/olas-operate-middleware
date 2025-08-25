@@ -83,7 +83,7 @@ def tenderly_add_balance(
     payload = response.json()
     if "error" in payload:
         raise RuntimeError(
-            f"Tenderly RPC call failed {rpc=} {TESTNET_RPCS}: {payload['error'].get('message')}."
+            f"Tenderly RPC call failed: {payload['error'].get('message')}."
         )
 
 
