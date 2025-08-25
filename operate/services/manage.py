@@ -2348,12 +2348,6 @@ class ServiceManager:
             deployment.delete()
         return deployment
 
-    def log_directories(self) -> None:
-        """Log directories."""
-        directories = [f"  - {str(p)}" for p in self.path.iterdir() if p.is_dir()]
-        directories_str = "\n".join(directories)
-        self.logger.info(f"Directories in {self.path}\n: {directories_str}")
-
     def update(
         self,
         service_config_id: str,
