@@ -603,7 +603,7 @@ Only if `require_consistent_owners = true`.
 
 ```json
 {
-  "error": "Failed to complete recovery: Inconsistent owners. Backup owners differ across Safes on chains <chain_1>, <chain_2>. Found backup owners: 0x..., 0x..."
+  "error": "Failed to complete recovery: Inconsistent owners. Backup owners differ across Safes on chains <chain_1>, <chain_2>. Found backup owners: 0x..., 0x... ."
 }
 ```
 
