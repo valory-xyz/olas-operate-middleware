@@ -23,7 +23,6 @@ import asyncio
 import json
 import logging
 import os
-import tempfile
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -34,7 +33,7 @@ from pathlib import Path
 
 import requests
 from aea.helpers.base import IPFSHash
-from aea_ledger_ethereum import EthereumCrypto, LedgerApi
+from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
@@ -1464,26 +1463,18 @@ class ServiceManager:
         if agent_is_service_safe_owner:
             self.logger.info("(Agent) Enabling recovery module in service Safe.")
             try:
-                with tempfile.NamedTemporaryFile(mode="w+", delete=True) as tmp_file:
-                    private_key = self.keys_manager.get(key=agent_address).private_key
-                    tmp_file.write(private_key)
-                    tmp_file.flush()
-                    crypto = EthereumCrypto(private_key_path=tmp_file.name)
-                    EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
-                        ledger_api=sftxb.ledger_api,
-                        crypto=crypto,
-                        chain_type=ChainType(chain),
-                        safe=service_safe_address,
-                    ).add(
-                        sftxb.get_enable_module_data(
-                            module_address=recovery_module_address,
-                            safe_address=service_safe_address,
-                        )
-                    ).settle()
-                    tmp_file.seek(0)
-                    tmp_file.write("\0" * len(private_key))
-                    tmp_file.flush()
-
+                crypto = self.keys_manager.get_crypto_instance(address=agent_address)
+                EthSafeTxBuilder._new_tx(  # pylint: disable=protected-access
+                    ledger_api=sftxb.ledger_api,
+                    crypto=crypto,
+                    chain_type=ChainType(chain),
+                    safe=service_safe_address,
+                ).add(
+                    sftxb.get_enable_module_data(
+                        module_address=recovery_module_address,
+                        safe_address=service_safe_address,
+                    )
+                ).settle()
                 self.logger.info(
                     "(Agent) Recovery module enabled successfully in service Safe."
                 )
