@@ -722,7 +722,11 @@ class _ChainUtil:
         ).get("owners", [])
 
     def swap(  # pylint: disable=too-many-arguments,too-many-locals
-        self, service_id: int, multisig: str, owner_key: str, new_owner_address: str
+        self,
+        service_id: int,
+        multisig: str,
+        owner_cryptos: t.List[Crypto],
+        new_owner_address: str,
     ) -> None:
         """Swap safe owner."""
         logging.info(f"Swapping safe for service {service_id} [{multisig}]...")
@@ -736,11 +740,6 @@ class _ChainUtil:
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
         )
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_file = Path(temp_dir, "key.txt")
-            key_file.write_text(owner_key, encoding="utf-8")
-            owner_crypto = EthereumCrypto(private_key_path=str(key_file))
-        owner_cryptos: t.List[EthereumCrypto] = [owner_crypto]
         owners = [
             manager.ledger_api.api.to_checksum_address(owner_crypto.address)
             for owner_crypto in owner_cryptos

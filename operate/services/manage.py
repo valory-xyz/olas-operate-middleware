@@ -1324,18 +1324,17 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
             self.logger.info("Swapping Safe owners")
-            sftxb.swap(  # noqa: E800
-                service_id=chain_data.token,  # noqa: E800
+            owner_crypto = self.keys_manager.get_crypto_instance(
+                address=current_safe_owners[0]
+            )
+            sftxb.swap(
+                service_id=chain_data.token,
                 multisig=chain_data.multisig,  # TODO this can be read from the registry
-                owner_key=str(
-                    self.keys_manager.get(
-                        key=current_safe_owners[0]
-                    ).private_key  # TODO allow multiple owners
-                ),  # noqa: E800
+                owner_cryptos=[owner_crypto],  # TODO allow multiple owners
                 new_owner_address=(
                     safe if safe else wallet.crypto.address
                 ),  # TODO it should always be safe address
-            )  # noqa: E800
+            )
 
         if withdrawal_address is not None:
             ethereum_crypto = KeysManager().get_crypto_instance(
