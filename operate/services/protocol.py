@@ -34,7 +34,6 @@ from typing import Optional, Union, cast
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
-from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
 from autonomy.chain.constants import (
@@ -796,7 +795,7 @@ class _ChainUtil:
         tx = registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=manager.ledger_api,
             contract_address=multisig,
-            sender_address=owner_crypto.address,
+            sender_address=owner_cryptos[0].address,
             owners=tuple(owners),  # type: ignore
             to_address=tx_params["to_address"],
             value=tx_params["ether_value"],
@@ -805,7 +804,7 @@ class _ChainUtil:
             signatures_by_owner=owner_to_signature,
             operation=SafeOperation.DELEGATE_CALL.value,
         )
-        stx = owner_crypto.sign_transaction(tx)
+        stx = owner_cryptos[0].sign_transaction(tx)
         tx_digest = manager.ledger_api.send_signed_transaction(stx)
         receipt = manager.ledger_api.api.eth.wait_for_transaction_receipt(tx_digest)
         if receipt["status"] != 1:
