@@ -1256,7 +1256,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         bundle_id = data.get("id")
         password = data.get("password")
-        raise_if_inconsistent_owners = not data.get("allow_other_owners", True)
+        raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
             operate.wallet_recoverey_manager.complete_recovery(

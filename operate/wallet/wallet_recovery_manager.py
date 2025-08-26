@@ -106,7 +106,7 @@ class WalletRecoveryManager:
         }
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
-        self, bundle_id: str, password: str, raise_if_inconsistent_owners: bool = False
+        self, bundle_id: str, password: str, raise_if_inconsistent_owners: bool = True
     ) -> None:
         """Recovery step 2"""
         self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 start")
@@ -164,6 +164,7 @@ class WalletRecoveryManager:
                 (w for w in new_wallet_manager if w.ledger_type == wallet.ledger_type)
             )
 
+            all_backup_owners = set()
             for chain, safe in wallet.safes.items():
                 ledger_api = wallet.ledger_api(chain=chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
@@ -179,6 +180,13 @@ class WalletRecoveryManager:
                     _report_issue(
                         f"Inconsistent owners. Safe {safe} on {chain} has {len(owners)} != 2 owners."
                     )
+                all_backup_owners.update(set(owners) - {new_wallet.address})
+
+            if len(all_backup_owners) != 1:
+                _report_issue(
+                    f"Inconsistent owners. Backup owners differ across Safes on chains {', '.join(chain.value for chain in wallet.safes.keys())}. "
+                    f"Found backup owners: {', '.join(map(str, all_backup_owners))}."
+                )
 
             new_wallet.safes = wallet.safes.copy()
             new_wallet.safe_chains = wallet.safe_chains.copy()
