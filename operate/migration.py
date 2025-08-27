@@ -30,7 +30,9 @@ from time import time
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 
 from operate.constants import ZERO_ADDRESS
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import AgentRelease as AgentReleaseType
+from operate.operate_types import AgentReleaseRepo, Chain, LedgerType
+from operate.services.agent_runner import AgentRelease
 from operate.services.manage import ServiceManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
@@ -359,6 +361,39 @@ class MigrationManager:
             for _, chain_config in data["chain_configs"].items():
                 if chain_config["ledger_config"]["chain"] == "optimistic":
                     chain_config["ledger_config"]["chain"] = Chain.OPTIMISM.value
+
+        if version < 9:
+            agents_supported = {
+                "trader_pearl": AgentRelease(
+                    is_aea=True, owner="valory-xyz", repo="trader", release="v0.0.101"
+                ),
+                "optimus": AgentRelease(
+                    is_aea=True, owner="valory-xyz", repo="optimus", release="v0.0.103"
+                ),
+                "memeooorr": AgentRelease(
+                    is_aea=True,
+                    owner="valory-xyz",
+                    repo="meme-ooorr",
+                    release="v0.0.101",
+                ),
+            }
+            package_path = data["package_path"]
+            try:
+                release_data = agents_supported[package_path]
+            except KeyError as e:
+                raise RuntimeError(f"Found unsupported {package_path=}") from e
+
+            data["agent_release"] = AgentReleaseType(
+                is_aea=release_data.is_aea,
+                repository=AgentReleaseRepo(
+                    repo_owner=release_data.owner,
+                    repo_name=release_data.repo,
+                    release_tag=release_data.release,
+                ),
+            )
+
+            if data["name"] is None:
+                data["name"] = release_data.repo
 
         data["version"] = SERVICE_CONFIG_VERSION
 

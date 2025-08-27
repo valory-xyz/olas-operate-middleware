@@ -45,7 +45,7 @@ from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
 
-from .agent_runner import AgentRelease, get_agent_runner_path
+from .agent_runner import get_agent_runner_path
 
 
 class AbstractDeploymentRunner(ABC):
