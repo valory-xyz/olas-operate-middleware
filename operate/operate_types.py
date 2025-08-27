@@ -215,8 +215,8 @@ class EnvVariableAttributes(TypedDict):
 class AgentReleaseRepo(TypedDict):
     """Agent release repo template."""
 
-    repo_owner: str
-    repo_name: str
+    owner: str
+    name: str
     version: str
 
 

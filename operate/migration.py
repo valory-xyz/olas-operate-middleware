@@ -249,12 +249,6 @@ class MigrationManager:
                                 "nft": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("nft"),
-                                "threshold": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("threshold"),
-                                "use_staking": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("use_staking"),
                                 "cost_of_bond": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("cost_of_bond"),
@@ -276,9 +270,6 @@ class MigrationManager:
         if version < 4:
             # Add missing fields introduced in later versions, if necessary.
             for _, chain_data in data.get("chain_configs", {}).items():
-                chain_data.setdefault("chain_data", {}).setdefault(
-                    "user_params", {}
-                ).setdefault("use_mech_marketplace", False)
                 service_name = data.get("name", "")
                 agent_id = Service.determine_agent_id(service_name)
                 chain_data.setdefault("chain_data", {}).setdefault("user_params", {})[
@@ -341,6 +332,12 @@ class MigrationManager:
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
 
+        if version < 6 and "service_path" in data:
+            # Redownload service path
+            package_absolute_path = path / Path(data["service_path"]).name
+            data.pop("service_path")
+            data["package_path"] = str(package_absolute_path.name)
+
         if version < 7:
             for _, chain_data in data.get("chain_configs", {}).items():
                 if chain_data["chain_data"]["multisig"] == "0xm":
@@ -386,9 +383,9 @@ class MigrationManager:
             data["agent_release"] = AgentReleaseType(
                 is_aea=release_data.is_aea,
                 repository=AgentReleaseRepo(
-                    repo_owner=release_data.owner,
-                    repo_name=release_data.repo,
-                    release_tag=release_data.release,
+                    owner=release_data.owner,
+                    name=release_data.repo,
+                    version=release_data.release,
                 ),
             )
 
