@@ -117,7 +117,7 @@ class MigrationManager:
         """Log directories present in `path`."""
         directories = [f"  - {str(p)}" for p in path.iterdir() if p.is_dir()]
         directories_str = "\n".join(directories)
-        self.logger.info(f"Directories in {path}\n: {directories_str}")
+        self.logger.info(f"Directories in {path}:\n{directories_str}")
 
     def migrate_user_account(self) -> None:
         """Migrates user.json"""
@@ -157,18 +157,22 @@ class MigrationManager:
 
         self.logger.info("Migrating wallet configs done.")
 
-    @staticmethod
     def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals
+        self,
         path: Path,
     ) -> bool:
         """Migrate the JSON file format if needed."""
 
         if not path.is_dir():
+            self.logger.warning(f"Service config path {path} is not a directory.")
             return False
 
         if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
             "bafybei"
         ):
+            self.logger.warning(
+                f"Service config path {path} is not a valid service config."
+            )
             return False
 
         if path.name.startswith("bafybei"):
@@ -209,6 +213,10 @@ class MigrationManager:
 
         if version == SERVICE_CONFIG_VERSION:
             return False
+
+        self.logger.info(
+            f"Migrating service config in {path} from version {version} to {SERVICE_CONFIG_VERSION}..."
+        )
 
         # Migration steps for older versions
         if version == 0:
@@ -399,13 +407,9 @@ class MigrationManager:
         paths = list(service_manager.path.iterdir())
         for path in paths:
             try:
-                if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
-                    "bafybei"
-                ):
-                    self.logger.info(f"migrate_service_configs {str(path)}")
-                    migrated = self._migrate_service(path)
-                    if migrated:
-                        self.logger.info(f"Folder {str(path)} has been migrated.")
+                migrated = self._migrate_service(path)
+                if migrated:
+                    self.logger.info(f"Folder {str(path)} has been migrated.")
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.error(
                     f"Failed to migrate service: {path.name}. Exception {e}: {traceback.format_exc()}"
