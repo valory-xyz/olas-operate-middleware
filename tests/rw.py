@@ -16,22 +16,22 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
+"""Read-write script for testing key file integrity."""
 
-"""Base class."""
+import os
+from pathlib import Path
 
-import typing as t
-from abc import ABC, abstractmethod
+from operate.keys import Key
 
 
-class LedgerHelper(ABC):  # pylint: disable=too-few-public-methods
-    """Base ledger helper."""
+def main() -> None:
+    """Main function to run the read-write operation."""
+    while True:
+        resource = Key.load(Path("key.json"))
+        resource.path = Path("key.json")
+        resource.store()
 
-    api: t.Any
 
-    def __init__(self, rpc: str) -> None:
-        """Initialize object."""
-        self.rpc = rpc
-
-    @abstractmethod
-    def create_key(self) -> t.Any:
-        """Create key."""
+if __name__ == "__main__":
+    print(f"Subprocess ID: {os.getpid()}")
+    main()

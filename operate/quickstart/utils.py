@@ -35,9 +35,6 @@ from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
 
-MAX_QUICKSTART_VERSION = 1
-
-
 def print_box(text: str, margin: int = 1, character: str = "=") -> None:
     """Print text centered within a box."""
 
@@ -119,20 +116,20 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
-    "optimistic": {
+    "optimism": {
         "name": "Optimism",
         "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
-        "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
+        "staking_bonding_token": OLAS[Chain.OPTIMISM],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            USDC[Chain.OPTIMISTIC]: {
+            USDC[Chain.OPTIMISM]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            OLAS[Chain.OPTIMISTIC]: {
+            OLAS[Chain.OPTIMISM]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             },
@@ -188,8 +185,12 @@ def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
     if os.environ.get("ATTENDED", "true").lower() != "true":
         return True
-    response = input(f"{question} (yes/no): ").strip().lower()
-    return response in ["yes", "y"]
+    while True:
+        response = input(f"{question} (yes/no): ").strip().lower()
+        if response.lower() in ("yes", "y"):
+            return True
+        if response.lower() in ("no", "n"):
+            return False
 
 
 def ask_or_get_from_env(
@@ -273,7 +274,6 @@ class QuickstartConfig(LocalResource):
 
     path: Path
     rpc: Optional[Dict[str, str]] = None
-    password_migrated: Optional[bool] = None
     staking_program_id: Optional[str] = None
     principal_chain: Optional[str] = None
     user_provided_args: Optional[Dict[str, str]] = None

@@ -25,6 +25,7 @@ import textwrap
 import time
 import typing as t
 import warnings
+from http import HTTPStatus
 
 import requests
 from aea.crypto.registries import make_ledger_api
@@ -33,10 +34,10 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, OPERATE_HOME
+from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, OPERATE_HOME
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger.profiles import NO_STAKING_PROGRAM_ID, STAKING, get_staking_contract
+from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
     LedgerType,
@@ -90,20 +91,24 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_expert_16_mech_marketplace": "trader",
         "quickstart_beta_expert_17_mech_marketplace": "trader",
         "quickstart_beta_expert_18_mech_marketplace": "trader",
+        "quickstart_beta_mech_marketplace_expert_3": "trader",
+        "quickstart_beta_mech_marketplace_expert_4": "trader",
+        "quickstart_beta_mech_marketplace_expert_5": "trader",
+        "quickstart_beta_mech_marketplace_expert_6": "trader",
+        "quickstart_beta_mech_marketplace_expert_7": "trader",
+        "quickstart_beta_mech_marketplace_expert_8": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
-        "marketplace_demand_alpha_1": "mech",
-        "marketplace_demand_alpha_2": "mech",
     },
-    Chain.OPTIMISTIC: {
-        "optimus_alpha": "optimus",
+    Chain.OPTIMISM: {
+        "optimus_alpha_2": "optimus",
+        "optimus_alpha_3": "optimus",
+        "optimus_alpha_4": "optimus",
     },
     Chain.ETHEREUM: {},
     Chain.BASE: {
         "meme_base_alpha_2": "memeooorr",
         "marketplace_supply_alpha": "mech",
-        "marketplace_demand_alpha_1": "mech",
-        "marketplace_demand_alpha_2": "mech",
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
@@ -196,9 +201,6 @@ def configure_local_config(
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
 
-    if config.password_migrated is None:
-        config.password_migrated = False
-
     config.principal_chain = template["home_chain"]
 
     home_chain = Chain.from_string(config.principal_chain)
@@ -245,7 +247,7 @@ def configure_local_config(
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
                     response = requests.get(ipfs_address)
-                    if response.status_code != 200:
+                    if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
                         )
@@ -361,14 +363,12 @@ def configure_local_config(
             template["configurations"][chain] |= {
                 "staking_program_id": config.staking_program_id,
                 "rpc": config.rpc[chain],
-                "use_staking": config.staking_program_id != NO_STAKING_PROGRAM_ID,
                 "cost_of_bond": min_staking_deposit,
             }
         else:
             template["configurations"][chain] |= {
                 "staking_program_id": NO_STAKING_PROGRAM_ID,
                 "rpc": config.rpc[chain],
-                "use_staking": False,
                 "cost_of_bond": 1,
             }
 
@@ -384,11 +384,35 @@ def configure_local_config(
     ):
         print_section("Please enter the arguments that will be used by the service.")
 
+    service_manager = operate.service_manager()
+    mech_configs = service_manager.get_mech_configs(
+        chain=config.principal_chain,
+        ledger_api=ledger_api,
+        staking_program_id=config.staking_program_id,
+    )
+
     for env_var_name, env_var_data in template["env_variables"].items():
         if env_var_data["provision_type"] == ServiceEnvProvisionType.USER:
+            # PRIORITY_MECH_ADDRESS and PRIORITY_MECH_SERVICE_ID are given dynamic default values
+            if env_var_name == "PRIORITY_MECH_ADDRESS":
+                env_var_data["value"] = mech_configs.priority_mech_address
+                if (
+                    env_var_name in config.user_provided_args
+                    and env_var_data["value"] != config.user_provided_args[env_var_name]
+                ):
+                    del config.user_provided_args[env_var_name]
+
+            if env_var_name == "PRIORITY_MECH_SERVICE_ID":
+                env_var_data["value"] = mech_configs.priority_mech_service_id
+                if (
+                    env_var_name in config.user_provided_args
+                    and env_var_data["value"] != config.user_provided_args[env_var_name]
+                ):
+                    del config.user_provided_args[env_var_name]
+
             if env_var_name not in config.user_provided_args:
                 print(f"Description: {env_var_data['description']}")
-                if env_var_data["value"]:
+                if env_var_data["value"] is not None and env_var_data["value"] != "":
                     print(f"Default: {env_var_data['value']}")
 
                 user_provided_arg = ask_or_get_from_env(
@@ -421,7 +445,7 @@ def configure_local_config(
     return config
 
 
-def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> None:
+def ask_password_if_needed(operate: "OperateApp") -> None:
     """Ask password if needed."""
     if operate.user_account is None:
         print_section("Set up local user account")
@@ -431,8 +455,6 @@ def ask_password_if_needed(operate: "OperateApp", config: QuickstartConfig) -> N
             password=password,
             path=operate._path / "user.json",
         )
-        config.password_migrated = True
-        config.store()
     else:
         _password = None
         while _password is None:
@@ -492,33 +514,34 @@ def ask_funds_in_address(
     chain: str,
 ) -> None:
     """Ask for funds in address."""
-    if required_balance > get_asset_balance(
-        ledger_api, asset_address, recipient_address
-    ):
-        print(
-            f"[{chain}] Please make sure {recipient_name} {recipient_address} "
-            f"has at least {wei_to_token(required_balance, chain, asset_address)}",
-        )
-        waiting_for_amount = required_balance - get_asset_balance(
+    if required_balance == 0:
+        return
+
+    current_balance = get_asset_balance(ledger_api, asset_address, recipient_address)
+    print(
+        f"[{chain}] Please transfer at least {wei_to_token(required_balance, chain, asset_address)} "
+        f"to the {recipient_name} {recipient_address} "
+    )
+    spinner = Halo(
+        text=f"[{chain}] Waiting for at least {wei_to_token(required_balance, chain, asset_address)}...",
+        spinner="dots",
+    )
+    spinner.start()
+
+    while True:
+        time.sleep(1)
+        updated_balance = get_asset_balance(
             ledger_api, asset_address, recipient_address
         )
-        spinner = Halo(
-            text=f"[{chain}] Waiting for at least {wei_to_token(waiting_for_amount, chain, asset_address)}...",
-            spinner="dots",
-        )
-        spinner.start()
+        if updated_balance >= current_balance + required_balance:
+            break
 
-        while True:
-            time.sleep(1)
-            updated_balance = get_asset_balance(
-                ledger_api, asset_address, recipient_address
-            )
-            if updated_balance >= required_balance:
-                break
+        remaining_requirement = current_balance + required_balance - updated_balance
+        spinner.text = f"[{chain}] Waiting for at least {wei_to_token(remaining_requirement, chain, asset_address)}..."
 
-        spinner.succeed(
-            f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}."
-        )
+    spinner.succeed(
+        f"[{chain}] {recipient_name} updated balance: {wei_to_token(updated_balance, chain, asset_address)}."
+    )
 
 
 def _ask_funds_from_requirements(
@@ -545,7 +568,7 @@ def _ask_funds_from_requirements(
             chain_config.chain_data.multisig: "Service Safe"
             for chain_config in service.chain_configs.values()
         }
-        | {key.address: "Agent EOA" for key in service.keys}
+        | {address: "Agent EOA" for address in service.agent_addresses}
     )
 
     if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
@@ -569,6 +592,9 @@ def _ask_funds_from_requirements(
             rpc=service.chain_configs[chain_name].ledger_config.rpc,
         )
         for wallet_address, requirements in chain_requirements.items():
+            if wallet_address in ("master_safe", "service_safe"):
+                continue  # we can't ask funds in placeholder addresses
+
             for asset_address, requirement in requirements.items():
                 ask_funds_in_address(
                     ledger_api=ledger_api,
@@ -582,8 +608,8 @@ def _ask_funds_from_requirements(
     return False
 
 
-def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
-    """Ensure enough funds."""
+def _maybe_create_master_eoa(operate: "OperateApp") -> None:
+    """Maybe create the Master EOA."""
     if not operate.wallet_manager.exists(ledger_type=LedgerType.ETHEREUM):
         print("Creating the Master EOA...")
         wallet, mnemonic = operate.wallet_manager.create(
@@ -598,9 +624,12 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
         ask_or_get_from_env(
             "Press enter to continue...", False, "CONTINUE", raise_if_missing=False
         )
-    else:
-        wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
 
+
+def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
+    """Ensure enough funds."""
+    _maybe_create_master_eoa(operate)
+    wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     manager = operate.service_manager()
 
     backup_owner = None
@@ -637,13 +666,12 @@ def run_service(
 
     print_title(f"{template['name']} quickstart")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
+    ask_password_if_needed(operate)
+    _maybe_create_master_eoa(operate)
 
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
-    ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager(skip_dependency_check=skip_dependency_check)

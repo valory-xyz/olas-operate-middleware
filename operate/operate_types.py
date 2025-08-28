@@ -28,15 +28,9 @@ from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
 from typing_extensions import TypedDict
 
+from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.resource import LocalResource
 
-
-_ACTIONS = {
-    "status": 0,
-    "build": 1,
-    "deploy": 2,
-    "stop": 3,
-}
 
 CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
 
@@ -127,20 +121,6 @@ for name in dir(ChainMixin):
         setattr(Chain, name, getattr(ChainMixin, name))
 
 
-class Action(enum.IntEnum):
-    """Action payload."""
-
-    STATUS = 0
-    BUILD = 1
-    DEPLOY = 2
-    STOP = 3
-
-    @classmethod
-    def from_string(cls, action: str) -> "Action":
-        """Load from string."""
-        return cls(_ACTIONS[action])
-
-
 class DeploymentStatus(enum.IntEnum):
     """Status payload."""
 
@@ -174,6 +154,8 @@ class ContractAddresses(TypedDict):
     service_registry_token_utility: str
     gnosis_safe_proxy_factory: str
     gnosis_safe_same_address_multisig: str
+    safe_multisig_with_recovery_module: str
+    recovery_module: str
     multisend: str
 
 
@@ -208,9 +190,6 @@ class ConfigurationTemplate(TypedDict):
     nft: str
     rpc: str
     agent_id: int
-    threshold: int
-    use_staking: bool
-    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: t.Dict[str, FundRequirementsTemplate]
     fallback_chain_params: t.Optional[t.Dict]
@@ -233,6 +212,21 @@ class EnvVariableAttributes(TypedDict):
     provision_type: ServiceEnvProvisionType
 
 
+class AgentReleaseRepo(TypedDict):
+    """Agent release repo template."""
+
+    owner: str
+    name: str
+    version: str
+
+
+class AgentRelease(TypedDict):
+    """Agent release template."""
+
+    is_aea: bool
+    repository: AgentReleaseRepo
+
+
 ConfigurationTemplates = t.Dict[str, ConfigurationTemplate]
 EnvVariables = t.Dict[str, EnvVariableAttributes]
 
@@ -245,6 +239,7 @@ class ServiceTemplate(TypedDict, total=False):
     image: str
     description: str
     service_version: str
+    agent_release: AgentRelease
     home_chain: str
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
@@ -275,12 +270,17 @@ class OnChainUserParams(LocalResource):
 
     staking_program_id: str
     nft: str
-    threshold: int
     agent_id: int
-    use_staking: bool
-    use_mech_marketplace: bool
     cost_of_bond: int
     fund_requirements: OnChainTokenRequirements
+
+    @property
+    def use_staking(self) -> bool:
+        """Check if staking is used."""
+        return (
+            self.staking_program_id is not None
+            and self.staking_program_id != NO_STAKING_PROGRAM_ID
+        )
 
     @classmethod
     def from_json(cls, obj: t.Dict) -> "OnChainUserParams":
@@ -295,8 +295,6 @@ class OnChainData(LocalResource):
     instances: t.List[str]  # Agent instances registered as safe owners
     token: int
     multisig: str
-    staked: bool
-    on_chain_state: OnChainState
     user_params: OnChainUserParams
 
 
@@ -331,3 +329,13 @@ class AssetFundingValues(TypedDict):
 
 
 FundingValues = t.Dict[str, AssetFundingValues]  # str is the asset address
+
+
+@dataclass
+class MechMarketplaceConfig:
+    """Mech Marketplace config."""
+
+    use_mech_marketplace: bool
+    mech_marketplace_address: str
+    priority_mech_address: str
+    priority_mech_service_id: int

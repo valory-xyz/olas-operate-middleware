@@ -26,7 +26,6 @@ from typing import TYPE_CHECKING, cast
 
 from operate.constants import SAFE_WEBAPP_URL
 from operate.ledger.profiles import get_staking_contract
-from operate.operate_types import LedgerType
 from operate.quickstart.run_service import (
     ask_password_if_needed,
     configure_local_config,
@@ -49,9 +48,6 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print_section(f"Claim staking rewards for {template['name']}")
 
-    operate.service_manager().migrate_service_configs()
-    operate.wallet_manager.migrate_wallet_configs()
-
     # check if agent was started before
     config = load_local_config(
         operate=operate, service_name=cast(str, template["name"])
@@ -71,10 +67,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     print("")
 
+    ask_password_if_needed(operate)
     config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
-    ask_password_if_needed(operate, config)
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()
@@ -113,11 +109,7 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         logging.error(e)
         return
 
-    wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     service_safe_address = chain_config.chain_data.multisig
-    print_title(f"Claim transaction done. Hash: {tx_hash}")
+    print_title(f"Claim transaction done. Hash: {tx_hash.hex()}")
     print(f"Claimed staking transferred to your service Safe {service_safe_address}.\n")
-    print(
-        f"You can use your Master EOA (address {wallet.crypto.address}) to connect your Safe at"
-        f"{SAFE_WEBAPP_URL}{service_safe_address}"
-    )
+    print(f"You may connect to service Safe at {SAFE_WEBAPP_URL}{service_safe_address}")

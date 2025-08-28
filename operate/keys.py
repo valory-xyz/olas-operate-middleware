@@ -20,17 +20,18 @@
 """Keys manager."""
 
 import json
-import logging
 import os
-import typing as t
+import shutil
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
+from operate.utils import SingletonMeta
 
 
 @dataclass
@@ -47,29 +48,22 @@ class Key(LocalResource):
         return super().load(path)  # type: ignore
 
 
-Keys = t.List[Key]
-
-
-class KeysManager:
+class KeysManager(metaclass=SingletonMeta):
     """Keys manager."""
 
-    def __init__(
-        self,
-        path: Path,
-        logger: t.Optional[logging.Logger] = None,
-    ) -> None:
+    def __init__(self, **kwargs: Any) -> None:
         """
         Initialize keys manager
 
         :param path: Path to keys storage.
         :param logger: logging.Logger object.
         """
-        self.path = path
-        self.logger = logger or setup_logger(name="operate.keys")
+        if "path" not in kwargs:
+            raise ValueError("Path must be provided for KeysManager")
 
-    def setup(self) -> None:
-        """Setup service manager."""
-        self.path.mkdir(exist_ok=True)
+        self.path = kwargs["path"]
+        self.logger = kwargs["logger"]
+        self.path.mkdir(exist_ok=True, parents=True)
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -82,24 +76,66 @@ class KeysManager:
             )
         )
 
+    def get_crypto_instance(self, address: str) -> EthereumCrypto:
+        """Get EthereumCrypto instance for the given address."""
+        key: Key = Key.from_json(  # type: ignore
+            obj=json.loads(
+                (self.path / address).read_text(
+                    encoding="utf-8",
+                )
+            )
+        )
+        # Create temporary file with delete=False to handle it manually
+        with tempfile.NamedTemporaryFile(
+            dir=self.path,
+            mode="w",
+            suffix=".txt",
+            delete=False,  # Handle cleanup manually
+        ) as temp_file:
+            temp_file_name = temp_file.name
+            temp_file.write(key.private_key)
+            temp_file.flush()
+            temp_file.close()  # Close the file before reading
+
+            # Set proper file permissions (readable by owner only)
+            os.chmod(temp_file_name, 0o600)
+            crypto = EthereumCrypto(private_key_path=temp_file_name)
+
+            try:
+                with open(temp_file_name, "r+", encoding="utf-8") as f:
+                    f.seek(0)
+                    f.write("\0" * len(key.private_key))
+                    f.flush()
+                    f.close()
+                os.unlink(temp_file_name)  # Clean up the temporary file
+            except OSError as e:
+                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
+
+        return crypto
+
     def create(self) -> str:
         """Creates new key."""
+        self.path.mkdir(exist_ok=True, parents=True)
         crypto = EthereumCrypto()
-        path = self.path / crypto.address
-        if path.is_file():
-            return crypto.address
+        for path in (
+            self.path / f"{crypto.address}.bak",
+            self.path / crypto.address,
+        ):
+            if path.is_file():
+                continue
 
-        path.write_text(
-            json.dumps(
-                Key(
-                    ledger=LedgerType.ETHEREUM,
-                    address=crypto.address,
-                    private_key=crypto.private_key,
-                ).json,
-                indent=4,
-            ),
-            encoding="utf-8",
-        )
+            path.write_text(
+                json.dumps(
+                    Key(
+                        ledger=LedgerType.ETHEREUM,
+                        address=crypto.address,
+                        private_key=crypto.private_key,
+                    ).json,
+                    indent=4,
+                ),
+                encoding="utf-8",
+            )
+
         return crypto.address
 
     def delete(self, key: str) -> None:
@@ -109,17 +145,22 @@ class KeysManager:
     @classmethod
     def migrate_format(cls, path: Path) -> bool:
         """Migrate the JSON file format if needed."""
+        migrated = False
+        backup_path = path.with_suffix(".bak")
+        if not backup_path.is_file():
+            shutil.copyfile(path, backup_path)
+            migrated = True
+
         with open(path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
         old_to_new_ledgers = {0: "ethereum", 1: "solana"}
-
-        migrated = False
         if data.get("ledger") in old_to_new_ledgers:
             data["ledger"] = old_to_new_ledgers.get(data["ledger"])
             migrated = True
 
-        with open(path, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2)
+        if migrated:
+            with open(path, "w", encoding="utf-8") as file:
+                json.dump(data, file, indent=2)
 
         return migrated

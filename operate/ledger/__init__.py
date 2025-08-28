@@ -20,12 +20,8 @@
 """Ledger helpers."""
 
 import os
-import typing as t
 
-from operate.ledger.base import LedgerHelper
-from operate.ledger.ethereum import Ethereum
-from operate.ledger.solana import Solana
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain
 
 
 ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
@@ -34,7 +30,7 @@ SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solan
 BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_PUBLIC_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
 OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
+MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
 
 ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
 GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
@@ -42,7 +38,7 @@ SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
 OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-MODE_RPC = os.environ.get("MODE_RPC", "https://rpc.mode.network")
+MODE_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
 
 PUBLIC_RPCS = {
     Chain.ETHEREUM: ETHEREUM_PUBLIC_RPC,
@@ -50,7 +46,7 @@ PUBLIC_RPCS = {
     Chain.SOLANA: SOLANA_PUBLIC_RPC,
     Chain.BASE: BASE_PUBLIC_RPC,
     Chain.CELO: CELO_PUBLIC_RPC,
-    Chain.OPTIMISTIC: OPTIMISM_PUBLIC_RPC,
+    Chain.OPTIMISM: OPTIMISM_PUBLIC_RPC,
     Chain.MODE: MODE_PUBLIC_RPC,
 }
 
@@ -60,23 +56,8 @@ DEFAULT_RPCS = {
     Chain.SOLANA: SOLANA_RPC,
     Chain.BASE: BASE_RPC,
     Chain.CELO: CELO_RPC,
-    Chain.OPTIMISTIC: OPTIMISM_RPC,
+    Chain.OPTIMISM: OPTIMISM_RPC,
     Chain.MODE: MODE_RPC,
-}
-
-CHAIN_HELPERS: t.Dict[Chain, t.Type[LedgerHelper]] = {
-    Chain.ETHEREUM: Ethereum,
-    Chain.GNOSIS: Ethereum,
-    Chain.SOLANA: Solana,
-    Chain.BASE: Ethereum,
-    Chain.CELO: Ethereum,
-    Chain.OPTIMISTIC: Ethereum,
-    Chain.MODE: Ethereum,
-}
-
-LEDGER_HELPERS: t.Dict[LedgerType, t.Type[LedgerHelper]] = {
-    LedgerType.ETHEREUM: Ethereum,
-    LedgerType.SOLANA: Solana,
 }
 
 # Base currency for each chain
@@ -86,7 +67,7 @@ CURRENCY_DENOMS = {
     Chain.SOLANA: "SOL",
     Chain.BASE: "ETH",
     Chain.CELO: "CELO",
-    Chain.OPTIMISTIC: "ETH",
+    Chain.OPTIMISM: "ETH",
     Chain.MODE: "ETH",
 }
 
@@ -97,7 +78,7 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.SOLANA: "Lamport",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
-    Chain.OPTIMISTIC: "Wei",
+    Chain.OPTIMISM: "Wei",
     Chain.MODE: "Wei",
 }
 
@@ -105,16 +86,6 @@ CURRENCY_SMALLEST_UNITS = {
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
     return DEFAULT_RPCS.get(chain, ETHEREUM_RPC)
-
-
-def get_ledger_helper_by_chain(rpc: str, chain: Chain) -> LedgerHelper:
-    """Get ledger helper by chain type."""
-    return CHAIN_HELPERS.get(chain, Ethereum)(rpc=rpc)
-
-
-def get_ledger_helper_by_ledger(rpc: str, ledger: LedgerHelper) -> LedgerHelper:
-    """Get ledger helper by ledger type."""
-    return LEDGER_HELPERS.get(ledger, Ethereum)(rpc=rpc)  # type: ignore
 
 
 def get_currency_denom(chain: Chain) -> str:

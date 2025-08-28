@@ -20,23 +20,25 @@
 """Tests for services.service module."""
 
 import json
+import logging
 import typing as t
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from deepdiff import DeepDiff
 
+from operate.constants import CONFIG_JSON
+from operate.migration import MigrationManager
 from operate.services.service import (
+    NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
-    Service,
 )
 
 
 DEFAULT_CONFIG_KWARGS = {
     "hash": "bafybeidicxsruh3r4a2xarawzan6ocwyvpn3ofv42po5kxf7x6ck7kn22u",
-    "use_staking": True,
-    "use_mech_marketplace": False,
     "rpc": "https://rpc.com",
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "hash_timestamp": 1704063600,
@@ -44,7 +46,6 @@ DEFAULT_CONFIG_KWARGS = {
     "staked": True,
     "on_chain_state": 4,
     "staking_program_id": "staking_program_1",
-    "threshold": 1,
     "agent_id": 25,
     "cost_of_bond": 10000000000000000,
     "fund_requirements_agent": 100000000000000000,
@@ -55,9 +56,13 @@ DEFAULT_CONFIG_KWARGS = {
     "keys_address_0": "0x0000000000000000000000000000000000000001",
     "keys_private_key_0": "0x0000000000000000000000000000000000000000000000000000000000000001",
     "instance_0": "0x0000000000000000000000000000000000000001",
-    "multisig": "0x0000000000000000000000000000000000000020",
+    "multisig": NON_EXISTENT_MULTISIG,
     "service_config_id": "sc-00000000-0000-0000-0000-000000000000",
     "package_path": "trader_pearl",
+    "agent_release": {
+        "is_aea": True,
+        "repository": {"owner": "valory-xyz", "name": "trader", "version": "v0.0.101"},
+    },
 }
 
 
@@ -83,8 +88,6 @@ def get_config_json_data_v0(**kwargs: t.Any) -> t.Dict[str, t.Any]:
             "user_params": {
                 "nft": kwargs.get("nft"),
                 "agent_id": kwargs.get("agent_id"),
-                "threshold": kwargs.get("threshold"),
-                "use_staking": kwargs.get("use_staking"),
                 "cost_of_bond": kwargs.get("cost_of_bond"),
                 "olas_cost_of_bond": 10000000000000000000,
                 "olas_required_to_stake": 10000000000000000000,
@@ -125,8 +128,6 @@ def get_config_json_data_v2(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
-                        "use_staking": kwargs.get("use_staking"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "agent": kwargs.get("fund_requirements_agent"),
@@ -167,9 +168,6 @@ def get_config_json_data_v3(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
-                        "use_staking": kwargs.get("use_staking"),
-                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "agent": kwargs.get("fund_requirements_agent"),
@@ -212,10 +210,7 @@ def get_config_json_data_v4(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
                         "agent_id": kwargs.get("agent_id"),
-                        "use_staking": kwargs.get("use_staking"),
-                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "agent": kwargs.get("fund_requirements_agent"),
@@ -260,10 +255,7 @@ def get_config_json_data_v5(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
                         "agent_id": kwargs.get("agent_id"),
-                        "use_staking": kwargs.get("use_staking"),
-                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "0x0000000000000000000000000000000000000000": {
@@ -310,10 +302,7 @@ def get_config_json_data_v6(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
                         "agent_id": kwargs.get("agent_id"),
-                        "use_staking": kwargs.get("use_staking"),
-                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "0x0000000000000000000000000000000000000000": {
@@ -333,21 +322,14 @@ def get_config_json_data_v6(**kwargs: t.Any) -> t.Dict[str, t.Any]:
 
 
 def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
-    """get_config_json_data_v6"""
+    """get_config_json_data_v7"""
 
     return {
         "version": 7,
         "service_config_id": kwargs.get("service_config_id"),
         "hash": kwargs.get("hash"),
         "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
-        "binary_path": kwargs.get("binary_path"),
-        "keys": [
-            {
-                "ledger": "ethereum",
-                "address": kwargs.get("keys_address_0"),
-                "private_key": kwargs.get("keys_private_key_0"),
-            }
-        ],
+        "agent_addresses": [kwargs.get("keys_address_0")],
         "home_chain": "gnosis",
         "chain_configs": {
             "gnosis": {
@@ -361,10 +343,7 @@ def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
                     "user_params": {
                         "staking_program_id": kwargs.get("staking_program_id"),
                         "nft": kwargs.get("nft"),
-                        "threshold": kwargs.get("threshold"),
                         "agent_id": kwargs.get("agent_id"),
-                        "use_staking": kwargs.get("use_staking"),
-                        "use_mech_marketplace": kwargs.get("use_mech_marketplace"),
                         "cost_of_bond": kwargs.get("cost_of_bond"),
                         "fund_requirements": {
                             "0x0000000000000000000000000000000000000000": {
@@ -383,7 +362,90 @@ def get_config_json_data_v7(**kwargs: t.Any) -> t.Dict[str, t.Any]:
     }
 
 
-get_expected_data = get_config_json_data_v7
+def get_config_json_data_v8(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    """get_config_json_data_v8"""
+
+    return {
+        "version": 8,
+        "service_config_id": kwargs.get("service_config_id"),
+        "hash": kwargs.get("hash"),
+        "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
+        "agent_addresses": [kwargs.get("keys_address_0")],
+        "home_chain": "gnosis",
+        "chain_configs": {
+            "gnosis": {
+                "ledger_config": {"rpc": kwargs.get("rpc"), "chain": "gnosis"},
+                "chain_data": {
+                    "instances": [kwargs.get("instance_0")],
+                    "token": kwargs.get("token"),
+                    "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
+                    "user_params": {
+                        "staking_program_id": kwargs.get("staking_program_id"),
+                        "nft": kwargs.get("nft"),
+                        "agent_id": kwargs.get("agent_id"),
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
+                        "fund_requirements": {
+                            "0x0000000000000000000000000000000000000000": {
+                                "agent": kwargs.get("fund_requirements_agent"),
+                                "safe": kwargs.get("fund_requirements_safe"),
+                            }
+                        },
+                    },
+                },
+            }
+        },
+        "description": kwargs.get("description"),
+        "env_variables": {},
+        "package_path": kwargs.get("package_path"),
+        "name": kwargs.get("name"),
+    }
+
+
+def get_config_json_data_v9(**kwargs: t.Any) -> t.Dict[str, t.Any]:
+    """get_config_json_data_v9"""
+
+    return {
+        "version": 9,
+        "service_config_id": kwargs.get("service_config_id"),
+        "hash": kwargs.get("hash"),
+        "hash_history": {kwargs.get("hash_timestamp"): kwargs.get("hash")},
+        "agent_addresses": [kwargs.get("keys_address_0")],
+        "home_chain": "gnosis",
+        "chain_configs": {
+            "gnosis": {
+                "ledger_config": {"rpc": kwargs.get("rpc"), "chain": "gnosis"},
+                "chain_data": {
+                    "instances": [kwargs.get("instance_0")],
+                    "token": kwargs.get("token"),
+                    "multisig": kwargs.get("multisig"),
+                    "staked": kwargs.get("staked"),
+                    "on_chain_state": kwargs.get("on_chain_state"),
+                    "user_params": {
+                        "staking_program_id": kwargs.get("staking_program_id"),
+                        "nft": kwargs.get("nft"),
+                        "agent_id": kwargs.get("agent_id"),
+                        "cost_of_bond": kwargs.get("cost_of_bond"),
+                        "fund_requirements": {
+                            "0x0000000000000000000000000000000000000000": {
+                                "agent": kwargs.get("fund_requirements_agent"),
+                                "safe": kwargs.get("fund_requirements_safe"),
+                            }
+                        },
+                    },
+                },
+            }
+        },
+        "description": kwargs.get("description"),
+        "env_variables": {},
+        "package_path": kwargs.get("package_path"),
+        "name": kwargs.get("name"),
+        "agent_release": kwargs.get("agent_release"),
+    }
+
+
+get_expected_data = get_config_json_data_v9
 
 
 class TestService:
@@ -392,8 +454,6 @@ class TestService:
     @pytest.mark.parametrize(
         "staking_program_id", ["staking_program_1", "staking_program_2"]
     )
-    @pytest.mark.parametrize("use_mech_marketplace", [True])
-    @pytest.mark.parametrize("use_staking", [True])
     @pytest.mark.parametrize(
         "get_config_json_data",
         [
@@ -403,40 +463,51 @@ class TestService:
             get_config_json_data_v4,
             get_config_json_data_v5,
             get_config_json_data_v6,
+            get_config_json_data_v7,
+            get_config_json_data_v8,
         ],
     )
     def test_service_migrate_format(
         self,
         get_config_json_data: t.Callable[..., t.Dict[str, t.Any]],
-        use_staking: bool,
-        use_mech_marketplace: bool,
         staking_program_id: str,
         tmp_path: Path,
     ) -> None:
         """Test services.service.Service.migrate_format()"""
 
         config_kwargs = DEFAULT_CONFIG_KWARGS.copy()
-        config_kwargs["use_staking"] = use_staking
-        config_kwargs["use_mech_marketplace"] = use_mech_marketplace
         config_kwargs["staking_program"] = staking_program_id
         old_config_json_data = get_config_json_data(**config_kwargs)
 
         # Emulate an existing service directory contents
-        service_config_dir = tmp_path / old_config_json_data.get(
+        service_dir = tmp_path / "services"
+        service_config_dir = service_dir / old_config_json_data.get(
             "service_config_id", old_config_json_data.get("hash")
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
 
-        config_json_path = service_config_dir / "config.json"
+        if old_config_json_data.get("version", 0) == 7:
+            old_config_json_data["home_chain"] = "optimistic"
+            old_config_json_data["chain_configs"]["optimistic"] = old_config_json_data[
+                "chain_configs"
+            ].pop("gnosis")
+            old_config_json_data["chain_configs"]["optimistic"]["ledger_config"][
+                "chain"
+            ] = "optimistic"
+
+        config_json_path = service_config_dir / CONFIG_JSON
         with open(config_json_path, "w", encoding="utf-8") as file:
             json.dump(old_config_json_data, file, indent=4)
 
-        # Migrate the service using Service.migrate_format and read the resulting
+        # Migrate the service using the MigrationManager and read the resulting
         # migrated data
-        Service.migrate_format(service_config_dir)
+        mm = MigrationManager(tmp_path, logging.getLogger("test"))
+        service_manager = Mock()
+        service_manager.path = service_dir
+        mm.migrate_services(service_manager)
 
-        migrated_config_dir = next(tmp_path.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
-        new_config_json_path = migrated_config_dir / "config.json"
+        migrated_config_dir = next(service_dir.glob(f"{SERVICE_CONFIG_PREFIX}*/"))
+        new_config_json_path = migrated_config_dir / CONFIG_JSON
         with open(new_config_json_path, "r", encoding="utf-8") as file:
             migrated_data = json.load(file)
 
@@ -444,11 +515,25 @@ class TestService:
         if old_config_json_data.get("version", 0) < 2:
             config_kwargs["staking_program_id"] = "pearl_alpha"
 
-        if old_config_json_data.get("version", 0) < 3:
-            config_kwargs["use_mech_marketplace"] = False
-
         if old_config_json_data.get("version", 0) < 4:
             config_kwargs["description"] = config_kwargs["name"]
+
+        if old_config_json_data.get("version", 0) == 7:
+            assert migrated_data["home_chain"] == "optimism"
+            assert "optimism" in migrated_data["chain_configs"]
+            assert "gnosis" not in migrated_data["chain_configs"]
+            assert (
+                migrated_data["chain_configs"]["optimism"]["ledger_config"]["chain"]
+                == "optimism"
+            )
+
+            migrated_data["home_chain"] = "gnosis"
+            migrated_data["chain_configs"]["gnosis"] = migrated_data[
+                "chain_configs"
+            ].pop("optimism")
+            migrated_data["chain_configs"]["gnosis"]["ledger_config"][
+                "chain"
+            ] = "gnosis"
 
         config_kwargs["service_config_id"] = migrated_config_dir.name
         config_kwargs["version"] = SERVICE_CONFIG_VERSION
