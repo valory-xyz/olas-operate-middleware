@@ -262,7 +262,7 @@ Create a new wallet.
     "ledger_type": "ethereum",
     "safe_chains": []
   },
-  "mnemonic": "word1 word2 word3 ..."
+  "mnemonic": ["word1", "word2", "word3", ...]
 }
 ```
 
@@ -398,6 +398,221 @@ Get all safes for all wallets.
     "ethereum": ["0x..."]
   }
 ]
+```
+
+## Wallet Recovery
+
+### `POST /api/wallet/recovery/initiate`
+
+Initiate wallet recovery.
+
+**Request Body:**
+
+```json
+{
+  "new_password": "your_new_password"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "id": "bundle_123",
+  "wallets": [
+    {
+      "current_wallet": {
+        "address": "0x...",
+        "safes": {
+          "gnosis": "0x...",
+          "base": "0x..."
+        },
+        "safe_chains": [
+          "gnosis",
+          "base"
+        ],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_wallet": {
+        "address": "0x...",
+        "safes": {},
+        "safe_chains": [],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_mnemonic": ["word1", "word2", "word3", ...]
+    }
+  ]
+}
+```
+
+**Response (No account - 404):**
+
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Logged in - 403):**
+
+```json
+{
+  "error": "User must be logged out to perform this operation."
+}
+```
+
+**Response (Password too short - 400):**
+
+```json
+{
+  "error": "New password must be at least 8 characters long."
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to initiate recovery. Please check the logs."
+}
+```
+
+### `POST /api/wallet/recovery/complete`
+
+Initiate wallet recovery.
+
+**Request Body:**
+
+```json
+{
+  "id": "bundle_123",
+  "password": "your_new_password",
+  "require_consistent_owners": true
+}
+```
+
+`new_wallet` must be an owner of all Safes created by `current_wallet` to proceed. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
+
+- Current (old) MasterEOA cannot be a Safe owner.
+- All Safes must have two owners (`new_wallet` and a backup owner).
+- All backup owners must match in all Safes.
+
+**Response (Success - 200):**
+
+```json
+[
+  {
+    "address": "0x...",
+    "ledger_type": "ethereum",
+    "safe_chains": ["gnosis"],
+    "safes": {
+      "gnosis": "0x...",
+      "base": "0x..."
+    },
+    "safe_chains": [
+      "gnosis",
+      "base"
+    ],
+    "ledger_type": "ethereum",
+    "safe_nonce": 1234567890
+  }
+]
+```
+
+**Response (No account - 404):**
+
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Logged in - 403):**
+
+```json
+{
+  "error": "User must be logged out to perform this operation."
+}
+```
+
+**Response (Bundle ID not provided - 400):**
+
+```json
+{
+  "error": "Failed to complete recovery: 'bundle_id' must be a non-empty string."
+}
+```
+
+**Response (Bundle does not exist - 404):**
+
+```json
+{
+  "error": "Failed to complete recovery: Recovery bundle bundle_123 does not exist."
+}
+```
+
+**Response (Bundle already executed - 400):**
+
+```json
+{
+  "error": "Failed to complete recovery: Recovery bundle bundle_123 has been executed already."
+}
+```
+
+**Response (Invalid password - 400):**
+
+```json
+{
+  "error": "Failed to complete recovery: Password is not valid."
+}
+```
+
+**Response (Missing owner - 400):**
+
+```json
+{
+  "error": "Failed to complete recovery: Incorrect owners. Wallet 0x... is not an owner of Safe 0x... on <chain>."
+}
+```
+
+**Response (Inconsistent owners - 400):**
+
+Only if `require_consistent_owners = true`.
+
+```json
+{
+  "error": "Failed to complete recovery: Inconsistent owners. Current wallet 0x... is still an owner of Safe 0x... on <chain>."
+}
+```
+
+**Response (Inconsistent owners - 400):**
+
+Only if `require_consistent_owners = true`.
+
+```json
+{
+  "error": "Failed to complete recovery: Inconsistent owners. Safe 0x... on <chain> has <N> != 2 owners."
+}
+```
+
+**Response (Inconsistent owners - 400):**
+
+Only if `require_consistent_owners = true`.
+
+```json
+{
+  "error": "Failed to complete recovery: Inconsistent owners. Backup owners differ across Safes on chains <chain_1>, <chain_2>. Found backup owners: 0x..., 0x... ."
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to complete recovery. Please check the logs."
+}
 ```
 
 ## Safe Management
@@ -1350,17 +1565,6 @@ Execute bridge transaction.
 
 **Response (Success - 200):**
 
-Individual bridge request status:
-
-- `QUOTE_DONE`: A quote is available.
-- `QUOTE_FAILED`: Failed to request a quote.
-- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
-- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
-- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
-- `EXECUTION_UNKNOWN`: Execution unknown.
-
-<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
-
 ```json
 {
   "id": "bundle_123",
@@ -1375,6 +1579,17 @@ Individual bridge request status:
   ]
 }
 ```
+
+Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
+- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
+- `EXECUTION_UNKNOWN`: Execution unknown.
+
+<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
 
 **Response (Invalid bundle ID - 400):**
 
@@ -1418,17 +1633,6 @@ Get bridge transaction status.
 
 **Response (Success - 200):**
 
-Individual bridge request status:
-
-- `QUOTE_DONE`: A quote is available.
-- `QUOTE_FAILED`: Failed to request a quote.
-- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
-- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
-- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
-- `EXECUTION_UNKNOWN`: Execution unknown.
-
-<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
-
 ```json
 {
   "id": "bundle_123",
@@ -1443,6 +1647,17 @@ Individual bridge request status:
   ]
 }
 ```
+
+Individual bridge request status:
+
+- `QUOTE_DONE`: A quote is available.
+- `QUOTE_FAILED`: Failed to request a quote.
+- `EXECUTION_PENDING`: Execution submitted and pending to be finalized.
+- `EXECUTION_DONE`: Execution finalized successfully.<sup>&#8224;</sup>
+- `EXECUTION_FAILED`: Execution failed.<sup>&#8224;</sup>
+- `EXECUTION_UNKNOWN`: Execution unknown.
+
+<sup>&#8224;</sup>Final status: bridge request status will not change after reaching this status.
 
 **Response (Invalid bundle ID - 400):**
 

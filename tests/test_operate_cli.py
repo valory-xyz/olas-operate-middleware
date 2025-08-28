@@ -28,13 +28,13 @@ import pytest
 from web3 import Web3
 
 from operate.cli import OperateApp
-from operate.constants import OPERATE
+from operate.constants import OPERATE, USER_JSON
 from operate.operate_types import LedgerType
 
 from tests.conftest import random_string
 
 
-MSG_NEW_PASSWORD_MISSING = "'password' is required."  # nosec
+MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
 MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
 MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
@@ -152,7 +152,7 @@ class TestOperateApp:
         sha256.update(password.encode())
         password_sha = sha256.hexdigest()
         data = {"password_sha": password_sha}
-        user_json_path = operate_home_path / "user.json"
+        user_json_path = operate_home_path / USER_JSON
         user_json_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
         operate = OperateApp(
