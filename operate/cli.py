@@ -56,6 +56,7 @@ from operate.constants import (
     SERVICES_DIR,
     USER_JSON,
     WALLETS_DIR,
+    WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -207,7 +208,7 @@ class OperateApp:
     def wallet_recoverey_manager(self) -> WalletRecoveryManager:
         """Load wallet recovery manager."""
         manager = WalletRecoveryManager(
-            path=self._path / "wallet_recovery",
+            path=self._path / WALLET_RECOVERY_DIR,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
         )
@@ -1267,6 +1268,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content=operate.wallet_manager.json,
                 status_code=HTTPStatus.OK,
+            )
+        except KeyError as e:
+            logger.error(f"_recovery_complete error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to complete recovery: {e}"},
+                status_code=HTTPStatus.NOT_FOUND,
             )
         except (ValueError, WalletRecoveryError) as e:
             logger.error(f"_recovery_complete error: {e}")

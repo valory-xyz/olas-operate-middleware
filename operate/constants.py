@@ -27,6 +27,7 @@ OPERATE_HOME = Path.cwd() / OPERATE
 SERVICES_DIR = "services"
 KEYS_DIR = "keys"
 WALLETS_DIR = "wallets"
+WALLET_RECOVERY_DIR = "wallet_recovery"
 DEPLOYMENT_DIR = "deployment"
 DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"

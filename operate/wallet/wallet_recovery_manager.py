@@ -138,7 +138,7 @@ class WalletRecoveryManager:
         old_root = self.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR
 
         if not new_root.exists() or not new_root.is_dir():
-            raise ValueError(f"Recovery bundle {bundle_id} does not exist.")
+            raise KeyError(f"Recovery bundle {bundle_id} does not exist.")
 
         if old_root.exists() and old_root.is_dir():
             raise ValueError(f"Recovery bundle {bundle_id} has been executed already.")

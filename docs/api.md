@@ -545,7 +545,7 @@ Initiate wallet recovery.
 }
 ```
 
-**Response (Bundle does not exist - 400):**
+**Response (Bundle does not exist - 404):**
 
 ```json
 {
