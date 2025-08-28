@@ -19,13 +19,11 @@
 
 """Tests for wallet.wallet_recoverey_manager module."""
 
-import json
 import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
-import requests
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumCrypto
 from dotenv import load_dotenv
@@ -33,7 +31,6 @@ from eth_account.signers.local import LocalAccount
 from web3 import Account
 
 from operate.cli import OperateApp
-from operate.constants import ZERO_ADDRESS
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
@@ -43,49 +40,22 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OPERATE_TEST, RUNNING_IN_CI, random_string
-
 
 load_dotenv()
 
 # TODO operate.ledger must be loaded after load_dotenv() due to RPC env vars.
-from operate.ledger import get_default_rpc  # noqa: E402
+from tests.conftest import (  # noqa: E402
+    OPERATE_TEST,
+    RUNNING_IN_CI,
+    random_string,
+    tenderly_add_balance,
+)
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
 
 
-def tenderly_add_balance(
-    chain: Chain,
-    recipient: str,
-    amount: int = 1000 * (10**18),
-    token: str = ZERO_ADDRESS,
-) -> None:
-    """tenderly_add_balance"""
-    rpc = get_default_rpc(chain)
-    headers = {"Content-Type": "application/json"}
-
-    if token == ZERO_ADDRESS:
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_addBalance",
-            "params": [recipient, hex(amount)],
-            "id": "1",
-        }
-    else:
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_setErc20Balance",
-            "params": [token, recipient, hex(amount)],
-            "id": "1",
-        }
-
-    response = requests.post(
-        url=rpc, headers=headers, data=json.dumps(data), timeout=30
-    )
-    response.raise_for_status()
-
-
+# TODO decide if use KeysManager method instead.
 def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     """create_crypto"""
     with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_file:
