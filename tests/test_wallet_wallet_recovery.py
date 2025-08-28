@@ -455,7 +455,7 @@ class TestWalletRecovery:
 
         random_bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
         with pytest.raises(
-            ValueError, match=f"Recovery bundle {random_bundle_id} does not exist."
+            KeyError, match=f"Recovery bundle {random_bundle_id} does not exist."
         ):
             operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=random_bundle_id
