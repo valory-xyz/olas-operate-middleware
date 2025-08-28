@@ -72,6 +72,7 @@ from operate.constants import (
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AgentRelease,
     Chain,
     ChainConfig,
     ChainConfigs,
@@ -97,7 +98,7 @@ from operate.utils.ssl import create_ssl_certificate
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-SERVICE_CONFIG_VERSION = 8
+SERVICE_CONFIG_VERSION = 9
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = None
@@ -715,21 +716,19 @@ class Deployment(LocalResource):
 class Service(LocalResource):
     """Service class."""
 
+    name: str
     version: int
     service_config_id: str
+    path: Path
+    package_path: Path
     hash: str
     hash_history: t.Dict[int, str]
+    agent_release: AgentRelease
     agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
-    agent_release: t.Dict
-
-    path: Path
-    package_path: Path
-
-    name: t.Optional[str] = None
 
     _helper: t.Optional[ServiceHelper] = None
     _deployment: t.Optional[Deployment] = None
@@ -1011,6 +1010,8 @@ class Service(LocalResource):
             )
         )
         self.package_path = Path(package_absolute_path.name)
+
+        self.agent_release = service_template.get("agent_release", self.agent_release)
 
         # env_variables
         if partial_update:
