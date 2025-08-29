@@ -19,6 +19,7 @@
 
 """Tests for wallet.wallet_recovery_manager module."""
 
+import os
 import tempfile
 import uuid
 from pathlib import Path
@@ -46,19 +47,36 @@ from tests.constants import OPERATE_TEST, TESTNET_RPCS
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
 
-logger = setup_logger(name="operate-test")
+LOGGER = setup_logger(name="operate-test")
 
 
 # TODO decide if use KeysManager method instead.
 def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     """create_crypto"""
-    with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_file:
-        tmp_file.write(private_key)
-        tmp_file.flush()
-        if ledger_type == LedgerType.ETHEREUM:
-            crypto = EthereumCrypto(private_key_path=tmp_file.name)
-        else:
-            raise NotImplementedError()
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".txt",
+        delete=False,  # Handle cleanup manually
+    ) as temp_file:
+        temp_file_name = temp_file.name
+        temp_file.write(private_key)
+        temp_file.flush()
+        temp_file.close()  # Close the file before reading
+
+        # Set proper file permissions (readable by owner only)
+        os.chmod(temp_file_name, 0o600)
+        crypto = EthereumCrypto(private_key_path=temp_file_name)
+
+        try:
+            with open(temp_file_name, "r+", encoding="utf-8") as f:
+                f.seek(0)
+                f.write("\0" * len(private_key))
+                f.flush()
+                f.close()
+            os.unlink(temp_file_name)  # Clean up the temporary file
+        except OSError as e:
+            raise RuntimeError(f"Failed to delete temp file {temp_file.name}") from e
+
     return crypto
 
 
@@ -195,7 +213,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=logger,
+            logger=LOGGER,
             password=password,
         )
 
@@ -339,7 +357,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=logger,
+            logger=LOGGER,
             password=password,
         )
 
@@ -571,7 +589,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=logger,
+            logger=LOGGER,
             password=password,
         )
 
