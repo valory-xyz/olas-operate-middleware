@@ -1258,14 +1258,6 @@ class TestProvider:
         expected_elapsed_time: int,
     ) -> None:
         """test_update_execution_status"""
-
-        print(os.environ["OPTIMISM_RPC"][-8:])
-        print(os.environ["BASE_RPC"][-8:])
-        print(os.environ["GNOSIS_RPC"][-8:])
-        print(os.environ["ETHEREUM_RPC"][-8:])
-        print(os.environ["MODE_RPC"][-8:])
-
-
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
