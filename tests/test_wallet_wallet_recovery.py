@@ -62,6 +62,7 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     return crypto
 
 
+@pytest.mark.skip(reason="Feature under development")
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 

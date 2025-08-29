@@ -306,10 +306,10 @@ class TestNativeBridgeProvider:
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
 
-@pytest.mark.skip(reason="DEBUG")
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
+    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -503,6 +503,7 @@ class TestProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -662,6 +663,7 @@ class TestProvider:
 
         assert not diff, "Wrong status."
 
+    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
         "provider_class",
