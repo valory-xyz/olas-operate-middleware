@@ -41,9 +41,12 @@ from operate.wallet.wallet_recovery_manager import (
 
 from tests.conftest import random_string, tenderly_add_balance
 from tests.constants import OPERATE_TEST, TESTNET_RPCS
+from aea.helpers.logging import setup_logger
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
+
+logger = setup_logger(name="operate-test")
 
 
 # TODO decide if use KeysManager method instead.
@@ -192,7 +195,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=logger,
             password=password,
         )
 
@@ -336,7 +339,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=logger,
             password=password,
         )
 
@@ -568,7 +571,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=logger,
             password=password,
         )
 
