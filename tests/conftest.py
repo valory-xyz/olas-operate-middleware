@@ -38,8 +38,10 @@ from typing import Generator
 import pytest
 import requests
 from web3 import Web3
+
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc  # noqa: E402
+
 
 def random_string(length: int = 16) -> str:
     """Random string"""

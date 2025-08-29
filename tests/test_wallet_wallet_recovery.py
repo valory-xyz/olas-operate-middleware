@@ -30,8 +30,6 @@ from eth_account.signers.local import LocalAccount
 from web3 import Account
 
 from operate.cli import OperateApp
-from operate.constants import ZERO_ADDRESS
-from operate.ledger import get_default_rpc
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
@@ -41,48 +39,11 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import random_string
+from tests.conftest import random_string, tenderly_add_balance
 from tests.constants import OPERATE_TEST, TESTNET_RPCS
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
-
-
-def tenderly_add_balance(
-    chain: Chain,
-    recipient: str,
-    amount: int = 1000 * (10**18),
-    token: str = ZERO_ADDRESS,
-) -> None:
-    """tenderly_add_balance"""
-    rpc = get_default_rpc(chain)
-    headers = {"Content-Type": "application/json"}
-
-    if token == ZERO_ADDRESS:
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_addBalance",
-            "params": [recipient, hex(amount)],
-            "id": "1",
-        }
-    else:
-        data = {
-            "jsonrpc": "2.0",
-            "method": "tenderly_setErc20Balance",
-            "params": [token, recipient, hex(amount)],
-            "id": "1",
-        }
-
-    response = requests.post(
-        url=rpc, headers=headers, data=json.dumps(data), timeout=30
-    )
-    response.raise_for_status()
-
-    payload = response.json()
-    if "error" in payload:
-        raise RuntimeError(
-            f"Tenderly RPC call failed: {payload['error'].get('message')}."
-        )
 
 
 # TODO decide if use KeysManager method instead.
