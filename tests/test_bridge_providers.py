@@ -661,7 +661,6 @@ class TestProvider:
 
         assert not diff, "Wrong status."
 
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
         "provider_class",
         [
