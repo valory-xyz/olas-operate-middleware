@@ -619,7 +619,6 @@ class Deployment(LocalResource):
         self,
         use_docker: bool = False,
         use_kubernetes: bool = False,
-        use_custom_binary: bool = False,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -675,7 +674,7 @@ class Deployment(LocalResource):
     def start(
         self,
         use_docker: bool = False,
-        custom_binary: t.Optional[str] = None,
+        is_aea: bool = True,
     ) -> None:
         """Start the service"""
         if self.status != DeploymentStatus.BUILT:
@@ -689,14 +688,12 @@ class Deployment(LocalResource):
         try:
             if use_docker:
                 run_deployment(
-                    build_dir=self.path / "deployment",
+                    build_dir=self.path / DEPLOYMENT_DIR,
                     detach=True,
                     project_name=self.path.name,
                 )
             else:
-                run_host_deployment(
-                    build_dir=self.path / DEPLOYMENT, custom_binary=custom_binary
-                )
+                run_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -709,7 +706,7 @@ class Deployment(LocalResource):
         self,
         use_docker: bool = False,
         force: bool = False,
-        custom_binary: t.Optional[str] = None,
+        is_aea: bool = True,
     ) -> None:
         """Stop the deployment."""
         if self.status != DeploymentStatus.DEPLOYED and not force:
@@ -720,13 +717,11 @@ class Deployment(LocalResource):
 
         if use_docker:
             stop_deployment(
-                build_dir=self.path / "deployment",
+                build_dir=self.path / DEPLOYMENT_DIR,
                 project_name=self.path.name,
             )
         else:
-            stop_host_deployment(
-                build_dir=self.path / DEPLOYMENT, custom_binary=custom_binary
-            )
+            stop_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
 
         self.status = DeploymentStatus.BUILT
         self.store()
@@ -873,7 +868,6 @@ class Service(LocalResource):
             agent_addresses=agent_addresses,
             home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
-            binary_path=service_template.get("binary_path"),
             chain_configs=chain_configs,
             path=package_absolute_path.parent,
             package_path=Path(package_absolute_path.name),
@@ -1026,7 +1020,6 @@ class Service(LocalResource):
         self.home_chain = service_template.get("home_chain", self.home_chain)
         self.description = service_template.get("description", self.description)
         self.name = service_template.get("name", self.name)
-        self.binary_path = service_template.get("binary_path")
 
         package_absolute_path = self.path / self.package_path
         if package_absolute_path.exists():
