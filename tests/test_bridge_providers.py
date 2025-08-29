@@ -57,7 +57,7 @@ from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, LedgerType
 
-from tests.constants import OPERATE_TEST, RUNNING_IN_CI
+from tests.constants import OPERATE_TEST
 
 
 TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()

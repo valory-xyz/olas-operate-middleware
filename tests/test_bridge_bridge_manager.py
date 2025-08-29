@@ -47,7 +47,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
-from tests.constants import OPERATE_TEST, RUNNING_IN_CI
+from tests.constants import OPERATE_TEST
 
 
 COINGECKO_PLATFORM_IDS = {
