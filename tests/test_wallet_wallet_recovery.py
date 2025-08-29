@@ -19,13 +19,11 @@
 
 """Tests for wallet.wallet_recovery_manager module."""
 
-import json
 import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
-import requests
 from aea.crypto.base import Crypto
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account.signers.local import LocalAccount
@@ -35,7 +33,7 @@ from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
 from operate.operate_types import Chain, LedgerType
-from operate.utils.gnosis import add_owner
+from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     RECOVERY_BUNDLE_PREFIX,
@@ -87,6 +85,7 @@ def tenderly_add_balance(
         )
 
 
+# TODO decide if use KeysManager method instead.
 def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     """create_crypto"""
     with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_file:
@@ -202,11 +201,12 @@ class TestWalletRecovery:
                 wallet = wallet_manager.load(ledger_type=ledger_type)
                 for chain in chains:
                     ledger_api = wallet.ledger_api(chain)
-                    add_owner(
+                    swap_owner(
                         ledger_api=ledger_api,
                         crypto=crypto,
                         safe=item["current_wallet"]["safes"][chain.value],
-                        owner=item["new_wallet"]["address"],
+                        old_owner=wallet.address,
+                        new_owner=item["new_wallet"]["address"],
                     )
 
         # Recovery step 2
@@ -319,11 +319,12 @@ class TestWalletRecovery:
                 wallet = wallet_manager.load(ledger_type=ledger_type)
                 for chain in chains:
                     ledger_api = wallet.ledger_api(chain)
-                    add_owner(
+                    swap_owner(
                         ledger_api=ledger_api,
                         crypto=crypto,
                         safe=item["current_wallet"]["safes"][chain.value],
-                        owner=item["new_wallet"]["address"],
+                        old_owner=wallet.address,
+                        new_owner=item["new_wallet"]["address"],
                     )
 
         # Recovery step 2 - fail
@@ -344,11 +345,12 @@ class TestWalletRecovery:
                 wallet = wallet_manager.load(ledger_type=ledger_type)
                 for chain in chains:
                     ledger_api = wallet.ledger_api(chain)
-                    add_owner(
+                    swap_owner(
                         ledger_api=ledger_api,
                         crypto=crypto,
                         safe=item["current_wallet"]["safes"][chain.value],
-                        owner=item["new_wallet"]["address"],
+                        old_owner=wallet.address,
+                        new_owner=item["new_wallet"]["address"],
                     )
 
         # Recovery step 2
@@ -379,10 +381,12 @@ class TestWalletRecovery:
 
         TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
 
+    @pytest.mark.parametrize("raise_if_inconsistent_owners", [True, False])
     def test_exceptions(
         self,
         tmp_path: Path,
         password: str,
+        raise_if_inconsistent_owners: bool,
     ) -> None:
         """test_exceptions"""
         operate = OperateApp(
@@ -394,6 +398,7 @@ class TestWalletRecovery:
         wallet_manager = operate.wallet_manager
         wallet_manager.setup()
         backup_wallet: LocalAccount = Account().create()
+        backup_wallet2: LocalAccount = Account().create()
         TestWalletRecovery._create_wallets(wallet_manager=wallet_manager)
         TestWalletRecovery._create_safes(
             wallet_manager=wallet_manager,
@@ -449,7 +454,7 @@ class TestWalletRecovery:
 
         random_bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
         with pytest.raises(
-            ValueError, match=f"Recovery bundle {random_bundle_id} does not exist."
+            KeyError, match=f"Recovery bundle {random_bundle_id} does not exist."
         ):
             operate.wallet_recoverey_manager.complete_recovery(
                 password=new_password, bundle_id=random_bundle_id
@@ -477,7 +482,7 @@ class TestWalletRecovery:
                 bundle_id=bundle_id,
             )
 
-        # Swap safe owners using backup wallet
+        # Add safe owners using backup wallet
         for item in step_1_output["wallets"]:
             crypto = create_crypto(
                 ledger_type=LedgerType(item["current_wallet"]["ledger_type"]),
@@ -502,10 +507,88 @@ class TestWalletRecovery:
                 raise_if_inconsistent_owners=True,
             )
 
+        if raise_if_inconsistent_owners:
+            # Remove old MasterEOA
+            for item in step_1_output["wallets"]:
+                crypto = create_crypto(
+                    ledger_type=LedgerType(item["current_wallet"]["ledger_type"]),
+                    private_key=backup_wallet.key.hex(),
+                )
+
+                for ledger_type, chains in LEDGER_TO_CHAINS.items():
+                    wallet = wallet_manager.load(ledger_type=ledger_type)
+                    for chain in chains:
+                        ledger_api = wallet.ledger_api(chain)
+                        remove_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=item["current_wallet"]["safes"][chain.value],
+                            owner=wallet.address,
+                            threshold=1,
+                        )
+
+            ledger_to_chains_1 = {}
+            ledger_to_chains_2 = {}
+
+            for ledger, chains in LEDGER_TO_CHAINS.items():
+                mid = len(chains) // 2
+                ledger_to_chains_1[ledger] = chains[:mid]
+                ledger_to_chains_2[ledger] = chains[mid:]
+
+            # Use a different backup owner for half of the chains
+            for item in step_1_output["wallets"]:
+                crypto = create_crypto(
+                    ledger_type=LedgerType(item["current_wallet"]["ledger_type"]),
+                    private_key=backup_wallet.key.hex(),
+                )
+
+                for ledger_type, chains in ledger_to_chains_1.items():
+                    wallet = wallet_manager.load(ledger_type=ledger_type)
+                    for chain in chains:
+                        ledger_api = wallet.ledger_api(chain)
+                        swap_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=item["current_wallet"]["safes"][chain.value],
+                            old_owner=backup_wallet.address,
+                            new_owner=backup_wallet2.address,
+                        )
+
+            with pytest.raises(
+                WalletRecoveryError,
+                match="^Inconsistent owners. Backup owners differ across Safes on chains.*",
+            ):
+                operate.wallet_recoverey_manager.complete_recovery(
+                    password=new_password,
+                    bundle_id=bundle_id,
+                    raise_if_inconsistent_owners=True,
+                )
+
+            # Revert original backup owner
+            for item in step_1_output["wallets"]:
+                crypto = create_crypto(
+                    ledger_type=LedgerType(item["current_wallet"]["ledger_type"]),
+                    private_key=backup_wallet2.key.hex(),
+                )
+
+                for ledger_type, chains in ledger_to_chains_1.items():
+                    wallet = wallet_manager.load(ledger_type=ledger_type)
+                    for chain in chains:
+                        tenderly_add_balance(chain, backup_wallet2.address)
+                        ledger_api = wallet.ledger_api(chain)
+                        swap_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=item["current_wallet"]["safes"][chain.value],
+                            old_owner=backup_wallet2.address,
+                            new_owner=backup_wallet.address,
+                        )
+
         # Recovery step 2
         operate.wallet_recoverey_manager.complete_recovery(
             password=new_password,
             bundle_id=bundle_id,
+            raise_if_inconsistent_owners=raise_if_inconsistent_owners,
         )
 
         # Test that recovery was successful

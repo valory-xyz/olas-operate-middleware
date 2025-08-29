@@ -27,6 +27,8 @@ package without needing to import them (pytest will automatically discover them)
 See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
+import json
+import os
 import random
 import string
 import tempfile
@@ -34,8 +36,10 @@ from pathlib import Path
 from typing import Generator
 
 import pytest
+import requests
 from web3 import Web3
-
+from operate.constants import ZERO_ADDRESS
+from operate.ledger import get_default_rpc  # noqa: E402
 
 def random_string(length: int = 16) -> str:
     """Random string"""
@@ -49,6 +53,37 @@ def random_mnemonic(num_words: int = 12) -> str:
     w3.eth.account.enable_unaudited_hdwallet_features()
     _, mnemonic = w3.eth.account.create_with_mnemonic(num_words=num_words)
     return mnemonic
+
+
+def tenderly_add_balance(
+    chain: Chain,
+    recipient: str,
+    amount: int = 1000 * (10**18),
+    token: str = ZERO_ADDRESS,
+) -> None:
+    """tenderly_add_balance"""
+    rpc = get_default_rpc(chain)
+    headers = {"Content-Type": "application/json"}
+
+    if token == ZERO_ADDRESS:
+        data = {
+            "jsonrpc": "2.0",
+            "method": "tenderly_addBalance",
+            "params": [recipient, hex(amount)],
+            "id": "1",
+        }
+    else:
+        data = {
+            "jsonrpc": "2.0",
+            "method": "tenderly_setErc20Balance",
+            "params": [token, recipient, hex(amount)],
+            "id": "1",
+        }
+
+    response = requests.post(
+        url=rpc, headers=headers, data=json.dumps(data), timeout=30
+    )
+    response.raise_for_status()
 
 
 @pytest.fixture

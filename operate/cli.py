@@ -20,7 +20,6 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
-import logging
 import multiprocessing
 import os
 import signal
@@ -46,7 +45,7 @@ from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
 
-from operate import services
+from operate import __version__, services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
@@ -56,6 +55,7 @@ from operate.constants import (
     SERVICES_DIR,
     USER_JSON,
     WALLETS_DIR,
+    WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -98,6 +98,8 @@ ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
 )
 TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE = True
 
+logger = setup_logger(name="operate")
+
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
     """Service not found error response"""
@@ -113,7 +115,6 @@ class OperateApp:
     def __init__(
         self,
         home: t.Optional[Path] = None,
-        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize object."""
         super().__init__()
@@ -122,14 +123,13 @@ class OperateApp:
         self._keys = self._path / KEYS_DIR
         self.setup()
 
-        self.logger = logger or setup_logger(name="operate")
         services.manage.KeysManager(
             path=self._keys,
-            logger=self.logger,
+            logger=logger,
         )
         self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
 
-        mm = MigrationManager(self._path, self.logger)
+        mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
@@ -181,7 +181,7 @@ class OperateApp:
         return services.manage.ServiceManager(
             path=self._services,
             wallet_manager=self.wallet_manager,
-            logger=self.logger,
+            logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
 
@@ -198,7 +198,7 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=self.logger,
+            logger=logger,
         )
         manager.setup()
         return manager
@@ -207,7 +207,7 @@ class OperateApp:
     def wallet_recoverey_manager(self) -> WalletRecoveryManager:
         """Load wallet recovery manager."""
         manager = WalletRecoveryManager(
-            path=self._path / "wallet_recovery",
+            path=self._path / WALLET_RECOVERY_DIR,
             wallet_manager=self.wallet_manager,
             logger=self.logger,
         )
@@ -219,7 +219,7 @@ class OperateApp:
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
-            logger=self.logger,
+            logger=logger,
         )
         return manager
 
@@ -250,10 +250,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
     )
 
-    logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
         logger.warning("Healthchecker is off!!!")
-    operate = OperateApp(home=home, logger=logger)
+    operate = OperateApp(home=home)
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
@@ -1256,7 +1255,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         bundle_id = data.get("id")
         password = data.get("password")
-        raise_if_inconsistent_owners = not data.get("allow_other_owners", True)
+        raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
             operate.wallet_recoverey_manager.complete_recovery(
@@ -1267,6 +1266,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return JSONResponse(
                 content=operate.wallet_manager.json,
                 status_code=HTTPStatus.OK,
+            )
+        except KeyError as e:
+            logger.error(f"_recovery_complete error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to complete recovery: {e}"},
+                status_code=HTTPStatus.NOT_FOUND,
             )
         except (ValueError, WalletRecoveryError) as e:
             logger.error(f"_recovery_complete error: {e}")
@@ -1289,6 +1294,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 @group(name="operate")
 def _operate() -> None:
     """Operate - deploy autonomous services."""
+    logger.info(f"Operate version: {__version__}")
 
 
 @_operate.command(name="daemon")
@@ -1305,7 +1311,6 @@ def _daemon(
 ) -> None:
     """Launch operate daemon."""
     app = create_app(home=home)
-    logger = setup_logger(name="daemon")
 
     config_kwargs = {
         "app": app,

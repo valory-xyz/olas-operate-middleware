@@ -489,9 +489,15 @@ Initiate wallet recovery.
 {
   "id": "bundle_123",
   "password": "your_new_password",
-  "allow_other_owners": true
+  "require_consistent_owners": true
 }
 ```
+
+`new_wallet` must be an owner of all Safes created by `current_wallet` to proceed. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
+
+- Current (old) MasterEOA cannot be a Safe owner.
+- All Safes must have two owners (`new_wallet` and a backup owner).
+- All backup owners must match in all Safes.
 
 **Response (Success - 200):**
 
@@ -539,7 +545,7 @@ Initiate wallet recovery.
 }
 ```
 
-**Response (Bundle does not exist - 400):**
+**Response (Bundle does not exist - 404):**
 
 ```json
 {
@@ -573,7 +579,7 @@ Initiate wallet recovery.
 
 **Response (Inconsistent owners - 400):**
 
-Only if `allow_other_owners = False`.
+Only if `require_consistent_owners = true`.
 
 ```json
 {
@@ -583,7 +589,7 @@ Only if `allow_other_owners = False`.
 
 **Response (Inconsistent owners - 400):**
 
-Only if `allow_other_owners = False`.
+Only if `require_consistent_owners = true`.
 
 ```json
 {
@@ -591,11 +597,13 @@ Only if `allow_other_owners = False`.
 }
 ```
 
-**Response (Missing owner - 400):**
+**Response (Inconsistent owners - 400):**
+
+Only if `require_consistent_owners = true`.
 
 ```json
 {
-  "error": "Failed to complete recovery: Incorrect owners. Wallet 0x... is not an owner of Safe 0x... on <chain>."
+  "error": "Failed to complete recovery: Inconsistent owners. Backup owners differ across Safes on chains <chain_1>, <chain_2>. Found backup owners: 0x..., 0x... ."
 }
 ```
 
