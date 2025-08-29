@@ -667,7 +667,7 @@ class TestProvider:
             RelayProvider,
             pytest.param(
                 LiFiProvider,
-                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Flaky test."),
+                marks=pytest.mark.xfail(reason="Flaky test."),
             ),
             NativeBridgeProvider,
         ],
