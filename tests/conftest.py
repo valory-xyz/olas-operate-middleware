@@ -28,7 +28,6 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
 import json
-import os
 import random
 import string
 import tempfile
@@ -41,6 +40,7 @@ from web3 import Web3
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc  # noqa: E402
+from operate.operate_types import Chain
 
 
 def random_string(length: int = 16) -> str:
