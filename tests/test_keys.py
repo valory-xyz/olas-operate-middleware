@@ -64,8 +64,6 @@ def key_file(keys_manager: KeysManager, sample_key: Key) -> tuple[Path, Key]:
     return key_file_path, sample_key
 
 
-@pytest.mark.skip(reason="DEBUG")
-
 class TestKeysManager:
     """Test cases for KeysManager class."""
 

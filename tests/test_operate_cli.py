@@ -47,7 +47,6 @@ def random_mnemonic(num_words: int = 12) -> str:
     return mnemonic
 
 
-@pytest.mark.skip(reason="DEBUG")
 class TestOperateApp:
     """Tests for operate.cli.OperateApp class."""
 

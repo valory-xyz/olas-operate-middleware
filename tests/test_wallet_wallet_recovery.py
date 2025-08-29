@@ -25,6 +25,7 @@ from pathlib import Path
 
 import pytest
 from aea.crypto.base import Crypto
+from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
 from eth_account.signers.local import LocalAccount
 from web3 import Account
@@ -41,7 +42,6 @@ from operate.wallet.wallet_recovery_manager import (
 
 from tests.conftest import random_string, tenderly_add_balance
 from tests.constants import OPERATE_TEST, TESTNET_RPCS
-from aea.helpers.logging import setup_logger
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
@@ -62,7 +62,6 @@ def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     return crypto
 
 
-@pytest.mark.skip(reason="Feature under development")
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 

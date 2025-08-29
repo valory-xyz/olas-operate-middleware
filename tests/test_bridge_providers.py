@@ -20,7 +20,6 @@
 """Tests for bridge.providers.* module."""
 
 
-import os
 import time
 import typing as t
 from pathlib import Path
@@ -112,7 +111,7 @@ def get_transfer_amount(
                 return value
         return 0
 
-@pytest.mark.skip(reason="DEBUG")
+
 class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 
@@ -310,7 +309,6 @@ class TestNativeBridgeProvider:
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
-    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -504,7 +502,6 @@ class TestProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
-    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -664,7 +661,6 @@ class TestProvider:
 
         assert not diff, "Wrong status."
 
-    @pytest.mark.skip(reason="DEBUG")
     @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
         "provider_class",

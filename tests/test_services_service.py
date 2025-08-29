@@ -426,7 +426,6 @@ def get_config_json_data_v8(**kwargs: t.Any) -> t.Dict[str, t.Any]:
 get_expected_data = get_config_json_data_v8
 
 
-@pytest.mark.skip(reason="DEBUG")
 class TestService:
     """Tests for services.service.Service class."""
 
