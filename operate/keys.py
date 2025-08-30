@@ -85,6 +85,7 @@ class KeysManager(metaclass=SingletonMeta):
                 )
             )
         )
+        private_key = key.private_key
         # Create temporary file with delete=False to handle it manually
         with tempfile.NamedTemporaryFile(
             dir=self.path,
@@ -93,7 +94,7 @@ class KeysManager(metaclass=SingletonMeta):
             delete=False,  # Handle cleanup manually
         ) as temp_file:
             temp_file_name = temp_file.name
-            temp_file.write(key.private_key)
+            temp_file.write(private_key)
             temp_file.flush()
             temp_file.close()  # Close the file before reading
 
@@ -104,7 +105,7 @@ class KeysManager(metaclass=SingletonMeta):
             try:
                 with open(temp_file_name, "r+", encoding="utf-8") as f:
                     f.seek(0)
-                    f.write("\0" * len(key.private_key))
+                    f.write("\0" * len(private_key))
                     f.flush()
                     f.close()
                 os.unlink(temp_file_name)  # Clean up the temporary file

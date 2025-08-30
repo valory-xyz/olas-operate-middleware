@@ -209,7 +209,7 @@ class OperateApp:
         manager = WalletRecoveryManager(
             path=self._path / WALLET_RECOVERY_DIR,
             wallet_manager=self.wallet_manager,
-            logger=self.logger,
+            logger=logger,
         )
         return manager
 

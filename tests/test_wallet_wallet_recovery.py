@@ -17,16 +17,17 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tests for wallet.wallet_recoverey_manager module."""
+"""Tests for wallet.wallet_recovery_manager module."""
 
+import os
 import tempfile
 import uuid
 from pathlib import Path
 
 import pytest
 from aea.crypto.base import Crypto
+from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import EthereumCrypto
-from dotenv import load_dotenv
 from eth_account.signers.local import LocalAccount
 from web3 import Account
 
@@ -40,38 +41,51 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-
-load_dotenv()
-
-# TODO operate.ledger must be loaded after load_dotenv() due to RPC env vars.
-from tests.conftest import (  # noqa: E402
-    OPERATE_TEST,
-    RUNNING_IN_CI,
-    random_string,
-    tenderly_add_balance,
-)
+from tests.conftest import random_string, tenderly_add_balance
+from tests.constants import OPERATE_TEST, TESTNET_RPCS
 
 
 LEDGER_TO_CHAINS = {LedgerType.ETHEREUM: [Chain.GNOSIS, Chain.BASE]}
+
+LOGGER = setup_logger(name="operate-test")
 
 
 # TODO decide if use KeysManager method instead.
 def create_crypto(ledger_type: LedgerType, private_key: str) -> Crypto:
     """create_crypto"""
-    with tempfile.NamedTemporaryFile(mode="w", delete=True) as tmp_file:
-        tmp_file.write(private_key)
-        tmp_file.flush()
-        if ledger_type == LedgerType.ETHEREUM:
-            crypto = EthereumCrypto(private_key_path=tmp_file.name)
-        else:
-            raise NotImplementedError()
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        suffix=".txt",
+        delete=False,  # Handle cleanup manually
+    ) as temp_file:
+        temp_file_name = temp_file.name
+        temp_file.write(private_key)
+        temp_file.flush()
+        temp_file.close()  # Close the file before reading
+
+        # Set proper file permissions (readable by owner only)
+        os.chmod(temp_file_name, 0o600)
+        crypto = EthereumCrypto(private_key_path=temp_file_name)
+
+        try:
+            with open(temp_file_name, "r+", encoding="utf-8") as f:
+                f.seek(0)
+                f.write("\0" * len(private_key))
+                f.flush()
+                f.close()
+            os.unlink(temp_file_name)  # Clean up the temporary file
+        except OSError as e:
+            raise RuntimeError(f"Failed to delete temp file {temp_file.name}") from e
+
     return crypto
 
 
-# TODO enable test once Tenderly RPCs are set up on CI.
-@pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
 class TestWalletRecovery:
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
+
+    @pytest.fixture(autouse=True)
+    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
 
     @staticmethod
     def _assert_recovered(
@@ -112,7 +126,6 @@ class TestWalletRecovery:
         password: str,
     ) -> None:
         """test_normal_flow"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -200,7 +213,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=LOGGER,
             password=password,
         )
 
@@ -223,7 +236,6 @@ class TestWalletRecovery:
         password: str,
     ) -> None:
         """test_incomplete_flow"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -345,7 +357,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=LOGGER,
             password=password,
         )
 
@@ -359,7 +371,6 @@ class TestWalletRecovery:
         raise_if_inconsistent_owners: bool,
     ) -> None:
         """test_exceptions"""
-
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
         )
@@ -578,7 +589,7 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=operate.logger,
+            logger=LOGGER,
             password=password,
         )
 

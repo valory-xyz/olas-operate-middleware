@@ -30,7 +30,7 @@ from operate.operate_types import ServiceTemplate
 from operate.services.manage import ServiceManager
 
 from .test_services_service import DEFAULT_CONFIG_KWARGS
-from tests.conftest import OPERATE_TEST
+from tests.constants import OPERATE_TEST
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:

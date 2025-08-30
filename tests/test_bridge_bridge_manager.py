@@ -47,7 +47,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 
-from tests.conftest import OPERATE_TEST, RUNNING_IN_CI
+from tests.constants import OPERATE_TEST
 
 
 COINGECKO_PLATFORM_IDS = {
@@ -343,7 +343,6 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     def test_bundle_quote(
         self,
         tmp_path: Path,
@@ -543,7 +542,6 @@ class TestBridgeManager:
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
         )
 
-    @pytest.mark.skipif(RUNNING_IN_CI, reason="Skip test on CI.")
     @pytest.mark.parametrize(
         "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
     )
