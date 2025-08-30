@@ -67,7 +67,7 @@ jobs:
       BASE_RPC: ${{ secrets.BASE_RPC }}
       ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
       GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
-      MODE_RPC1: ${{ secrets.MODE_RPC }} # FIX THIS, CAUSES ERRORS WHEN SET
+      # MODE_RPC: ${{ secrets.MODE_RPC }} # TODO fix MODE_RPC secret in GH (it's defined with surrounding quotes " ")
       OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
       BASE_TESTNET_RPC: ${{ secrets.BASE_TESTNET_RPC }}
       ETHEREUM_TESTNET_RPC: ${{ secrets.ETHEREUM_TESTNET_RPC }}
@@ -76,14 +76,6 @@ jobs:
       OPTIMISM_TESTNET_RPC: ${{ secrets.OPTIMISM_TESTNET_RPC }}
 
     steps:
-      - name: Debug env vars
-        run: |
-          for var in BASE_RPC ETHEREUM_RPC GNOSIS_RPC MODE_RPC1 OPTIMISM_RPC; do
-            val="${!var}"
-            echo "$var=${val: -8}"
-          done
-
-
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v3
         with:
