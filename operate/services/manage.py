@@ -1895,21 +1895,23 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
-        staking_program_id = chain_config.chain_data.user_params.staking_program_id
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
         self.logger.info(
             f"OLAS Balance on service Safe {chain_config.chain_data.multisig}: "
             f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_config.chain_data.multisig)}"
         )
+        current_staking_program = self._get_current_staking_program(
+            service=service, chain=chain
+        )
         staking_contract = get_staking_contract(
             chain=ledger_config.chain,
-            staking_program_id=staking_program_id,
+            staking_program_id=current_staking_program,
         )
         if staking_contract is None:
             raise RuntimeError(
-                "No staking contract found for the current staking_program_id: "
-                f"{staking_program_id}. Not claiming the rewards."
+                "No staking contract found for the "
+                f"{current_staking_program=}. Not claiming the rewards."
             )
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
@@ -1925,14 +1927,15 @@ class ServiceManager:
             .add(
                 sftxb.get_claiming_data(
                     service_id=chain_config.chain_data.token,
-                    staking_contract=get_staking_contract(
-                        chain=ledger_config.chain,
-                        staking_program_id=staking_program_id,
-                    ),
+                    staking_contract=staking_contract,
                 )
             )
             .settle()
         )
+
+        if receipt.status != 1:
+            self.logger.error(f"Failed to claim staking rewards. Tx hash: {receipt.tx_hash}")
+            return 0
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
