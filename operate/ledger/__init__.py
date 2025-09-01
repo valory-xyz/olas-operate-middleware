@@ -24,62 +24,65 @@ import os
 from operate.operate_types import Chain
 
 
-ETHEREUM_PUBLIC_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
-GNOSIS_PUBLIC_RPC = os.environ.get("GNOSIS_RPC", "https://gnosis-rpc.publicnode.com")
-SOLANA_PUBLIC_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
-BASE_PUBLIC_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
-CELO_PUBLIC_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
-OPTIMISM_PUBLIC_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
-MODE_PUBLIC_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
+CHAINS = [
+    Chain.ARBITRUM_ONE,
+    Chain.BASE,
+    Chain.CELO,
+    Chain.ETHEREUM,
+    Chain.GNOSIS,
+    Chain.MODE,
+    Chain.OPTIMISM,
+    Chain.POLYGON,
+    Chain.SOLANA,
+]
 
-ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
-GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
-SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
+ARBITRUM_ONE_RPC = os.environ.get("ARBITRUM_ONE_RPC", "https://arb1.arbitrum.io/rpc")
 BASE_RPC = os.environ.get("BASE_RPC", "https://mainnet.base.org")
 CELO_RPC = os.environ.get("CELO_RPC", "https://forno.celo.org")
-OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
+ETHEREUM_RPC = os.environ.get("ETHEREUM_RPC", "https://ethereum.publicnode.com")
+GNOSIS_RPC = os.environ.get("GNOSIS_RPC", "https://rpc-gate.autonolas.tech/gnosis-rpc/")
 MODE_RPC = os.environ.get("MODE_RPC", "https://mainnet.mode.network/")
+OPTIMISM_RPC = os.environ.get("OPTIMISM_RPC", "https://mainnet.optimism.io")
+POLYGON_RPC = os.environ.get("POLYGON_RPC", "https://polygon-rpc.com")
+SOLANA_RPC = os.environ.get("SOLANA_RPC", "https://api.mainnet-beta.solana.com")
 
-PUBLIC_RPCS = {
-    Chain.ETHEREUM: ETHEREUM_PUBLIC_RPC,
-    Chain.GNOSIS: GNOSIS_PUBLIC_RPC,
-    Chain.SOLANA: SOLANA_PUBLIC_RPC,
-    Chain.BASE: BASE_PUBLIC_RPC,
-    Chain.CELO: CELO_PUBLIC_RPC,
-    Chain.OPTIMISM: OPTIMISM_PUBLIC_RPC,
-    Chain.MODE: MODE_PUBLIC_RPC,
-}
 
 DEFAULT_RPCS = {
-    Chain.ETHEREUM: ETHEREUM_RPC,
-    Chain.GNOSIS: GNOSIS_RPC,
-    Chain.SOLANA: SOLANA_RPC,
+    Chain.ARBITRUM_ONE: ARBITRUM_ONE_RPC,
     Chain.BASE: BASE_RPC,
     Chain.CELO: CELO_RPC,
-    Chain.OPTIMISM: OPTIMISM_RPC,
+    Chain.ETHEREUM: ETHEREUM_RPC,
+    Chain.GNOSIS: GNOSIS_RPC,
     Chain.MODE: MODE_RPC,
+    Chain.OPTIMISM: OPTIMISM_RPC,
+    Chain.POLYGON: POLYGON_RPC,
+    Chain.SOLANA: SOLANA_RPC,
 }
 
 # Base currency for each chain
 CURRENCY_DENOMS = {
-    Chain.ETHEREUM: "ETH",
-    Chain.GNOSIS: "xDAI",
-    Chain.SOLANA: "SOL",
+    Chain.ARBITRUM_ONE: "ETH",
     Chain.BASE: "ETH",
     Chain.CELO: "CELO",
-    Chain.OPTIMISM: "ETH",
+    Chain.ETHEREUM: "ETH",
+    Chain.GNOSIS: "xDAI",
     Chain.MODE: "ETH",
+    Chain.OPTIMISM: "ETH",
+    Chain.POLYGON: "POL",
+    Chain.SOLANA: "SOL",
 }
 
 # Smallest denomination for each chain
 CURRENCY_SMALLEST_UNITS = {
-    Chain.ETHEREUM: "Wei",
-    Chain.GNOSIS: "Wei",
-    Chain.SOLANA: "Lamport",
+    Chain.ARBITRUM_ONE: "Wei",
     Chain.BASE: "Wei",
     Chain.CELO: "Wei",
-    Chain.OPTIMISM: "Wei",
+    Chain.ETHEREUM: "Wei",
+    Chain.GNOSIS: "Wei",
     Chain.MODE: "Wei",
+    Chain.OPTIMISM: "Wei",
+    Chain.POLYGON: "Wei",
+    Chain.SOLANA: "Lamport",
 }
 
 
