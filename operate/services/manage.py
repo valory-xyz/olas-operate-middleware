@@ -2323,8 +2323,8 @@ class ServiceManager:
                         await loop.run_in_executor(
                             executor,
                             self.claim_on_chain_from_safe,
-                            service_config_id=service_config_id,
-                            chain=service.home_chain,
+                            service_config_id,
+                            service.home_chain,
                         )
                     except Exception:  # pylint: disable=broad-except
                         logging.info(
