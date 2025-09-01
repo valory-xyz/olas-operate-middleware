@@ -30,6 +30,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from http import HTTPStatus
 from pathlib import Path
+from time import time
 
 import requests
 from aea.helpers.base import IPFSHash
@@ -1266,6 +1267,12 @@ class ServiceManager:
                 chain=chain,
                 staking_program_id=current_staking_program,
             )
+        else:
+            # at least claim the rewards if we cannot unstake yet
+            self.claim_on_chain_from_safe(
+                service_config_id=service_config_id,
+                chain=chain,
+            )
 
         if self._get_on_chain_state(service=service, chain=chain) in (
             OnChainState.ACTIVE_REGISTRATION,
@@ -1834,7 +1841,12 @@ class ServiceManager:
         staking_program_id: t.Optional[str] = None,
         force: bool = False,
     ) -> None:
-        """Unbond service on-chain"""
+        """Unstake service on-chain"""
+        # Claim the rewards first so that they are moved to the Master Safe
+        self.claim_on_chain_from_safe(
+            service_config_id=service_config_id,
+            chain=chain,
+        )
 
         self.logger.info("unstake_service_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
@@ -1877,38 +1889,42 @@ class ServiceManager:
         self,
         service_config_id: str,
         chain: str,
-    ) -> str:
-        """Claim rewards from Safe and returns transaction hash"""
+    ) -> int:
+        """Claim rewards from staking and returns the claimed amount"""
         self.logger.info("claim_on_chain_from_safe")
         service = self.load(service_config_id=service_config_id)
         chain_config = service.chain_configs[chain]
         ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        staking_program_id = chain_data.user_params.staking_program_id
+        staking_program_id = chain_config.chain_data.user_params.staking_program_id
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-        print(
-            f"OLAS Balance on service Safe {chain_data.multisig}: "
-            f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_data.multisig)}"
+        self.logger.info(
+            f"OLAS Balance on service Safe {chain_config.chain_data.multisig}: "
+            f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_config.chain_data.multisig)}"
         )
-        if (
-            get_staking_contract(
-                chain=ledger_config.chain,
-                staking_program_id=staking_program_id,
-            )
-            is None
-        ):
+        staking_contract = get_staking_contract(
+            chain=ledger_config.chain,
+            staking_program_id=staking_program_id,
+        )
+        if staking_contract is None:
             raise RuntimeError(
                 "No staking contract found for the current staking_program_id: "
                 f"{staking_program_id}. Not claiming the rewards."
             )
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        if not sftxb.staking_rewards_claimable(
+            service_id=chain_config.chain_data.token,
+            staking_contract=staking_contract,
+        ):
+            self.logger.info("No staking rewards claimable")
+            return 0
+
         receipt = (
             sftxb.new_tx()
             .add(
                 sftxb.get_claiming_data(
-                    service_id=chain_data.token,
+                    service_id=chain_config.chain_data.token,
                     staking_contract=get_staking_contract(
                         chain=ledger_config.chain,
                         staking_program_id=staking_program_id,
@@ -1917,7 +1933,21 @@ class ServiceManager:
             )
             .settle()
         )
-        return receipt["transactionHash"]
+
+        # transfer claimed amount from agents safe to master safe
+        # TODO: remove after staking contract directly starts sending the rewards to master safe
+        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        self.logger.info(f"Claimed amount: {amount_claimed}")
+        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+        transfer_erc20_from_safe(
+            ledger_api=ledger_api,
+            crypto=ethereum_crypto,
+            safe=chain_config.chain_data.multisig,
+            token=receipt["logs"][0]["address"],
+            to=wallet.safes[Chain(chain)],
+            amount=amount_claimed,
+        )
+        return amount_claimed
 
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -2254,6 +2284,7 @@ class ServiceManager:
         task = asyncio.current_task()
         task_id = id(task) if task else "Unknown task_id"
         with ThreadPoolExecutor() as executor:
+            last_claim = 0
             while True:
                 try:
                     await loop.run_in_executor(
@@ -2285,6 +2316,22 @@ class ServiceManager:
                     logging.info(
                         f"Error occured while funding the service\n{traceback.format_exc()}"
                     )
+
+                # try claiming rewards every hour
+                if last_claim + 3600 < time():
+                    try:
+                        await loop.run_in_executor(
+                            executor,
+                            self.claim_on_chain_from_safe,
+                            service_config_id=service_config_id,
+                            chain=service.home_chain,
+                        )
+                    except Exception:  # pylint: disable=broad-except
+                        logging.info(
+                            f"Error occured while claiming rewards\n{traceback.format_exc()}"
+                        )
+                    last_claim = time()
+
                 await asyncio.sleep(60)
 
     def deploy_service_locally(
