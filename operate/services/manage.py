@@ -701,15 +701,15 @@ class ServiceManager:
 
             env_var_to_value.update(
                 {
-                    "ARBITRUM_ONE_LEDGER_RPC": get_default_rpc(Chain.BASE),
+                    "ARBITRUM_ONE_LEDGER_RPC": get_default_rpc(Chain.ARBITRUM_ONE),
                     "BASE_LEDGER_RPC": get_default_rpc(Chain.BASE),
                     "CELO_LEDGER_RPC": get_default_rpc(Chain.CELO),
                     "ETHEREUM_LEDGER_RPC": get_default_rpc(Chain.ETHEREUM),
                     "GNOSIS_LEDGER_RPC": get_default_rpc(Chain.GNOSIS),
                     "MODE_LEDGER_RPC": get_default_rpc(Chain.MODE),
                     "OPTIMISM_LEDGER_RPC": get_default_rpc(Chain.OPTIMISM),
-                    "POLYGON_LEDGER_RPC": get_default_rpc(Chain.OPTIMISM),
-                    "SOLANA_LEDGER_RPC": get_default_rpc(Chain.OPTIMISM),
+                    "POLYGON_LEDGER_RPC": get_default_rpc(Chain.POLYGON),
+                    "SOLANA_LEDGER_RPC": get_default_rpc(Chain.SOLANA),
                     f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": target_staking_params.get(
                         "staking_contract"
