@@ -25,14 +25,13 @@ import warnings
 from typing import TYPE_CHECKING, cast
 
 from operate.constants import SAFE_WEBAPP_URL
-from operate.ledger.profiles import get_staking_contract
 from operate.quickstart.run_service import (
     ask_password_if_needed,
     configure_local_config,
     get_service,
     load_local_config,
 )
-from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
+from operate.quickstart.utils import ask_yes_or_no, print_section
 
 
 if TYPE_CHECKING:
@@ -74,6 +73,10 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
 
     # reload manger and config after setting operate.password
     manager = operate.service_manager()
+    chain_config = service.chain_configs[config.principal_chain]
+    wallet = operate.wallet_manager.load(
+        ledger_type=chain_config.ledger_config.chain.ledger_type
+    )
     config = load_local_config(operate=operate, service_name=cast(str, service.name))
     assert (  # nosec
         config.principal_chain is not None
@@ -81,23 +84,8 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
     assert config.rpc is not None, "RPC not set in quickstart config"  # nosec
     os.environ["CUSTOM_CHAIN_RPC"] = config.rpc[config.principal_chain]
 
-    chain_config = service.chain_configs[config.principal_chain]
-    sftxb = manager.get_eth_safe_tx_builder(
-        ledger_config=chain_config.ledger_config,
-    )
-    staking_contract = get_staking_contract(
-        chain=config.principal_chain,
-        staking_program_id=config.staking_program_id,
-    )
-    if not staking_contract or not sftxb.staking_rewards_claimable(
-        service_id=chain_config.chain_data.token,
-        staking_contract=staking_contract,
-    ):
-        print("No rewards to claim. Exiting.")
-        return
-
     try:
-        tx_hash = manager.claim_on_chain_from_safe(
+        manager.claim_on_chain_from_safe(
             service_config_id=service.service_config_id,
             chain=config.principal_chain,
         )
@@ -109,7 +97,8 @@ def claim_staking_rewards(operate: "OperateApp", config_path: str) -> None:
         logging.error(e)
         return
 
-    service_safe_address = chain_config.chain_data.multisig
-    print_title(f"Claim transaction done. Hash: {tx_hash.hex()}")
-    print(f"Claimed staking transferred to your service Safe {service_safe_address}.\n")
-    print(f"You may connect to service Safe at {SAFE_WEBAPP_URL}{service_safe_address}")
+    master_safe = wallet.safes[chain_config.ledger_config.chain]
+    print(
+        f"Claimed staking rewards are transferred to your Master Safe {master_safe}.\n"
+    )
+    print(f"You may connect to the Master Safe at {SAFE_WEBAPP_URL}{master_safe}")
