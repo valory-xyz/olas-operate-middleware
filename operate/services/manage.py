@@ -1838,7 +1838,7 @@ class ServiceManager:
         staking_program_id: t.Optional[str] = None,
         force: bool = False,
     ) -> None:
-        """Unbond service on-chain"""
+        """Unstake service on-chain"""
         # Claim the rewards first so that they are moved to the Master Safe
         self.claim_on_chain_from_safe(
             service_config_id=service_config_id,
