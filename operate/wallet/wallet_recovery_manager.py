@@ -49,7 +49,7 @@ class WalletRecoveryManager:
         logger: Logger,
         wallet_manager: MasterWalletManager,
     ) -> None:
-        """Initialize master wallet manager."""
+        """Initialize wallet recovery manager."""
         self.path = path
         self.logger = logger
         self.wallet_manager = wallet_manager

@@ -21,6 +21,7 @@
 
 import binascii
 import contextlib
+from functools import cache
 import io
 import json
 import logging
@@ -31,6 +32,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from aea.crypto.registries import make_ledger_api
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
@@ -56,6 +58,7 @@ from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
+from operate.ledger import get_default_rpc
 from web3.contract import Contract
 
 from operate.constants import (
@@ -183,6 +186,20 @@ class GnosisSafeTransaction:
 class StakingManager(OnChainHelper):
     """Helper class for staking a service."""
 
+    staking_ctr = t.cast(
+        StakingTokenContract,
+        StakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "staking_token")
+        ),
+    )
+
+    dual_staking_ctr = t.cast(
+        DualStakingTokenContract,
+        DualStakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "dual_staking_token")
+        ),
+    )
+
     def __init__(
         self,
         key: Path,
@@ -191,18 +208,61 @@ class StakingManager(OnChainHelper):
     ) -> None:
         """Initialize object."""
         super().__init__(key=key, chain_type=chain_type, password=password)
-        self.staking_ctr = t.cast(
-            StakingTokenContract,
-            StakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "staking_token")
-            ),
+
+    @cache
+    @staticmethod
+    def get_staking_params(chain: str, staking_contract: str) -> t.Dict:
+        """Get staking params"""
+        _chain = OperateChain(chain)
+        ledger_api = make_ledger_api(
+            _chain.ledger_type,
+            address=get_default_rpc(chain=_chain),
+            chain_id=_chain.id,
         )
-        self.dual_staking_ctr = t.cast(
-            DualStakingTokenContract,
-            DualStakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "dual_staking_token")
-            ),
+        instance = StakingManager.staking_ctr.get_instance(
+            ledger_api=ledger_api,
+            contract_address=staking_contract,
         )
+        agent_ids = instance.functions.getAgentIds().call()
+        service_registry = instance.functions.serviceRegistry().call()
+        staking_token = instance.functions.stakingToken().call()
+        service_registry_token_utility = (
+            instance.functions.serviceRegistryTokenUtility().call()
+        )
+        min_staking_deposit = instance.functions.minStakingDeposit().call()
+        activity_checker = instance.functions.activityChecker().call()
+
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": {},
+        }
+        try:
+            instance = StakingManager.dual_staking_ctr.get_instance(
+                ledger_api=ledger_api,
+                contract_address=staking_contract,
+            )
+            output["additional_staking_tokens"][
+                instance.functions.secondToken().call()
+            ] = instance.functions.secondTokenAmount().call()
+        except Exception:  # pylint: disable=broad-except # nosec
+            # Contract is not a dual staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
+            pass
+
+        return output
 
     def status(self, service_id: int, staking_contract: str) -> StakingState:
         """Is the service staked?"""
@@ -862,72 +922,17 @@ class _ChainUtil:
         self, staking_contract: str, fallback_params: t.Optional[t.Dict] = None
     ) -> t.Dict:
         """Get agent IDs for the staking contract"""
-
         if staking_contract is None and fallback_params is not None:
             return fallback_params
-
-        cache = _ChainUtil._cache
-        if staking_contract in cache.setdefault("get_staking_params", {}):
-            return cache["get_staking_params"][staking_contract]
-
         self._patch()
         staking_manager = StakingManager(
             key=self.wallet.key_path,
             password=self.wallet.password,
             chain_type=self.chain_type,
         )
-        agent_ids = staking_manager.agent_ids(
+        return staking_manager.get_staking_params(
             staking_contract=staking_contract,
         )
-        service_registry = staking_manager.service_registry(
-            staking_contract=staking_contract,
-        )
-        staking_token = staking_manager.staking_token(
-            staking_contract=staking_contract,
-        )
-        service_registry_token_utility = staking_manager.service_registry_token_utility(
-            staking_contract=staking_contract,
-        )
-        min_staking_deposit = staking_manager.min_staking_deposit(
-            staking_contract=staking_contract,
-        )
-        activity_checker = staking_manager.activity_checker(
-            staking_contract=staking_contract,
-        )
-
-        output = {
-            "staking_contract": staking_contract,
-            "agent_ids": agent_ids,
-            "service_registry": service_registry,
-            "staking_token": staking_token,
-            "service_registry_token_utility": service_registry_token_utility,
-            "min_staking_deposit": min_staking_deposit,
-            "activity_checker": activity_checker,
-            "additional_staking_tokens": {},
-        }
-        try:
-            instance = staking_manager.dual_staking_ctr.get_instance(
-                ledger_api=self.ledger_api,
-                contract_address=staking_contract,
-            )
-            output["additional_staking_tokens"][
-                instance.functions.secondToken().call()
-            ] = instance.functions.secondTokenAmount().call()
-        except Exception:  # pylint: disable=broad-except # nosec
-            # Contract is not a dual staking contract
-
-            # TODO The exception caught here should be ContractLogicError.
-            # This exception is typically raised when the contract reverts with
-            # a reason string. However, in some cases, the error message
-            # does not contain a reason string, which means web3.py raises
-            # a generic ValueError instead. It should be properly analyzed
-            # what exceptions might be raised by web3.py in this case. To
-            # avoid any issues we are simply catching all exceptions.
-            pass
-
-        cache["get_staking_params"][staking_contract] = output
-
-        return output
 
 
 class OnChainManager(_ChainUtil):

@@ -2756,6 +2756,7 @@ class ServiceManager:
             ),
         )
 
+        # TODO address this comment in FundingManager
         # This computation assumes the service will be/has been minted with these
         # parameters. Otherwise, these values should be retrieved on-chain as follows:
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService

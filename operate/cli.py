@@ -32,6 +32,7 @@ from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
+from operate.services.funding_manager import FundingManager
 import psutil
 import requests
 from aea.helpers.logging import setup_logger
@@ -184,6 +185,14 @@ class OperateApp:
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
+
+    @property
+    def funding_manager(self) -> FundingManager:
+        """Load funding manager."""
+        manager = FundingManager(
+            logger=logger,
+        )
+        return manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
