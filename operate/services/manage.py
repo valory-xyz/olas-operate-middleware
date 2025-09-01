@@ -1934,7 +1934,9 @@ class ServiceManager:
         )
 
         if receipt.status != 1:
-            self.logger.error(f"Failed to claim staking rewards. Tx hash: {receipt.tx_hash}")
+            self.logger.error(
+                f"Failed to claim staking rewards. Tx hash: {receipt.tx_hash}"
+            )
             return 0
 
         # transfer claimed amount from agents safe to master safe
