@@ -54,7 +54,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
 )
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
-from operate.ledger import PUBLIC_RPCS, get_currency_denom
+from operate.ledger import get_currency_denom, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MASTER_EOA_FUNDS,
@@ -701,12 +701,15 @@ class ServiceManager:
 
             env_var_to_value.update(
                 {
-                    "ETHEREUM_LEDGER_RPC": PUBLIC_RPCS[Chain.ETHEREUM],
-                    "GNOSIS_LEDGER_RPC": PUBLIC_RPCS[Chain.GNOSIS],
-                    "BASE_LEDGER_RPC": PUBLIC_RPCS[Chain.BASE],
-                    "CELO_LEDGER_RPC": PUBLIC_RPCS[Chain.CELO],
-                    "OPTIMISM_LEDGER_RPC": PUBLIC_RPCS[Chain.OPTIMISM],
-                    "MODE_LEDGER_RPC": PUBLIC_RPCS[Chain.MODE],
+                    "ARBITRUM_ONE_LEDGER_RPC": get_default_rpc(Chain.ARBITRUM_ONE),
+                    "BASE_LEDGER_RPC": get_default_rpc(Chain.BASE),
+                    "CELO_LEDGER_RPC": get_default_rpc(Chain.CELO),
+                    "ETHEREUM_LEDGER_RPC": get_default_rpc(Chain.ETHEREUM),
+                    "GNOSIS_LEDGER_RPC": get_default_rpc(Chain.GNOSIS),
+                    "MODE_LEDGER_RPC": get_default_rpc(Chain.MODE),
+                    "OPTIMISM_LEDGER_RPC": get_default_rpc(Chain.OPTIMISM),
+                    "POLYGON_LEDGER_RPC": get_default_rpc(Chain.POLYGON),
+                    "SOLANA_LEDGER_RPC": get_default_rpc(Chain.SOLANA),
                     f"{chain.upper()}_LEDGER_RPC": ledger_config.rpc,
                     "STAKING_CONTRACT_ADDRESS": target_staking_params.get(
                         "staking_contract"
