@@ -232,7 +232,10 @@ class EthereumMasterWallet(MasterWallet):
     path: Path
     address: str
 
+    safes: t.Dict[Chain, str] = field(default_factory=dict)
+    safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType = LedgerType.ETHEREUM
+    safe_nonce: t.Optional[int] = None  # For cross-chain reusability
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
