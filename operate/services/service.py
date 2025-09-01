@@ -317,6 +317,8 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         use_acn: bool = False,
     ) -> "HostDeploymentGenerator":
         """Generate agent and tendermint configurations"""
+        self.build_dir.mkdir(exist_ok=True, parents=True)
+        (self.build_dir / "agent").mkdir(exist_ok=True, parents=True)
         agent = self.service_builder.generate_agent(agent_n=0)
         agent = {key: f"{value}" for key, value in agent.items()}
         (self.build_dir / "agent.json").write_text(
@@ -526,7 +528,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
+    def _build_host(
+        self,
+        force: bool = True,
+        chain: t.Optional[str] = None,
+        with_tm: bool = True,
+    ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
@@ -583,15 +590,21 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            (
-                HostDeploymentGenerator(
-                    service_builder=builder,
-                    build_dir=build.resolve(),
-                    use_tm_testnet_setup=True,
-                )
-                .generate_config_tendermint()
-                .generate()
-                .populate_private_keys()
+            deployement_generator = HostDeploymentGenerator(
+                service_builder=builder,
+                build_dir=build.resolve(),
+                use_tm_testnet_setup=True,
+            )
+            if with_tm:
+                deployement_generator.generate_config_tendermint()
+
+            deployement_generator.generate()
+            deployement_generator.populate_private_keys()
+
+            # Add keys
+            shutil.copy(
+                build / "ethereum_private_key.txt",
+                build / "agent" / "ethereum_private_key.txt",
             )
 
         except Exception as e:
@@ -658,7 +671,11 @@ class Deployment(LocalResource):
         os.environ.clear()
         os.environ.update(original_env)
 
-    def start(self, use_docker: bool = False) -> None:
+    def start(
+        self,
+        use_docker: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Start the service"""
         if self.status != DeploymentStatus.BUILT:
             raise NotAllowed(
@@ -671,12 +688,12 @@ class Deployment(LocalResource):
         try:
             if use_docker:
                 run_deployment(
-                    build_dir=self.path / "deployment",
+                    build_dir=self.path / DEPLOYMENT_DIR,
                     detach=True,
                     project_name=self.path.name,
                 )
             else:
-                run_host_deployment(build_dir=self.path / "deployment")
+                run_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -685,7 +702,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.DEPLOYED
         self.store()
 
-    def stop(self, use_docker: bool = False, force: bool = False) -> None:
+    def stop(
+        self,
+        use_docker: bool = False,
+        force: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Stop the deployment."""
         if self.status != DeploymentStatus.DEPLOYED and not force:
             return
@@ -695,11 +717,11 @@ class Deployment(LocalResource):
 
         if use_docker:
             stop_deployment(
-                build_dir=self.path / "deployment",
+                build_dir=self.path / DEPLOYMENT_DIR,
                 project_name=self.path.name,
             )
         else:
-            stop_host_deployment(build_dir=self.path / "deployment")
+            stop_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
 
         self.status = DeploymentStatus.BUILT
         self.store()

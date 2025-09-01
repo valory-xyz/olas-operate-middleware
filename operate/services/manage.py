@@ -2284,7 +2284,7 @@ class ServiceManager:
                     )
                 await asyncio.sleep(60)
 
-    def deploy_service_locally(
+    def deploy_service_locally(  # pylint: disable=too-many-arguments
         self,
         service_config_id: str,
         chain: t.Optional[str] = None,
@@ -2313,7 +2313,7 @@ class ServiceManager:
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker)
+        deployment.start(use_docker=use_docker, is_aea=service.agent_release["is_aea"])
         return deployment
 
     def stop_service_locally(
@@ -2333,7 +2333,11 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker=use_docker, force=force)
+        deployment.stop(
+            use_docker=use_docker,
+            force=force,
+            is_aea=service.agent_release["is_aea"],
+        )
         if delete:
             deployment.delete()
         return deployment

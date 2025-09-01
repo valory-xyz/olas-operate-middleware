@@ -1247,6 +1247,10 @@ def qs_start(
         bool,
         params.Boolean(help="Will skip the dependencies check for minting the service"),
     ] = False,
+    use_binary: Annotated[
+        bool,
+        params.Boolean(help="Will use the released binary to run the service"),
+    ] = False,
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
@@ -1257,17 +1261,22 @@ def qs_start(
         config_path=config,
         build_only=build_only,
         skip_dependency_check=skip_dependency_check,
+        use_binary=use_binary,
     )
 
 
 @_operate.command(name="quickstop")
 def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
+    use_binary: Annotated[
+        bool,
+        params.Boolean(help="Will use the released binary to run the service"),
+    ] = False,
 ) -> None:
     """Quickstart."""
     operate = OperateApp()
     operate.setup()
-    stop_service(operate=operate, config_path=config)
+    stop_service(operate=operate, config_path=config, use_binary=use_binary)
 
 
 @_operate.command(name="terminate")
