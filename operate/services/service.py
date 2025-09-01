@@ -666,7 +666,8 @@ class Deployment(LocalResource):
                 }
             )
             service.consume_env_variables()
-            self._build_host(force=force, chain=chain)
+            is_aea = service.agent_release["is_aea"]
+            self._build_host(force=force, chain=chain, with_tm=is_aea)
 
         os.environ.clear()
         os.environ.update(original_env)
