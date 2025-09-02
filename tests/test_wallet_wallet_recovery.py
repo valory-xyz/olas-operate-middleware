@@ -128,6 +128,7 @@ class TestWalletRecovery:
     @pytest.fixture(autouse=True)
     def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
+        monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 
     @staticmethod
     def _assert_recovered(
