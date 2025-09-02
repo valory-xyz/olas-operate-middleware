@@ -33,6 +33,8 @@ import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
+from operate.constants import CONFIG_JSON
+
 
 @dataclass
 class AgentRelease:
@@ -120,7 +122,7 @@ class AgentRunnerManager:
     @classmethod
     def get_agent_release_from_service_dir(cls, service_dir: Path) -> AgentRelease:
         """Get agent release object according to public id."""
-        service_config_file = service_dir / "config.json"
+        service_config_file = service_dir / CONFIG_JSON
         service_config = json.loads(service_config_file.read_text())
         if "agent_release" not in service_config:
             raise ValueError(f"Agent release details are not found in {service_config}")
