@@ -31,6 +31,7 @@ import json
 import random
 import string
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator
 
@@ -38,9 +39,14 @@ import pytest
 import requests
 from web3 import Web3
 
-from operate.constants import ZERO_ADDRESS
+from operate.cli import OperateApp
+from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.keys import KeysManager
 from operate.ledger import get_default_rpc  # noqa: E402
-from operate.operate_types import Chain
+from operate.operate_types import Chain, LedgerType
+from operate.wallet.master import MasterWalletManager
+
+from tests.constants import LOGGER, OPERATE_TEST
 
 
 def random_string(length: int = 16) -> str:
@@ -99,3 +105,76 @@ def temp_keys_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for keys."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
+
+
+@dataclass
+class OperateTestEnv:
+    """Operate test environment."""
+
+    tmp_path: Path
+    password: str
+    operate: OperateApp
+    wallet_manager: MasterWalletManager
+    keys_manager: KeysManager
+    backup_wallet: str
+    backup_wallet2: str
+
+
+@pytest.fixture
+def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
+    """Sets up a test environment."""
+
+    def _create_wallets(wallet_manager: MasterWalletManager) -> None:
+        for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
+            wallet_manager.create(ledger_type=ledger_type)
+
+    def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
+        ledger_types = {wallet.ledger_type for wallet in wallet_manager}
+        for chain in [Chain.GNOSIS, Chain.OPTIMISM]:
+            ledger_type = chain.ledger_type
+            if ledger_type in ledger_types:
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                tenderly_add_balance(chain, wallet.address)
+                tenderly_add_balance(chain, backup_owner)
+                wallet.create_safe(
+                    chain=chain,
+                    backup_owner=backup_owner,
+                )
+
+    operate = OperateApp(
+        home=tmp_path / OPERATE_TEST,
+    )
+    operate.setup()
+    operate.create_user_account(password=password)
+    operate.password = password
+    wallet_manager = operate.wallet_manager
+    wallet_manager.setup()
+    keys_manager = KeysManager(
+        path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
+        logger=LOGGER,
+    )
+    backup_wallet = keys_manager.create()
+    backup_wallet2 = keys_manager.create()
+
+    assert backup_wallet != backup_wallet2
+
+    _create_wallets(wallet_manager=wallet_manager)
+    _create_safes(
+        wallet_manager=wallet_manager,
+        backup_owner=backup_wallet,
+    )
+
+    # Logout
+    operate = OperateApp(
+        home=tmp_path / OPERATE_TEST,
+    )
+
+    return OperateTestEnv(
+        tmp_path=tmp_path,
+        password=password,
+        operate=operate,
+        wallet_manager=wallet_manager,
+        keys_manager=keys_manager,
+        backup_wallet=backup_wallet,
+        backup_wallet2=backup_wallet2,
+    )
