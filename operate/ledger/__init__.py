@@ -109,24 +109,27 @@ def get_currency_smallest_unit(chain: Chain) -> str:
 
 DEFAULT_LEDGER_APIS: t.Dict[Chain, LedgerApi] = {}
 
-for _chain in CHAINS:
-    if _chain == Chain.SOLANA:
-        continue  # TODO: Complete when Solana is supported
-
-    gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-    if _chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
-        gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
-            5, GWEI
-        )
-
-    DEFAULT_LEDGER_APIS[_chain] = make_ledger_api(
-        _chain.ledger_type.name.lower(),
-        address=get_default_rpc(chain=_chain),
-        chain_id=_chain.id,
-        gas_price_strategies=gas_price_strategies,
-    )
-
 
 def get_default_ledger_api(chain: Chain) -> LedgerApi:
     """Get default RPC chain type."""
+
+    if chain not in DEFAULT_LEDGER_APIS:
+        if chain == Chain.SOLANA:
+            raise NotImplementedError(
+                "Solana not yet supported."
+            )  # TODO: Complete when Solana is supported
+
+        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+                5, GWEI
+            )
+
+        DEFAULT_LEDGER_APIS[chain] = make_ledger_api(
+            chain.ledger_type.name.lower(),
+            address=get_default_rpc(chain=chain),
+            chain_id=chain.id,
+            gas_price_strategies=gas_price_strategies,
+        )
+
     return DEFAULT_LEDGER_APIS[chain]

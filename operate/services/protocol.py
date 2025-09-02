@@ -60,6 +60,7 @@ from hexbytes import HexBytes
 from web3.contract import Contract
 
 from operate.constants import (
+    NO_STAKING_PROGRAM_ID,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
@@ -605,6 +606,18 @@ class StakingManager:
         ).encodeABI(
             fn_name="forcedUnstake",
             args=[service_id],
+        )
+
+    def get_staking_contract(
+        self, staking_program_id: t.Optional[str]
+    ) -> t.Optional[str]:
+        """Get staking contract based on the config and the staking program."""
+        if staking_program_id == NO_STAKING_PROGRAM_ID or staking_program_id is None:
+            return None
+
+        return STAKING[self.chain].get(
+            staking_program_id,
+            staking_program_id,
         )
 
     def get_current_staking_program(self, service_id: int) -> t.Optional[str]:
