@@ -316,7 +316,7 @@ class StakingManager:
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
         )
-        service_info = instance.functions.getService(service_id).call()
+        service_info = instance.functions.getServiceInfo(service_id).call()
         return service_info
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
