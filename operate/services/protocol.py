@@ -57,8 +57,6 @@ from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
-from operate.ledger.profiles import CONTRACTS, STAKING
-from operate.services.service import NON_EXISTENT_TOKEN
 from web3.contract import Contract
 
 from operate.constants import (
@@ -72,8 +70,10 @@ from operate.data.contracts.dual_staking_token.contract import DualStakingTokenC
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
+from operate.services.service import NON_EXISTENT_TOKEN
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -213,8 +213,8 @@ class StakingManager:
         """Get ledger api."""
         return get_default_ledger_api(OperateChain(self.chain.value))
 
-    @cache
     @staticmethod
+    @cache
     def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
         """Get staking params"""
         ledger_api = get_default_ledger_api(chain=chain)
@@ -607,9 +607,7 @@ class StakingManager:
             args=[service_id],
         )
 
-    def get_current_staking_program(
-        self, service_id: int
-    ) -> t.Optional[str]:
+    def get_current_staking_program(self, service_id: int) -> t.Optional[str]:
         """Get the current staking program of a service"""
         ledger_api = self.ledger_api
 
@@ -629,7 +627,7 @@ class StakingManager:
                 contract_address=service_owner,
             )
             state = staking_ctr.functions.getStakingState(service_id).call()
-    
+
         except Exception:  # pylint: disable=broad-except
             # Service owner is not a staking contract
 
@@ -651,9 +649,7 @@ class StakingManager:
 
         # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
         # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
-        for staking_program_id, staking_program_address in STAKING[
-            self.chain
-        ].items():
+        for staking_program_id, staking_program_address in STAKING[self.chain].items():
             staking_ctr = self.staking_ctr.get_instance(
                 ledger_api=self.ledger_api,
                 contract_address=staking_program_address,

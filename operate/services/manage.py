@@ -53,7 +53,6 @@ from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
-from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
 from operate.ledger import get_currency_denom, get_default_rpc
 from operate.ledger.profiles import (
@@ -61,7 +60,6 @@ from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
-    STAKING,
     USDC,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
@@ -75,7 +73,12 @@ from operate.operate_types import (
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
-from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingManager, StakingState
+from operate.services.protocol import (
+    EthSafeTxBuilder,
+    OnChainManager,
+    StakingManager,
+    StakingState,
+)
 from operate.services.service import (
     ChainConfig,
     Deployment,
@@ -1503,7 +1506,7 @@ class ServiceManager:
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
             )
 
-    def _get_current_staking_program(
+    def _get_current_staking_program(  # pylint: disable=no-self-use
         self, service: Service, chain: str
     ) -> t.Optional[str]:
         staking_manager = StakingManager(Chain(chain))
@@ -1830,7 +1833,10 @@ class ServiceManager:
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
 
-        if chain_config.chain_data.token == NON_EXISTENT_TOKEN or chain_config.chain_data.multisig == ZERO_ADDRESS:
+        if (
+            chain_config.chain_data.token == NON_EXISTENT_TOKEN
+            or chain_config.chain_data.multisig == ZERO_ADDRESS
+        ):
             self.logger.info("Service is not minted or Safe not deployed.")
             return 0
 
