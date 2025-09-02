@@ -75,7 +75,7 @@ from operate.operate_types import (
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
-from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
+from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingManager, StakingState
 from operate.services.service import (
     ChainConfig,
     Deployment,
@@ -628,6 +628,7 @@ class ServiceManager:
         user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+        # sftxb._patch()
         safe = wallet.safes[Chain(chain)]
 
         # TODO fix this
@@ -1506,78 +1507,10 @@ class ServiceManager:
     def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        service_id = chain_config.chain_data.token
-        ledger_api = sftxb.ledger_api
-
-        if service_id == NON_EXISTENT_TOKEN:
-            return None
-
-        service_registry = registry_contracts.service_registry.get_instance(
-            ledger_api=ledger_api,
-            contract_address=CONTRACTS[ledger_config.chain]["service_registry"],
+        staking_manager = StakingManager(Chain(chain))
+        return staking_manager.get_current_staking_program(
+            service_id=service.chain_configs[chain].chain_data.token
         )
-
-        service_owner = service_registry.functions.ownerOf(service_id).call()
-
-        # TODO Implement in Staking Manager. Implemented here for performance issues.
-        staking_ctr = t.cast(
-            StakingTokenContract,
-            StakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "staking_token")
-            ),
-        )
-
-        try:
-            state = StakingState(
-                staking_ctr.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=service_owner,
-                )
-                .functions.getStakingState(service_id)
-                .call()
-            )
-        except Exception:  # pylint: disable=broad-except
-            # Service owner is not a staking contract
-
-            # TODO The exception caught here should be ContractLogicError.
-            # This exception is typically raised when the contract reverts with
-            # a reason string. However, in some cases, the error message
-            # does not contain a reason string, which means web3.py raises
-            # a generic ValueError instead. It should be properly analyzed
-            # what exceptions might be raised by web3.py in this case. To
-            # avoid any issues we are simply catching all exceptions.
-            return None
-
-        if state == StakingState.UNSTAKED:
-            return None
-
-        for staking_program_id, val in STAKING[ledger_config.chain].items():
-            if val == service_owner:
-                return staking_program_id
-
-        # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
-        # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
-        for staking_program_id, staking_program_address in STAKING[
-            ledger_config.chain
-        ].items():
-            state = StakingState(
-                staking_ctr.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=staking_program_address,
-                )
-                .functions.getStakingState(service_id)
-                .call()
-            )
-
-            if state in (StakingState.STAKED, StakingState.EVICTED):
-                return staking_program_id
-
-        # it's staked, but we don't know which staking program
-        # so the staking_program_id should be an arbitrary staking contract
-        return service_owner
 
     def unbond_service_on_chain(
         self, service_config_id: str, chain: t.Optional[str] = None
@@ -1897,6 +1830,11 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+
+        if chain_config.chain_data.token == NON_EXISTENT_TOKEN or chain_config.chain_data.multisig == ZERO_ADDRESS:
+            self.logger.info("Service is not minted or Safe not deployed.")
+            return 0
+
         self.logger.info(
             f"OLAS Balance on service Safe {chain_config.chain_data.multisig}: "
             f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_config.chain_data.multisig)}"

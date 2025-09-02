@@ -21,7 +21,6 @@
 
 import binascii
 import contextlib
-from functools import cache
 import io
 import json
 import logging
@@ -29,10 +28,10 @@ import os
 import tempfile
 import typing as t
 from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import Optional, Union, cast
 
-from aea.crypto.registries import make_ledger_api
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
@@ -58,7 +57,8 @@ from autonomy.cli.helpers.chain import MintHelper, OnChainHelper
 from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
-from operate.ledger import get_default_rpc
+from operate.ledger.profiles import CONTRACTS, STAKING
+from operate.services.service import NON_EXISTENT_TOKEN
 from web3.contract import Contract
 
 from operate.constants import (
@@ -71,6 +71,7 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -183,7 +184,7 @@ class GnosisSafeTransaction:
         )
 
 
-class StakingManager(OnChainHelper):
+class StakingManager:
     """Helper class for staking a service."""
 
     staking_ctr = t.cast(
@@ -202,23 +203,21 @@ class StakingManager(OnChainHelper):
 
     def __init__(
         self,
-        key: Path,
-        chain_type: ChainType = ChainType.CUSTOM,
-        password: Optional[str] = None,
+        chain: OperateChain,
     ) -> None:
         """Initialize object."""
-        super().__init__(key=key, chain_type=chain_type, password=password)
+        self.chain = chain
+
+    @property
+    def ledger_api(self) -> LedgerApi:
+        """Get ledger api."""
+        return get_default_ledger_api(OperateChain(self.chain.value))
 
     @cache
     @staticmethod
-    def get_staking_params(chain: str, staking_contract: str) -> t.Dict:
+    def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
         """Get staking params"""
-        _chain = OperateChain(chain)
-        ledger_api = make_ledger_api(
-            _chain.ledger_type,
-            address=get_default_rpc(chain=_chain),
-            chain_id=_chain.id,
-        )
+        ledger_api = get_default_ledger_api(chain=chain)
         instance = StakingManager.staking_ctr.get_instance(
             ledger_api=ledger_api,
             contract_address=staking_contract,
@@ -264,7 +263,14 @@ class StakingManager(OnChainHelper):
 
         return output
 
-    def status(self, service_id: int, staking_contract: str) -> StakingState:
+    def get_staking_params(self, staking_contract: str) -> t.Dict:
+        """Get staking params"""
+        return StakingManager._get_staking_params(
+            chain=self.chain,
+            staking_contract=staking_contract,
+        )
+
+    def staking_state(self, service_id: int, staking_contract: str) -> StakingState:
         """Is the service staked?"""
         return StakingState(
             self.staking_ctr.get_instance(
@@ -306,11 +312,12 @@ class StakingManager(OnChainHelper):
 
     def service_info(self, staking_contract: str, service_id: int) -> dict:
         """Get the service onchain info"""
-        return self.staking_ctr.get_service_info(
-            self.ledger_api,
-            staking_contract,
-            service_id,
-        ).get("data")
+        instance = self.staking_ctr.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=staking_contract,
+        )
+        service_info = instance.functions.getService(service_id).call()
+        return service_info
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
         """Get a list of agent IDs for the given staking contract."""
@@ -366,7 +373,7 @@ class StakingManager(OnChainHelper):
         staking_contract: str,
     ) -> None:
         """Check if service can be staked."""
-        status = self.status(service_id, staking_contract)
+        status = self.staking_state(service_id, staking_contract)
         if status == StakingState.STAKED:
             raise ValueError("Service already staked")
 
@@ -376,21 +383,28 @@ class StakingManager(OnChainHelper):
         if not self.slots_available(staking_contract):
             raise ValueError("No sataking slots available.")
 
+    # TODO To be deprecated, only used in on-chain manager
     def stake(
         self,
         service_id: int,
         service_registry: str,
         staking_contract: str,
+        key: Path,
+        password: str,
     ) -> None:
         """Stake the service"""
+        och = OnChainHelper(
+            key=key, chain_type=ChainType(self.chain.value), password=password
+        )
+
         self.check_staking_compatibility(
             service_id=service_id, staking_contract=staking_contract
         )
 
         tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
+            ledger_api=och.ledger_api,
+            crypto=och.crypto,
+            chain_type=och.chain_type,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -406,10 +420,10 @@ class StakingManager(OnChainHelper):
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
             return registry_contracts.erc20.get_approve_tx(
-                ledger_api=self.ledger_api,
+                ledger_api=och.ledger_api,
                 contract_address=service_registry,
                 spender=staking_contract,
-                sender=self.crypto.address,
+                sender=och.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
             )
 
@@ -424,15 +438,15 @@ class StakingManager(OnChainHelper):
         def _build_staking_tx(  # pylint: disable=unused-argument
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
-            return self.ledger_api.build_transaction(
+            return och.ledger_api.build_transaction(
                 contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
+                    ledger_api=och.ledger_api,
                     contract_address=staking_contract,
                 ),
                 method_name="stake",
                 method_args={"serviceId": service_id},
                 tx_args={
-                    "sender_address": self.crypto.address,
+                    "sender_address": och.crypto.address,
                 },
                 raise_on_try=True,
             )
@@ -451,7 +465,7 @@ class StakingManager(OnChainHelper):
         staking_contract: str,
     ) -> None:
         """Check unstaking availability"""
-        if self.status(
+        if self.staking_state(
             service_id=service_id, staking_contract=staking_contract
         ) not in {StakingState.STAKED, StakingState.EVICTED}:
             raise ValueError("Service not staked.")
@@ -475,13 +489,23 @@ class StakingManager(OnChainHelper):
         if staked_duration < minimum_staking_duration and available_rewards > 0:
             raise ValueError("Service cannot be unstaked yet.")
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    # TODO To be deprecated, only used in on-chain manager
+    def unstake(
+        self,
+        service_id: int,
+        staking_contract: str,
+        key: Path,
+        password: str,
+    ) -> None:
         """Unstake the service"""
+        och = OnChainHelper(
+            key=key, chain_type=ChainType(self.chain.value), password=password
+        )
 
         tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
+            ledger_api=och.ledger_api,
+            crypto=och.crypto,
+            chain_type=och.chain_type,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -490,15 +514,15 @@ class StakingManager(OnChainHelper):
         def _build_unstaking_tx(  # pylint: disable=unused-argument
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
-            return self.ledger_api.build_transaction(
+            return och.ledger_api.build_transaction(
                 contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
+                    ledger_api=och.ledger_api,
                     contract_address=staking_contract,
                 ),
                 method_name="unstake",
                 method_args={"serviceId": service_id},
                 tx_args={
-                    "sender_address": self.crypto.address,
+                    "sender_address": och.crypto.address,
                 },
                 raise_on_try=True,
             )
@@ -583,6 +607,65 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
+    def get_current_staking_program(
+        self, service_id: int
+    ) -> t.Optional[str]:
+        """Get the current staking program of a service"""
+        ledger_api = self.ledger_api
+
+        if service_id == NON_EXISTENT_TOKEN:
+            return None
+
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=ledger_api,
+            contract_address=CONTRACTS[self.chain]["service_registry"],
+        )
+
+        service_owner = service_registry.functions.ownerOf(service_id).call()
+
+        try:
+            staking_ctr = self.staking_ctr.get_instance(
+                ledger_api=self.ledger_api,
+                contract_address=service_owner,
+            )
+            state = staking_ctr.functions.getStakingState(service_id).call()
+    
+        except Exception:  # pylint: disable=broad-except
+            # Service owner is not a staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
+            return None
+
+        if state == StakingState.UNSTAKED:
+            return None
+
+        for staking_program_id, val in STAKING[self.chain].items():
+            if val == service_owner:
+                return staking_program_id
+
+        # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
+        # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
+        for staking_program_id, staking_program_address in STAKING[
+            self.chain
+        ].items():
+            staking_ctr = self.staking_ctr.get_instance(
+                ledger_api=self.ledger_api,
+                contract_address=staking_program_address,
+            )
+            state = staking_ctr.functions.getStakingState(service_id).call()
+            if state in (StakingState.STAKED, StakingState.EVICTED):
+                return staking_program_id
+
+        # it's staked, but we don't know which staking program
+        # so the staking_program_id should be an arbitrary staking contract
+        return service_owner
+
 
 # TODO Backport this to Open Autonomy MintHelper class
 # MintHelper should support passing custom 'description', 'name' and 'attributes'.
@@ -631,8 +714,6 @@ class MintManager(MintHelper):
 
 class _ChainUtil:
     """On chain service management."""
-
-    _cache = {}
 
     def __init__(
         self,
@@ -874,9 +955,7 @@ class _ChainUtil:
         """Check if there are available slots on the staking contract"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).slots_available(
             staking_contract=staking_contract,
         )
@@ -885,9 +964,7 @@ class _ChainUtil:
         """Check if there are available staking rewards on the staking contract"""
         self._patch()
         available_rewards = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).available_rewards(
             staking_contract=staking_contract,
         )
@@ -897,9 +974,7 @@ class _ChainUtil:
         """Check if there are claimable staking rewards on the staking contract"""
         self._patch()
         claimable_rewards = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).claimable_rewards(
             staking_contract=staking_contract,
             service_id=service_id,
@@ -910,10 +985,8 @@ class _ChainUtil:
         """Stake the service"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        ).status(
+            chain=OperateChain(self.chain_type.value),
+        ).staking_state(
             service_id=service_id,
             staking_contract=staking_contract,
         )
@@ -926,9 +999,7 @@ class _ChainUtil:
             return fallback_params
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
         return staking_manager.get_staking_params(
             staking_contract=staking_contract,
@@ -1120,35 +1191,33 @@ class OnChainManager(_ChainUtil):
         """Stake service."""
         self._patch()
         StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).stake(
             service_id=service_id,
             service_registry=service_registry,
             staking_contract=staking_contract,
+            key=self.wallet.key_path,
+            password=self.wallet.password,
         )
 
     def unstake(self, service_id: int, staking_contract: str) -> None:
         """Unstake service."""
         self._patch()
         StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).unstake(
             service_id=service_id,
             staking_contract=staking_contract,
+            key=self.wallet.key_path,
+            password=self.wallet.password,
         )
 
     def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
         """Stake the service"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        ).status(
+            chain=OperateChain(self.chain_type.value),
+        ).staking_state(
             service_id=service_id,
             staking_contract=staking_contract,
         )
@@ -1445,9 +1514,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get staking approval data"""
         self._patch()
         txd = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).get_stake_approval_tx_data(
             service_id=service_id,
             service_registry=service_registry,
@@ -1469,9 +1536,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get staking tx data"""
         self._patch()
         txd = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).get_stake_tx_data(
             service_id=service_id,
             staking_contract=staking_contract,
@@ -1492,9 +1557,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get unstaking tx data"""
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
         txd = (
             staking_manager.get_forced_unstake_tx_data(
@@ -1522,9 +1585,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get claiming tx data"""
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
         txd = staking_manager.get_claim_tx_data(
             service_id=service_id,
@@ -1541,9 +1602,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Stake service."""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).slots_available(
             staking_contract=staking_contract,
         )
@@ -1553,9 +1612,7 @@ class EthSafeTxBuilder(_ChainUtil):
         self._patch()
         try:
             StakingManager(
-                key=self.wallet.key_path,
-                password=self.wallet.password,
-                chain_type=self.chain_type,
+                chain=OperateChain(self.chain_type.value),
             ).check_if_unstaking_possible(
                 service_id=service_id,
                 staking_contract=staking_contract,

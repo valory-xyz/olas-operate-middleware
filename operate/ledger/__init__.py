@@ -20,6 +20,12 @@
 """Ledger helpers."""
 
 import os
+import typing as t
+from copy import deepcopy
+
+from aea.crypto.base import LedgerApi
+from aea.crypto.registries import make_ledger_api
+from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 
 from operate.operate_types import Chain
 
@@ -88,14 +94,39 @@ CURRENCY_SMALLEST_UNITS = {
 
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
-    return DEFAULT_RPCS.get(chain, ETHEREUM_RPC)
+    return DEFAULT_RPCS[chain]
 
 
 def get_currency_denom(chain: Chain) -> str:
     """Get currency denom by chain type."""
-    return CURRENCY_DENOMS.get(chain, "ETH")
+    return CURRENCY_DENOMS.get(chain, "NATIVE")
 
 
 def get_currency_smallest_unit(chain: Chain) -> str:
     """Get currency denom by chain type."""
     return CURRENCY_SMALLEST_UNITS.get(chain, "Wei")
+
+
+DEFAULT_LEDGER_APIS: t.Dict[Chain, LedgerApi] = {}
+
+for _chain in CHAINS:
+    if _chain == Chain.SOLANA:
+        continue  # TODO: Complete when Solana is supported
+
+    gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+    if _chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+        gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+            5, GWEI
+        )
+
+    DEFAULT_LEDGER_APIS[_chain] = make_ledger_api(
+        _chain.ledger_type.name.lower(),
+        address=get_default_rpc(chain=_chain),
+        chain_id=_chain.id,
+        gas_price_strategies=gas_price_strategies,
+    )
+
+
+def get_default_ledger_api(chain: Chain) -> LedgerApi:
+    """Get default RPC chain type."""
+    return DEFAULT_LEDGER_APIS[chain]

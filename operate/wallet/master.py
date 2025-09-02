@@ -42,7 +42,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_rpc
+from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
@@ -111,6 +111,9 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> LedgerApi:
         """Get ledger api object."""
+        if not rpc:
+            return get_default_ledger_api(chain=chain)
+
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
         if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
             gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(

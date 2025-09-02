@@ -32,7 +32,6 @@ from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
-from operate.services.funding_manager import FundingManager
 import psutil
 import requests
 from aea.helpers.logging import setup_logger
@@ -75,6 +74,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
