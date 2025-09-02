@@ -45,7 +45,7 @@ from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
 
-from operate import __version__, services
+from operate import __version__, services, wallet
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
@@ -74,6 +74,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -184,6 +185,15 @@ class OperateApp:
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
+
+    @property
+    def funding_manager(self) -> FundingManager:
+        """Load funding manager."""
+        manager = FundingManager(
+            wallet_manager=self.wallet_manager,
+            logger=logger,
+        )
+        return manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
