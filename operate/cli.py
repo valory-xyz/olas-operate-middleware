@@ -74,7 +74,6 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
-from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -185,14 +184,6 @@ class OperateApp:
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
-
-    @property
-    def funding_manager(self) -> FundingManager:
-        """Load funding manager."""
-        manager = FundingManager(
-            logger=logger,
-        )
-        return manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
