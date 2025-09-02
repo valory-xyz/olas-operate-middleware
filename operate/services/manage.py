@@ -628,7 +628,6 @@ class ServiceManager:
         user_params = chain_config.chain_data.user_params
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        # sftxb._patch()
         safe = wallet.safes[Chain(chain)]
 
         # TODO fix this
@@ -1074,22 +1073,22 @@ class ServiceManager:
         ):
             self.logger.info("Deploying service")
 
-            reuse_multisig = True
             info = sftxb.info(token_id=chain_data.token)
             service_safe_address = info["multisig"]
             if service_safe_address == ZERO_ADDRESS:
                 reuse_multisig = False
+                is_recovery_module_enabled = True
+            else:
+                reuse_multisig = True
+                is_recovery_module_enabled = (
+                    registry_contracts.gnosis_safe.is_module_enabled(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=service_safe_address,
+                        module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                    ).get("enabled")
+                )
 
             self.logger.info(f"{reuse_multisig=}")
-
-            is_recovery_module_enabled = (
-                registry_contracts.gnosis_safe.is_module_enabled(
-                    ledger_api=sftxb.ledger_api,
-                    contract_address=service_safe_address,
-                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                ).get("enabled")
-            )
-
             self.logger.info(f"{is_recovery_module_enabled=}")
 
             messages = sftxb.get_deploy_data_from_safe(
