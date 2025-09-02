@@ -251,6 +251,7 @@ EXPLORER_URL = {
 }
 
 
+# TODO: Deprecate in favour of StakingManager method
 def get_staking_contract(
     chain: str, staking_program_id: t.Optional[str]
 ) -> t.Optional[str]:
