@@ -27,6 +27,8 @@ import uuid
 import pytest
 
 from operate.cli import OperateApp
+from operate.ledger import get_default_ledger_api
+from operate.operate_types import Chain
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -96,24 +98,19 @@ class TestWalletRecovery:
         bundle_id = step_1_output["id"]
 
         # Swap safe owners using backup wallet
+        crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_owner)
-            for wallet in wallet_manager:
-                ledger_type = wallet.ledger_type
-                wallet = wallet_manager.load(ledger_type=ledger_type)
-                for chain in wallet.safes:
-                    ledger_api = wallet.ledger_api(chain)
-                    assert (
-                        item["current_wallet"]["safes"][chain.value]
-                        == wallet.safes[chain]
-                    )
-                    swap_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain.value],
-                        old_owner=wallet.address,
-                        new_owner=item["new_wallet"]["address"],
-                    )
+            chains_str = list(item["current_wallet"]["safes"].keys())
+            for chain_str in chains_str:
+                chain = Chain(chain_str)
+                ledger_api = get_default_ledger_api(chain)
+                swap_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=item["current_wallet"]["safes"][chain_str],
+                    old_owner=item["current_wallet"]["address"],
+                    new_owner=item["new_wallet"]["address"],
+                )
 
         # Recovery step 2
         operate.wallet_recoverey_manager.complete_recovery(
@@ -187,26 +184,21 @@ class TestWalletRecovery:
         bundle_id = step_1_output["id"]
 
         # Incompletely swap safe owners using backup wallet
+        crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_owner)
-            for wallet in wallet_manager:
-                ledger_type = wallet.ledger_type
-                wallet = wallet_manager.load(ledger_type=ledger_type)
-                mid = len(wallet.safes) // 2
-                safes_1 = list(wallet.safes.keys())[:mid]
-                for chain in safes_1:
-                    ledger_api = wallet.ledger_api(chain)
-                    assert (
-                        item["current_wallet"]["safes"][chain.value]
-                        == wallet.safes[chain]
-                    )
-                    swap_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain.value],
-                        old_owner=wallet.address,
-                        new_owner=item["new_wallet"]["address"],
-                    )
+            chains_str = list(item["current_wallet"]["safes"].keys())
+            mid = len(chains_str) // 2
+            chains_str_1 = chains_str[:mid]
+            for chain_str in chains_str_1:
+                chain = Chain(chain_str)
+                ledger_api = get_default_ledger_api(chain)
+                swap_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=item["current_wallet"]["safes"][chain_str],
+                    old_owner=item["current_wallet"]["address"],
+                    new_owner=item["new_wallet"]["address"],
+                )
 
         # Recovery step 2 - fail
         with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
@@ -216,26 +208,21 @@ class TestWalletRecovery:
             )
 
         # Resume swapping safe owners using backup wallet
+        crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_owner)
-            for wallet in wallet_manager:
-                ledger_type = wallet.ledger_type
-                wallet = wallet_manager.load(ledger_type=ledger_type)
-                mid = len(wallet.safes) // 2
-                safes_2 = list(wallet.safes.keys())[mid:]
-                for chain in safes_2:
-                    ledger_api = wallet.ledger_api(chain)
-                    assert (
-                        item["current_wallet"]["safes"][chain.value]
-                        == wallet.safes[chain]
-                    )
-                    swap_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain.value],
-                        old_owner=wallet.address,
-                        new_owner=item["new_wallet"]["address"],
-                    )
+            chains_str = list(item["current_wallet"]["safes"].keys())
+            mid = len(chains_str) // 2
+            chains_str_2 = chains_str[mid:]
+            for chain_str in chains_str_2:
+                chain = Chain(chain_str)
+                ledger_api = get_default_ledger_api(chain)
+                swap_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=item["current_wallet"]["safes"][chain_str],
+                    old_owner=item["current_wallet"]["address"],
+                    new_owner=item["new_wallet"]["address"],
+                )
 
         # Recovery step 2
         operate.wallet_recoverey_manager.complete_recovery(
@@ -360,23 +347,18 @@ class TestWalletRecovery:
             )
 
         # Add safe owners using backup wallet
+        crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_owner)
-            for wallet in wallet_manager:
-                ledger_type = wallet.ledger_type
-                wallet = wallet_manager.load(ledger_type=ledger_type)
-                for chain in wallet.safes:
-                    ledger_api = wallet.ledger_api(chain)
-                    assert (
-                        item["current_wallet"]["safes"][chain.value]
-                        == wallet.safes[chain]
-                    )
-                    add_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain.value],
-                        owner=item["new_wallet"]["address"],
-                    )
+            chains_str = list(item["current_wallet"]["safes"].keys())
+            for chain_str in chains_str:
+                chain = Chain(chain_str)
+                ledger_api = get_default_ledger_api(chain)
+                add_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=item["current_wallet"]["safes"][chain_str],
+                    owner=item["new_wallet"]["address"],
+                )
 
         with pytest.raises(WalletRecoveryError, match="^Inconsistent owners.*"):
             operate.wallet_recoverey_manager.complete_recovery(
@@ -387,46 +369,36 @@ class TestWalletRecovery:
 
         if raise_if_inconsistent_owners:
             # Remove old MasterEOA
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_owner)
-                for wallet in wallet_manager:
-                    ledger_type = wallet.ledger_type
-                    wallet = wallet_manager.load(ledger_type=ledger_type)
-                    for chain in wallet.safes:
-                        ledger_api = wallet.ledger_api(chain)
-                        assert (
-                            item["current_wallet"]["safes"][chain.value]
-                            == wallet.safes[chain]
-                        )
-                        remove_owner(
-                            ledger_api=ledger_api,
-                            crypto=crypto,
-                            safe=item["current_wallet"]["safes"][chain.value],
-                            owner=wallet.address,
-                            threshold=1,
-                        )
+                chains_str = list(item["current_wallet"]["safes"].keys())
+                for chain_str in chains_str:
+                    chain = Chain(chain_str)
+                    ledger_api = get_default_ledger_api(chain)
+                    remove_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["current_wallet"]["safes"][chain_str],
+                        owner=item["current_wallet"]["address"],
+                        threshold=1,
+                    )
 
             # Use a different backup owner for half of the chains
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_owner)
-                for wallet in wallet_manager:
-                    ledger_type = wallet.ledger_type
-                    wallet = wallet_manager.load(ledger_type=ledger_type)
-                    mid = len(wallet.safes) // 2
-                    safes_1 = list(wallet.safes.keys())[:mid]
-                    for chain in safes_1:
-                        ledger_api = wallet.ledger_api(chain)
-                        assert (
-                            item["current_wallet"]["safes"][chain.value]
-                            == wallet.safes[chain]
-                        )
-                        swap_owner(
-                            ledger_api=ledger_api,
-                            crypto=crypto,
-                            safe=item["current_wallet"]["safes"][chain.value],
-                            old_owner=backup_owner,
-                            new_owner=backup_owner2,
-                        )
+                chains_str = list(item["current_wallet"]["safes"].keys())
+                mid = len(chains_str) // 2
+                chains_str_1 = chains_str[:mid]
+                for chain_str in chains_str_1:
+                    chain = Chain(chain_str)
+                    ledger_api = get_default_ledger_api(chain)
+                    swap_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["current_wallet"]["safes"][chain_str],
+                        old_owner=backup_owner,
+                        new_owner=backup_owner2,
+                    )
 
             with pytest.raises(
                 WalletRecoveryError,
@@ -439,27 +411,22 @@ class TestWalletRecovery:
                 )
 
             # Revert original backup owner
+            crypto = keys_manager.get_crypto_instance(backup_owner2)
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_owner2)
-                for wallet in wallet_manager:
-                    ledger_type = wallet.ledger_type
-                    wallet = wallet_manager.load(ledger_type=ledger_type)
-                    mid = len(wallet.safes) // 2
-                    safes_1 = list(wallet.safes.keys())[:mid]
-                    for chain in safes_1:
-                        tenderly_add_balance(chain, backup_owner2)
-                        ledger_api = wallet.ledger_api(chain)
-                        assert (
-                            item["current_wallet"]["safes"][chain.value]
-                            == wallet.safes[chain]
-                        )
-                        swap_owner(
-                            ledger_api=ledger_api,
-                            crypto=crypto,
-                            safe=item["current_wallet"]["safes"][chain.value],
-                            old_owner=backup_owner2,
-                            new_owner=backup_owner,
-                        )
+                chains_str = list(item["current_wallet"]["safes"].keys())
+                mid = len(chains_str) // 2
+                chains_str_1 = chains_str[:mid]
+                for chain_str in chains_str_1:
+                    chain = Chain(chain_str)
+                    ledger_api = get_default_ledger_api(chain)
+                    tenderly_add_balance(chain, backup_owner2)
+                    swap_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=item["current_wallet"]["safes"][chain_str],
+                        old_owner=backup_owner2,
+                        new_owner=backup_owner,
+                    )
 
         # Recovery step 2
         operate.wallet_recoverey_manager.complete_recovery(
