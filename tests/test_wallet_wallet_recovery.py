@@ -71,7 +71,7 @@ class TestWalletRecovery:
         operate = test_env.operate
         wallet_manager = test_env.wallet_manager
         keys_manager = test_env.keys_manager
-        backup_wallet = test_env.backup_wallet
+        backup_owner = test_env.backup_owner
         password = test_env.password
 
         # Recovery step 1
@@ -97,7 +97,7 @@ class TestWalletRecovery:
 
         # Swap safe owners using backup wallet
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_wallet)
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for wallet in wallet_manager:
                 ledger_type = wallet.ledger_type
                 wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -162,7 +162,7 @@ class TestWalletRecovery:
         operate = test_env.operate
         wallet_manager = test_env.wallet_manager
         keys_manager = test_env.keys_manager
-        backup_wallet = test_env.backup_wallet
+        backup_owner = test_env.backup_owner
         password = test_env.password
 
         # Recovery step 1
@@ -188,7 +188,7 @@ class TestWalletRecovery:
 
         # Incompletely swap safe owners using backup wallet
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_wallet)
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for wallet in wallet_manager:
                 ledger_type = wallet.ledger_type
                 wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -217,7 +217,7 @@ class TestWalletRecovery:
 
         # Resume swapping safe owners using backup wallet
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_wallet)
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for wallet in wallet_manager:
                 ledger_type = wallet.ledger_type
                 wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -275,8 +275,8 @@ class TestWalletRecovery:
         operate = test_env.operate
         wallet_manager = test_env.wallet_manager
         keys_manager = test_env.keys_manager
-        backup_wallet = test_env.backup_wallet
-        backup_wallet2 = test_env.backup_wallet2
+        backup_owner = test_env.backup_owner
+        backup_owner2 = test_env.backup_owner2
         password = test_env.password
 
         # Log in
@@ -361,7 +361,7 @@ class TestWalletRecovery:
 
         # Add safe owners using backup wallet
         for item in step_1_output["wallets"]:
-            crypto = keys_manager.get_crypto_instance(backup_wallet)
+            crypto = keys_manager.get_crypto_instance(backup_owner)
             for wallet in wallet_manager:
                 ledger_type = wallet.ledger_type
                 wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -388,7 +388,7 @@ class TestWalletRecovery:
         if raise_if_inconsistent_owners:
             # Remove old MasterEOA
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_wallet)
+                crypto = keys_manager.get_crypto_instance(backup_owner)
                 for wallet in wallet_manager:
                     ledger_type = wallet.ledger_type
                     wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -408,7 +408,7 @@ class TestWalletRecovery:
 
             # Use a different backup owner for half of the chains
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_wallet)
+                crypto = keys_manager.get_crypto_instance(backup_owner)
                 for wallet in wallet_manager:
                     ledger_type = wallet.ledger_type
                     wallet = wallet_manager.load(ledger_type=ledger_type)
@@ -424,8 +424,8 @@ class TestWalletRecovery:
                             ledger_api=ledger_api,
                             crypto=crypto,
                             safe=item["current_wallet"]["safes"][chain.value],
-                            old_owner=backup_wallet,
-                            new_owner=backup_wallet2,
+                            old_owner=backup_owner,
+                            new_owner=backup_owner2,
                         )
 
             with pytest.raises(
@@ -440,14 +440,14 @@ class TestWalletRecovery:
 
             # Revert original backup owner
             for item in step_1_output["wallets"]:
-                crypto = keys_manager.get_crypto_instance(backup_wallet2)
+                crypto = keys_manager.get_crypto_instance(backup_owner2)
                 for wallet in wallet_manager:
                     ledger_type = wallet.ledger_type
                     wallet = wallet_manager.load(ledger_type=ledger_type)
                     mid = len(wallet.safes) // 2
                     safes_1 = list(wallet.safes.keys())[:mid]
                     for chain in safes_1:
-                        tenderly_add_balance(chain, backup_wallet2)
+                        tenderly_add_balance(chain, backup_owner2)
                         ledger_api = wallet.ledger_api(chain)
                         assert (
                             item["current_wallet"]["safes"][chain.value]
@@ -457,8 +457,8 @@ class TestWalletRecovery:
                             ledger_api=ledger_api,
                             crypto=crypto,
                             safe=item["current_wallet"]["safes"][chain.value],
-                            old_owner=backup_wallet2,
-                            new_owner=backup_wallet,
+                            old_owner=backup_owner2,
+                            new_owner=backup_owner,
                         )
 
         # Recovery step 2
