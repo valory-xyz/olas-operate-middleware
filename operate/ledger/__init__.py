@@ -26,6 +26,7 @@ from copy import deepcopy
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
+from web3.middleware import geth_poa_middleware
 
 from operate.operate_types import Chain
 
@@ -125,11 +126,16 @@ def get_default_ledger_api(chain: Chain) -> LedgerApi:
                 5, GWEI
             )
 
-        DEFAULT_LEDGER_APIS[chain] = make_ledger_api(
+        ledger_api = make_ledger_api(
             chain.ledger_type.name.lower(),
             address=get_default_rpc(chain=chain),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
         )
+
+        if chain == Chain.OPTIMISM:
+            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
+
+        DEFAULT_LEDGER_APIS[chain] = ledger_api
 
     return DEFAULT_LEDGER_APIS[chain]

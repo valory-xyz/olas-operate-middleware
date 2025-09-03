@@ -68,6 +68,7 @@ from operate.constants import (
     CONFIG_JSON,
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
+    HEALTHCHECK_JSON,
 )
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
@@ -911,7 +912,7 @@ class Service(LocalResource):
 
     def get_latest_healthcheck(self) -> t.Dict:
         """Return the latest stored healthcheck.json"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if not healthcheck_json_path.exists():
             return {}
@@ -924,7 +925,7 @@ class Service(LocalResource):
 
     def remove_latest_healthcheck(self) -> None:
         """Remove the latest healthcheck.json, if it exists"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if healthcheck_json_path.exists():
             try:

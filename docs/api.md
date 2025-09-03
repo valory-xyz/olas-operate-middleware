@@ -959,6 +959,7 @@ Get service deployment information.
   },
   "path": "/path/to/service",
   "healthcheck": {
+    "is_healthy": true,
     "is_transitioning_fast": false,
     "period": 123,
     "round": 456

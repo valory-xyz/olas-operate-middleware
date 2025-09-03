@@ -33,7 +33,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -41,6 +40,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
@@ -225,28 +225,12 @@ class Provider(ABC):
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
         from_chain = provider_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        return get_default_ledger_api(Chain(from_chain))
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = provider_request.params["to"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        to_chain = provider_request.params["to"]["chain"]
+        return get_default_ledger_api(Chain(to_chain))
 
     @abstractmethod
     def quote(self, provider_request: ProviderRequest) -> None:

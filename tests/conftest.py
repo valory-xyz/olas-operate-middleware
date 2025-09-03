@@ -31,6 +31,7 @@ import json
 import random
 import string
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator
 
@@ -38,9 +39,24 @@ import pytest
 import requests
 from web3 import Web3
 
-from operate.constants import ZERO_ADDRESS
+from operate.bridge.bridge_manager import BridgeManager
+from operate.cli import OperateApp
+from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.keys import KeysManager
 from operate.ledger import get_default_rpc  # noqa: E402
-from operate.operate_types import Chain
+from operate.ledger.profiles import OLAS
+from operate.operate_types import (
+    Chain,
+    ConfigurationTemplate,
+    FundRequirementsTemplate,
+    LedgerType,
+    ServiceEnvProvisionType,
+    ServiceTemplate,
+)
+from operate.services.manage import ServiceManager
+from operate.wallet.master import MasterWalletManager
+
+from tests.constants import LOGGER, OPERATE_TEST
 
 
 def random_string(length: int = 16) -> str:
@@ -99,3 +115,198 @@ def temp_keys_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for keys."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
+
+
+@dataclass
+class OperateTestEnv:
+    """Operate test environment."""
+
+    tmp_path: Path
+    password: str
+    operate: OperateApp
+    wallet_manager: MasterWalletManager
+    service_manager: ServiceManager
+    bridge_manager: BridgeManager
+    keys_manager: KeysManager
+    backup_owner: str
+    backup_owner2: str
+
+
+def _get_service_template_trader() -> ServiceTemplate:
+    """Get the service template"""
+    return ServiceTemplate(
+        {
+            "name": "Trader Agent",
+            "hash": "bafybeifhxeoar5hdwilmnzhy6jf664zqp5lgrzi6lpbkc4qmoqrr24ow4q",
+            "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
+            "description": "Trader agent for omen prediction markets",
+            "service_version": "v0.26.1",
+            "home_chain": "gnosis",
+            "configurations": {
+                "gnosis": ConfigurationTemplate(
+                    {
+                        "staking_program_id": "pearl_beta_2",
+                        "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
+                        "rpc": "http://localhost:8545",
+                        "agent_id": 14,
+                        "cost_of_bond": 1000000000000000,
+                        "fund_requirements": {
+                            ZERO_ADDRESS: FundRequirementsTemplate(
+                                {
+                                    "agent": 2000000000000000000,
+                                    "safe": 5000000000000000000,
+                                }
+                            )
+                        },
+                        "fallback_chain_params": None,
+                    }
+                ),
+            },
+            "env_variables": {
+                "GNOSIS_LEDGER_RPC": {
+                    "name": "Gnosis ledger RPC",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "STAKING_CONTRACT_ADDRESS": {
+                    "name": "Staking contract address",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_MARKETPLACE_CONFIG": {
+                    "name": "Mech marketplace configuration",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_ACTIVITY_CHECKER_CONTRACT": {
+                    "name": "Mech activity checker contract",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_CONTRACT_ADDRESS": {
+                    "name": "Mech contract address",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_REQUEST_PRICE": {
+                    "name": "Mech request price",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "USE_MECH_MARKETPLACE": {
+                    "name": "Use Mech marketplace",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "TOOLS_ACCURACY_HASH": {
+                    "name": "Tools accuracy hash",
+                    "description": "",
+                    "value": "QmWgsqncF22hPLNTyWtDzVoKPJ9gmgR1jcuLL5t31xyzzr",
+                    "provision_type": ServiceEnvProvisionType.FIXED,
+                },
+                "ACC_INFO_FIELDS_REQUESTS": {
+                    "name": "Acc info fields requests",
+                    "description": "",
+                    "value": "nr_responses",
+                    "provision_type": ServiceEnvProvisionType.FIXED,
+                },
+                "MECH_INTERACT_ROUND_TIMEOUT_SECONDS": {
+                    "name": "Mech interact round timeout",
+                    "description": "",
+                    "value": "900",
+                    "provision_type": ServiceEnvProvisionType.FIXED,
+                },
+                "STORE_PATH": {
+                    "name": "Store path",
+                    "description": "",
+                    "value": "persistent_data/",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "LOG_DIR": {
+                    "name": "Log directory",
+                    "description": "",
+                    "value": "benchmarks/",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "IRRELEVANT_TOOLS": {
+                    "name": "Irrelevant tools",
+                    "description": "",
+                    "value": '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot"]',
+                    "provision_type": ServiceEnvProvisionType.FIXED,
+                },
+            },
+        }
+    )
+
+
+@pytest.fixture
+def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
+    """Sets up a test environment."""
+
+    def _create_wallets(wallet_manager: MasterWalletManager) -> None:
+        for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
+            wallet_manager.create(ledger_type=ledger_type)
+
+    def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
+        ledger_types = {wallet.ledger_type for wallet in wallet_manager}
+        for chain in [Chain.GNOSIS, Chain.OPTIMISM]:
+            ledger_type = chain.ledger_type
+            if ledger_type in ledger_types:
+                wallet = wallet_manager.load(ledger_type=ledger_type)
+                tenderly_add_balance(chain, wallet.address)
+                tenderly_add_balance(chain, backup_owner)
+                wallet.create_safe(
+                    chain=chain,
+                    backup_owner=backup_owner,
+                )
+                tenderly_add_balance(chain, wallet.safes[chain])
+                tenderly_add_balance(
+                    chain=chain, recipient=wallet.safes[chain], token=OLAS[chain]
+                )
+
+    operate = OperateApp(
+        home=tmp_path / OPERATE_TEST,
+    )
+    operate.setup()
+    operate.create_user_account(password=password)
+    operate.password = password
+    operate.wallet_manager.setup()
+    keys_manager = KeysManager(
+        path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
+        logger=LOGGER,
+    )
+    backup_owner = keys_manager.create()
+    backup_owner2 = keys_manager.create()
+
+    assert backup_owner != backup_owner2
+
+    _create_wallets(wallet_manager=operate.wallet_manager)
+    _create_safes(
+        wallet_manager=operate.wallet_manager,
+        backup_owner=backup_owner,
+    )
+    operate.service_manager().create(service_template=_get_service_template_trader())
+
+    # Logout
+    operate = OperateApp(
+        home=tmp_path / OPERATE_TEST,
+    )
+
+    return OperateTestEnv(
+        tmp_path=tmp_path,
+        password=password,
+        operate=operate,
+        wallet_manager=operate.wallet_manager,
+        service_manager=operate.service_manager(),
+        bridge_manager=operate.bridge_manager,
+        keys_manager=keys_manager,
+        backup_owner=backup_owner,
+        backup_owner2=backup_owner2,
+    )
