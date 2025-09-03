@@ -29,7 +29,7 @@ from traceback import print_exc
 
 import aiohttp  # type: ignore
 
-from operate.constants import HEALTH_CHECK_URL
+from operate.constants import HEALTHCHECK_JSON, HEALTH_CHECK_URL
 from operate.services.manage import ServiceManager  # type: ignore
 
 
@@ -107,12 +107,14 @@ class HealthChecker:
                     response_json = await resp.json()
 
                     if service_path:
-                        healthcheck_json_path = service_path / "healthcheck.json"
+                        healthcheck_json_path = service_path / HEALTHCHECK_JSON
                         healthcheck_json_path.write_text(
                             json.dumps(response_json, indent=2), encoding="utf-8"
                         )
 
-                    return response_json.get("is_transitioning_fast", False)
+                    return response_json.get(
+                        "is_healthy", response_json.get("is_transitioning_fast", False)
+                    )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
                 except Exception as e:  # pylint: disable=broad-except
                     self.logger.error(
                         f"[HEALTH_CHECKER] error {e}. set not healthy!", exc_info=True
