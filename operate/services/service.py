@@ -73,6 +73,7 @@ from operate.constants import (
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AgentRelease,
     Chain,
     ChainConfig,
     ChainConfigs,
@@ -98,7 +99,7 @@ from operate.utils.ssl import create_ssl_certificate
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-SERVICE_CONFIG_VERSION = 8
+SERVICE_CONFIG_VERSION = 9
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = None
@@ -317,6 +318,8 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         use_acn: bool = False,
     ) -> "HostDeploymentGenerator":
         """Generate agent and tendermint configurations"""
+        self.build_dir.mkdir(exist_ok=True, parents=True)
+        (self.build_dir / "agent").mkdir(exist_ok=True, parents=True)
         agent = self.service_builder.generate_agent(agent_n=0)
         agent = {key: f"{value}" for key, value in agent.items()}
         (self.build_dir / "agent.json").write_text(
@@ -526,7 +529,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
+    def _build_host(
+        self,
+        force: bool = True,
+        chain: t.Optional[str] = None,
+        with_tm: bool = True,
+    ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
@@ -583,15 +591,21 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            (
-                HostDeploymentGenerator(
-                    service_builder=builder,
-                    build_dir=build.resolve(),
-                    use_tm_testnet_setup=True,
-                )
-                .generate_config_tendermint()
-                .generate()
-                .populate_private_keys()
+            deployement_generator = HostDeploymentGenerator(
+                service_builder=builder,
+                build_dir=build.resolve(),
+                use_tm_testnet_setup=True,
+            )
+            if with_tm:
+                deployement_generator.generate_config_tendermint()
+
+            deployement_generator.generate()
+            deployement_generator.populate_private_keys()
+
+            # Add keys
+            shutil.copy(
+                build / "ethereum_private_key.txt",
+                build / "agent" / "ethereum_private_key.txt",
             )
 
         except Exception as e:
@@ -653,12 +667,17 @@ class Deployment(LocalResource):
                 }
             )
             service.consume_env_variables()
-            self._build_host(force=force, chain=chain)
+            is_aea = service.agent_release["is_aea"]
+            self._build_host(force=force, chain=chain, with_tm=is_aea)
 
         os.environ.clear()
         os.environ.update(original_env)
 
-    def start(self, use_docker: bool = False) -> None:
+    def start(
+        self,
+        use_docker: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Start the service"""
         if self.status != DeploymentStatus.BUILT:
             raise NotAllowed(
@@ -671,12 +690,12 @@ class Deployment(LocalResource):
         try:
             if use_docker:
                 run_deployment(
-                    build_dir=self.path / "deployment",
+                    build_dir=self.path / DEPLOYMENT_DIR,
                     detach=True,
                     project_name=self.path.name,
                 )
             else:
-                run_host_deployment(build_dir=self.path / "deployment")
+                run_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -685,7 +704,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.DEPLOYED
         self.store()
 
-    def stop(self, use_docker: bool = False, force: bool = False) -> None:
+    def stop(
+        self,
+        use_docker: bool = False,
+        force: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Stop the deployment."""
         if self.status != DeploymentStatus.DEPLOYED and not force:
             return
@@ -695,11 +719,11 @@ class Deployment(LocalResource):
 
         if use_docker:
             stop_deployment(
-                build_dir=self.path / "deployment",
+                build_dir=self.path / DEPLOYMENT_DIR,
                 project_name=self.path.name,
             )
         else:
-            stop_host_deployment(build_dir=self.path / "deployment")
+            stop_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
 
         self.status = DeploymentStatus.BUILT
         self.store()
@@ -716,20 +740,19 @@ class Deployment(LocalResource):
 class Service(LocalResource):
     """Service class."""
 
+    name: str
     version: int
     service_config_id: str
+    path: Path
+    package_path: Path
     hash: str
     hash_history: t.Dict[int, str]
+    agent_release: AgentRelease
     agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
-
-    path: Path
-    package_path: Path
-
-    name: t.Optional[str] = None
 
     _helper: t.Optional[ServiceHelper] = None
     _deployment: t.Optional[Deployment] = None
@@ -851,6 +874,7 @@ class Service(LocalResource):
             path=package_absolute_path.parent,
             package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
+            agent_release=service_template["agent_release"],
         )
         service.store()
         return service
@@ -1010,6 +1034,8 @@ class Service(LocalResource):
             )
         )
         self.package_path = Path(package_absolute_path.name)
+
+        self.agent_release = service_template.get("agent_release", self.agent_release)
 
         # env_variables
         if partial_update:

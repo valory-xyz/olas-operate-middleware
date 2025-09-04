@@ -212,6 +212,21 @@ class EnvVariableAttributes(TypedDict):
     provision_type: ServiceEnvProvisionType
 
 
+class AgentReleaseRepo(TypedDict):
+    """Agent release repo template."""
+
+    owner: str
+    name: str
+    version: str
+
+
+class AgentRelease(TypedDict):
+    """Agent release template."""
+
+    is_aea: bool
+    repository: AgentReleaseRepo
+
+
 ConfigurationTemplates = t.Dict[str, ConfigurationTemplate]
 EnvVariables = t.Dict[str, EnvVariableAttributes]
 
@@ -224,6 +239,7 @@ class ServiceTemplate(TypedDict, total=False):
     image: str
     description: str
     service_version: str
+    agent_release: AgentRelease
     home_chain: str
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
