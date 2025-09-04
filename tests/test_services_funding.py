@@ -32,7 +32,7 @@ from operate.cli import create_app
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import CHAINS
 from operate.ledger.profiles import DUST, OLAS, USDC
-from operate.operate_types import Chain
+from operate.operate_types import Chain, OnChainState
 
 from tests.conftest import (
     OperateTestEnv,
@@ -98,6 +98,12 @@ class TestFunding:
         service = service_manager.load(service_config_id=service_config_id)
         for chain_str, chain_config in service.chain_configs.items():
             chain = Chain(chain_str)
+            assert (
+                service_manager._get_on_chain_state(  # pylint: disable=protected-access
+                    service, chain_str
+                )
+                == OnChainState.DEPLOYED
+            )
 
             for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
                 for agent_address in service.agent_addresses:
@@ -119,13 +125,20 @@ class TestFunding:
             url="/api/account/login",
             json={"password": password},
         )
-        client.post(
-            url=f"/api/v2/service/{service_config_id}/terminate",
+        terminate_response = client.post(
+            url=f"/api/v2/service/{service_config_id}/terminate_and_withdraw",
         )
+        assert terminate_response.status_code == 200
 
         service = service_manager.load(service_config_id=service_config_id)
         for chain_str, chain_config in service.chain_configs.items():
             chain = Chain(chain_str)
+            assert (
+                service_manager._get_on_chain_state(  # pylint: disable=protected-access
+                    service, chain_str
+                )
+                == OnChainState.PRE_REGISTRATION
+            )
 
             for asset in AGENT_FUNDING_ASSETS[chain]:
                 for agent_address in service.agent_addresses:
