@@ -45,6 +45,7 @@ from operate.constants import (
     AGENT_LOG_ENV_VAR,
     AGENT_PERSISTENT_STORAGE_DIR,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    DEFAULT_TOPUP_THRESHOLD,
     IPFS_ADDRESS,
     ZERO_ADDRESS,
 )
@@ -54,13 +55,12 @@ from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_rpc
+from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
-    USDC,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
 )
@@ -73,6 +73,7 @@ from operate.operate_types import (
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
+from operate.services.funding_manager import FundingManager
 from operate.services.protocol import (
     EthSafeTxBuilder,
     OnChainManager,
@@ -90,14 +91,16 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances
-from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_safe
+from operate.utils.gnosis import (
+    get_asset_balance,
+    get_assets_balances,
+    transfer_erc20_from_safe,
+)
 from operate.wallet.master import MasterWalletManager
 
 
 # pylint: disable=redefined-builtin
-DEFAULT_TOPUP_THRESHOLD = 0.5
+
 # At the moment, we only support running one agent per service locally on a machine.
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
 NUM_LOCAL_AGENT_INSTANCES = 1
@@ -110,6 +113,7 @@ class ServiceManager:
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
+        funding_manager: FundingManager,
         logger: logging.Logger,
         skip_dependency_check: t.Optional[bool] = False,
     ) -> None:
@@ -124,6 +128,7 @@ class ServiceManager:
         self.path = path
         self.keys_manager = KeysManager()
         self.wallet_manager = wallet_manager
+        self.funding_manager = funding_manager
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
 
@@ -1307,8 +1312,8 @@ class ServiceManager:
 
         if withdrawal_address is not None:
             # we don't drain signer yet, because the owner swapping tx may need to happen
-            self.drain_service_safe(
-                service_config_id=service_config_id,
+            self.funding_manager.drain_service_safe(
+                service=service,
                 withdrawal_address=withdrawal_address,
                 chain=Chain(chain),
             )
@@ -1350,19 +1355,11 @@ class ServiceManager:
             )
 
         if withdrawal_address is not None:
-            ethereum_crypto = KeysManager().get_crypto_instance(
-                service.agent_addresses[0]
-            )
-            # drain all native tokens from service signer key
-            drain_eoa(
-                ledger_api=self.wallet_manager.load(
-                    ledger_config.chain.ledger_type
-                ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
-                crypto=ethereum_crypto,
+            self.funding_manager.drain_agents_eoas(
+                service=service,
                 withdrawal_address=withdrawal_address,
-                chain_id=ledger_config.chain.id,
+                chain=Chain(chain),
             )
-            self.logger.info(f"{service.name} signer drained")
 
     def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
         self,
@@ -2147,77 +2144,6 @@ class ServiceManager:
                 chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
-
-    def drain_service_safe(  # pylint: disable=too-many-locals
-        self,
-        service_config_id: str,
-        withdrawal_address: str,
-        chain: Chain,
-    ) -> None:
-        """Drain the funds out of the service safe."""
-        self.logger.info(
-            f"Draining the safe of service: {service_config_id} on chain {chain.value}"
-        )
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain.value]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
-        withdrawal_address = Web3.to_checksum_address(withdrawal_address)
-
-        # drain ERC20 tokens from service safe
-        for token_name, token_address in (
-            ("OLAS", OLAS[chain]),
-            (
-                f"W{get_currency_denom(chain)}",
-                WRAPPED_NATIVE_ASSET[chain],
-            ),
-            ("USDC", USDC[chain]),
-        ):
-            token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ledger_api,
-                contract_address=token_address,
-            )
-            balance = token_instance.functions.balanceOf(chain_data.multisig).call()
-            if balance == 0:
-                self.logger.info(
-                    f"No {token_name} to drain from service safe: {chain_data.multisig}"
-                )
-                continue
-
-            self.logger.info(
-                f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}"
-            )
-            transfer_erc20_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                token=token_address,
-                to=withdrawal_address,
-                amount=balance,
-            )
-
-        # drain native asset from service safe
-        balance = ledger_api.get_balance(chain_data.multisig)
-        if balance == 0:
-            self.logger.info(
-                f"No {get_currency_denom(chain)} to drain from service safe: {chain_data.multisig}"
-            )
-        else:
-            self.logger.info(
-                f"Draining {balance} {get_currency_denom(chain)} out of service safe: {chain_data.multisig}"
-            )
-            transfer_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                to=withdrawal_address,
-                amount=balance,
-            )
-
-        self.logger.info(f"{service.name} safe drained ({service_config_id=})")
 
     async def funding_job(
         self,
