@@ -48,12 +48,12 @@ SERVICE_SAFE_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
 
 for _chain in set(CHAINS) - {Chain.SOLANA}:
     AGENT_FUNDING_ASSETS[_chain] = {
-        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),
+        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),  # nosec B311
     }
     SERVICE_SAFE_FUNDING_ASSETS[_chain] = {
-        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),
-        OLAS[_chain]: random.randint(int(100e6), int(200e6)),
-        USDC[_chain]: random.randint(int(100e6), int(200e6)),
+        ZERO_ADDRESS: random.randint(int(1e18), int(2e18)),  # nosec B311
+        OLAS[_chain]: random.randint(int(100e6), int(200e6)),  # nosec B311
+        USDC[_chain]: random.randint(int(100e6), int(200e6)),  # nosec B311
     }
 
 
