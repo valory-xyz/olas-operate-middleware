@@ -78,7 +78,7 @@ from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
-from operate.wallet.master import MasterWalletManager
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
@@ -1149,6 +1149,70 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content={"error": None, "message": "Terminate and withdraw successful"}
+        )
+
+    @app.post("/api/v2/service/{service_config_id}/fund/{target}")
+    async def fund_service(request: Request) -> JSONResponse:
+        """Fund agent or service safe via master safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        target = request.path_params["target"]
+        service_manager = operate.service_manager()
+        wallet_manager = operate.wallet_manager
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            data = await request.json()
+            service = service_manager.load(service_config_id=service_config_id)
+            for chain_str, tokens in data.items():
+                chain = Chain(chain_str)
+                if target == "safe":
+                    address = service.chain_configs[chain_str].chain_data.multisig
+                elif target == "agent":
+                    address = service.agent_addresses[0]
+                else:
+                    return JSONResponse(
+                        status_code=HTTPStatus.BAD_REQUEST,
+                        content={"error": f"Invalid target: {target}"},
+                    )
+
+                wallet = wallet_manager.load(chain.ledger_type)
+                for asset, amount in tokens.items():
+                    wallet.transfer_asset(
+                        to=address,
+                        amount=int(amount),
+                        chain=chain,
+                        asset=asset,
+                        from_safe=True,
+                    )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to fund from master safe. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to fund from master safe. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to fund from master safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to fund from master safe. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Funded from master safe successfully"}
         )
 
     @app.post("/api/bridge/bridge_refill_requirements")

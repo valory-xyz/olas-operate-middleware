@@ -24,6 +24,7 @@
 
 import random
 import typing as t
+from http import HTTPStatus
 
 import pytest
 from fastapi.testclient import TestClient
@@ -152,3 +153,96 @@ class TestFunding:
             service_safe_address = chain_config.chain_data.multisig
             for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
                 assert get_balance(chain, service_safe_address, asset) == 0
+
+    def test_service_fund(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        """Test fund agent/safe from master safe."""
+
+        password = test_env.password
+        operate = test_env.operate
+        operate.password = password
+
+        service_manager = operate.service_manager()
+        services, _ = service_manager.get_all_services()
+
+        service_config_id = None
+        target_service = "Trader"
+        for service in services:
+            if target_service.lower() in service.name.lower():
+                service_config_id = service.service_config_id
+                break
+
+        assert service_config_id is not None
+        service = service_manager.load(service_config_id=service_config_id)
+
+        for chain_config in service.chain_configs.values():
+            assert chain_config.chain_data.multisig is None
+
+        service_manager.deploy_service_onchain_from_safe(
+            service_config_id=service_config_id
+        )
+
+        app = create_app(home=operate._path)
+        client = TestClient(app)
+        client.post(
+            url="/api/account/login",
+            json={"password": password},
+        )
+
+        service = service_manager.load(service_config_id=service_config_id)
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            wallet = operate.wallet_manager.load(chain.ledger_type)
+            master_safe = wallet.safes[chain]
+            assert (
+                service_manager._get_on_chain_state(  # pylint: disable=protected-access
+                    service, chain_str
+                )
+                == OnChainState.DEPLOYED
+            )
+
+            for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
+                for agent_address in service.agent_addresses:
+                    # Simulate a call that will fail
+                    master_safe_balance = get_balance(chain, master_safe, asset)
+                    response = client.post(
+                        url=f"/api/v2/service/{service_config_id}/fund/safe",
+                        json={chain_str: {asset: f"{master_safe_balance + 1}"}},
+                    )
+                    assert response.status_code == HTTPStatus.BAD_REQUEST
+                    assert "Failed to fund from master safe" in response.json()["error"]
+
+                    initial_balance = get_balance(chain, agent_address, asset)
+                    response = client.post(
+                        url=f"/api/v2/service/{service_config_id}/fund/agent",
+                        json={chain_str: {asset: f"{amount}"}},
+                    )
+                    assert response.status_code == HTTPStatus.OK
+                    assert (
+                        get_balance(chain, agent_address, asset)
+                        == initial_balance + amount
+                    )
+
+            service_safe_address = chain_config.chain_data.multisig
+            for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
+                # Simulate a call that will fail
+                master_safe_balance = get_balance(chain, master_safe, asset)
+                response = client.post(
+                    url=f"/api/v2/service/{service_config_id}/fund/safe",
+                    json={chain_str: {asset: f"{master_safe_balance + 1}"}},
+                )
+                assert response.status_code == HTTPStatus.BAD_REQUEST
+                assert "Failed to fund from master safe" in response.json()["error"]
+
+                initial_balance = get_balance(chain, service_safe_address, asset)
+                response = client.post(
+                    url=f"/api/v2/service/{service_config_id}/fund/safe",
+                    json={chain_str: {asset: f"{amount}"}},
+                )
+                assert response.status_code == HTTPStatus.OK
+                assert (
+                    get_balance(chain, service_safe_address, asset)
+                    == initial_balance + amount
+                )

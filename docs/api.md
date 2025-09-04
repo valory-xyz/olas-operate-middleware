@@ -1524,6 +1524,64 @@ Terminates and unbonds a service on-chain, and withdraws all the funds from the 
 }
 ```
 
+### `POST /api/v2/service/{service_config_id}/fund/{safe|agent}`
+
+Funds the agent or service safe.
+
+**Request Body:**
+
+```json
+{
+  "gnosis": {
+    "0x...": {
+      "0x...": "1000000000000000000",  // token1: value
+      "0x...": "1000000000000000000"   // token2: value
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Funded from master safe successfully"
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Insufficient funds - 400):**
+
+```json
+{
+  "error": "Failed to fund from master safe. Insufficient funds: (...)"
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to fund from master safe. Please check the logs."
+}
+```
+
 ## Bridge Management
 
 ### `POST /api/bridge/bridge_refill_requirements`

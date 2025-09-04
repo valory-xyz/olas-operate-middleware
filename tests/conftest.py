@@ -44,7 +44,7 @@ from operate.cli import OperateApp
 from operate.constants import KEYS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_rpc  # noqa: E402
-from operate.ledger.profiles import OLAS
+from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import (
     Chain,
     ConfigurationTemplate,
@@ -317,6 +317,12 @@ def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
                 tenderly_add_balance(chain, wallet.safes[chain])
                 tenderly_add_balance(
                     chain=chain, recipient=wallet.safes[chain], token=OLAS[chain]
+                )
+                tenderly_add_balance(
+                    chain=chain,
+                    recipient=wallet.safes[chain],
+                    token=USDC[chain],
+                    amount=int(1000e6),
                 )
 
     operate = OperateApp(
