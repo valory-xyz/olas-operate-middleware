@@ -485,6 +485,34 @@ def transfer_erc20_from_safe(
     )
 
 
+def estimate_transfer_tx_fee(
+    ledger_api: LedgerApi, sender_address: str, destination_address: str, chain_id: int
+) -> int:
+    """Estimate transfer transaction fee."""
+    tx = ledger_api.get_transfer_transaction(
+        sender_address=sender_address,
+        destination_address=destination_address,
+        amount=0,
+        tx_fee=0,
+        tx_nonce="0x",
+        chain_id=chain_id,
+        raise_on_try=True,
+    )
+    tx = ledger_api.update_with_gas_estimate(
+        transaction=tx,
+        raise_on_try=False,
+    )
+    chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    if Chain.from_id(chain_id) in (
+        Chain.ARBITRUM_ONE,
+        Chain.BASE,
+        Chain.OPTIMISM,
+        Chain.MODE,
+    ):
+        chain_fee += ledger_api.get_l1_data_fee(tx)
+    return chain_fee
+
+
 def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,

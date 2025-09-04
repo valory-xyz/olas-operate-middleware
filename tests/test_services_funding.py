@@ -246,3 +246,103 @@ class TestFunding:
                     get_balance(chain, service_safe_address, asset)
                     == initial_balance + amount
                 )
+
+    def test_withdraw_master_safe(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        """Test fund agent/safe from master safe."""
+
+        password = test_env.password
+        operate = test_env.operate
+        operate.password = password
+
+        app = create_app(home=operate._path)
+        client = TestClient(app)
+        client.post(
+            url="/api/account/login",
+            json={"password": password},
+        )
+
+        dst_address = test_env.backup_owner2
+        chain = Chain.GNOSIS
+        asset = USDC[Chain.GNOSIS]
+        topup = int(100e6)
+
+        wallet = operate.wallet_manager.load(chain.ledger_type)
+        master_eoa = wallet.address
+        master_safe = wallet.safes[chain]
+
+        # Test 1
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_balance(chain, master_eoa, asset)
+        master_safe_balance = get_balance(chain, master_safe, asset)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_balance(chain, dst_address, asset)
+        amount_transfer = random.randint(
+            int(master_safe_balance / 2), master_safe_balance
+        )  # nosec B311
+        client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert (
+            get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
+        )
+        assert (
+            get_balance(chain, master_safe, asset)
+            == master_safe_balance - amount_transfer
+        )
+        assert get_balance(chain, master_eoa, asset) == master_eoa_balance
+
+        # Test 2
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_balance(chain, master_eoa, asset)
+        master_safe_balance = get_balance(chain, master_safe, asset)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_balance(chain, dst_address, asset)
+        amount_transfer = master_safe_balance
+        client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert (
+            get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
+        )
+        assert get_balance(chain, master_safe, asset) == 0
+        assert get_balance(chain, master_eoa, asset) == master_eoa_balance
+
+        # Test 3
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_balance(chain, master_eoa, asset)
+        master_safe_balance = get_balance(chain, master_safe, asset)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_balance(chain, dst_address, asset)
+        amount_transfer = master_safe_balance + master_eoa_balance
+        client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert (
+            get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
+        )
+        assert get_balance(chain, master_safe, asset) == 0
+        assert get_balance(chain, master_eoa, asset) == 0

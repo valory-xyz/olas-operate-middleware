@@ -58,6 +58,7 @@ from operate.constants import (
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -77,7 +78,11 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
-from operate.utils.gnosis import get_assets_balances
+from operate.utils.gnosis import (
+    estimate_transfer_tx_fee,
+    get_asset_balance,
+    get_assets_balances,
+)
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
@@ -850,6 +855,108 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 "backup_owner_updated": backup_owner_updated,
                 "message": message,
             }
+        )
+
+    @app.post("/api/wallet/withdraw")
+    async def _wallet_withdraw(request: Request) -> JSONResponse:
+        """Withdraw from master safe / master eoa"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        data = await request.json()
+        if not operate.user_account.is_valid(password=data["password"]):
+            return JSONResponse(
+                content={"error": "Password is not valid."},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        try:
+            withdraw_assets = data.get("withdraw_assets", {})
+            address = data["to"]
+            wallet_manager = operate.wallet_manager
+
+            for chain_str, tokens in withdraw_assets.items():
+                chain = Chain(chain_str)
+                wallet = wallet_manager.load(chain.ledger_type)
+                master_eoa = wallet.address
+                for asset, amount in tokens.items():
+                    amount = int(amount)
+                    master_safe = wallet.safes[chain]
+                    master_safe_balance = get_asset_balance(
+                        ledger_api=get_default_ledger_api(chain),
+                        asset_address=asset,
+                        address=master_safe,
+                        raise_on_invalid_address=False,
+                    )
+                    master_eoa_balance = get_asset_balance(
+                        ledger_api=get_default_ledger_api(chain),
+                        asset_address=asset,
+                        address=master_eoa,
+                        raise_on_invalid_address=False,
+                    )
+
+                    # TODO Improve reduction of master_eoa_native token.
+                    # It should take into account all transactions sent
+                    # to reduce the available balance.
+                    if asset == ZERO_ADDRESS:
+                        tx_fee = estimate_transfer_tx_fee(
+                            ledger_api=get_default_ledger_api(chain),
+                            sender_address=master_eoa,
+                            destination_address=address,
+                            chain_id=chain.id,
+                        )
+                        master_eoa_balance = min(0, master_eoa_balance - 4 * tx_fee)
+
+                    if master_safe_balance + master_eoa_balance < amount:
+                        return JSONResponse(
+                            content={
+                                "error": f"Failed to withdraw {asset} from {chain}. Insufficient funds."
+                            },
+                            status_code=HTTPStatus.BAD_REQUEST,
+                        )
+                    if master_safe_balance > 0:
+                        wallet.transfer_asset(
+                            to=address,
+                            amount=min(master_safe_balance, int(amount)),
+                            chain=chain,
+                            asset=asset,
+                            from_safe=True,
+                        )
+
+                    shortfall = amount - min(master_safe_balance, int(amount))
+                    if shortfall:
+                        wallet.transfer_asset(
+                            to=address,
+                            amount=min(master_eoa_balance, int(shortfall)),
+                            chain=chain,
+                            asset=asset,
+                            from_safe=False,
+                        )
+
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to fund from master safe. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to fund from master safe. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to fund from master safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to fund from master safe. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Funded from master safe successfully"}
         )
 
     @app.get("/api/v2/services")
