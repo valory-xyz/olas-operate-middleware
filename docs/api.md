@@ -1533,10 +1533,8 @@ Funds the agent or service safe.
 ```json
 {
   "gnosis": {
-    "0x...": {
-      "0x...": "1000000000000000000",  // token1: value
-      "0x...": "1000000000000000000"   // token2: value
-    }
+    "0x...": "1000000000000000000",  // token1: value
+    "0x...": "1000000000000000000"   // token2: value
   }
 }
 ```
