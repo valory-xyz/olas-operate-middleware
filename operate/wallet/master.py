@@ -262,7 +262,18 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
         """Transfer funds from EOA wallet."""
+
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+        balance = ledger_api.get_balance(address=self.address)
+        tx_fee = estimate_transfer_tx_fee(
+            chain=chain, sender_address=self.address, to=to
+        )
+        if balance - tx_fee < amount <= balance:
+            amount = balance - tx_fee
+
+        if amount <= 0:
+            return None
+
         tx_helper = TxSettler(
             ledger_api=ledger_api,
             crypto=self.crypto,
@@ -529,13 +540,6 @@ class EthereumMasterWallet(MasterWallet):
         """
         safe_balance = self.get_safe_balance(chain=chain, asset=asset)
         eoa_balance = self.get_eoa_balance(chain=chain, asset=asset)
-
-        if asset == ZERO_ADDRESS:
-            tx_fee = estimate_transfer_tx_fee(
-                chain=chain, sender_address=self.address, to=to
-            )
-            eoa_balance -= tx_fee
-
         balance = safe_balance + eoa_balance
 
         if balance < amount:
@@ -543,6 +547,11 @@ class EthereumMasterWallet(MasterWallet):
                 f"Cannot transfer {amount} asset {asset} units to {to} on chain {chain.value.capitalize()}. "
                 f"Balance of master safe is {safe_balance}. Balance of master eoa is {eoa_balance}."
             )
+
+        if asset == ZERO_ADDRESS and balance == amount:  # pylint: disable=simplifiable-if-statement
+            drain = True
+        else:
+            drain = False
 
         tx_hashes = []
         from_safe_amount = min(safe_balance, amount)
@@ -560,6 +569,10 @@ class EthereumMasterWallet(MasterWallet):
         amount -= from_safe_amount
 
         if amount > 0:
+            if drain:
+                eoa_balance = self.get_eoa_balance(chain=chain, asset=asset)
+                amount = eoa_balance
+
             tx_hash = self.transfer_asset(
                 to=to, amount=amount, chain=chain, asset=asset, from_safe=False, rpc=rpc
             )
