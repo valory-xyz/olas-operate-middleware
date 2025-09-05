@@ -268,7 +268,7 @@ class EthereumMasterWallet(MasterWallet):
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if balance - tx_fee < amount <= balance:
+        if balance == amount:
             amount = balance - tx_fee
 
         if amount <= 0:
@@ -548,7 +548,9 @@ class EthereumMasterWallet(MasterWallet):
                 f"Balance of master safe is {safe_balance}. Balance of master eoa is {eoa_balance}."
             )
 
-        if asset == ZERO_ADDRESS and balance == amount:  # pylint: disable=simplifiable-if-statement
+        if (  # pylint: disable=simplifiable-if-statement
+            asset == ZERO_ADDRESS and balance == amount
+        ):
             drain = True
         else:
             drain = False
