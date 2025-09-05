@@ -123,35 +123,6 @@ def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
     response.raise_for_status()
 
 
-def get_balance(
-    chain: Chain,
-    address: str,
-    token: str = ZERO_ADDRESS,
-) -> int:
-    """Get balance of an address."""
-    rpc = get_default_rpc(chain)
-    w3 = Web3(Web3.HTTPProvider(rpc))
-    address = Web3.to_checksum_address(address)
-    token = Web3.to_checksum_address(token)
-
-    if token == ZERO_ADDRESS:
-        return w3.eth.get_balance(address)
-
-    contract = w3.eth.contract(
-        address=token,
-        abi=[
-            {
-                "constant": True,
-                "inputs": [{"name": "_owner", "type": "address"}],
-                "name": "balanceOf",
-                "outputs": [{"name": "balance", "type": "uint256"}],
-                "type": "function",
-            }
-        ],
-    )
-    return contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
-
-
 @pytest.fixture
 def password() -> str:
     """Password fixture"""
