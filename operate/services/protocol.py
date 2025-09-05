@@ -635,7 +635,9 @@ class StakingManager:
         service_owner = service_registry.functions.ownerOf(service_id).call()
 
         try:
-            state = self.staking_state(service_id=service_id, staking_contract=service_owner)
+            state = self.staking_state(
+                service_id=service_id, staking_contract=service_owner
+            )
 
         except Exception:  # pylint: disable=broad-except
             # Service owner is not a staking contract
@@ -659,7 +661,9 @@ class StakingManager:
         # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
         # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
         for staking_program_id, staking_program_address in STAKING[self.chain].items():
-            state = self.staking_state(service_id=service_id, staking_contract=staking_program_address)
+            state = self.staking_state(
+                service_id=service_id, staking_contract=staking_program_address
+            )
             if state in (StakingState.STAKED, StakingState.EVICTED):
                 return staking_program_id
 
