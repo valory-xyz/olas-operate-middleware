@@ -74,6 +74,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -181,9 +182,19 @@ class OperateApp:
         return services.manage.ServiceManager(
             path=self._services,
             wallet_manager=self.wallet_manager,
+            funding_manager=self.funding_manager,
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
+
+    @property
+    def funding_manager(self) -> FundingManager:
+        """Load funding manager."""
+        manager = FundingManager(
+            wallet_manager=self.wallet_manager,
+            logger=logger,
+        )
+        return manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
@@ -1028,6 +1039,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         cancel_funding_job(service_config_id=service_config_id)
         return JSONResponse(content=deployment.json)
 
+    # TODO Deprecate
     @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
     @with_retries
     async def _withdraw_onchain(request: Request) -> JSONResponse:
@@ -1096,6 +1108,48 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
+
+    @app.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
+    @with_retries
+    async def _terminate_and_withdraw(request: Request) -> JSONResponse:
+        """Terminate the service and withdraw all the funds to Master Safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+        wallet_manager = operate.wallet_manager
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            pause_all_services()
+            service = service_manager.load(service_config_id=service_config_id)
+            for chain in service.chain_configs:
+                wallet = wallet_manager.load(Chain(chain).ledger_type)
+                master_safe = wallet.safes[Chain(chain)]
+                service_manager.terminate_service_on_chain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    withdrawal_address=master_safe,
+                )
+
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Terminate and withdraw failed: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to terminate and withdraw funds. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Terminate and withdraw successful"}
+        )
 
     @app.post("/api/bridge/bridge_refill_requirements")
     @with_retries

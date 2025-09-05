@@ -1434,7 +1434,7 @@ Stop a running service deployment locally.
 }
 ```
 
-### `POST /api/v2/service/{service_config_id}/onchain/withdraw`
+### `[DEPRECATED] POST /api/v2/service/{service_config_id}/onchain/withdraw`
 
 Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the master safe and master signer.
 
@@ -1484,6 +1484,43 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 ```json
 {
   "error": "Failed to withdraw funds. Please check the logs."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/terminate_and_withdraw`
+
+Terminates and unbonds a service on-chain, and withdraws all the funds from the agent safe and agent signer to the master safe.
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Terminate and withdraw successful"
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Terminate and withdraw failed - 500):**
+
+```json
+{
+  "error": "Failed to terminate and withdraw funds. Please check the logs."
 }
 ```
 

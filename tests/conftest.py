@@ -104,6 +104,54 @@ def tenderly_add_balance(
     response.raise_for_status()
 
 
+def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
+    """tenderly_increase_time"""
+    rpc = get_default_rpc(chain)
+    headers = {"Content-Type": "application/json"}
+
+    if time <= 0:
+        return
+
+    data = {
+        "jsonrpc": "2.0",
+        "method": "evm_increaseTime",
+        "params": [hex(time)],
+        "id": "1",
+    }
+
+    response = requests.post(rpc, headers=headers, data=json.dumps(data), timeout=30)
+    response.raise_for_status()
+
+
+def get_balance(
+    chain: Chain,
+    address: str,
+    token: str = ZERO_ADDRESS,
+) -> int:
+    """Get balance of an address."""
+    rpc = get_default_rpc(chain)
+    w3 = Web3(Web3.HTTPProvider(rpc))
+    address = Web3.to_checksum_address(address)
+    token = Web3.to_checksum_address(token)
+
+    if token == ZERO_ADDRESS:
+        return w3.eth.get_balance(address)
+
+    contract = w3.eth.contract(
+        address=token,
+        abi=[
+            {
+                "constant": True,
+                "inputs": [{"name": "_owner", "type": "address"}],
+                "name": "balanceOf",
+                "outputs": [{"name": "balance", "type": "uint256"}],
+                "type": "function",
+            }
+        ],
+    )
+    return contract.functions.balanceOf(Web3.to_checksum_address(address)).call()
+
+
 @pytest.fixture
 def password() -> str:
     """Password fixture"""
@@ -147,7 +195,7 @@ def _get_service_template_trader() -> ServiceTemplate:
                     {
                         "staking_program_id": "pearl_beta_2",
                         "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
-                        "rpc": "http://localhost:8545",
+                        "rpc": get_default_rpc(Chain.GNOSIS),
                         "agent_id": 14,
                         "cost_of_bond": 1000000000000000,
                         "fund_requirements": {
