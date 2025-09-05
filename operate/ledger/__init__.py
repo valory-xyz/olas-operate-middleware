@@ -111,14 +111,15 @@ def get_currency_smallest_unit(chain: Chain) -> str:
 DEFAULT_LEDGER_APIS: t.Dict[Chain, LedgerApi] = {}
 
 
-def get_default_ledger_api(chain: Chain) -> LedgerApi:
+def make_chain_ledger_api(
+    chain: Chain,
+    rpc: t.Optional[str] = None,
+) -> LedgerApi:
     """Get default RPC chain type."""
 
     if chain not in DEFAULT_LEDGER_APIS:
-        if chain == Chain.SOLANA:
-            raise NotImplementedError(
-                "Solana not yet supported."
-            )  # TODO: Complete when Solana is supported
+        if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
+            raise NotImplementedError("Solana not yet supported.")
 
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
         if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
@@ -128,7 +129,7 @@ def get_default_ledger_api(chain: Chain) -> LedgerApi:
 
         ledger_api = make_ledger_api(
             chain.ledger_type.name.lower(),
-            address=get_default_rpc(chain=chain),
+            address=rpc,
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
         )
@@ -138,4 +139,13 @@ def get_default_ledger_api(chain: Chain) -> LedgerApi:
 
         DEFAULT_LEDGER_APIS[chain] = ledger_api
 
+    return DEFAULT_LEDGER_APIS[chain]
+
+
+def get_default_ledger_api(chain: Chain) -> LedgerApi:
+    """Get default RPC chain type."""
+    if chain not in DEFAULT_LEDGER_APIS:
+        DEFAULT_LEDGER_APIS[chain] = make_chain_ledger_api(
+            chain=chain, rpc=get_default_rpc(chain=chain)
+        )
     return DEFAULT_LEDGER_APIS[chain]

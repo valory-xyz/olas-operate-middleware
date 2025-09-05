@@ -23,13 +23,10 @@ import json
 import logging
 import os
 import typing as t
-from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
-from aea.crypto.registries import make_ledger_api
-from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
@@ -42,7 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api, get_default_rpc
+from operate.ledger import get_default_ledger_api, make_chain_ledger_api
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC, WRAPPED_NATIVE_ASSET
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
@@ -106,27 +103,15 @@ class MasterWallet(LocalResource):
         """Key path."""
         return self.path / self._key
 
+    @staticmethod
     def ledger_api(
-        self,
         chain: Chain,
         rpc: t.Optional[str] = None,
     ) -> LedgerApi:
         """Get ledger api object."""
         if not rpc:
             return get_default_ledger_api(chain=chain)
-
-        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
-            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
-                5, GWEI
-            )
-
-        return make_ledger_api(
-            self.ledger_type.name.lower(),
-            address=(rpc or get_default_rpc(chain=chain)),
-            chain_id=chain.id,
-            gas_price_strategies=gas_price_strategies,
-        )
+        return make_chain_ledger_api(chain=chain, rpc=rpc)
 
     def transfer(
         self,
