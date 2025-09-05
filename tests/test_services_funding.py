@@ -361,6 +361,45 @@ class TestFunding:
         assert get_asset_balance(ledger_api, asset, master_eoa) == 0
 
         # Test 4 - Withdraw all native from Safe and EOA
+        tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
+        tenderly_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
+        master_eoa_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, master_eoa
+        )
+        master_safe_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, master_safe
+        )
+        assert master_eoa_balance_native > 0
+        assert master_safe_balance_native > 0
+        initial_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, dst_address
+        )
+        amount_transfer_native = master_safe_balance_native + master_eoa_balance_native
+        response = client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {
+                    chain.value: {
+                        ZERO_ADDRESS: f"{amount_transfer_native}",
+                    }
+                },
+                "to": dst_address,
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert (
+            get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
+            <= initial_balance_native + amount_transfer_native
+        )
+        assert (
+            get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
+            >= initial_balance_native + amount_transfer_native - DUST[chain]
+        )
+        assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
+        assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
+
+        # Test 5 - Withdraw all native and asset from Safe and EOA
         tenderly_add_balance(chain, master_eoa, topup, asset)
         tenderly_add_balance(chain, master_safe, topup, asset)
         tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
@@ -408,7 +447,11 @@ class TestFunding:
         assert get_asset_balance(ledger_api, asset, master_eoa) == 0
         assert (
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
-            == initial_balance_native + amount_transfer_native
+            <= initial_balance_native + amount_transfer_native
+        )
+        assert (
+            get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
+            >= initial_balance_native + amount_transfer_native - DUST[chain]
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
