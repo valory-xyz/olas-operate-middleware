@@ -870,56 +870,62 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             withdraw_assets = data.get("withdraw_assets", {})
             to = data["to"]
             wallet_manager = operate.wallet_manager
+            transfer_txs: t.Dict[str, t.Dict[str, t.List[str]]] = {}
 
             # TODO: Ensure master wallet has enough funding.
             for chain_str, tokens in withdraw_assets.items():
                 chain = Chain(chain_str)
                 wallet = wallet_manager.load(chain.ledger_type)
+                transfer_txs[chain_str] = {}
 
                 # Process ERC20 first
                 for asset, amount in tokens.items():
                     if asset != ZERO_ADDRESS:
-                        wallet.transfer_asset_from_safe_then_eoa(
+                        txs = wallet.transfer_asset_from_safe_then_eoa(
                             to=to,
                             amount=int(amount),
                             chain=chain,
                             asset=asset,
                         )
+                        transfer_txs[chain_str][asset] = txs
 
                 # Process native last
                 if ZERO_ADDRESS in tokens:
                     asset = ZERO_ADDRESS
                     amount = tokens[asset]
-                    wallet.transfer_asset_from_safe_then_eoa(
+                    txs = wallet.transfer_asset_from_safe_then_eoa(
                         to=to,
                         amount=int(amount),
                         chain=chain,
                         asset=asset,
                     )
+                    transfer_txs[chain_str][asset] = txs
 
         except InsufficientFundsException as e:
-            logger.error(
-                f"Failed to fund from master safe. Insufficient funds: {e}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 content={
-                    "error": f"Failed to fund from master safe. Insufficient funds: {e}"
+                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "transfer_txs": transfer_txs,
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(
-                f"Failed to fund from master safe: {e}\n{traceback.format_exc()}"
-            )
+            logger.error(f"Failed to withdraw funds: {e}\n{traceback.format_exc()}")
             return JSONResponse(
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 content={
-                    "error": "Failed to fund from master safe. Please check the logs."
+                    "error": "Failed to withdraw funds. Please check the logs.",
+                    "transfer_txs": transfer_txs,
                 },
             )
 
         return JSONResponse(
-            content={"error": None, "message": "Funded from master safe successfully"}
+            content={
+                "error": None,
+                "message": "Funds withdrawn successfully.",
+                "transfer_txs": transfer_txs,
+            }
         )
 
     @app.get("/api/v2/services")

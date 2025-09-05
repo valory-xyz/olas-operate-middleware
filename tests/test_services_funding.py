@@ -284,7 +284,7 @@ class TestFunding:
         amount_transfer = random.randint(  # nosec B311
             int(master_safe_balance / 2), master_safe_balance
         )
-        client.post(
+        response = client.post(
             url="/api/wallet/withdraw",
             json={
                 "password": password,
@@ -292,6 +292,7 @@ class TestFunding:
                 "to": dst_address,
             },
         )
+        assert response.status_code == HTTPStatus.OK
         assert (
             get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
         )
@@ -310,7 +311,7 @@ class TestFunding:
         assert master_safe_balance > 0
         initial_balance = get_balance(chain, dst_address, asset)
         amount_transfer = master_safe_balance
-        client.post(
+        response = client.post(
             url="/api/wallet/withdraw",
             json={
                 "password": password,
@@ -318,6 +319,7 @@ class TestFunding:
                 "to": dst_address,
             },
         )
+        assert response.status_code == HTTPStatus.OK
         assert (
             get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
         )
@@ -333,7 +335,7 @@ class TestFunding:
         assert master_safe_balance > 0
         initial_balance = get_balance(chain, dst_address, asset)
         amount_transfer = master_safe_balance + master_eoa_balance
-        client.post(
+        response = client.post(
             url="/api/wallet/withdraw",
             json={
                 "password": password,
@@ -341,6 +343,7 @@ class TestFunding:
                 "to": dst_address,
             },
         )
+        assert response.status_code == HTTPStatus.OK
         assert (
             get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
         )
@@ -367,7 +370,7 @@ class TestFunding:
         amount_transfer_native = (
             master_safe_balance_native + master_eoa_balance_native - DUST[chain]
         )
-        client.post(
+        response = client.post(
             url="/api/wallet/withdraw",
             json={
                 "password": password,
@@ -380,6 +383,7 @@ class TestFunding:
                 "to": dst_address,
             },
         )
+        assert response.status_code == HTTPStatus.OK
         assert (
             get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
         )

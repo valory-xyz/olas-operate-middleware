@@ -556,7 +556,7 @@ class EthereumMasterWallet(MasterWallet):
         if balance < amount:
             raise InsufficientFundsException(
                 f"Cannot transfer {amount} asset {asset} units to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of safe is {safe_balance}. Balance of eoa is {eoa_balance}."
+                f"Balance of master safe is {safe_balance}. Balance of master eoa is {eoa_balance}."
             )
 
         tx_hashes = []
