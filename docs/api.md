@@ -325,7 +325,7 @@ falling back to Master EOA if needed.
   "message": "Funds withdrawn successfully.",
   "transfer_txs": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // list of tx hashes from master safe (and master eoa if needed)
       "0x...": ["0x...", "0x..."]
     }
   }

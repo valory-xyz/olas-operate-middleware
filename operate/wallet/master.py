@@ -213,8 +213,8 @@ class MasterWallet(LocalResource):
         """Updates password using the mnemonic."""
         raise NotImplementedError()
 
-    def get_balance(self, chain: Chain, asset: str = ZERO_ADDRESS) -> int:
-        """Get balance"""
+    def get_eoa_balance(self, chain: Chain, asset: str = ZERO_ADDRESS) -> int:
+        """Get EOA's balance"""
         return get_asset_balance(
             ledger_api=get_default_ledger_api(chain),
             asset_address=asset,
