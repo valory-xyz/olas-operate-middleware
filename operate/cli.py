@@ -58,7 +58,6 @@ from operate.constants import (
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import (
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -78,16 +77,8 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
-from operate.utils.gnosis import (
-    estimate_transfer_tx_fee,
-    get_asset_balance,
-    get_assets_balances,
-)
-from operate.wallet.master import (
-    InsufficientFundsException,
-    MasterWallet,
-    MasterWalletManager,
-)
+from operate.utils.gnosis import get_assets_balances
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
@@ -888,26 +879,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 # Process ERC20 first
                 for asset, amount in tokens.items():
                     if asset != ZERO_ADDRESS:
-                        wallet.transfer_asset(
+                        wallet.transfer_asset_from_safe_then_eoa(
                             to=to,
                             amount=int(amount),
                             chain=chain,
                             asset=asset,
-                            from_safe=True,
-                            from_eoa=True
                         )
 
                 # Process native last
                 if ZERO_ADDRESS in tokens:
                     asset = ZERO_ADDRESS
                     amount = tokens[asset]
-                    wallet.transfer_asset(
+                    wallet.transfer_asset_from_safe_then_eoa(
                         to=to,
                         amount=int(amount),
                         chain=chain,
                         asset=asset,
-                        from_safe=True,
-                        from_eoa=True
                     )
 
         except InsufficientFundsException as e:

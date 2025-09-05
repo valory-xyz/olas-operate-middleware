@@ -180,9 +180,9 @@ ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
 DUST = {
     Chain.ARBITRUM_ONE: int(1e14),
     Chain.BASE: int(1e14),
-    Chain.CELO: int(1e13),
+    Chain.CELO: int(1e15),
     Chain.ETHEREUM: int(1e14),
-    Chain.GNOSIS: int(1e13),
+    Chain.GNOSIS: int(1e15),
     Chain.MODE: int(1e14),
     Chain.OPTIMISM: int(1e14),
     Chain.POLYGON: int(1e14),

@@ -39,6 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 
 
@@ -485,17 +486,16 @@ def transfer_erc20_from_safe(
     )
 
 
-def estimate_transfer_tx_fee(
-    ledger_api: LedgerApi, sender_address: str, destination_address: str, chain_id: int
-) -> int:
+def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
     """Estimate transfer transaction fee."""
+    ledger_api = get_default_ledger_api(chain)
     tx = ledger_api.get_transfer_transaction(
         sender_address=sender_address,
-        destination_address=destination_address,
+        destination_address=to,
         amount=0,
         tx_fee=0,
         tx_nonce="0x",
-        chain_id=chain_id,
+        chain_id=chain.id,
         raise_on_try=True,
     )
     tx = ledger_api.update_with_gas_estimate(
@@ -503,7 +503,7 @@ def estimate_transfer_tx_fee(
         raise_on_try=False,
     )
     chain_fee = tx["gas"] * tx["maxFeePerGas"]
-    if Chain.from_id(chain_id) in (
+    if chain in (
         Chain.ARBITRUM_ONE,
         Chain.BASE,
         Chain.OPTIMISM,

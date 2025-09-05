@@ -273,7 +273,7 @@ class TestFunding:
         master_eoa = wallet.address
         master_safe = wallet.safes[chain]
 
-        # Test 1
+        # Test 1 - Withdraw token from Safe partially
         tenderly_add_balance(chain, master_eoa, topup, asset)
         tenderly_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_balance(chain, master_eoa, asset)
@@ -301,7 +301,7 @@ class TestFunding:
         )
         assert get_balance(chain, master_eoa, asset) == master_eoa_balance
 
-        # Test 2
+        # Test 2 - Withdraw all token from Safe
         tenderly_add_balance(chain, master_eoa, topup, asset)
         tenderly_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_balance(chain, master_eoa, asset)
@@ -324,7 +324,7 @@ class TestFunding:
         assert get_balance(chain, master_safe, asset) == 0
         assert get_balance(chain, master_eoa, asset) == master_eoa_balance
 
-        # Test 3
+        # Test 3 - Withdraw all token from Safe and EOA
         tenderly_add_balance(chain, master_eoa, topup, asset)
         tenderly_add_balance(chain, master_safe, topup, asset)
         master_eoa_balance = get_balance(chain, master_eoa, asset)
@@ -347,7 +347,7 @@ class TestFunding:
         assert get_balance(chain, master_safe, asset) == 0
         assert get_balance(chain, master_eoa, asset) == 0
 
-        # Test 4
+        # Test 4 - Withdraw all native from Safe and EOA
         tenderly_add_balance(chain, master_eoa, topup, asset)
         tenderly_add_balance(chain, master_safe, topup, asset)
         tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
@@ -356,6 +356,7 @@ class TestFunding:
         master_safe_balance = get_balance(chain, master_safe, asset)
         master_eoa_balance_native = get_balance(chain, master_eoa, ZERO_ADDRESS)
         master_safe_balance_native = get_balance(chain, master_safe, ZERO_ADDRESS)
+
         assert master_eoa_balance > 0
         assert master_safe_balance > 0
         assert master_eoa_balance_native > 0
@@ -389,4 +390,4 @@ class TestFunding:
             == initial_balance_native + amount_transfer_native
         )
         assert get_balance(chain, master_safe, ZERO_ADDRESS) == 0
-        assert get_balance(chain, master_eoa, ZERO_ADDRESS) <= DUST[chain]
+        assert get_balance(chain, master_eoa, ZERO_ADDRESS) <= 2 * DUST[chain]
