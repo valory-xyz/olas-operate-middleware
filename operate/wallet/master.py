@@ -40,7 +40,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import get_default_ledger_api, make_chain_ledger_api
-from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC, WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
@@ -528,7 +528,7 @@ class EthereumMasterWallet(MasterWallet):
         If asset is a zero address, transfer native currency.
         """
         safe_balance = self.get_safe_balance(chain=chain, asset=asset)
-        eoa_balance = self.get_balance(chain=chain, asset=asset)
+        eoa_balance = self.get_eoa_balance(chain=chain, asset=asset)
 
         if asset == ZERO_ADDRESS:
             tx_fee = estimate_transfer_tx_fee(
@@ -780,7 +780,6 @@ class EthereumMasterWallet(MasterWallet):
     def extended_json(self) -> t.Dict:
         """Get JSON representation with extended information (e.g., safe owners)."""
         rpc = None
-        tokens = (OLAS, USDC, WRAPPED_NATIVE_ASSET)
         wallet_json = self.json
 
         balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
@@ -793,9 +792,9 @@ class EthereumMasterWallet(MasterWallet):
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
-            assets = {ZERO_ADDRESS} | {asset[chain] for asset in tokens}
+            assets = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
             for asset in assets:
-                balances[chain_str][self.address][asset] = self.get_balance(
+                balances[chain_str][self.address][asset] = self.get_eoa_balance(
                     chain=chain, asset=asset
                 )
                 balances[chain_str][safe][asset] = self.get_safe_balance(
