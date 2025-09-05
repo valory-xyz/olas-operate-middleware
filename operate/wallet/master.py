@@ -133,8 +133,8 @@ class MasterWallet(LocalResource):
         amount: int,
         chain: Chain,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -146,8 +146,8 @@ class MasterWallet(LocalResource):
         amount: int,
         chain: Chain,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -158,8 +158,8 @@ class MasterWallet(LocalResource):
         chain: Chain,
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """Transfer erc20/native assets to the given account."""
         raise NotImplementedError()
 
@@ -215,23 +215,6 @@ class MasterWallet(LocalResource):
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
         """Updates password using the mnemonic."""
         raise NotImplementedError()
-
-    def get_balance(self, chain: Chain, token: str = ZERO_ADDRESS) -> int:
-        """Get balance"""
-        return get_asset_balance(
-            ledger_api=get_default_ledger_api(chain),
-            asset_address=token,
-            address=self.address,
-        )
-
-    def get_safe_balance(self, chain: Chain, token: str = ZERO_ADDRESS) -> int:
-        """Get safe balance"""
-        safe = self.safes[chain]
-        return get_asset_balance(
-            ledger_api=get_default_ledger_api(chain),
-            asset_address=token,
-            address=safe,
-        )
 
     # TODO move to resource.py if used in more resources similarly
     @property
@@ -392,49 +375,42 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-
-        if amount == 0:
+        if amount <= 0:
             return None
 
-        if amount < 0:
-            raise ValueError("'amount' must be non negative.")
+        if from_safe:
+            sender = t.cast(str, self.safes[chain])
+            sender_str = f"Safe {sender}"
+        else:
+            sender = self.crypto.address
+            sender_str = f"EOA {sender}"
 
-        if not from_safe and not from_eoa:
-            raise ValueError("At least one source must be true: 'from_safe' or 'from_eoa'.")
-
-        safe_balance = self.get_safe_balance(chain=chain) if from_safe else 0
-        eoa_balance = self.get_balance(chain=chain) if from_eoa else 0
-        balance = safe_balance + eoa_balance
-
-        ledger_api = self.ledger_api(chain=chain)
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
         to = ledger_api.api.to_checksum_address(to)
+        balance = ledger_api.get_balance(address=sender)
 
         if balance < amount:
-            message = f"Cannot transfer {amount} native units from wallet to {to} on chain {chain} (available balance {balance})."
-            if from_safe:
-                message += f" Balance of safe is {safe_balance} native units."
-            if from_eoa:
-                message += f" Balance of eoa is {eoa_balance} native units."
-            raise InsufficientFundsException(message)
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} native units from {sender_str} to {to} on chain {chain.value.capitalize()}. "
+                f"Balance of {sender_str} is {balance} native units on chain {chain.value.capitalize()}."
+            )
 
-        tx_hashes = []
-
-        if from_safe and amount > 0:
-            from_safe_amount = min(safe_balance, amount)
-            tx_hash = self._transfer_from_safe(to=to, amount=from_safe_amount, chain=chain)
-            if tx_hash:
-                tx_hashes.append(tx_hash)
-            amount -= from_safe_amount
-
-        if from_eoa and amount > 0:
-            tx_hash = self._transfer_from_eoa(to=to, amount=amount, chain=chain)
-            if tx_hash:
-                tx_hashes.append(tx_hash)
-
-        return tx_hashes
+        if from_safe:
+            return self._transfer_from_safe(
+                to=to,
+                amount=amount,
+                chain=chain,
+                rpc=rpc,
+            )
+        return self._transfer_from_eoa(
+            to=to,
+            amount=amount,
+            chain=chain,
+            rpc=rpc,
+        )
 
     # pylint: disable=too-many-arguments
     def transfer_erc20(
@@ -444,49 +420,54 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-
-        if amount == 0:
+        if amount <= 0:
             return None
 
-        if amount < 0:
-            raise ValueError("'amount' must be non negative.")
+        if from_safe:
+            sender = t.cast(str, self.safes[chain])
+            sender_str = f"Safe {sender}"
+        else:
+            sender = self.crypto.address
+            sender_str = f"EOA {sender}"
 
-        if not from_safe and not from_eoa:
-            raise ValueError("At least one source must be true: 'from_safe' or 'from_eoa'.")
-
-        safe_balance = self.get_safe_balance(chain=chain, token=token) if from_safe else 0
-        eoa_balance = self.get_balance(chain, token=token) if from_eoa else 0
-        balance = safe_balance + eoa_balance
-
-        ledger_api = self.ledger_api(chain=chain)
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
         to = ledger_api.api.to_checksum_address(to)
+        balance = (
+            registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token,
+            )
+            .functions.balanceOf(sender)
+            .call()
+        )
+
+        tokens = {OLAS[chain]: "OLAS", USDC[chain]: "USDC"}
+        token_name = tokens.get(token, token)
 
         if balance < amount:
-            message = f"Cannot transfer {amount} token {token} units from wallet to {to} on chain {chain} (available balance {balance})."
-            if from_safe:
-                message += f" Balance of safe is {safe_balance} native units."
-            if from_eoa:
-                message += f" Balance of eoa is {eoa_balance} native units."
-            raise InsufficientFundsException(message)
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} {token_name} from {sender_str} to {to} on chain {chain.value.capitalize()}. "
+                f"Balance of {sender_str} is {balance} {token_name} on chain {chain.value.capitalize()}."
+            )
 
-        tx_hashes = []
-
-        if from_safe and amount > 0:
-            from_safe_amount = min(safe_balance, amount)
-            tx_hash = self._transfer_erc20_from_safe(token=token, to=to, amount=from_safe_amount, chain=chain)
-            if tx_hash:
-                tx_hashes.append(tx_hash)
-            amount -= from_safe_amount
-
-        if from_eoa and amount > 0:
-            tx_hash = self._transfer_erc20_from_eoa(token=token, to=to, amount=amount, chain=chain)
-            if tx_hash:
-                tx_hashes.append(tx_hash)
-
-        return tx_hashes
+        if from_safe:
+            return self._transfer_erc20_from_safe(
+                token=token,
+                to=to,
+                amount=amount,
+                chain=chain,
+                rpc=rpc,
+            )
+        return self._transfer_erc20_from_eoa(
+            token=token,
+            to=to,
+            amount=amount,
+            chain=chain,
+            rpc=rpc,
+        )
 
     def transfer_asset(
         self,
@@ -495,8 +476,8 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
-        from_eoa: bool = False,
-    ) -> t.List[str]:
+        rpc: t.Optional[str] = None,
+    ) -> t.Optional[str]:
         """
         Transfer assets to the given account.
 
@@ -508,7 +489,7 @@ class EthereumMasterWallet(MasterWallet):
                 amount=amount,
                 chain=chain,
                 from_safe=from_safe,
-                from_eoa=from_eoa,
+                rpc=rpc,
             )
         return self.transfer_erc20(
             token=asset,
@@ -516,7 +497,7 @@ class EthereumMasterWallet(MasterWallet):
             amount=amount,
             chain=chain,
             from_safe=from_safe,
-            from_eoa=from_eoa,
+            rpc=rpc,
         )
 
     def drain(
@@ -549,6 +530,7 @@ class EthereumMasterWallet(MasterWallet):
                 chain=chain,
                 asset=asset,
                 from_safe=from_safe,
+                rpc=rpc,
             )
 
         if not from_safe:
