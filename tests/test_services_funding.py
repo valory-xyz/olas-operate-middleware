@@ -281,9 +281,9 @@ class TestFunding:
         assert master_eoa_balance > 0
         assert master_safe_balance > 0
         initial_balance = get_balance(chain, dst_address, asset)
-        amount_transfer = random.randint(
+        amount_transfer = random.randint(  # nosec B311
             int(master_safe_balance / 2), master_safe_balance
-        )  # nosec B311
+        )
         client.post(
             url="/api/wallet/withdraw",
             json={
@@ -346,3 +346,47 @@ class TestFunding:
         )
         assert get_balance(chain, master_safe, asset) == 0
         assert get_balance(chain, master_eoa, asset) == 0
+
+        # Test 4
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
+        tenderly_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
+        master_eoa_balance = get_balance(chain, master_eoa, asset)
+        master_safe_balance = get_balance(chain, master_safe, asset)
+        master_eoa_balance_native = get_balance(chain, master_eoa, ZERO_ADDRESS)
+        master_safe_balance_native = get_balance(chain, master_safe, ZERO_ADDRESS)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        assert master_eoa_balance_native > 0
+        assert master_safe_balance_native > 0
+        initial_balance = get_balance(chain, dst_address, asset)
+        initial_balance_native = get_balance(chain, dst_address, ZERO_ADDRESS)
+        amount_transfer = master_safe_balance + master_eoa_balance
+        amount_transfer_native = (
+            master_safe_balance_native + master_eoa_balance_native - DUST[chain]
+        )
+        client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {
+                    chain.value: {
+                        asset: f"{amount_transfer}",
+                        ZERO_ADDRESS: f"{amount_transfer_native}",
+                    }
+                },
+                "to": dst_address,
+            },
+        )
+        assert (
+            get_balance(chain, dst_address, asset) == initial_balance + amount_transfer
+        )
+        assert get_balance(chain, master_safe, asset) == 0
+        assert get_balance(chain, master_eoa, asset) == 0
+        assert (
+            get_balance(chain, dst_address, ZERO_ADDRESS)
+            == initial_balance_native + amount_transfer_native
+        )
+        assert get_balance(chain, master_safe, ZERO_ADDRESS) == 0
+        assert get_balance(chain, master_eoa, ZERO_ADDRESS) <= DUST[chain]

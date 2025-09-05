@@ -83,7 +83,11 @@ from operate.utils.gnosis import (
     get_asset_balance,
     get_assets_balances,
 )
-from operate.wallet.master import InsufficientFundsException, MasterWalletManager
+from operate.wallet.master import (
+    InsufficientFundsException,
+    MasterWallet,
+    MasterWalletManager,
+)
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
@@ -873,66 +877,38 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             withdraw_assets = data.get("withdraw_assets", {})
-            address = data["to"]
+            to = data["to"]
             wallet_manager = operate.wallet_manager
 
+            # TODO: Ensure master wallet has enough funding.
             for chain_str, tokens in withdraw_assets.items():
                 chain = Chain(chain_str)
                 wallet = wallet_manager.load(chain.ledger_type)
-                master_eoa = wallet.address
+
+                # Process ERC20 first
                 for asset, amount in tokens.items():
-                    amount = int(amount)
-                    master_safe = wallet.safes[chain]
-                    master_safe_balance = get_asset_balance(
-                        ledger_api=get_default_ledger_api(chain),
-                        asset_address=asset,
-                        address=master_safe,
-                        raise_on_invalid_address=False,
-                    )
-                    master_eoa_balance = get_asset_balance(
-                        ledger_api=get_default_ledger_api(chain),
-                        asset_address=asset,
-                        address=master_eoa,
-                        raise_on_invalid_address=False,
-                    )
-
-                    # TODO Improve reduction of master_eoa_native token.
-                    # It should take into account all transactions sent
-                    # to reduce the available balance.
-                    if asset == ZERO_ADDRESS:
-                        tx_fee = estimate_transfer_tx_fee(
-                            ledger_api=get_default_ledger_api(chain),
-                            sender_address=master_eoa,
-                            destination_address=address,
-                            chain_id=chain.id,
-                        )
-                        master_eoa_balance = min(0, master_eoa_balance - 4 * tx_fee)
-
-                    if master_safe_balance + master_eoa_balance < amount:
-                        return JSONResponse(
-                            content={
-                                "error": f"Failed to withdraw {asset} from {chain}. Insufficient funds."
-                            },
-                            status_code=HTTPStatus.BAD_REQUEST,
-                        )
-                    if master_safe_balance > 0:
+                    if asset != ZERO_ADDRESS:
                         wallet.transfer_asset(
-                            to=address,
-                            amount=min(master_safe_balance, int(amount)),
+                            to=to,
+                            amount=int(amount),
                             chain=chain,
                             asset=asset,
                             from_safe=True,
+                            from_eoa=True
                         )
 
-                    shortfall = amount - min(master_safe_balance, int(amount))
-                    if shortfall:
-                        wallet.transfer_asset(
-                            to=address,
-                            amount=min(master_eoa_balance, int(shortfall)),
-                            chain=chain,
-                            asset=asset,
-                            from_safe=False,
-                        )
+                # Process native last
+                if ZERO_ADDRESS in tokens:
+                    asset = ZERO_ADDRESS
+                    amount = tokens[asset]
+                    wallet.transfer_asset(
+                        to=to,
+                        amount=int(amount),
+                        chain=chain,
+                        asset=asset,
+                        from_safe=True,
+                        from_eoa=True
+                    )
 
         except InsufficientFundsException as e:
             logger.error(
