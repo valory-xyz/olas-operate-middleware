@@ -45,6 +45,7 @@ from operate.constants import (
     AGENT_LOG_ENV_VAR,
     AGENT_PERSISTENT_STORAGE_DIR,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    DEFAULT_TOPUP_THRESHOLD,
     IPFS_ADDRESS,
     ZERO_ADDRESS,
 )
@@ -53,16 +54,13 @@ from operate.data.contracts.mech_activity.contract import MechActivityContract
 from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
-from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_rpc
+from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_MASTER_EOA_FUNDS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
-    STAKING,
-    USDC,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
 )
@@ -75,7 +73,13 @@ from operate.operate_types import (
     ServiceEnvProvisionType,
     ServiceTemplate,
 )
-from operate.services.protocol import EthSafeTxBuilder, OnChainManager, StakingState
+from operate.services.funding_manager import FundingManager
+from operate.services.protocol import (
+    EthSafeTxBuilder,
+    OnChainManager,
+    StakingManager,
+    StakingState,
+)
 from operate.services.service import (
     ChainConfig,
     Deployment,
@@ -87,14 +91,16 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances
-from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_safe
+from operate.utils.gnosis import (
+    get_asset_balance,
+    get_assets_balances,
+    transfer_erc20_from_safe,
+)
 from operate.wallet.master import MasterWalletManager
 
 
 # pylint: disable=redefined-builtin
-DEFAULT_TOPUP_THRESHOLD = 0.5
+
 # At the moment, we only support running one agent per service locally on a machine.
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
 NUM_LOCAL_AGENT_INSTANCES = 1
@@ -107,6 +113,7 @@ class ServiceManager:
         self,
         path: Path,
         wallet_manager: MasterWalletManager,
+        funding_manager: FundingManager,
         logger: logging.Logger,
         skip_dependency_check: t.Optional[bool] = False,
     ) -> None:
@@ -121,6 +128,7 @@ class ServiceManager:
         self.path = path
         self.keys_manager = KeysManager()
         self.wallet_manager = wallet_manager
+        self.funding_manager = funding_manager
         self.logger = logger
         self.skip_depencency_check = skip_dependency_check
 
@@ -1073,22 +1081,22 @@ class ServiceManager:
         ):
             self.logger.info("Deploying service")
 
-            reuse_multisig = True
             info = sftxb.info(token_id=chain_data.token)
             service_safe_address = info["multisig"]
             if service_safe_address == ZERO_ADDRESS:
                 reuse_multisig = False
+                is_recovery_module_enabled = True
+            else:
+                reuse_multisig = True
+                is_recovery_module_enabled = (
+                    registry_contracts.gnosis_safe.is_module_enabled(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=service_safe_address,
+                        module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                    ).get("enabled")
+                )
 
             self.logger.info(f"{reuse_multisig=}")
-
-            is_recovery_module_enabled = (
-                registry_contracts.gnosis_safe.is_module_enabled(
-                    ledger_api=sftxb.ledger_api,
-                    contract_address=service_safe_address,
-                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                ).get("enabled")
-            )
-
             self.logger.info(f"{is_recovery_module_enabled=}")
 
             messages = sftxb.get_deploy_data_from_safe(
@@ -1304,8 +1312,8 @@ class ServiceManager:
 
         if withdrawal_address is not None:
             # we don't drain signer yet, because the owner swapping tx may need to happen
-            self.drain_service_safe(
-                service_config_id=service_config_id,
+            self.funding_manager.drain_service_safe(
+                service=service,
                 withdrawal_address=withdrawal_address,
                 chain=Chain(chain),
             )
@@ -1347,19 +1355,11 @@ class ServiceManager:
             )
 
         if withdrawal_address is not None:
-            ethereum_crypto = KeysManager().get_crypto_instance(
-                service.agent_addresses[0]
-            )
-            # drain all native tokens from service signer key
-            drain_eoa(
-                ledger_api=self.wallet_manager.load(
-                    ledger_config.chain.ledger_type
-                ).ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc),
-                crypto=ethereum_crypto,
+            self.funding_manager.drain_agents_eoas(
+                service=service,
                 withdrawal_address=withdrawal_address,
-                chain_id=ledger_config.chain.id,
+                chain=Chain(chain),
             )
-            self.logger.info(f"{service.name} signer drained")
 
     def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
         self,
@@ -1503,81 +1503,13 @@ class ServiceManager:
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
             )
 
-    def _get_current_staking_program(
+    def _get_current_staking_program(  # pylint: disable=no-self-use
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-        chain_config = service.chain_configs[chain]
-        ledger_config = chain_config.ledger_config
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-        service_id = chain_config.chain_data.token
-        ledger_api = sftxb.ledger_api
-
-        if service_id == NON_EXISTENT_TOKEN:
-            return None
-
-        service_registry = registry_contracts.service_registry.get_instance(
-            ledger_api=ledger_api,
-            contract_address=CONTRACTS[ledger_config.chain]["service_registry"],
+        staking_manager = StakingManager(Chain(chain))
+        return staking_manager.get_current_staking_program(
+            service_id=service.chain_configs[chain].chain_data.token
         )
-
-        service_owner = service_registry.functions.ownerOf(service_id).call()
-
-        # TODO Implement in Staking Manager. Implemented here for performance issues.
-        staking_ctr = t.cast(
-            StakingTokenContract,
-            StakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "staking_token")
-            ),
-        )
-
-        try:
-            state = StakingState(
-                staking_ctr.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=service_owner,
-                )
-                .functions.getStakingState(service_id)
-                .call()
-            )
-        except Exception:  # pylint: disable=broad-except
-            # Service owner is not a staking contract
-
-            # TODO The exception caught here should be ContractLogicError.
-            # This exception is typically raised when the contract reverts with
-            # a reason string. However, in some cases, the error message
-            # does not contain a reason string, which means web3.py raises
-            # a generic ValueError instead. It should be properly analyzed
-            # what exceptions might be raised by web3.py in this case. To
-            # avoid any issues we are simply catching all exceptions.
-            return None
-
-        if state == StakingState.UNSTAKED:
-            return None
-
-        for staking_program_id, val in STAKING[ledger_config.chain].items():
-            if val == service_owner:
-                return staking_program_id
-
-        # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
-        # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
-        for staking_program_id, staking_program_address in STAKING[
-            ledger_config.chain
-        ].items():
-            state = StakingState(
-                staking_ctr.get_instance(
-                    ledger_api=ledger_api,
-                    contract_address=staking_program_address,
-                )
-                .functions.getStakingState(service_id)
-                .call()
-            )
-
-            if state in (StakingState.STAKED, StakingState.EVICTED):
-                return staking_program_id
-
-        # it's staked, but we don't know which staking program
-        # so the staking_program_id should be an arbitrary staking contract
-        return service_owner
 
     def unbond_service_on_chain(
         self, service_config_id: str, chain: t.Optional[str] = None
@@ -1897,6 +1829,14 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
         ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
+
+        if (
+            chain_config.chain_data.token == NON_EXISTENT_TOKEN
+            or chain_config.chain_data.multisig == ZERO_ADDRESS
+        ):
+            self.logger.info("Service is not minted or Safe not deployed.")
+            return 0
+
         self.logger.info(
             f"OLAS Balance on service Safe {chain_config.chain_data.multisig}: "
             f"{get_asset_balance(ledger_api, OLAS[Chain(chain)], chain_config.chain_data.multisig)}"
@@ -2204,77 +2144,6 @@ class ServiceManager:
                 chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
-
-    def drain_service_safe(  # pylint: disable=too-many-locals
-        self,
-        service_config_id: str,
-        withdrawal_address: str,
-        chain: Chain,
-    ) -> None:
-        """Drain the funds out of the service safe."""
-        self.logger.info(
-            f"Draining the safe of service: {service_config_id} on chain {chain.value}"
-        )
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[chain.value]
-        ledger_config = chain_config.ledger_config
-        chain_data = chain_config.chain_data
-        wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain=ledger_config.chain, rpc=ledger_config.rpc)
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
-        withdrawal_address = Web3.to_checksum_address(withdrawal_address)
-
-        # drain ERC20 tokens from service safe
-        for token_name, token_address in (
-            ("OLAS", OLAS[chain]),
-            (
-                f"W{get_currency_denom(chain)}",
-                WRAPPED_NATIVE_ASSET[chain],
-            ),
-            ("USDC", USDC[chain]),
-        ):
-            token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ledger_api,
-                contract_address=token_address,
-            )
-            balance = token_instance.functions.balanceOf(chain_data.multisig).call()
-            if balance == 0:
-                self.logger.info(
-                    f"No {token_name} to drain from service safe: {chain_data.multisig}"
-                )
-                continue
-
-            self.logger.info(
-                f"Draining {balance} {token_name} out of service safe: {chain_data.multisig}"
-            )
-            transfer_erc20_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                token=token_address,
-                to=withdrawal_address,
-                amount=balance,
-            )
-
-        # drain native asset from service safe
-        balance = ledger_api.get_balance(chain_data.multisig)
-        if balance == 0:
-            self.logger.info(
-                f"No {get_currency_denom(chain)} to drain from service safe: {chain_data.multisig}"
-            )
-        else:
-            self.logger.info(
-                f"Draining {balance} {get_currency_denom(chain)} out of service safe: {chain_data.multisig}"
-            )
-            transfer_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                to=withdrawal_address,
-                amount=balance,
-            )
-
-        self.logger.info(f"{service.name} safe drained ({service_config_id=})")
 
     async def funding_job(
         self,
@@ -2761,6 +2630,7 @@ class ServiceManager:
             ),
         )
 
+        # TODO address this comment in FundingManager
         # This computation assumes the service will be/has been minted with these
         # parameters. Otherwise, these values should be retrieved on-chain as follows:
         # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService

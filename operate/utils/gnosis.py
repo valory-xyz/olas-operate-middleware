@@ -39,6 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 
 
@@ -485,6 +486,33 @@ def transfer_erc20_from_safe(
     )
 
 
+def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
+    """Estimate transfer transaction fee."""
+    ledger_api = get_default_ledger_api(chain)
+    tx = ledger_api.get_transfer_transaction(
+        sender_address=sender_address,
+        destination_address=to,
+        amount=0,
+        tx_fee=0,
+        tx_nonce="0x",
+        chain_id=chain.id,
+        raise_on_try=True,
+    )
+    tx = ledger_api.update_with_gas_estimate(
+        transaction=tx,
+        raise_on_try=False,
+    )
+    chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    if chain in (
+        Chain.ARBITRUM_ONE,
+        Chain.BASE,
+        Chain.OPTIMISM,
+        Chain.MODE,
+    ):
+        chain_fee += ledger_api.get_l1_data_fee(tx)
+    return chain_fee
+
+
 def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
@@ -505,10 +533,22 @@ def drain_eoa(
         *args: t.Any, **kwargs: t.Any
     ) -> t.Dict:
         """Build transaction"""
+        chain_fee = estimate_transfer_tx_fee(
+            chain=Chain.from_id(chain_id),
+            sender_address=crypto.address,
+            to=withdrawal_address,
+        )
+
+        amount = ledger_api.get_balance(crypto.address) - chain_fee
+        if amount <= 0:
+            raise ChainInteractionError(
+                f"No balance to drain from wallet: {crypto.address}"
+            )
+
         tx = ledger_api.get_transfer_transaction(
             sender_address=crypto.address,
             destination_address=withdrawal_address,
-            amount=0,
+            amount=amount,
             tx_fee=0,
             tx_nonce="0x",
             chain_id=chain_id,
@@ -518,21 +558,6 @@ def drain_eoa(
             transaction=tx,
             raise_on_try=False,
         )
-
-        chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (
-            Chain.ARBITRUM_ONE,
-            Chain.BASE,
-            Chain.OPTIMISM,
-            Chain.MODE,
-        ):
-            chain_fee += ledger_api.get_l1_data_fee(tx)
-
-        tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
-        if tx["value"] <= 0:
-            raise ChainInteractionError(
-                f"No balance to drain from wallet: {crypto.address}"
-            )
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"

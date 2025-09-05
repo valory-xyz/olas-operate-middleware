@@ -177,6 +177,17 @@ WRAPPED_NATIVE_ASSET = {
 
 ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
 
+DUST = {
+    Chain.ARBITRUM_ONE: int(1e14),
+    Chain.BASE: int(1e14),
+    Chain.CELO: int(1e15),
+    Chain.ETHEREUM: int(1e14),
+    Chain.GNOSIS: int(1e15),
+    Chain.MODE: int(1e14),
+    Chain.OPTIMISM: int(1e14),
+    Chain.POLYGON: int(1e14),
+}
+
 DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.ARBITRUM_ONE: {
         ZERO_ADDRESS: int(1e15 / 4),
@@ -251,6 +262,7 @@ EXPLORER_URL = {
 }
 
 
+# TODO: Deprecate in favour of StakingManager method
 def get_staking_contract(
     chain: str, staking_program_id: t.Optional[str]
 ) -> t.Optional[str]:
