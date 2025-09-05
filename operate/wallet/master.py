@@ -23,13 +23,10 @@ import json
 import logging
 import os
 import typing as t
-from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
-from aea.crypto.registries import make_ledger_api
-from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
@@ -42,7 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api, get_default_rpc
+from operate.ledger import get_default_ledger_api, make_chain_ledger_api
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
@@ -51,6 +48,7 @@ from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     drain_eoa,
+    estimate_transfer_tx_fee,
     get_asset_balance,
     get_owners,
     remove_owner,
@@ -105,27 +103,15 @@ class MasterWallet(LocalResource):
         """Key path."""
         return self.path / self._key
 
+    @staticmethod
     def ledger_api(
-        self,
         chain: Chain,
         rpc: t.Optional[str] = None,
     ) -> LedgerApi:
         """Get ledger api object."""
         if not rpc:
             return get_default_ledger_api(chain=chain)
-
-        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
-            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
-                5, GWEI
-            )
-
-        return make_ledger_api(
-            self.ledger_type.name.lower(),
-            address=(rpc or get_default_rpc(chain=chain)),
-            chain_id=chain.id,
-            gas_price_strategies=gas_price_strategies,
-        )
+        return make_chain_ledger_api(chain=chain, rpc=rpc)
 
     def transfer(
         self,
@@ -160,7 +146,18 @@ class MasterWallet(LocalResource):
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
-        """Transfer erc20/native assets to the given account."""
+        """Transfer assets to the given account."""
+        raise NotImplementedError()
+
+    def transfer_asset_from_safe_then_eoa(
+        self,
+        to: str,
+        amount: int,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        rpc: t.Optional[str] = None,
+    ) -> t.List[str]:
+        """Transfer assets to the given account using Safe balance first, and EOA balance for leftover."""
         raise NotImplementedError()
 
     def drain(
@@ -215,6 +212,23 @@ class MasterWallet(LocalResource):
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
         """Updates password using the mnemonic."""
         raise NotImplementedError()
+
+    def get_eoa_balance(self, chain: Chain, asset: str = ZERO_ADDRESS) -> int:
+        """Get EOA's balance"""
+        return get_asset_balance(
+            ledger_api=get_default_ledger_api(chain),
+            asset_address=asset,
+            address=self.address,
+        )
+
+    def get_safe_balance(self, chain: Chain, asset: str = ZERO_ADDRESS) -> int:
+        """Get safe balance"""
+        safe = self.safes[chain]
+        return get_asset_balance(
+            ledger_api=get_default_ledger_api(chain),
+            asset_address=asset,
+            address=safe,
+        )
 
     # TODO move to resource.py if used in more resources similarly
     @property
@@ -395,7 +409,7 @@ class EthereumMasterWallet(MasterWallet):
         if balance < amount:
             raise InsufficientFundsException(
                 f"Cannot transfer {amount} native units from {sender_str} to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of {sender_str} is {balance} native units on chain {chain.value.capitalize()}."
+                f"Balance of {sender_str} is {balance} native units."
             )
 
         if from_safe:
@@ -450,7 +464,7 @@ class EthereumMasterWallet(MasterWallet):
         if balance < amount:
             raise InsufficientFundsException(
                 f"Cannot transfer {amount} {token_name} from {sender_str} to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of {sender_str} is {balance} {token_name} on chain {chain.value.capitalize()}."
+                f"Balance of {sender_str} is {balance} {token_name}."
             )
 
         if from_safe:
@@ -499,6 +513,60 @@ class EthereumMasterWallet(MasterWallet):
             from_safe=from_safe,
             rpc=rpc,
         )
+
+    def transfer_asset_from_safe_then_eoa(
+        self,
+        to: str,
+        amount: int,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        rpc: t.Optional[str] = None,
+    ) -> t.List[str]:
+        """
+        Transfer assets to the given account using Safe balance first, and EOA balance for leftover.
+
+        If asset is a zero address, transfer native currency.
+        """
+        safe_balance = self.get_safe_balance(chain=chain, asset=asset)
+        eoa_balance = self.get_eoa_balance(chain=chain, asset=asset)
+
+        if asset == ZERO_ADDRESS:
+            tx_fee = estimate_transfer_tx_fee(
+                chain=chain, sender_address=self.address, to=to
+            )
+            eoa_balance -= tx_fee
+
+        balance = safe_balance + eoa_balance
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} asset {asset} units to {to} on chain {chain.value.capitalize()}. "
+                f"Balance of master safe is {safe_balance}. Balance of master eoa is {eoa_balance}."
+            )
+
+        tx_hashes = []
+        from_safe_amount = min(safe_balance, amount)
+        if from_safe_amount > 0:
+            tx_hash = self.transfer_asset(
+                to=to,
+                amount=from_safe_amount,
+                chain=chain,
+                asset=asset,
+                from_safe=True,
+                rpc=rpc,
+            )
+            if tx_hash:
+                tx_hashes.append(tx_hash)
+        amount -= from_safe_amount
+
+        if amount > 0:
+            tx_hash = self.transfer_asset(
+                to=to, amount=amount, chain=chain, asset=asset, from_safe=False, rpc=rpc
+            )
+            if tx_hash:
+                tx_hashes.append(tx_hash)
+
+        return tx_hashes
 
     def drain(
         self,
@@ -712,39 +780,35 @@ class EthereumMasterWallet(MasterWallet):
     def extended_json(self) -> t.Dict:
         """Get JSON representation with extended information (e.g., safe owners)."""
         rpc = None
-        tokens = (OLAS, USDC)
         wallet_json = self.json
 
-        if not self.safes:
-            return wallet_json
-
+        balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
         owner_sets = set()
         for chain, safe in self.safes.items():
+            chain_str = chain.value
             ledger_api = self.ledger_api(chain=chain, rpc=rpc)
             owners = get_owners(ledger_api=ledger_api, safe=safe)
             owners.remove(self.address)
 
-            balances: t.Dict[str, int] = {}
-            balances[ZERO_ADDRESS] = ledger_api.get_balance(safe) or 0
-            for token in tokens:
-                balance = (
-                    registry_contracts.erc20.get_instance(
-                        ledger_api=ledger_api,
-                        contract_address=token[chain],
-                    )
-                    .functions.balanceOf(safe)
-                    .call()
-                )
-                balances[token[chain]] = balance
+            balances[chain_str] = {self.address: {}, safe: {}}
 
+            assets = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
+            for asset in assets:
+                balances[chain_str][self.address][asset] = self.get_eoa_balance(
+                    chain=chain, asset=asset
+                )
+                balances[chain_str][safe][asset] = self.get_safe_balance(
+                    chain=chain, asset=asset
+                )
             wallet_json["safes"][chain.value] = {
                 wallet_json["safes"][chain.value]: {
                     "backup_owners": owners,
-                    "balances": balances,
+                    "balances": balances[chain_str][safe],
                 }
             }
             owner_sets.add(frozenset(owners))
 
+        wallet_json["balances"] = balances
         wallet_json["extended_json"] = True
         wallet_json["consistent_safe_address"] = len(set(self.safes.values())) == 1
         wallet_json["consistent_backup_owner"] = len(owner_sets) == 1

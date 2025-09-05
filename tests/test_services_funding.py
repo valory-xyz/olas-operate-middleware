@@ -31,16 +31,12 @@ from fastapi.testclient import TestClient
 
 from operate.cli import create_app
 from operate.constants import ZERO_ADDRESS
-from operate.ledger import CHAINS
+from operate.ledger import CHAINS, get_default_ledger_api
 from operate.ledger.profiles import DUST, OLAS, USDC
 from operate.operate_types import Chain, OnChainState
+from operate.utils.gnosis import get_asset_balance
 
-from tests.conftest import (
-    OperateTestEnv,
-    get_balance,
-    tenderly_add_balance,
-    tenderly_increase_time,
-)
+from tests.conftest import OperateTestEnv, tenderly_add_balance, tenderly_increase_time
 from tests.constants import LOGGER, TESTNET_RPCS
 
 
@@ -99,6 +95,7 @@ class TestFunding:
         service = service_manager.load(service_config_id=service_config_id)
         for chain_str, chain_config in service.chain_configs.items():
             chain = Chain(chain_str)
+            ledger_api = get_default_ledger_api(chain)
             assert (
                 service_manager._get_on_chain_state(  # pylint: disable=protected-access
                     service, chain_str
@@ -108,15 +105,17 @@ class TestFunding:
 
             for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
                 for agent_address in service.agent_addresses:
-                    assert get_balance(chain, agent_address, asset) == 0
+                    assert get_asset_balance(ledger_api, asset, agent_address) == 0
                     tenderly_add_balance(chain, agent_address, amount, asset)
-                    assert get_balance(chain, agent_address, asset) == amount
+                    assert get_asset_balance(ledger_api, asset, agent_address) == amount
 
             service_safe_address = chain_config.chain_data.multisig
             for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
-                assert get_balance(chain, service_safe_address, asset) == 0
+                assert get_asset_balance(ledger_api, asset, service_safe_address) == 0
                 tenderly_add_balance(chain, service_safe_address, amount, asset)
-                assert get_balance(chain, service_safe_address, asset) == amount
+                assert (
+                    get_asset_balance(ledger_api, asset, service_safe_address) == amount
+                )
 
             tenderly_increase_time(chain)
 
@@ -143,7 +142,7 @@ class TestFunding:
 
             for asset in AGENT_FUNDING_ASSETS[chain]:
                 for agent_address in service.agent_addresses:
-                    balance = get_balance(chain, agent_address, asset)
+                    balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
                         assert balance < DUST[chain]
@@ -152,7 +151,7 @@ class TestFunding:
 
             service_safe_address = chain_config.chain_data.multisig
             for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
-                assert get_balance(chain, service_safe_address, asset) == 0
+                assert get_asset_balance(ledger_api, asset, service_safe_address) == 0
 
     def test_service_fund(
         self,
@@ -196,6 +195,7 @@ class TestFunding:
             chain = Chain(chain_str)
             wallet = operate.wallet_manager.load(chain.ledger_type)
             master_safe = wallet.safes[chain]
+            ledger_api = get_default_ledger_api(chain)
             assert (
                 service_manager._get_on_chain_state(  # pylint: disable=protected-access
                     service, chain_str
@@ -206,7 +206,9 @@ class TestFunding:
             for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
                 for agent_address in service.agent_addresses:
                     # Simulate a call that will fail
-                    master_safe_balance = get_balance(chain, master_safe, asset)
+                    master_safe_balance = get_asset_balance(
+                        ledger_api, asset, master_safe
+                    )
                     response = client.post(
                         url=f"/api/v2/service/{service_config_id}/fund/safe",
                         json={chain_str: {asset: f"{master_safe_balance + 1}"}},
@@ -214,21 +216,23 @@ class TestFunding:
                     assert response.status_code == HTTPStatus.BAD_REQUEST
                     assert "Failed to fund from master safe" in response.json()["error"]
 
-                    initial_balance = get_balance(chain, agent_address, asset)
+                    initial_balance = get_asset_balance(
+                        ledger_api, asset, agent_address
+                    )
                     response = client.post(
                         url=f"/api/v2/service/{service_config_id}/fund/agent",
                         json={chain_str: {asset: f"{amount}"}},
                     )
                     assert response.status_code == HTTPStatus.OK
                     assert (
-                        get_balance(chain, agent_address, asset)
+                        get_asset_balance(ledger_api, asset, agent_address)
                         == initial_balance + amount
                     )
 
             service_safe_address = chain_config.chain_data.multisig
             for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
                 # Simulate a call that will fail
-                master_safe_balance = get_balance(chain, master_safe, asset)
+                master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
                 response = client.post(
                     url=f"/api/v2/service/{service_config_id}/fund/safe",
                     json={chain_str: {asset: f"{master_safe_balance + 1}"}},
@@ -236,13 +240,175 @@ class TestFunding:
                 assert response.status_code == HTTPStatus.BAD_REQUEST
                 assert "Failed to fund from master safe" in response.json()["error"]
 
-                initial_balance = get_balance(chain, service_safe_address, asset)
+                initial_balance = get_asset_balance(
+                    ledger_api, asset, service_safe_address
+                )
                 response = client.post(
                     url=f"/api/v2/service/{service_config_id}/fund/safe",
                     json={chain_str: {asset: f"{amount}"}},
                 )
                 assert response.status_code == HTTPStatus.OK
                 assert (
-                    get_balance(chain, service_safe_address, asset)
+                    get_asset_balance(ledger_api, asset, service_safe_address)
                     == initial_balance + amount
                 )
+
+    def test_withdraw_master_safe(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        """Test fund agent/safe from master safe."""
+
+        password = test_env.password
+        operate = test_env.operate
+        operate.password = password
+
+        app = create_app(home=operate._path)
+        client = TestClient(app)
+        client.post(
+            url="/api/account/login",
+            json={"password": password},
+        )
+
+        dst_address = test_env.backup_owner2
+        chain = Chain.GNOSIS
+        ledger_api = get_default_ledger_api(chain)
+        asset = USDC[Chain.GNOSIS]
+        topup = int(100e6)
+
+        wallet = operate.wallet_manager.load(chain.ledger_type)
+        master_eoa = wallet.address
+        master_safe = wallet.safes[chain]
+
+        # Test 1 - Withdraw token from Safe partially
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
+        master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_asset_balance(ledger_api, asset, dst_address)
+        amount_transfer = random.randint(  # nosec B311
+            int(master_safe_balance / 2), master_safe_balance
+        )
+        response = client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert (
+            get_asset_balance(ledger_api, asset, dst_address)
+            == initial_balance + amount_transfer
+        )
+        assert (
+            get_asset_balance(ledger_api, asset, master_safe)
+            == master_safe_balance - amount_transfer
+        )
+        assert get_asset_balance(ledger_api, asset, master_eoa) == master_eoa_balance
+
+        # Test 2 - Withdraw all token from Safe
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
+        master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_asset_balance(ledger_api, asset, dst_address)
+        amount_transfer = master_safe_balance
+        response = client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert (
+            get_asset_balance(ledger_api, asset, dst_address)
+            == initial_balance + amount_transfer
+        )
+        assert get_asset_balance(ledger_api, asset, master_safe) == 0
+        assert get_asset_balance(ledger_api, asset, master_eoa) == master_eoa_balance
+
+        # Test 3 - Withdraw all token from Safe and EOA
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
+        master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        initial_balance = get_asset_balance(ledger_api, asset, dst_address)
+        amount_transfer = master_safe_balance + master_eoa_balance
+        response = client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {chain.value: {asset: f"{amount_transfer}"}},
+                "to": dst_address,
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert (
+            get_asset_balance(ledger_api, asset, dst_address)
+            == initial_balance + amount_transfer
+        )
+        assert get_asset_balance(ledger_api, asset, master_safe) == 0
+        assert get_asset_balance(ledger_api, asset, master_eoa) == 0
+
+        # Test 4 - Withdraw all native from Safe and EOA
+        tenderly_add_balance(chain, master_eoa, topup, asset)
+        tenderly_add_balance(chain, master_safe, topup, asset)
+        tenderly_add_balance(chain, master_eoa, int(100e18), ZERO_ADDRESS)
+        tenderly_add_balance(chain, master_safe, int(100e18), ZERO_ADDRESS)
+        master_eoa_balance = get_asset_balance(ledger_api, asset, master_eoa)
+        master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
+        master_eoa_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, master_eoa
+        )
+        master_safe_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, master_safe
+        )
+
+        assert master_eoa_balance > 0
+        assert master_safe_balance > 0
+        assert master_eoa_balance_native > 0
+        assert master_safe_balance_native > 0
+        initial_balance = get_asset_balance(ledger_api, asset, dst_address)
+        initial_balance_native = get_asset_balance(
+            ledger_api, ZERO_ADDRESS, dst_address
+        )
+        amount_transfer = master_safe_balance + master_eoa_balance
+        amount_transfer_native = (
+            master_safe_balance_native + master_eoa_balance_native - DUST[chain]
+        )
+        response = client.post(
+            url="/api/wallet/withdraw",
+            json={
+                "password": password,
+                "withdraw_assets": {
+                    chain.value: {
+                        asset: f"{amount_transfer}",
+                        ZERO_ADDRESS: f"{amount_transfer_native}",
+                    }
+                },
+                "to": dst_address,
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        assert (
+            get_asset_balance(ledger_api, asset, dst_address)
+            == initial_balance + amount_transfer
+        )
+        assert get_asset_balance(ledger_api, asset, master_safe) == 0
+        assert get_asset_balance(ledger_api, asset, master_eoa) == 0
+        assert (
+            get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
+            == initial_balance_native + amount_transfer_native
+        )
+        assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
+        assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]

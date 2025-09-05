@@ -298,6 +298,84 @@ Create a new wallet.
 }
 ```
 
+### `POST /api/wallet/withdraw`
+
+Withdraw funds to the target account, using Master Safe first and
+falling back to Master EOA if needed.
+
+**Request Body:**
+
+```json
+{
+  "password": "your_password",
+  "to": "0x...",
+  "withdraw_assets": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 1000000000000000000,
+      "0x...": 500000000000000000
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "Funds withdrawn successfully.",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid password - 401):**
+
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+**Response (Insufficient funds - 400):**
+
+```json
+{
+  "error": "Failed to withdraw funds. Insufficient funds: (...)",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to withdraw funds. Please check the logs.",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
+}
+```
+
 ### `POST /api/wallet/private_key`
 
 Get Master EOA private key.
@@ -364,6 +442,18 @@ Get extended wallet information including safes and additional metadata.
             "0x...": 500000000000000000
           }
         }
+      }
+    },
+    "balances": {
+      "gnosis": {
+        "0x...": {
+            "0x0000000000000000000000000000000000000000": 1000000000000000000,
+            "0x...": 500000000000000000
+        },
+        "0x...": {
+            "0x0000000000000000000000000000000000000000": 1000000000000000000,
+            "0x...": 500000000000000000
+        },        
       }
     },
     "extended_json": true,

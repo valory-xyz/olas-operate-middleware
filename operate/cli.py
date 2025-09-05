@@ -852,6 +852,82 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             }
         )
 
+    @app.post("/api/wallet/withdraw")
+    async def _wallet_withdraw(request: Request) -> JSONResponse:
+        """Withdraw from master safe / master eoa"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        data = await request.json()
+        if not operate.user_account.is_valid(password=data["password"]):
+            return JSONResponse(
+                content={"error": "Password is not valid."},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        try:
+            withdraw_assets = data.get("withdraw_assets", {})
+            to = data["to"]
+            wallet_manager = operate.wallet_manager
+            transfer_txs: t.Dict[str, t.Dict[str, t.List[str]]] = {}
+
+            # TODO: Ensure master wallet has enough funding.
+            for chain_str, tokens in withdraw_assets.items():
+                chain = Chain(chain_str)
+                wallet = wallet_manager.load(chain.ledger_type)
+                transfer_txs[chain_str] = {}
+
+                # Process ERC20 first
+                for asset, amount in tokens.items():
+                    if asset != ZERO_ADDRESS:
+                        txs = wallet.transfer_asset_from_safe_then_eoa(
+                            to=to,
+                            amount=int(amount),
+                            chain=chain,
+                            asset=asset,
+                        )
+                        transfer_txs[chain_str][asset] = txs
+
+                # Process native last
+                if ZERO_ADDRESS in tokens:
+                    asset = ZERO_ADDRESS
+                    amount = tokens[asset]
+                    txs = wallet.transfer_asset_from_safe_then_eoa(
+                        to=to,
+                        amount=int(amount),
+                        chain=chain,
+                        asset=asset,
+                    )
+                    transfer_txs[chain_str][asset] = txs
+
+        except InsufficientFundsException as e:
+            logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "transfer_txs": transfer_txs,
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Failed to withdraw funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to withdraw funds. Please check the logs.",
+                    "transfer_txs": transfer_txs,
+                },
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": "Funds withdrawn successfully.",
+                "transfer_txs": transfer_txs,
+            }
+        )
+
     @app.get("/api/v2/services")
     @with_retries
     async def _get_services(request: Request) -> JSONResponse:
