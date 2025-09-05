@@ -325,7 +325,7 @@ falling back to Master EOA if needed.
   "message": "Funds withdrawn successfully.",
   "transfer_txs": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // list of tx hashes from master safe (and master eoa if needed)
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
       "0x...": ["0x...", "0x..."]
     }
   }
@@ -352,7 +352,13 @@ falling back to Master EOA if needed.
 
 ```json
 {
-  "error": "Failed to withdraw funds. Insufficient funds: (...)"
+  "error": "Failed to withdraw funds. Insufficient funds: (...)",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
 }
 ```
 
@@ -360,7 +366,13 @@ falling back to Master EOA if needed.
 
 ```json
 {
-  "error": "Failed to withdraw funds. Please check the logs."
+  "error": "Failed to withdraw funds. Please check the logs.",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
 }
 ```
 
