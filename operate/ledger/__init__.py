@@ -129,7 +129,7 @@ def make_chain_ledger_api(
 
         ledger_api = make_ledger_api(
             chain.ledger_type.name.lower(),
-            address=rpc,
+            address=rpc or get_default_rpc(chain=chain),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
         )
