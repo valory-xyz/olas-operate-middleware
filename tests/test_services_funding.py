@@ -36,8 +36,8 @@ from operate.ledger.profiles import DUST, OLAS, USDC
 from operate.operate_types import Chain, OnChainState
 from operate.utils.gnosis import get_asset_balance
 
-from tests.conftest import OperateTestEnv, tenderly_add_balance, tenderly_increase_time
-from tests.constants import LOGGER, TESTNET_RPCS
+from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance, tenderly_increase_time
+from tests.constants import LOGGER
 
 
 AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
@@ -54,13 +54,8 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
     }
 
 
-class TestFunding:
+class TestFunding(OnTestnet):
     """Tests for services.funding."""
-
-    @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
-        monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 
     def test_terminate_withdraw_service(
         self,

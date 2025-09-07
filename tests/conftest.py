@@ -28,6 +28,7 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 """
 
 import json
+import os
 import random
 import string
 import tempfile
@@ -56,7 +57,7 @@ from operate.operate_types import (
 from operate.services.manage import ServiceManager
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST
+from tests.constants import LOGGER, OPERATE_TEST, TESTNET_RPCS
 
 
 def random_string(length: int = 16) -> str:
@@ -134,6 +135,26 @@ def temp_keys_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for keys."""
     with tempfile.TemporaryDirectory() as temp_dir:
         yield Path(temp_dir)
+
+
+class OnTestnet():
+    """TestOnTestnet"""
+
+    @pytest.fixture(autouse=True, scope="session")
+    def _check_required_envs(self) -> None:
+        required_envs = [
+            "BASE_TESTNET_RPC",
+            "ETHEREUM_TESTNET_RPC",
+            "GNOSIS_TESTNET_RPC",
+        ]
+        missing = [var for var in required_envs if os.environ.get(var) is None]
+        if missing:
+            pytest.fail(f"Missing required environment variables: {', '.join(missing)}")
+
+    @pytest.fixture(autouse=True)
+    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
+        monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 
 
 @dataclass

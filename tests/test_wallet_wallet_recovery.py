@@ -37,17 +37,12 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OperateTestEnv, random_string, tenderly_add_balance
-from tests.constants import LOGGER, OPERATE_TEST, TESTNET_RPCS
+from tests.conftest import OnTestnet, OperateTestEnv, random_string, tenderly_add_balance
+from tests.constants import LOGGER, OPERATE_TEST
 
 
-class TestWalletRecovery:
+class TestWalletRecovery(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
-
-    @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
-        monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 
     @staticmethod
     def _assert_recovered(
