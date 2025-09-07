@@ -552,7 +552,7 @@ class EthereumMasterWallet(MasterWallet):
 
         if amount > 0:
             if drain_native:
-                eoa_balance = self.get_eoa_balance(chain=chain, asset=asset)
+                eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
                 amount = eoa_balance
 
             tx_hash = self.transfer_asset(
