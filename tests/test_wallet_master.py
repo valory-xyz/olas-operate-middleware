@@ -241,14 +241,14 @@ class TestMasterWallet(OnTestnet):
         "wallet_class",
         [EthereumMasterWallet],
     )
-    def test_transfer_error(
+    def test_transfer_error_funds(
         self,
         tmp_path: Path,
         password: str,
         chain: Chain,
         wallet_class: t.Type[MasterWallet],
     ) -> None:
-        """test_transfer_error"""
+        """test_transfer_error_funds"""
 
         keys_manager = KeysManager(
             path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
@@ -293,3 +293,59 @@ class TestMasterWallet(OnTestnet):
                         asset=asset,
                         from_safe=from_safe,
                     )
+
+    @pytest.mark.parametrize(
+        "wallet_class",
+        [EthereumMasterWallet],
+    )
+    def test_transfer_error_safes(
+        self,
+        tmp_path: Path,
+        password: str,
+        wallet_class: t.Type[MasterWallet],
+    ) -> None:
+        """test_transfer_error_safes"""
+
+        keys_manager = KeysManager(
+            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            logger=LOGGER,
+        )
+        receiver_addr = keys_manager.create()
+
+        wallet, _ = wallet_class.new(password=password, path=tmp_path / WALLETS_DIR)
+
+        chain = Chain.POLYGON  # Chain not funded
+        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        for asset in assets:
+            assert wallet.get_balance(chain=chain, asset=asset, from_safe=False) == 0
+            with pytest.raises(
+                ValueError,
+                match=f"Wallet does not have a Safe on chain {chain}.",
+            ):
+                wallet.get_balance(chain=chain, asset=asset, from_safe=True)
+
+            amount = 1
+
+            with pytest.raises(
+                InsufficientFundsException,
+                match=f"^Cannot transfer {amount}.*",
+            ):
+                wallet.transfer_asset(
+                    to=receiver_addr,
+                    amount=amount,
+                    chain=chain,
+                    asset=asset,
+                    from_safe=False,
+                )
+
+            with pytest.raises(
+                ValueError,
+                match=f"Wallet does not have a Safe on chain {chain}.",
+            ):
+                wallet.transfer_asset(
+                    to=receiver_addr,
+                    amount=amount,
+                    chain=chain,
+                    asset=asset,
+                    from_safe=True,
+                )

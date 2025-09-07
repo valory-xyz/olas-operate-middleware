@@ -242,6 +242,9 @@ class MasterWallet(LocalResource):
     ) -> int:
         """Get wallet balance on a given chain."""
         if from_safe:
+            if chain not in self.safes:
+                raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
+
             address = self.safes[chain]
         else:
             address = self.address
@@ -284,8 +287,18 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
         """Transfer funds from EOA wallet."""
-
+        to = Web3().to_checksum_address(to)
         balance = self.get_balance(chain=chain, from_safe=False)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} native units from EOA {self.address} to {to} on chain {chain}. "
+                f"Balance of {self.address} is {balance} native units."
+            )
+
+        if amount <= 0:
+            return None
+
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
@@ -338,13 +351,26 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
         """Transfer funds from safe wallet."""
-        if self.safes is None:
-            raise ValueError("Safes not initialized")
+        if chain not in self.safes:
+            raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
+
+        safe = self.safes[chain]
+        to = Web3().to_checksum_address(to)
+        balance = self.get_balance(chain=chain, from_safe=True)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} native units from Safe {safe} to {to} on chain {chain}. "
+                f"Balance of {safe} is {balance} native units."
+            )
+
+        if amount <= 0:
+            return None
 
         return transfer_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
-            safe=t.cast(str, self.safes[chain]),
+            safe=safe,
             to=to,
             amount=amount,
         )
@@ -358,8 +384,21 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer erc20 from safe wallet."""
-        if self.safes is None:
-            raise ValueError("Safes not initialized")
+        if chain not in self.safes:
+            raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
+
+        safe = self.safes[chain]
+        to = Web3().to_checksum_address(to)
+        balance = self.get_balance(chain=chain, asset=token, from_safe=True)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} {get_token_name(chain, token)} units from Safe {safe} to {to} on chain {chain}. "
+                f"Balance of {safe} is {balance} native units."
+            )
+
+        if amount <= 0:
+            return None
 
         return transfer_erc20_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
@@ -379,6 +418,18 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer erc20 from EOA wallet."""
+        to = Web3().to_checksum_address(to)
+        balance = self.get_balance(chain=chain, asset=token, from_safe=False)
+
+        if balance < amount:
+            raise InsufficientFundsException(
+                f"Cannot transfer {amount} {get_token_name(chain, token)} units from EOA {self.address} to {to} on chain {chain}. "
+                f"Balance of {self.address} is {balance} native units."
+            )
+
+        if amount <= 0:
+            return None
+
         wallet_address = self.address
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
         tx_settler = TxSettler(
@@ -425,25 +476,6 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-        if amount <= 0:
-            return None
-
-        if from_safe:
-            sender = t.cast(str, self.safes[chain])
-            sender_str = f"Safe {sender}"
-        else:
-            sender = self.crypto.address
-            sender_str = f"EOA {sender}"
-
-        to = Web3().to_checksum_address(to)
-        balance = self.get_balance(chain, from_safe=from_safe)
-
-        if balance < amount:
-            raise InsufficientFundsException(
-                f"Cannot transfer {amount} native units from {sender_str} to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of {sender_str} is {balance} native units."
-            )
-
         if from_safe:
             return self._transfer_from_safe(
                 to=to,
@@ -469,26 +501,6 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-        if amount <= 0:
-            return None
-
-        if from_safe:
-            sender = t.cast(str, self.safes[chain])
-            sender_str = f"Safe {sender}"
-        else:
-            sender = self.crypto.address
-            sender_str = f"EOA {sender}"
-
-        to = Web3().to_checksum_address(to)
-        token_name = get_token_name(chain, token)
-        balance = self.get_balance(chain, asset=token, from_safe=from_safe)
-
-        if balance < amount:
-            raise InsufficientFundsException(
-                f"Cannot transfer {amount} {token_name} from {sender_str} to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of {sender_str} is {balance} {token_name}."
-            )
-
         if from_safe:
             return self._transfer_erc20_from_safe(
                 token=token,
@@ -552,7 +564,9 @@ class EthereumMasterWallet(MasterWallet):
 
         if amount > 0:
             if drain_native:
-                eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
+                eoa_balance = self.get_balance(
+                    chain=chain, asset=asset, from_safe=False
+                )
                 amount = eoa_balance
 
             tx_hash = self.transfer_asset(
@@ -655,8 +669,9 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Create safe."""
-        if chain in self.safe_chains:
-            return None
+        if chain in self.safes:
+            raise ValueError(f"Wallet already has a Safe on chain {chain}.")
+
         safe, self.safe_nonce, tx_hash = create_gnosis_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
@@ -678,9 +693,9 @@ class EthereumMasterWallet(MasterWallet):
     ) -> bool:
         """Adds a backup owner if not present, or updates it by the provided backup owner. Setting a None backup owner will remove the current one, if any."""
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
-        if chain not in self.safes:  # type: ignore
-            raise ValueError(f"Safes not created for chain {chain}!")
-        safe = t.cast(str, self.safes[chain])  # type: ignore
+        if chain not in self.safes:
+            raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
+        safe = t.cast(str, self.safes[chain])
         owners = get_owners(ledger_api=ledger_api, safe=safe)
 
         if len(owners) > 2:
