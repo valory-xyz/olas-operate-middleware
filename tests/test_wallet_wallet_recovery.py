@@ -37,7 +37,12 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OnTestnet, OperateTestEnv, random_string, tenderly_add_balance
+from tests.conftest import (
+    OnTestnet,
+    OperateTestEnv,
+    random_string,
+    tenderly_add_balance,
+)
 from tests.constants import LOGGER, OPERATE_TEST
 
 

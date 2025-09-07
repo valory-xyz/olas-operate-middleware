@@ -137,22 +137,20 @@ def temp_keys_dir() -> Generator[Path, None, None]:
         yield Path(temp_dir)
 
 
-class OnTestnet():
+class OnTestnet:
     """TestOnTestnet"""
 
-    @pytest.fixture(autouse=True, scope="session")
-    def _check_required_envs(self) -> None:
+    @pytest.fixture(autouse=True)
+    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         required_envs = [
             "BASE_TESTNET_RPC",
             "ETHEREUM_TESTNET_RPC",
             "GNOSIS_TESTNET_RPC",
+            "OPTIMISM_TESTNET_RPC",
         ]
         missing = [var for var in required_envs if os.environ.get(var) is None]
         if missing:
             pytest.fail(f"Missing required environment variables: {', '.join(missing)}")
-
-    @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
         monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 

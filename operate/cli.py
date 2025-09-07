@@ -753,7 +753,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS.values()}
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values()
+            }
             balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},

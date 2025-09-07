@@ -22,40 +22,27 @@
 
 # pylint: disable=too-many-locals
 
-from pathlib import Path
 import random
-import uuid
+import typing as t
+from pathlib import Path
+
+import pytest
 
 from operate.constants import KEYS_DIR, WALLETS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
-from operate.ledger.profiles import ERC20_TOKENS, USDC
-import pytest
-
-from operate.cli import OperateApp
 from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import ERC20_TOKENS, USDC
 from operate.operate_types import Chain
-from operate.utils.gnosis import (
-    add_owner,
-    estimate_transfer_tx_fee,
-    get_asset_balance,
-    remove_owner,
-    swap_owner,
-)
-from operate.wallet.master import EthereumMasterWallet, InsufficientFundsException, MasterWallet
-from operate.wallet.wallet_recovery_manager import (
-    RECOVERY_BUNDLE_PREFIX,
-    RECOVERY_OLD_OBJECTS_DIR,
-    WalletRecoveryError,
+from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
+from operate.wallet.master import (
+    EthereumMasterWallet,
+    InsufficientFundsException,
+    MasterWallet,
 )
 
-from tests.conftest import (
-    OperateTestEnv,
-    OnTestnet,
-    random_string,
-    tenderly_add_balance,
-)
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
-import typing as t
+from tests.conftest import OnTestnet, tenderly_add_balance
+from tests.constants import LOGGER, RUNNING_IN_CI
+
 
 TX_FEE_TOLERANCE = 2
 
@@ -137,11 +124,7 @@ class TestMasterWallet(OnTestnet):
         final_balance_receiver = get_asset_balance(ledger_api, asset, receiver_addr)
         if not from_safe and asset == ZERO_ADDRESS:  # Transfer native from EOA
             if amount == initial_balance_sender:  # Drain native from EOA
-                assert (
-                    0
-                    <= final_balance_sender
-                    <= TX_FEE_TOLERANCE * tx_fee
-                )
+                assert 0 <= final_balance_sender <= TX_FEE_TOLERANCE * tx_fee
                 assert (
                     initial_balance_receiver + amount - TX_FEE_TOLERANCE * tx_fee
                     <= final_balance_receiver
@@ -161,9 +144,19 @@ class TestMasterWallet(OnTestnet):
     @pytest.mark.parametrize(
         "chain",
         [
-            # pytest.param(Chain.BASE, marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI")),
-            # pytest.param(Chain.ETHEREUM, marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI")),
+            pytest.param(
+                Chain.BASE,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
+            pytest.param(
+                Chain.ETHEREUM,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
             Chain.GNOSIS,
+            pytest.param(
+                Chain.OPTIMISM,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
         ],
     )
     @pytest.mark.parametrize(
@@ -229,9 +222,19 @@ class TestMasterWallet(OnTestnet):
     @pytest.mark.parametrize(
         "chain",
         [
-            # pytest.param(Chain.BASE, marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI")),
-            # pytest.param(Chain.ETHEREUM, marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI")),
+            pytest.param(
+                Chain.BASE,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
+            pytest.param(
+                Chain.ETHEREUM,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
             Chain.GNOSIS,
+            pytest.param(
+                Chain.OPTIMISM,
+                marks=pytest.mark.skipif(RUNNING_IN_CI, reason="Skipped on CI"),
+            ),
         ],
     )
     @pytest.mark.parametrize(
@@ -275,9 +278,7 @@ class TestMasterWallet(OnTestnet):
         for asset in assets:
             for from_safe in (True, False):
                 balance = wallet.get_balance(
-                    chain=chain,
-                    asset=asset,
-                    from_safe=from_safe
+                    chain=chain, asset=asset, from_safe=from_safe
                 )
                 assert balance > 0
                 amount = balance + 1  # Raises exception

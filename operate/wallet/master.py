@@ -47,7 +47,6 @@ from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
-    drain_eoa,
     estimate_transfer_tx_fee,
     get_asset_balance,
     get_owners,
@@ -238,7 +237,9 @@ class MasterWallet(LocalResource):
         """Updates password using the mnemonic."""
         raise NotImplementedError()
 
-    def get_balance(self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True) -> int:
+    def get_balance(
+        self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True
+    ) -> int:
         """Get wallet balance on a given chain."""
         if from_safe:
             address = self.safes[chain]

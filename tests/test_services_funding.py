@@ -26,7 +26,6 @@ import random
 import typing as t
 from http import HTTPStatus
 
-import pytest
 from fastapi.testclient import TestClient
 
 from operate.cli import create_app
@@ -36,7 +35,12 @@ from operate.ledger.profiles import DUST, OLAS, USDC
 from operate.operate_types import Chain, OnChainState
 from operate.utils.gnosis import get_asset_balance
 
-from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance, tenderly_increase_time
+from tests.conftest import (
+    OnTestnet,
+    OperateTestEnv,
+    tenderly_add_balance,
+    tenderly_increase_time,
+)
 from tests.constants import LOGGER
 
 
