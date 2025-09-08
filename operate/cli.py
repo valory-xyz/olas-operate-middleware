@@ -51,6 +51,9 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
     OPERATE_HOME,
     SERVICES_DIR,
     USER_JSON,
@@ -84,10 +87,6 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryManager,
 )
 
-
-MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
-MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
-MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(

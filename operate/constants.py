@@ -68,3 +68,6 @@ NO_STAKING_PROGRAM_ID = "no_staking"
 
 DEPLOYMENT_START_TRIES_NUM = 3
 IPFS_CHECK_URL = "https://gateway.autonolas.tech/ipfs/bafybeigcllaxn4ycjjvika3zd6eicksuriez2wtg67gx7pamhcazl3tv54/echo/README.md"
+MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec

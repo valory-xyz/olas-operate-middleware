@@ -26,8 +26,7 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
-from operate.cli import MSG_INVALID_PASSWORD
-from operate.constants import USER_JSON, WALLETS_DIR
+from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR
 from operate.utils.gnosis import get_owners
 from operate.wallet.master import MasterWalletManager
 

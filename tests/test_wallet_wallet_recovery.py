@@ -26,7 +26,8 @@ import uuid
 
 import pytest
 
-from operate.cli import MSG_INVALID_PASSWORD, OperateApp
+from operate.cli import OperateApp
+from operate.constants import MSG_INVALID_PASSWORD
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner

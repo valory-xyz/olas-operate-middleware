@@ -27,13 +27,14 @@ import argon2
 import pytest
 from web3 import Web3
 
-from operate.cli import (
+from operate.cli import OperateApp
+from operate.constants import (
     MSG_INVALID_MNEMONIC,
     MSG_INVALID_PASSWORD,
     MSG_NEW_PASSWORD_MISSING,
-    OperateApp,
+    OPERATE,
+    USER_JSON,
 )
-from operate.constants import OPERATE, USER_JSON
 from operate.operate_types import LedgerType
 
 from tests.conftest import random_string
