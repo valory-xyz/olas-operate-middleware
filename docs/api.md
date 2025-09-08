@@ -1616,7 +1616,7 @@ Terminates and unbonds a service on-chain, and withdraws all the funds from the 
 
 ### `POST /api/v2/service/{service_config_id}/fund`
 
-Funds the agent or service Safe from master Safe.
+Funds the agent or service Safe from Master Safe.
 
 **Request Body:**
 
