@@ -776,7 +776,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
-                tx_hash = wallet.transfer_asset(
+                tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
                     chain=chain,
@@ -883,7 +883,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 # Process ERC20 first
                 for asset, amount in tokens.items():
                     if asset != ZERO_ADDRESS:
-                        txs = wallet.transfer_asset_from_safe_then_eoa(
+                        txs = wallet.transfer_from_safe_then_eoa(
                             to=to,
                             amount=int(amount),
                             chain=chain,
@@ -895,7 +895,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 if ZERO_ADDRESS in tokens:
                     asset = ZERO_ADDRESS
                     amount = tokens[asset]
-                    txs = wallet.transfer_asset_from_safe_then_eoa(
+                    txs = wallet.transfer_from_safe_then_eoa(
                         to=to,
                         amount=int(amount),
                         chain=chain,
@@ -1261,7 +1261,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
                 wallet = wallet_manager.load(chain.ledger_type)
                 for asset, amount in tokens.items():
-                    wallet.transfer_asset(
+                    wallet.transfer(
                         to=address,
                         amount=int(amount),
                         chain=chain,

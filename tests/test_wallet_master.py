@@ -111,7 +111,7 @@ class TestMasterWallet(OnTestnet):
         initial_balance_sender = wallet.get_balance(
             chain=chain, asset=asset, from_safe=from_safe
         )
-        wallet.transfer_asset(
+        wallet.transfer(
             to=receiver_addr,
             amount=amount,
             chain=chain,
@@ -286,7 +286,7 @@ class TestMasterWallet(OnTestnet):
                     InsufficientFundsException,
                     match=f"^Cannot transfer {amount}.*",
                 ):
-                    wallet.transfer_asset(
+                    wallet.transfer(
                         to=receiver_addr,
                         amount=amount,
                         chain=chain,
@@ -330,7 +330,7 @@ class TestMasterWallet(OnTestnet):
                 InsufficientFundsException,
                 match=f"^Cannot transfer {amount}.*",
             ):
-                wallet.transfer_asset(
+                wallet.transfer(
                     to=receiver_addr,
                     amount=amount,
                     chain=chain,
@@ -342,7 +342,7 @@ class TestMasterWallet(OnTestnet):
                 ValueError,
                 match=f"Wallet does not have a Safe on chain {chain}.",
             ):
-                wallet.transfer_asset(
+                wallet.transfer(
                     to=receiver_addr,
                     amount=amount,
                     chain=chain,

@@ -112,31 +112,7 @@ class MasterWallet(LocalResource):
             return get_default_ledger_api(chain=chain)
         return make_chain_ledger_api(chain=chain, rpc=rpc)
 
-    def transfer(
-        self,
-        to: str,
-        amount: int,
-        chain: Chain,
-        from_safe: bool = True,
-        rpc: t.Optional[str] = None,
-    ) -> t.Optional[str]:
-        """Transfer funds to the given account."""
-        raise NotImplementedError()
-
-    # pylint: disable=too-many-arguments
-    def transfer_erc20(
-        self,
-        token: str,
-        to: str,
-        amount: int,
-        chain: Chain,
-        from_safe: bool = True,
-        rpc: t.Optional[str] = None,
-    ) -> t.Optional[str]:
-        """Transfer funds to the given account."""
-        raise NotImplementedError()
-
-    def transfer_asset(
+    def transfer(  # pylint: disable=too-many-arguments
         self,
         to: str,
         amount: int,
@@ -145,25 +121,10 @@ class MasterWallet(LocalResource):
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
-        """Transfer asset to the given account."""
-        if asset == ZERO_ADDRESS:
-            return self.transfer(
-                to=to,
-                amount=amount,
-                chain=chain,
-                from_safe=from_safe,
-                rpc=rpc,
-            )
-        return self.transfer_erc20(
-            token=asset,
-            to=to,
-            amount=amount,
-            chain=chain,
-            from_safe=from_safe,
-            rpc=rpc,
-        )
+        """Transfer funds to the given account."""
+        raise NotImplementedError()
 
-    def transfer_asset_from_safe_then_eoa(
+    def transfer_from_safe_then_eoa(
         self,
         to: str,
         amount: int,
@@ -185,7 +146,7 @@ class MasterWallet(LocalResource):
         assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
         for asset in assets:
             balance = self.get_balance(chain=chain, from_safe=from_safe)
-            self.transfer_asset(
+            self.transfer(
                 to=withdrawal_address,
                 amount=balance,
                 chain=chain,
@@ -467,17 +428,34 @@ class EthereumMasterWallet(MasterWallet):
         tx_hash = tx_receipt.get("transactionHash", "").hex()
         return tx_hash
 
-    def transfer(
+    def transfer(  # pylint: disable=too-many-arguments
         self,
         to: str,
         amount: int,
         chain: Chain,
+        asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-        if from_safe:
+        if from_safe and asset != ZERO_ADDRESS:
+            return self._transfer_erc20_from_safe(
+                token=asset,
+                to=to,
+                amount=amount,
+                chain=chain,
+                rpc=rpc,
+            )
+        if from_safe and asset == ZERO_ADDRESS:
             return self._transfer_from_safe(
+                to=to,
+                amount=amount,
+                chain=chain,
+                rpc=rpc,
+            )
+        if not from_safe and asset != ZERO_ADDRESS:
+            return self._transfer_erc20_from_eoa(
+                token=asset,
                 to=to,
                 amount=amount,
                 chain=chain,
@@ -490,34 +468,7 @@ class EthereumMasterWallet(MasterWallet):
             rpc=rpc,
         )
 
-    # pylint: disable=too-many-arguments
-    def transfer_erc20(
-        self,
-        token: str,
-        to: str,
-        amount: int,
-        chain: Chain,
-        from_safe: bool = True,
-        rpc: t.Optional[str] = None,
-    ) -> t.Optional[str]:
-        """Transfer funds to the given account."""
-        if from_safe:
-            return self._transfer_erc20_from_safe(
-                token=token,
-                to=to,
-                amount=amount,
-                chain=chain,
-                rpc=rpc,
-            )
-        return self._transfer_erc20_from_eoa(
-            token=token,
-            to=to,
-            amount=amount,
-            chain=chain,
-            rpc=rpc,
-        )
-
-    def transfer_asset_from_safe_then_eoa(
+    def transfer_from_safe_then_eoa(
         self,
         to: str,
         amount: int,
@@ -550,7 +501,7 @@ class EthereumMasterWallet(MasterWallet):
         tx_hashes = []
         from_safe_amount = min(safe_balance, amount)
         if from_safe_amount > 0:
-            tx_hash = self.transfer_asset(
+            tx_hash = self.transfer(
                 to=to,
                 amount=from_safe_amount,
                 chain=chain,
@@ -569,7 +520,7 @@ class EthereumMasterWallet(MasterWallet):
                 )
                 amount = eoa_balance
 
-            tx_hash = self.transfer_asset(
+            tx_hash = self.transfer(
                 to=to, amount=amount, chain=chain, asset=asset, from_safe=False, rpc=rpc
             )
             if tx_hash:
