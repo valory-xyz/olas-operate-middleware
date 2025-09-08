@@ -1526,7 +1526,7 @@ Stop a running service deployment locally.
 
 ### `[DEPRECATED] POST /api/v2/service/{service_config_id}/onchain/withdraw`
 
-Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the master safe and master signer.
+Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the Master Safe and master signer.
 
 **Request Body:**
 
@@ -1579,7 +1579,7 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 
 ### `POST /api/v2/service/{service_config_id}/terminate_and_withdraw`
 
-Terminates and unbonds a service on-chain, and withdraws all the funds from the agent safe and agent signer to the master safe.
+Terminates and unbonds a service on-chain, and withdraws all the funds from the agent safe and agent signer to the Master Safe.
 
 **Response (Success - 200):**
 
@@ -1614,17 +1614,19 @@ Terminates and unbonds a service on-chain, and withdraws all the funds from the 
 }
 ```
 
-### `POST /api/v2/service/{service_config_id}/fund/{safe|agent}`
+### `POST /api/v2/service/{service_config_id}/fund`
 
-Funds the agent or service safe.
+Funds the agent or service Safe from master Safe.
 
 **Request Body:**
 
 ```json
 {
   "gnosis": {
-    "0x...": "1000000000000000000",  // token1: value
-    "0x...": "1000000000000000000"   // token2: value
+    "0x...": {  // Agent EOA or service Safe
+      "0x...": "1000000000000000000",  // token1: value
+      "0x...": "1000000000000000000"   // token2: value
+    }
   }
 }
 ```
@@ -1634,7 +1636,7 @@ Funds the agent or service safe.
 ```json
 {
   "error": null,
-  "message": "Funded from master safe successfully"
+  "message": "Funded from Master Safe successfully"
 }
 ```
 
@@ -1654,11 +1656,19 @@ Funds the agent or service safe.
 }
 ```
 
+**Response (Invalid address - 400):**
+
+```json
+{
+  "error": "Failed to fund from Master Safe. Address 0x... is not an agent EOA or service Safe for service service_123."
+}
+```
+
 **Response (Insufficient funds - 400):**
 
 ```json
 {
-  "error": "Failed to fund from master safe. Insufficient funds: (...)"
+  "error": "Failed to fund from Master Safe. Insufficient funds: (...)"
 }
 ```
 
@@ -1666,7 +1676,7 @@ Funds the agent or service safe.
 
 ```json
 {
-  "error": "Failed to fund from master safe. Please check the logs."
+  "error": "Failed to fund from Master Safe. Please check the logs."
 }
 ```
 
@@ -1693,6 +1703,7 @@ Get bridge refill requirements for cross-chain transactions.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "balances": {
