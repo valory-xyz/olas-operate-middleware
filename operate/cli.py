@@ -85,6 +85,10 @@ from operate.wallet.wallet_recovery_manager import (
 )
 
 
+MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
+
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
     content={"error": "User not logged in."}, status_code=HTTPStatus.UNAUTHORIZED
@@ -148,13 +152,13 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         if not (
             self.user_account.is_valid(old_password)
             and self.wallet_manager.is_password_valid(old_password)
         ):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
@@ -165,11 +169,11 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
-            raise ValueError("Seed phrase is not valid.")
+            raise ValueError(MSG_INVALID_MNEMONIC)
 
         wallet_manager = self.wallet_manager
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
@@ -588,7 +592,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -643,7 +647,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_NOT_LOGGED_IN_ERROR
         if operate.password != password:
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -864,7 +868,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 

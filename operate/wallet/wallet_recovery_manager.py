@@ -26,6 +26,7 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
+from operate.cli import MSG_INVALID_PASSWORD
 from operate.constants import USER_JSON, WALLETS_DIR
 from operate.utils.gnosis import get_owners
 from operate.wallet.master import MasterWalletManager
@@ -145,7 +146,7 @@ class WalletRecoveryManager:
 
         new_user_account = UserAccount.load(new_root / USER_JSON)
         if not new_user_account.is_valid(password=password):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         new_wallet_manager = MasterWalletManager(
             path=new_wallets_path, logger=self.logger, password=password

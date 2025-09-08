@@ -26,7 +26,7 @@ import uuid
 
 import pytest
 
-from operate.cli import OperateApp
+from operate.cli import MSG_INVALID_PASSWORD, OperateApp
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
@@ -335,7 +335,7 @@ class TestWalletRecovery(OnTestnet):
             )
 
         random_password = random_string(16)
-        with pytest.raises(ValueError, match="Password is not valid."):
+        with pytest.raises(ValueError, match=MSG_INVALID_PASSWORD):
             operate.wallet_recoverey_manager.complete_recovery(
                 password=random_password, bundle_id=bundle_id
             )
