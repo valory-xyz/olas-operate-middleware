@@ -24,7 +24,7 @@ import typing as t
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import CHAINS
+from operate.ledger import CHAINS, get_currency_denom
 from operate.operate_types import Chain, ContractAddresses
 
 
@@ -175,7 +175,11 @@ WRAPPED_NATIVE_ASSET = {
     Chain.POLYGON: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
 }
 
-ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+ERC20_TOKENS = {
+    "OLAS": OLAS,
+    "USDC": USDC,
+    "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
+}
 
 DUST = {
     Chain.ARBITRUM_ONE: int(1e14),
@@ -260,6 +264,21 @@ EXPLORER_URL = {
         "address": "https://polygonscan.com/address/{address}",
     },
 }
+
+
+def get_token_name(chain: Chain, token: str) -> str:
+    """Get token name."""
+    if token == ZERO_ADDRESS:
+        return "native"
+
+    if WRAPPED_NATIVE_ASSET.get(chain) == token:
+        return f"W{get_currency_denom(chain)}"
+
+    for symbol, tokens in ERC20_TOKENS.items():
+        if tokens.get(chain) == token:
+            return symbol
+
+    return token
 
 
 # TODO: Deprecate in favour of StakingManager method

@@ -1993,7 +1993,7 @@ class ServiceManager:
                         self.logger.info(
                             f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {agent_address}"
                         )
-                        wallet.transfer_asset(
+                        wallet.transfer(
                             asset=asset_address,
                             to=agent_address,
                             amount=int(to_transfer),
@@ -2062,7 +2062,7 @@ class ServiceManager:
                     # when not enough funds are present, and the FE doesn't let the user to start the agent.
                     # Ideally this error should be allowed, and then the FE should ask the user for more funds.
                     with suppress(RuntimeError):
-                        wallet.transfer_asset(
+                        wallet.transfer(
                             asset=asset_address,
                             to=t.cast(str, chain_data.multisig),
                             amount=int(to_transfer),
@@ -2108,8 +2108,8 @@ class ServiceManager:
                     or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
                 )
                 self.logger.info(f"Transferring {to_transfer} units to {agent_address}")
-                wallet.transfer_erc20(
-                    token=token,
+                wallet.transfer(
+                    asset=token,
                     to=agent_address,
                     amount=int(to_transfer),
                     chain=ledger_config.chain,
@@ -2137,8 +2137,8 @@ class ServiceManager:
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )
-            wallet.transfer_erc20(
-                token=token,
+            wallet.transfer(
+                asset=token,
                 to=t.cast(str, chain_data.multisig),
                 amount=int(to_transfer),
                 chain=ledger_config.chain,
