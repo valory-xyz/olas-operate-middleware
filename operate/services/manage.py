@@ -1275,7 +1275,7 @@ class ServiceManager:
                 chain=chain,
                 staking_program_id=current_staking_program,
             )
-        else:
+        elif is_staked:
             # at least claim the rewards if we cannot unstake yet
             self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,
