@@ -474,6 +474,7 @@ class Deployment(LocalResource):
                     build_dir=build.resolve(),
                     use_tm_testnet_setup=True,
                     image_author=builder.service.author,
+                    custom_props={},  # we can set extra docker compose things here, like health checker
                 )
                 .generate()
                 .generate_config_tendermint()
