@@ -1343,6 +1343,8 @@ def _daemon(
                 requests.get(f"http://{host}:{port}/shutdown", timeout=3)
             except Exception:  # pylint: disable=broad-except
                 logger.exception("Failed to stop previous instance")
+        except Exception:  # pylint: disable=broad-except
+            logger.exception("Failed to stop previous instance")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
