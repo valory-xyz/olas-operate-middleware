@@ -22,17 +22,32 @@
 
 # pylint: disable=too-many-locals
 
+import os
+import typing as t
 from logging import Logger
 
+from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
+from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
+from operate.constants import (
+    DEFAULT_TOPUP_THRESHOLD,
+    MASTER_EOA_PLACEHOLDER,
+    MASTER_SAFE_PLACEHOLDER,
+    MIN_AGENT_BOND,
+    MIN_SECURITY_DEPOSIT,
+    SERVICE_SAFE_PLACEHOLDER,
+    ZERO_ADDRESS,
+)
 from operate.keys import KeysManager
 from operate.ledger import get_currency_denom, get_default_ledger_api
-from operate.ledger.profiles import OLAS, USDC, WRAPPED_NATIVE_ASSET
-from operate.operate_types import Chain
-from operate.services.service import Service
-from operate.utils.gnosis import drain_eoa
+from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, OLAS, USDC, WRAPPED_NATIVE_ASSET
+from operate.operate_types import Chain, ChainAmounts, OnChainState
+from operate.services.protocol import StakingManager, StakingState
+from operate.services.service import NON_EXISTENT_TOKEN, Service
+from operate.utils import merge_sum_dicts
+from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -139,3 +154,596 @@ class FundingManager:
             )
 
         self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
+
+    # -------------------------------------------------------------------------------------
+    # -------------------------------------------------------------------------------------
+
+    def _compute_protocol_asset_requirements(self, service: Service) -> ChainAmounts:
+        """Computes the protocol asset requirements to deploy on-chain and stake (if necessary)"""
+
+        self.logger.info(
+            f"[FUNDING MANAGER] Computing protocol asset requirements for service {service.service_config_id}"
+        )
+        protocol_asset_requirements: ChainAmounts = {}
+
+        for chain, chain_config in service.chain_configs.items():
+            user_params = chain_config.chain_data.user_params
+            number_of_agents = len(service.agent_addresses)
+            # os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc  # TODO do we need this?
+
+            requirements: defaultdict = defaultdict(int)
+
+            if not user_params.use_staking or not user_params.staking_program_id:
+                protocol_agent_bonds = (
+                    max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
+                )
+                protocol_security_deposit = max(
+                    MIN_SECURITY_DEPOSIT, user_params.cost_of_bond
+                )
+                staking_agent_bonds = 0
+                staking_security_deposit = 0
+            else:
+                protocol_agent_bonds = MIN_AGENT_BOND * number_of_agents
+                protocol_security_deposit = MIN_SECURITY_DEPOSIT
+
+                staking_manager = StakingManager(chain=Chain(chain))
+                staking_params = staking_manager.get_staking_params(
+                    staking_contract=staking_manager.get_staking_contract(
+                        staking_program_id=user_params.staking_program_id,
+                    ),
+                )
+
+                staking_agent_bonds = (
+                    staking_params["min_staking_deposit"] * number_of_agents
+                )
+                staking_security_deposit = staking_params["min_staking_deposit"]
+                staking_token = staking_params["staking_token"]
+                requirements[staking_token] += staking_agent_bonds
+                requirements[staking_token] += staking_security_deposit
+
+                for token, amount in staking_params[
+                    "additional_staking_tokens"
+                ].items():
+                    requirements[token] = amount
+
+            requirements[ZERO_ADDRESS] += protocol_agent_bonds
+            requirements[ZERO_ADDRESS] += protocol_security_deposit
+
+            master_safe = self._resolve_master_safe(Chain(chain))
+
+            protocol_asset_requirements[chain] = {master_safe: dict(requirements)}
+
+        return dict(protocol_asset_requirements)
+
+        # TODO address this comment
+        # This computation assumes the service will be/has been minted with these
+        # parameters. Otherwise, these values should be retrieved on-chain as follows:
+        # - agent_bonds: by combining the output of ServiceRegistry .getAgentParams .getService
+        #   and ServiceRegistryTokenUtility .getAgentBond
+        # - security_deposit: as the maximum agent bond.
+
+    def _compute_protocol_bonded_assets(  # pylint: disable=too-many-locals
+        self, service: Service
+    ) -> ChainAmounts:
+        """Computes the bonded assets: current agent bonds and current security deposit"""
+
+        protocol_bonded_assets: ChainAmounts = {}
+
+        for chain, chain_config in service.chain_configs.items():
+            bonded_assets: defaultdict = defaultdict(int)
+            ledger_config = chain_config.ledger_config
+            user_params = chain_config.chain_data.user_params
+
+            if not self.wallet_manager.exists(ledger_config.chain.ledger_type):
+                protocol_bonded_assets[chain] = {
+                    MASTER_SAFE_PLACEHOLDER: dict(bonded_assets)
+                }
+                continue
+
+            wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
+            ledger_api = get_default_ledger_api(Chain(chain))
+            staking_manager = StakingManager(Chain(chain))
+
+            if Chain(chain) not in wallet.safes:
+                protocol_bonded_assets[chain] = {
+                    MASTER_SAFE_PLACEHOLDER: dict(bonded_assets)
+                }
+                continue
+
+            master_safe = wallet.safes[Chain(chain)]
+
+            service_id = chain_config.chain_data.token
+            if service_id == NON_EXISTENT_TOKEN:
+                protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
+                continue
+
+            # os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc  # TODO do we need this?
+
+            # Determine bonded native amount
+            service_registry_address = CHAIN_PROFILES[chain]["service_registry"]
+            service_registry = registry_contracts.service_registry.get_instance(
+                ledger_api=ledger_api,
+                contract_address=service_registry_address,
+            )
+            service_info = service_registry.functions.getService(service_id).call()
+            security_deposit = service_info[0]
+            service_state = service_info[6]
+            agent_ids = service_info[7]
+
+            if (
+                OnChainState.ACTIVE_REGISTRATION
+                <= service_state
+                < OnChainState.TERMINATED_BONDED
+            ):
+                bonded_assets[ZERO_ADDRESS] += security_deposit
+
+            operator_balance = service_registry.functions.getOperatorBalance(
+                master_safe, service_id
+            ).call()
+            bonded_assets[ZERO_ADDRESS] += operator_balance
+
+            # Determine bonded token amount for staking programs
+            current_staking_program = staking_manager.get_current_staking_program(
+                service_id=service_id,
+            )
+            target_staking_program = user_params.staking_program_id
+            staking_contract = staking_manager.get_staking_contract(
+                staking_program_id=current_staking_program or target_staking_program,
+            )
+
+            if not staking_contract:
+                return dict(bonded_assets)
+
+            staking_manager = StakingManager(Chain(chain))
+            staking_params = staking_manager.get_staking_params(
+                staking_contract=staking_manager.get_staking_contract(
+                    staking_program_id=user_params.staking_program_id,
+                ),
+            )
+
+            service_registry_token_utility_address = staking_params[
+                "service_registry_token_utility"
+            ]
+            service_registry_token_utility = (
+                registry_contracts.service_registry_token_utility.get_instance(
+                    ledger_api=ledger_api,
+                    contract_address=service_registry_token_utility_address,
+                )
+            )
+
+            agent_bonds = 0
+            for agent_id in agent_ids:
+                num_agent_instances = service_registry.functions.getInstancesForAgentId(
+                    service_id, agent_id
+                ).call()[0]
+                agent_bond = service_registry_token_utility.functions.getAgentBond(
+                    service_id, agent_id
+                ).call()
+                agent_bonds += num_agent_instances * agent_bond
+
+            if service_state == OnChainState.TERMINATED_BONDED:
+                num_agent_instances = service_info[5]
+                token_bond = (
+                    service_registry_token_utility.functions.getOperatorBalance(
+                        master_safe,
+                        service_id,
+                    ).call()
+                )
+                agent_bonds += num_agent_instances * token_bond
+
+            security_deposit = 0
+            if (
+                OnChainState.ACTIVE_REGISTRATION
+                <= service_state
+                < OnChainState.TERMINATED_BONDED
+            ):
+                security_deposit = (
+                    service_registry_token_utility.functions.mapServiceIdTokenDeposit(
+                        service_id
+                    ).call()[1]
+                )
+
+            bonded_assets[staking_params["staking_token"]] += agent_bonds
+            bonded_assets[staking_params["staking_token"]] += security_deposit
+
+            staking_state = staking_manager.staking_state(
+                service_id=service_id,
+                staking_contract=staking_params["staking_contract"],
+            )
+
+            if staking_state in (StakingState.STAKED, StakingState.EVICTED):
+                for token, amount in staking_params[
+                    "additional_staking_tokens"
+                ].items():
+                    bonded_assets[token] += amount
+
+            protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
+
+        return dict(protocol_bonded_assets)
+
+    @staticmethod
+    def _compute_shortfalls(
+        balances: ChainAmounts,
+        thresholds: ChainAmounts,
+        topups: ChainAmounts,
+    ) -> ChainAmounts:
+        """
+        Compute shortfall per chain/address/asset:
+        if balance < threshold, shortfall = topup - balance, else 0
+        """
+        shortfalls = ChainAmounts()
+
+        for chain, addresses in thresholds.items():
+            shortfalls.setdefault(chain, {})
+            for address, assets in addresses.items():
+                shortfalls[chain].setdefault(address, {})
+                for asset, threshold in assets.items():
+                    balance = balances.get(chain, {}).get(address, {}).get(asset, 0)
+                    topup = topups.get(chain, {}).get(address, {}).get(asset, 0)
+                    if balance < threshold:
+                        shortfalls[chain][address][asset] = max(topup - balance, 0)
+                    else:
+                        shortfalls[chain][address][asset] = 0
+
+        return shortfalls
+
+    def _resolve_master_eoa(self, chain: Chain) -> str:
+        if self.wallet_manager.exists(chain.ledger_type):
+            wallet = self.wallet_manager.load(chain.ledger_type)
+            return wallet.address
+        return MASTER_EOA_PLACEHOLDER
+
+    def _resolve_master_safe(self, chain: Chain) -> str:
+        if self.wallet_manager.exists(chain.ledger_type):
+            wallet = self.wallet_manager.load(chain.ledger_type)
+            if chain in wallet.safes:
+                return wallet.safes[chain]
+        return MASTER_SAFE_PLACEHOLDER
+
+    def _aggregate_as_master_safe_amounts(self, *amounts: ChainAmounts) -> ChainAmounts:
+        output = ChainAmounts()
+        for amts in amounts:
+            for chain_str, addresses in amts.items():
+                chain = Chain(chain_str)
+                master_safe = self._resolve_master_safe(chain)
+                master_safe_dict = output.setdefault(chain_str, {}).setdefault(
+                    master_safe, {}
+                )
+                for _, assets in addresses.items():
+                    for asset, amount in assets.items():
+                        master_safe_dict[asset] = (
+                            master_safe_dict.get(asset, 0) + amount
+                        )
+
+        return output
+
+    def _split_excess_assets_master_eoa_balances(
+        self, balances: ChainAmounts
+    ) -> t.Tuple[ChainAmounts, ChainAmounts]:
+        """Splits excess balances from master EOA only on chains without a Master Safe."""
+        excess_balance = ChainAmounts()
+        remaining_balance = ChainAmounts()
+
+        for chain_str, addresses in balances.items():
+            chain = Chain(chain_str)
+            master_safe = self._resolve_master_safe(chain)
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    if master_safe == MASTER_SAFE_PLACEHOLDER:
+                        remaining = min(amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0))  # When transferring, the Master Safe will be already created, that is why we are only retaining DEFAULT_EOA_TOPUPS
+                        excess = amount - remaining
+                    else:
+                        remaining = amount
+                        excess = 0
+
+                    excess_balance.setdefault(chain_str, {}).setdefault(
+                        master_safe, {}
+                    )[asset] = excess
+                    remaining_balance.setdefault(chain_str, {}).setdefault(address, {})[
+                        asset
+                    ] = remaining  
+
+        return excess_balance, remaining_balance
+
+    def _split_critical_eoa_shortfalls(
+        self, balances: ChainAmounts, shortfalls: ChainAmounts
+    ) -> t.Tuple[ChainAmounts, ChainAmounts]:
+        """Splits critical EOA shortfalls in two: the first split containins the native shortfalls whose balance is < threshold / 2. The second one, contains the remaining shortfalls. This is to ensure EOA operational balance."""
+        critical_shortfalls = ChainAmounts()
+        remaining_shortfalls = ChainAmounts()
+
+        for chain_str, addresses in shortfalls.items():
+            chain = Chain(chain_str)
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    if asset == ZERO_ADDRESS and balances[chain_str][address][
+                        asset
+                    ] < int(
+                        DEFAULT_EOA_TOPUPS[chain][asset] / 4
+                    ):  # TODO Ensure that this is enough to pay a transfer tx at least.
+                        critical_shortfalls.setdefault(chain_str, {}).setdefault(
+                            address, {}
+                        )[asset] = amount
+                        remaining_shortfalls.setdefault(chain_str, {}).setdefault(
+                            address, {}
+                        )[asset] = 0                          
+                    else:
+                        critical_shortfalls.setdefault(chain_str, {}).setdefault(
+                            address, {}
+                        )[asset] = 0                        
+                        remaining_shortfalls.setdefault(chain_str, {}).setdefault(
+                            address, {}
+                        )[asset] = amount
+
+        return critical_shortfalls, remaining_shortfalls
+
+    def _get_master_safe_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+        output = ChainAmounts()
+        for chain_str, addresses in thresholds.items():
+            chain = Chain(chain_str)
+            master_safe = self._resolve_master_safe(chain)
+            master_safe_dict = output.setdefault(chain_str, {}).setdefault(
+                master_safe, {}
+            )
+            for _, assets in addresses.items():
+                for asset, _ in assets.items():
+                    master_safe_dict[asset] = get_asset_balance(
+                        ledger_api=get_default_ledger_api(chain),
+                        asset_address=asset,
+                        address=master_safe,
+                        raise_on_invalid_address=False,
+                    )
+
+        return output
+
+    def _get_master_eoa_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+        output = ChainAmounts()
+        for chain_str, addresses in thresholds.items():
+            chain = Chain(chain_str)
+            master_eoa = self._resolve_master_eoa(chain)
+            master_eoa_dict = output.setdefault(chain_str, {}).setdefault(
+                master_eoa, {}
+            )
+            for _, assets in addresses.items():
+                for asset, _ in assets.items():
+                    master_eoa_dict[asset] = get_asset_balance(
+                        ledger_api=get_default_ledger_api(chain),
+                        asset_address=asset,
+                        address=master_eoa,
+                        raise_on_invalid_address=False,
+                    )
+
+        return output
+
+    def funding_requirements(self, service: Service) -> t.Dict:
+        # TODO cache _resolve methods to avoid loading multiple times file.
+        # TODO refactor: move protocol_ methods to protocol class, refactor to accomodate arbitrary owner and operators,
+        # refactor to manage multiple chains with different master safes, etc.
+
+        balances: t.Dict = {}
+        protocol_bonded_assets: t.Dict = {}
+        protocol_asset_requirements: t.Dict = {}
+        refill_requirements: t.Dict = {}
+        total_requirements: t.Dict = {}
+        chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
+
+        # Protocol shortfall
+        protocol_thresholds = self._compute_protocol_asset_requirements(service)
+        protocol_balances = self._compute_protocol_bonded_assets(service)
+        protocol_topups = protocol_thresholds
+        protocol_shortfalls = self._compute_shortfalls(
+            balances=protocol_balances,
+            thresholds=protocol_thresholds,
+            topups=protocol_topups,
+        )
+
+        # Initial service shortfall
+        # We assume that if the service safe is created in any chain,
+        # we have requested the funding already.
+        service_topups = service.get_funding_amounts()
+        service_shortfalls = ChainAmounts()
+        if all(
+            SERVICE_SAFE_PLACEHOLDER in addresses
+            for addresses in service_topups.values()
+        ):
+            service_shortfalls = service_topups
+
+        # Master EOA shortfall
+        master_eoa_topups = ChainAmounts()
+        for chain in chains:
+            chain_str = chain.value
+            master_eoa = self._resolve_master_eoa(chain)
+            master_safe = self._resolve_master_safe(chain)
+
+            if master_safe != MASTER_SAFE_PLACEHOLDER:
+                master_eoa_topups[chain_str] = {
+                    master_eoa: dict(DEFAULT_EOA_TOPUPS[chain])
+                }
+            else:
+                master_eoa_topups[chain_str] = {
+                    master_eoa: dict(DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain])
+                }
+
+            # Set the topup for MasterEOA for remaining tokens to 0 if they don't exist
+            # This ensures that the balances of MasterEOA are collected for relevant tokens
+            all_assets = {ZERO_ADDRESS} | {
+                asset
+                for addresses in (protocol_topups[chain_str], service_topups[chain_str])
+                for assets in addresses.values()
+                for asset in assets
+            }
+            for asset in all_assets:
+                master_eoa_topups[chain_str][master_eoa].setdefault(asset, 0)
+
+        master_eoa_thresholds = master_eoa_topups.divide(2)
+        master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds)
+
+        print("master_eoa_balances1", master_eoa_balances)
+
+
+        # BRIDGING PATCH: remove excess balances for chains without a Safe:
+        (
+            excess_master_eoa_balances,
+            master_eoa_balances,
+        ) = self._split_excess_assets_master_eoa_balances(master_eoa_balances)
+
+        print("master_eoa_balances2", master_eoa_balances)
+        print("excess_master_eoa_balances", master_eoa_balances)
+
+
+        master_eoa_shortfalls = self._compute_shortfalls(
+            balances=master_eoa_balances,
+            thresholds=master_eoa_thresholds,
+            topups=master_eoa_topups,
+        )
+
+        print("master_eoa_threshold", master_eoa_thresholds)
+        print("master_eoa_topups", master_eoa_topups)
+
+        print("master_eoa_balances", master_eoa_balances)
+        print("master_eoa_shortfalls", master_eoa_shortfalls)
+
+        (
+            master_eoa_critical_shortfalls,
+            master_eoa_shortfalls,
+        ) = self._split_critical_eoa_shortfalls(
+            balances=master_eoa_balances, shortfalls=master_eoa_shortfalls
+        )
+
+        # Master Safe shortfall
+        master_safe_thresholds = self._aggregate_as_master_safe_amounts(
+            master_eoa_shortfalls,
+            protocol_shortfalls,
+            service_shortfalls,
+        )
+        master_safe_topup = master_safe_thresholds
+        master_safe_balances = merge_sum_dicts(
+            self._get_master_safe_balances(master_safe_thresholds),
+            self._aggregate_as_master_safe_amounts(excess_master_eoa_balances),
+        )
+        master_safe_shortfalls = self._compute_shortfalls(
+            balances=master_safe_balances,
+            thresholds=master_safe_thresholds,
+            topups=master_safe_topup,
+        )
+
+        # # TODO this is a patch for the case when excess balance is in MasterEOA
+        # # and MasterSafe is not created (typically for onboarding bridging).
+        # # It simulates the "balance in the future" for both addesses when
+        # # transfering the excess assets.
+        # for chain_str, addresses in balances.items():
+        #     chain = Chain(chain_str)
+        #     master_safe = self._resolve_master_safe(chain)
+        #     if master_safe == MASTER_SAFE_PLACEHOLDER:
+        #         eoa_funding_values = self.get_master_eoa_native_funding_values(
+        #             master_safe_exists=master_safe_exists,
+        #             chain=Chain(chain),
+        #             balance=balances[chain][master_eoa][ZERO_ADDRESS],
+        #         )
+
+        #         for asset in balances[chain][master_safe]:
+        #             if asset == ZERO_ADDRESS:
+        #                 balances[chain][master_safe][asset] = max(
+        #                     balances[chain][master_eoa][asset]
+        #                     - eoa_funding_values["topup"],
+        #                     0,
+        #                 )
+        #                 balances[chain][master_eoa][asset] = min(
+        #                     balances[chain][master_eoa][asset],
+        #                     eoa_funding_values["topup"],
+        #                 )
+        #             else:
+        #                 balances[chain][master_safe][asset] = balances[chain][
+        #                     master_eoa
+        #                 ][asset]
+        #                 balances[chain][master_eoa][asset] = 0
+
+        # Prepare output values
+        protocol_bonded_assets = protocol_balances
+        protocol_asset_requirements = protocol_thresholds
+        refill_requirements = merge_sum_dicts(
+            master_eoa_critical_shortfalls,
+            master_safe_shortfalls,
+        )
+        total_requirements = merge_sum_dicts(  # TODO Review if this is correct
+            master_eoa_critical_shortfalls,
+            master_safe_thresholds,
+        )
+        balances = merge_sum_dicts(
+            master_eoa_balances,
+            master_safe_balances,
+        )
+
+        # Compute boolean flags
+        is_refill_required = any(
+            amount > 0
+            for address in refill_requirements.values()
+            for assets in address.values()
+            for amount in assets.values()
+        )
+
+        allow_start_agent = True
+        if any(
+            MASTER_SAFE_PLACEHOLDER in addresses
+            for addresses in refill_requirements.values()
+        ) or any(
+            amount > 0
+            for address in master_eoa_critical_shortfalls.values()
+            for assets in address.values()
+            for amount in assets.values()
+        ):
+            allow_start_agent = False
+
+        return {
+            "balances": balances,
+            "bonded_assets": protocol_bonded_assets,
+            "total_requirements": total_requirements,
+            "refill_requirements": refill_requirements,
+            "protocol_asset_requirements": protocol_asset_requirements,
+            "is_refill_required": is_refill_required,
+            "allow_start_agent": allow_start_agent,
+        }
+
+    def _try_fund(self, amounts: ChainAmounts) -> None:
+        for chain_str, addresses in amounts.items():
+            chain = Chain(chain_str)
+            wallet = self.wallet_manager.load(chain.ledger_type)
+            for address, assets in addresses.items():
+                for asset, value in assets.values():
+                    balance = wallet.get_balance(
+                        chain=chain, asset=asset, from_safe=False
+                    )
+
+    def fund_service(self, service: Service) -> None:
+        """Fund service-related wallets."""
+
+        chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
+
+        # Fund MasterEOA
+        master_eoa_thresholds = ChainAmounts()
+        master_eoa_topups = ChainAmounts()
+        for chain in chains:
+            master_eoa = self._resolve_master_eoa(chain)
+            master_eoa_thresholds = DEFAULT_EOA_THRESHOLDS[chain]
+            for asset, threshold in master_eoa_thresholds:
+                balance = get_asset_balance(
+                    ledger_api=get_default_ledger_api(chain),
+                    asset_address=asset,
+                    address=master_eoa,
+                    raise_on_invalid_address=False,
+                )
+                self._try_fund()
+
+        for chain in chains:
+            for asset, topup in DEFAULT_EOA_TOPUPS[chain].items():
+                wallet = self.wallet_manager.load(chain.ledger_type)
+                balance = wallet.get_balance(chain=chain, asset=asset, from_safe=False)
+                if balance < int(topup * DEFAULT_TOPUP_THRESHOLD):
+                    # Try fund MasterEOA
+                    wallet.transfer(
+                        chain=chain,
+                        to=wallet.address,
+                        asset=asset,
+                        amount=topup - balance,
+                        from_safe=True,
+                    )

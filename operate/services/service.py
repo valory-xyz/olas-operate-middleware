@@ -69,11 +69,15 @@ from operate.constants import (
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
     HEALTHCHECK_JSON,
+    SERVICE_SAFE_PLACEHOLDER,
+    ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
+from operate.ledger import get_default_rpc
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
+    ChainAmounts,
     ChainConfig,
     ChainConfigs,
     DeployedNodes,
@@ -818,11 +822,12 @@ class Service(LocalResource):
             )
         )
 
-        ledger_configs = ServiceHelper(path=package_absolute_path).ledger_configs()
-
         chain_configs = {}
-        for chain, config in service_template["configurations"].items():
-            ledger_config = ledger_configs[chain]
+        for chain_str, config in service_template["configurations"].items():
+            chain = Chain(chain_str)
+            ledger_config = LedgerConfig(
+                rpc=get_default_rpc(Chain(chain_str)), chain=chain
+            )
             ledger_config.rpc = config["rpc"]
 
             chain_data = OnChainData(
@@ -832,7 +837,7 @@ class Service(LocalResource):
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
-            chain_configs[chain] = ChainConfig(
+            chain_configs[chain_str] = ChainConfig(
                 ledger_config=ledger_config,
                 chain_data=chain_data,
             )
@@ -1111,3 +1116,23 @@ class Service(LocalResource):
 
         if updated:
             self.store()
+
+    # TODO For now, funding_requirements mean "initial funding requirements"
+    def get_funding_amounts(self) -> ChainAmounts:
+        """Get funding amounts as a dict structure."""
+        amounts = {}
+
+        for chain_str, chain_config in self.chain_configs.items():
+            fund_requirements = chain_config.chain_data.user_params.fund_requirements
+            service_safe = chain_config.chain_data.multisig
+
+            if service_safe is None or service_safe == ZERO_ADDRESS:
+                service_safe = SERVICE_SAFE_PLACEHOLDER
+
+            chain_amounts = amounts.setdefault(chain_str, {})
+            for asset, req in fund_requirements.items():
+                chain_amounts.setdefault(service_safe, {})[asset] = req.safe
+                for agent_address in self.agent_addresses:
+                    chain_amounts.setdefault(agent_address, {})[asset] = req.agent
+
+        return amounts

@@ -36,6 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator
 
+from operate.utils.gnosis import get_asset_balance
 import pytest
 import requests
 from web3 import Web3
@@ -44,7 +45,7 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp
 from operate.constants import KEYS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
-from operate.ledger import get_default_rpc  # noqa: E402
+from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import (
     Chain,
@@ -92,10 +93,16 @@ def tenderly_add_balance(
             "id": "1",
         }
     else:
+        current_balance = get_asset_balance(
+            ledger_api=get_default_ledger_api(chain),
+            address=recipient,
+            asset_address=token,
+            raise_on_invalid_address=False
+        )
         data = {
             "jsonrpc": "2.0",
             "method": "tenderly_setErc20Balance",
-            "params": [token, recipient, hex(amount)],
+            "params": [token, recipient, hex(amount + current_balance)],
             "id": "1",
         }
 
@@ -278,6 +285,120 @@ def _get_service_template_trader() -> ServiceTemplate:
                     "description": "",
                     "value": '["native-transfer","prediction-online-lite","claude-prediction-online-lite","prediction-online-sme-lite","prediction-request-reasoning-lite","prediction-request-reasoning-claude-lite","prediction-offline-sme","deepmind-optimization","deepmind-optimization-strong","openai-gpt-3.5-turbo","openai-gpt-3.5-turbo-instruct","openai-gpt-4","openai-text-davinci-002","openai-text-davinci-003","prediction-online-sum-url-content","prediction-online-summarized-info","stabilityai-stable-diffusion-512-v2-1","stabilityai-stable-diffusion-768-v2-1","stabilityai-stable-diffusion-v1-5","stabilityai-stable-diffusion-xl-beta-v2-2-2","prediction-url-cot-claude","prediction-url-cot"]',
                     "provision_type": ServiceEnvProvisionType.FIXED,
+                },
+            },
+        }
+    )
+
+
+def _get_service_template_multichain_service() -> ServiceTemplate:
+    """Get the service template"""
+    return ServiceTemplate(
+        {
+            "name": "Test Multichain Service",
+            "hash": "bafybeifhxeoar5hdwilmnzhy6jf664zqp5lgrzi6lpbkc4qmoqrr24ow4q",
+            "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
+            "description": "Test Multichain Service",
+            "service_version": "v0.0.1",
+            "home_chain": "gnosis",
+            "configurations": {
+                "gnosis": ConfigurationTemplate(
+                    {
+                        "staking_program_id": "pearl_beta_2",
+                        "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
+                        "rpc": get_default_rpc(Chain.GNOSIS),
+                        "agent_id": 14,
+                        "cost_of_bond": 1000000000000000,
+                        "fund_requirements": {
+                            ZERO_ADDRESS: FundRequirementsTemplate(
+                                {
+                                    "agent": 2000000000000000000,
+                                    "safe": 5000000000000000000,
+                                }
+                            )
+                        },
+                        "fallback_chain_params": None,
+                    }
+                ),
+                "base": ConfigurationTemplate(
+                    {
+                        "staking_program_id": None,
+                        "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
+                        "rpc": get_default_rpc(Chain.BASE),
+                        "agent_id": 43,
+                        "cost_of_bond": 100000000000000,
+                        "fund_requirements": {
+                            ZERO_ADDRESS: FundRequirementsTemplate(
+                                {
+                                    "agent": 5000000000000000,
+                                    "safe": 10000000000000000,
+                                },
+                            ),
+                            USDC[Chain.BASE]: FundRequirementsTemplate(
+                                {
+                                    "agent": 20000000,
+                                    "safe": 50000000,
+                                }
+                            ),
+                        },
+                        "fallback_chain_params": None,
+                    }
+                ),
+            },
+            "env_variables": {
+                "BASE_LEDGER_RPC": {
+                    "name": "Base ledger RPC",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "GNOSIS_LEDGER_RPC": {
+                    "name": "Gnosis ledger RPC",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "STAKING_CONTRACT_ADDRESS": {
+                    "name": "Staking contract address",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_ACTIVITY_CHECKER_CONTRACT": {
+                    "name": "Mech activity checker contract",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_CONTRACT_ADDRESS": {
+                    "name": "Mech contract address",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "MECH_REQUEST_PRICE": {
+                    "name": "Mech request price",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "USE_MECH_MARKETPLACE": {
+                    "name": "Use Mech marketplace",
+                    "description": "",
+                    "value": "",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "LOG_DIR": {
+                    "name": "Log directory",
+                    "description": "",
+                    "value": "benchmarks/",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
+                },
+                "STORE_PATH": {
+                    "name": "Store path",
+                    "description": "",
+                    "value": "persistent_data/",
+                    "provision_type": ServiceEnvProvisionType.COMPUTED,
                 },
             },
         }

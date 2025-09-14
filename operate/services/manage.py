@@ -58,7 +58,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
-    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_EOA_TOPUPS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
     WRAPPED_NATIVE_ASSET,
@@ -1903,16 +1903,18 @@ class ServiceManager:
     ) -> None:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
+        self.funding_manager.fund_service(service)
 
-        for chain in service.chain_configs.keys():
-            self.logger.info(f"[FUNDING_JOB] [{task_id=}] Funding {chain=}")
-            self.fund_service_single_chain(
-                service_config_id=service_config_id,
-                funding_values=funding_values,
-                from_safe=from_safe,
-                chain=chain,
-            )
+        # for chain in service.chain_configs.keys():
+        #     self.logger.info(f"[FUNDING_JOB] [{task_id=}] Funding {chain=}")
+        #     self.fund_service_single_chain(
+        #         service_config_id=service_config_id,
+        #         funding_values=funding_values,
+        #         from_safe=from_safe,
+        #         chain=chain,
+        #     )
 
+    # TODO deprecate
     def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
         self,
         service_config_id: str,
@@ -2070,6 +2072,7 @@ class ServiceManager:
                             rpc=rpc or ledger_config.rpc,
                         )
 
+    # TODO Deprecate
     # TODO This method is possibly not used anymore
     def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
         self,
@@ -2280,6 +2283,14 @@ class ServiceManager:
         )
         return service
 
+    def funding_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
+        self, service_config_id: str
+    ) -> t.Dict:
+        """Get the funding requirements for a service."""
+        service = self.load(service_config_id=service_config_id)
+        return self.funding_manager.funding_requirements(service)
+
+    # TODO deprecate
     def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
         self, service_config_id: str
     ) -> t.Dict:
@@ -2483,6 +2494,7 @@ class ServiceManager:
             "allow_start_agent": allow_start_agent,
         }
 
+    # TODO deprecate
     def _compute_bonded_assets(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str
     ) -> t.Dict:
@@ -2598,6 +2610,7 @@ class ServiceManager:
 
         return dict(bonded_assets)
 
+    # TODO deprecate
     def _compute_protocol_asset_requirements(  # pylint: disable=too-many-locals
         self, service_config_id: str, chain: str
     ) -> t.Dict:
@@ -2646,6 +2659,7 @@ class ServiceManager:
 
         return dict(service_asset_requirements)
 
+    # TODO deprecate
     @staticmethod
     def _compute_refill_requirement(
         asset_funding_values: t.Dict,
@@ -2726,12 +2740,13 @@ class ServiceManager:
             "recommended_refill": recommended_refill,
         }
 
+    # TODO deprecate
     @staticmethod
     def get_master_eoa_native_funding_values(
         master_safe_exists: bool, chain: Chain, balance: int
     ) -> t.Dict:
         """Get Master EOA native funding values."""
 
-        topup = DEFAULT_MASTER_EOA_FUNDS[chain][ZERO_ADDRESS]
+        topup = DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS]
         threshold = topup / 2 if master_safe_exists else topup
         return {"topup": topup, "threshold": threshold, "balance": balance}

@@ -19,6 +19,7 @@
 
 """Types module."""
 
+import copy
 import enum
 import os
 import typing as t
@@ -323,3 +324,17 @@ class MechMarketplaceConfig:
     mech_marketplace_address: str
     priority_mech_address: str
     priority_mech_service_id: int
+
+
+# {chain: {address: {token: amount}}}
+class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
+    def divide(self, divisor: float) -> "ChainAmounts":
+        if divisor == 0:
+            raise ValueError("Cannot divide by zero")
+
+        output = copy.deepcopy(self)
+        for _, addresses in output.items():
+            for _, balances in addresses.items():
+                for asset, amount in balances.items():
+                    balances[asset] = int(amount / divisor)
+        return output
