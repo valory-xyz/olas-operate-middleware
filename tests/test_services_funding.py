@@ -34,16 +34,17 @@ from fastapi.testclient import TestClient
 from operate.cli import OperateApp, create_app
 from operate.constants import (
     KEYS_DIR,
+    MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
-from operate.ledger.profiles import DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, DUST, OLAS, USDC
+from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, DUST, OLAS, USDC
 from operate.operate_types import Chain, OnChainState
 from operate.utils import subtract_dicts
-from operate.utils.gnosis import get_asset_balance
+from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
 
 from tests.conftest import (
     OnTestnet,
@@ -702,23 +703,26 @@ class TestFunding(OnTestnet):
         # -------------------------------------------------
         # Bridge funds to Master EOA - Funding requirements
         # -------------------------------------------------
-        for chain_str, addresses in response.json()["refill_requirements"].items():
-            asset_amounts: t.Dict[str, int] = {}
-
-            for address, assets in addresses.items():
-                for asset, amount in assets.items():
+        for chain_str, addresses in response_json["refill_requirements"].items():
+            for _, master_eoa_assets in addresses.items():
+                for asset, amount in master_eoa_assets.items():
                     # The sum of requirements for Master EOA and Master Safe is transferred to Master EOA.
-                    asset_amounts[asset] = asset_amounts.get(asset, 0) + amount
-                    # But balance of each address is reflected in Master EOA and Master Safe placeholder.
-                    expected_json["balances"][chain_str][address][asset] += amount
+                    tenderly_add_balance(
+                        chain=Chain(chain_str),
+                        recipient=master_eoa,
+                        token=asset,
+                        amount=amount,
+                    )
+                    expected_json["balances"][chain_str][master_eoa][asset] += amount
 
-            for asset, assets in asset_amounts.items():
-                tenderly_add_balance(
-                    chain=Chain(chain_str),
-                    recipient=master_eoa,
-                    token=asset,
-                    amount=assets,
-                )
+        # Arrange "balances in the future" (after transferring excess)
+        for chain_str in expected_json["balances"]:
+            if MASTER_SAFE_PLACEHOLDER in expected_json["balances"][chain_str]:
+                master_eoa_assets = expected_json["balances"][chain_str][master_eoa]
+                for asset, amount in master_eoa_assets.items():
+                    default_eoa_topup = DEFAULT_EOA_TOPUPS[Chain(chain_str)].get(asset, 0)
+                    expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][asset] = amount - default_eoa_topup
+                    expected_json["balances"][chain_str][master_eoa][asset] = default_eoa_topup
 
         expected_json["total_requirements"][chain1.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
         expected_json["total_requirements"][chain2.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
@@ -771,19 +775,40 @@ class TestFunding(OnTestnet):
                 ].pop("master_safe")
 
         # Adjusts transferred native assets
-        # for chain in chains:
-        #     master_safe = master_safes[chain]
-        #     expected_json["balances"][master_safe][ZERO_ADDRESS] = 
+        for chain_str in expected_json["balances"]:
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            tx_fee = estimate_transfer_tx_fee(Chain(chain_str), master_eoa, master_safes[chain])
+            tx_fee_erc20 = 65000 * int(1e6)  # TODO improve estimation
+            assert real_balance_master_eoa <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_erc20
+            expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = real_balance_master_eoa
 
-
+        expected_json["allow_start_agent"] = True
 
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response.json(), "res_4.json")
+        PRINT_JSON(response_json, "res_4.json")
         PRINT_JSON(expected_json, "res_4x.json")
-
         assert not diff
+
+        # ----------------------------------
+        # Start agent - Funding requirements
+        # ----------------------------------
+
+        operate.password = password
+        operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        PRINT_JSON(response_json, "res_5.json")
+
+
+
+
 
 
         return
