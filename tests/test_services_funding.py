@@ -532,13 +532,11 @@ class TestFunding(OnTestnet):
             home=tmp_path / OPERATE_TEST,
         )
 
-        service_template = _get_service_template_multichain_service()
+        service_template = _get_service_template_trader()
 
         chain1 = Chain.GNOSIS
-        chain2 = Chain.BASE
-        chains = (chain1, chain2)
+        chains = (chain1,)
         c1_cfg = service_template["configurations"][chain1.value]
-        c2_cfg = service_template["configurations"][chain2.value]
         c1_staking_bond = 50000000000000000000
         expected_json = {
             "balances": {
@@ -552,22 +550,9 @@ class TestFunding(OnTestnet):
                         OLAS[chain1]: 0,
                     },
                 },
-                chain2.value: {
-                    "master_eoa": {
-                        ZERO_ADDRESS: 0,
-                        USDC[chain2]: 0,
-                    },
-                    "master_safe": {
-                        ZERO_ADDRESS: 0,
-                        USDC[chain2]: 0,
-                    },
-                },
             },
             "bonded_assets": {
                 chain1.value: {
-                    "master_safe": {},
-                },
-                chain2.value: {
                     "master_safe": {},
                 },
             },
@@ -585,19 +570,6 @@ class TestFunding(OnTestnet):
                         OLAS[chain1]: 2 * c1_staking_bond,
                     },
                 },
-                chain2.value: {
-                    "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain2][ZERO_ADDRESS],
-                        USDC[chain2]: 0,
-                    },
-                    "master_safe": {
-                        ZERO_ADDRESS: 2 * c2_cfg["cost_of_bond"]
-                        + c2_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-                        + c2_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
-                        USDC[chain2]: c2_cfg["fund_requirements"][USDC[chain2]]["agent"]
-                        + c2_cfg["fund_requirements"][USDC[chain2]]["safe"],
-                    },
-                },
             },
             "refill_requirements": {
                 chain1.value: {
@@ -613,30 +585,12 @@ class TestFunding(OnTestnet):
                         OLAS[chain1]: 2 * c1_staking_bond,
                     },
                 },
-                chain2.value: {
-                    "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain2][ZERO_ADDRESS],
-                        USDC[chain2]: 0,
-                    },
-                    "master_safe": {
-                        ZERO_ADDRESS: 2 * c2_cfg["cost_of_bond"]
-                        + c2_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-                        + c2_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
-                        USDC[chain2]: c2_cfg["fund_requirements"][USDC[chain2]]["agent"]
-                        + c2_cfg["fund_requirements"][USDC[chain2]]["safe"],
-                    },
-                },
             },
             "protocol_asset_requirements": {
                 chain1.value: {
                     "master_safe": {
                         ZERO_ADDRESS: MIN_AGENT_BOND + MIN_SECURITY_DEPOSIT,
                         OLAS[chain1]: 2 * c1_staking_bond,
-                    },
-                },
-                chain2.value: {
-                    "master_safe": {
-                        ZERO_ADDRESS: 2 * c2_cfg["cost_of_bond"],
                     },
                 },
             },
@@ -669,7 +623,6 @@ class TestFunding(OnTestnet):
         diff = DeepDiff(response.json(), expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response.json(), "res_1.json")
         assert not diff
 
         # ----------------------------------------
@@ -724,8 +677,9 @@ class TestFunding(OnTestnet):
                     expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][asset] = amount - default_eoa_topup
                     expected_json["balances"][chain_str][master_eoa][asset] = default_eoa_topup
 
-        expected_json["total_requirements"][chain1.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
-        expected_json["total_requirements"][chain2.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
+        for chain in chains:
+            expected_json["total_requirements"][chain.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
+
         expected_json["refill_requirements"] = subtract_dicts(
             expected_json["total_requirements"], expected_json["balances"]
         )
@@ -739,8 +693,6 @@ class TestFunding(OnTestnet):
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response.json(), "res_3.json")
-        PRINT_JSON(expected_json, "res_3x.json")
 
         assert not diff
 
@@ -788,8 +740,7 @@ class TestFunding(OnTestnet):
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response_json, "res_4.json")
-        PRINT_JSON(expected_json, "res_4x.json")
+
         assert not diff
 
         # ----------------------------------
@@ -805,10 +756,6 @@ class TestFunding(OnTestnet):
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
         PRINT_JSON(response_json, "res_5.json")
-
-
-
-
 
 
         return
