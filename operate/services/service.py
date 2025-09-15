@@ -1080,7 +1080,7 @@ class Service(LocalResource):
         Note that this method modifies os.environ. Consider if you need a backup of os.environ before using this method.
         """
         for env_var, attributes in self.env_variables.items():
-            os.environ[env_var] = str(attributes["value"])
+            os.environ[env_var] = str(attributes.get("value", ""))
 
     def update_env_variables_values(
         self, env_var_to_value: t.Dict[str, t.Any], except_if_undefined: bool = False
