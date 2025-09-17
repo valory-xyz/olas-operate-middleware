@@ -1075,6 +1075,7 @@ class ServiceManager:
             ).settle()
 
         # Deploy service
+        is_initial_funding = False
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.FINISHED_REGISTRATION
@@ -1085,6 +1086,7 @@ class ServiceManager:
             service_safe_address = info["multisig"]
             if service_safe_address == ZERO_ADDRESS:
                 reuse_multisig = False
+                is_initial_funding = True
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
@@ -1114,6 +1116,9 @@ class ServiceManager:
         info = sftxb.info(token_id=chain_data.token)
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
+
+        if is_initial_funding:
+            self.funding_manager.fund_service_initial(service)
 
         # TODO: yet another agent specific logic for mech, which should be abstracted
         if all(

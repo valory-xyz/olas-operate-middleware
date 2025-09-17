@@ -29,9 +29,11 @@ from logging import Logger
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
+import requests
 from web3 import Web3
 
 from operate.constants import (
+    AGENT_FUNDING_REQUESTS_URL,
     DEFAULT_TOPUP_THRESHOLD,
     MASTER_EOA_PLACEHOLDER,
     MASTER_SAFE_PLACEHOLDER,
@@ -578,30 +580,18 @@ class FundingManager:
         master_eoa_thresholds = master_eoa_topups.divide(2)
         master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds)
 
-        print("master_eoa_balances1", master_eoa_balances)
-
-
-        # BRIDGING PATCH: remove excess balances for chains without a Safe:
+        # BEGIN Bridging patch: remove excess balances for chains without a Safe:
         (
             excess_master_eoa_balances,
             master_eoa_balances,
         ) = self._split_excess_assets_master_eoa_balances(master_eoa_balances)
-
-        print("master_eoa_balances2", master_eoa_balances)
-        print("excess_master_eoa_balances", master_eoa_balances)
-
+        # END Bridging patch
 
         master_eoa_shortfalls = self._compute_shortfalls(
             balances=master_eoa_balances,
             thresholds=master_eoa_thresholds,
             topups=master_eoa_topups,
         )
-
-        print("master_eoa_threshold", master_eoa_thresholds)
-        print("master_eoa_topups", master_eoa_topups)
-
-        print("master_eoa_balances", master_eoa_balances)
-        print("master_eoa_shortfalls", master_eoa_shortfalls)
 
         (
             master_eoa_critical_shortfalls,
@@ -627,37 +617,6 @@ class FundingManager:
             topups=master_safe_topup,
         )
 
-        # # TODO this is a patch for the case when excess balance is in MasterEOA
-        # # and MasterSafe is not created (typically for onboarding bridging).
-        # # It simulates the "balance in the future" for both addesses when
-        # # transfering the excess assets.
-        # for chain_str, addresses in balances.items():
-        #     chain = Chain(chain_str)
-        #     master_safe = self._resolve_master_safe(chain)
-        #     if master_safe == MASTER_SAFE_PLACEHOLDER:
-        #         eoa_funding_values = self.get_master_eoa_native_funding_values(
-        #             master_safe_exists=master_safe_exists,
-        #             chain=Chain(chain),
-        #             balance=balances[chain][master_eoa][ZERO_ADDRESS],
-        #         )
-
-        #         for asset in balances[chain][master_safe]:
-        #             if asset == ZERO_ADDRESS:
-        #                 balances[chain][master_safe][asset] = max(
-        #                     balances[chain][master_eoa][asset]
-        #                     - eoa_funding_values["topup"],
-        #                     0,
-        #                 )
-        #                 balances[chain][master_eoa][asset] = min(
-        #                     balances[chain][master_eoa][asset],
-        #                     eoa_funding_values["topup"],
-        #                 )
-        #             else:
-        #                 balances[chain][master_safe][asset] = balances[chain][
-        #                     master_eoa
-        #                 ][asset]
-        #                 balances[chain][master_eoa][asset] = 0
-
         # Prepare output values
         protocol_bonded_assets = protocol_balances
         protocol_asset_requirements = protocol_thresholds
@@ -673,6 +632,14 @@ class FundingManager:
             master_eoa_balances,
             master_safe_balances,
         )
+
+        agent_funding_requests = {}
+        try:
+            resp = requests.get(AGENT_FUNDING_REQUESTS_URL, timeout=10)
+            resp.raise_for_status()
+            agent_funding_requests = resp.json()
+        except Exception:
+            self.logger.warning(f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDING_REQUESTS_URL}.")
 
         # Compute boolean flags
         is_refill_required = any(
@@ -702,6 +669,7 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
+            "agent_funding_requests": agent_funding_requests
         }
 
     def _try_fund(self, amounts: ChainAmounts) -> None:
@@ -712,6 +680,23 @@ class FundingManager:
                 for asset, value in assets.values():
                     balance = wallet.get_balance(
                         chain=chain, asset=asset, from_safe=False
+                    )
+
+    def fund_service_initial(self, service: Service) -> None:
+        self._fund_chain_amounts(service.get_funding_amounts())
+
+    def _fund_chain_amounts(self, amounts: ChainAmounts): 
+        for chain_str, addresses in amounts.items():
+            chain = Chain(chain_str)
+            wallet = self.wallet_manager.load(chain.ledger_type)
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    wallet.transfer(
+                        chain=chain,
+                        to=address,
+                        asset=asset,
+                        amount=amount,
+                        from_safe=True
                     )
 
     def fund_service(self, service: Service) -> None:

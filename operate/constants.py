@@ -57,6 +57,7 @@ ON_CHAIN_INTERACT_SLEEP = 3.0
 MIN_PASSWORD_LENGTH = 8
 
 HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
+AGENT_FUNDING_REQUESTS_URL = "http://127.0.0.1:8716/funding_requests"
 SAFE_WEBAPP_URL = "https://app.safe.global/home?safe=gno:"
 TM_CONTROL_URL = "http://localhost:8080"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"

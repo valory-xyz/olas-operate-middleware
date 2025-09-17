@@ -23,16 +23,19 @@
 # pylint: disable=too-many-locals
 
 import random
+import respx
 import typing as t
 from http import HTTPStatus
 from pathlib import Path
 
 import httpx
+import requests_mock
 from deepdiff import DeepDiff
 from fastapi.testclient import TestClient
 
 from operate.cli import OperateApp, create_app
 from operate.constants import (
+    AGENT_FUNDING_REQUESTS_URL,
     KEYS_DIR,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
@@ -596,6 +599,7 @@ class TestFunding(OnTestnet):
             },
             "is_refill_required": True,
             "allow_start_agent": False,
+            "agent_funding_requests": {},
         }
 
         app = create_app(home=operate._path)
@@ -620,9 +624,13 @@ class TestFunding(OnTestnet):
             url=f"/api/v2/service/{service_config_id}/funding_requirements",
         )
         assert response.status_code == HTTPStatus.OK
-        diff = DeepDiff(response.json(), expected_json)
+        response_json = response.json()
+        diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
+
+        PRINT_JSON(response_json, "res_1.json")
+        PRINT_JSON(expected_json, "res_1x.json")
         assert not diff
 
         # ----------------------------------------
@@ -650,7 +658,9 @@ class TestFunding(OnTestnet):
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response.json(), "res_2.json")
+
+        PRINT_JSON(response_json, "res_2.json")
+        PRINT_JSON(expected_json, "res_2x.json")
         assert not diff
 
         # -------------------------------------------------
@@ -694,6 +704,8 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
+        PRINT_JSON(response_json, "res_3.json")
+        PRINT_JSON(expected_json, "res_3x.json")
         assert not diff
 
         # -------------------------------------------------
@@ -726,13 +738,13 @@ class TestFunding(OnTestnet):
                     chain.value
                 ].pop("master_safe")
 
-        # Adjusts transferred native assets
+        # Adjust expected Master EOA native assets
         for chain_str in expected_json["balances"]:
             real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
             tx_fee = estimate_transfer_tx_fee(Chain(chain_str), master_eoa, master_safes[chain])
-            tx_fee_erc20 = 65000 * int(1e6)  # TODO improve estimation
+            tx_fee_registry = 65000 * int(1e6)  # TODO improve estimation
             assert real_balance_master_eoa <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
-            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_erc20
+            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_registry
             expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = real_balance_master_eoa
 
         expected_json["allow_start_agent"] = True
@@ -741,11 +753,13 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
+        PRINT_JSON(response_json, "res_4.json")
+        PRINT_JSON(expected_json, "res_4x.json")
         assert not diff
 
-        # ----------------------------------
-        # Start agent - Funding requirements
-        # ----------------------------------
+        # ---------------------------------------------
+        # Start agent first time - Funding requirements
+        # ---------------------------------------------
 
         operate.password = password
         operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
@@ -757,32 +771,80 @@ class TestFunding(OnTestnet):
         response_json = response.json()
         PRINT_JSON(response_json, "res_5.json")
 
+        # Adjust Master Safe balance
+        for chain_str in expected_json["balances"]:
+            master_safe = master_safes[chain]
+            for asset in expected_json["balances"][chain_str][master_safe]:
+                expected_json["balances"][chain_str][master_safe][asset] -= expected_json["protocol_asset_requirements"][chain_str][master_safe][asset]
+                cfg = service_template["configurations"][chain1.value]
+                expected_json["balances"][chain_str][master_safe][asset] -= cfg["fund_requirements"].get(asset, {}).get("agent", 0)
+                expected_json["balances"][chain_str][master_safe][asset] -= cfg["fund_requirements"].get(asset, {}).get("safe", 0)
+                expected_json["bonded_assets"][chain_str][master_safe][asset] = expected_json["protocol_asset_requirements"][chain_str][master_safe][asset]
+                expected_json["total_requirements"][chain_str][master_safe][asset] = 0  # The protocol requirements are bonded, noting more needed.
 
-        return
+        # Adjust Master EOA native assets
+        for chain_str in expected_json["balances"]:
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            tx_fee_registry = 10 * 65000 * int(1e6)  # TODO improve estimation
+            assert real_balance_master_eoa <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
+            expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = real_balance_master_eoa
 
+        diff = DeepDiff(response_json, expected_json)
+        if diff:
+            print(diff)
+
+        PRINT_JSON(expected_json, "res_5x.json")
+        assert not diff
+
+        # ----------------------------------
+        # Start agent - Funding requirements
+        # ----------------------------------
+
+        operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
 
         response = client.get(
             url=f"/api/v2/service/{service_config_id}/funding_requirements",
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
+        PRINT_JSON(response_json, "res_6.json")
+
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
-        PRINT_JSON(response.json(), "res_3.json")
+
+        PRINT_JSON(expected_json, "res_6x.json")
         assert not diff
 
+        # ---------------------------------------
+        # Agent asks funds - Funding requirements
+        # ---------------------------------------
 
-        return
-        response = client.get(
-            url=f"/api/v2/service/{service_config_id}/funding_requirements",
-        )
-        assert response.status_code == HTTPStatus.OK
-        diff = DeepDiff(response.json(), expected_json)
+        fund_requests = {
+            chain1.value: {
+                master_safes[chain1]: {
+                    ZERO_ADDRESS: 42000000000000000000
+                }
+            }
+        }
+
+        with requests_mock.Mocker(real_http=True) as mock:
+            mock.get(AGENT_FUNDING_REQUESTS_URL, json=fund_requests)
+            response = client.get(
+                url=f"/api/v2/service/{service_config_id}/funding_requirements",
+            )
+            assert response.status_code == HTTPStatus.OK
+            response_json = response.json()
+            PRINT_JSON(response_json, "res_7.json")
+
+        diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
+
+        PRINT_JSON(expected_json, "res_7x.json")
         assert not diff
 
-        import json
+        return
 
-        LOGGER.info(json.dumps(response.json(), indent=2))
+
