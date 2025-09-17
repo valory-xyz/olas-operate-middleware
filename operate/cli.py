@@ -62,7 +62,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
-    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
 )
@@ -288,6 +288,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             raise exception
         return res
 
+    def schedule_healthcheck_job(
+        service_config_id: str,
+    ) -> None:
+        """Schedule a healthcheck job."""
+        if not HEALTH_CHECKER_OFF:
+            # dont start health checker if it's switched off
+            health_checker.start_for_service(service_config_id)
+
     def schedule_funding_job(
         service_config_id: str,
         from_safe: bool = True,
@@ -306,14 +314,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 from_safe=from_safe,
             )
         )
-
-    def schedule_healthcheck_job(
-        service_config_id: str,
-    ) -> None:
-        """Schedule a healthcheck job."""
-        if not HEALTH_CHECKER_OFF:
-            # dont start health checker if it's switched off
-            health_checker.start_for_service(service_config_id)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -765,7 +765,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-            initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
+            initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
@@ -1001,6 +1001,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .get_agent_performance()
         )
 
+    @app.get("/api/v2/service/{service_config_id}/funding_requirements")
+    @with_retries
+    async def _get_funding_requirements(request: Request) -> JSONResponse:
+        """Get the service refill requirements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().funding_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
+    # TODO deprecate
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
