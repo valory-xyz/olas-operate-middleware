@@ -22,14 +22,13 @@
 
 # pylint: disable=too-many-locals
 
-import os
 import typing as t
 from logging import Logger
 
+import requests
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
-import requests
 from web3 import Web3
 
 from operate.constants import (
@@ -44,7 +43,13 @@ from operate.constants import (
 )
 from operate.keys import KeysManager
 from operate.ledger import get_currency_denom, get_default_ledger_api
-from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, OLAS, USDC, WRAPPED_NATIVE_ASSET
+from operate.ledger.profiles import (
+    DEFAULT_EOA_TOPUPS,
+    DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
+    OLAS,
+    USDC,
+    WRAPPED_NATIVE_ASSET,
+)
 from operate.operate_types import Chain, ChainAmounts, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
@@ -432,7 +437,9 @@ class FundingManager:
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if master_safe == MASTER_SAFE_PLACEHOLDER:
-                        remaining = min(amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0))  # When transferring, the Master Safe will be already created, that is why we are only retaining DEFAULT_EOA_TOPUPS
+                        remaining = min(
+                            amount, DEFAULT_EOA_TOPUPS[chain].get(asset, 0)
+                        )  # When transferring, the Master Safe will be already created, that is why we are only retaining DEFAULT_EOA_TOPUPS
                         excess = amount - remaining
                     else:
                         remaining = amount
@@ -443,12 +450,13 @@ class FundingManager:
                     )[asset] = excess
                     remaining_balance.setdefault(chain_str, {}).setdefault(address, {})[
                         asset
-                    ] = remaining  
+                    ] = remaining
 
         return excess_balance, remaining_balance
 
+    @staticmethod
     def _split_critical_eoa_shortfalls(
-        self, balances: ChainAmounts, shortfalls: ChainAmounts
+        balances: ChainAmounts, shortfalls: ChainAmounts
     ) -> t.Tuple[ChainAmounts, ChainAmounts]:
         """Splits critical EOA shortfalls in two: the first split containins the native shortfalls whose balance is < threshold / 2. The second one, contains the remaining shortfalls. This is to ensure EOA operational balance."""
         critical_shortfalls = ChainAmounts()
@@ -468,11 +476,11 @@ class FundingManager:
                         )[asset] = amount
                         remaining_shortfalls.setdefault(chain_str, {}).setdefault(
                             address, {}
-                        )[asset] = 0                          
+                        )[asset] = 0
                     else:
                         critical_shortfalls.setdefault(chain_str, {}).setdefault(
                             address, {}
-                        )[asset] = 0                        
+                        )[asset] = 0
                         remaining_shortfalls.setdefault(chain_str, {}).setdefault(
                             address, {}
                         )[asset] = amount
@@ -518,10 +526,7 @@ class FundingManager:
         return output
 
     def funding_requirements(self, service: Service) -> t.Dict:
-        # TODO cache _resolve methods to avoid loading multiple times file.
-        # TODO refactor: move protocol_ methods to protocol class, refactor to accomodate arbitrary owner and operators,
-        # refactor to manage multiple chains with different master safes, etc.
-
+        """Funding requirements"""
         balances: t.Dict = {}
         protocol_bonded_assets: t.Dict = {}
         protocol_asset_requirements: t.Dict = {}
@@ -638,8 +643,10 @@ class FundingManager:
             resp = requests.get(AGENT_FUNDING_REQUESTS_URL, timeout=10)
             resp.raise_for_status()
             agent_funding_requests = resp.json()
-        except Exception:
-            self.logger.warning(f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDING_REQUESTS_URL}.")
+        except Exception:  # pylint: disable=broad-except
+            self.logger.warning(
+                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDING_REQUESTS_URL}."
+            )
 
         # Compute boolean flags
         is_refill_required = any(
@@ -669,8 +676,31 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": agent_funding_requests
+            "agent_funding_requests": agent_funding_requests,
         }
+
+    def fund_service_initial(self, service: Service) -> None:
+        """Fund service initially"""
+        self._fund_chain_amounts(service.get_funding_amounts())
+
+    def _fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+        for chain_str, addresses in amounts.items():
+            chain = Chain(chain_str)
+            wallet = self.wallet_manager.load(chain.ledger_type)
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    wallet.transfer(
+                        chain=chain,
+                        to=address,
+                        asset=asset,
+                        amount=amount,
+                        from_safe=True,
+                    )
+
+    # TODO Below this line - pending finish funding Job for Master EOA
+    # TODO cache _resolve methods to avoid loading multiple times file.
+    # TODO refactor: move protocol_ methods to protocol class, refactor to accomodate arbitrary owner and operators,
+    # refactor to manage multiple chains with different master safes, etc.
 
     def _try_fund(self, amounts: ChainAmounts) -> None:
         for chain_str, addresses in amounts.items():
@@ -682,34 +712,17 @@ class FundingManager:
                         chain=chain, asset=asset, from_safe=False
                     )
 
-    def fund_service_initial(self, service: Service) -> None:
-        self._fund_chain_amounts(service.get_funding_amounts())
-
-    def _fund_chain_amounts(self, amounts: ChainAmounts): 
-        for chain_str, addresses in amounts.items():
-            chain = Chain(chain_str)
-            wallet = self.wallet_manager.load(chain.ledger_type)
-            for address, assets in addresses.items():
-                for asset, amount in assets.items():
-                    wallet.transfer(
-                        chain=chain,
-                        to=address,
-                        asset=asset,
-                        amount=amount,
-                        from_safe=True
-                    )
-
     def fund_service(self, service: Service) -> None:
         """Fund service-related wallets."""
 
         chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
 
         # Fund MasterEOA
-        master_eoa_thresholds = ChainAmounts()
+        master_eoa_thresholds = DEFAULT_EOA_TOPUPS.divide(2)
         master_eoa_topups = ChainAmounts()
         for chain in chains:
             master_eoa = self._resolve_master_eoa(chain)
-            master_eoa_thresholds = DEFAULT_EOA_THRESHOLDS[chain]
+            master_eoa_thresholds = master_eoa_thresholds[chain]
             for asset, threshold in master_eoa_thresholds:
                 balance = get_asset_balance(
                     ledger_api=get_default_ledger_api(chain),

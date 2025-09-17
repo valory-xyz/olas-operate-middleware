@@ -1120,7 +1120,7 @@ class Service(LocalResource):
     # TODO For now, funding_requirements mean "initial funding requirements"
     def get_funding_amounts(self) -> ChainAmounts:
         """Get funding amounts as a dict structure."""
-        amounts = {}
+        amounts = ChainAmounts()
 
         for chain_str, chain_config in self.chain_configs.items():
             fund_requirements = chain_config.chain_data.user_params.fund_requirements

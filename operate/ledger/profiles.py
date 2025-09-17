@@ -23,11 +23,7 @@ import typing as t
 
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
-from operate.constants import (
-    DEFAULT_TOPUP_THRESHOLD,
-    NO_STAKING_PROGRAM_ID,
-    ZERO_ADDRESS,
-)
+from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
 from operate.ledger import CHAINS, get_currency_denom
 from operate.operate_types import Chain, ContractAddresses
 

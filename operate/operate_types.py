@@ -326,9 +326,15 @@ class MechMarketplaceConfig:
     priority_mech_service_id: int
 
 
-# {chain: {address: {token: amount}}}
-class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
+class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
+    """
+    Class that represents chain amounts as a dictionary
+
+    The standard format follows the convention {chain: {address: {token: amount}}}
+    """
+
     def divide(self, divisor: float) -> "ChainAmounts":
+        """Divide all amounts by the specified divisor"""
         if divisor == 0:
             raise ValueError("Cannot divide by zero")
 

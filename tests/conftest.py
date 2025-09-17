@@ -36,7 +36,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator
 
-from operate.utils.gnosis import get_asset_balance
 import pytest
 import requests
 from web3 import Web3
@@ -56,6 +55,7 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.services.manage import ServiceManager
+from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
 from tests.constants import LOGGER, OPERATE_TEST, TESTNET_RPCS
@@ -97,7 +97,7 @@ def tenderly_add_balance(
             ledger_api=get_default_ledger_api(chain),
             address=recipient,
             asset_address=token,
-            raise_on_invalid_address=False
+            raise_on_invalid_address=False,
         )
         data = {
             "jsonrpc": "2.0",

@@ -22,13 +22,12 @@
 
 # pylint: disable=too-many-locals
 
+import json
 import random
-import respx
 import typing as t
 from http import HTTPStatus
 from pathlib import Path
 
-import httpx
 import requests_mock
 from deepdiff import DeepDiff
 from fastapi.testclient import TestClient
@@ -44,7 +43,13 @@ from operate.constants import (
 )
 from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
-from operate.ledger.profiles import DEFAULT_EOA_TOPUPS, DEFAULT_EOA_TOPUPS_WITHOUT_SAFE, DUST, OLAS, USDC
+from operate.ledger.profiles import (
+    DEFAULT_EOA_TOPUPS,
+    DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
+    DUST,
+    OLAS,
+    USDC,
+)
 from operate.operate_types import Chain, OnChainState
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
@@ -52,7 +57,6 @@ from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
 from tests.conftest import (
     OnTestnet,
     OperateTestEnv,
-    _get_service_template_multichain_service,
     _get_service_template_trader,
     tenderly_add_balance,
     tenderly_increase_time,
@@ -73,10 +77,8 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
         USDC[_chain]: random.randint(int(100e6), int(200e6)),  # nosec B311
     }
 
-import json
 
-
-def PRINT_JSON(data: t.Dict, filename: str = ""):
+def _print_json(data: t.Dict, filename: str = ""):
     if filename:
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False, sort_keys=True)
@@ -528,7 +530,6 @@ class TestFunding(OnTestnet):
             logger=LOGGER,
         )
         backup_owner = keys_manager.create()
-        service_manager = operate.service_manager()
 
         # Logout
         operate = OperateApp(
@@ -562,7 +563,9 @@ class TestFunding(OnTestnet):
             "total_requirements": {
                 chain1.value: {
                     "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][ZERO_ADDRESS],
+                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
+                            ZERO_ADDRESS
+                        ],
                         OLAS[chain1]: 0,
                     },
                     "master_safe": {
@@ -577,7 +580,9 @@ class TestFunding(OnTestnet):
             "refill_requirements": {
                 chain1.value: {
                     "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][ZERO_ADDRESS],
+                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
+                            ZERO_ADDRESS
+                        ],
                         OLAS[chain1]: 0,
                     },
                     "master_safe": {
@@ -629,8 +634,8 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
-        PRINT_JSON(response_json, "res_1.json")
-        PRINT_JSON(expected_json, "res_1x.json")
+        _print_json(response_json, "res_1.json")
+        _print_json(expected_json, "res_1x.json")
         assert not diff
 
         # ----------------------------------------
@@ -659,8 +664,8 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
-        PRINT_JSON(response_json, "res_2.json")
-        PRINT_JSON(expected_json, "res_2x.json")
+        _print_json(response_json, "res_2.json")
+        _print_json(expected_json, "res_2x.json")
         assert not diff
 
         # -------------------------------------------------
@@ -683,12 +688,20 @@ class TestFunding(OnTestnet):
             if MASTER_SAFE_PLACEHOLDER in expected_json["balances"][chain_str]:
                 master_eoa_assets = expected_json["balances"][chain_str][master_eoa]
                 for asset, amount in master_eoa_assets.items():
-                    default_eoa_topup = DEFAULT_EOA_TOPUPS[Chain(chain_str)].get(asset, 0)
-                    expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][asset] = amount - default_eoa_topup
-                    expected_json["balances"][chain_str][master_eoa][asset] = default_eoa_topup
+                    default_eoa_topup = DEFAULT_EOA_TOPUPS[Chain(chain_str)].get(
+                        asset, 0
+                    )
+                    expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][
+                        asset
+                    ] = (amount - default_eoa_topup)
+                    expected_json["balances"][chain_str][master_eoa][
+                        asset
+                    ] = default_eoa_topup
 
         for chain in chains:
-            expected_json["total_requirements"][chain.value][master_eoa][ZERO_ADDRESS] = 0  # TODO verify
+            expected_json["total_requirements"][chain.value][master_eoa][
+                ZERO_ADDRESS
+            ] = 0  # TODO verify
 
         expected_json["refill_requirements"] = subtract_dicts(
             expected_json["total_requirements"], expected_json["balances"]
@@ -704,8 +717,8 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
-        PRINT_JSON(response_json, "res_3.json")
-        PRINT_JSON(expected_json, "res_3x.json")
+        _print_json(response_json, "res_3.json")
+        _print_json(expected_json, "res_3x.json")
         assert not diff
 
         # -------------------------------------------------
@@ -718,7 +731,7 @@ class TestFunding(OnTestnet):
                 json={
                     "chain": chain.value,
                     "backup_owner": backup_owner,
-                    "transfer_excess_assets": True
+                    "transfer_excess_assets": True,
                 },
             )
             assert response.status_code == HTTPStatus.CREATED
@@ -731,7 +744,13 @@ class TestFunding(OnTestnet):
         response_json = response.json()
 
         # Changes: Master EOA placeholder with real address
-        for k in ("balances", "refill_requirements", "total_requirements", "bonded_assets", "protocol_asset_requirements"):
+        for k in (
+            "balances",
+            "refill_requirements",
+            "total_requirements",
+            "bonded_assets",
+            "protocol_asset_requirements",
+        ):
             for chain in chains:
                 master_safe = master_safes[chain]
                 expected_json[k][chain.value][master_safe] = expected_json[k][
@@ -740,13 +759,25 @@ class TestFunding(OnTestnet):
 
         # Adjust expected Master EOA native assets
         for chain_str in expected_json["balances"]:
-            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
-            tx_fee = estimate_transfer_tx_fee(Chain(chain_str), master_eoa, master_safes[chain])
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ]
+            tx_fee = estimate_transfer_tx_fee(
+                Chain(chain_str), master_eoa, master_safes[chain]
+            )
             tx_fee_registry = 65000 * int(1e6)  # TODO improve estimation
-            assert real_balance_master_eoa <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            assert (
+                real_balance_master_eoa
+                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
             # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_registry
-            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99  # TODO fix line above
-            expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = real_balance_master_eoa
+            assert (
+                real_balance_master_eoa
+                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+            )  # TODO fix line above
+            expected_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ] = real_balance_master_eoa
 
         expected_json["allow_start_agent"] = True
 
@@ -754,8 +785,8 @@ class TestFunding(OnTestnet):
         if diff:
             print(diff)
 
-        PRINT_JSON(response_json, "res_4.json")
-        PRINT_JSON(expected_json, "res_4x.json")
+        _print_json(response_json, "res_4.json")
+        _print_json(expected_json, "res_4x.json")
         assert not diff
 
         # ---------------------------------------------
@@ -770,33 +801,61 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        PRINT_JSON(response_json, "res_5.json")
+        _print_json(response_json, "res_5.json")
 
         # Adjust Master Safe balance
         for chain_str in expected_json["balances"]:
             master_safe = master_safes[chain]
             for asset in expected_json["balances"][chain_str][master_safe]:
-                expected_json["balances"][chain_str][master_safe][asset] -= expected_json["protocol_asset_requirements"][chain_str][master_safe][asset]
+                expected_json["balances"][chain_str][master_safe][
+                    asset
+                ] -= expected_json["protocol_asset_requirements"][chain_str][
+                    master_safe
+                ][
+                    asset
+                ]
                 cfg = service_template["configurations"][chain1.value]
-                expected_json["balances"][chain_str][master_safe][asset] -= cfg["fund_requirements"].get(asset, {}).get("agent", 0)
-                expected_json["balances"][chain_str][master_safe][asset] -= cfg["fund_requirements"].get(asset, {}).get("safe", 0)
-                expected_json["bonded_assets"][chain_str][master_safe][asset] = expected_json["protocol_asset_requirements"][chain_str][master_safe][asset]
-                expected_json["total_requirements"][chain_str][master_safe][asset] = 0  # The protocol requirements are bonded, noting more needed.
+                expected_json["balances"][chain_str][master_safe][asset] -= (
+                    cfg["fund_requirements"].get(asset, {}).get("agent", 0)
+                )
+                expected_json["balances"][chain_str][master_safe][asset] -= (
+                    cfg["fund_requirements"].get(asset, {}).get("safe", 0)
+                )
+                expected_json["bonded_assets"][chain_str][master_safe][
+                    asset
+                ] = expected_json["protocol_asset_requirements"][chain_str][
+                    master_safe
+                ][
+                    asset
+                ]
+                expected_json["total_requirements"][chain_str][master_safe][
+                    asset
+                ] = 0  # The protocol requirements are bonded, noting more needed.
 
         # Adjust Master EOA native assets
         for chain_str in expected_json["balances"]:
-            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ]
             tx_fee_registry = 10 * 65000 * int(1e6)  # TODO improve estimation
-            assert real_balance_master_eoa <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            assert (
+                real_balance_master_eoa
+                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
             # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
-            assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
-            expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = real_balance_master_eoa
+            assert (
+                real_balance_master_eoa
+                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+            )
+            expected_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ] = real_balance_master_eoa
 
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
 
-        PRINT_JSON(expected_json, "res_5x.json")
+        _print_json(expected_json, "res_5x.json")
         assert not diff
 
         # ----------------------------------
@@ -810,13 +869,13 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        PRINT_JSON(response_json, "res_6.json")
+        _print_json(response_json, "res_6.json")
 
         diff = DeepDiff(response_json, expected_json)
         if diff:
             print(diff)
 
-        PRINT_JSON(expected_json, "res_6x.json")
+        _print_json(expected_json, "res_6x.json")
         assert not diff
 
         # ---------------------------------------
@@ -827,11 +886,7 @@ class TestFunding(OnTestnet):
         agent_eoa = service.agent_addresses[0]
         agent_safe = service.chain_configs[chain1.value].chain_data.multisig
         fund_requests = {
-            chain1.value: {
-                agent_safe: {
-                    ZERO_ADDRESS: 42000000000000000000
-                }
-            }
+            chain1.value: {agent_safe: {ZERO_ADDRESS: 42000000000000000000}}
         }
 
         expected_json["agent_funding_requests"] = fund_requests
@@ -843,13 +898,13 @@ class TestFunding(OnTestnet):
             )
             assert response.status_code == HTTPStatus.OK
             response_json = response.json()
-            PRINT_JSON(response_json, "res_7.json")
+            _print_json(response_json, "res_7.json")
 
             diff = DeepDiff(response_json, expected_json)
             if diff:
                 print(diff)
 
-            PRINT_JSON(expected_json, "res_7x.json")
+            _print_json(expected_json, "res_7x.json")
             assert not diff
 
             # Send funds to agent - Funding requirements
