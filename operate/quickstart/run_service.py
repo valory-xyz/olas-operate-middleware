@@ -34,7 +34,12 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, OPERATE_HOME
+from operate.constants import (
+    IPFS_ADDRESS,
+    NO_STAKING_PROGRAM_ID,
+    OPERATE_HOME,
+    USER_JSON,
+)
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING, get_staking_contract
@@ -453,7 +458,7 @@ def ask_password_if_needed(operate: "OperateApp") -> None:
         password = ask_confirm_password()
         UserAccount.new(
             password=password,
-            path=operate._path / "user.json",
+            path=operate._path / USER_JSON,
         )
     else:
         _password = None

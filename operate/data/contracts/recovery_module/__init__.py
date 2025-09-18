@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2023 Valory AG
+#   Copyright 2025 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,21 +17,4 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Operate app."""
-
-import logging
-from importlib.metadata import PackageNotFoundError, version
-
-
-try:
-    # Prefer the distribution name if installed; fall back to the module name
-    __version__ = version("olas-operate-middleware")
-except PackageNotFoundError:
-    try:
-        __version__ = version("operate")
-    except PackageNotFoundError:
-        logger = logging.getLogger("operate")
-        logger.warning("Could not determine version, using 0.0.0+local")
-        __version__ = "0.0.0+local"
-
-logging.getLogger("aea").setLevel(logging.ERROR)
+"""This module contains the support resources for the `RecoveryModule` contract."""

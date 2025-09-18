@@ -34,19 +34,20 @@ from typing import Optional, Union, cast
 from aea.configurations.data_types import PackageType
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.base import IPFSHash, cd
-from aea_ledger_ethereum.ethereum import EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainConfigs, ChainType, ContractConfigs
 from autonomy.chain.constants import (
     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
     GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
+    RECOVERY_MODULE_CONTRACT,
+    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
-    get_delployment_payload,
-    get_reuse_multisig_payload,
+    get_deployment_payload,
+    get_deployment_with_recovery_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -65,6 +66,7 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
+from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
@@ -719,7 +721,11 @@ class _ChainUtil:
         ).get("owners", [])
 
     def swap(  # pylint: disable=too-many-arguments,too-many-locals
-        self, service_id: int, multisig: str, owner_key: str, new_owner_address: str
+        self,
+        service_id: int,
+        multisig: str,
+        owner_cryptos: t.List[Crypto],
+        new_owner_address: str,
     ) -> None:
         """Swap safe owner."""
         logging.info(f"Swapping safe for service {service_id} [{multisig}]...")
@@ -733,11 +739,6 @@ class _ChainUtil:
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
         )
-        with tempfile.TemporaryDirectory() as temp_dir:
-            key_file = Path(temp_dir, "key.txt")
-            key_file.write_text(owner_key, encoding="utf-8")
-            owner_crypto = EthereumCrypto(private_key_path=str(key_file))
-        owner_cryptos: t.List[EthereumCrypto] = [owner_crypto]
         owners = [
             manager.ledger_api.api.to_checksum_address(owner_crypto.address)
             for owner_crypto in owner_cryptos
@@ -794,7 +795,7 @@ class _ChainUtil:
         tx = registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=manager.ledger_api,
             contract_address=multisig,
-            sender_address=owner_crypto.address,
+            sender_address=owner_cryptos[0].address,
             owners=tuple(owners),  # type: ignore
             to_address=tx_params["to_address"],
             value=tx_params["ether_value"],
@@ -803,7 +804,7 @@ class _ChainUtil:
             signatures_by_owner=owner_to_signature,
             operation=SafeOperation.DELEGATE_CALL.value,
         )
-        stx = owner_crypto.sign_transaction(tx)
+        stx = owner_cryptos[0].sign_transaction(tx)
         tx_digest = manager.ledger_api.send_signed_transaction(stx)
         receipt = manager.ledger_api.api.eth.wait_for_transaction_receipt(tx_digest)
         if receipt["status"] != 1:
@@ -1151,9 +1152,21 @@ class OnChainManager(_ChainUtil):
 class EthSafeTxBuilder(_ChainUtil):
     """Safe Transaction builder."""
 
-    def new_tx(self) -> GnosisSafeTransaction:
+    @classmethod
+    def _new_tx(
+        cls, ledger_api: LedgerApi, crypto: Crypto, chain_type: ChainType, safe: str
+    ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return GnosisSafeTransaction(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=chain_type,
+            safe=safe,
+        )
+
+    def new_tx(self) -> GnosisSafeTransaction:
+        """Create a new GnosisSafeTransaction instance."""
+        return EthSafeTxBuilder._new_tx(
             ledger_api=self.wallet.ledger_api(
                 chain=OperateChain.from_string(self.chain_type.value),
                 rpc=self.rpc,
@@ -1307,55 +1320,12 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": cost_of_bond,
         }
 
-    def get_deploy_data(
-        self,
-        service_id: int,
-        reuse_multisig: bool = False,
-    ) -> t.Dict:
-        """Get deploy tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
-        if reuse_multisig:
-            _deployment_payload, error = get_reuse_multisig_payload(
-                ledger_api=self.ledger_api,
-                crypto=self.crypto,
-                chain_type=self.chain_type,
-                service_id=service_id,
-            )
-            if _deployment_payload is None:
-                raise ValueError(error)
-            deployment_payload = _deployment_payload
-            gnosis_safe_multisig = ContractConfigs.get(
-                GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
-            ).contracts[self.chain_type]
-        else:
-            deployment_payload = get_delployment_payload()
-            gnosis_safe_multisig = ContractConfigs.get(
-                GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
-            ).contracts[self.chain_type]
-
-        txd = instance.encodeABI(
-            fn_name="deploy",
-            args=[
-                service_id,
-                gnosis_safe_multisig,
-                deployment_payload,
-            ],
-        )
-        return {
-            "to": self.contracts["service_manager"],
-            "data": txd[2:],
-            "operation": MultiSendOperation.CALL,
-            "value": 0,
-        }
-
     def get_deploy_data_from_safe(
         self,
         service_id: int,
         master_safe: str,
         reuse_multisig: bool = False,
+        use_recovery_module: bool = True,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
         registry_instance = registry_contracts.service_manager.get_instance(
@@ -1364,27 +1334,50 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         approve_hash_message = None
         if reuse_multisig:
-            (
-                _deployment_payload,
-                approve_hash_message,
-                error,
-            ) = get_reuse_multisig_from_safe_payload(
-                ledger_api=self.ledger_api,
-                chain_type=self.chain_type,
-                service_id=service_id,
-                master_safe=master_safe,
-            )
-            if _deployment_payload is None:
-                raise ValueError(error)
-            deployment_payload = _deployment_payload
-            gnosis_safe_multisig = ContractConfigs.get(
-                GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
-            ).contracts[self.chain_type]
-        else:
-            deployment_payload = get_delployment_payload()
-            gnosis_safe_multisig = ContractConfigs.get(
-                GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
-            ).contracts[self.chain_type]
+            if not use_recovery_module:
+                (
+                    _deployment_payload,
+                    approve_hash_message,
+                    error,
+                ) = get_reuse_multisig_from_safe_payload(
+                    ledger_api=self.ledger_api,
+                    chain_type=self.chain_type,
+                    service_id=service_id,
+                    master_safe=master_safe,
+                )
+                if _deployment_payload is None:
+                    raise ValueError(error)
+                deployment_payload = _deployment_payload
+                gnosis_safe_multisig = ContractConfigs.get(
+                    GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT.name
+                ).contracts[self.chain_type]
+            else:
+                (
+                    _deployment_payload,
+                    error,
+                ) = get_reuse_multisig_with_recovery_from_safe_payload(
+                    ledger_api=self.ledger_api,
+                    chain_type=self.chain_type,
+                    service_id=service_id,
+                    master_safe=master_safe,
+                )
+                if _deployment_payload is None:
+                    raise ValueError(error)
+                deployment_payload = _deployment_payload
+                gnosis_safe_multisig = ContractConfigs.get(
+                    RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
+        else:  # Deploy a new multisig
+            if not use_recovery_module:
+                deployment_payload = get_deployment_payload()
+                gnosis_safe_multisig = ContractConfigs.get(
+                    GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
+                ).contracts[self.chain_type]
+            else:
+                deployment_payload = get_deployment_with_recovery_payload()
+                gnosis_safe_multisig = ContractConfigs.get(
+                    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
 
         deploy_data = registry_instance.encodeABI(
             fn_name="deploy",
@@ -1571,6 +1564,56 @@ class EthSafeTxBuilder(_ChainUtil):
         # TODO: Discuss implementation
         raise NotImplementedError()
 
+    def get_recover_access_data(self, service_id: int) -> t.Dict:
+        """Get recover access tx data."""
+        instance = t.cast(
+            RecoveryModule,
+            RecoveryModule.from_dir(
+                directory=str(DATA_DIR / "contracts" / "recovery_module"),
+            ),
+        ).get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=self.contracts["recovery_module"],
+        )
+        # TODO Replace the line above by this one once the recovery_module is
+        # included in the release of OpenAutonomy.
+        # instance = registry_contracts.recovery_module.get_instance(  # noqa: E800
+        #     ledger_api=self.ledger_api,  # noqa: E800
+        #     contract_address=self.contracts["recovery_module"],  # noqa: E800
+        # )  # noqa: E800
+        txd = instance.encodeABI(
+            fn_name="recoverAccess",
+            args=[service_id],
+        )
+        return {
+            "to": self.contracts["recovery_module"],
+            "data": txd[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+    def get_enable_module_data(
+        self,
+        safe_address: str,
+        module_address: str,
+    ) -> t.Dict:
+        """Get enable module tx data"""
+        self._patch()
+        instance = registry_contracts.gnosis_safe.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=safe_address,
+        )
+        txd = instance.encodeABI(
+            fn_name="enableModule",
+            args=[module_address],
+        )
+        return {
+            "to": safe_address,
+            "data": txd[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
 
 def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
     """Get the packed signatures."""
@@ -1730,3 +1773,37 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
     )
     payload = multisig_address + safe_exec_data[2:]
     return payload, approve_hash_message, None
+
+
+def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals
+    ledger_api: LedgerApi,
+    chain_type: ChainType,
+    service_id: int,
+    master_safe: str,
+) -> t.Tuple[Optional[str], Optional[str]]:
+    """Reuse multisig."""
+    _, multisig_address, _, _, *_ = get_service_info(
+        ledger_api=ledger_api,
+        chain_type=chain_type,
+        token_id=service_id,
+    )
+    if multisig_address == ZERO_ADDRESS:
+        return None, "Cannot reuse multisig, No previous deployment exist!"
+
+    service_owner = master_safe
+
+    multisig_instance = registry_contracts.gnosis_safe.get_instance(
+        ledger_api=ledger_api,
+        contract_address=multisig_address,
+    )
+
+    # Verify if the service was terminated properly or not
+    old_owners = multisig_instance.functions.getOwners().call()
+    if len(old_owners) != 1 or service_owner not in old_owners:
+        return (
+            None,
+            "Service was not terminated properly, the service owner should be the only owner of the safe",
+        )
+
+    payload = "0x" + int(service_id).to_bytes(32, "big").hex()
+    return payload, None

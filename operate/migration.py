@@ -29,11 +29,10 @@ from time import time
 
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import USER_JSON, ZERO_ADDRESS
 from operate.operate_types import Chain, LedgerType
 from operate.services.manage import ServiceManager
 from operate.services.service import (
-    DEFAULT_TRADER_ENV_VARS,
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
@@ -43,10 +42,66 @@ from operate.utils import create_backup
 from operate.wallet.master import LEDGER_TYPE_TO_WALLET_CLASS, MasterWalletManager
 
 
+DEFAULT_TRADER_ENV_VARS = {
+    "GNOSIS_LEDGER_RPC": {
+        "name": "Gnosis ledger RPC",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "STAKING_CONTRACT_ADDRESS": {
+        "name": "Staking contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_MARKETPLACE_CONFIG": {
+        "name": "Mech marketplace configuration",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_ACTIVITY_CHECKER_CONTRACT": {
+        "name": "Mech activity checker contract",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_CONTRACT_ADDRESS": {
+        "name": "Mech contract address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "MECH_REQUEST_PRICE": {
+        "name": "Mech request price",
+        "description": "",
+        "value": "10000000000000000",
+        "provision_type": "computed",
+    },
+    "USE_MECH_MARKETPLACE": {
+        "name": "Use Mech marketplace",
+        "description": "",
+        "value": "False",
+        "provision_type": "computed",
+    },
+    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
+        "name": "Requester staking instance address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+    "PRIORITY_MECH_ADDRESS": {
+        "name": "Priority Mech address",
+        "description": "",
+        "value": "",
+        "provision_type": "computed",
+    },
+}
+
+
 class MigrationManager:
     """MigrationManager"""
-
-    # TODO Backport here migration for services/config.json, etc.
 
     def __init__(
         self,
@@ -62,12 +117,12 @@ class MigrationManager:
         """Log directories present in `path`."""
         directories = [f"  - {str(p)}" for p in path.iterdir() if p.is_dir()]
         directories_str = "\n".join(directories)
-        self.logger.info(f"Directories in {path}\n: {directories_str}")
+        self.logger.info(f"Directories in {path}:\n{directories_str}")
 
     def migrate_user_account(self) -> None:
         """Migrates user.json"""
 
-        path = self._path / "user.json"
+        path = self._path / USER_JSON
         if not path.exists():
             return
 
@@ -102,18 +157,22 @@ class MigrationManager:
 
         self.logger.info("Migrating wallet configs done.")
 
-    @staticmethod
     def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals
+        self,
         path: Path,
     ) -> bool:
         """Migrate the JSON file format if needed."""
 
         if not path.is_dir():
+            self.logger.warning(f"Service config path {path} is not a directory.")
             return False
 
         if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
             "bafybei"
         ):
+            self.logger.warning(
+                f"Service config path {path} is not a valid service config."
+            )
             return False
 
         if path.name.startswith("bafybei"):
@@ -154,6 +213,10 @@ class MigrationManager:
 
         if version == SERVICE_CONFIG_VERSION:
             return False
+
+        self.logger.info(
+            f"Migrating service config in {path} from version {version} to {SERVICE_CONFIG_VERSION}..."
+        )
 
         # Migration steps for older versions
         if version == 0:
@@ -344,13 +407,9 @@ class MigrationManager:
         paths = list(service_manager.path.iterdir())
         for path in paths:
             try:
-                if path.name.startswith(SERVICE_CONFIG_PREFIX) or path.name.startswith(
-                    "bafybei"
-                ):
-                    self.logger.info(f"migrate_service_configs {str(path)}")
-                    migrated = self._migrate_service(path)
-                    if migrated:
-                        self.logger.info(f"Folder {str(path)} has been migrated.")
+                migrated = self._migrate_service(path)
+                if migrated:
+                    self.logger.info(f"Folder {str(path)} has been migrated.")
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.error(
                     f"Failed to migrate service: {path.name}. Exception {e}: {traceback.format_exc()}"

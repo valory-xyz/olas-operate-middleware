@@ -20,7 +20,6 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
-import logging
 import multiprocessing
 import os
 import signal
@@ -46,7 +45,7 @@ from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
 
-from operate import services
+from operate import __version__, services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
@@ -54,6 +53,9 @@ from operate.constants import (
     MIN_PASSWORD_LENGTH,
     OPERATE_HOME,
     SERVICES_DIR,
+    USER_JSON,
+    WALLETS_DIR,
+    WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
@@ -76,17 +78,27 @@ from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import MasterWalletManager
+from operate.wallet.wallet_recovery_manager import (
+    WalletRecoveryError,
+    WalletRecoveryManager,
+)
 
 
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
     content={"error": "User not logged in."}, status_code=HTTPStatus.UNAUTHORIZED
 )
+USER_LOGGED_IN_ERROR = JSONResponse(
+    content={"error": "User must be logged out to perform this operation."},
+    status_code=HTTPStatus.FORBIDDEN,
+)
 ACCOUNT_NOT_FOUND_ERROR = JSONResponse(
     content={"error": "User account not found."},
     status_code=HTTPStatus.NOT_FOUND,
 )
 TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE = True
+
+logger = setup_logger(name="operate")
 
 
 def service_not_found_error(service_config_id: str) -> JSONResponse:
@@ -103,7 +115,6 @@ class OperateApp:
     def __init__(
         self,
         home: t.Optional[Path] = None,
-        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize object."""
         super().__init__()
@@ -112,14 +123,13 @@ class OperateApp:
         self._keys = self._path / KEYS_DIR
         self.setup()
 
-        self.logger = logger or setup_logger(name="operate")
         services.manage.KeysManager(
             path=self._keys,
-            logger=self.logger,
+            logger=logger,
         )
         self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
 
-        mm = MigrationManager(self._path, self.logger)
+        mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
@@ -130,14 +140,14 @@ class OperateApp:
         self.password = password
         return UserAccount.new(
             password=password,
-            path=self._path / "user.json",
+            path=self._path / USER_JSON,
         )
 
     def update_password(self, old_password: str, new_password: str) -> None:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'password' is required.")
+            raise ValueError("'new_password' is required.")
 
         if not (
             self.user_account.is_valid(old_password)
@@ -154,7 +164,7 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'password' is required.")
+            raise ValueError("'new_password' is required.")
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
@@ -171,37 +181,45 @@ class OperateApp:
         return services.manage.ServiceManager(
             path=self._services,
             wallet_manager=self.wallet_manager,
-            logger=self.logger,
+            logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
         """Load user account."""
-        return (
-            UserAccount.load(self._path / "user.json")
-            if (self._path / "user.json").exists()
-            else None
-        )
+        if (self._path / USER_JSON).exists():
+            return UserAccount.load(self._path / USER_JSON)
+        return None
 
     @property
     def wallet_manager(self) -> MasterWalletManager:
-        """Load master wallet."""
+        """Load wallet manager."""
         manager = MasterWalletManager(
-            path=self._path / "wallets",
+            path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=self.logger,
+            logger=logger,
         )
         manager.setup()
         return manager
 
     @property
+    def wallet_recoverey_manager(self) -> WalletRecoveryManager:
+        """Load wallet recovery manager."""
+        manager = WalletRecoveryManager(
+            path=self._path / WALLET_RECOVERY_DIR,
+            wallet_manager=self.wallet_manager,
+            logger=logger,
+        )
+        return manager
+
+    @property
     def bridge_manager(self) -> BridgeManager:
-        """Load master wallet."""
+        """Load bridge manager."""
         manager = BridgeManager(
             path=self._path / "bridge",
             wallet_manager=self.wallet_manager,
-            logger=self.logger,
+            logger=logger,
         )
         return manager
 
@@ -232,10 +250,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
     )
 
-    logger = setup_logger(name="operate")
     if HEALTH_CHECKER_OFF:
         logger.warning("Healthchecker is off!!!")
-    operate = OperateApp(home=home, logger=logger)
+    operate = OperateApp(home=home)
 
     funding_jobs: t.Dict[str, asyncio.Task] = {}
     health_checker = HealthChecker(
@@ -877,6 +894,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         deployment_json["healthcheck"] = service.get_latest_healthcheck()
         return JSONResponse(content=deployment_json)
 
+    @app.get("/api/v2/service/{service_config_id}/agent_performance")
+    @with_retries
+    async def _get_agent_performance(request: Request) -> JSONResponse:
+        """Get the service refill requirements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager()
+            .load(service_config_id=service_config_id)
+            .get_agent_performance()
+        )
+
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
@@ -1166,12 +1198,103 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    @app.post("/api/wallet/recovery/initiate")
+    @with_retries
+    async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
+        """Initiate wallet recovery."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password:
+            return USER_LOGGED_IN_ERROR
+
+        data = await request.json()
+        new_password = data.get("new_password")
+
+        if not new_password or len(new_password) < MIN_PASSWORD_LENGTH:
+            return JSONResponse(
+                content={
+                    "error": f"New password must be at least {MIN_PASSWORD_LENGTH} characters long."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        try:
+            output = operate.wallet_recoverey_manager.initiate_recovery(
+                new_password=new_password
+            )
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except (ValueError, WalletRecoveryError) as e:
+            logger.error(f"_recovery_initiate error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to initiate recovery: {e}"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_initiate error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to initiate recovery. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.post("/api/wallet/recovery/complete")
+    @with_retries
+    async def _wallet_recovery_complete(request: Request) -> JSONResponse:
+        """Complete wallet recovery."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        if operate.password:
+            return USER_LOGGED_IN_ERROR
+
+        data = await request.json()
+        bundle_id = data.get("id")
+        password = data.get("password")
+        raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
+
+        try:
+            operate.wallet_recoverey_manager.complete_recovery(
+                bundle_id=bundle_id,
+                password=password,
+                raise_if_inconsistent_owners=raise_if_inconsistent_owners,
+            )
+            return JSONResponse(
+                content=operate.wallet_manager.json,
+                status_code=HTTPStatus.OK,
+            )
+        except KeyError as e:
+            logger.error(f"_recovery_complete error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to complete recovery: {e}"},
+                status_code=HTTPStatus.NOT_FOUND,
+            )
+        except (ValueError, WalletRecoveryError) as e:
+            logger.error(f"_recovery_complete error: {e}")
+            return JSONResponse(
+                content={"error": f"Failed to complete recovery: {e}"},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_complete error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to complete recovery. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
     return app
 
 
 @group(name="operate")
 def _operate() -> None:
     """Operate - deploy autonomous services."""
+    logger.info(f"Operate version: {__version__}")
 
 
 @_operate.command(name="daemon")
@@ -1188,7 +1311,6 @@ def _daemon(
 ) -> None:
     """Launch operate daemon."""
     app = create_app(home=home)
-    logger = setup_logger(name="daemon")
 
     config_kwargs = {
         "app": app,
@@ -1203,6 +1325,7 @@ def _daemon(
             {
                 "ssl_keyfile": ssl_keyfile,
                 "ssl_certfile": ssl_certfile,
+                "ssl_version": 2,
             }
         )
 
@@ -1211,10 +1334,17 @@ def _daemon(
         url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
         logger.info(f"trying to stop  previous instance with {url}")
         try:
-            requests.get(url, timeout=3, verify=False)  # nosec
-            logger.info("previous instance stopped")
+            requests.get(
+                f"https://{host}:{port}/shutdown", timeout=3, verify=False  # nosec
+            )
+        except requests.exceptions.SSLError:
+            logger.warning("SSL failed, trying HTTP fallback...")
+            try:
+                requests.get(f"http://{host}:{port}/shutdown", timeout=3)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Failed to stop previous instance")
         except Exception:  # pylint: disable=broad-except
-            logger.exception("failed to stop previous instance. probably not running")
+            logger.exception("Failed to stop previous instance")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
