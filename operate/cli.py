@@ -1325,6 +1325,7 @@ def _daemon(
             {
                 "ssl_keyfile": ssl_keyfile,
                 "ssl_certfile": ssl_certfile,
+                "ssl_version": 2,
             }
         )
 
@@ -1333,10 +1334,17 @@ def _daemon(
         url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
         logger.info(f"trying to stop  previous instance with {url}")
         try:
-            requests.get(url, timeout=3, verify=False)  # nosec
-            logger.info("previous instance stopped")
+            requests.get(
+                f"https://{host}:{port}/shutdown", timeout=3, verify=False  # nosec
+            )
+        except requests.exceptions.SSLError:
+            logger.warning("SSL failed, trying HTTP fallback...")
+            try:
+                requests.get(f"http://{host}:{port}/shutdown", timeout=3)
+            except Exception:  # pylint: disable=broad-except
+                logger.exception("Failed to stop previous instance")
         except Exception:  # pylint: disable=broad-except
-            logger.exception("failed to stop previous instance. probably not running")
+            logger.exception("Failed to stop previous instance")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access

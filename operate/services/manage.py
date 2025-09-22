@@ -1082,12 +1082,19 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
 
             is_recovery_module_enabled = (
-                registry_contracts.gnosis_safe.is_module_enabled(
-                    ledger_api=sftxb.ledger_api,
-                    contract_address=service_safe_address,
-                    module_address=CONTRACTS[Chain(chain)]["recovery_module"],
-                ).get("enabled")
+                True  # Ensure is true for non-deployed multisigs
             )
+            if (
+                service_safe_address is not None
+                and service_safe_address != ZERO_ADDRESS
+            ):
+                is_recovery_module_enabled = (
+                    registry_contracts.gnosis_safe.is_module_enabled(
+                        ledger_api=sftxb.ledger_api,
+                        contract_address=service_safe_address,
+                        module_address=CONTRACTS[Chain(chain)]["recovery_module"],
+                    ).get("enabled")
+                )
 
             self.logger.info(f"{is_recovery_module_enabled=}")
 
@@ -1267,7 +1274,7 @@ class ServiceManager:
                 chain=chain,
                 staking_program_id=current_staking_program,
             )
-        else:
+        elif is_staked:
             # at least claim the rewards if we cannot unstake yet
             self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,

@@ -68,6 +68,7 @@ from operate.constants import (
     CONFIG_JSON,
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
+    HEALTHCHECK_JSON,
 )
 from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
@@ -935,7 +936,7 @@ class Service(LocalResource):
 
     def get_latest_healthcheck(self) -> t.Dict:
         """Return the latest stored healthcheck.json"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if not healthcheck_json_path.exists():
             return {}
@@ -948,7 +949,7 @@ class Service(LocalResource):
 
     def remove_latest_healthcheck(self) -> None:
         """Remove the latest healthcheck.json, if it exists"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if healthcheck_json_path.exists():
             try:
@@ -1105,7 +1106,7 @@ class Service(LocalResource):
         Note that this method modifies os.environ. Consider if you need a backup of os.environ before using this method.
         """
         for env_var, attributes in self.env_variables.items():
-            os.environ[env_var] = str(attributes["value"])
+            os.environ[env_var] = str(attributes.get("value", ""))
 
     def update_env_variables_values(
         self, env_var_to_value: t.Dict[str, t.Any], except_if_undefined: bool = False
