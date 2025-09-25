@@ -858,7 +858,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.post("/api/wallet/withdraw")
     async def _wallet_withdraw(request: Request) -> JSONResponse:
-        """Withdraw from master safe / master eoa"""
+        """Withdraw from Master Safe / master eoa"""
 
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
@@ -1153,13 +1153,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     withdrawal_address=withdrawal_address,
                 )
 
-                # drain the master safe and master signer for the home chain
+                # drain the Master Safe and master signer for the home chain
                 chain = Chain(service.home_chain)
                 master_wallet = service_manager.wallet_manager.load(
                     ledger_type=chain.ledger_type
                 )
 
-                # drain the master safe
+                # drain the Master Safe
                 logger.info(
                     f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
                 )
@@ -1231,15 +1231,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             content={"error": None, "message": "Terminate and withdraw successful"}
         )
 
-    @app.post("/api/v2/service/{service_config_id}/fund/{target}")
+    @app.post("/api/v2/service/{service_config_id}/fund")
     async def fund_service(request: Request) -> JSONResponse:
-        """Fund agent or service safe via master safe"""
+        """Fund agent or service safe via Master Safe"""
 
         if operate.password is None:
             return USER_NOT_LOGGED_IN_ERROR
 
         service_config_id = request.path_params["service_config_id"]
-        target = request.path_params["target"]
         service_manager = operate.service_manager()
         wallet_manager = operate.wallet_manager
 
@@ -1247,52 +1246,56 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return service_not_found_error(service_config_id=service_config_id)
 
         try:
-            data = await request.json()
             service = service_manager.load(service_config_id=service_config_id)
-            for chain_str, tokens in data.items():
+            data = await request.json()
+            for chain_str, addresses in data.items():
+                for address in addresses:
+                    if (
+                        address not in service.agent_addresses
+                        and address
+                        != service.chain_configs[chain_str].chain_data.multisig
+                    ):
+                        return JSONResponse(
+                            content={
+                                "error": f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service_config_id}."
+                            },
+                            status_code=HTTPStatus.BAD_REQUEST,
+                        )
+            for chain_str, addresses in data.items():
                 chain = Chain(chain_str)
-                if target == "safe":
-                    address = service.chain_configs[chain_str].chain_data.multisig
-                elif target == "agent":
-                    address = service.agent_addresses[0]
-                else:
-                    return JSONResponse(
-                        status_code=HTTPStatus.BAD_REQUEST,
-                        content={"error": f"Invalid target: {target}"},
-                    )
-
                 wallet = wallet_manager.load(chain.ledger_type)
-                for asset, amount in tokens.items():
-                    wallet.transfer(
-                        to=address,
-                        amount=int(amount),
-                        chain=chain,
-                        asset=asset,
-                        from_safe=True,
-                    )
+                for address, assets in addresses.items():
+                    for asset, amount in assets.items():
+                        wallet.transfer(
+                            to=address,
+                            amount=int(amount),
+                            chain=chain,
+                            asset=asset,
+                            from_safe=True,
+                        )
         except InsufficientFundsException as e:
             logger.error(
-                f"Failed to fund from master safe. Insufficient funds: {e}\n{traceback.format_exc()}"
+                f"Failed to fund from Master Safe. Insufficient funds: {e}\n{traceback.format_exc()}"
             )
             return JSONResponse(
                 content={
-                    "error": f"Failed to fund from master safe. Insufficient funds: {e}"
+                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(
-                f"Failed to fund from master safe: {e}\n{traceback.format_exc()}"
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
             )
             return JSONResponse(
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 content={
-                    "error": "Failed to fund from master safe. Please check the logs."
+                    "error": "Failed to fund from Master Safe. Please check the logs."
                 },
             )
 
         return JSONResponse(
-            content={"error": None, "message": "Funded from master safe successfully"}
+            content={"error": None, "message": "Funded from Master Safe successfully"}
         )
 
     @app.post("/api/bridge/bridge_refill_requirements")

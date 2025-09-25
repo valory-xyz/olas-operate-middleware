@@ -156,11 +156,12 @@ class TestFunding(OnTestnet):
         self,
         test_env: OperateTestEnv,
     ) -> None:
-        """Test fund agent/safe from master safe."""
+        """Test fund agent/safe from Master Safe."""
 
         password = test_env.password
         operate = test_env.operate
         operate.password = password
+        backup_owner = test_env.backup_owner
 
         service_manager = operate.service_manager()
         services, _ = service_manager.get_all_services()
@@ -209,23 +210,25 @@ class TestFunding(OnTestnet):
                         ledger_api, asset, master_safe
                     )
                     response = client.post(
-                        url=f"/api/v2/service/{service_config_id}/fund/safe",
-                        json={chain_str: {asset: f"{master_safe_balance + 1}"}},
+                        url=f"/api/v2/service/{service_config_id}/fund",
+                        json={
+                            chain_str: {
+                                agent_address: {asset: f"{master_safe_balance + 1}"}
+                            }
+                        },
                     )
                     assert response.status_code == HTTPStatus.BAD_REQUEST
-                    assert "Failed to fund from master safe" in response.json()["error"]
+                    assert "Failed to fund from Master Safe" in response.json()["error"]
 
-                    initial_balance = get_asset_balance(
-                        ledger_api, asset, agent_address
-                    )
+                    # Simulate a call that will fail
                     response = client.post(
-                        url=f"/api/v2/service/{service_config_id}/fund/agent",
-                        json={chain_str: {asset: f"{amount}"}},
+                        url=f"/api/v2/service/{service_config_id}/fund",
+                        json={chain_str: {backup_owner: {asset: f"{amount}"}}},
                     )
-                    assert response.status_code == HTTPStatus.OK
+                    assert response.status_code == HTTPStatus.BAD_REQUEST
                     assert (
-                        get_asset_balance(ledger_api, asset, agent_address)
-                        == initial_balance + amount
+                        f"Failed to fund from Master Safe: Address {backup_owner} is not an agent EOA or service Safe for service {service_config_id}."
+                        in response.json()["error"]
                     )
 
             service_safe_address = chain_config.chain_data.multisig
@@ -233,30 +236,96 @@ class TestFunding(OnTestnet):
                 # Simulate a call that will fail
                 master_safe_balance = get_asset_balance(ledger_api, asset, master_safe)
                 response = client.post(
-                    url=f"/api/v2/service/{service_config_id}/fund/safe",
-                    json={chain_str: {asset: f"{master_safe_balance + 1}"}},
+                    url=f"/api/v2/service/{service_config_id}/fund",
+                    json={
+                        chain_str: {
+                            service_safe_address: {asset: f"{master_safe_balance + 1}"}
+                        }
+                    },
                 )
                 assert response.status_code == HTTPStatus.BAD_REQUEST
-                assert "Failed to fund from master safe" in response.json()["error"]
+                assert "Failed to fund from Master Safe" in response.json()["error"]
 
-                initial_balance = get_asset_balance(
-                    ledger_api, asset, service_safe_address
-                )
+                # Simulate a call that will fail
                 response = client.post(
-                    url=f"/api/v2/service/{service_config_id}/fund/safe",
-                    json={chain_str: {asset: f"{amount}"}},
+                    url=f"/api/v2/service/{service_config_id}/fund",
+                    json={chain_str: {backup_owner: {asset: f"{amount}"}}},
                 )
-                assert response.status_code == HTTPStatus.OK
+                assert response.status_code == HTTPStatus.BAD_REQUEST
+                assert (
+                    f"Failed to fund from Master Safe: Address {backup_owner} is not an agent EOA or service Safe for service {service_config_id}."
+                    in response.json()["error"]
+                )
+
+        initial_balances = {
+            chain_str: {
+                agent_address: {
+                    asset: get_asset_balance(
+                        get_default_ledger_api(Chain(chain_str)), asset, agent_address
+                    )
+                    for asset in AGENT_FUNDING_ASSETS[Chain(chain_str)]
+                }
+                for agent_address in service.agent_addresses
+            }
+            | {
+                chain_config.chain_data.multisig: {
+                    asset: get_asset_balance(
+                        get_default_ledger_api(Chain(chain_str)),
+                        asset,
+                        chain_config.chain_data.multisig,
+                    )
+                    for asset in SERVICE_SAFE_FUNDING_ASSETS[Chain(chain_str)]
+                }
+            }
+            for chain_str, chain_config in service.chain_configs.items()
+        }
+
+        response = client.post(
+            url=f"/api/v2/service/{service_config_id}/fund",
+            json={
+                chain_str: {
+                    agent_address: {
+                        asset: f"{amount}"
+                        for asset, amount in AGENT_FUNDING_ASSETS[
+                            Chain(chain_str)
+                        ].items()
+                    }
+                    for agent_address in service.agent_addresses
+                }
+                | {
+                    chain_config.chain_data.multisig: {
+                        asset: f"{amount}"
+                        for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[
+                            Chain(chain_str)
+                        ].items()
+                    }
+                }
+                for chain_str, chain_config in service.chain_configs.items()
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            ledger_api = get_default_ledger_api(chain)
+            for agent_address in service.agent_addresses:
+                for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
+                    assert (
+                        get_asset_balance(ledger_api, asset, agent_address)
+                        == initial_balances[chain_str][agent_address][asset] + amount
+                    )
+
+            service_safe_address = chain_config.chain_data.multisig
+            for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
                 assert (
                     get_asset_balance(ledger_api, asset, service_safe_address)
-                    == initial_balance + amount
+                    == initial_balances[chain_str][service_safe_address][asset] + amount
                 )
 
     def test_withdraw(
         self,
         test_env: OperateTestEnv,
     ) -> None:
-        """Test fund agent/safe from master safe."""
+        """Test fund agent/safe from Master Safe."""
 
         password = test_env.password
         operate = test_env.operate
