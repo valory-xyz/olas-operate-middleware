@@ -231,19 +231,6 @@ class TestFunding(OnTestnet):
                         in response.json()["error"]
                     )
 
-                    initial_balance = get_asset_balance(
-                        ledger_api, asset, agent_address
-                    )
-                    response = client.post(
-                        url=f"/api/v2/service/{service_config_id}/fund",
-                        json={chain_str: {agent_address: {asset: f"{amount}"}}},
-                    )
-                    assert response.status_code == HTTPStatus.OK
-                    assert (
-                        get_asset_balance(ledger_api, asset, agent_address)
-                        == initial_balance + amount
-                    )
-
             service_safe_address = chain_config.chain_data.multisig
             for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
                 # Simulate a call that will fail
@@ -270,17 +257,68 @@ class TestFunding(OnTestnet):
                     in response.json()["error"]
                 )
 
-                initial_balance = get_asset_balance(
-                    ledger_api, asset, service_safe_address
-                )
-                response = client.post(
-                    url=f"/api/v2/service/{service_config_id}/fund",
-                    json={chain_str: {service_safe_address: {asset: f"{amount}"}}},
-                )
-                assert response.status_code == HTTPStatus.OK
+        initial_balances = {
+            chain_str: {
+                agent_address: {
+                    asset: get_asset_balance(
+                        get_default_ledger_api(Chain(chain_str)), asset, agent_address
+                    )
+                    for asset in AGENT_FUNDING_ASSETS[Chain(chain_str)]
+                }
+                for agent_address in service.agent_addresses
+            }
+            | {
+                chain_config.chain_data.multisig: {
+                    asset: get_asset_balance(
+                        get_default_ledger_api(Chain(chain_str)),
+                        asset,
+                        chain_config.chain_data.multisig,
+                    )
+                    for asset in SERVICE_SAFE_FUNDING_ASSETS[Chain(chain_str)]
+                }
+            }
+            for chain_str, chain_config in service.chain_configs.items()
+        }
+
+        response = client.post(
+            url=f"/api/v2/service/{service_config_id}/fund",
+            json={
+                chain_str: {
+                    agent_address: {
+                        asset: f"{amount}"
+                        for asset, amount in AGENT_FUNDING_ASSETS[
+                            Chain(chain_str)
+                        ].items()
+                    }
+                    for agent_address in service.agent_addresses
+                }
+                | {
+                    chain_config.chain_data.multisig: {
+                        asset: f"{amount}"
+                        for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[
+                            Chain(chain_str)
+                        ].items()
+                    }
+                }
+                for chain_str, chain_config in service.chain_configs.items()
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        for chain_str, chain_config in service.chain_configs.items():
+            chain = Chain(chain_str)
+            ledger_api = get_default_ledger_api(chain)
+            for agent_address in service.agent_addresses:
+                for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
+                    assert (
+                        get_asset_balance(ledger_api, asset, agent_address)
+                        == initial_balances[chain_str][agent_address][asset] + amount
+                    )
+
+            service_safe_address = chain_config.chain_data.multisig
+            for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
                 assert (
                     get_asset_balance(ledger_api, asset, service_safe_address)
-                    == initial_balance + amount
+                    == initial_balances[chain_str][service_safe_address][asset] + amount
                 )
 
     def test_withdraw(
