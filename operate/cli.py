@@ -212,7 +212,6 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=logger,
         )
         manager.setup()
         return manager
@@ -1266,9 +1265,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service = service_manager.load(service_config_id=service_config_id)
             data = await request.json()
             for chain_str, addresses in data.items():
-                chain = Chain(chain_str)
-                wallet = wallet_manager.load(chain.ledger_type)
-                for address, assets in addresses.items():
+                for address in addresses:
                     if (
                         address not in service.agent_addresses
                         and address
@@ -1280,6 +1277,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                             },
                             status_code=HTTPStatus.BAD_REQUEST,
                         )
+            for chain_str, addresses in data.items():
+                chain = Chain(chain_str)
+                wallet = wallet_manager.load(chain.ledger_type)
+                for address, assets in addresses.items():
                     for asset, amount in assets.items():
                         wallet.transfer(
                             to=address,

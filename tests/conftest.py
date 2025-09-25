@@ -154,6 +154,7 @@ class OnTestnet:
             "ETHEREUM_TESTNET_RPC",
             "GNOSIS_TESTNET_RPC",
             "OPTIMISM_TESTNET_RPC",
+            "POLYGON_TESTNET_RPC",
         ]
         missing = [var for var in required_envs if os.environ.get(var) is None]
         if missing:
