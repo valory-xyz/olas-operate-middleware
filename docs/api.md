@@ -298,6 +298,84 @@ Create a new wallet.
 }
 ```
 
+### `POST /api/wallet/withdraw`
+
+Withdraw funds to the target account, using Master Safe first and
+falling back to Master EOA if needed.
+
+**Request Body:**
+
+```json
+{
+  "password": "your_password",
+  "to": "0x...",
+  "withdraw_assets": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 1000000000000000000,
+      "0x...": 500000000000000000
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "message": "Funds withdrawn successfully.",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid password - 401):**
+
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+**Response (Insufficient funds - 400):**
+
+```json
+{
+  "error": "Failed to withdraw funds. Insufficient funds: (...)",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to withdraw funds. Please check the logs.",
+  "transfer_txs": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": ["0x...", "0x..."],  // List of successful txs from Master Safe and/or Master EOA
+      "0x...": ["0x...", "0x..."]
+    }
+  }  
+}
+```
+
 ### `POST /api/wallet/private_key`
 
 Get Master EOA private key.
@@ -364,6 +442,18 @@ Get extended wallet information including safes and additional metadata.
             "0x...": 500000000000000000
           }
         }
+      }
+    },
+    "balances": {
+      "gnosis": {
+        "0x...": {
+            "0x0000000000000000000000000000000000000000": 1000000000000000000,
+            "0x...": 500000000000000000
+        },
+        "0x...": {
+            "0x0000000000000000000000000000000000000000": 1000000000000000000,
+            "0x...": 500000000000000000
+        },        
       }
     },
     "extended_json": true,
@@ -1434,9 +1524,9 @@ Stop a running service deployment locally.
 }
 ```
 
-### `POST /api/v2/service/{service_config_id}/onchain/withdraw`
+### `[DEPRECATED] POST /api/v2/service/{service_config_id}/onchain/withdraw`
 
-Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the master safe and master signer.
+Withdraw all funds from a service and terminate it on-chain. This includes terminating the service on-chain and draining both the Master Safe and master signer.
 
 **Request Body:**
 
@@ -1487,6 +1577,109 @@ Withdraw all funds from a service and terminate it on-chain. This includes termi
 }
 ```
 
+### `POST /api/v2/service/{service_config_id}/terminate_and_withdraw`
+
+Terminates and unbonds a service on-chain, and withdraws all the funds from the agent safe and agent signer to the Master Safe.
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Terminate and withdraw successful"
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Terminate and withdraw failed - 500):**
+
+```json
+{
+  "error": "Failed to terminate and withdraw funds. Please check the logs."
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/fund`
+
+Funds the agent or service Safe from Master Safe.
+
+**Request Body:**
+
+```json
+{
+  "gnosis": {
+    "0x...": {  // Agent EOA or service Safe
+      "0x...": "1000000000000000000",  // token1: value
+      "0x...": "1000000000000000000"   // token2: value
+    }
+  }
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Funded from Master Safe successfully"
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid address - 400):**
+
+```json
+{
+  "error": "Failed to fund from Master Safe. Address 0x... is not an agent EOA or service Safe for service service_123."
+}
+```
+
+**Response (Insufficient funds - 400):**
+
+```json
+{
+  "error": "Failed to fund from Master Safe. Insufficient funds: (...)"
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to fund from Master Safe. Please check the logs."
+}
+```
+
 ## Bridge Management
 
 ### `POST /api/bridge/bridge_refill_requirements`
@@ -1510,6 +1703,7 @@ Get bridge refill requirements for cross-chain transactions.
 ```
 
 **Response (Success - 200):**
+
 ```json
 {
   "balances": {

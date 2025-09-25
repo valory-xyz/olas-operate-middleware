@@ -33,6 +33,8 @@ DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"
 USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
+FUNDING_REQUIREMENTS_JSON = "funding_requirements.json"
+DEFAULT_TOPUP_THRESHOLD = 0.5
 
 AGENT_PERSISTENT_STORAGE_DIR = "persistent_data"
 AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
@@ -40,6 +42,9 @@ AGENT_LOG_DIR = "benchmarks"
 AGENT_LOG_ENV_VAR = "LOG_DIR"
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+MIN_AGENT_BOND = 1
+MIN_SECURITY_DEPOSIT = 1
 
 ON_CHAIN_INTERACT_TIMEOUT = 120.0
 ON_CHAIN_INTERACT_RETRIES = 10
@@ -63,3 +68,6 @@ NO_STAKING_PROGRAM_ID = "no_staking"
 
 DEPLOYMENT_START_TRIES_NUM = 3
 IPFS_CHECK_URL = "https://gateway.autonolas.tech/ipfs/bafybeigcllaxn4ycjjvika3zd6eicksuriez2wtg67gx7pamhcazl3tv54/echo/README.md"
+MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
