@@ -40,7 +40,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import get_default_ledger_api, make_chain_ledger_api
-from operate.ledger.profiles import ERC20_TOKENS, get_token_name
+from operate.ledger.profiles import DUST, ERC20_TOKENS, get_token_name
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
@@ -270,7 +270,7 @@ class EthereumMasterWallet(MasterWallet):
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if amount + tx_fee >= balance >= amount:
+        if amount + tx_fee >= balance >= amount - DUST[chain]:
             # we assume that the user wants to drain the EOA
             amount = balance - tx_fee
 
