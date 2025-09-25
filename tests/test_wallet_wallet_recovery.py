@@ -27,6 +27,7 @@ import uuid
 import pytest
 
 from operate.cli import OperateApp
+from operate.constants import MSG_INVALID_PASSWORD
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
@@ -37,17 +38,17 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OperateTestEnv, random_string, tenderly_add_balance
-from tests.constants import LOGGER, OPERATE_TEST, TESTNET_RPCS
+from tests.conftest import (
+    OnTestnet,
+    OperateTestEnv,
+    random_string,
+    tenderly_add_balance,
+)
+from tests.constants import OPERATE_TEST
 
 
-class TestWalletRecovery:
+class TestWalletRecovery(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
-
-    @pytest.fixture(autouse=True)
-    def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr("operate.ledger.DEFAULT_RPCS", TESTNET_RPCS)
-        monkeypatch.setattr("operate.ledger.DEFAULT_LEDGER_APIS", {})
 
     @staticmethod
     def _assert_recovered(
@@ -134,7 +135,6 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 
@@ -246,7 +246,6 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 
@@ -335,7 +334,7 @@ class TestWalletRecovery:
             )
 
         random_password = random_string(16)
-        with pytest.raises(ValueError, match="Password is not valid."):
+        with pytest.raises(ValueError, match=MSG_INVALID_PASSWORD):
             operate.wallet_recoverey_manager.complete_recovery(
                 password=random_password, bundle_id=bundle_id
             )
@@ -451,7 +450,6 @@ class TestWalletRecovery:
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 

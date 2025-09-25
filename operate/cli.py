@@ -51,6 +51,9 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
     OPERATE_HOME,
     SERVICES_DIR,
     USER_JSON,
@@ -148,13 +151,13 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         if not (
             self.user_account.is_valid(old_password)
             and self.wallet_manager.is_password_valid(old_password)
         ):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
@@ -165,11 +168,11 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
-            raise ValueError("Seed phrase is not valid.")
+            raise ValueError(MSG_INVALID_MNEMONIC)
 
         wallet_manager = self.wallet_manager
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
@@ -209,7 +212,6 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=logger,
         )
         manager.setup()
         return manager
@@ -588,7 +590,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -643,7 +645,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_NOT_LOGGED_IN_ERROR
         if operate.password != password:
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -753,7 +755,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values()
+            }
             balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},
@@ -774,7 +778,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
-                tx_hash = wallet.transfer_asset(
+                tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
                     chain=chain,
@@ -862,7 +866,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -881,7 +885,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 # Process ERC20 first
                 for asset, amount in tokens.items():
                     if asset != ZERO_ADDRESS:
-                        txs = wallet.transfer_asset_from_safe_then_eoa(
+                        txs = wallet.transfer_from_safe_then_eoa(
                             to=to,
                             amount=int(amount),
                             chain=chain,
@@ -893,7 +897,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 if ZERO_ADDRESS in tokens:
                     asset = ZERO_ADDRESS
                     amount = tokens[asset]
-                    txs = wallet.transfer_asset_from_safe_then_eoa(
+                    txs = wallet.transfer_from_safe_then_eoa(
                         to=to,
                         amount=int(amount),
                         chain=chain,
@@ -1259,7 +1263,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
                 wallet = wallet_manager.load(chain.ledger_type)
                 for asset, amount in tokens.items():
-                    wallet.transfer_asset(
+                    wallet.transfer(
                         to=address,
                         amount=int(amount),
                         chain=chain,
