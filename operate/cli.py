@@ -212,7 +212,6 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=logger,
         )
         manager.setup()
         return manager
