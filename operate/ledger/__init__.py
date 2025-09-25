@@ -132,6 +132,7 @@ def make_chain_ledger_api(
             address=rpc or get_default_rpc(chain=chain),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
+            poa_chain=chain == Chain.POLYGON,
         )
 
         if chain == Chain.OPTIMISM:

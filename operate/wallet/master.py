@@ -250,7 +250,7 @@ class EthereumMasterWallet(MasterWallet):
         if from_safe and chain not in self.safes:
             raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
 
-        balance = self.get_balance(chain=chain, from_safe=from_safe)
+        balance = self.get_balance(chain=chain, asset=token, from_safe=from_safe)
         if balance < amount:
             source = "Master Safe" if from_safe else " Master EOA"
             source_address = self.safes[chain] if from_safe else self.address
@@ -270,7 +270,7 @@ class EthereumMasterWallet(MasterWallet):
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if amount + tx_fee >= balance:
+        if amount + tx_fee >= balance >= amount:
             # we assume that the user wants to drain the EOA
             amount = balance - tx_fee
 
