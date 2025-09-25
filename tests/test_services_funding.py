@@ -283,7 +283,7 @@ class TestFunding(OnTestnet):
                     == initial_balance + amount
                 )
 
-    def test_withdraw_master_safe(
+    def test_withdraw(
         self,
         test_env: OperateTestEnv,
     ) -> None:
@@ -404,7 +404,9 @@ class TestFunding(OnTestnet):
         initial_balance_native = get_asset_balance(
             ledger_api, ZERO_ADDRESS, dst_address
         )
-        amount_transfer_native = master_safe_balance_native + master_eoa_balance_native
+        amount_transfer_native = (
+            master_safe_balance_native + master_eoa_balance_native - 1
+        )  # - 1 to check dust handling
         response = client.post(
             url="/api/wallet/withdraw",
             json={

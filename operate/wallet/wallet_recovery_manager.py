@@ -77,7 +77,7 @@ class WalletRecoveryManager:
 
         new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(
-            path=new_wallets_path, logger=self.logger, password=new_password
+            path=new_wallets_path, password=new_password
         )
         new_wallet_manager.setup()
 
@@ -148,7 +148,7 @@ class WalletRecoveryManager:
             raise ValueError(MSG_INVALID_PASSWORD)
 
         new_wallet_manager = MasterWalletManager(
-            path=new_wallets_path, logger=self.logger, password=password
+            path=new_wallets_path, password=password
         )
 
         ledger_types = {item.ledger_type for item in self.wallet_manager}

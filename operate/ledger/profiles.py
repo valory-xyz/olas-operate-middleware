@@ -265,20 +265,22 @@ EXPLORER_URL = {
     },
 }
 
+NATIVE_TOKEN_NAME = "native"  # nosec
 
-def get_token_name(chain: Chain, token: str) -> str:
+
+def get_token_name(chain: Chain, token_address: str) -> str:
     """Get token name."""
-    if token == ZERO_ADDRESS:
-        return "native"
+    if token_address == ZERO_ADDRESS:
+        return NATIVE_TOKEN_NAME
 
-    if WRAPPED_NATIVE_ASSET.get(chain) == token:
+    if WRAPPED_NATIVE_ASSET.get(chain) == token_address:
         return f"W{get_currency_denom(chain)}"
 
     for symbol, tokens in ERC20_TOKENS.items():
-        if tokens.get(chain) == token:
+        if tokens.get(chain) == token_address:
             return symbol
 
-    return token
+    return token_address
 
 
 # TODO: Deprecate in favour of StakingManager method

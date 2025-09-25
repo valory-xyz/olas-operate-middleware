@@ -44,7 +44,7 @@ from tests.conftest import (
     random_string,
     tenderly_add_balance,
 )
-from tests.constants import LOGGER, OPERATE_TEST
+from tests.constants import OPERATE_TEST
 
 
 class TestWalletRecovery(OnTestnet):
@@ -135,7 +135,6 @@ class TestWalletRecovery(OnTestnet):
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 
@@ -247,7 +246,6 @@ class TestWalletRecovery(OnTestnet):
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 
@@ -452,7 +450,6 @@ class TestWalletRecovery(OnTestnet):
         )
         old_wallet_manager = MasterWalletManager(
             path=old_wallet_manager_path,
-            logger=LOGGER,
             password=password,
         )
 
