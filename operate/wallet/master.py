@@ -272,6 +272,7 @@ class EthereumMasterWallet(MasterWallet):
         )
         if amount + tx_fee >= balance >= amount - DUST[chain]:
             # we assume that the user wants to drain the EOA
+            # we also account for dust here because withdraw call use some EOA balance to drain the safes first
             amount = balance - tx_fee
 
         if amount <= 0:
