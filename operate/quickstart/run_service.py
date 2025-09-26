@@ -692,7 +692,7 @@ def run_service(
     )
 
     print_section("Funding the service")
-    manager.fund_service(service_config_id=service.service_config_id)
+    manager.funding_manager.fund_service_initial(service=service)
 
     print_section("Deploying the service")
     manager.deploy_service_locally(

@@ -67,7 +67,7 @@ from operate.ledger.profiles import (
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.operate_types import Chain, ChainAmounts, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
 from operate.quickstart.reset_configs import reset_configs
@@ -295,10 +295,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # dont start health checker if it's switched off
             health_checker.start_for_service(service_config_id)
 
-    def schedule_funding_job(
-        service_config_id: str,
-        from_safe: bool = True,
-    ) -> None:
+    def schedule_funding_job(service_config_id: str) -> None:
         """Schedule a funding job."""
         logger.info(f"Starting funding job for {service_config_id}")
         if service_config_id in funding_jobs:
@@ -307,10 +304,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         loop = asyncio.get_running_loop()
         funding_jobs[service_config_id] = loop.create_task(
-            operate.service_manager().funding_job(
+            operate.funding_manager.funding_job(
                 service_config_id=service_config_id,
+                service_manager=operate.service_manager(),
                 loop=loop,
-                from_safe=from_safe,
             )
         )
 
@@ -1062,7 +1059,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
-            manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
@@ -1256,39 +1252,34 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
-        wallet_manager = operate.wallet_manager
 
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
         try:
-            service = service_manager.load(service_config_id=service_config_id)
             data = await request.json()
-            for chain_str, addresses in data.items():
-                for address in addresses:
-                    if (
-                        address not in service.agent_addresses
-                        and address
-                        != service.chain_configs[chain_str].chain_data.multisig
-                    ):
-                        return JSONResponse(
-                            content={
-                                "error": f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service_config_id}."
-                            },
-                            status_code=HTTPStatus.BAD_REQUEST,
-                        )
-            for chain_str, addresses in data.items():
-                chain = Chain(chain_str)
-                wallet = wallet_manager.load(chain.ledger_type)
-                for address, assets in addresses.items():
-                    for asset, amount in assets.items():
-                        wallet.transfer(
-                            to=address,
-                            amount=int(amount),
-                            chain=chain,
-                            asset=asset,
-                            from_safe=True,
-                        )
+            service_manager.fund_service(
+                service_config_id=service_config_id,
+                amounts=ChainAmounts(
+                    {
+                        chain_str: {
+                            address: {
+                                asset: int(amount) for asset, amount in assets.items()
+                            }
+                            for address, assets in addresses.items()
+                        }
+                        for chain_str, addresses in data.items()
+                    }
+                ),
+            )
+        except ValueError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except InsufficientFundsException as e:
             logger.error(
                 f"Failed to fund from Master Safe. Insufficient funds: {e}\n{traceback.format_exc()}"

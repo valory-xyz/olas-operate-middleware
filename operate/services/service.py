@@ -35,6 +35,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from traceback import print_exc
 
+import requests
 from aea.configurations.constants import (
     DEFAULT_LEDGER,
     LEDGER,
@@ -42,6 +43,7 @@ from aea.configurations.constants import (
     PRIVATE_KEY_PATH_SCHEMA,
     SKILL,
 )
+from aea.helpers.logging import setup_logger
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
@@ -64,6 +66,7 @@ from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
+    AGENT_FUNDS_STATUS_URL,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     CONFIG_JSON,
     DEPLOYMENT_DIR,
@@ -109,6 +112,8 @@ NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
+
+logger = setup_logger("operate.services.service")
 
 
 def mkdirs(build_dir: Path) -> None:
@@ -1117,8 +1122,7 @@ class Service(LocalResource):
         if updated:
             self.store()
 
-    # TODO For now, funding_requirements mean "initial funding requirements"
-    def get_funding_amounts(self) -> ChainAmounts:
+    def get_initial_funding_amounts(self) -> ChainAmounts:
         """Get funding amounts as a dict structure."""
         amounts = ChainAmounts()
 
@@ -1136,3 +1140,41 @@ class Service(LocalResource):
                     chain_amounts.setdefault(agent_address, {})[asset] = req.agent
 
         return amounts
+
+    def get_agent_funding_requests(self) -> t.Tuple[ChainAmounts, dict]:
+        """Get funding amounts requested by agent and its exact response."""
+        agent_response = {}
+        agent_funding_requests = ChainAmounts()
+        try:
+            resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
+            resp.raise_for_status()
+            agent_response = resp.json()
+        except Exception:  # pylint: disable=broad-except
+            logger.warning(
+                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDS_STATUS_URL}."
+            )
+
+        for chain_str, addresses in agent_response.items():
+            agent_funding_requests.setdefault(chain_str, {})
+            for address, assets in addresses.items():
+                agent_funding_requests[chain_str].setdefault(address, {})
+                if (
+                    address not in self.agent_addresses
+                    and address != self.chain_configs[chain_str].chain_data.multisig
+                ):
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
+                    )
+
+                for asset, amounts in assets.items():
+                    try:
+                        agent_funding_requests[chain_str][address][asset] = int(
+                            amounts["deficit"]
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"[FUNDING MANAGER] Invalid funding amount {amounts['deficit']} for asset {asset} on chain {chain_str} for address {address}. Setting to 0."
+                        )
+                        agent_funding_requests[chain_str][address][asset] = 0
+
+        return agent_funding_requests, agent_response

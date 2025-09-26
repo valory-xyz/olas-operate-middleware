@@ -22,18 +22,19 @@
 
 # pylint: disable=too-many-locals
 
+import asyncio
+import traceback
 import typing as t
+from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
+from time import time
 
-import requests
 from aea_ledger_ethereum import defaultdict
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
 from operate.constants import (
-    AGENT_FUNDING_REQUESTS_URL,
-    DEFAULT_TOPUP_THRESHOLD,
     MASTER_EOA_PLACEHOLDER,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
@@ -50,7 +51,7 @@ from operate.ledger.profiles import (
     USDC,
     WRAPPED_NATIVE_ASSET,
 )
-from operate.operate_types import Chain, ChainAmounts, OnChainState
+from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import merge_sum_dicts
@@ -58,6 +59,10 @@ from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
+
+
+if t.TYPE_CHECKING:
+    from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 
 class FundingManager:
@@ -229,7 +234,7 @@ class FundingManager:
         #   and ServiceRegistryTokenUtility .getAgentBond
         # - security_deposit: as the maximum agent bond.
 
-    def _compute_protocol_bonded_assets(  # pylint: disable=too-many-locals
+    def _compute_protocol_bonded_assets(  # pylint: disable=too-many-locals,too-many-statements
         self, service: Service
     ) -> ChainAmounts:
         """Computes the bonded assets: current agent bonds and current security deposit"""
@@ -374,10 +379,7 @@ class FundingManager:
         thresholds: ChainAmounts,
         topups: ChainAmounts,
     ) -> ChainAmounts:
-        """
-        Compute shortfall per chain/address/asset:
-        if balance < threshold, shortfall = topup - balance, else 0
-        """
+        """Compute shortfall per chain/address/asset: if balance < threshold, shortfall = topup - balance, else 0"""
         shortfalls = ChainAmounts()
 
         for chain, addresses in thresholds.items():
@@ -525,13 +527,40 @@ class FundingManager:
 
         return output
 
+    def fund_master_eoa(self) -> None:
+        """Fund Master EOA"""
+        if not self.wallet_manager.exists(LedgerType.ETHEREUM):
+            self.logger.warning(
+                "[FUNDING MANAGER] Cannot fund Master EOA: No Ethereum wallet available."
+            )
+            return
+
+        master_wallet = self.wallet_manager.load(
+            ledger_type=LedgerType.ETHEREUM
+        )  # Only for ethereum for now
+        master_eoa_topups = ChainAmounts(
+            {
+                chain.value: {
+                    self._resolve_master_eoa(chain): dict(DEFAULT_EOA_TOPUPS[chain])
+                }
+                for chain in master_wallet.safes
+            }
+        )
+        master_eoa_balances = self._get_master_eoa_balances(master_eoa_topups)
+        master_eoa_shortfalls = self._compute_shortfalls(
+            balances=master_eoa_balances,
+            thresholds=master_eoa_topups.divide(2),
+            topups=master_eoa_topups,
+        )
+        self._fund_chain_amounts(master_eoa_shortfalls)
+
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
-        balances: t.Dict = {}
-        protocol_bonded_assets: t.Dict = {}
-        protocol_asset_requirements: t.Dict = {}
-        refill_requirements: t.Dict = {}
-        total_requirements: t.Dict = {}
+        balances = ChainAmounts()
+        protocol_bonded_assets = ChainAmounts()
+        protocol_asset_requirements = ChainAmounts()
+        refill_requirements = ChainAmounts()
+        total_requirements = ChainAmounts()
         chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
 
         # Protocol shortfall
@@ -547,8 +576,11 @@ class FundingManager:
         # Initial service shortfall
         # We assume that if the service safe is created in any chain,
         # we have requested the funding already.
-        service_topups = service.get_funding_amounts()
-        service_shortfalls = ChainAmounts()
+        service_topups = service.get_initial_funding_amounts()
+        (
+            service_shortfalls,
+            agent_funding_response,
+        ) = service.get_agent_funding_requests()
         if all(
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_topups.values()
@@ -638,16 +670,6 @@ class FundingManager:
             master_safe_balances,
         )
 
-        agent_funding_requests = {}
-        try:
-            resp = requests.get(AGENT_FUNDING_REQUESTS_URL, timeout=10)
-            resp.raise_for_status()
-            agent_funding_requests = resp.json()
-        except Exception:  # pylint: disable=broad-except
-            self.logger.warning(
-                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDING_REQUESTS_URL}."
-            )
-
         # Compute boolean flags
         is_refill_required = any(
             amount > 0
@@ -676,12 +698,12 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": agent_funding_requests,
+            "agent_funding_requests": agent_funding_response,
         }
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self._fund_chain_amounts(service.get_funding_amounts())
+        self._fund_chain_amounts(service.get_initial_funding_amounts())
 
     def _fund_chain_amounts(self, amounts: ChainAmounts) -> None:
         for chain_str, addresses in amounts.items():
@@ -689,6 +711,12 @@ class FundingManager:
             wallet = self.wallet_manager.load(chain.ledger_type)
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
+                    if amount <= 0:
+                        continue
+
+                    self.logger.info(
+                        f"[FUNDING MANAGER] Funding {amount} of {asset} to {address} on chain {chain.value} from Master Safe {wallet.safes.get(chain, 'N/A')}"
+                    )
                     wallet.transfer(
                         chain=chain,
                         to=address,
@@ -697,51 +725,64 @@ class FundingManager:
                         from_safe=True,
                     )
 
+    def fund_service(self, service: Service, amounts: ChainAmounts) -> None:
+        """Fund service-related wallets."""
+        for chain_str, addresses in amounts.items():
+            for address in addresses:
+                if (
+                    address not in service.agent_addresses
+                    and address != service.chain_configs[chain_str].chain_data.multisig
+                ):
+                    raise ValueError(
+                        f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
+                    )
+
+        self._fund_chain_amounts(amounts)
+
+    async def funding_job(
+        self,
+        service_config_id: str,
+        service_manager: "ServiceManager",
+        loop: t.Optional[asyncio.AbstractEventLoop] = None,
+    ) -> None:
+        """Start a background funding job."""
+        loop = loop or asyncio.get_event_loop()
+        service = service_manager.load(service_config_id=service_config_id)
+        with ThreadPoolExecutor() as executor:
+            last_claim = 0.0
+            last_master_eoa_funding = 0.0
+            while True:
+                # try claiming rewards every hour
+                if last_claim + 3600 < time():
+                    try:
+                        await loop.run_in_executor(
+                            executor,
+                            service_manager.claim_on_chain_from_safe,
+                            service_config_id,
+                            service.home_chain,
+                        )
+                    except Exception:  # pylint: disable=broad-except
+                        self.logger.info(
+                            f"Error occured while claiming rewards\n{traceback.format_exc()}"
+                        )
+                    last_claim = time()
+
+                # fund Master EOA every hour
+                if last_master_eoa_funding + 3600 < time():
+                    try:
+                        await loop.run_in_executor(
+                            executor,
+                            self.fund_master_eoa,
+                        )
+                    except Exception:  # pylint: disable=broad-except
+                        self.logger.info(
+                            f"Error occured while funding Master EOA\n{traceback.format_exc()}"
+                        )
+                    last_master_eoa_funding = time()
+
+                await asyncio.sleep(60)
+
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.
     # TODO refactor: move protocol_ methods to protocol class, refactor to accomodate arbitrary owner and operators,
     # refactor to manage multiple chains with different master safes, etc.
-
-    def _try_fund(self, amounts: ChainAmounts) -> None:
-        for chain_str, addresses in amounts.items():
-            chain = Chain(chain_str)
-            wallet = self.wallet_manager.load(chain.ledger_type)
-            for address, assets in addresses.items():
-                for asset, value in assets.values():
-                    balance = wallet.get_balance(
-                        chain=chain, asset=asset, from_safe=False
-                    )
-
-    def fund_service(self, service: Service) -> None:
-        """Fund service-related wallets."""
-
-        chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
-
-        # Fund MasterEOA
-        master_eoa_thresholds = DEFAULT_EOA_TOPUPS.divide(2)
-        master_eoa_topups = ChainAmounts()
-        for chain in chains:
-            master_eoa = self._resolve_master_eoa(chain)
-            master_eoa_thresholds = master_eoa_thresholds[chain]
-            for asset, threshold in master_eoa_thresholds:
-                balance = get_asset_balance(
-                    ledger_api=get_default_ledger_api(chain),
-                    asset_address=asset,
-                    address=master_eoa,
-                    raise_on_invalid_address=False,
-                )
-                self._try_fund()
-
-        for chain in chains:
-            for asset, topup in DEFAULT_EOA_TOPUPS[chain].items():
-                wallet = self.wallet_manager.load(chain.ledger_type)
-                balance = wallet.get_balance(chain=chain, asset=asset, from_safe=False)
-                if balance < int(topup * DEFAULT_TOPUP_THRESHOLD):
-                    # Try fund MasterEOA
-                    wallet.transfer(
-                        chain=chain,
-                        to=wallet.address,
-                        asset=asset,
-                        amount=topup - balance,
-                        from_safe=True,
-                    )

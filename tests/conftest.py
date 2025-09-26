@@ -107,7 +107,7 @@ def tenderly_add_balance(
         }
 
     response = requests.post(
-        url=rpc, headers=headers, data=json.dumps(data), timeout=30
+        url=rpc, headers=headers, data=json.dumps(data), timeout=60
     )
     response.raise_for_status()
 

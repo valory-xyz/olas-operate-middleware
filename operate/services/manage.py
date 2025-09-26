@@ -19,18 +19,15 @@
 # ------------------------------------------------------------------------------
 """Service manager."""
 
-import asyncio
 import json
 import logging
 import os
 import traceback
 import typing as t
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 from http import HTTPStatus
 from pathlib import Path
-from time import time
 
 import requests
 from aea.helpers.base import IPFSHash
@@ -66,6 +63,7 @@ from operate.ledger.profiles import (
 )
 from operate.operate_types import (
     Chain,
+    ChainAmounts,
     FundingValues,
     LedgerConfig,
     MechMarketplaceConfig,
@@ -1325,23 +1323,10 @@ class ServiceManager:
 
         if counter_current_safe_owners == counter_instances:
             if withdrawal_address is None:
-                self.logger.info("Service funded for safe swap")
-                self.fund_service(
-                    service_config_id=service_config_id,
-                    funding_values={
-                        ZERO_ADDRESS: {
-                            "agent": {
-                                "topup": chain_data.user_params.fund_requirements[
-                                    ZERO_ADDRESS
-                                ].agent,
-                                "threshold": chain_data.user_params.fund_requirements[
-                                    ZERO_ADDRESS
-                                ].agent,
-                            },
-                            "safe": {"topup": 0, "threshold": 0},
-                        }
-                    },
-                )
+                self.logger.info(
+                    "Service funded for safe swap"
+                )  # TODO: is this safe swapping needed anymore?
+                self.funding_manager.fund_service_initial(service)
 
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
@@ -1902,22 +1887,11 @@ class ServiceManager:
     def fund_service(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         service_config_id: str,
-        funding_values: t.Optional[FundingValues] = None,
-        from_safe: bool = True,
-        task_id: t.Optional[str] = None,
+        amounts: ChainAmounts,
     ) -> None:
         """Fund service if required."""
         service = self.load(service_config_id=service_config_id)
-        self.funding_manager.fund_service(service)
-
-        # for chain in service.chain_configs.keys():
-        #     self.logger.info(f"[FUNDING_JOB] [{task_id=}] Funding {chain=}")
-        #     self.fund_service_single_chain(
-        #         service_config_id=service_config_id,
-        #         funding_values=funding_values,
-        #         from_safe=from_safe,
-        #         chain=chain,
-        #     )
+        self.funding_manager.fund_service(service=service, amounts=amounts)
 
     # TODO deprecate
     def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
@@ -2152,69 +2126,6 @@ class ServiceManager:
                 chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
-
-    async def funding_job(
-        self,
-        service_config_id: str,
-        loop: t.Optional[asyncio.AbstractEventLoop] = None,
-        from_safe: bool = True,
-    ) -> None:
-        """Start a background funding job."""
-        loop = loop or asyncio.get_event_loop()
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[service.home_chain]
-        task = asyncio.current_task()
-        task_id = id(task) if task else "Unknown task_id"
-        with ThreadPoolExecutor() as executor:
-            last_claim = 0
-            while True:
-                try:
-                    await loop.run_in_executor(
-                        executor,
-                        self.fund_service,
-                        service_config_id,  # Service id
-                        {
-                            asset_address: {
-                                "agent": {
-                                    "topup": fund_requirements.agent,
-                                    "threshold": int(
-                                        fund_requirements.agent
-                                        * DEFAULT_TOPUP_THRESHOLD
-                                    ),
-                                },
-                                "safe": {
-                                    "topup": fund_requirements.safe,
-                                    "threshold": int(
-                                        fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
-                                    ),
-                                },
-                            }
-                            for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
-                        },
-                        from_safe,
-                        task_id,
-                    )
-                except Exception:  # pylint: disable=broad-except
-                    logging.info(
-                        f"Error occured while funding the service\n{traceback.format_exc()}"
-                    )
-
-                # try claiming rewards every hour
-                if last_claim + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            self.claim_on_chain_from_safe,
-                            service_config_id,
-                            service.home_chain,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        logging.info(
-                            f"Error occured while claiming rewards\n{traceback.format_exc()}"
-                        )
-                    last_claim = time()
-
-                await asyncio.sleep(60)
 
     def deploy_service_locally(
         self,
