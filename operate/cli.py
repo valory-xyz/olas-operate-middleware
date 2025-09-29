@@ -247,7 +247,7 @@ class OperateApp:
         """Json representation of the app."""
         return {
             "name": "Operate HTTP server",
-            "version": "0.1.0.rc0",
+            "version": (__version__),
             "home": str(self._path),
         }
 
