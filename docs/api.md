@@ -828,6 +828,7 @@ Get all valid services.
     "service_config_id": "service_123",
     "name": "My Service",
     "description": "Service description",
+    "service_public_id": "valory/service_123:0.1.0",
     "hash": "bafybeic...",
     "keys": [
       {
@@ -895,6 +896,7 @@ Get a specific service.
   "service_config_id": "service_123",
   "name": "My Service",
   "description": "Service description",
+  "service_public_id": "valory/service_123:0.1.0",
   "hash": "bafybeic...",
   "keys": [
     {
@@ -1112,6 +1114,7 @@ Create a new service.
   "name": "My Service",
   "description": "Service description",
   "hash": "bafybeic...",
+  "service_public_id": "valory/service_123:0.1.0",
   "keys": [
     {
       "ledger": "ethereum",
@@ -1160,6 +1163,7 @@ Create a new service.
   "name": "My Service",
   "description": "Service description",
   "hash": "bafybeic...",
+  "service_public_id": "valory/service_123:0.1.0",
   "keys": [
     {
       "ledger": "ethereum",
@@ -1219,6 +1223,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
   "name": "Updated Service Name",
   "description": "Updated description",
   "hash": "bafybeic...",
+  "service_public_id": "valory/service_123:0.1.0",
   "keys": [
     {
       "ledger": "ethereum",
@@ -1268,6 +1273,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
   "name": "Updated Service Name",
   "description": "Updated description",
   "hash": "bafybeic...",
+  "service_public_id": "valory/service_123:0.1.0",
   "keys": [
     {
       "ledger": "ethereum",
@@ -1336,6 +1342,7 @@ Deploy and run a service.
   "name": "My Service",
   "description": "Service description",
   "hash": "bafybeic...",
+  "service_public_id": "valory/service_123:0.1.0",
   "keys": [
     {
       "ledger": "ethereum",
