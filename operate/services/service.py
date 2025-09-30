@@ -736,6 +736,13 @@ class Service(LocalResource):
 
     _file = CONFIG_JSON
 
+    @property
+    def json(self) -> t.Dict:
+        """To dictionary object."""
+        obj = super().json
+        obj["service_public_id"] = self.service_public_id()
+        return obj
+
     @staticmethod
     def determine_agent_id(service_name: str) -> int:
         """Determine the appropriate agent ID based on service name."""
