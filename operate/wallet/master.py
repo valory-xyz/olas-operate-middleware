@@ -247,10 +247,9 @@ class EthereumMasterWallet(MasterWallet):
     ) -> str:
         """Checks conditions before transfer. Returns the to address checksummed."""
         if amount <= 0:
-            logger.warning(
+            raise ValueError(
                 "Transfer amount must be greater than zero, not transferring."
             )
-            return None
 
         to = Web3().to_checksum_address(to)
         if from_safe and chain not in self.safes:
@@ -281,9 +280,13 @@ class EthereumMasterWallet(MasterWallet):
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
             amount = balance - tx_fee
 
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=False
-        )
+        try:
+            to = self._pre_transfer_checks(
+                to=to, amount=amount, chain=chain, from_safe=False
+            )
+        except ValueError as e:
+            logger.error(f"Pre-transfer checks failed: {e}")
+            return None
 
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
         tx_helper = TxSettler(
@@ -328,9 +331,13 @@ class EthereumMasterWallet(MasterWallet):
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
     ) -> t.Optional[str]:
         """Transfer funds from safe wallet."""
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=True
-        )
+        try:
+            to = self._pre_transfer_checks(
+                to=to, amount=amount, chain=chain, from_safe=True
+            )
+        except ValueError as e:
+            logger.error(f"Pre-transfer checks failed: {e}")
+            return None
 
         return transfer_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
@@ -349,9 +356,13 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer erc20 from safe wallet."""
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=True, token=token
-        )
+        try:
+            to = self._pre_transfer_checks(
+                to=to, amount=amount, chain=chain, from_safe=True, token=token
+            )
+        except ValueError as e:
+            logger.error(f"Pre-transfer checks failed: {e}")
+            return None
 
         return transfer_erc20_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
@@ -371,9 +382,13 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer erc20 from EOA wallet."""
-        to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=False, token=token
-        )
+        try:
+            to = self._pre_transfer_checks(
+                to=to, amount=amount, chain=chain, from_safe=False, token=token
+            )
+        except ValueError as e:
+            logger.error(f"Pre-transfer checks failed: {e}")
+            return None
 
         wallet_address = self.address
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))

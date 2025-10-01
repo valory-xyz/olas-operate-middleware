@@ -1148,8 +1148,8 @@ class Service(LocalResource):
 
         return amounts
 
-    def get_agent_funding_requests(self) -> t.Tuple[ChainAmounts, dict]:
-        """Get funding amounts requested by agent and its exact response."""
+    def get_agent_funding_requests(self) -> ChainAmounts:
+        """Get funding amounts requested by the agent."""
         agent_response = {}
         agent_funding_requests = ChainAmounts()
         try:
@@ -1184,4 +1184,4 @@ class Service(LocalResource):
                         )
                         agent_funding_requests[chain_str][address][asset] = 0
 
-        return agent_funding_requests, agent_response
+        return agent_funding_requests

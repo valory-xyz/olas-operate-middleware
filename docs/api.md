@@ -1141,6 +1141,65 @@ Get agent performance information.
 }
 ```
 
+### `GET /api/v2/service/{service_config_id}/funding_requirements`
+
+Get service funding requirements by asking the agent also.
+
+**Response (Success - 200):**
+
+```json
+{
+  "balances": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1000000000000000000
+      }
+    }
+  },
+  "bonded_assets": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 500000000000000000
+    }
+  },
+  "total_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 2000000000000000000
+      }
+    }
+  },
+  "refill_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "protocol_asset_requirements": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 1000000000000000000
+    }
+  },
+  "agent_funding_requests": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "is_refill_required": true,
+  "allow_start_agent": true
+}
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}/refill_requirements`
 
 Get service refill requirements.

@@ -693,7 +693,9 @@ class TestFunding(OnTestnet):
             },
             "is_refill_required": True,
             "allow_start_agent": False,
-            "agent_funding_requests": {},
+            "agent_funding_requests": {
+                chain1.value: {},
+            },
         }
 
         app = create_app(home=operate._path)
@@ -712,13 +714,23 @@ class TestFunding(OnTestnet):
             json=service_template,
         )
         assert response.status_code == HTTPStatus.OK
-        service_config_id = response.json()["service_config_id"]
+        created_service = response.json()
+        service_config_id = created_service["service_config_id"]
+        agent_eoa = created_service["agent_addresses"][0]
 
         response = client.get(
             url=f"/api/v2/service/{service_config_id}/funding_requirements",
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
+        expected_json["agent_funding_requests"][chain1.value] = {
+            "service_safe": {
+                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
+            },
+            agent_eoa: {
+                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+            },
+        }
         diff = DeepDiff(response_json, expected_json)
         assert not diff, diff
 
@@ -914,6 +926,7 @@ class TestFunding(OnTestnet):
                 ZERO_ADDRESS
             ] = real_balance_master_eoa
 
+        del expected_json["agent_funding_requests"][chain1.value]
         diff = DeepDiff(response_json, expected_json)
         assert not diff, diff
 
@@ -949,7 +962,13 @@ class TestFunding(OnTestnet):
             }
         }
 
-        expected_json["agent_funding_requests"] = fund_requests
+        expected_json["agent_funding_requests"] = {
+            chain1.value: {
+                agent_safe: {
+                    ZERO_ADDRESS: 42000000000000000000,
+                }
+            }
+        }
         expected_json["total_requirements"][chain1.value][master_safe][
             ZERO_ADDRESS
         ] = 42000000000000000000
@@ -979,16 +998,7 @@ class TestFunding(OnTestnet):
         )
 
         # Send funds to agent - Funding requirements
-        fund_data = {
-            chain: {
-                address: {
-                    asset: str(amounts["deficit"])
-                    for asset, amounts in asset_amounts.items()
-                }
-                for address, asset_amounts in addresses.items()
-            }
-            for chain, addresses in response_json["agent_funding_requests"].items()
-        }
+        fund_data = response_json["agent_funding_requests"]
         previous_balance = {
             chain_str: {
                 address: {

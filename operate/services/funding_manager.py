@@ -577,10 +577,7 @@ class FundingManager:
         # We assume that if the service safe is created in any chain,
         # we have requested the funding already.
         service_topups = service.get_initial_funding_amounts()
-        (
-            service_shortfalls,
-            agent_funding_response,
-        ) = service.get_agent_funding_requests()
+        service_shortfalls = service.get_agent_funding_requests()
         if all(
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_topups.values()
@@ -698,7 +695,7 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": agent_funding_response,
+            "agent_funding_requests": service_shortfalls,
         }
 
     def fund_service_initial(self, service: Service) -> None:
