@@ -51,7 +51,8 @@ def test_data_contracts_sanity() -> None:
         spec = importlib.util.spec_from_file_location(
             f"operate.data.contracts.{name}.contract", contract_file
         )
-        assert spec and spec.loader, f"Unable to create spec for {contract_file}"
+        assert spec, f"Unable to create spec for {contract_file}"
+        assert spec.loader, f"Spec loader is None for {contract_file}"
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)  # type: ignore
 

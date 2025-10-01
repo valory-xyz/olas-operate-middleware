@@ -70,9 +70,8 @@ class MasterWallet(LocalResource):
 
     path: Path
     address: str
-
-    safes: t.Dict[Chain, str] = field(default_factory=dict)
-    safe_chains: t.List[Chain] = field(default_factory=list)
+    safes: t.Dict[Chain, str]
+    safe_chains: t.List[Chain]
     ledger_type: LedgerType
     safe_nonce: t.Optional[int] = None
 

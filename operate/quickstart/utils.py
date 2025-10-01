@@ -30,7 +30,7 @@ import requests
 from halo import Halo
 from web3.exceptions import Web3RPCError
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import DEFAULT_TIMEOUT, ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
@@ -226,7 +226,10 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
 
     try:
         response = requests.post(
-            rpc_url, json=rpc_data, headers={"Content-Type": "application/json"}
+            rpc_url,
+            json=rpc_data,
+            headers={"Content-Type": "application/json"},
+            timeout=DEFAULT_TIMEOUT,
         )
         response.raise_for_status()
         rpc_response = response.json()
