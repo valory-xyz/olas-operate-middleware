@@ -82,7 +82,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
-    data = contract.encodeABI(
+    data = contract.encode_abi(
         "create",
         args=[
             service.chain_configs[service.home_chain].chain_data.token,

@@ -297,8 +297,8 @@ def add_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="addOwnerWithThreshold",
+    txd = instance.encode_abi(
+        abi_element_identifier="addOwnerWithThreshold",
         args=[
             owner,
             1,
@@ -343,8 +343,8 @@ def swap_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="swapOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="swapOwner",
         args=[
             prev_owner,
             old_owner,
@@ -373,8 +373,8 @@ def remove_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="removeOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="removeOwner",
         args=[
             prev_owner,
             owner,
@@ -469,8 +469,8 @@ def transfer_erc20_from_safe(
         ledger_api=ledger_api,
         contract_address=token,
     )
-    txd = instance.encodeABI(
-        fn_name="transfer",
+    txd = instance.encode_abi(
+        abi_element_identifier="transfer",
         args=[
             to,
             amount,

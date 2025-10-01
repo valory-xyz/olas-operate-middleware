@@ -33,7 +33,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -228,11 +227,6 @@ class Provider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
         return ledger_api
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
@@ -241,11 +235,6 @@ class Provider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
         return ledger_api
 
     @abstractmethod

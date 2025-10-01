@@ -465,8 +465,8 @@ class StakingManager(OnChainHelper):
         return registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=service_registry,
-        ).encodeABI(
-            fn_name="approve",
+        ).encode_abi(
+            abi_element_identifier="approve",
             args=[
                 staking_contract,
                 service_id,
@@ -482,8 +482,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="stake",
+        ).encode_abi(
+            abi_element_identifier="stake",
             args=[service_id],
         )
 
@@ -496,8 +496,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="unstake",
+        ).encode_abi(
+            abi_element_identifier="unstake",
             args=[service_id],
         )
 
@@ -506,8 +506,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="claim",
+        ).encode_abi(
+            abi_element_identifier="claim",
             args=[service_id],
         )
 
@@ -518,8 +518,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="forcedUnstake",
+        ).encode_abi(
+            abi_element_identifier="forcedUnstake",
             args=[service_id],
         )
 
@@ -1221,8 +1221,8 @@ class EthSafeTxBuilder(_ChainUtil):
         instance = self.service_manager_instance
         if update_token is None:
             safe = self.safe
-            txd = instance.encodeABI(
-                fn_name="create",
+            txd = instance.encode_abi(
+                abi_element_identifier="create",
                 args=[
                     safe,
                     token or ETHEREUM_ERC20,
@@ -1233,8 +1233,8 @@ class EthSafeTxBuilder(_ChainUtil):
                 ],
             )
         else:
-            txd = instance.encodeABI(
-                fn_name="update",
+            txd = instance.encode_abi(
+                abi_element_identifier="update",
                 args=[
                     token or ETHEREUM_ERC20,
                     manager.metadata_hash,
@@ -1263,8 +1263,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=erc20_contract,
         )
-        txd = instance.encodeABI(
-            fn_name="approve",
+        txd = instance.encode_abi(
+            abi_element_identifier="approve",
             args=[spender, amount],
         )
         return {
@@ -1280,8 +1280,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="activateRegistration",
+        txd = instance.encode_abi(
+            abi_element_identifier="activateRegistration",
             args=[service_id],
         )
         return {
@@ -1304,8 +1304,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="registerAgents",
+        txd = instance.encode_abi(
+            abi_element_identifier="registerAgents",
             args=[
                 service_id,
                 instances,
@@ -1379,8 +1379,8 @@ class EthSafeTxBuilder(_ChainUtil):
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
 
-        deploy_data = registry_instance.encodeABI(
-            fn_name="deploy",
+        deploy_data = registry_instance.encode_abi(
+            abi_element_identifier="deploy",
             args=[
                 service_id,
                 gnosis_safe_multisig,
@@ -1403,8 +1403,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="terminate",
+        txd = instance.encode_abi(
+            abi_element_identifier="terminate",
             args=[service_id],
         )
         return {
@@ -1420,8 +1420,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="unbond",
+        txd = instance.encode_abi(
+            abi_element_identifier="unbond",
             args=[service_id],
         )
         return {
@@ -1581,8 +1581,8 @@ class EthSafeTxBuilder(_ChainUtil):
         #     ledger_api=self.ledger_api,  # noqa: E800
         #     contract_address=self.contracts["recovery_module"],  # noqa: E800
         # )  # noqa: E800
-        txd = instance.encodeABI(
-            fn_name="recoverAccess",
+        txd = instance.encode_abi(
+            abi_element_identifier="recoverAccess",
             args=[service_id],
         )
         return {
@@ -1603,8 +1603,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=safe_address,
         )
-        txd = instance.encodeABI(
-            fn_name="enableModule",
+        txd = instance.encode_abi(
+            abi_element_identifier="enableModule",
             args=[module_address],
         )
         return {
@@ -1685,8 +1685,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
                 "to": multisig_address,
                 "data": HexBytes(
                     bytes.fromhex(
-                        multisig_instance.encodeABI(
-                            fn_name="addOwnerWithThreshold",
+                        multisig_instance.encode_abi(
+                            abi_element_identifier="addOwnerWithThreshold",
                             args=[_owner, 1],
                         )[2:]
                     )
@@ -1701,8 +1701,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="removeOwner",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="removeOwner",
                         args=[new_owners[0], master_safe, 1],
                     )[2:]
                 )
@@ -1717,8 +1717,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="changeThreshold",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="changeThreshold",
                         args=[threshold],
                     )[2:]
                 )
@@ -1743,8 +1743,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         data=multisend_tx["data"],
         operation=1,
     ).get("tx_hash")
-    approve_hash_data = multisig_instance.encodeABI(
-        fn_name="approveHash",
+    approve_hash_data = multisig_instance.encode_abi(
+        abi_element_identifier="approveHash",
         args=[
             safe_tx_hash,
         ],
@@ -1756,8 +1756,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         "value": 0,
     }
 
-    safe_exec_data = multisig_instance.encodeABI(
-        fn_name="execTransaction",
+    safe_exec_data = multisig_instance.encode_abi(
+        abi_element_identifier="execTransaction",
         args=[
             multisend_address,  # to address
             multisend_tx["value"],  # value

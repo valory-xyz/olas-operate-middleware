@@ -219,6 +219,7 @@ def configure_local_config(
         LedgerType.ETHEREUM.lower(),
         address=config.rpc[config.principal_chain],  # type: ignore[index]
         chain_id=home_chain.id,
+        poa_chain=chain in (Chain.OPTIMISM.value, Chain.POLYGON.value),
     )
 
     if config.staking_program_id is None:

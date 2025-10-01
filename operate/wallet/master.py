@@ -122,6 +122,7 @@ class MasterWallet(LocalResource):
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
+            poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
         )
 
     def transfer(
