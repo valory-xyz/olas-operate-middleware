@@ -1971,6 +1971,9 @@ class ServiceManager:
                         to_transfer = max(
                             min(available_balance, target_balance - agent_balance), 0
                         )
+                        if to_transfer <= 0:
+                            continue
+
                         self.logger.info(
                             f"[FUNDING_JOB] Transferring {to_transfer} units (asset {asset_address}) to agent {agent_address}"
                         )
@@ -2089,6 +2092,9 @@ class ServiceManager:
                     agent_topup
                     or chain_data.user_params.fund_requirements[ZERO_ADDRESS].agent
                 )
+                if to_transfer <= 0:
+                    continue
+
                 self.logger.info(f"Transferring {to_transfer} units to {agent_address}")
                 wallet.transfer(
                     asset=token,
@@ -2116,6 +2122,9 @@ class ServiceManager:
                 safe_topup
                 or chain_data.user_params.fund_requirements[ZERO_ADDRESS].safe
             )
+            if to_transfer <= 0:
+                return
+
             self.logger.info(
                 f"Transferring {to_transfer} units to {chain_data.multisig}"
             )

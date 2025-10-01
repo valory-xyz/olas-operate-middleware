@@ -518,6 +518,9 @@ class EthereumMasterWallet(MasterWallet):
         assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
         for asset in assets:
             balance = self.get_balance(chain=chain, from_safe=from_safe)
+            if balance <= 0:
+                continue
+
             self.transfer(
                 to=withdrawal_address,
                 amount=balance,
