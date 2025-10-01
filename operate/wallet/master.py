@@ -246,6 +246,12 @@ class EthereumMasterWallet(MasterWallet):
         token: str = ZERO_ADDRESS,
     ) -> str:
         """Checks conditions before transfer. Returns the to address checksummed."""
+        if amount <= 0:
+            logger.warning(
+                "Transfer amount must be greater than zero, not transferring."
+            )
+            return None
+
         to = Web3().to_checksum_address(to)
         if from_safe and chain not in self.safes:
             raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
@@ -274,13 +280,6 @@ class EthereumMasterWallet(MasterWallet):
             # we assume that the user wants to drain the EOA
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
             amount = balance - tx_fee
-
-        if amount <= 0:
-            logger.warning(
-                "Insufficient funds for transfer from EOA "
-                f"{self.address} to {to} after deducting fees."
-            )
-            return None
 
         to = self._pre_transfer_checks(
             to=to, amount=amount, chain=chain, from_safe=False
@@ -423,12 +422,6 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Transfer funds to the given account."""
-        if amount <= 0:
-            logger.warning(
-                "Transfer amount must be greater than zero, not transferring."
-            )
-            return None
-
         if from_safe:
             if asset == ZERO_ADDRESS:
                 return self._transfer_from_safe(
