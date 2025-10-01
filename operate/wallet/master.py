@@ -281,7 +281,7 @@ class EthereumMasterWallet(MasterWallet):
 
         setattr(tx_helper, "build", _build_tx)  # noqa: B010
         tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
         return tx_hash
 
     def _transfer_from_safe(
@@ -363,7 +363,7 @@ class EthereumMasterWallet(MasterWallet):
 
         setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
         tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
         return tx_hash
 
     def transfer(

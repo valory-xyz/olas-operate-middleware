@@ -1948,7 +1948,7 @@ class ServiceManager:
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
-        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
         ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
         transfer_erc20_from_safe(
