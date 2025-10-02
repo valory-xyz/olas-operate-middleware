@@ -862,6 +862,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             content={service_id: service_id in _services for service_id in service_ids}
         )
 
+    @app.get("/api/v2/services/deployment")
+    @with_retries
+    async def _get_services_deployment(request: Request) -> JSONResponse:
+        """Get a service deployment."""
+        service_manager = operate.service_manager()
+        output = {}
+        for service in service_manager.get_all_services()[0]:
+            deployment_json = service.deployment.json
+            deployment_json["healthcheck"] = service.get_latest_healthcheck()
+            output[service.service_config_id] = deployment_json
+
+        return JSONResponse(content=output)
+
     @app.get("/api/v2/service/{service_config_id}")
     @with_retries
     async def _get_service(request: Request) -> JSONResponse:
