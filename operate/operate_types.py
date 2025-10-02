@@ -19,6 +19,7 @@
 
 """Types module."""
 
+import copy
 import enum
 import os
 import typing as t
@@ -323,3 +324,58 @@ class MechMarketplaceConfig:
     mech_marketplace_address: str
     priority_mech_address: str
     priority_mech_service_id: int
+
+
+class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
+    """
+    Class that represents chain amounts as a dictionary
+
+    The standard format follows the convention {chain: {address: {token: amount}}}
+    """
+
+    def __add__(self, other: "ChainAmounts") -> "ChainAmounts":
+        """Add two ChainAmounts together"""
+        output = copy.deepcopy(self)
+        for chain, addresses in other.items():
+            if chain not in output:
+                output[chain] = {}
+            for address, balances in addresses.items():
+                if address not in output[chain]:
+                    output[chain][address] = {}
+                for asset, amount in balances.items():
+                    if asset not in output[chain][address]:
+                        output[chain][address][asset] = 0
+                    output[chain][address][asset] += amount
+        return output
+
+    def __mul__(self, multiplier: float) -> "ChainAmounts":
+        """Multiply all amounts by the specified multiplier"""
+        output = copy.deepcopy(self)
+        for _, addresses in output.items():
+            for _, balances in addresses.items():
+                for asset, amount in balances.items():
+                    balances[asset] = amount * multiplier
+        return output
+
+    def __sub__(self, other: "ChainAmounts") -> "ChainAmounts":
+        """Subtract two ChainAmounts"""
+        return self + (other * -1)
+
+    def __truediv__(self, divisor: float) -> "ChainAmounts":
+        """Divide all amounts by the specified divisor"""
+        if divisor == 0:
+            raise ValueError("Cannot divide by zero")
+
+        return self * (1 / divisor)
+
+    def __floordiv__(self, divisor: float) -> "ChainAmounts":
+        """Divide all amounts by the specified divisor"""
+        if divisor == 0:
+            raise ValueError("Cannot divide by zero")
+
+        output = copy.deepcopy(self)
+        for _, addresses in output.items():
+            for _, balances in addresses.items():
+                for asset, amount in balances.items():
+                    balances[asset] = amount // divisor
+        return output

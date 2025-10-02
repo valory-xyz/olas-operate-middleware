@@ -25,23 +25,43 @@
 import random
 import typing as t
 from http import HTTPStatus
+from pathlib import Path
+from unittest.mock import patch
 
+import requests_mock
+from deepdiff import DeepDiff
 from fastapi.testclient import TestClient
 
-from operate.cli import create_app
-from operate.constants import ZERO_ADDRESS
+from operate.cli import OperateApp, create_app
+from operate.constants import (
+    AGENT_FUNDS_STATUS_URL,
+    KEYS_DIR,
+    MASTER_SAFE_PLACEHOLDER,
+    MIN_AGENT_BOND,
+    MIN_SECURITY_DEPOSIT,
+    ZERO_ADDRESS,
+)
+from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
-from operate.ledger.profiles import DUST, OLAS, USDC
-from operate.operate_types import Chain, OnChainState
+from operate.ledger.profiles import (
+    DEFAULT_EOA_TOPUPS,
+    DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
+    DUST,
+    OLAS,
+    USDC,
+)
+from operate.operate_types import Chain, LedgerType, OnChainState
+from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance
 
 from tests.conftest import (
     OnTestnet,
     OperateTestEnv,
+    _get_service_template_trader,
     tenderly_add_balance,
     tenderly_increase_time,
 )
-from tests.constants import LOGGER
+from tests.constants import LOGGER, OPERATE_TEST
 
 
 AGENT_FUNDING_ASSETS: t.Dict[Chain, t.Dict[str, int]] = {}
@@ -60,6 +80,63 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
 
 class TestFunding(OnTestnet):
     """Tests for services.funding."""
+
+    def test_master_eoa_fund(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        """Test funding the Master EOA."""
+        password = test_env.password
+        operate = test_env.operate
+        operate.password = password
+
+        wallet = operate.wallet_manager.load(LedgerType.ETHEREUM)
+
+        for chain in wallet.safes:
+            ledger_api = get_default_ledger_api(chain)
+
+            # When Master EOA balance is fine
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.address,
+                )
+                > DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] / 2
+            )
+            with patch.object(wallet, "transfer") as mock_transfer:
+                operate.funding_manager.fund_master_eoa()
+                assert mock_transfer.call_count == 0
+
+            # When Master EOA balance is lower than threshold
+            current_balance = get_asset_balance(
+                ledger_api=ledger_api,
+                asset_address=ZERO_ADDRESS,
+                address=wallet.address,
+            )
+            wallet.transfer(
+                to=ZERO_ADDRESS,  # burn some balance
+                amount=current_balance - DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] // 2,
+                chain=chain,
+                from_safe=False,
+            )
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.address,
+                )
+                < DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] / 2
+            )
+            operate.funding_manager.fund_master_eoa()
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.address,
+                )
+                > DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] - DUST[chain]
+            )
 
     def test_terminate_withdraw_service(
         self,
@@ -104,16 +181,14 @@ class TestFunding(OnTestnet):
 
             for asset, amount in AGENT_FUNDING_ASSETS[chain].items():
                 for agent_address in service.agent_addresses:
-                    assert get_asset_balance(ledger_api, asset, agent_address) == 0
                     tenderly_add_balance(chain, agent_address, amount, asset)
-                    assert get_asset_balance(ledger_api, asset, agent_address) == amount
+                    assert get_asset_balance(ledger_api, asset, agent_address) >= amount
 
             service_safe_address = chain_config.chain_data.multisig
             for asset, amount in SERVICE_SAFE_FUNDING_ASSETS[chain].items():
-                assert get_asset_balance(ledger_api, asset, service_safe_address) == 0
                 tenderly_add_balance(chain, service_safe_address, amount, asset)
                 assert (
-                    get_asset_balance(ledger_api, asset, service_safe_address) == amount
+                    get_asset_balance(ledger_api, asset, service_safe_address) >= amount
                 )
 
             tenderly_increase_time(chain)
@@ -525,3 +600,433 @@ class TestFunding(OnTestnet):
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
+
+    def test_full_funding_flow(
+        self,
+        tmp_path: Path,
+        password: str,
+    ) -> None:
+        """test_full_funding_flow"""
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+        operate.setup()
+        operate.create_user_account(password=password)
+        operate.password = password
+        operate.wallet_manager.setup()
+        keys_manager = KeysManager(
+            path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
+            logger=LOGGER,
+        )
+        backup_owner = keys_manager.create()
+
+        # Logout
+        operate = OperateApp(
+            home=tmp_path / OPERATE_TEST,
+        )
+
+        service_template = _get_service_template_trader()
+
+        chain1 = Chain.GNOSIS
+        chains = (chain1,)
+        c1_cfg = service_template["configurations"][chain1.value]
+        c1_staking_bond = 50000000000000000000
+        expected_json: t.Dict[str, t.Any] = {
+            "balances": {
+                chain1.value: {
+                    "master_eoa": {
+                        ZERO_ADDRESS: 0,
+                        OLAS[chain1]: 0,
+                    },
+                    "master_safe": {
+                        ZERO_ADDRESS: 0,
+                        OLAS[chain1]: 0,
+                    },
+                },
+            },
+            "bonded_assets": {
+                chain1.value: {
+                    "master_safe": {},
+                },
+            },
+            "total_requirements": {
+                chain1.value: {
+                    "master_eoa": {
+                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
+                            ZERO_ADDRESS
+                        ],
+                        OLAS[chain1]: 0,
+                    },
+                    "master_safe": {
+                        ZERO_ADDRESS: MIN_AGENT_BOND
+                        + MIN_SECURITY_DEPOSIT
+                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
+                        OLAS[chain1]: 2 * c1_staking_bond,
+                    },
+                },
+            },
+            "refill_requirements": {
+                chain1.value: {
+                    "master_eoa": {
+                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
+                            ZERO_ADDRESS
+                        ],
+                        OLAS[chain1]: 0,
+                    },
+                    "master_safe": {
+                        ZERO_ADDRESS: MIN_AGENT_BOND
+                        + MIN_SECURITY_DEPOSIT
+                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
+                        OLAS[chain1]: 2 * c1_staking_bond,
+                    },
+                },
+            },
+            "protocol_asset_requirements": {
+                chain1.value: {
+                    "master_safe": {
+                        ZERO_ADDRESS: MIN_AGENT_BOND + MIN_SECURITY_DEPOSIT,
+                        OLAS[chain1]: 2 * c1_staking_bond,
+                    },
+                },
+            },
+            "is_refill_required": True,
+            "allow_start_agent": False,
+            "agent_funding_requests": {
+                chain1.value: {},
+            },
+        }
+
+        app = create_app(home=operate._path)
+        client = TestClient(app)
+        response = client.post(
+            url="/api/account/login",
+            json={"password": password},
+        )
+        assert response.status_code == HTTPStatus.OK
+
+        # ---------------------------------------------
+        # Create service locally - Funding requirements
+        # ---------------------------------------------
+        response = client.post(
+            url="/api/v2/service",
+            json=service_template,
+        )
+        assert response.status_code == HTTPStatus.OK
+        created_service = response.json()
+        service_config_id = created_service["service_config_id"]
+        agent_eoa = created_service["agent_addresses"][0]
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        expected_json["agent_funding_requests"][chain1.value] = {
+            "service_safe": {
+                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
+            },
+            agent_eoa: {
+                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+            },
+        }
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # ----------------------------------------
+        # Create Master EOA - Funding requirements
+        # ----------------------------------------
+        response = client.post(
+            url="/api/wallet",
+            json={"ledger_type": chain1.ledger_type.value},
+        )
+        assert response.status_code == HTTPStatus.OK
+        master_eoa = response.json()["wallet"]["address"]
+
+        # Changes: Master EOA placeholder with real address
+        for k in ("balances", "refill_requirements", "total_requirements"):
+            for chain in chains:
+                expected_json[k][chain.value][master_eoa] = expected_json[k][
+                    chain.value
+                ].pop("master_eoa")
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # -------------------------------------------------
+        # Bridge funds to Master EOA - Funding requirements
+        # -------------------------------------------------
+        for chain_str, addresses in response_json["refill_requirements"].items():
+            for _, master_eoa_assets in addresses.items():
+                for asset, amount in master_eoa_assets.items():
+                    # The sum of requirements for Master EOA and Master Safe is transferred to Master EOA.
+                    tenderly_add_balance(
+                        chain=Chain(chain_str),
+                        recipient=master_eoa,
+                        token=asset,
+                        amount=amount,
+                    )
+                    expected_json["balances"][chain_str][master_eoa][asset] += amount
+
+        # Arrange "balances in the future" (after transferring excess)
+        for chain_str in expected_json["balances"]:
+            if MASTER_SAFE_PLACEHOLDER in expected_json["balances"][chain_str]:
+                master_eoa_assets = expected_json["balances"][chain_str][master_eoa]
+                for asset, amount in master_eoa_assets.items():
+                    default_eoa_topup = DEFAULT_EOA_TOPUPS[Chain(chain_str)].get(
+                        asset, 0
+                    )
+                    expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][
+                        asset
+                    ] = (amount - default_eoa_topup)
+                    expected_json["balances"][chain_str][master_eoa][
+                        asset
+                    ] = default_eoa_topup
+
+        for chain in chains:
+            expected_json["total_requirements"][chain.value][master_eoa][
+                ZERO_ADDRESS
+            ] = 0  # TODO verify
+
+        expected_json["refill_requirements"] = subtract_dicts(
+            expected_json["total_requirements"], expected_json["balances"]
+        )
+        expected_json["is_refill_required"] = False
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # -------------------------------------------------
+        # Create Safe & bridge funds - Funding requirements
+        # -------------------------------------------------
+        master_safes = {}
+        for chain in chains:
+            response = client.post(
+                url="/api/wallet/safe",
+                json={
+                    "chain": chain.value,
+                    "backup_owner": backup_owner,
+                    "transfer_excess_assets": True,
+                },
+            )
+            assert response.status_code == HTTPStatus.CREATED
+            master_safes[chain] = response.json()["safe"]
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+
+        # Changes: Master EOA placeholder with real address
+        for k in (
+            "balances",
+            "refill_requirements",
+            "total_requirements",
+            "bonded_assets",
+            "protocol_asset_requirements",
+        ):
+            for chain in chains:
+                master_safe = master_safes[chain]
+                expected_json[k][chain.value][master_safe] = expected_json[k][
+                    chain.value
+                ].pop("master_safe")
+
+        # Adjust expected Master EOA native assets
+        for chain_str in expected_json["balances"]:
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ]
+            assert (
+                real_balance_master_eoa
+                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
+            # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_registry
+            assert (
+                real_balance_master_eoa
+                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+            )  # TODO fix line above
+            expected_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ] = real_balance_master_eoa
+
+        expected_json["allow_start_agent"] = True
+
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # ---------------------------------------------
+        # Start agent first time - Funding requirements
+        # ---------------------------------------------
+
+        operate.password = password
+        operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+
+        # Adjust Master Safe balance
+        for chain_str in expected_json["balances"]:
+            master_safe = master_safes[chain]
+            for asset in expected_json["balances"][chain_str][master_safe]:
+                expected_json["balances"][chain_str][master_safe][
+                    asset
+                ] -= expected_json["protocol_asset_requirements"][chain_str][
+                    master_safe
+                ][
+                    asset
+                ]
+                cfg = service_template["configurations"][chain1.value]
+                expected_json["balances"][chain_str][master_safe][asset] -= (
+                    cfg["fund_requirements"].get(asset, {}).get("agent", 0)
+                )
+                expected_json["balances"][chain_str][master_safe][asset] -= (
+                    cfg["fund_requirements"].get(asset, {}).get("safe", 0)
+                )
+                expected_json["bonded_assets"][chain_str][master_safe][
+                    asset
+                ] = expected_json["protocol_asset_requirements"][chain_str][
+                    master_safe
+                ][
+                    asset
+                ]
+                expected_json["total_requirements"][chain_str][master_safe][
+                    asset
+                ] = 0  # The protocol requirements are bonded, nothing more needed.
+
+        # Adjust Master EOA native assets
+        for chain_str in expected_json["balances"]:
+            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ]
+            assert (
+                real_balance_master_eoa
+                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
+            # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
+            assert (
+                real_balance_master_eoa
+                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+            )
+            expected_json["balances"][chain_str][master_eoa][
+                ZERO_ADDRESS
+            ] = real_balance_master_eoa
+
+        del expected_json["agent_funding_requests"][chain1.value]
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # ----------------------------------
+        # Start agent again - Funding requirements
+        # ----------------------------------
+
+        operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
+
+        response = client.get(
+            url=f"/api/v2/service/{service_config_id}/funding_requirements",
+        )
+        assert response.status_code == HTTPStatus.OK
+        response_json = response.json()
+        diff = DeepDiff(response_json, expected_json)
+        assert not diff, diff
+
+        # ---------------------------------------
+        # Agent asks funds - Funding requirements
+        # ---------------------------------------
+
+        service = operate.service_manager().load(service_config_id)
+        agent_safe = service.chain_configs[chain1.value].chain_data.multisig
+        fund_requests = {
+            chain1.value: {
+                agent_safe: {
+                    ZERO_ADDRESS: {
+                        "requirement": 0,  # isn't used here
+                        "balance": 0,  # isn't used here
+                        "deficit": 42000000000000000000,
+                    }
+                }
+            }
+        }
+
+        expected_json["agent_funding_requests"] = {
+            chain1.value: {
+                agent_safe: {
+                    ZERO_ADDRESS: 42000000000000000000,
+                }
+            }
+        }
+        expected_json["total_requirements"][chain1.value][master_safe][
+            ZERO_ADDRESS
+        ] = 42000000000000000000
+        expected_json["refill_requirements"] = subtract_dicts(
+            expected_json["total_requirements"], expected_json["balances"]
+        )
+        expected_json["is_refill_required"] = True
+
+        with requests_mock.Mocker(real_http=True) as mock:
+            mock.get(AGENT_FUNDS_STATUS_URL, json=fund_requests)
+            response = client.get(
+                url=f"/api/v2/service/{service_config_id}/funding_requirements",
+            )
+            assert response.status_code == HTTPStatus.OK
+            response_json = response.json()
+            diff = DeepDiff(response_json, expected_json)
+            assert not diff, diff
+
+        # User funds the Master Safe with exactly the amount requested by the agent
+        tenderly_add_balance(
+            chain=chain1,
+            recipient=master_safes[chain1],
+            token=ZERO_ADDRESS,
+            amount=expected_json["refill_requirements"][chain1.value][master_safe][
+                ZERO_ADDRESS
+            ],
+        )
+
+        # Send funds to agent - Funding requirements
+        fund_data = response_json["agent_funding_requests"]
+        previous_balance = {
+            chain_str: {
+                address: {
+                    asset: get_asset_balance(
+                        ledger_api=get_default_ledger_api(Chain(chain_str)),
+                        asset_address=asset,
+                        address=address,
+                    )
+                    for asset in tokens
+                }
+                for address, tokens in addresses.items()
+            }
+            for chain_str, addresses in fund_data.items()
+        }
+        response = client.post(
+            url=f"/api/v2/service/{service_config_id}/fund",
+            json=fund_data,
+        )
+
+        assert response.status_code == HTTPStatus.OK
+        for chain_str, addresses in fund_data.items():
+            chain = Chain(chain_str)
+            for address, tokens in addresses.items():
+                for asset, amount in tokens.items():
+                    _previous_balance = previous_balance[chain_str][address][asset]
+                    actual_balance = get_asset_balance(
+                        ledger_api=get_default_ledger_api(chain),
+                        asset_address=asset,
+                        address=address,
+                    )
+                    assert actual_balance == _previous_balance + int(amount)

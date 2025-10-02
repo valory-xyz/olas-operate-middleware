@@ -62,12 +62,12 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
-    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.operate_types import Chain, ChainAmounts, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
 from operate.quickstart.reset_configs import reset_configs
@@ -247,7 +247,7 @@ class OperateApp:
         """Json representation of the app."""
         return {
             "name": "Operate HTTP server",
-            "version": "0.1.0.rc0",
+            "version": (__version__),
             "home": str(self._path),
         }
 
@@ -287,10 +287,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             raise exception
         return res
 
-    def schedule_funding_job(
+    def schedule_healthcheck_job(
         service_config_id: str,
-        from_safe: bool = True,
     ) -> None:
+        """Schedule a healthcheck job."""
+        if not HEALTH_CHECKER_OFF:
+            # dont start health checker if it's switched off
+            health_checker.start_for_service(service_config_id)
+
+    def schedule_funding_job(service_config_id: str) -> None:
         """Schedule a funding job."""
         logger.info(f"Starting funding job for {service_config_id}")
         if service_config_id in funding_jobs:
@@ -299,20 +304,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         loop = asyncio.get_running_loop()
         funding_jobs[service_config_id] = loop.create_task(
-            operate.service_manager().funding_job(
+            operate.funding_manager.funding_job(
                 service_config_id=service_config_id,
+                service_manager=operate.service_manager(),
                 loop=loop,
-                from_safe=from_safe,
             )
         )
-
-    def schedule_healthcheck_job(
-        service_config_id: str,
-    ) -> None:
-        """Schedule a healthcheck job."""
-        if not HEALTH_CHECKER_OFF:
-            # dont start health checker if it's switched off
-            health_checker.start_for_service(service_config_id)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -764,7 +761,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-            initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
+            initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
@@ -778,6 +775,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
+                if amount <= 0:
+                    continue
+
                 tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
@@ -1000,6 +1000,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .get_agent_performance()
         )
 
+    @app.get("/api/v2/service/{service_config_id}/funding_requirements")
+    @with_retries
+    async def _get_funding_requirements(request: Request) -> JSONResponse:
+        """Get the service refill requirements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().funding_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
+    # TODO deprecate
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
@@ -1046,7 +1062,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
-            manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
@@ -1240,39 +1255,34 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         service_config_id = request.path_params["service_config_id"]
         service_manager = operate.service_manager()
-        wallet_manager = operate.wallet_manager
 
         if not service_manager.exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
         try:
-            service = service_manager.load(service_config_id=service_config_id)
             data = await request.json()
-            for chain_str, addresses in data.items():
-                for address in addresses:
-                    if (
-                        address not in service.agent_addresses
-                        and address
-                        != service.chain_configs[chain_str].chain_data.multisig
-                    ):
-                        return JSONResponse(
-                            content={
-                                "error": f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service_config_id}."
-                            },
-                            status_code=HTTPStatus.BAD_REQUEST,
-                        )
-            for chain_str, addresses in data.items():
-                chain = Chain(chain_str)
-                wallet = wallet_manager.load(chain.ledger_type)
-                for address, assets in addresses.items():
-                    for asset, amount in assets.items():
-                        wallet.transfer(
-                            to=address,
-                            amount=int(amount),
-                            chain=chain,
-                            asset=asset,
-                            from_safe=True,
-                        )
+            service_manager.fund_service(
+                service_config_id=service_config_id,
+                amounts=ChainAmounts(
+                    {
+                        chain_str: {
+                            address: {
+                                asset: int(amount) for asset, amount in assets.items()
+                            }
+                            for address, assets in addresses.items()
+                        }
+                        for chain_str, addresses in data.items()
+                    }
+                ),
+            )
+        except ValueError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except InsufficientFundsException as e:
             logger.error(
                 f"Failed to fund from Master Safe. Insufficient funds: {e}\n{traceback.format_exc()}"

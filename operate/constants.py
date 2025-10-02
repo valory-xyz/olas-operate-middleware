@@ -36,6 +36,11 @@ HEALTHCHECK_JSON = "healthcheck.json"
 FUNDING_REQUIREMENTS_JSON = "funding_requirements.json"
 DEFAULT_TOPUP_THRESHOLD = 0.5
 
+MASTER_EOA_PLACEHOLDER = "master_eoa"
+MASTER_SAFE_PLACEHOLDER = "master_safe"
+AGENT_EOA_PLACEHOLDER = "agent_eoa"
+SERVICE_SAFE_PLACEHOLDER = "service_safe"
+
 AGENT_PERSISTENT_STORAGE_DIR = "persistent_data"
 AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
 AGENT_LOG_DIR = "benchmarks"
@@ -52,6 +57,7 @@ ON_CHAIN_INTERACT_SLEEP = 3.0
 MIN_PASSWORD_LENGTH = 8
 
 HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
+AGENT_FUNDS_STATUS_URL = "http://127.0.0.1:8716/funds-status"
 SAFE_WEBAPP_URL = "https://app.safe.global/home?safe=gno:"
 TM_CONTROL_URL = "http://localhost:8080"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"
