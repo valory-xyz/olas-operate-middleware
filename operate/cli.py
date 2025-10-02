@@ -51,6 +51,9 @@ from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
     OPERATE_HOME,
     SERVICES_DIR,
     USER_JSON,
@@ -59,12 +62,12 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
-    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.operate_types import Chain, ChainAmounts, DeploymentStatus, LedgerType
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
 from operate.quickstart.reset_configs import reset_configs
@@ -74,10 +77,11 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
-from operate.wallet.master import MasterWalletManager
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
@@ -147,13 +151,13 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         if not (
             self.user_account.is_valid(old_password)
             and self.wallet_manager.is_password_valid(old_password)
         ):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
@@ -164,11 +168,11 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
-            raise ValueError("Seed phrase is not valid.")
+            raise ValueError(MSG_INVALID_MNEMONIC)
 
         wallet_manager = self.wallet_manager
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
@@ -181,9 +185,19 @@ class OperateApp:
         return services.manage.ServiceManager(
             path=self._services,
             wallet_manager=self.wallet_manager,
+            funding_manager=self.funding_manager,
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
+
+    @property
+    def funding_manager(self) -> FundingManager:
+        """Load funding manager."""
+        manager = FundingManager(
+            wallet_manager=self.wallet_manager,
+            logger=logger,
+        )
+        return manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
@@ -198,7 +212,6 @@ class OperateApp:
         manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
-            logger=logger,
         )
         manager.setup()
         return manager
@@ -234,7 +247,7 @@ class OperateApp:
         """Json representation of the app."""
         return {
             "name": "Operate HTTP server",
-            "version": "0.1.0.rc0",
+            "version": (__version__),
             "home": str(self._path),
         }
 
@@ -274,10 +287,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             raise exception
         return res
 
-    def schedule_funding_job(
+    def schedule_healthcheck_job(
         service_config_id: str,
-        from_safe: bool = True,
     ) -> None:
+        """Schedule a healthcheck job."""
+        if not HEALTH_CHECKER_OFF:
+            # dont start health checker if it's switched off
+            health_checker.start_for_service(service_config_id)
+
+    def schedule_funding_job(service_config_id: str) -> None:
         """Schedule a funding job."""
         logger.info(f"Starting funding job for {service_config_id}")
         if service_config_id in funding_jobs:
@@ -286,20 +304,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         loop = asyncio.get_running_loop()
         funding_jobs[service_config_id] = loop.create_task(
-            operate.service_manager().funding_job(
+            operate.funding_manager.funding_job(
                 service_config_id=service_config_id,
+                service_manager=operate.service_manager(),
                 loop=loop,
-                from_safe=from_safe,
             )
         )
-
-    def schedule_healthcheck_job(
-        service_config_id: str,
-    ) -> None:
-        """Schedule a healthcheck job."""
-        if not HEALTH_CHECKER_OFF:
-            # dont start health checker if it's switched off
-            health_checker.start_for_service(service_config_id)
 
     def cancel_funding_job(service_config_id: str) -> None:
         """Cancel funding job."""
@@ -577,7 +587,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -632,7 +642,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_NOT_LOGGED_IN_ERROR
         if operate.password != password:
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
@@ -742,14 +752,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values()
+            }
             balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},
                 asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-            initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
+            initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
 
         logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
 
@@ -763,7 +775,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
-                tx_hash = wallet.transfer_asset(
+                if amount <= 0:
+                    continue
+
+                tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
                     chain=chain,
@@ -838,6 +853,82 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 "chain": chain.value,
                 "backup_owner_updated": backup_owner_updated,
                 "message": message,
+            }
+        )
+
+    @app.post("/api/wallet/withdraw")
+    async def _wallet_withdraw(request: Request) -> JSONResponse:
+        """Withdraw from Master Safe / master eoa"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        data = await request.json()
+        if not operate.user_account.is_valid(password=data["password"]):
+            return JSONResponse(
+                content={"error": MSG_INVALID_PASSWORD},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        try:
+            withdraw_assets = data.get("withdraw_assets", {})
+            to = data["to"]
+            wallet_manager = operate.wallet_manager
+            transfer_txs: t.Dict[str, t.Dict[str, t.List[str]]] = {}
+
+            # TODO: Ensure master wallet has enough funding.
+            for chain_str, tokens in withdraw_assets.items():
+                chain = Chain(chain_str)
+                wallet = wallet_manager.load(chain.ledger_type)
+                transfer_txs[chain_str] = {}
+
+                # Process ERC20 first
+                for asset, amount in tokens.items():
+                    if asset != ZERO_ADDRESS:
+                        txs = wallet.transfer_from_safe_then_eoa(
+                            to=to,
+                            amount=int(amount),
+                            chain=chain,
+                            asset=asset,
+                        )
+                        transfer_txs[chain_str][asset] = txs
+
+                # Process native last
+                if ZERO_ADDRESS in tokens:
+                    asset = ZERO_ADDRESS
+                    amount = tokens[asset]
+                    txs = wallet.transfer_from_safe_then_eoa(
+                        to=to,
+                        amount=int(amount),
+                        chain=chain,
+                        asset=asset,
+                    )
+                    transfer_txs[chain_str][asset] = txs
+
+        except InsufficientFundsException as e:
+            logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "transfer_txs": transfer_txs,
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Failed to withdraw funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to withdraw funds. Please check the logs.",
+                    "transfer_txs": transfer_txs,
+                },
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": "Funds withdrawn successfully.",
+                "transfer_txs": transfer_txs,
             }
         )
 
@@ -922,6 +1013,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .get_agent_performance()
         )
 
+    @app.get("/api/v2/service/{service_config_id}/funding_requirements")
+    @with_retries
+    async def _get_funding_requirements(request: Request) -> JSONResponse:
+        """Get the service refill requirements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().funding_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
+    # TODO deprecate
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
     @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
@@ -968,7 +1075,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
-            manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
@@ -1041,6 +1147,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         cancel_funding_job(service_config_id=service_config_id)
         return JSONResponse(content=deployment.json)
 
+    # TODO Deprecate
     @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
     @with_retries
     async def _withdraw_onchain(request: Request) -> JSONResponse:
@@ -1074,13 +1181,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     withdrawal_address=withdrawal_address,
                 )
 
-                # drain the master safe and master signer for the home chain
+                # drain the Master Safe and master signer for the home chain
                 chain = Chain(service.home_chain)
                 master_wallet = service_manager.wallet_manager.load(
                     ledger_type=chain.ledger_type
                 )
 
-                # drain the master safe
+                # drain the Master Safe
                 logger.info(
                     f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
                 )
@@ -1109,6 +1216,110 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
+
+    @app.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
+    @with_retries
+    async def _terminate_and_withdraw(request: Request) -> JSONResponse:
+        """Terminate the service and withdraw all the funds to Master Safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+        wallet_manager = operate.wallet_manager
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            pause_all_services()
+            service = service_manager.load(service_config_id=service_config_id)
+            for chain in service.chain_configs:
+                wallet = wallet_manager.load(Chain(chain).ledger_type)
+                master_safe = wallet.safes[Chain(chain)]
+                service_manager.terminate_service_on_chain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                    withdrawal_address=master_safe,
+                )
+
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Terminate and withdraw failed: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to terminate and withdraw funds. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Terminate and withdraw successful"}
+        )
+
+    @app.post("/api/v2/service/{service_config_id}/fund")
+    async def fund_service(request: Request) -> JSONResponse:
+        """Fund agent or service safe via Master Safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            data = await request.json()
+            service_manager.fund_service(
+                service_config_id=service_config_id,
+                amounts=ChainAmounts(
+                    {
+                        chain_str: {
+                            address: {
+                                asset: int(amount) for asset, amount in assets.items()
+                            }
+                            for address, assets in addresses.items()
+                        }
+                        for chain_str, addresses in data.items()
+                    }
+                ),
+            )
+        except ValueError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to fund from Master Safe. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to fund from Master Safe. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Funded from Master Safe successfully"}
+        )
 
     @app.post("/api/bridge/bridge_refill_requirements")
     @with_retries

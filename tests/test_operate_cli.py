@@ -28,15 +28,16 @@ import pytest
 from web3 import Web3
 
 from operate.cli import OperateApp
-from operate.constants import OPERATE, USER_JSON
+from operate.constants import (
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
+    OPERATE,
+    USER_JSON,
+)
 from operate.operate_types import LedgerType
 
 from tests.conftest import random_string
-
-
-MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
-MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
-MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
 
 def random_mnemonic(num_words: int = 12) -> str:
