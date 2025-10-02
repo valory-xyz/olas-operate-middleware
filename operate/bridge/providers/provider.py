@@ -33,7 +33,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -64,7 +63,7 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 )
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
-ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
+ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').to_0x_hex()[:10]
 
 GAS_ESTIMATE_BUFFER = 1.10
 
@@ -228,11 +227,6 @@ class Provider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
         return ledger_api
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
@@ -241,11 +235,6 @@ class Provider(ABC):
         chain = Chain(from_chain)
         wallet = self.wallet_manager.load(chain.ledger_type)
         ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
         return ledger_api
 
     @abstractmethod
@@ -414,7 +403,7 @@ class Provider(ABC):
                     dry_run=False,
                 )
                 self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                tx_hashes.append(tx_receipt.get("transactionHash", "").hex())
+                tx_hashes.append(tx_receipt.get("transactionHash", "").to_0x_hex())
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,

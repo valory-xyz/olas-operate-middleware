@@ -203,7 +203,7 @@ def create_safe(
         contract="",
         kwargs={},
     )
-    tx_hash = receipt.get("transactionHash", "").hex()
+    tx_hash = receipt.get("transactionHash", "").to_0x_hex()
     instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
         ledger_api=ledger_api,
         contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
@@ -282,7 +282,7 @@ def send_safe_txs(
         kwargs={},
         dry_run=False,
     )
-    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
     return tx_hash
 
 
@@ -297,8 +297,8 @@ def add_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="addOwnerWithThreshold",
+    txd = instance.encode_abi(
+        abi_element_identifier="addOwnerWithThreshold",
         args=[
             owner,
             1,
@@ -343,8 +343,8 @@ def swap_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="swapOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="swapOwner",
         args=[
             prev_owner,
             old_owner,
@@ -373,8 +373,8 @@ def remove_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="removeOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="removeOwner",
         args=[
             prev_owner,
             owner,
@@ -451,7 +451,7 @@ def transfer(
         kwargs={},
         dry_run=False,
     )
-    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
     return tx_hash
 
 
@@ -469,8 +469,8 @@ def transfer_erc20_from_safe(
         ledger_api=ledger_api,
         contract_address=token,
     )
-    txd = instance.encodeABI(
-        fn_name="transfer",
+    txd = instance.encode_abi(
+        abi_element_identifier="transfer",
         args=[
             to,
             amount,
@@ -557,7 +557,7 @@ def drain_eoa(
 
     tx_hash = tx_receipt.get("transactionHash", None)
     if tx_hash is not None:
-        return tx_hash.hex()
+        return tx_hash.to_0x_hex()
 
     return None
 

@@ -70,9 +70,8 @@ class MasterWallet(LocalResource):
 
     path: Path
     address: str
-
-    safes: t.Dict[Chain, str] = field(default_factory=dict)
-    safe_chains: t.List[Chain] = field(default_factory=list)
+    safes: t.Dict[Chain, str]
+    safe_chains: t.List[Chain]
     ledger_type: LedgerType
     safe_nonce: t.Optional[int] = None
 
@@ -122,6 +121,7 @@ class MasterWallet(LocalResource):
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
+            poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
         )
 
     def transfer(
@@ -281,7 +281,7 @@ class EthereumMasterWallet(MasterWallet):
 
         setattr(tx_helper, "build", _build_tx)  # noqa: B010
         tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
         return tx_hash
 
     def _transfer_from_safe(
@@ -363,7 +363,7 @@ class EthereumMasterWallet(MasterWallet):
 
         setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
         tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
         return tx_hash
 
     def transfer(

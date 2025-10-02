@@ -24,7 +24,7 @@ from typing import Tuple
 import requests
 from aea_ledger_ethereum import Web3
 
-from operate.constants import MECH_MARKETPLACE_JSON_URL
+from operate.constants import DEFAULT_TIMEOUT, MECH_MARKETPLACE_JSON_URL
 from operate.operate_types import Chain
 from operate.quickstart.utils import print_section
 from operate.services.protocol import EthSafeTxBuilder
@@ -57,7 +57,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     # Get the mech type from service config
     mech_type = service.env_variables.get("MECH_TYPE", {}).get("value", "Native")
 
-    abi = requests.get(MECH_MARKETPLACE_JSON_URL).json()["abi"]
+    abi = requests.get(MECH_MARKETPLACE_JSON_URL, timeout=DEFAULT_TIMEOUT).json()["abi"]
     chain = Chain.from_string(service.home_chain)
     mech_marketplace_address = service.env_variables["MECH_MARKETPLACE_ADDRESS"][
         "value"
@@ -82,7 +82,7 @@ def deploy_mech(sftxb: EthSafeTxBuilder, service: Service) -> Tuple[str, str]:
     contract = sftxb.ledger_api.api.eth.contract(
         address=Web3.to_checksum_address(mech_marketplace_address), abi=abi
     )
-    data = contract.encodeABI(
+    data = contract.encode_abi(
         "create",
         args=[
             service.chain_configs[service.home_chain].chain_data.token,
