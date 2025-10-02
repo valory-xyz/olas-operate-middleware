@@ -18,3 +18,20 @@
 # ------------------------------------------------------------------------------
 
 """Operate app."""
+
+import logging
+from importlib.metadata import PackageNotFoundError, version
+
+
+try:
+    # Prefer the distribution name if installed; fall back to the module name
+    __version__ = version("olas-operate-middleware")
+except PackageNotFoundError:
+    try:
+        __version__ = version("operate")
+    except PackageNotFoundError:
+        logger = logging.getLogger("operate")
+        logger.warning("Could not determine version, using 0.0.0+local")
+        __version__ = "0.0.0+local"
+
+logging.getLogger("aea").setLevel(logging.ERROR)

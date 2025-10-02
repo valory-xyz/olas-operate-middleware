@@ -1,0 +1,23 @@
+name: foreign_omnibridge
+author: valory
+version: 0.1.0
+type: contract
+description: ForeignOmnibridge
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeibsmumov3s36vfo24xp2niilcp3ywju2d4yqfadllyjncqtgtndly
+  build/ForeignOmnibridge.json: bafybeibmcflt7w5p5szgii7glbtrvjahweclowz2k7e6qjq7yfbvszy6em
+  contract.py: bafybeicyccimmstipoba3irqzpyfntxnpvfvgrxsnihygbs7xln5l6auma
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: ForeignOmnibridge
+contract_interface_paths:
+  ethereum: build/ForeignOmnibridge.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: ==1.60.0
+  open-aea-test-autonomy:
+    version: ==0.18.3
+  web3:
+    version: <7,>=6.0.0

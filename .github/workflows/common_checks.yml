@@ -13,7 +13,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.10.9"]
+        python-version: ["3.10"]
     timeout-minutes: 30
     steps:
     - uses: actions/checkout@v4
@@ -58,10 +58,22 @@ jobs:
 
     strategy:
       matrix:
-        os: [ ubuntu-latest ]
-        python-version: [ "3.10.9" ]
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        python-version: [ "3.10" ]
   
     timeout-minutes: 30
+
+    env:
+      BASE_RPC: ${{ secrets.BASE_RPC }}
+      ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
+      GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
+      MODE_RPC: ${{ secrets.MODE_RPC }}
+      OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
+      BASE_TESTNET_RPC: ${{ secrets.BASE_TESTNET_RPC }}
+      ETHEREUM_TESTNET_RPC: ${{ secrets.ETHEREUM_TESTNET_RPC }}
+      GNOSIS_TESTNET_RPC: ${{ secrets.GNOSIS_TESTNET_RPC }}
+      MODE_TESTNET_RPC: ${{ secrets.MODE_TESTNET_RPC }}
+      OPTIMISM_TESTNET_RPC: ${{ secrets.OPTIMISM_TESTNET_RPC }}
 
     steps:
       - uses: actions/checkout@v3

@@ -45,7 +45,9 @@ from aea.configurations.constants import (
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
+from autonomy.configurations.constants import DEFAULT_SERVICE_CONFIG_FILE
 from autonomy.configurations.loader import apply_env_variables, load_service_config
+from autonomy.constants import DEFAULT_KEYS_FILE, DOCKER_COMPOSE_YAML
 from autonomy.deploy.base import BaseDeploymentGenerator
 from autonomy.deploy.base import ServiceBuilder as BaseServiceBuilder
 from autonomy.deploy.constants import (
@@ -62,13 +64,13 @@ from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
-    DEPLOYMENT,
+    AGENT_PERSISTENT_STORAGE_ENV_VAR,
+    CONFIG_JSON,
+    DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
-    DOCKER_COMPOSE_YAML,
-    KEYS_JSON,
-    ZERO_ADDRESS,
+    HEALTHCHECK_JSON,
 )
-from operate.keys import Keys
+from operate.keys import KeysManager
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
@@ -81,7 +83,6 @@ from operate.operate_types import (
     LedgerConfig,
     LedgerConfigs,
     OnChainData,
-    OnChainState,
     OnChainUserParams,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -89,6 +90,7 @@ from operate.operate_types import (
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
+from operate.utils.ssl import create_ssl_certificate
 
 
 # pylint: disable=no-member,redefined-builtin,too-many-instance-attributes,too-many-locals
@@ -96,69 +98,11 @@ from operate.services.utils import tendermint
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-DELETE_PREFIX = "delete_"
-SERVICE_CONFIG_VERSION = 5
+SERVICE_CONFIG_VERSION = 8
 SERVICE_CONFIG_PREFIX = "sc-"
 
-NON_EXISTENT_MULTISIG = "0xm"
+NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
-
-DEFAULT_TRADER_ENV_VARS = {
-    "GNOSIS_LEDGER_RPC": {
-        "name": "Gnosis ledger RPC",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "STAKING_CONTRACT_ADDRESS": {
-        "name": "Staking contract address",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "MECH_MARKETPLACE_CONFIG": {
-        "name": "Mech marketplace configuration",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "MECH_ACTIVITY_CHECKER_CONTRACT": {
-        "name": "Mech activity checker contract",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "MECH_CONTRACT_ADDRESS": {
-        "name": "Mech contract address",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "MECH_REQUEST_PRICE": {
-        "name": "Mech request price",
-        "description": "",
-        "value": "10000000000000000",
-        "provision_type": "computed",
-    },
-    "USE_MECH_MARKETPLACE": {
-        "name": "Use Mech marketplace",
-        "description": "",
-        "value": "False",
-        "provision_type": "computed",
-    },
-    "REQUESTER_STAKING_INSTANCE_ADDRESS": {
-        "name": "Requester staking instance address",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-    "PRIORITY_MECH_ADDRESS": {
-        "name": "Priority Mech address",
-        "description": "",
-        "value": "",
-        "provision_type": "computed",
-    },
-}
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
 
@@ -286,6 +230,9 @@ class ServiceHelper:
                 override["type"] == "connection"
                 and "valory/ledger" in override["public_id"]
             ):
+                if 0 in override:  # take the values from the first config
+                    override = override[0]
+
                 for _, config in override["config"]["ledger_apis"].items():
                     # TODO chain name is inferred from the chain_id. The actual id provided on service.yaml is ignored.
                     chain = Chain.from_id(chain_id=config["chain_id"])  # type: ignore
@@ -313,13 +260,24 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         tendermint_executable = str(
             shutil.which("tendermint"),
         )
+        env = {}
+        env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
         tendermint_executable = str(
             Path(os.path.dirname(sys.executable)) / "tendermint"
         )
+
         if platform.system() == "Windows":
+            env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
             tendermint_executable = str(
                 Path(os.path.dirname(sys.executable)) / "tendermint.exe"
             )
+
+        if not (getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS")):
+            # we dont run inside pyinstaller, mean DEV mode!
+            tendermint_executable = "tendermint"
+            if platform.system() == "Windows":
+                tendermint_executable = "tendermint.exe"
+
         subprocess.run(  # pylint: disable=subprocess-run-check # nosec
             args=[
                 tendermint_executable,
@@ -396,7 +354,7 @@ class Deployment(LocalResource):
     nodes: DeployedNodes
     path: Path
 
-    _file = "deployment.json"
+    _file = DEPLOYMENT_JSON
 
     @staticmethod
     def new(path: Path) -> "Deployment":
@@ -421,23 +379,23 @@ class Deployment(LocalResource):
 
     def copy_previous_agent_run_logs(self) -> None:
         """Copy previous agent logs."""
-        source_path = self.path / DEPLOYMENT / "agent" / "log.txt"
+        source_path = self.path / DEPLOYMENT_DIR / "agent" / "log.txt"
         destination_path = self.path / "prev_log.txt"
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
     def _build_kubernetes(self, force: bool = True) -> None:
         """Build kubernetes deployment."""
-        k8s_build = self.path / DEPLOYMENT / "abci_build_k8s"
+        k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
             shutil.rmtree(k8s_build)
         mkdirs(build_dir=k8s_build)
 
         service = Service.load(path=self.path)
         builder = ServiceBuilder.from_dir(
-            path=service.service_path,
-            keys_file=self.path / KEYS_JSON,
-            number_of_agents=len(service.keys),
+            path=service.package_absolute_path,
+            keys_file=self.path / DEFAULT_KEYS_FILE,
+            number_of_agents=len(service.agent_addresses),
         )
         builder.deplopyment_type = KubernetesGenerator.deployment_type
         (
@@ -468,7 +426,7 @@ class Deployment(LocalResource):
             force=force,
         )
 
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
             return
         if build.exists() and force:
@@ -476,16 +434,12 @@ class Deployment(LocalResource):
             shutil.rmtree(build)
         mkdirs(build_dir=build)
 
-        keys_file = self.path / KEYS_JSON
+        keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
                 [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
                 ],
                 indent=4,
             ),
@@ -493,9 +447,9 @@ class Deployment(LocalResource):
         )
         try:
             builder = ServiceBuilder.from_dir(
-                path=service.service_path,
+                path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -557,7 +511,10 @@ class Deployment(LocalResource):
                 new_mappings = []
                 for mapping in deployment["services"][node]["volumes"]:
                     if mapping.startswith("./data"):
-                        mapping = "." + mapping
+                        (self.path / "persistent_data").mkdir(
+                            exist_ok=True, parents=True
+                        )
+                        mapping = mapping.replace("./data", "../persistent_data")
 
                     new_mappings.append(mapping)
 
@@ -571,7 +528,7 @@ class Deployment(LocalResource):
 
     def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
         """Build host depployment."""
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
             return
 
@@ -600,16 +557,12 @@ class Deployment(LocalResource):
         chain_config = service.chain_configs[chain]
         chain_data = chain_config.chain_data
 
-        keys_file = self.path / KEYS_JSON
+        keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
                 [
-                    {
-                        "address": key.address,
-                        "private_key": key.private_key,
-                        "ledger": key.ledger.name.lower(),
-                    }
-                    for key in service.keys
+                    KeysManager().get(address).json
+                    for address in service.agent_addresses
                 ],
                 indent=4,
             ),
@@ -617,9 +570,9 @@ class Deployment(LocalResource):
         )
         try:
             builder = ServiceBuilder.from_dir(
-                path=service.service_path,
+                path=service.package_absolute_path,
                 keys_file=keys_file,
-                number_of_agents=len(service.keys),
+                number_of_agents=len(service.agent_addresses),
             )
             builder.deplopyment_type = HostDeploymentGenerator.deployment_type
             builder.try_update_abci_connection_params()
@@ -668,14 +621,38 @@ class Deployment(LocalResource):
         # TODO: Maybe remove usage of chain and use home_chain always?
         original_env = os.environ.copy()
         service = Service.load(path=self.path)
-        service.consume_env_variables()
 
         if use_docker or use_kubernetes:
+            ssl_key_path, ssl_cert_path = create_ssl_certificate(
+                ssl_dir=service.path / PERSISTENT_DATA_DIR / "ssl"
+            )
+            service.update_env_variables_values(
+                {
+                    "STORE_PATH": "/data",
+                    "SSL_KEY_PATH": (
+                        Path("/data") / "ssl" / ssl_key_path.name
+                    ).as_posix(),
+                    "SSL_CERT_PATH": (
+                        Path("/data") / "ssl" / ssl_cert_path.name
+                    ).as_posix(),
+                }
+            )
+            service.consume_env_variables()
             if use_docker:
                 self._build_docker(force=force, chain=chain)
             if use_kubernetes:
                 self._build_kubernetes(force=force)
         else:
+            ssl_key_path, ssl_cert_path = create_ssl_certificate(
+                ssl_dir=service.path / DEPLOYMENT_DIR / "ssl"
+            )
+            service.update_env_variables_values(
+                {
+                    "SSL_KEY_PATH": str(ssl_key_path),
+                    "SSL_CERT_PATH": str(ssl_cert_path),
+                }
+            )
+            service.consume_env_variables()
             self._build_host(force=force, chain=chain)
 
         os.environ.clear()
@@ -693,7 +670,11 @@ class Deployment(LocalResource):
 
         try:
             if use_docker:
-                run_deployment(build_dir=self.path / "deployment", detach=True)
+                run_deployment(
+                    build_dir=self.path / "deployment",
+                    detach=True,
+                    project_name=self.path.name,
+                )
             else:
                 run_host_deployment(build_dir=self.path / "deployment")
         except Exception:
@@ -713,7 +694,10 @@ class Deployment(LocalResource):
         self.store()
 
         if use_docker:
-            stop_deployment(build_dir=self.path / "deployment")
+            stop_deployment(
+                build_dir=self.path / "deployment",
+                project_name=self.path.name,
+            )
         else:
             stop_host_deployment(build_dir=self.path / "deployment")
 
@@ -722,7 +706,7 @@ class Deployment(LocalResource):
 
     def delete(self) -> None:
         """Delete the deployment."""
-        build = self.path / DEPLOYMENT
+        build = self.path / DEPLOYMENT_DIR
         shutil.rmtree(build)
         self.status = DeploymentStatus.DELETED
         self.store()
@@ -736,24 +720,31 @@ class Service(LocalResource):
     service_config_id: str
     hash: str
     hash_history: t.Dict[int, str]
-    keys: Keys
+    agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
 
     path: Path
-    service_path: Path
+    package_path: Path
 
     name: t.Optional[str] = None
 
     _helper: t.Optional[ServiceHelper] = None
     _deployment: t.Optional[Deployment] = None
 
-    _file = "config.json"
+    _file = CONFIG_JSON
+
+    @property
+    def json(self) -> t.Dict:
+        """To dictionary object."""
+        obj = super().json
+        obj["service_public_id"] = self.service_public_id()
+        return obj
 
     @staticmethod
-    def _determine_agent_id(service_name: str) -> int:
+    def determine_agent_id(service_name: str) -> int:
         """Determine the appropriate agent ID based on service name."""
         service_name_lower = service_name.lower()
         if "mech" in service_name_lower:
@@ -765,191 +756,6 @@ class Service(LocalResource):
         return AGENT_TYPE_IDS["trader"]
 
     @classmethod
-    def migrate_format(cls, path: Path) -> bool:  # pylint: disable=too-many-statements
-        """Migrate the JSON file format if needed."""
-
-        if not path.is_dir():
-            return False
-
-        if not path.name.startswith(SERVICE_CONFIG_PREFIX) and not path.name.startswith(
-            "bafybei"
-        ):
-            return False
-
-        if path.name.startswith("bafybei"):
-            backup_name = f"backup_{int(time.time())}_{path.name}"
-            backup_path = path.parent / backup_name
-            shutil.copytree(path, backup_path)
-            deployment_path = backup_path / "deployment"
-            if deployment_path.is_dir():
-                shutil.rmtree(deployment_path)
-
-        with open(path / Service._file, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        version = data.get("version", 0)
-        if version > SERVICE_CONFIG_VERSION:
-            raise RuntimeError(
-                f"Service configuration in {path} has version {version}, which means it was created with a newer version of olas-operate-middleware. Only configuration versions <= {SERVICE_CONFIG_VERSION} are supported by this version of olas-operate-middleware."
-            )
-
-        # Complete missing env vars for trader
-        if "trader" in data["name"].lower():
-            data.setdefault("env_variables", {})
-
-            for key, value in DEFAULT_TRADER_ENV_VARS.items():
-                if key not in data["env_variables"]:
-                    data["env_variables"][key] = value
-
-            with open(path / Service._file, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=2)
-
-        if version == SERVICE_CONFIG_VERSION:
-            return False
-
-        # Migration steps for older versions
-        if version == 0:
-            new_data = {
-                "version": 2,
-                "hash": data.get("hash"),
-                "keys": data.get("keys"),
-                "home_chain_id": "100",  # This is the default value for version 2 - do not change, will be corrected below
-                "chain_configs": {
-                    "100": {  # This is the default value for version 2 - do not change, will be corrected below
-                        "ledger_config": {
-                            "rpc": data.get("ledger_config", {}).get("rpc"),
-                            "type": data.get("ledger_config", {}).get("type"),
-                            "chain": data.get("ledger_config", {}).get("chain"),
-                        },
-                        "chain_data": {
-                            "instances": data.get("chain_data", {}).get(
-                                "instances", []
-                            ),
-                            "token": data.get("chain_data", {}).get("token"),
-                            "multisig": data.get("chain_data", {}).get("multisig"),
-                            "staked": data.get("chain_data", {}).get("staked", False),
-                            "on_chain_state": data.get("chain_data", {}).get(
-                                "on_chain_state", 3
-                            ),
-                            "user_params": {
-                                "staking_program_id": "pearl_alpha",
-                                "nft": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("nft"),
-                                "threshold": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("threshold"),
-                                "use_staking": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("use_staking"),
-                                "cost_of_bond": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("cost_of_bond"),
-                                "fund_requirements": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("fund_requirements", {}),
-                                "agent_id": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("agent_id", "14"),
-                            },
-                        },
-                    }
-                },
-                "service_path": data.get("service_path", ""),
-                "name": data.get("name", ""),
-            }
-            data = new_data
-
-        if version < 4:
-            # Add missing fields introduced in later versions, if necessary.
-            for _, chain_data in data.get("chain_configs", {}).items():
-                chain_data.setdefault("chain_data", {}).setdefault(
-                    "user_params", {}
-                ).setdefault("use_mech_marketplace", False)
-                service_name = data.get("name", "")
-                agent_id = cls._determine_agent_id(service_name)
-                chain_data.setdefault("chain_data", {}).setdefault("user_params", {})[
-                    "agent_id"
-                ] = agent_id
-
-            data["description"] = data.setdefault("description", data.get("name"))
-            data["hash_history"] = data.setdefault(
-                "hash_history", {int(time.time()): data["hash"]}
-            )
-
-            if "service_config_id" not in data:
-                service_config_id = Service.get_new_service_config_id(path)
-                new_path = path.parent / service_config_id
-                data["service_config_id"] = service_config_id
-                path = path.rename(new_path)
-
-            old_to_new_ledgers = ["ethereum", "solana"]
-            for key_data in data["keys"]:
-                key_data["ledger"] = old_to_new_ledgers[key_data["ledger"]]
-
-            old_to_new_chains = [
-                "ethereum",
-                "goerli",
-                "gnosis",
-                "solana",
-                "optimistic",
-                "base",
-                "mode",
-            ]
-            new_chain_configs = {}
-            for chain_id, chain_data in data["chain_configs"].items():
-                chain_data["ledger_config"]["chain"] = old_to_new_chains[
-                    chain_data["ledger_config"]["chain"]
-                ]
-                del chain_data["ledger_config"]["type"]
-                new_chain_configs[Chain.from_id(int(chain_id)).value] = chain_data  # type: ignore
-
-            data["chain_configs"] = new_chain_configs
-            data["home_chain"] = data.setdefault("home_chain", Chain.from_id(int(data.get("home_chain_id", "100"))).value)  # type: ignore
-            del data["home_chain_id"]
-
-            if "env_variables" not in data:
-                if data["name"] == "valory/trader_pearl":
-                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS
-                else:
-                    data["env_variables"] = {}
-
-        if version < 5:
-            new_chain_configs = {}
-            for chain, chain_data in data["chain_configs"].items():
-                fund_requirements = chain_data["chain_data"]["user_params"][
-                    "fund_requirements"
-                ]
-                if ZERO_ADDRESS not in fund_requirements:
-                    chain_data["chain_data"]["user_params"]["fund_requirements"] = {
-                        ZERO_ADDRESS: fund_requirements
-                    }
-
-                new_chain_configs[chain] = chain_data  # type: ignore
-            data["chain_configs"] = new_chain_configs
-
-        data["version"] = SERVICE_CONFIG_VERSION
-
-        # Redownload service path
-        service_path = path / Path(data["service_path"]).name
-        if service_path.exists() and service_path.is_dir():
-            print("EXISTS")
-            shutil.rmtree(service_path)
-
-        service_path = Path(
-            IPFSTool().download(
-                hash_id=data["hash"],
-                target_dir=path,
-            )
-        )
-        data["service_path"] = str(service_path)
-
-        with open(path / Service._file, "w", encoding="utf-8") as file:
-            json.dump(data, file, indent=2)
-
-        return True
-
-    @classmethod
     def load(cls, path: Path) -> "Service":
         """Load a service"""
         return super().load(path)  # type: ignore
@@ -958,7 +764,7 @@ class Service(LocalResource):
     def helper(self) -> ServiceHelper:
         """Get service helper."""
         if self._helper is None:
-            self._helper = ServiceHelper(path=self.service_path)
+            self._helper = ServiceHelper(path=self.package_absolute_path)
         return t.cast(ServiceHelper, self._helper)
 
     @property
@@ -972,9 +778,38 @@ class Service(LocalResource):
             self._deployment = Deployment.new(path=self.path)
         return t.cast(Deployment, self._deployment)
 
+    @property
+    def package_absolute_path(self) -> Path:
+        """Get the package_absolute_path."""
+        self._ensure_package_exists()
+        package_absolute_path = self.path / self.package_path
+        return package_absolute_path
+
+    def _ensure_package_exists(self) -> None:
+        package_absolute_path = self.path / self.package_path
+        if (
+            not package_absolute_path.exists()
+            or not (package_absolute_path / DEFAULT_SERVICE_CONFIG_FILE).exists()
+        ):
+            with tempfile.TemporaryDirectory(dir=self.path) as temp_dir:
+                package_temp_path = Path(
+                    IPFSTool().download(
+                        hash_id=self.hash,
+                        target_dir=temp_dir,
+                    )
+                )
+                target_path = self.path / package_temp_path.name
+
+                if target_path.exists():
+                    shutil.rmtree(target_path)
+
+                shutil.move(package_temp_path, target_path)
+                self.package_path = Path(target_path.name)
+                self.store()
+
     @staticmethod
     def new(  # pylint: disable=too-many-locals
-        keys: Keys,
+        agent_addresses: t.List[str],
         service_template: ServiceTemplate,
         storage: Path,
     ) -> "Service":
@@ -983,14 +818,14 @@ class Service(LocalResource):
         service_config_id = Service.get_new_service_config_id(storage)
         path = storage / service_config_id
         path.mkdir()
-        service_path = Path(
+        package_absolute_path = Path(
             IPFSTool().download(
                 hash_id=service_template["hash"],
                 target_dir=path,
             )
         )
 
-        ledger_configs = ServiceHelper(path=service_path).ledger_configs()
+        ledger_configs = ServiceHelper(path=package_absolute_path).ledger_configs()
 
         chain_configs = {}
         for chain, config in service_template["configurations"].items():
@@ -1001,8 +836,6 @@ class Service(LocalResource):
                 instances=[],
                 token=NON_EXISTENT_TOKEN,
                 multisig=NON_EXISTENT_MULTISIG,
-                staked=False,
-                on_chain_state=OnChainState.NON_EXISTENT,
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
@@ -1018,12 +851,12 @@ class Service(LocalResource):
             name=service_template["name"],
             description=service_template["description"],
             hash=service_template["hash"],
-            keys=keys,
+            agent_addresses=agent_addresses,
             home_chain=service_template["home_chain"],
             hash_history={current_timestamp: service_template["hash"]},
             chain_configs=chain_configs,
-            path=service_path.parent,
-            service_path=service_path,
+            path=package_absolute_path.parent,
+            package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
         )
         service.store()
@@ -1031,7 +864,9 @@ class Service(LocalResource):
 
     def service_public_id(self, include_version: bool = True) -> str:
         """Get the public id (based on the service hash)."""
-        with (self.service_path / "service.yaml").open("r", encoding="utf-8") as fp:
+        with (self.package_absolute_path / DEFAULT_SERVICE_CONFIG_FILE).open(
+            "r", encoding="utf-8"
+        ) as fp:
             service_yaml, *_ = yaml_load_all(fp)
 
         public_id = f"{service_yaml['author']}/{service_yaml['name']}"
@@ -1061,7 +896,9 @@ class Service(LocalResource):
                 )
             )
 
-            with (package_path / "service.yaml").open("r", encoding="utf-8") as fp:
+            with (package_path / DEFAULT_SERVICE_CONFIG_FILE).open(
+                "r", encoding="utf-8"
+            ) as fp:
                 service_yaml, *_ = yaml_load_all(fp)
 
             public_id = f"{service_yaml['author']}/{service_yaml['name']}"
@@ -1082,7 +919,7 @@ class Service(LocalResource):
 
     def get_latest_healthcheck(self) -> t.Dict:
         """Return the latest stored healthcheck.json"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if not healthcheck_json_path.exists():
             return {}
@@ -1095,13 +932,47 @@ class Service(LocalResource):
 
     def remove_latest_healthcheck(self) -> None:
         """Remove the latest healthcheck.json, if it exists"""
-        healthcheck_json_path = self.path / "healthcheck.json"
+        healthcheck_json_path = self.path / HEALTHCHECK_JSON
 
         if healthcheck_json_path.exists():
             try:
                 healthcheck_json_path.unlink()
             except Exception as e:  # pylint: disable=broad-except
                 print(f"Exception deleting {healthcheck_json_path}: {e}")
+
+    def get_agent_performance(self) -> t.Dict:
+        """Return the agent activity"""
+
+        # Default values
+        agent_performance: t.Dict[str, t.Any] = {
+            "timestamp": None,
+            "metrics": [],
+            "last_activity": None,
+            "last_chat_message": None,
+        }
+
+        agent_performance_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "agent_performance.json"
+        )
+
+        if agent_performance_json_path.exists():
+            try:
+                with open(agent_performance_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    agent_performance.update(data)
+            except (json.JSONDecodeError, OSError) as e:
+                # Keep default values if file is invalid
+                print(
+                    f"Error reading file 'agent_performance.json': {e}"
+                )  # TODO Use logger
+
+        return dict(sorted(agent_performance.items()))
 
     def update(
         self,
@@ -1135,14 +1006,17 @@ class Service(LocalResource):
         self.description = service_template.get("description", self.description)
         self.name = service_template.get("name", self.name)
 
-        shutil.rmtree(self.service_path)
-        service_path = Path(
+        package_absolute_path = self.path / self.package_path
+        if package_absolute_path.exists():
+            shutil.rmtree(package_absolute_path)
+
+        package_absolute_path = Path(
             IPFSTool().download(
                 hash_id=self.hash,
                 target_dir=self.path,
             )
         )
-        self.service_path = service_path
+        self.package_path = Path(package_absolute_path.name)
 
         # env_variables
         if partial_update:
@@ -1154,7 +1028,7 @@ class Service(LocalResource):
         # chain_configs
         # TODO support remove chains for non-partial updates
         # TODO ensure all and only existing chains are passed for non-partial updates
-        ledger_configs = ServiceHelper(path=self.service_path).ledger_configs()
+        ledger_configs = ServiceHelper(path=self.package_absolute_path).ledger_configs()
         for chain, new_config in service_template.get("configurations", {}).items():
             if chain in self.chain_configs:
                 # The template is providing a chain configuration that already
@@ -1182,8 +1056,6 @@ class Service(LocalResource):
                     instances=[],
                     token=NON_EXISTENT_TOKEN,
                     multisig=NON_EXISTENT_MULTISIG,
-                    staked=False,
-                    on_chain_state=OnChainState.NON_EXISTENT,
                     user_params=OnChainUserParams.from_json(new_config),  # type: ignore
                 )
 
@@ -1205,6 +1077,8 @@ class Service(LocalResource):
                 config  # type: ignore
             )
 
+            self.chain_configs[chain].ledger_config.rpc = config["rpc"]
+
         self.store()
 
     def consume_env_variables(self) -> None:
@@ -1213,7 +1087,7 @@ class Service(LocalResource):
         Note that this method modifies os.environ. Consider if you need a backup of os.environ before using this method.
         """
         for env_var, attributes in self.env_variables.items():
-            os.environ[env_var] = str(attributes["value"])
+            os.environ[env_var] = str(attributes.get("value", ""))
 
     def update_env_variables_values(
         self, env_var_to_value: t.Dict[str, t.Any], except_if_undefined: bool = False
@@ -1244,10 +1118,3 @@ class Service(LocalResource):
 
         if updated:
             self.store()
-
-    def delete(self) -> None:
-        """Delete a service."""
-        parent_directory = self.path.parent
-        new_path = parent_directory / f"{DELETE_PREFIX}{self.path.name}"
-        shutil.move(self.path, new_path)
-        shutil.rmtree(new_path)

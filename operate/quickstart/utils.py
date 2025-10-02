@@ -21,8 +21,10 @@
 
 import getpass
 import os
+from dataclasses import dataclass
 from decimal import Decimal, ROUND_UP
-from typing import Optional
+from pathlib import Path
+from typing import Dict, Optional, Union, get_args, get_origin
 
 import requests
 from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
@@ -30,6 +32,7 @@ from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain
+from operate.resource import LocalResource, deserialize
 
 
 def print_box(text: str, margin: int = 1, character: str = "=") -> None:
@@ -67,7 +70,7 @@ def unit_to_wei(unit: float) -> int:
 CHAIN_TO_METADATA = {
     "gnosis": {
         "name": "Gnosis",
-        "gasFundReq": unit_to_wei(0.5),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.5),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.GNOSIS],
         "token_data": {
             ZERO_ADDRESS: {
@@ -91,7 +94,7 @@ CHAIN_TO_METADATA = {
     },
     "mode": {
         "name": "Mode",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.MODE],
         "token_data": {
             ZERO_ADDRESS: {
@@ -113,20 +116,20 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
-    "optimistic": {
+    "optimism": {
         "name": "Optimism",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
-        "staking_bonding_token": OLAS[Chain.OPTIMISTIC],
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
+        "staking_bonding_token": OLAS[Chain.OPTIMISM],
         "token_data": {
             ZERO_ADDRESS: {
                 "symbol": "ETH",
                 "decimals": 18,
             },
-            USDC[Chain.OPTIMISTIC]: {
+            USDC[Chain.OPTIMISM]: {
                 "symbol": "USDC",
                 "decimals": 6,
             },
-            OLAS[Chain.OPTIMISTIC]: {
+            OLAS[Chain.OPTIMISM]: {
                 "symbol": "OLAS",
                 "decimals": 18,
             },
@@ -139,7 +142,7 @@ CHAIN_TO_METADATA = {
     },
     "base": {
         "name": "Base",
-        "gasFundReq": unit_to_wei(0.005),  # fund for master wallet
+        "gasFundReq": unit_to_wei(0.005),  # fund for master EOA
         "staking_bonding_token": OLAS[Chain.BASE],
         "token_data": {
             ZERO_ADDRESS: {
@@ -182,8 +185,12 @@ def ask_yes_or_no(question: str) -> bool:
     """Ask a yes/no question."""
     if os.environ.get("ATTENDED", "true").lower() != "true":
         return True
-    response = input(f"{question} (yes/no): ").strip().lower()
-    return response in ["yes", "y"]
+    while True:
+        response = input(f"{question} (yes/no): ").strip().lower()
+        if response.lower() in ("yes", "y"):
+            return True
+        if response.lower() in ("no", "n"):
+            return False
 
 
 def ask_or_get_from_env(
@@ -192,10 +199,10 @@ def ask_or_get_from_env(
     """Get user input either interactively or from environment variables."""
     if os.getenv("ATTENDED", "true").lower() == "true":
         if is_pass:
-            return getpass.getpass(prompt)
-        return input(prompt)
+            return getpass.getpass(prompt).strip()
+        return input(prompt).strip()
     if env_var_name in os.environ:
-        return os.environ[env_var_name]
+        return os.environ[env_var_name].strip()
     if raise_if_missing:
         raise ValueError(f"{env_var_name} env var required in unattended mode")
     return ""
@@ -248,7 +255,7 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
     ):
         print("Error: The provided RPC does not support 'eth_newFilter'.")
         spinner.fail("Terminating script.")
-    elif rpc_error_message == "invalid params":
+    elif "invalid" in rpc_error_message or "params" in rpc_error_message:
         spinner.succeed("RPC checks passed.")
         return True
     else:
@@ -259,3 +266,33 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
         spinner.fail("Terminating script.")
 
     return False
+
+
+@dataclass
+class QuickstartConfig(LocalResource):
+    """Local configuration."""
+
+    path: Path
+    rpc: Optional[Dict[str, str]] = None
+    staking_program_id: Optional[str] = None
+    principal_chain: Optional[str] = None
+    user_provided_args: Optional[Dict[str, str]] = None
+
+    @classmethod
+    def from_json(cls, obj: Dict) -> "LocalResource":
+        """Load LocalResource from json."""
+        kwargs = {}
+        for pname, ptype in cls.__annotations__.items():
+            if pname.startswith("_"):
+                continue
+
+            # allow for optional types
+            is_optional_type = get_origin(ptype) is Union and type(None) in get_args(
+                ptype
+            )
+            value = obj.get(pname, None)
+            if is_optional_type and value is None:
+                continue
+
+            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
+        return cls(**kwargs)

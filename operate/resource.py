@@ -21,12 +21,20 @@
 
 import enum
 import json
+import os
+import platform
+import shutil
+import time
+import types
 import typing as t
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
 
 # pylint: disable=too-many-return-statements,no-member
+
+
+N_BACKUPS = 5
 
 
 def serialize(obj: t.Any) -> t.Any:
@@ -41,11 +49,27 @@ def serialize(obj: t.Any) -> t.Any:
         return [serialize(obj=value) for value in obj]
     if isinstance(obj, enum.Enum):
         return obj.value
+    if isinstance(obj, bytes):
+        return obj.hex()
     return obj
 
 
 def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
     """Desrialize a json object."""
+
+    origin = getattr(otype, "__origin__", None)
+
+    # Handle Union and Optional
+    if origin is t.Union or isinstance(otype, types.UnionType):
+        for arg in t.get_args(otype):
+            if arg is type(None):  # noqa: E721
+                continue
+            try:
+                return deserialize(obj, arg)
+            except Exception:  # pylint: disable=broad-except  # nosec
+                continue
+        return None
+
     base = getattr(otype, "__class__")  # noqa: B009
     if base.__name__ == "_GenericAlias":  # type: ignore
         args = otype.__args__  # type: ignore
@@ -65,7 +89,26 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
         return Path(obj)
     if is_dataclass(otype):
         return otype.from_json(obj)
+    if otype is bytes:
+        return bytes.fromhex(obj)
     return obj
+
+
+def _safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) -> None:
+    """Safely perform file operation with retries on Windows."""
+    max_retries = 3 if platform.system() == "Windows" else 1
+
+    for attempt in range(max_retries):
+        try:
+            operation(*args, **kwargs)
+            return
+        except (PermissionError, FileNotFoundError, OSError) as e:
+            if attempt == max_retries - 1:
+                raise e
+
+            if platform.system() == "Windows":
+                # On Windows, wait a bit and retry
+                time.sleep(0.1)
 
 
 class LocalResource:
@@ -117,10 +160,42 @@ class LocalResource:
         if self._file is not None:
             path = path / self._file
 
-        path.write_text(
+        bak0 = path.with_name(f"{path.name}.0.bak")
+
+        if path.exists() and not bak0.exists():
+            _safe_file_operation(shutil.copy2, path, bak0)
+
+        tmp_path = path.parent / f".{path.name}.tmp"
+
+        # Clean up any existing tmp file
+        if tmp_path.exists():
+            _safe_file_operation(tmp_path.unlink)
+
+        tmp_path.write_text(
             json.dumps(
                 self.json,
                 indent=2,
             ),
             encoding="utf-8",
         )
+
+        # Atomic replace to avoid corruption
+        try:
+            _safe_file_operation(os.replace, tmp_path, path)
+        except (PermissionError, FileNotFoundError):
+            # On Windows, if the replace fails, clean up and skip
+            if platform.system() == "Windows":
+                _safe_file_operation(tmp_path.unlink)
+
+        self.load(self.path)  # Validate before making backup
+
+        # Rotate backup files
+        for i in reversed(range(N_BACKUPS - 1)):
+            newer = path.with_name(f"{path.name}.{i}.bak")
+            older = path.with_name(f"{path.name}.{i + 1}.bak")
+            if newer.exists():
+                if older.exists():
+                    _safe_file_operation(older.unlink)
+                _safe_file_operation(newer.rename, older)
+
+        _safe_file_operation(shutil.copy2, path, bak0)

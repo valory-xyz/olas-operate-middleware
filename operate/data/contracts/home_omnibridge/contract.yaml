@@ -1,0 +1,23 @@
+name: home_omnibridge
+author: valory
+version: 0.1.0
+type: contract
+description: HomeOmnibridge
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeigrlrmwk3dhnoe4o5ovygtmudik7ybhsx2etqqjpvdi65rtlfpuhe
+  build/HomeOmnibridge.json: bafybeihm4ff4mhoca2iwcogg5srqe2x6p674uxxc3v5dcci4emxfgc7qpm
+  contract.py: bafybeifitn7z4oqvycixw56lvrzvifydqyhwtph3nlaivzcm22ogn4rmfq
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: HomeOmnibridge
+contract_interface_paths:
+  ethereum: build/HomeOmnibridge.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: ==1.60.0
+  open-aea-test-autonomy:
+    version: ==0.18.3
+  web3:
+    version: <7,>=6.0.0

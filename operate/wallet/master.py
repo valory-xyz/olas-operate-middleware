@@ -29,13 +29,12 @@ from pathlib import Path
 
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
-from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
-from web3 import Account
+from web3 import Account, Web3
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -47,7 +46,8 @@ from operate.ledger import get_default_rpc
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
-from operate.utils.gnosis import NULL_ADDRESS, add_owner
+from operate.utils import create_backup
+from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     drain_eoa,
@@ -69,9 +69,12 @@ class MasterWallet(LocalResource):
     """Master wallet."""
 
     path: Path
-    safes: t.Optional[t.Dict[Chain, str]] = {}
-    safe_chains: t.List[Chain] = []
+    address: str
+
+    safes: t.Dict[Chain, str] = field(default_factory=dict)
+    safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType
+    safe_nonce: t.Optional[int] = None
 
     _key: str
     _crypto: t.Optional[Crypto] = None
@@ -109,7 +112,7 @@ class MasterWallet(LocalResource):
     ) -> LedgerApi:
         """Get ledger api object."""
         gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISTIC):
+        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
             gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
                 5, GWEI
             )
@@ -128,7 +131,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -141,7 +144,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         raise NotImplementedError()
 
@@ -153,7 +156,7 @@ class MasterWallet(LocalResource):
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer erc20/native assets to the given account."""
         raise NotImplementedError()
 
@@ -167,8 +170,8 @@ class MasterWallet(LocalResource):
         """Drain all erc20/native assets to the given account."""
         raise NotImplementedError()
 
-    @staticmethod
-    def new(password: str, path: Path) -> t.Tuple["MasterWallet", t.List[str]]:
+    @classmethod
+    def new(cls, password: str, path: Path) -> t.Tuple["MasterWallet", t.List[str]]:
         """Create a new master wallet."""
         raise NotImplementedError()
 
@@ -177,7 +180,7 @@ class MasterWallet(LocalResource):
         chain: Chain,
         backup_owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Create safe."""
         raise NotImplementedError()
 
@@ -188,6 +191,26 @@ class MasterWallet(LocalResource):
         rpc: t.Optional[str] = None,
     ) -> bool:
         """Update backup owner."""
+        raise NotImplementedError()
+
+    def is_password_valid(self, password: str) -> bool:
+        """Verifies if the provided password is valid."""
+        try:
+            self._crypto_cls(self.path / self._key, password)
+            return True
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+    def update_password(self, new_password: str) -> None:
+        """Update password."""
+        raise NotImplementedError()
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Is mnemonic valid."""
+        raise NotImplementedError()
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
         raise NotImplementedError()
 
     # TODO move to resource.py if used in more resources similarly
@@ -209,8 +232,8 @@ class EthereumMasterWallet(MasterWallet):
     path: Path
     address: str
 
-    safes: t.Optional[t.Dict[Chain, str]] = field(default_factory=dict)  # type: ignore
-    safe_chains: t.List[Chain] = field(default_factory=list)  # type: ignore
+    safes: t.Dict[Chain, str] = field(default_factory=dict)
+    safe_chains: t.List[Chain] = field(default_factory=list)
     ledger_type: LedgerType = LedgerType.ETHEREUM
     safe_nonce: t.Optional[int] = None  # For cross-chain reusability
 
@@ -220,7 +243,7 @@ class EthereumMasterWallet(MasterWallet):
 
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds from EOA wallet."""
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
         tx_helper = TxSettler(
@@ -247,9 +270,9 @@ class EthereumMasterWallet(MasterWallet):
                 chain_id=chain.id,
                 raise_on_try=True,
                 max_fee_per_gas=int(max_fee_per_gas) if max_fee_per_gas else None,
-                max_priority_fee_per_gas=int(max_priority_fee_per_gas)
-                if max_priority_fee_per_gas
-                else None,
+                max_priority_fee_per_gas=(
+                    int(max_priority_fee_per_gas) if max_priority_fee_per_gas else None
+                ),
             )
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,
@@ -257,22 +280,24 @@ class EthereumMasterWallet(MasterWallet):
             )
 
         setattr(tx_helper, "build", _build_tx)  # noqa: B010
-        tx_helper.transact(lambda x: x, "", kwargs={})
+        tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
+        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        return tx_hash
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds from safe wallet."""
-        if self.safes is not None:
-            transfer_from_safe(
-                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-                crypto=self.crypto,
-                safe=t.cast(str, self.safes[chain]),
-                to=to,
-                amount=amount,
-            )
-        else:
+        if self.safes is None:
             raise ValueError("Safes not initialized")
+
+        return transfer_from_safe(
+            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+            crypto=self.crypto,
+            safe=t.cast(str, self.safes[chain]),
+            to=to,
+            amount=amount,
+        )
 
     def _transfer_erc20_from_safe(
         self,
@@ -281,9 +306,12 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        """Transfer funds from safe wallet."""
-        transfer_erc20_from_safe(
+    ) -> t.Optional[str]:
+        """Transfer erc20 from safe wallet."""
+        if self.safes is None:
+            raise ValueError("Safes not initialized")
+
+        return transfer_erc20_from_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             token=token,
@@ -299,8 +327,44 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> None:
-        raise NotImplementedError()
+    ) -> t.Optional[str]:
+        """Transfer erc20 from EOA wallet."""
+        wallet_address = self.address
+        ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+        tx_settler = TxSettler(
+            ledger_api=ledger_api,
+            crypto=self.crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+
+        def _build_transfer_tx(  # pylint: disable=unused-argument
+            *args: t.Any, **kargs: t.Any
+        ) -> t.Dict:
+            # TODO Backport to OpenAEA
+            instance = registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=token,
+            )
+            tx = instance.functions.transfer(to, amount).build_transaction(
+                {
+                    "from": wallet_address,
+                    "gas": 1,
+                    "gasPrice": ledger_api.api.eth.gas_price,
+                    "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
+                }
+            )
+            return ledger_api.update_with_gas_estimate(
+                transaction=tx,
+                raise_on_try=False,
+            )
+
+        setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
+        tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
+        tx_hash = tx_receipt.get("transactionHash", "").hex()
+        return tx_hash
 
     def transfer(
         self,
@@ -309,7 +373,7 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         if amount <= 0:
             return None
@@ -354,7 +418,7 @@ class EthereumMasterWallet(MasterWallet):
         chain: Chain,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Transfer funds to the given account."""
         if amount <= 0:
             return None
@@ -410,7 +474,7 @@ class EthereumMasterWallet(MasterWallet):
         asset: str = ZERO_ADDRESS,
         from_safe: bool = True,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """
         Transfer assets to the given account.
 
@@ -454,6 +518,9 @@ class EthereumMasterWallet(MasterWallet):
                 asset_address=asset,
                 address=self.safes[chain] if from_safe else self.crypto.address,
             )
+            if balance <= 0:
+                continue
+
             self.transfer_asset(
                 to=withdrawal_address,
                 amount=balance,
@@ -477,10 +544,15 @@ class EthereumMasterWallet(MasterWallet):
     ) -> t.Tuple["EthereumMasterWallet", t.List[str]]:
         """Create a new master wallet."""
         # Backport support on aea
+
+        eoa_wallet_path = path / cls._key
+        if eoa_wallet_path.exists():
+            raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
+
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
-        (path / cls._key).write_text(
+        eoa_wallet_path.write_text(
             data=json.dumps(
                 Account.encrypt(
                     private_key=crypto._private_key,  # pylint: disable=protected-access
@@ -497,30 +569,69 @@ class EthereumMasterWallet(MasterWallet):
         wallet.password = password
         return wallet, mnemonic.split()
 
-    def update_password(self, password: str) -> None:
-        """Update password."""
+    def update_password(self, new_password: str) -> None:
+        """Updates password."""
+        create_backup(self.path / self._key)
         self._crypto = None
         (self.path / self._key).write_text(
             data=json.dumps(
                 Account.encrypt(
                     private_key=self.crypto.private_key,  # pylint: disable=protected-access
-                    password=password,
+                    password=new_password,
                 ),
                 indent=2,
             ),
             encoding="utf-8",
         )
+        self.password = new_password
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Verifies if the provided BIP-39 mnemonic is valid."""
+        try:
+            w3 = Web3()
+            w3.eth.account.enable_unaudited_hdwallet_features()
+            new_account = w3.eth.account.from_mnemonic(mnemonic)
+            keystore_data = json.loads(
+                Path(self.path / self._key).read_text(encoding="utf-8")
+            )
+            stored_address = keystore_data["address"].removeprefix("0x").lower()
+            return stored_address == new_account.address.removeprefix("0x").lower()
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
+        if not self.is_mnemonic_valid(mnemonic):
+            raise ValueError("The provided mnemonic is not valid")
+
+        path = self.path / EthereumMasterWallet._key
+        create_backup(path)
+
+        w3 = Web3()
+        w3.eth.account.enable_unaudited_hdwallet_features()
+        crypto = Web3().eth.account.from_mnemonic(mnemonic)
+        (path).write_text(
+            data=json.dumps(
+                Account.encrypt(
+                    private_key=crypto._private_key,  # pylint: disable=protected-access
+                    password=new_password,
+                ),
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        self.password = new_password
 
     def create_safe(
         self,
         chain: Chain,
         backup_owner: t.Optional[str] = None,
         rpc: t.Optional[str] = None,
-    ) -> None:
+    ) -> t.Optional[str]:
         """Create safe."""
         if chain in self.safe_chains:
-            return
-        safe, self.safe_nonce = create_gnosis_safe(
+            return None
+        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
             ledger_api=self.ledger_api(chain=chain, rpc=rpc),
             crypto=self.crypto,
             backup_owner=backup_owner,
@@ -531,6 +642,7 @@ class EthereumMasterWallet(MasterWallet):
             self.safes = {}
         self.safes[chain] = safe
         self.store()
+        return tx_hash
 
     def update_backup_owner(
         self,
@@ -610,7 +722,7 @@ class EthereumMasterWallet(MasterWallet):
             owners.remove(self.address)
 
             balances: t.Dict[str, int] = {}
-            balances[NULL_ADDRESS] = ledger_api.get_balance(safe) or 0
+            balances[ZERO_ADDRESS] = ledger_api.get_balance(safe) or 0
             for token in tokens:
                 balance = (
                     registry_contracts.erc20.get_instance(
@@ -674,7 +786,7 @@ class EthereumMasterWallet(MasterWallet):
             "goerli",
             "gnosis",
             "solana",
-            "optimistic",
+            "optimism",
             "base",
             "mode",
         ]
@@ -701,6 +813,17 @@ class EthereumMasterWallet(MasterWallet):
                 safes[chain] = address
         data["safes"] = safes
 
+        if "optimistic" in data.get("safes", {}):
+            data["safes"]["optimism"] = data["safes"].pop("optimistic")
+            migrated = True
+
+        if "optimistic" in data.get("safe_chains"):
+            data["safe_chains"] = [
+                "optimism" if chain == "optimistic" else chain
+                for chain in data["safe_chains"]
+            ]
+            migrated = True
+
         with open(wallet_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
 
@@ -718,13 +841,13 @@ class MasterWalletManager:
     def __init__(
         self,
         path: Path,
+        logger: logging.Logger,
         password: t.Optional[str] = None,
-        logger: t.Optional[logging.Logger] = None,
     ) -> None:
         """Initialize master wallet manager."""
         self.path = path
+        self.logger = logger
         self._password = password
-        self.logger = logger or setup_logger(name="operate.master_wallet_manager")
 
     @property
     def json(self) -> t.List[t.Dict]:
@@ -784,26 +907,39 @@ class MasterWalletManager:
         wallet.password = self.password
         return wallet
 
+    def is_password_valid(self, password: str) -> bool:
+        """Verifies if the provided password is valid."""
+        for wallet in self:
+            if not wallet.is_password_valid(password):
+                return False
+
+        return True
+
+    def update_password(self, new_password: str) -> None:
+        """Updates password of manager and wallets."""
+        for wallet in self:
+            wallet.password = self.password
+            wallet.update_password(new_password)
+
+        self.password = new_password
+
+    def is_mnemonic_valid(self, mnemonic: str) -> bool:
+        """Verifies if the provided BIP-39 mnemonic is valid."""
+        for wallet in self:
+            if not wallet.is_mnemonic_valid(mnemonic):
+                return False
+        return True
+
+    def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
+        """Updates password using the mnemonic."""
+        for wallet in self:
+            wallet.update_password_with_mnemonic(mnemonic, new_password)
+
+        self.password = new_password
+
     def __iter__(self) -> t.Iterator[MasterWallet]:
         """Iterate over master wallets."""
         for ledger_type in LedgerType:
             if not self.exists(ledger_type=ledger_type):
                 continue
             yield LEDGER_TYPE_TO_WALLET_CLASS[ledger_type].load(path=self.path)
-
-    def migrate_wallet_configs(self) -> None:
-        """Migrate old wallet config formats to new ones, if applies."""
-
-        print(self.path)
-
-        for ledger_type in LedgerType:
-            if not self.exists(ledger_type=ledger_type):
-                continue
-
-            wallet_class = LEDGER_TYPE_TO_WALLET_CLASS.get(ledger_type)
-            if wallet_class is None:
-                continue
-
-            migrated = wallet_class.migrate_format(path=self.path)
-            if migrated:
-                self.logger.info(f"Wallet {wallet_class} has been migrated.")

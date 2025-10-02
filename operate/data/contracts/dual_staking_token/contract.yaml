@@ -1,0 +1,23 @@
+name: dual_staking_token
+author: valory
+version: 0.1.0
+type: contract
+description: Dual staking token contract
+license: Apache-2.0
+aea_version: '>=1.0.0, <2.0.0'
+fingerprint:
+  __init__.py: bafybeickx6ot3syhywbaewl3mmnowa75dd5rogqy7pmmc5ctk4yd74pvoa
+  build/DualStakingToken.json: bafybeibvh3lcvo242jqtyrfrbezgziedlymjlr7bmttvezhgjjxlgklcxa
+  contract.py: bafybeiftspqmbq23cjifektsgwtxfcf7uaeywwdbsdvp67a7yi3wqc3pnm
+fingerprint_ignore_patterns: []
+contracts: []
+class_name: DualStakingTokenContract
+contract_interface_paths:
+  ethereum: build/DualStakingToken.json
+dependencies:
+  open-aea-ledger-ethereum:
+    version: <2,>=1.53.0
+  open-aea-test-autonomy:
+    version: <1,>=0.14.14.post1
+  web3:
+    version: <7,>=6.0.0

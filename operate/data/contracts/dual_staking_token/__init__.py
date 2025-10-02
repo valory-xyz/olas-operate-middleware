@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # ------------------------------------------------------------------------------
 #
-#   Copyright 2023 Valory AG
+#   Copyright 2025 Valory AG
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -17,22 +17,4 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Solana ledger helpers."""
-
-import typing as t
-
-from operate.ledger.base import LedgerHelper
-from operate.operate_types import LedgerType
-
-
-class Solana(LedgerHelper):
-    """Solana ledger helper."""
-
-    def create_key(self) -> t.Dict:
-        """Create key."""
-        return {
-            "address": "",
-            "private_key": "",
-            "encrypted": False,
-            "ledger": LedgerType.SOLANA,
-        }
+"""This module contains the support resources for the dual staking contract."""

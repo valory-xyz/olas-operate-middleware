@@ -22,9 +22,7 @@
 import binascii
 import itertools
 import secrets
-import time
 import typing as t
-from datetime import datetime
 from enum import Enum
 
 from aea.crypto.base import Crypto, LedgerApi
@@ -33,7 +31,7 @@ from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
-from web3.exceptions import TimeExhausted
+from web3 import Web3
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -44,10 +42,8 @@ from operate.constants import (
 from operate.operate_types import Chain
 
 
-logger = setup_logger(name="operate.manager")
-NULL_ADDRESS: str = "0x" + "0" * 40
+logger = setup_logger(name="operate.utils.gnosis")
 MAX_UINT256 = 2**256 - 1
-ZERO_ETH = 0
 SENTINEL_OWNERS = "0x0000000000000000000000000000000000000001"
 
 
@@ -66,48 +62,6 @@ class MultiSendOperation(Enum):
     DELEGATE_CALL = 1
 
 
-def settle_raw_transaction(
-    ledger_api: LedgerApi, build_and_send_tx: t.Callable[[], t.Optional[str]]
-) -> t.Dict:
-    """Settle the transaction.
-
-    Args:
-        ledger_api: The ledger api.
-        send_tx: The function to send the transaction and return tx digest or receipt.
-
-    Returns:
-        The transaction receipt
-    """
-    retries = 0
-    deadline = datetime.now().timestamp() + ON_CHAIN_INTERACT_TIMEOUT
-    while retries < ON_CHAIN_INTERACT_RETRIES or datetime.now().timestamp() < deadline:
-        try:
-            digest_or_receipt = build_and_send_tx()
-        except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Error sending the transaction: {e}")
-            digest_or_receipt = None
-
-        if isinstance(digest_or_receipt, str):  # it's a digest
-            logger.info(f"Transaction hash: {digest_or_receipt}")
-            try:
-                receipt = ledger_api.api.eth.wait_for_transaction_receipt(
-                    digest_or_receipt
-                )
-            except TimeExhausted:
-                receipt = None
-
-        else:
-            receipt = digest_or_receipt
-
-        if receipt is not None and receipt["status"] != 0:
-            return receipt
-
-        time.sleep(ON_CHAIN_INTERACT_SLEEP)
-        retries += 1
-
-    raise RuntimeError("Timeout while waiting for safe transaction to go through")
-
-
 def hash_payload_to_hex(  # pylint: disable=too-many-arguments,too-many-locals
     safe_tx_hash: str,
     ether_value: int,
@@ -117,8 +71,8 @@ def hash_payload_to_hex(  # pylint: disable=too-many-arguments,too-many-locals
     operation: int = SafeOperation.CALL.value,
     base_gas: int = 0,
     safe_gas_price: int = 0,
-    gas_token: str = NULL_ADDRESS,
-    refund_receiver: str = NULL_ADDRESS,
+    gas_token: str = ZERO_ADDRESS,
+    refund_receiver: str = ZERO_ADDRESS,
     use_flashbots: bool = False,
     gas_limit: int = 0,
     raise_on_failed_simulation: bool = False,
@@ -210,7 +164,7 @@ def create_safe(
     crypto: Crypto,
     backup_owner: t.Optional[str] = None,
     salt_nonce: t.Optional[int] = None,
-) -> t.Tuple[str, int]:
+) -> t.Tuple[str, int, str]:
     """Create gnosis safe."""
     salt_nonce = salt_nonce or _get_nonce()
 
@@ -220,9 +174,11 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=[crypto.address]
-            if backup_owner is None
-            else [crypto.address, backup_owner],
+            owners=(
+                [crypto.address]
+                if backup_owner is None
+                else [crypto.address, backup_owner]
+            ),
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -247,12 +203,13 @@ def create_safe(
         contract="",
         kwargs={},
     )
+    tx_hash = receipt.get("transactionHash", "").hex()
     instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
         ledger_api=ledger_api,
         contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
     )
     (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    return event["args"]["proxy"], salt_nonce
+    return event["args"]["proxy"], salt_nonce, tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
@@ -269,14 +226,16 @@ def send_safe_txs(
     ledger_api: LedgerApi,
     crypto: Crypto,
     to: t.Optional[str] = None,
-) -> None:
+) -> t.Optional[str]:
     """Send internal safe transaction."""
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
     to_address = to or safe
 
-    def _build_and_send_tx() -> t.Optional[str]:
+    def _build_tx(  # pylint: disable=unused-argument
+        *args: t.Any, **kwargs: t.Any
+    ) -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -295,7 +254,7 @@ def send_safe_txs(
                 is_deprecated_mode=True,
             )[2:]
         }
-        transaction = registry_contracts.gnosis_safe.get_raw_safe_transaction(
+        return registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=ledger_api,
             contract_address=safe,
             sender_address=owner,
@@ -308,14 +267,23 @@ def send_safe_txs(
             operation=SafeOperation.CALL.value,
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
-        return ledger_api.send_signed_transaction(
-            crypto.sign_transaction(transaction),
-        )
 
-    settle_raw_transaction(
+    tx_settler = TxSettler(
         ledger_api=ledger_api,
-        build_and_send_tx=_build_and_send_tx,
+        crypto=crypto,
+        chain_type=Chain.from_id(
+            ledger_api._chain_id  # pylint: disable=protected-access
+        ),
     )
+    setattr(tx_settler, "build", _build_tx)  # noqa: B010
+    tx_receipt = tx_settler.transact(
+        method=lambda: {},
+        contract="",
+        kwargs={},
+        dry_run=False,
+    )
+    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    return tx_hash
 
 
 def add_owner(
@@ -427,14 +395,16 @@ def transfer(
     safe: str,
     to: str,
     amount: t.Union[float, int],
-) -> None:
+) -> t.Optional[str]:
     """Transfer assets from safe to given address."""
     amount = int(amount)
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
 
-    def _build_and_send_tx() -> t.Optional[str]:
+    def _build_tx(  # pylint: disable=unused-argument
+        *args: t.Any, **kwargs: t.Any
+    ) -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -453,7 +423,7 @@ def transfer(
                 is_deprecated_mode=True,
             )[2:]
         }
-        transaction = registry_contracts.gnosis_safe.get_raw_safe_transaction(
+        return registry_contracts.gnosis_safe.get_raw_safe_transaction(
             ledger_api=ledger_api,
             contract_address=safe,
             sender_address=owner,
@@ -466,14 +436,23 @@ def transfer(
             operation=SafeOperation.CALL.value,
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
-        return ledger_api.send_signed_transaction(
-            crypto.sign_transaction(transaction),
-        )
 
-    settle_raw_transaction(
+    tx_settler = TxSettler(
         ledger_api=ledger_api,
-        build_and_send_tx=_build_and_send_tx,
+        crypto=crypto,
+        chain_type=Chain.from_id(
+            ledger_api._chain_id  # pylint: disable=protected-access
+        ),
     )
+    setattr(tx_settler, "build", _build_tx)  # noqa: B010
+    tx_receipt = tx_settler.transact(
+        method=lambda: {},
+        contract="",
+        kwargs={},
+        dry_run=False,
+    )
+    tx_hash = tx_receipt.get("transactionHash", "").hex()
+    return tx_hash
 
 
 def transfer_erc20_from_safe(
@@ -483,7 +462,7 @@ def transfer_erc20_from_safe(
     token: str,
     to: str,
     amount: t.Union[float, int],
-) -> None:
+) -> t.Optional[str]:
     """Transfer ERC20 assets from safe to given address."""
     amount = int(amount)
     instance = registry_contracts.erc20.get_instance(
@@ -497,7 +476,7 @@ def transfer_erc20_from_safe(
             amount,
         ],
     )
-    send_safe_txs(
+    return send_safe_txs(
         txd=bytes.fromhex(txd[2:]),
         safe=safe,
         ledger_api=ledger_api,
@@ -511,7 +490,7 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> None:
+) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
     tx_helper = TxSettler(
         ledger_api=ledger_api,
@@ -537,20 +516,20 @@ def drain_eoa(
         )
         tx = ledger_api.update_with_gas_estimate(
             transaction=tx,
-            raise_on_try=True,
+            raise_on_try=False,
         )
 
         chain_fee = tx["gas"] * tx["maxFeePerGas"]
         if Chain.from_id(chain_id) in (
             Chain.ARBITRUM_ONE,
             Chain.BASE,
-            Chain.OPTIMISTIC,
+            Chain.OPTIMISM,
+            Chain.MODE,
         ):
             chain_fee += ledger_api.get_l1_data_fee(tx)
 
         tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
         if tx["value"] <= 0:
-            logger.warning(f"No balance to drain from wallet: {crypto.address}")
             raise ChainInteractionError(
                 f"No balance to drain from wallet: {crypto.address}"
             )
@@ -562,38 +541,65 @@ def drain_eoa(
         return tx
 
     setattr(tx_helper, "build", _build_tx)  # noqa: B010
-    settle_raw_transaction(
-        ledger_api=ledger_api,
-        build_and_send_tx=lambda: tx_helper.transact(lambda x: x, "", kwargs={}),
-    )
+    try:
+        tx_receipt = tx_helper.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
+        )
+    except ChainInteractionError as e:
+        if "No balance to drain from wallet" in str(e):
+            logger.warning(f"Failed to drain wallet {crypto.address} with error: {e}.")
+            return None
+
+        raise e
+
+    tx_hash = tx_receipt.get("transactionHash", None)
+    if tx_hash is not None:
+        return tx_hash.hex()
+
+    return None
 
 
 def get_asset_balance(
     ledger_api: LedgerApi,
     asset_address: str,
     address: str,
+    raise_on_invalid_address: bool = True,
 ) -> int:
     """
     Get the balance of a native asset or ERC20 token.
 
     If contract address is a zero address, return the native balance.
     """
-    if asset_address == ZERO_ADDRESS:
-        return ledger_api.get_balance(address)
-    return (
-        registry_contracts.erc20.get_instance(
-            ledger_api=ledger_api,
-            contract_address=asset_address,
+    if not Web3.is_address(address):
+        if raise_on_invalid_address:
+            raise ValueError(f"Invalid address: {address}")
+        return 0
+
+    try:
+        if asset_address == ZERO_ADDRESS:
+            return ledger_api.get_balance(address, raise_on_try=True)
+        return (
+            registry_contracts.erc20.get_instance(
+                ledger_api=ledger_api,
+                contract_address=asset_address,
+            )
+            .functions.balanceOf(address)
+            .call()
         )
-        .functions.balanceOf(address)
-        .call()
-    )
+    except Exception as e:
+        raise RuntimeError(
+            f"Cannot get balance of {address=} {asset_address=} rpc={ledger_api._api.provider.endpoint_uri}."  # pylint: disable=protected-access
+        ) from e
 
 
 def get_assets_balances(
     ledger_api: LedgerApi,
     asset_addresses: t.Set[str],
     addresses: t.Set[str],
+    raise_on_invalid_address: bool = True,
 ) -> t.Dict[str, t.Dict[str, int]]:
     """
     Get the balances of a list of native assets or ERC20 tokens.
@@ -607,6 +613,7 @@ def get_assets_balances(
             ledger_api=ledger_api,
             asset_address=asset,
             address=address,
+            raise_on_invalid_address=raise_on_invalid_address,
         )
 
     return output

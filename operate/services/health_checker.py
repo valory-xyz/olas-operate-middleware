@@ -20,19 +20,17 @@
 """Source code for checking aea is alive.."""
 import asyncio
 import json
+import logging
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from pathlib import Path
 from traceback import print_exc
 
 import aiohttp  # type: ignore
-from aea.helpers.logging import setup_logger
 
-from operate.constants import HEALTH_CHECK_URL
+from operate.constants import HEALTHCHECK_JSON, HEALTH_CHECK_URL
 from operate.services.manage import ServiceManager  # type: ignore
-
-
-HTTP_OK = 200
 
 
 class HealthChecker:
@@ -42,19 +40,19 @@ class HealthChecker:
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90
     NUMBER_OF_FAILS_DEFAULT = 10
-    HEALTH_CHECK_URL = HEALTH_CHECK_URL
 
     def __init__(
         self,
         service_manager: ServiceManager,
+        logger: logging.Logger,
         port_up_timeout: int | None = None,
         sleep_period: int | None = None,
         number_of_fails: int | None = None,
     ) -> None:
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
-        self.logger = setup_logger(name="operate.health_checker")
         self._service_manager = service_manager
+        self.logger = logger
         self.port_up_timeout = port_up_timeout or self.PORT_UP_TIMEOUT_DEFAULT
         self.sleep_period = sleep_period or self.SLEEP_PERIOD_DEFAULT
         self.number_of_fails = number_of_fails or self.NUMBER_OF_FAILS_DEFAULT
@@ -87,27 +85,41 @@ class HealthChecker:
                 f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
             )
 
-    @classmethod
     async def check_service_health(
-        cls, service_config_id: str, service_path: t.Optional[Path] = None
+        self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health"""
         del service_config_id
-        timeout = aiohttp.ClientTimeout(total=cls.REQUEST_TIMEOUT_DEFAULT)
+        timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(cls.HEALTH_CHECK_URL) as resp:
-                status = resp.status
-                response_json = await resp.json()
+            async with session.get(HEALTH_CHECK_URL) as resp:
+                try:
+                    status = resp.status
 
-                if service_path:
-                    healthcheck_json_path = service_path / "healthcheck.json"
-                    healthcheck_json_path.write_text(
-                        json.dumps(response_json, indent=2), encoding="utf-8"
+                    if status != HTTPStatus.OK:
+                        # not HTTP OK -> not healthy for sure
+                        content = await resp.text()
+                        self.logger.warning(
+                            f"[HEALTH_CHECKER] Bad http status code : {status} content: {content}. not healthy!"
+                        )
+                        return False
+
+                    response_json = await resp.json()
+
+                    if service_path:
+                        healthcheck_json_path = service_path / HEALTHCHECK_JSON
+                        healthcheck_json_path.write_text(
+                            json.dumps(response_json, indent=2), encoding="utf-8"
+                        )
+
+                    return response_json.get(
+                        "is_healthy", response_json.get("is_transitioning_fast", False)
+                    )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
+                except Exception as e:  # pylint: disable=broad-except
+                    self.logger.error(
+                        f"[HEALTH_CHECKER] error {e}. set not healthy!", exc_info=True
                     )
-
-                return status == HTTP_OK and response_json.get(
-                    "is_transitioning_fast", False
-                )
+                    return False
 
     async def healthcheck_job(
         self,

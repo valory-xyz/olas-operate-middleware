@@ -19,8 +19,6 @@
 
 """Tests for services.service module."""
 
-import random
-import string
 import typing as t
 from pathlib import Path
 
@@ -32,18 +30,7 @@ from operate.operate_types import ServiceTemplate
 from operate.services.manage import ServiceManager
 
 from .test_services_service import DEFAULT_CONFIG_KWARGS
-
-
-ROOT_PATH = Path(__file__).resolve().parent
-OPERATE_HOME = ROOT_PATH / ".operate_test"
-
-
-@pytest.fixture
-def random_string() -> str:
-    """random_string"""
-    length = 8
-    chars = string.ascii_letters + string.digits
-    return "".join(random.choices(chars, k=length))  # nosec B311
+from tests.constants import OPERATE_TEST
 
 
 def get_template(**kwargs: t.Any) -> ServiceTemplate:
@@ -108,15 +95,14 @@ class TestServiceManager:
         update_description: bool,
         update_hash: bool,
         tmp_path: Path,
-        random_string: str,
+        password: str,
     ) -> None:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / ".operate_test",
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
-        password = random_string
         operate.create_user_account(password=password)
         operate.password = password
         service_manager = operate.service_manager()
@@ -200,15 +186,14 @@ class TestServiceManager:
         update_description: bool,
         update_hash: bool,
         tmp_path: Path,
-        random_string: str,
+        password: str,
     ) -> None:
         """Test operate.service_manager().update()"""
 
         operate = OperateApp(
-            home=tmp_path / ".operate_test",
+            home=tmp_path / OPERATE_TEST,
         )
         operate.setup()
-        password = random_string
         operate.create_user_account(password=password)
         operate.password = password
         service_manager = operate.service_manager()
@@ -283,16 +268,56 @@ class TestServiceManager:
         assert not diff, "Updated service does not match expected service."
 
     @pytest.mark.parametrize(
-        "topup1, threshold1, balance1, topup2, threshold2, balance2, topup3, threshold3, balance3, sender_balance, minimum_refill_required, recommended_refill_required",
+        (
+            "topup1",
+            "threshold1",
+            "balance1",
+            "topup2",
+            "threshold2",
+            "balance2",
+            "topup3",
+            "threshold3",
+            "balance3",
+            "sender_topup",
+            "sender_threshold",
+            "sender_balance",
+            "minimum_refill_required",
+            "recommended_refill_required",
+        ),
         [
-            (10, 5, 1, 0, 0, 0, 0, 0, 0, 1, 3, 8),
-            (10, 5, 1, 10, 5, 8, 0, 0, 0, 1, 3, 8),
-            (10, 5, 8, 10, 5, 1, 0, 0, 0, 1, 3, 8),
-            (10, 5, 8, 10, 5, 1, 10, 5, 1, 1, 7, 17),
-            (10, 5, 6, 10, 5, 6, 0, 0, 0, 1, 0, 0),
-            (10, 5, 2, 20, 10, 7, 0, 0, 0, 4, 2, 17),
-            (10, 5, 2, 20, 10, 3, 0, 0, 0, 4, 6, 21),
-            (15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 5, 5),
+            (10, 5, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 3, 8),
+            (10, 5, 1, 10, 5, 8, 0, 0, 0, 0, 0, 1, 3, 8),
+            (10, 5, 8, 10, 5, 1, 0, 0, 0, 0, 0, 1, 3, 8),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 0, 0, 1, 7, 17),
+            (10, 5, 6, 10, 5, 6, 0, 0, 0, 0, 0, 1, 0, 0),
+            (10, 5, 2, 20, 10, 7, 0, 0, 0, 0, 0, 4, 2, 17),
+            (10, 5, 2, 20, 10, 3, 0, 0, 0, 0, 0, 4, 6, 21),
+            (15, 15, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 5),
+            (10, 5, 1, 0, 0, 0, 0, 0, 0, 10, 5, 1, 8, 18),
+            (10, 5, 1, 10, 5, 8, 0, 0, 0, 10, 5, 1, 8, 18),
+            (10, 5, 8, 10, 5, 1, 0, 0, 0, 10, 5, 1, 8, 18),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 10, 5, 1, 12, 27),
+            (10, 5, 6, 10, 5, 6, 0, 0, 0, 10, 5, 1, 4, 9),
+            (10, 5, 2, 20, 10, 7, 0, 0, 0, 10, 5, 4, 7, 27),
+            (10, 5, 2, 20, 10, 3, 0, 0, 0, 10, 5, 4, 11, 31),
+            (15, 15, 10, 0, 0, 0, 0, 0, 0, 10, 5, 0, 10, 15),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 10, 5, 28, 0, 0),
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 5, 3, 2, 7),
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 5, 7, 0, 0),
+            (0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 5, 11, 0, 0),
+            (10, 5, 2, 0, 0, 0, 0, 0, 0, 10, 5, 3, 5, 15),
+            (10, 5, 2, 0, 0, 0, 0, 0, 0, 10, 5, 7, 1, 11),
+            (10, 5, 2, 0, 0, 0, 0, 0, 0, 10, 5, 11, 0, 7),
+            (10, 5, 7, 0, 0, 0, 0, 0, 0, 10, 5, 3, 2, 7),
+            (10, 5, 7, 0, 0, 0, 0, 0, 0, 10, 5, 7, 0, 0),
+            (10, 5, 7, 0, 0, 0, 0, 0, 0, 10, 5, 11, 0, 0),
+            (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 3, 2, 7),
+            (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 7, 0, 0),
+            (10, 5, 11, 0, 0, 0, 0, 0, 0, 10, 5, 11, 0, 0),
+            (10, 5, 2, 0, 0, 0, 0, 0, 0, 10, 5, 1, 7, 17),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 1, 34, 89),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 7, 28, 83),
+            (100, 50, 20, 0, 0, 0, 0, 0, 0, 10, 5, 11, 24, 79),
         ],
     )
     def test_service_manager_compute_refill_requirements(
@@ -306,6 +331,8 @@ class TestServiceManager:
         topup3: int,
         threshold3: int,
         balance3: int,
+        sender_topup: int,
+        sender_threshold: int,
         sender_balance: int,
         minimum_refill_required: int,
         recommended_refill_required: int,
@@ -334,7 +361,10 @@ class TestServiceManager:
             "recommended_refill": recommended_refill_required,
         }
         result = ServiceManager._compute_refill_requirement(
-            asset_funding_values, sender_balance
+            asset_funding_values=asset_funding_values,
+            sender_topup=sender_topup,
+            sender_threshold=sender_threshold,
+            sender_balance=sender_balance,
         )
 
         diff = DeepDiff(result, expected_result)
@@ -342,3 +372,69 @@ class TestServiceManager:
             print(diff)
 
         assert not diff, "Failed to compute refill requirements."
+
+    @pytest.mark.parametrize(
+        (
+            "topup1",
+            "threshold1",
+            "balance1",
+            "topup2",
+            "threshold2",
+            "balance2",
+            "topup3",
+            "threshold3",
+            "balance3",
+            "sender_topup",
+            "sender_threshold",
+            "sender_balance",
+        ),
+        [
+            (5, 10, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1),
+            (10, 5, 1, 5, 10, 8, 0, 0, 0, 0, 0, 1),
+            (10, 5, 8, 10, 5, 1, 0, 0, 0, 5, 10, 1),
+            (10, 5, 8, 10, 5, 1, 2, 5, 1, 0, 0, 1),
+            (10, 5, 6, 10, 5, 6, 0, 0, 0, 9, 10, 1),
+            (10, 5, 8, 10, 5, -1, 10, 5, 1, 0, 0, 1),
+            (10, 5, 8, 10, 5, 1, 10, 5, 1, 0, 0, -1),
+        ],
+    )
+    def test_service_manager_compute_refill_requirements_raise(
+        self,
+        topup1: int,
+        threshold1: int,
+        balance1: int,
+        topup2: int,
+        threshold2: int,
+        balance2: int,
+        topup3: int,
+        threshold3: int,
+        balance3: int,
+        sender_topup: int,
+        sender_threshold: int,
+        sender_balance: int,
+    ) -> None:
+        """Test operate.service_manager()._compute_refill_requirements()"""
+
+        asset_funding_values = {}
+        asset_funding_values["0x1"] = {
+            "topup": topup1,
+            "threshold": threshold1,
+            "balance": balance1,
+        }
+        asset_funding_values["0x2"] = {
+            "topup": topup2,
+            "threshold": threshold2,
+            "balance": balance2,
+        }
+        asset_funding_values["0x3"] = {
+            "topup": topup3,
+            "threshold": threshold3,
+            "balance": balance3,
+        }
+        with pytest.raises(ValueError, match=r"^Argument.*must.*"):
+            ServiceManager._compute_refill_requirement(
+                asset_funding_values=asset_funding_values,
+                sender_topup=sender_topup,
+                sender_threshold=sender_threshold,
+                sender_balance=sender_balance,
+            )

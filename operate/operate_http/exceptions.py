@@ -19,6 +19,8 @@
 
 """Exceptions."""
 
+from http import HTTPStatus
+
 
 class ResourceException(Exception):
     """Base resource exceptio."""
@@ -29,22 +31,22 @@ class ResourceException(Exception):
 class BadRequest(ResourceException):
     """Bad request error."""
 
-    code = 400
+    code = HTTPStatus.BAD_REQUEST
 
 
 class ResourceAlreadyExists(ResourceException):
     """Bad request error."""
 
-    code = 409
+    code = HTTPStatus.CONFLICT
 
 
 class NotFound(ResourceException):
     """Not found error."""
 
-    code = 404
+    code = HTTPStatus.NOT_FOUND
 
 
 class NotAllowed(ResourceException):
     """Not allowed error."""
 
-    code = 405
+    code = HTTPStatus.METHOD_NOT_ALLOWED

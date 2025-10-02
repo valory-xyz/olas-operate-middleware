@@ -20,10 +20,14 @@
 
 import json
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from operate.constants import OPERATE_HOME
-from operate.quickstart.run_service import configure_local_config, get_service
+from operate.quickstart.run_service import (
+    ask_password_if_needed,
+    configure_local_config,
+    get_service,
+    load_local_config,
+)
 from operate.quickstart.utils import print_section, print_title
 
 
@@ -42,16 +46,19 @@ def stop_service(operate: "OperateApp", config_path: str) -> None:
     print_title(f"Stop {template['name']} Quickstart")
 
     # check if agent was started before
-    path = OPERATE_HOME / "local_config.json"
-    if not path.exists():
+    config = load_local_config(
+        operate=operate, service_name=cast(str, template["name"])
+    )
+    if not config.path.exists():
         print("No previous agent setup found. Exiting.")
         return
 
-    configure_local_config(template)
+    ask_password_if_needed(operate)
+    configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     manager.stop_service_locally(
-        service_config_id=service.service_config_id, delete=True, use_docker=True
+        service_config_id=service.service_config_id, use_docker=True, force=True
     )
 
     print()

@@ -18,15 +18,15 @@
 """Terminate on-chain service."""
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
-from operate.constants import OPERATE_HOME
 from operate.operate_types import OnChainState
 from operate.quickstart.run_service import (
     ask_password_if_needed,
     configure_local_config,
     ensure_enough_funds,
     get_service,
+    load_local_config,
 )
 from operate.quickstart.utils import ask_yes_or_no, print_section, print_title
 
@@ -44,8 +44,10 @@ def terminate_service(operate: "OperateApp", config_path: str) -> None:
     print_title(f"Terminate {template['name']} on-chain service")
 
     # check if agent was started before
-    path = OPERATE_HOME / "local_config.json"
-    if not path.exists():
+    config = load_local_config(
+        operate=operate, service_name=cast(str, template["name"])
+    )
+    if not config.path.exists():
         print("No previous agent setup found. Exiting.")
         return
 
@@ -56,8 +58,8 @@ def terminate_service(operate: "OperateApp", config_path: str) -> None:
         print("Cancelled.")
         return
 
-    config = configure_local_config(template)
-    ask_password_if_needed(operate, config)
+    ask_password_if_needed(operate)
+    config = configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
     ensure_enough_funds(operate, service)

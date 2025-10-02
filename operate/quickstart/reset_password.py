@@ -21,6 +21,7 @@
 from typing import TYPE_CHECKING
 
 from operate.account.user import UserAccount
+from operate.constants import USER_JSON
 from operate.operate_types import LedgerType
 from operate.quickstart.run_service import ask_confirm_password
 from operate.quickstart.utils import ask_or_get_from_env, print_section, print_title
@@ -36,7 +37,7 @@ def reset_password(operate: "OperateApp") -> None:
     print_title("Reset your password")
 
     # check if agent was started before
-    if not (operate._path / "user.json").exists():
+    if not (operate._path / USER_JSON).exists():
         print("No previous agent setup found. Exiting.")
         return
 
@@ -57,7 +58,7 @@ def reset_password(operate: "OperateApp") -> None:
     print("Resetting password of user account...")
     UserAccount.new(
         password=old_password,
-        path=operate._path / "user.json",
+        path=operate._path / USER_JSON,
     ).update(
         old_password=old_password,
         new_password=new_password,
@@ -69,6 +70,6 @@ def reset_password(operate: "OperateApp") -> None:
     wallet: EthereumMasterWallet = operate.wallet_manager.load(
         ledger_type=LedgerType.ETHEREUM
     )
-    wallet.update_password(password=new_password)
+    wallet.update_password(new_password=new_password)
 
     print_section("Password reset done!")
