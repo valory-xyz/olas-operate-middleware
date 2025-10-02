@@ -901,10 +901,15 @@ Get all services deployment information.
     },
     "path": "/path/to/service",
     "healthcheck": {
+      "agent_health": {},
       "is_healthy": true,
-      "is_transitioning_fast": false,
+      "is_tm_healthy": true,    
+      "is_transitioning_fast": true,
       "period": 123,
-      "round": 456
+      "reset_pause_duration": 30,
+      "rounds": ["round_1", "round_2", "round_3"],
+      "rounds_info": {},
+      "seconds_since_last_transition": 12.34,
     }
   },
   "service_config_id2": {
@@ -1002,10 +1007,15 @@ Get service deployment information.
   },
   "path": "/path/to/service",
   "healthcheck": {
+    "agent_health": {},
     "is_healthy": true,
-    "is_transitioning_fast": false,
+    "is_tm_healthy": true,    
+    "is_transitioning_fast": true,
     "period": 123,
-    "round": 456
+    "reset_pause_duration": 30,
+    "rounds": ["round_1", "round_2", "round_3"],
+    "rounds_info": {},
+    "seconds_since_last_transition": 12.34,
   }
 }
 ```
