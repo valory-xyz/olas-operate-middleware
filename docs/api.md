@@ -885,6 +885,47 @@ Check if all the services are valid and can be deployed.
 }
 ```
 
+### `GET /api/v2/services/deployment`
+
+Get all services deployment information.
+
+**Response (Success - 200):**
+
+```json
+{
+  "service_config_id1": {
+    "status": 3,  // DEPLOYED
+    "nodes": {
+      "agent": ["service_abci_0"],
+      "tendermint": ["service_tm_0"]
+    },
+    "path": "/path/to/service",
+    "healthcheck": {
+      "is_healthy": true,
+      "is_transitioning_fast": false,
+      "period": 123,
+      "round": 456
+    }
+  },
+  "service_config_id2": {
+    "status": 1,  // BUILT
+    "nodes": {
+      "agent": [],
+      "tendermint": []
+    },
+    "healthcheck": {}
+  },
+  "service_config_id3": {
+    "status": 1,  // BUILT
+    "nodes": {
+      "agent": [],
+      "tendermint": []
+    },
+    "healthcheck": {}
+  }
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}`
 
 Get a specific service.
@@ -954,7 +995,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": "DEPLOYED",
+  "status": 3,  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
@@ -973,7 +1014,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": "BUILT",
+  "status": 1,  // BUILT
   "nodes": {
     "agent": [],
     "tendermint": []
@@ -987,7 +1028,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": "DEPLOYED",
+  "status": 3,  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
@@ -1415,7 +1456,7 @@ Stop a running service deployment locally.
 
 ```json
 {
-  "status": "STOPPED",
+  "status": 5,  // STOPPED
   "nodes": {
     "agent": [],
     "tendermint": []
