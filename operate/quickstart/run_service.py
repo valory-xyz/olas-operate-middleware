@@ -251,7 +251,7 @@ def configure_local_config(
                     contract_address=STAKING[home_chain][program_id],
                 )
                 try:
-                    metadata_hash = instance.functions.metadataHash().call().to_0x_hex()
+                    metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
                     response = requests.get(ipfs_address, timeout=DEFAULT_TIMEOUT)
                     if response.status_code != HTTPStatus.OK:

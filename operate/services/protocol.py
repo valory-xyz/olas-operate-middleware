@@ -57,6 +57,7 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
+from web3.types import TxReceipt
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -112,9 +113,7 @@ class GnosisSafeTransaction:
         self._txs.append(tx)
         return self
 
-    def build(  # pylint: disable=unused-argument
-        self, *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def build(self) -> t.Dict:
         """Build the transaction."""
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
@@ -164,19 +163,18 @@ class GnosisSafeTransaction:
         )
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> t.Dict:
+    def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-        )
-        setattr(tx_settler, "build", self.build)  # noqa: B010
-        return tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                tx_builder=self.build,
+            )
+            .transact()
+            .settle()
+            .tx_receipt
         )
 
 
@@ -321,19 +319,10 @@ class StakingManager(OnChainHelper):
         service_id: int,
         service_registry: str,
         staking_contract: str,
-    ) -> None:
+    ) -> str:
         """Stake the service"""
         self.check_staking_compatibility(
             service_id=service_id, staking_contract=staking_contract
-        )
-
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
         )
 
         # we make use of the ERC20 contract to build the approval transaction
@@ -342,47 +331,46 @@ class StakingManager(OnChainHelper):
         # this is very bad way to do it but it works because the ERC721 contract expects two arguments
         # for approve call (spender, token_id), and the ERC20 contract wrapper used here from open-autonomy
         # passes the amount as the second argument.
-        def _build_approval_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return registry_contracts.erc20.get_approve_tx(
+        TxSettler(
+            ledger_api=self.ledger_api,
+            crypto=self.crypto,
+            chain_type=self.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=lambda: registry_contracts.erc20.get_approve_tx(
                 ledger_api=self.ledger_api,
                 contract_address=service_registry,
                 spender=staking_contract,
                 sender=self.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
-            )
+            ),
+        ).transact().settle()
 
-        setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
-        )
-
-        def _build_staking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="stake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="stake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_staking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def check_if_unstaking_possible(
@@ -415,40 +403,33 @@ class StakingManager(OnChainHelper):
         if staked_duration < minimum_staking_duration and available_rewards > 0:
             raise ValueError("Service cannot be unstaked yet.")
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    def unstake(self, service_id: int, staking_contract: str) -> str:
         """Unstake the service"""
 
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-
-        def _build_unstaking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="unstake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="unstake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_unstaking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def get_stake_approval_tx_data(
