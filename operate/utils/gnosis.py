@@ -183,15 +183,19 @@ def create_safe(
         del tx["contract_address"]
         return tx
 
-    tx_settler = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=ChainProfile.CUSTOM,
-        timeout=ON_CHAIN_INTERACT_TIMEOUT,
-        retries=ON_CHAIN_INTERACT_RETRIES,
-        sleep=ON_CHAIN_INTERACT_SLEEP,
-        tx_builder=_build,
-    ).transact().settle()
+    tx_settler = (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=_build,
+        )
+        .transact()
+        .settle()
+    )
     (event,) = tx_settler.get_events(
         contract=registry_contracts.gnosis_safe_proxy_factory.get_instance(
             ledger_api=ledger_api,
@@ -257,14 +261,19 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=Chain.from_id(
-            ledger_api._chain_id  # pylint: disable=protected-access
-        ),
-        tx_builder=_build_tx,
-    ).transact().settle().tx_hash
+    return (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
+            tx_builder=_build_tx,
+        )
+        .transact()
+        .settle()
+        .tx_hash
+    )
 
 
 def add_owner(
@@ -416,14 +425,19 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    return TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=Chain.from_id(
-            ledger_api._chain_id  # pylint: disable=protected-access
-        ),
-        tx_builder=_build_tx,
-    ).transact().settle().tx_hash
+    return (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
+            tx_builder=_build_tx,
+        )
+        .transact()
+        .settle()
+        .tx_hash
+    )
 
 
 def transfer_erc20_from_safe(
@@ -461,8 +475,9 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> str:
+) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
+
     def _build_tx() -> t.Dict:
         """Build transaction"""
         tx = ledger_api.get_transfer_transaction(
@@ -500,23 +515,28 @@ def drain_eoa(
 
         return tx
 
-
     try:
-        return TxSettler(
-            ledger_api=ledger_api,
-            crypto=crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=_build_tx,
-        ).transact().settle().tx_hash
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
     except ChainInteractionError as e:
         if "No balance to drain from wallet" in str(e):
             logger.warning(f"Failed to drain wallet {crypto.address} with error: {e}.")
             return None
 
         raise e
+
 
 def get_asset_balance(
     ledger_api: LedgerApi,

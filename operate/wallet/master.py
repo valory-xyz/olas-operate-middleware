@@ -246,6 +246,7 @@ class EthereumMasterWallet(MasterWallet):
     ) -> str:
         """Transfer funds from EOA wallet."""
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
+
         def _build_tx() -> t.Dict:
             """Build transaction"""
             max_priority_fee_per_gas = os.getenv("MAX_PRIORITY_FEE_PER_GAS", None)
@@ -268,15 +269,20 @@ class EthereumMasterWallet(MasterWallet):
                 raise_on_try=True,
             )
 
-        return TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=_build_tx,
-        ).transact().settle().tx_hash
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -345,15 +351,20 @@ class EthereumMasterWallet(MasterWallet):
                 raise_on_try=False,
             )
 
-        return TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=_build_transfer_tx,
-        ).transact().settle().tx_hash
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_transfer_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def transfer(
         self,

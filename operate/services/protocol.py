@@ -165,12 +165,17 @@ class GnosisSafeTransaction:
 
     def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        return TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            tx_builder=self.build,
-        ).transact().settle().tx_receipt
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                tx_builder=self.build,
+            )
+            .transact()
+            .settle()
+            .tx_receipt
+        )
 
 
 class StakingManager(OnChainHelper):
@@ -339,29 +344,34 @@ class StakingManager(OnChainHelper):
                 spender=staking_contract,
                 sender=self.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
-            )
+            ),
         ).transact().settle()
 
-        return TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=lambda: self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="stake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="stake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-        ).transact().settle().tx_hash
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def check_if_unstaking_possible(
         self,
@@ -396,26 +406,31 @@ class StakingManager(OnChainHelper):
     def unstake(self, service_id: int, staking_contract: str) -> str:
         """Unstake the service"""
 
-        return TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-            tx_builder=lambda: self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="unstake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="unstake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-        ).transact().settle().tx_hash
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def get_stake_approval_tx_data(
         self,

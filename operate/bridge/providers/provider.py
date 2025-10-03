@@ -391,9 +391,11 @@ class Provider(ABC):
                     retries=ON_CHAIN_INTERACT_RETRIES,
                     sleep=ON_CHAIN_INTERACT_SLEEP,
                     tx_builder=lambda: {
-                        **tx,
-                        "nonce": from_ledger_api.api.eth.get_transaction_count(from_address)
-                    }
+                        **tx,  # noqa: B023
+                        "nonce": from_ledger_api.api.eth.get_transaction_count(
+                            from_address
+                        ),
+                    },
                 ).transact()
                 self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
                 tx_hashes.append(tx_settler.tx_hash)
