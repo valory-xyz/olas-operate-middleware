@@ -27,12 +27,14 @@ import time
 import typing as t
 import uuid
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from dataclasses import dataclass
 from math import ceil
 
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
+from web3.exceptions import TimeExhausted
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -379,7 +381,6 @@ class Provider(ABC):
             from_address = provider_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(provider_request)
-            tx_hashes = []
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
@@ -397,25 +398,21 @@ class Provider(ABC):
                         ),
                     },
                 ).transact()
-                self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                tx_hashes.append(tx_settler.tx_hash)
+
+                with suppress(TimeExhausted):
+                    tx_settler.settle()
+                    self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
-                from_tx_hash=tx_hashes[-1],
+                from_tx_hash=tx_settler.tx_hash,
                 to_tx_hash=None,
                 provider_data=None,
             )
             provider_request.execution_data = execution_data
-            if len(tx_hashes) == len(txs):
-                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
-            else:
-                provider_request.execution_data.message = (
-                    MESSAGE_EXECUTION_FAILED_SETTLEMENT
-                )
-                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
