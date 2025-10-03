@@ -1393,8 +1393,12 @@ def qs_start(
 @_operate.command(name="quickstop")
 def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
-    """Quickstart."""
+    """Quickstop."""
+    os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
     stop_service(operate=operate, config_path=config)
