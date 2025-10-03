@@ -168,9 +168,7 @@ def create_safe(
     """Create gnosis safe."""
     salt_nonce = salt_nonce or _get_nonce()
 
-    def _build(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def _build() -> t.Dict:
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
@@ -192,24 +190,17 @@ def create_safe(
         timeout=ON_CHAIN_INTERACT_TIMEOUT,
         retries=ON_CHAIN_INTERACT_RETRIES,
         sleep=ON_CHAIN_INTERACT_SLEEP,
+        tx_builder=_build,
+    ).transact().settle()
+    (event,) = tx_settler.get_events(
+        contract=registry_contracts.gnosis_safe_proxy_factory.get_instance(
+            ledger_api=ledger_api,
+            contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
+        ),
+        event_name="ProxyCreation",
     )
-    setattr(  # noqa: B010
-        tx_settler,
-        "build",
-        _build,
-    )
-    receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-    )
-    tx_hash = receipt.get("transactionHash", "").to_0x_hex()
-    instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
-        ledger_api=ledger_api,
-        contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
-    )
-    (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    return event["args"]["proxy"], salt_nonce, tx_hash
+
+    return event["args"]["proxy"], salt_nonce, tx_settler.tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
@@ -226,16 +217,14 @@ def send_safe_txs(
     ledger_api: LedgerApi,
     crypto: Crypto,
     to: t.Optional[str] = None,
-) -> t.Optional[str]:
+) -> str:
     """Send internal safe transaction."""
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
     to_address = to or safe
 
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[str]:
+    def _build_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -268,22 +257,14 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    tx_settler = TxSettler(
+    return TxSettler(
         ledger_api=ledger_api,
         crypto=crypto,
         chain_type=Chain.from_id(
             ledger_api._chain_id  # pylint: disable=protected-access
         ),
-    )
-    setattr(tx_settler, "build", _build_tx)  # noqa: B010
-    tx_receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-        dry_run=False,
-    )
-    tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
-    return tx_hash
+        tx_builder=_build_tx,
+    ).transact().settle().tx_hash
 
 
 def add_owner(
@@ -395,16 +376,14 @@ def transfer(
     safe: str,
     to: str,
     amount: t.Union[float, int],
-) -> t.Optional[str]:
+) -> str:
     """Transfer assets from safe to given address."""
     amount = int(amount)
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
 
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[str]:
+    def _build_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -437,22 +416,14 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    tx_settler = TxSettler(
+    return TxSettler(
         ledger_api=ledger_api,
         crypto=crypto,
         chain_type=Chain.from_id(
             ledger_api._chain_id  # pylint: disable=protected-access
         ),
-    )
-    setattr(tx_settler, "build", _build_tx)  # noqa: B010
-    tx_receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-        dry_run=False,
-    )
-    tx_hash = tx_receipt.get("transactionHash", "").to_0x_hex()
-    return tx_hash
+        tx_builder=_build_tx,
+    ).transact().settle().tx_hash
 
 
 def transfer_erc20_from_safe(
@@ -490,20 +461,9 @@ def drain_eoa(
     crypto: Crypto,
     withdrawal_address: str,
     chain_id: int,
-) -> t.Optional[str]:
+) -> str:
     """Drain all the native tokens from the crypto wallet."""
-    tx_helper = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=ChainProfile.CUSTOM,
-        timeout=ON_CHAIN_INTERACT_TIMEOUT,
-        retries=ON_CHAIN_INTERACT_RETRIES,
-        sleep=ON_CHAIN_INTERACT_SLEEP,
-    )
-
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def _build_tx() -> t.Dict:
         """Build transaction"""
         tx = ledger_api.get_transfer_transaction(
             sender_address=crypto.address,
@@ -540,27 +500,23 @@ def drain_eoa(
 
         return tx
 
-    setattr(tx_helper, "build", _build_tx)  # noqa: B010
+
     try:
-        tx_receipt = tx_helper.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
-        )
+        return TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=_build_tx,
+        ).transact().settle().tx_hash
     except ChainInteractionError as e:
         if "No balance to drain from wallet" in str(e):
             logger.warning(f"Failed to drain wallet {crypto.address} with error: {e}.")
             return None
 
         raise e
-
-    tx_hash = tx_receipt.get("transactionHash", None)
-    if tx_hash is not None:
-        return tx_hash.to_0x_hex()
-
-    return None
-
 
 def get_asset_balance(
     ledger_api: LedgerApi,

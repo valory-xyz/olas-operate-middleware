@@ -379,31 +379,24 @@ class Provider(ABC):
             from_address = provider_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(provider_request)
-            tx_settler = TxSettler(
-                ledger_api=from_ledger_api,
-                crypto=wallet.crypto,
-                chain_type=Chain(provider_request.params["from"]["chain"]),
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-            )
             tx_hashes = []
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
-                nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
-                tx["nonce"] = nonce  # TODO: backport to TxSettler
-                setattr(  # noqa: B010
-                    tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
-                )
-                tx_receipt = tx_settler.transact(
-                    method=lambda: {},
-                    contract="",
-                    kwargs={},
-                    dry_run=False,
-                )
+                tx_settler = TxSettler(
+                    ledger_api=from_ledger_api,
+                    crypto=wallet.crypto,
+                    chain_type=Chain(provider_request.params["from"]["chain"]),
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=lambda: {
+                        **tx,
+                        "nonce": from_ledger_api.api.eth.get_transaction_count(from_address)
+                    }
+                ).transact()
                 self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                tx_hashes.append(tx_receipt.get("transactionHash", "").to_0x_hex())
+                tx_hashes.append(tx_settler.tx_hash)
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
