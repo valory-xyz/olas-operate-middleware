@@ -751,7 +751,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )[wallet.address]
             initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
 
-        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+        logger.info(f"_create_safe Computed {initial_funds=}")
 
         try:
             create_tx = wallet.create_safe(  # pylint: disable=no-member
@@ -763,6 +763,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
+                logger.info(
+                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
+                )
                 tx_hash = wallet.transfer_asset(
                     to=safe_address,
                     amount=int(amount),

@@ -352,17 +352,34 @@ class EthereumMasterWallet(MasterWallet):
                 {
                     "from": wallet_address,
                     "gas": 1,
-                    "gasPrice": ledger_api.api.eth.gas_price,
                     "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
                 }
             )
+            gas_pricing = ledger_api.try_get_gas_pricing()
+            if gas_pricing is None:
+                tx["gasPrice"] = ledger_api.api.eth.gas_price
+            elif (
+                "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing
+            ):
+                tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+                tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+            elif "gasPrice" in gas_pricing:
+                tx["gasPrice"] = gas_pricing["gasPrice"]
+            else:
+                tx["gasPrice"] = ledger_api.api.eth.gas_price
+
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,
                 raise_on_try=False,
             )
 
         setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
-        tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
+        tx_receipt = tx_settler.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
+        )
         tx_hash = tx_receipt.get("transactionHash", "").hex()
         return tx_hash
 
