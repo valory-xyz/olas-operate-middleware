@@ -352,22 +352,11 @@ class EthereumMasterWallet(MasterWallet):
                 {
                     "from": wallet_address,
                     "gas": 1,
+                    "maxFeePerGas": 1,
+                    "maxPriorityFeePerGas": 1,
                     "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
                 }
             )
-            gas_pricing = ledger_api.try_get_gas_pricing()
-            if gas_pricing is None:
-                tx["gasPrice"] = ledger_api.api.eth.gas_price
-            elif (
-                "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing
-            ):
-                tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-                tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
-            elif "gasPrice" in gas_pricing:
-                tx["gasPrice"] = gas_pricing["gasPrice"]
-            else:
-                tx["gasPrice"] = ledger_api.api.eth.gas_price
-
             return ledger_api.update_with_gas_estimate(
                 transaction=tx,
                 raise_on_try=False,
