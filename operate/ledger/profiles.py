@@ -85,6 +85,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "pearl_beta_mech_marketplace_2": "0x8d7bE092d154b01d404f1aCCFA22Cef98C613B5D",
         "pearl_beta_mech_marketplace_3": "0x9D00A0551F20979080d3762005C9B74D7Aa77b85",
         "pearl_beta_mech_marketplace_4": "0xE2f80659dB1069f3B6a08af1A62064190c119543",
+        "quickstart_beta_mech_marketplace_expert_1": "0xdB9E2713c3dA3C403F2eA6E570eB978b00304e9E",
+        "quickstart_beta_mech_marketplace_expert_2": "0x1E90522b45c771DCF5f79645B9e96551d2ECaF62",
         "quickstart_beta_mech_marketplace_expert_3": "0x75EECA6207be98cAc3fDE8a20eCd7B01e50b3472",
         "quickstart_beta_mech_marketplace_expert_4": "0x9c7F6103e3a72E4d1805b9C683Ea5B370Ec1a99f",
         "quickstart_beta_mech_marketplace_expert_5": "0xcdC603e0Ee55Aae92519f9770f214b2Be4967f7d",
