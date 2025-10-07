@@ -538,6 +538,7 @@ class FundingManager:
         master_wallet = self.wallet_manager.load(
             ledger_type=LedgerType.ETHEREUM
         )  # Only for ethereum for now
+        self.logger.info(f"[FUNDING MANAGER] Funding Master EOA {master_wallet.address}")
         master_eoa_topups = ChainAmounts(
             {
                 chain.value: {
@@ -738,13 +739,11 @@ class FundingManager:
 
     async def funding_job(
         self,
-        service_config_id: str,
         service_manager: "ServiceManager",
         loop: t.Optional[asyncio.AbstractEventLoop] = None,
     ) -> None:
         """Start a background funding job."""
         loop = loop or asyncio.get_event_loop()
-        service = service_manager.load(service_config_id=service_config_id)
         with ThreadPoolExecutor() as executor:
             last_claim = 0.0
             last_master_eoa_funding = 0.0
@@ -754,9 +753,7 @@ class FundingManager:
                     try:
                         await loop.run_in_executor(
                             executor,
-                            service_manager.claim_on_chain_from_safe,
-                            service_config_id,
-                            service.home_chain,
+                            service_manager.claim_all_on_chain_from_safe,
                         )
                     except Exception:  # pylint: disable=broad-except
                         self.logger.info(
