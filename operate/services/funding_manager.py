@@ -20,9 +20,10 @@
 """Funding manager"""
 
 
-# pylint: disable=too-many-locals
+# pylint: disable=too-many-locals,too-many-statements
 
 import asyncio
+import threading
 import traceback
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
@@ -35,7 +36,7 @@ from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
 from operate.constants import (
-    AGENT_FUNDING_COOLDOWN_SECONDS,
+    DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     MASTER_EOA_PLACEHOLDER,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
@@ -55,7 +56,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
-from operate.utils import merge_sum_dicts
+from operate.utils import SingletonMeta, merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
@@ -66,20 +67,23 @@ if t.TYPE_CHECKING:
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 
-class FundingManager:
+class FundingManager(metaclass=SingletonMeta):
     """FundingManager"""
 
     def __init__(
         self,
         wallet_manager: MasterWalletManager,
         logger: Logger,
+        funding_requests_cooldown_seconds: int = DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     ) -> None:
         """Initialize funding manager."""
         self.wallet_manager = wallet_manager
         self.logger = logger
-        self._funding_in_progress = {}
-        self._last_funding_amounts = {}
-        self._cooldown_until = {}
+        self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
+        self._lock = threading.Lock()
+        self._funding_in_progress: t.Dict[str, bool] = {}
+        self._last_funding_amounts: t.Dict[str, ChainAmounts] = {}
+        self._funding_requests_cooldown_until: t.Dict[str, float] = {}
 
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain
@@ -585,18 +589,29 @@ class FundingManager:
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_initial_topup.values()
         ):
-            service_initial_topup = ChainAmounts()
-
-        service_config_id = service.service_config_id
-        if (
-            self._funding_in_progress.get(service_config_id, False)
-            or self._cooldown_until.get(service_config_id, 0) < time()
-        ):
-            service_shortfalls = ChainAmounts()
-            agent_funding_requests_cooldown = True
+            service_initial_shortfall = ChainAmounts()
         else:
-            service_shortfalls = service.get_agent_funding_requests()
-            agent_funding_requests_cooldown = False
+            service_initial_shortfall = service_initial_topup
+
+        # Service funding requests
+        service_config_id = service.service_config_id
+        funding_in_progress = self._funding_in_progress.get(service_config_id, False)
+        now = time()
+        if funding_in_progress:
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = False
+        elif now < self._funding_requests_cooldown_until.get(service_config_id, 0):
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = True
+        else:
+            funding_requests = service.get_funding_requests()
+            funding_requests_cooldown = False
+
+        self.logger.info(f"[FUNDING MANAGER] {funding_in_progress=}")
+        self.logger.info(f"[FUNDING MANAGER] {funding_requests_cooldown=}")
+        self.logger.info(f"[FUNDING MANAGER] {now=}")
+        self.logger.info(f"[FUNDING MANAGER] {self._funding_in_progress=}")
+        self.logger.info(f"[FUNDING MANAGER] {self._funding_requests_cooldown_until=}")
 
         # Master EOA shortfall
         master_eoa_topups = ChainAmounts()
@@ -655,7 +670,7 @@ class FundingManager:
         master_safe_thresholds = self._aggregate_as_master_safe_amounts(
             master_eoa_shortfalls,
             protocol_shortfalls,
-            service_initial_topup,
+            service_initial_shortfall,
         )
         master_safe_topup = master_safe_thresholds
         master_safe_balances = merge_sum_dicts(
@@ -712,8 +727,9 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": service_shortfalls,
-            "agent_funding_requests_cooldown": agent_funding_requests_cooldown,
+            "agent_funding_requests": funding_requests,
+            "agent_funding_requests_cooldown": funding_requests_cooldown,
+            "agent_funding_in_progress": funding_in_progress,
         }
 
     def fund_service_initial(self, service: Service) -> None:
@@ -724,7 +740,7 @@ class FundingManager:
         required = self._aggregate_as_master_safe_amounts(amounts)
         balances = self._get_master_safe_balances(required)
 
-        if required > balances:
+        if balances < required:
             raise RuntimeError(
                 f"[FUNDING MANAGER] Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
             )
@@ -752,11 +768,12 @@ class FundingManager:
         """Fund service-related wallets."""
         service_config_id = service.service_config_id
 
-        # Atomic check-and-set using setdefault
-        if self._funding_in_progress.setdefault(service_config_id, True):
-            raise RuntimeError(
-                f"Funding already in progress for service {service_config_id}."
-            )
+        with self._lock:
+            if self._funding_in_progress.get(service_config_id, False):
+                raise RuntimeError(
+                    f"Funding already in progress for service {service_config_id}."
+                )
+            self._funding_in_progress[service_config_id] = True
 
         try:
             for chain_str, addresses in amounts.items():
@@ -772,11 +789,12 @@ class FundingManager:
 
             self._fund_chain_amounts(amounts)
             self._last_funding_amounts[service_config_id] = amounts
-            self._cooldown_until[service_config_id] = (
-                time() + AGENT_FUNDING_COOLDOWN_SECONDS
+            self._funding_requests_cooldown_until[service_config_id] = (
+                time() + self.funding_requests_cooldown_seconds
             )
         finally:
-            self._funding_in_progress[service_config_id] = False
+            with self._lock:
+                self._funding_in_progress[service_config_id] = False
 
     async def funding_job(
         self,

@@ -197,6 +197,8 @@ class OperateApp:
             wallet_manager=self.wallet_manager,
             logger=logger,
         )
+        if self.password:
+            manager.wallet_manager.password = self.password
         return manager
 
     @property

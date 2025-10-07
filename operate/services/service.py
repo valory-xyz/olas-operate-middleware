@@ -1148,10 +1148,10 @@ class Service(LocalResource):
 
         return amounts
 
-    def get_agent_funding_requests(self) -> ChainAmounts:
+    def get_funding_requests(self) -> ChainAmounts:
         """Get funding amounts requested by the agent."""
         agent_response = {}
-        agent_funding_requests = ChainAmounts()
+        funding_requests = ChainAmounts()
         try:
             resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
             resp.raise_for_status()
@@ -1162,9 +1162,9 @@ class Service(LocalResource):
             )
 
         for chain_str, addresses in agent_response.items():
-            agent_funding_requests.setdefault(chain_str, {})
+            funding_requests.setdefault(chain_str, {})
             for address, assets in addresses.items():
-                agent_funding_requests[chain_str].setdefault(address, {})
+                funding_requests[chain_str].setdefault(address, {})
                 if (
                     address not in self.agent_addresses
                     and address != self.chain_configs[chain_str].chain_data.multisig
@@ -1175,13 +1175,13 @@ class Service(LocalResource):
 
                 for asset, amounts in assets.items():
                     try:
-                        agent_funding_requests[chain_str][address][asset] = int(
+                        funding_requests[chain_str][address][asset] = int(
                             amounts["deficit"]
                         )
                     except (ValueError, TypeError):
                         logger.warning(
                             f"[FUNDING MANAGER] Invalid funding amount {amounts['deficit']} for asset {asset} on chain {chain_str} for address {address}. Setting to 0."
                         )
-                        agent_funding_requests[chain_str][address][asset] = 0
+                        funding_requests[chain_str][address][asset] = 0
 
-        return agent_funding_requests
+        return funding_requests
