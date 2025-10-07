@@ -298,7 +298,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     def schedule_funding_job() -> None:
         """Schedule the funding job."""
         cancel_funding_job()  # cancel previous job if any
-        logger.info(f"Starting the funding job")
+        logger.info("Starting the funding job")
 
         loop = asyncio.get_event_loop()
         nonlocal funding_job
@@ -317,7 +317,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         status = funding_job.cancel()
         if not status:
-            logger.info(f"Funding job cancellation failed")
+            logger.info("Funding job cancellation failed")
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")

@@ -538,7 +538,9 @@ class FundingManager:
         master_wallet = self.wallet_manager.load(
             ledger_type=LedgerType.ETHEREUM
         )  # Only for ethereum for now
-        self.logger.info(f"[FUNDING MANAGER] Funding Master EOA {master_wallet.address}")
+        self.logger.info(
+            f"[FUNDING MANAGER] Funding Master EOA {master_wallet.address}"
+        )
         master_eoa_topups = ChainAmounts(
             {
                 chain.value: {
