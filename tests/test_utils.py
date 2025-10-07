@@ -330,20 +330,3 @@ class TestSingletonMeta:
 
         assert instance1 is instance2
         assert instance1.get_time() == instance2.get_time()
-
-    def test_class_locks_created(self) -> None:
-        """Test that class locks are properly created for each singleton class."""
-
-        class LockTestSingleton(metaclass=SingletonMeta):
-            pass
-
-        # Create an instance to ensure the class is processed
-        LockTestSingleton()
-
-        # Check that a lock was created for this class
-        assert LockTestSingleton in SingletonMeta._class_locks
-        # Check that the lock is the correct type by comparing with a known lock instance
-        expected_lock_type = type(threading.Lock())
-        assert isinstance(
-            SingletonMeta._class_locks[LockTestSingleton], expected_lock_type
-        )

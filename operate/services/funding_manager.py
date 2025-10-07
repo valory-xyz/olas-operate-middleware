@@ -593,9 +593,9 @@ class FundingManager(metaclass=SingletonMeta):
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_initial_topup.values()
         ):
-            service_initial_shortfall = ChainAmounts()
+            service_initial_shortfalls = ChainAmounts()
         else:
-            service_initial_shortfall = service_initial_topup
+            service_initial_shortfalls = service_initial_topup
 
         # Service funding requests
         service_config_id = service.service_config_id
@@ -674,7 +674,7 @@ class FundingManager(metaclass=SingletonMeta):
         master_safe_thresholds = self._aggregate_as_master_safe_amounts(
             master_eoa_shortfalls,
             protocol_shortfalls,
-            service_initial_shortfall,
+            service_initial_shortfalls,
         )
         master_safe_topup = master_safe_thresholds
         master_safe_balances = merge_sum_dicts(
