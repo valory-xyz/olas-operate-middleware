@@ -1145,6 +1145,11 @@ Get agent performance information.
 
 Get service funding requirements by asking the agent also.
 
+Notes:
+
+- If `agent_funding_in_progress` is `true`, then `agent_funding_requests` might reflect an inaccurate value, as the agent might not have had time to receive funds and reconsider new funding requests.
+- If `agent_funding_requests_cooldown` is `true`, it means a recent call to `/api/v2/service/{service_config_id}/fund`. Agent requests are ignored during the cooldown period, and `agent_funding_requests` will be empty.
+
 **Response (Success - 200):**
 
 ```json
@@ -1188,7 +1193,9 @@ Get service funding requirements by asking the agent also.
     }
   },
   "is_refill_required": true,
-  "allow_start_agent": true
+  "allow_start_agent": true,
+  "agent_funding_requests_cooldown": false,
+  "agent_funding_in_progress": false,
 }
 ```
 
@@ -1682,7 +1689,7 @@ Terminates and unbonds a service on-chain, and withdraws all the funds from the 
 
 ### `POST /api/v2/service/{service_config_id}/fund`
 
-Funds the agent or service Safe from Master Safe.
+Funds the agent or service Safe from Master Safe. Fails (409 - Request conflict) if a funding operation is already in progress.
 
 **Request Body:**
 
@@ -1735,6 +1742,14 @@ Funds the agent or service Safe from Master Safe.
 ```json
 {
   "error": "Failed to fund from Master Safe. Insufficient funds: (...)"
+}
+```
+
+**Response (Funding already in progress - 409):**
+
+```json
+{
+  "error": "Funding already in progress for service service_123."
 }
 ```
 

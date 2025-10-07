@@ -77,7 +77,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
-from operate.services.funding_manager import FundingManager
+from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
@@ -1249,7 +1249,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/v2/service/{service_config_id}/fund")
-    async def fund_service(request: Request) -> JSONResponse:
+    async def fund_service(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> JSONResponse:
         """Fund agent or service safe via Master Safe"""
 
         if operate.password is None:
@@ -1294,6 +1296,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except FundingInProgressError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(

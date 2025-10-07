@@ -67,6 +67,10 @@ if t.TYPE_CHECKING:
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 
+class FundingInProgressError(RuntimeError):
+    """Raised when an attempt is made to fund a service that is already being funded."""
+
+
 class FundingManager(metaclass=SingletonMeta):
     """FundingManager"""
 
@@ -742,7 +746,7 @@ class FundingManager(metaclass=SingletonMeta):
 
         if balances < required:
             raise RuntimeError(
-                f"[FUNDING MANAGER] Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
+                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
             )
 
         for chain_str, addresses in amounts.items():
@@ -770,7 +774,7 @@ class FundingManager(metaclass=SingletonMeta):
 
         with self._lock:
             if self._funding_in_progress.get(service_config_id, False):
-                raise RuntimeError(
+                raise FundingInProgressError(
                     f"Funding already in progress for service {service_config_id}."
                 )
             self._funding_in_progress[service_config_id] = True
