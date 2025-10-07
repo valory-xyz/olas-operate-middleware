@@ -79,6 +79,7 @@ from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.funding_manager import FundingManager
 from operate.services.health_checker import HealthChecker
+from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
@@ -132,6 +133,7 @@ class OperateApp:
             logger=logger,
         )
         self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self.settings = Settings(path=self._path)
 
         mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
@@ -480,6 +482,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     async def _get_api(request: Request) -> JSONResponse:
         """Get API info."""
         return JSONResponse(content=operate.json)
+
+    @app.get("/api/settings")
+    async def _get_settings(request: Request) -> JSONResponse:
+        """Get settings."""
+        return JSONResponse(content=operate.settings.json)
 
     @app.get("/api/account")
     @with_retries

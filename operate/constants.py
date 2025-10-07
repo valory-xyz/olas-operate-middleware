@@ -33,6 +33,7 @@ DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"
 USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
+SETTINGS_JSON = "settings.json"
 FUNDING_REQUIREMENTS_JSON = "funding_requirements.json"
 DEFAULT_TOPUP_THRESHOLD = 0.5
 
