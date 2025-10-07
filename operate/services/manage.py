@@ -1807,6 +1807,16 @@ class ServiceManager:
             )
         ).settle()
 
+    def claim_all_on_chain_from_safe(self) -> None:
+        """Claim rewards from all services and chains"""
+        self.logger.info("claim_all_on_chain_from_safe")
+        services, _ = self.get_all_services()
+        for service in services:
+            self.claim_on_chain_from_safe(
+                service_config_id=service.service_config_id,
+                chain=service.home_chain,
+            )
+
     def claim_on_chain_from_safe(
         self,
         service_config_id: str,
