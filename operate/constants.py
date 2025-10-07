@@ -55,6 +55,7 @@ ON_CHAIN_INTERACT_TIMEOUT = 120.0
 ON_CHAIN_INTERACT_RETRIES = 10
 ON_CHAIN_INTERACT_SLEEP = 3.0
 MIN_PASSWORD_LENGTH = 8
+AGENT_FUNDING_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 
 HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
 AGENT_FUNDS_STATUS_URL = "http://127.0.0.1:8716/funds-status"

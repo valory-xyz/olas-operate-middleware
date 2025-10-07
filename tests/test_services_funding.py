@@ -693,9 +693,7 @@ class TestFunding(OnTestnet):
             },
             "is_refill_required": True,
             "allow_start_agent": False,
-            "agent_funding_requests": {
-                chain1.value: {},
-            },
+            "agent_funding_requests": {},
         }
 
         app = create_app(home=operate._path)
@@ -723,14 +721,6 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        expected_json["agent_funding_requests"][chain1.value] = {
-            "service_safe": {
-                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
-            },
-            agent_eoa: {
-                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-            },
-        }
         diff = DeepDiff(response_json, expected_json)
         assert not diff, diff
 
