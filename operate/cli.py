@@ -269,7 +269,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home)
 
-    funding_jobs: t.Dict[str, asyncio.Task] = {}
+    funding_job: t.Optional[asyncio.Task] = None
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
     )
@@ -297,29 +297,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # dont start health checker if it's switched off
             health_checker.start_for_service(service_config_id)
 
-    def schedule_funding_job(service_config_id: str) -> None:
-        """Schedule a funding job."""
-        logger.info(f"Starting funding job for {service_config_id}")
-        if service_config_id in funding_jobs:
-            logger.info(f"Cancelling existing funding job for {service_config_id}")
-            cancel_funding_job(service_config_id=service_config_id)
+    def schedule_funding_job() -> None:
+        """Schedule the funding job."""
+        cancel_funding_job()  # cancel previous job if any
+        logger.info("Starting the funding job")
 
-        loop = asyncio.get_running_loop()
-        funding_jobs[service_config_id] = loop.create_task(
+        loop = asyncio.get_event_loop()
+        nonlocal funding_job
+        funding_job = loop.create_task(
             operate.funding_manager.funding_job(
-                service_config_id=service_config_id,
                 service_manager=operate.service_manager(),
                 loop=loop,
             )
         )
 
-    def cancel_funding_job(service_config_id: str) -> None:
+    def cancel_funding_job() -> None:
         """Cancel funding job."""
-        if service_config_id not in funding_jobs:
+        nonlocal funding_job
+        if funding_job is None:
             return
-        status = funding_jobs[service_config_id].cancel()
+
+        status = funding_job.cancel()
         if not status:
-            logger.info(f"Funding job cancellation for {service_config_id} failed")
+            logger.info("Funding job cancellation failed")
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
@@ -358,7 +358,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     f"Deployment {service_config_id} stopping failed. but continue"
                 )
             logger.info(f"Cancelling funding job for {service_config_id}")
-            cancel_funding_job(service_config_id=service_config_id)
             health_checker.stop_for_service(service_config_id=service_config_id)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
@@ -381,6 +380,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         watchdog_task = set_parent_watchdog(app)
         yield
         # Clean up the ML models and release the resources
+
+        with suppress(Exception):
+            cancel_funding_job()
 
         with suppress(Exception):
             watchdog_task.cancel()
@@ -594,6 +596,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         operate.password = data["password"]
+        schedule_funding_job()
         return JSONResponse(
             content={"message": "Login successful."},
             status_code=HTTPStatus.OK,
@@ -765,7 +768,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )[wallet.address]
             initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
 
-        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+        logger.info(f"_create_safe Computed {initial_funds=}")
 
         try:
             create_tx = wallet.create_safe(  # pylint: disable=no-member
@@ -780,6 +783,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 if amount <= 0:
                     continue
 
+                logger.info(
+                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
+                )
                 tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
@@ -955,6 +961,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             content={service_id: service_id in _services for service_id in service_ids}
         )
 
+    @app.get("/api/v2/services/deployment")
+    @with_retries
+    async def _get_services_deployment(request: Request) -> JSONResponse:
+        """Get a service deployment."""
+        service_manager = operate.service_manager()
+        output = {}
+        for service in service_manager.get_all_services()[0]:
+            deployment_json = service.deployment.json
+            deployment_json["healthcheck"] = service.get_latest_healthcheck()
+            output[service.service_config_id] = deployment_json
+
+        return JSONResponse(content=output)
+
     @app.get("/api/v2/service/{service_config_id}")
     @with_retries
     async def _get_service(request: Request) -> JSONResponse:
@@ -1067,7 +1086,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
-        schedule_funding_job(service_config_id=service_config_id)
         schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
@@ -1133,7 +1151,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         await run_in_executor(deployment.stop)
         logger.info(f"Cancelling funding job for {service_config_id}")
-        cancel_funding_job(service_config_id=service_config_id)
         return JSONResponse(content=deployment.json)
 
     # TODO Deprecate
@@ -1603,8 +1620,12 @@ def qs_start(
 @_operate.command(name="quickstop")
 def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
-    """Quickstart."""
+    """Quickstop."""
+    os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
     stop_service(operate=operate, config_path=config)

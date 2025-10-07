@@ -403,7 +403,8 @@ class EthereumMasterWallet(MasterWallet):
                 {
                     "from": wallet_address,
                     "gas": 1,
-                    "gasPrice": ledger_api.api.eth.gas_price,
+                    "maxFeePerGas": 1,
+                    "maxPriorityFeePerGas": 1,
                     "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
                 }
             )
@@ -413,7 +414,12 @@ class EthereumMasterWallet(MasterWallet):
             )
 
         setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
-        tx_receipt = tx_settler.transact(lambda x: x, "", kwargs={})
+        tx_receipt = tx_settler.transact(
+            method=lambda: {},
+            contract="",
+            kwargs={},
+            dry_run=False,
+        )
         tx_hash = tx_receipt.get("transactionHash", "").hex()
         return tx_hash
 
