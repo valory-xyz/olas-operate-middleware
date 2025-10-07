@@ -78,6 +78,7 @@ class FundingManager:
         self.wallet_manager = wallet_manager
         self.logger = logger
         self._funding_in_progress = {}
+        self._last_funding_amounts = {}
         self._cooldown_until = {}
 
     def drain_agents_eoas(
@@ -720,6 +721,14 @@ class FundingManager:
         self._fund_chain_amounts(service.get_initial_funding_amounts())
 
     def _fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+        required = self._aggregate_as_master_safe_amounts(amounts)
+        balances = self._get_master_safe_balances(required)
+
+        if required > balances:
+            raise RuntimeError(
+                f"[FUNDING MANAGER] Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
+            )
+
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -762,6 +771,7 @@ class FundingManager:
                         )
 
             self._fund_chain_amounts(amounts)
+            self._last_funding_amounts[service_config_id] = amounts
             self._cooldown_until[service_config_id] = (
                 time() + AGENT_FUNDING_COOLDOWN_SECONDS
             )
