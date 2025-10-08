@@ -751,7 +751,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )[wallet.address]
             initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
 
-        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+        logger.info(f"_create_safe Computed {initial_funds=}")
 
         try:
             create_tx = wallet.create_safe(  # pylint: disable=no-member
@@ -763,6 +763,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
+                logger.info(
+                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
+                )
                 tx_hash = wallet.transfer_asset(
                     to=safe_address,
                     amount=int(amount),
@@ -1393,8 +1396,12 @@ def qs_start(
 @_operate.command(name="quickstop")
 def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
-    """Quickstart."""
+    """Quickstop."""
+    os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
     stop_service(operate=operate, config_path=config)
