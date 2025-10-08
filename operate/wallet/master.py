@@ -342,7 +342,8 @@ class EthereumMasterWallet(MasterWallet):
                 {
                     "from": wallet_address,
                     "gas": 1,
-                    "gasPrice": ledger_api.api.eth.gas_price,
+                    "maxFeePerGas": 1,
+                    "maxPriorityFeePerGas": 1,
                     "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
                 }
             )
