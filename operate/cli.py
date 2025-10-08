@@ -751,7 +751,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )[wallet.address]
             initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
 
-        logger.info(f"POST /api/wallet/safe Computed {initial_funds=}")
+        logger.info(f"_create_safe Computed {initial_funds=}")
 
         try:
             create_tx = wallet.create_safe(  # pylint: disable=no-member
@@ -763,6 +763,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
+                logger.info(
+                    f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
+                )
                 tx_hash = wallet.transfer_asset(
                     to=safe_address,
                     amount=int(amount),
@@ -861,6 +864,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(
             content={service_id: service_id in _services for service_id in service_ids}
         )
+
+    @app.get("/api/v2/services/deployment")
+    @with_retries
+    async def _get_services_deployment(request: Request) -> JSONResponse:
+        """Get a service deployment."""
+        service_manager = operate.service_manager()
+        output = {}
+        for service in service_manager.get_all_services()[0]:
+            deployment_json = service.deployment.json
+            deployment_json["healthcheck"] = service.get_latest_healthcheck()
+            output[service.service_config_id] = deployment_json
+
+        return JSONResponse(content=output)
 
     @app.get("/api/v2/service/{service_config_id}")
     @with_retries
@@ -1389,8 +1405,12 @@ def qs_stop(
         bool,
         params.Boolean(help="Will use the released binary to run the service"),
     ] = False,
+    attended: Annotated[
+        str, params.String(help="Run in attended/unattended mode (default: true")
+    ] = "true",
 ) -> None:
-    """Quickstart."""
+    """Quickstop."""
+    os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
     stop_service(operate=operate, config_path=config, use_binary=use_binary)

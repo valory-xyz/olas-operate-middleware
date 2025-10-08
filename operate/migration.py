@@ -347,6 +347,14 @@ class MigrationManager:
             del data["keys"]
 
         if version < 8:
+            for _, chain_data in data.get("chain_configs", {}).items():
+                if chain_data["chain_data"]["multisig"] == "0xm":
+                    chain_data["chain_data"]["multisig"] = NON_EXISTENT_MULTISIG
+
+            if "keys" in data:
+                data["agent_addresses"] = [key["address"] for key in data["keys"]]
+                del data["keys"]
+
             if data["home_chain"] == "optimistic":
                 data["home_chain"] = Chain.OPTIMISM.value
 

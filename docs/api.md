@@ -828,6 +828,7 @@ Get all valid services.
     "name": "My Service",
     "version": 9,
     "service_config_id": "service_123",
+    "service_public_id": "valory/service_123:0.1.0",
     "package_path": "package",
     "hash": "bafybei...",
     "hash_history": {
@@ -901,6 +902,52 @@ Check if all the services are valid and can be deployed.
 }
 ```
 
+### `GET /api/v2/services/deployment`
+
+Get all services deployment information.
+
+**Response (Success - 200):**
+
+```json
+{
+  "service_config_id1": {
+    "status": 3,  // DEPLOYED
+    "nodes": {
+      "agent": ["service_abci_0"],
+      "tendermint": ["service_tm_0"]
+    },
+    "path": "/path/to/service",
+    "healthcheck": {
+      "agent_health": {},
+      "is_healthy": true,
+      "is_tm_healthy": true,    
+      "is_transitioning_fast": true,
+      "period": 123,
+      "reset_pause_duration": 30,
+      "rounds": ["round_1", "round_2", "round_3"],
+      "rounds_info": {},
+      "seconds_since_last_transition": 12.34,
+    }
+  },
+  "service_config_id2": {
+    "status": 1,  // BUILT
+    "nodes": {
+      "agent": [],
+      "tendermint": []
+    },
+    "healthcheck": {}
+  },
+  "service_config_id3": {
+    "status": 1,  // BUILT
+    "nodes": {
+      "agent": [],
+      "tendermint": []
+    },
+    "healthcheck": {}
+  }
+}
+```
+
 ### `GET /api/v2/service/{service_config_id}`
 
 Get a specific service.
@@ -912,6 +959,7 @@ Get a specific service.
   "name": "My Service",
   "version": 9,
   "service_config_id": "service_123",
+  "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
   "hash": "bafybei...",
   "hash_history": {
@@ -986,17 +1034,22 @@ Get service deployment information.
 
 ```json
 {
-  "status": "DEPLOYED",
+  "status": 3,  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
   },
   "path": "/path/to/service",
   "healthcheck": {
+    "agent_health": {},
     "is_healthy": true,
-    "is_transitioning_fast": false,
+    "is_tm_healthy": true,    
+    "is_transitioning_fast": true,
     "period": 123,
-    "round": 456
+    "reset_pause_duration": 30,
+    "rounds": ["round_1", "round_2", "round_3"],
+    "rounds_info": {},
+    "seconds_since_last_transition": 12.34,
   }
 }
 ```
@@ -1005,7 +1058,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": "BUILT",
+  "status": 1,  // BUILT
   "nodes": {
     "agent": [],
     "tendermint": []
@@ -1019,7 +1072,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": "DEPLOYED",
+  "status": 3,  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
@@ -1146,6 +1199,7 @@ Create a new service.
   "name": "My Service",
   "version": 9,
   "service_config_id": "service_123",
+  "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
   "hash": "bafybei...",
   "hash_history": {
@@ -1211,6 +1265,7 @@ Create a new service.
   "name": "My Service",
   "version": 9,
   "service_config_id": "service_123",
+  "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
   "hash": "bafybei...",
   "hash_history": {
@@ -1439,6 +1494,7 @@ Deploy and run a service.
   "name": "My Service",
   "version": 9,
   "service_config_id": "service_123",
+  "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
   "hash": "bafybei...",
   "hash_history": {
@@ -1529,7 +1585,7 @@ Stop a running service deployment locally.
 
 ```json
 {
-  "status": "STOPPED",
+  "status": 5,  // STOPPED
   "nodes": {
     "agent": [],
     "tendermint": []
