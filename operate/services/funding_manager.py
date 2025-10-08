@@ -60,7 +60,7 @@ from operate.utils import SingletonMeta, merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
-from operate.wallet.master import MasterWalletManager
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
 if t.TYPE_CHECKING:
@@ -86,7 +86,6 @@ class FundingManager(metaclass=SingletonMeta):
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
         self._funding_in_progress: t.Dict[str, bool] = {}
-        self._last_funding_amounts: t.Dict[str, ChainAmounts] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
 
     def drain_agents_eoas(
@@ -614,12 +613,6 @@ class FundingManager(metaclass=SingletonMeta):
             funding_requests = service.get_funding_requests()
             funding_requests_cooldown = False
 
-        self.logger.info(f"[FUNDING MANAGER] {funding_in_progress=}")
-        self.logger.info(f"[FUNDING MANAGER] {funding_requests_cooldown=}")
-        self.logger.info(f"[FUNDING MANAGER] {now=}")
-        self.logger.info(f"[FUNDING MANAGER] {self._funding_in_progress=}")
-        self.logger.info(f"[FUNDING MANAGER] {self._funding_requests_cooldown_until=}")
-
         # Master EOA shortfall
         master_eoa_topups = ChainAmounts()
         for chain in chains:
@@ -748,7 +741,7 @@ class FundingManager(metaclass=SingletonMeta):
         balances = self._get_master_safe_balances(required)
 
         if balances < required:
-            raise RuntimeError(
+            raise InsufficientFundsException(
                 f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
             )
 
@@ -775,6 +768,10 @@ class FundingManager(metaclass=SingletonMeta):
         """Fund service-related wallets."""
         service_config_id = service.service_config_id
 
+        # Atomic, thread-safe get-and-set of the _funding_in_progress boolean.
+        # This ensures only one funding operation per service at a time, and
+        # any call to fund_service while a funding operation is in progress will
+        # raise a FundingInProgressError (instead of blocking and piling up calls).
         with self._lock:
             if self._funding_in_progress.get(service_config_id, False):
                 raise FundingInProgressError(
@@ -795,7 +792,6 @@ class FundingManager(metaclass=SingletonMeta):
                         )
 
             self._fund_chain_amounts(amounts)
-            self._last_funding_amounts[service_config_id] = amounts
             self._funding_requests_cooldown_until[service_config_id] = (
                 time() + self.funding_requests_cooldown_seconds
             )
