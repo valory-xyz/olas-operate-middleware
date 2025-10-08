@@ -1199,7 +1199,7 @@ Get service funding requirements by asking the agent also.
 Notes:
 
 - If `agent_funding_in_progress` is `true`, then `agent_funding_requests` might reflect an inaccurate value, as the agent might not have had time to receive funds and reconsider new funding requests.
-- If `agent_funding_requests_cooldown` is `true`, it means a recent call to `/api/v2/service/{service_config_id}/fund` has occurred. Agent requests are ignored during the cooldown period, and the `agent_funding_requests` dictionary will be empty.
+- If `agent_funding_requests_cooldown` is `true`, it means a recent call to `/api/v2/service/{service_config_id}/fund` has occurred. Agent requests are ignored during the cooldown period, and the `agent_funding_requests` dictionary will be empty. The default cooldown period is 5 minutes. 
 
 **Response (Success - 200):**
 
