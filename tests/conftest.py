@@ -407,7 +407,20 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
 
 
 @pytest.fixture
-def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
+def test_operate(tmp_path: Path, password: str) -> OperateApp:
+    """Sets up a test operate app."""
+    operate = OperateApp(
+        home=tmp_path / OPERATE_TEST,
+    )
+    operate.setup()
+    operate.create_user_account(password=password)
+    operate.password = password
+    operate.wallet_manager.setup()
+    return operate
+
+
+@pytest.fixture
+def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> OperateTestEnv:
     """Sets up a test environment."""
 
     def _create_wallets(wallet_manager: MasterWalletManager) -> None:
@@ -437,15 +450,8 @@ def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
                     amount=int(1000e6),
                 )
 
-    operate = OperateApp(
-        home=tmp_path / OPERATE_TEST,
-    )
-    operate.setup()
-    operate.create_user_account(password=password)
-    operate.password = password
-    operate.wallet_manager.setup()
     keys_manager = KeysManager(
-        path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
+        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
         logger=LOGGER,
     )
     backup_owner = keys_manager.create()
@@ -453,25 +459,25 @@ def test_env(tmp_path: Path, password: str) -> OperateTestEnv:
 
     assert backup_owner != backup_owner2
 
-    _create_wallets(wallet_manager=operate.wallet_manager)
+    _create_wallets(wallet_manager=test_operate.wallet_manager)
     _create_safes(
-        wallet_manager=operate.wallet_manager,
+        wallet_manager=test_operate.wallet_manager,
         backup_owner=backup_owner,
     )
-    operate.service_manager().create(service_template=_get_service_template_trader())
+    test_operate.service_manager().create(
+        service_template=_get_service_template_trader()
+    )
 
     # Logout
-    operate = OperateApp(
-        home=tmp_path / OPERATE_TEST,
-    )
+    test_operate.password = None
 
     return OperateTestEnv(
         tmp_path=tmp_path,
         password=password,
-        operate=operate,
-        wallet_manager=operate.wallet_manager,
-        service_manager=operate.service_manager(),
-        bridge_manager=operate.bridge_manager,
+        operate=test_operate,
+        wallet_manager=test_operate.wallet_manager,
+        service_manager=test_operate.service_manager(),
+        bridge_manager=test_operate.bridge_manager,
         keys_manager=keys_manager,
         backup_owner=backup_owner,
         backup_owner2=backup_owner2,
