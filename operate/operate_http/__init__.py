@@ -32,8 +32,6 @@ from starlette.types import Receive, Scope, Send
 from operate.operate_http.exceptions import NotAllowed, ResourceException
 
 
-# pylint: disable=no-self-use
-
 GenericResource = t.TypeVar("GenericResource")
 PostPayload = t.TypeVar("PostPayload")
 PostResponse = t.TypeVar("PostResponse")

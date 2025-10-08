@@ -660,9 +660,7 @@ class TestBridgeManager:
 
             print(f"{refill_amount=}")
 
-            quoted_from_cost_usd = (
-                refill_amount * from_price_usd / (10**from_decimals)
-            )
+            quoted_from_cost_usd = refill_amount * from_price_usd / (10**from_decimals)
             expected_to_cost_usd = amount_unit * to_price_usd
             print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")
             print(f"Quoted cost on {from_chain}: {quoted_from_cost_usd}")

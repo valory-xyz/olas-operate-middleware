@@ -1948,7 +1948,7 @@ class ServiceManager:
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
-        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
         ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
         transfer_erc20_from_safe(
@@ -2454,9 +2454,9 @@ class ServiceManager:
                 allow_start_agent = False
 
             # Protocol asset requirements
-            protocol_asset_requirements[
-                chain
-            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            protocol_asset_requirements[chain] = (
+                self._compute_protocol_asset_requirements(service_config_id, chain)
+            )
             service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Bonded assets
@@ -2563,15 +2563,12 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
-                total_requirements[chain].setdefault(master_safe, {})[
-                    asset_address
-                ] = sum(
-                    agent_asset_funding_values[address]["topup"]
-                    for address in agent_asset_funding_values
-                ) + protocol_asset_requirements[
-                    chain
-                ].get(
-                    asset_address, 0
+                total_requirements[chain].setdefault(master_safe, {})[asset_address] = (
+                    sum(
+                        agent_asset_funding_values[address]["topup"]
+                        for address in agent_asset_funding_values
+                    )
+                    + protocol_asset_requirements[chain].get(asset_address, 0)
                 )
 
                 if asset_address == ZERO_ADDRESS and any(
@@ -2600,9 +2597,9 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
-            total_requirements[chain].setdefault(master_eoa, {})[
-                ZERO_ADDRESS
-            ] = eoa_funding_values["topup"]
+            total_requirements[chain].setdefault(master_eoa, {})[ZERO_ADDRESS] = (
+                eoa_funding_values["topup"]
+            )
 
         is_refill_required = any(
             amount > 0

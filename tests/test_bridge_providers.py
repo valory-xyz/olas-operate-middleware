@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
+from hexbytes import HexBytes
 from web3 import Web3
 
 from operate.bridge.bridge_manager import (
@@ -60,7 +61,7 @@ from operate.operate_types import Chain, LedgerType
 from tests.constants import OPERATE_TEST
 
 
-TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
@@ -100,13 +101,15 @@ def get_transfer_amount(
         for log in receipt["logs"]:
             if (
                 log["address"].lower() == token_address.lower()
-                and log["topics"][0].hex().lower() == TRANSFER_TOPIC.lower()
-                and Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
+                and log["topics"][0].to_0x_hex().lower() == TRANSFER_TOPIC.lower()
+                and Web3.to_checksum_address("0x" + log["topics"][2].to_0x_hex()[-40:])
                 == recipient
             ):
                 data = log["data"]
                 value = (
-                    int(data.hex(), 16) if isinstance(data, bytes) else int(data, 16)
+                    int(data.to_0x_hex(), 16)
+                    if isinstance(data, HexBytes)
+                    else int(data, 16)
                 )
                 return value
         return 0

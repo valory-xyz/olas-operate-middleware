@@ -70,9 +70,8 @@ class MasterWallet(LocalResource):
 
     path: Path
     address: str
-
-    safes: t.Dict[Chain, str] = field(default_factory=dict)
-    safe_chains: t.List[Chain] = field(default_factory=list)
+    safes: t.Dict[Chain, str]
+    safe_chains: t.List[Chain]
     ledger_type: LedgerType
     safe_nonce: t.Optional[int] = None
 
@@ -122,6 +121,7 @@ class MasterWallet(LocalResource):
             address=(rpc or get_default_rpc(chain=chain)),
             chain_id=chain.id,
             gas_price_strategies=gas_price_strategies,
+            poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
         )
 
     def transfer(
@@ -243,21 +243,11 @@ class EthereumMasterWallet(MasterWallet):
 
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> t.Optional[str]:
+    ) -> str:
         """Transfer funds from EOA wallet."""
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
-        tx_helper = TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
 
-        def _build_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kwargs: t.Any
-        ) -> t.Dict:
+        def _build_tx() -> t.Dict:
             """Build transaction"""
             max_priority_fee_per_gas = os.getenv("MAX_PRIORITY_FEE_PER_GAS", None)
             max_fee_per_gas = os.getenv("MAX_FEE_PER_GAS", None)
@@ -279,10 +269,20 @@ class EthereumMasterWallet(MasterWallet):
                 raise_on_try=True,
             )
 
-        setattr(tx_helper, "build", _build_tx)  # noqa: B010
-        tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
-        return tx_hash
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -327,22 +327,12 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> t.Optional[str]:
+    ) -> str:
         """Transfer erc20 from EOA wallet."""
         wallet_address = self.address
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
-        tx_settler = TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
 
-        def _build_transfer_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
+        def _build_transfer_tx() -> t.Dict:
             # TODO Backport to OpenAEA
             instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -362,15 +352,20 @@ class EthereumMasterWallet(MasterWallet):
                 raise_on_try=False,
             )
 
-        setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
-        tx_receipt = tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_transfer_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
-        return tx_hash
 
     def transfer(
         self,

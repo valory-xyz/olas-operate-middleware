@@ -39,7 +39,7 @@ class DualStakingTokenContract(Contract):
     ) -> JSONLike:
         """Build stake tx."""
         contract_instance = cls.get_instance(ledger_api, contract_address)
-        data = contract_instance.encodeABI("stake", args=[service_id])
+        data = contract_instance.encode_abi("stake", args=[service_id])
         return dict(data=bytes.fromhex(data[2:]))
 
     @classmethod
@@ -50,7 +50,7 @@ class DualStakingTokenContract(Contract):
     ) -> JSONLike:
         """Build checkpoint tx."""
         contract_instance = cls.get_instance(ledger_api, contract_address)
-        data = contract_instance.encodeABI("checkpoint")
+        data = contract_instance.encode_abi("checkpoint")
         return dict(data=bytes.fromhex(data[2:]))
 
     @classmethod
@@ -62,7 +62,7 @@ class DualStakingTokenContract(Contract):
     ) -> JSONLike:
         """Build unstake tx."""
         contract_instance = cls.get_instance(ledger_api, contract_address)
-        data = contract_instance.encodeABI("unstake", args=[service_id])
+        data = contract_instance.encode_abi("unstake", args=[service_id])
         return dict(data=bytes.fromhex(data[2:]))
 
     @classmethod
