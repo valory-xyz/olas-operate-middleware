@@ -65,7 +65,7 @@ class AgentRelease:
 # list of agents releases supported
 AGENTS_SUPPORTED = {
     "valory/trader": AgentRelease(
-        owner="valory-xyz", repo="trader", release="v0.0.101"
+        owner="valory-xyz", repo="trader", release="v0.27.2-rc.1"
     ),
     "valory/optimus": AgentRelease(
         owner="valory-xyz", repo="optimus", release="v0.0.1051"
