@@ -258,10 +258,10 @@ class RelayProvider(Provider):
                     timestamp=int(time.time()),
                 )
             except requests.RequestException as e:
-                self.logger.warning(
-                    f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {e}."
-                )
                 response_json = response.json()
+                self.logger.warning(
+                    f"[RELAY PROVIDER] Request failed on attempt {attempt}/{DEFAULT_MAX_QUOTE_RETRIES}: {response_json}."
+                )
                 quote_data = QuoteData(
                     eta=None,
                     elapsed_time=time.time() - start,
