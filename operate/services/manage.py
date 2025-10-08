@@ -419,7 +419,7 @@ class ServiceManager:
                     user_params.use_staking
                     and current_agent_bond != staking_params["min_staking_deposit"]
                 )
-                # or (  # This does not work, because current_agent_bond only is correct for staking !
+                # or (  # TODO Missing complete this check for non-staked services (similar as done in FundingManager) current_agent_bond should be read from the protocol, now it's only read for the staking contract.
                 #     not user_params.use_staking
                 #     and current_agent_bond != user_params.cost_of_bond
                 # )
@@ -831,7 +831,7 @@ class ServiceManager:
                     and current_agent_bond
                     != target_staking_params["min_staking_deposit"]
                 )
-                # or (  # This does not work, because current_agent_bond only is correct for staking !
+                # or (  # TODO Missing complete this check for non-staked services (similar as done in FundingManager) current_agent_bond should be read from the protocol, now it's only read for the staking contract.
                 #     not user_params.use_staking
                 #     and current_agent_bond != user_params.cost_of_bond
                 # )
