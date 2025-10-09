@@ -162,14 +162,7 @@ class OperateApp:
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
         self._password = value
-        self._wallet_manager = MasterWalletManager(
-            path=self._path / WALLETS_DIR,
-            password=self._password,
-        )
-        self._funding_manager = FundingManager(
-            wallet_manager=self._wallet_manager,
-            logger=logger,
-        )
+        self.funding_manager.wallet_manager.password = value
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
