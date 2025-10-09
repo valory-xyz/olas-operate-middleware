@@ -56,7 +56,7 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
-from operate.utils import SingletonMeta, merge_sum_dicts
+from operate.utils import merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
@@ -71,7 +71,7 @@ class FundingInProgressError(RuntimeError):
     """Raised when an attempt is made to fund a service that is already being funded."""
 
 
-class FundingManager(metaclass=SingletonMeta):
+class FundingManager:
     """FundingManager"""
 
     def __init__(

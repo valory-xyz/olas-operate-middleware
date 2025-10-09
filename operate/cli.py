@@ -131,13 +131,41 @@ class OperateApp:
             path=self._keys,
             logger=logger,
         )
-        self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+
+        self._wallet_manager = MasterWalletManager(
+            path=self._path / WALLETS_DIR,
+            password=self.password,
+        )
+        self._wallet_manager.setup()
+        self._funding_manager = FundingManager(
+            wallet_manager=self._wallet_manager,
+            logger=logger,
+        )
 
         mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
         mm.migrate_qs_configs()
+
+    @property
+    def password(self) -> t.Optional[str]:
+        """Get the password."""
+        return self._password
+
+    @password.setter
+    def password(self, value: t.Optional[str]) -> None:
+        """Set the password."""
+        self._password = value
+        self._wallet_manager = MasterWalletManager(
+            path=self._path / WALLETS_DIR,
+            password=self._password,
+        )
+        self._funding_manager = FundingManager(
+            wallet_manager=self._wallet_manager,
+            logger=logger,
+        )
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -193,13 +221,7 @@ class OperateApp:
     @property
     def funding_manager(self) -> FundingManager:
         """Load funding manager."""
-        manager = FundingManager(
-            wallet_manager=self.wallet_manager,
-            logger=logger,
-        )
-        if self.password:
-            manager.wallet_manager.password = self.password
-        return manager
+        return self._funding_manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
@@ -211,12 +233,7 @@ class OperateApp:
     @property
     def wallet_manager(self) -> MasterWalletManager:
         """Load wallet manager."""
-        manager = MasterWalletManager(
-            path=self._path / WALLETS_DIR,
-            password=self.password,
-        )
-        manager.setup()
-        return manager
+        return self._wallet_manager
 
     @property
     def wallet_recoverey_manager(self) -> WalletRecoveryManager:
