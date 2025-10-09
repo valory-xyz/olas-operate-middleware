@@ -415,18 +415,26 @@ class ServiceManager:
             and (
                 on_chain_hash != service.hash
                 or current_agent_id != staking_params["agent_ids"][0]
-                or current_agent_bond != staking_params["min_staking_deposit"]
+                or (
+                    user_params.use_staking
+                    and current_agent_bond != staking_params["min_staking_deposit"]
+                )
+                # TODO Missing complete this check for non-staked services it should compare the current_agent_bond from the protocol, now it's only read for the staking contract.
                 or on_chain_description != service.description
             )
         )
         current_staking_program = self._get_current_staking_program(service, chain)
 
+        self.logger.info(f"{chain_data.token=}")
+        self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{staking_params['agent_ids']=}")
+        self.logger.info(f"{current_agent_bond=}")
+        self.logger.info(f"{staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")
         self.logger.info(f"{is_update=}")
 
@@ -815,7 +823,12 @@ class ServiceManager:
                 # on_chain_hash != service.hash or  # noqa
                 current_agent_id != target_staking_params["agent_ids"][0]
                 # TODO This has to be removed for Optimus (needs to be properly implemented). Needs to be put back for Trader!
-                or current_agent_bond != target_staking_params["min_staking_deposit"]
+                or (
+                    user_params.use_staking
+                    and current_agent_bond
+                    != target_staking_params["min_staking_deposit"]
+                )
+                # TODO Missing complete this check for non-staked services it should compare the current_agent_bond from the protocol, now it's only read for the staking contract.
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
@@ -823,12 +836,13 @@ class ServiceManager:
         )
 
         self.logger.info(f"{chain_data.token=}")
+        self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
         self.logger.info(f"{user_params.staking_program_id=}")
         self.logger.info(f"{on_chain_hash=}")
         self.logger.info(f"{service.hash=}")
         self.logger.info(f"{current_agent_id=}")
-        self.logger.info(f"{target_staking_params['agent_ids'][0]=}")
+        self.logger.info(f"{target_staking_params['agent_ids']=}")
         self.logger.info(f"{current_agent_bond=}")
         self.logger.info(f"{target_staking_params['min_staking_deposit']=}")
         self.logger.info(f"{is_first_mint=}")

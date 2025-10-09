@@ -34,12 +34,7 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import (
-    IPFS_ADDRESS,
-    NO_STAKING_PROGRAM_ID,
-    OPERATE_HOME,
-    USER_JSON,
-)
+from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING, get_staking_contract
@@ -145,7 +140,8 @@ def ask_confirm_password() -> str:
 
 def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartConfig:
     """Load the local quickstart configuration."""
-    old_path = OPERATE_HOME / "local_config.json"
+    operate_home = operate._path
+    old_path = operate_home / "local_config.json"
     if old_path.exists():  # Migrate to new naming scheme
         config = t.cast(QuickstartConfig, QuickstartConfig.load(old_path))
         service_manager = operate.service_manager()
@@ -178,13 +174,13 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
                     shutil.move(old_path, config.path)
                     break
 
-    for qs_config in OPERATE_HOME.glob("*-quickstart-config.json"):
+    for qs_config in operate_home.glob("*-quickstart-config.json"):
         if f"{service_name}-quickstart-config.json" == qs_config.name:
             config = t.cast(QuickstartConfig, QuickstartConfig.load(qs_config))
             break
     else:
         config = QuickstartConfig(
-            OPERATE_HOME / f"{service_name}-quickstart-config.json"
+            operate_home / f"{service_name}-quickstart-config.json"
         )
 
     return config
