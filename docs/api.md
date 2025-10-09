@@ -38,6 +38,23 @@ Get basic API information.
 }
 ```
 
+### `GET /api/settings`
+
+Get current settings.
+
+**Response (Success - 200):**
+
+```json
+{
+  "version": 1,
+  "eoa_topups": {
+    "gnosis": {
+      "0x0000000000000000000000000000000000000000": 750000000000000000
+    }
+  }
+}
+```
+
 ## Account Management
 
 ### `GET /api/account`
