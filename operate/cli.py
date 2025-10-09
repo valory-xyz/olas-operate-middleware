@@ -132,10 +132,8 @@ class OperateApp:
             path=self._keys,
             logger=logger,
         )
-        self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
-        self.settings = Settings(path=self._path)
-
         self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self.settings = Settings(path=self._path)
 
         self._wallet_manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
@@ -162,7 +160,7 @@ class OperateApp:
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
         self._password = value
-        self.funding_manager.wallet_manager.password = value
+        self._wallet_manager.password = value
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
