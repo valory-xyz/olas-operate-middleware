@@ -34,12 +34,7 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import (
-    IPFS_ADDRESS,
-    NO_STAKING_PROGRAM_ID,
-    OPERATE_HOME,
-    USER_JSON,
-)
+from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger.profiles import STAKING, get_staking_contract
