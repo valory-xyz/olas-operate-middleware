@@ -740,6 +740,10 @@ class FundingManager(metaclass=SingletonMeta):
         required = self._aggregate_as_master_safe_amounts(amounts)
         balances = self._get_master_safe_balances(required)
 
+        print(f"{amounts=}")
+        print(f"{required=}")
+        print(f"{balances=}")
+
         if balances < required:
             raise InsufficientFundsException(
                 f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
