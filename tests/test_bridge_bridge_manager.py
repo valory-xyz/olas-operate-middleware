@@ -543,7 +543,15 @@ class TestBridgeManager:
         )
 
     @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
+        "to_chain_enum",
+        [
+            Chain.BASE,
+            pytest.param(
+                Chain.MODE, marks=pytest.mark.xfail(reason="MODE chain unstable")
+            ),
+            Chain.OPTIMISM,
+            Chain.GNOSIS,
+        ],
     )
     @pytest.mark.parametrize("token_dict", [USDC, OLAS])
     def test_correct_providers_swap_token(

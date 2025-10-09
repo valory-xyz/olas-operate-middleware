@@ -379,3 +379,12 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
                 for asset, amount in balances.items():
                     balances[asset] = amount // divisor
         return output
+
+    def __lt__(self, other: "ChainAmounts") -> bool:
+        """Return True if all amounts in self are strictly less than the corresponding amounts in other."""
+        for chain, addresses in self.items():
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    if amount >= other.get(chain, {}).get(address, {}).get(asset, 0):
+                        return False
+        return True

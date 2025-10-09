@@ -693,9 +693,9 @@ class TestFunding(OnTestnet):
             },
             "is_refill_required": True,
             "allow_start_agent": False,
-            "agent_funding_requests": {
-                chain1.value: {},
-            },
+            "agent_funding_requests": {},
+            "agent_funding_requests_cooldown": False,
+            "agent_funding_in_progress": False,
         }
 
         app = create_app(home=operate._path)
@@ -716,21 +716,12 @@ class TestFunding(OnTestnet):
         assert response.status_code == HTTPStatus.OK
         created_service = response.json()
         service_config_id = created_service["service_config_id"]
-        agent_eoa = created_service["agent_addresses"][0]
 
         response = client.get(
             url=f"/api/v2/service/{service_config_id}/funding_requirements",
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        expected_json["agent_funding_requests"][chain1.value] = {
-            "service_safe": {
-                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
-            },
-            agent_eoa: {
-                ZERO_ADDRESS: c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-            },
-        }
         diff = DeepDiff(response_json, expected_json)
         assert not diff, diff
 
@@ -926,7 +917,6 @@ class TestFunding(OnTestnet):
                 ZERO_ADDRESS
             ] = real_balance_master_eoa
 
-        del expected_json["agent_funding_requests"][chain1.value]
         diff = DeepDiff(response_json, expected_json)
         assert not diff, diff
 
@@ -969,13 +959,7 @@ class TestFunding(OnTestnet):
                 }
             }
         }
-        expected_json["total_requirements"][chain1.value][master_safe][
-            ZERO_ADDRESS
-        ] = 42000000000000000000
-        expected_json["refill_requirements"] = subtract_dicts(
-            expected_json["total_requirements"], expected_json["balances"]
-        )
-        expected_json["is_refill_required"] = True
+        expected_json["is_refill_required"] = False
 
         with requests_mock.Mocker(real_http=True) as mock:
             mock.get(AGENT_FUNDS_STATUS_URL, json=fund_requests)
@@ -992,12 +976,14 @@ class TestFunding(OnTestnet):
             chain=chain1,
             recipient=master_safes[chain1],
             token=ZERO_ADDRESS,
-            amount=expected_json["refill_requirements"][chain1.value][master_safe][
+            amount=expected_json["agent_funding_requests"][chain1.value][agent_safe][
                 ZERO_ADDRESS
             ],
         )
 
+        # ---------------------------------------
         # Send funds to agent - Funding requirements
+        # ---------------------------------------
         fund_data = response_json["agent_funding_requests"]
         previous_balance = {
             chain_str: {
@@ -1030,3 +1016,36 @@ class TestFunding(OnTestnet):
                         address=address,
                     )
                     assert actual_balance == _previous_balance + int(amount)
+
+        with requests_mock.Mocker(real_http=True) as mock:
+            mock.get(AGENT_FUNDS_STATUS_URL, json=fund_requests)
+            response = client.get(
+                url=f"/api/v2/service/{service_config_id}/funding_requirements",
+            )
+            assert response.status_code == HTTPStatus.OK
+            response_json = response.json()
+
+            expected_json["agent_funding_requests"] = {}
+            expected_json["agent_funding_requests_cooldown"] = True
+
+            # Adjust Master EOA native assets
+            for chain_str in expected_json["balances"]:
+                real_balance_master_eoa = response_json["balances"][chain_str][
+                    master_eoa
+                ][ZERO_ADDRESS]
+                assert (
+                    real_balance_master_eoa
+                    <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                )
+                # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
+                assert (
+                    real_balance_master_eoa
+                    >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                    * 0.99
+                )
+                expected_json["balances"][chain_str][master_eoa][
+                    ZERO_ADDRESS
+                ] = real_balance_master_eoa
+
+            diff = DeepDiff(response_json, expected_json)
+            assert not diff, diff

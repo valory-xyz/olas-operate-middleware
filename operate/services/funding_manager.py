@@ -20,9 +20,10 @@
 """Funding manager"""
 
 
-# pylint: disable=too-many-locals
+# pylint: disable=too-many-locals,too-many-statements
 
 import asyncio
+import threading
 import traceback
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
@@ -35,6 +36,7 @@ from autonomy.chain.constants import CHAIN_PROFILES
 from web3 import Web3
 
 from operate.constants import (
+    DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     MASTER_EOA_PLACEHOLDER,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
@@ -58,11 +60,15 @@ from operate.utils import merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
-from operate.wallet.master import MasterWalletManager
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
 if t.TYPE_CHECKING:
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
+
+
+class FundingInProgressError(RuntimeError):
+    """Raised when an attempt is made to fund a service that is already being funded."""
 
 
 class FundingManager:
@@ -72,10 +78,15 @@ class FundingManager:
         self,
         wallet_manager: MasterWalletManager,
         logger: Logger,
+        funding_requests_cooldown_seconds: int = DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     ) -> None:
-        """Initialize master wallet manager."""
+        """Initialize funding manager."""
         self.wallet_manager = wallet_manager
         self.logger = logger
+        self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
+        self._lock = threading.Lock()
+        self._funding_in_progress: t.Dict[str, bool] = {}
+        self._funding_requests_cooldown_until: t.Dict[str, float] = {}
 
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain
@@ -559,11 +570,11 @@ class FundingManager:
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
-        balances = ChainAmounts()
-        protocol_bonded_assets = ChainAmounts()
-        protocol_asset_requirements = ChainAmounts()
-        refill_requirements = ChainAmounts()
-        total_requirements = ChainAmounts()
+        balances: ChainAmounts
+        protocol_bonded_assets: ChainAmounts
+        protocol_asset_requirements: ChainAmounts
+        refill_requirements: ChainAmounts
+        total_requirements: ChainAmounts
         chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
 
         # Protocol shortfall
@@ -579,13 +590,28 @@ class FundingManager:
         # Initial service shortfall
         # We assume that if the service safe is created in any chain,
         # we have requested the funding already.
-        service_topups = service.get_initial_funding_amounts()
-        service_shortfalls = service.get_agent_funding_requests()
-        if all(
+        service_initial_topup = service.get_initial_funding_amounts()
+        if not all(
             SERVICE_SAFE_PLACEHOLDER in addresses
-            for addresses in service_topups.values()
+            for addresses in service_initial_topup.values()
         ):
-            service_shortfalls = service_topups
+            service_initial_shortfalls = ChainAmounts()
+        else:
+            service_initial_shortfalls = service_initial_topup
+
+        # Service funding requests
+        service_config_id = service.service_config_id
+        funding_in_progress = self._funding_in_progress.get(service_config_id, False)
+        now = time()
+        if funding_in_progress:
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = False
+        elif now < self._funding_requests_cooldown_until.get(service_config_id, 0):
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = True
+        else:
+            funding_requests = service.get_funding_requests()
+            funding_requests_cooldown = False
 
         # Master EOA shortfall
         master_eoa_topups = ChainAmounts()
@@ -607,7 +633,10 @@ class FundingManager:
             # This ensures that the balances of MasterEOA are collected for relevant tokens
             all_assets = {ZERO_ADDRESS} | {
                 asset
-                for addresses in (protocol_topups[chain_str], service_topups[chain_str])
+                for addresses in (
+                    protocol_topups[chain_str],
+                    service_initial_topup[chain_str],
+                )
                 for assets in addresses.values()
                 for asset in assets
             }
@@ -641,7 +670,7 @@ class FundingManager:
         master_safe_thresholds = self._aggregate_as_master_safe_amounts(
             master_eoa_shortfalls,
             protocol_shortfalls,
-            service_shortfalls,
+            service_initial_shortfalls,
         )
         master_safe_topup = master_safe_thresholds
         master_safe_balances = merge_sum_dicts(
@@ -698,7 +727,9 @@ class FundingManager:
             "protocol_asset_requirements": protocol_asset_requirements,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": service_shortfalls,
+            "agent_funding_requests": funding_requests,
+            "agent_funding_requests_cooldown": funding_requests_cooldown,
+            "agent_funding_in_progress": funding_in_progress,
         }
 
     def fund_service_initial(self, service: Service) -> None:
@@ -706,6 +737,14 @@ class FundingManager:
         self._fund_chain_amounts(service.get_initial_funding_amounts())
 
     def _fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+        required = self._aggregate_as_master_safe_amounts(amounts)
+        balances = self._get_master_safe_balances(required)
+
+        if balances < required:
+            raise InsufficientFundsException(
+                f"Insufficient funds in Master Safe to perform funding. Required: {amounts}, Available: {balances}"
+            )
+
         for chain_str, addresses in amounts.items():
             chain = Chain(chain_str)
             wallet = self.wallet_manager.load(chain.ledger_type)
@@ -727,17 +766,38 @@ class FundingManager:
 
     def fund_service(self, service: Service, amounts: ChainAmounts) -> None:
         """Fund service-related wallets."""
-        for chain_str, addresses in amounts.items():
-            for address in addresses:
-                if (
-                    address not in service.agent_addresses
-                    and address != service.chain_configs[chain_str].chain_data.multisig
-                ):
-                    raise ValueError(
-                        f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
-                    )
+        service_config_id = service.service_config_id
 
-        self._fund_chain_amounts(amounts)
+        # Atomic, thread-safe get-and-set of the _funding_in_progress boolean.
+        # This ensures only one funding operation per service at a time, and
+        # any call to fund_service while a funding operation is in progress will
+        # raise a FundingInProgressError (instead of blocking and piling up calls).
+        with self._lock:
+            if self._funding_in_progress.get(service_config_id, False):
+                raise FundingInProgressError(
+                    f"Funding already in progress for service {service_config_id}."
+                )
+            self._funding_in_progress[service_config_id] = True
+
+        try:
+            for chain_str, addresses in amounts.items():
+                for address in addresses:
+                    if (
+                        address not in service.agent_addresses
+                        and address
+                        != service.chain_configs[chain_str].chain_data.multisig
+                    ):
+                        raise ValueError(
+                            f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
+                        )
+
+            self._fund_chain_amounts(amounts)
+            self._funding_requests_cooldown_until[service_config_id] = (
+                time() + self.funding_requests_cooldown_seconds
+            )
+        finally:
+            with self._lock:
+                self._funding_in_progress[service_config_id] = False
 
     async def funding_job(
         self,

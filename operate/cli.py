@@ -77,7 +77,7 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
-from operate.services.funding_manager import FundingManager
+from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
 from operate.utils import subtract_dicts
@@ -132,14 +132,35 @@ class OperateApp:
             path=self._keys,
             logger=logger,
         )
-        self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
         self.settings = Settings(path=self._path)
+
+        self._wallet_manager = MasterWalletManager(
+            path=self._path / WALLETS_DIR,
+            password=self.password,
+        )
+        self._wallet_manager.setup()
+        self._funding_manager = FundingManager(
+            wallet_manager=self._wallet_manager,
+            logger=logger,
+        )
 
         mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
         mm.migrate_qs_configs()
+
+    @property
+    def password(self) -> t.Optional[str]:
+        """Get the password."""
+        return self._password
+
+    @password.setter
+    def password(self, value: t.Optional[str]) -> None:
+        """Set the password."""
+        self._password = value
+        self._wallet_manager.password = value
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -195,11 +216,7 @@ class OperateApp:
     @property
     def funding_manager(self) -> FundingManager:
         """Load funding manager."""
-        manager = FundingManager(
-            wallet_manager=self.wallet_manager,
-            logger=logger,
-        )
-        return manager
+        return self._funding_manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
@@ -211,12 +228,7 @@ class OperateApp:
     @property
     def wallet_manager(self) -> MasterWalletManager:
         """Load wallet manager."""
-        manager = MasterWalletManager(
-            path=self._path / WALLETS_DIR,
-            password=self.password,
-        )
-        manager.setup()
-        return manager
+        return self._wallet_manager
 
     @property
     def wallet_recoverey_manager(self) -> WalletRecoveryManager:
@@ -1271,7 +1283,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/v2/service/{service_config_id}/fund")
-    async def fund_service(request: Request) -> JSONResponse:
+    async def fund_service(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> JSONResponse:
         """Fund agent or service safe via Master Safe"""
 
         if operate.password is None:
@@ -1316,6 +1330,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
                 },
                 status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except FundingInProgressError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
             )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(
