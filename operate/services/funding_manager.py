@@ -52,6 +52,7 @@ from operate.ledger.profiles import (
     OLAS,
     USDC,
     WRAPPED_NATIVE_ASSET,
+    get_token_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
@@ -125,20 +126,23 @@ class FundingManager:
         ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
 
-        # drain ERC20 tokens from service safe
-        for token_name, token_address in (
-            ("OLAS", OLAS[chain]),
-            (
-                f"W{get_currency_denom(chain)}",
-                WRAPPED_NATIVE_ASSET[chain],
-            ),
-            ("USDC", USDC[chain]),
-        ):
+        # Drain ERC20 tokens from service Safe
+        tokens = {
+            WRAPPED_NATIVE_ASSET[chain],
+            OLAS[chain],
+            USDC[chain],
+        } | service.chain_configs[
+            chain.value
+        ].chain_data.user_params.fund_requirements.keys()
+        tokens.discard(ZERO_ADDRESS)
+
+        for token_address in tokens:
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
                 contract_address=token_address,
             )
             balance = token_instance.functions.balanceOf(chain_data.multisig).call()
+            token_name = get_token_name(chain, token_address)
             if balance == 0:
                 self.logger.info(
                     f"No {token_name} to drain from service safe: {chain_data.multisig}"
@@ -157,7 +161,7 @@ class FundingManager:
                 amount=balance,
             )
 
-        # drain native asset from service safe
+        # Drain native asset from service Safe
         balance = ledger_api.get_balance(chain_data.multisig)
         if balance == 0:
             self.logger.info(
