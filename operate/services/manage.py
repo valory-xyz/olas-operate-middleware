@@ -44,6 +44,8 @@ from operate.constants import (
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     DEFAULT_TOPUP_THRESHOLD,
     IPFS_ADDRESS,
+    MIN_AGENT_BOND,
+    MIN_SECURITY_DEPOSIT,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
@@ -961,7 +963,6 @@ class ServiceManager:
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
         ):
-            # TODO Verify that this is incorrect: cost_of_bond = staking_params["min_staking_deposit"]
             cost_of_bond = user_params.cost_of_bond
             if user_params.use_staking:
                 token_utility = target_staking_params["service_registry_token_utility"]
@@ -998,7 +999,7 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                cost_of_bond = 1
+                cost_of_bond = MIN_AGENT_BOND
 
             self.logger.info("Activating service")
 
@@ -1008,7 +1009,9 @@ class ServiceManager:
                 address=safe,
             )
 
-            if native_balance < cost_of_bond:
+            if (
+                native_balance < cost_of_bond
+            ):  # TODO check that this is the security deposit
                 message = f"Cannot activate service: address {safe} {native_balance=} < {cost_of_bond=}."
                 self.logger.error(message)
                 raise ValueError(message)
@@ -1060,7 +1063,7 @@ class ServiceManager:
                 self.logger.info(
                     f"Approved {token_utility_allowance} OLAS from {safe} to {token_utility}"
                 )
-                cost_of_bond = 1 * len(service.agent_addresses)
+                cost_of_bond = MIN_AGENT_BOND
 
             self.logger.info(
                 f"Registering agent instances: {chain_data.token} -> {service.agent_addresses}"
@@ -1072,7 +1075,7 @@ class ServiceManager:
                 address=safe,
             )
 
-            if native_balance < cost_of_bond:
+            if native_balance < cost_of_bond * len(service.agent_addresses):
                 message = f"Cannot register agent instances: address {safe} {native_balance=} < {cost_of_bond=}."
                 self.logger.error(message)
                 raise ValueError(message)
@@ -1950,7 +1953,10 @@ class ServiceManager:
                     else:
                         on_chain_operations_buffer = (
                             chain_data.user_params.cost_of_bond
-                            * (1 + len(service.agent_addresses))
+                            * (
+                                MIN_SECURITY_DEPOSIT
+                                + MIN_AGENT_BOND * len(service.agent_addresses)
+                            )
                         )
 
             asset_funding_values = (

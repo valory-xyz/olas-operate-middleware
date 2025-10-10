@@ -41,6 +41,7 @@ from operate.constants import (
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
+    NO_STAKING_PROGRAM_ID,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
 )
@@ -198,7 +199,11 @@ class FundingManager:
 
             requirements: defaultdict = defaultdict(int)
 
-            if not user_params.use_staking or not user_params.staking_program_id:
+            if (
+                not user_params.use_staking
+                or not user_params.staking_program_id
+                or user_params.staking_program_id == NO_STAKING_PROGRAM_ID
+            ):
                 protocol_agent_bonds = (
                     max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
                 )
