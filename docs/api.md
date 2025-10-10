@@ -1623,11 +1623,11 @@ Deploy and run a service.
 }
 ```
 
-**Response (Operation failed after retries - 500):**
+**Response (Internal server error - 500):**
 
 ```json
 {
-  "error": "Service is already running."
+  "error": "Internal error message."
 }
 ```
 
@@ -1657,11 +1657,11 @@ Stop a running service deployment locally.
 }
 ```
 
-**Response (Operation failed after retries - 500):**
+**Response (Internal server error - 500):**
 
 ```json
 {
-  "error": "Operation failed after multiple attempts. Please try again later."
+  "error": "Internal error message."
 }
 ```
 

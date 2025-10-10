@@ -36,8 +36,6 @@ import psutil
 import requests
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
-from compose.project import ProjectError
-from docker.errors import APIError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -441,37 +439,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     )
 
-    def with_retries(f: t.Callable) -> t.Callable:
-        """Retries decorator."""
-
-        async def _call(request: Request) -> JSONResponse:
-            """Call the endpoint."""
-            logger.info(f"Calling `{f.__name__}` with retries enabled")
-            retries = 0
-            while retries < DEFAULT_MAX_RETRIES:
-                try:
-                    return await f(request)
-                except (APIError, ProjectError) as e:
-                    logger.error(f"Error {e}\n{traceback.format_exc()}")
-                    if "has active endpoints" in str(e):
-                        error_msg = "Service is already running."
-                    else:
-                        error_msg = "Service deployment failed. Please check the logs."
-                    return JSONResponse(
-                        content={"error": error_msg},
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                    )
-                except Exception as e:  # pylint: disable=broad-except
-                    logger.error(f"Error {str(e)}\n{traceback.format_exc()}")
-                retries += 1
+    @app.middleware("http")
+    async def handle_internal_server_error(request: Request, call_next):
+        try:
+            response = await call_next(request)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Error {str(e)}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={
-                    "error": "Operation failed after multiple attempts. Please try again later."
-                },
+                content={"error": str(e)},
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
-
-        return _call
+        return response
 
     @app.get(f"/{shutdown_endpoint}")
     async def _kill_server(request: Request) -> JSONResponse:
@@ -490,7 +468,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"stopped": True})
 
     @app.get("/api")
-    @with_retries
     async def _get_api(request: Request) -> JSONResponse:
         """Get API info."""
         return JSONResponse(content=operate.json)
@@ -501,13 +478,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=operate.settings.json)
 
     @app.get("/api/account")
-    @with_retries
     async def _get_account(request: Request) -> t.Dict:
         """Get account information."""
         return {"is_setup": operate.user_account is not None}
 
     @app.post("/api/account")
-    @with_retries
     async def _setup_account(request: Request) -> t.Dict:
         """Setup account."""
         if operate.user_account is not None:
@@ -529,7 +504,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"error": None})
 
     @app.put("/api/account")
-    @with_retries
     async def _update_password(  # pylint: disable=too-many-return-statements
         request: Request,
     ) -> t.Dict:
@@ -599,7 +573,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/account/login")
-    @with_retries
     async def _validate_password(request: Request) -> t.Dict:
         """Validate password."""
         if operate.user_account is None:
@@ -620,7 +593,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/wallet")
-    @with_retries
     async def _get_wallets(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
@@ -629,7 +601,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=wallets)
 
     @app.post("/api/wallet")
-    @with_retries
     async def _create_wallet(request: Request) -> t.List[t.Dict]:
         """Create wallet"""
         if operate.user_account is None:
@@ -652,7 +623,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
 
     @app.post("/api/wallet/private_key")
-    @with_retries
     async def _get_private_key(request: Request) -> t.List[t.Dict]:
         """Get Master EOA private key."""
         if operate.user_account is None:
@@ -673,7 +643,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"private_key": wallet.crypto.private_key})
 
     @app.get("/api/extended/wallet")
-    @with_retries
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
@@ -682,7 +651,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=wallets)
 
     @app.get("/api/wallet/safe")
-    @with_retries
     async def _get_safes(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
         all_safes = []
@@ -694,7 +662,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=all_safes)
 
     @app.get("/api/wallet/safe/{chain}")
-    @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Get safe address"""
         chain = Chain.from_string(request.path_params["chain"])
@@ -829,7 +796,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.put("/api/wallet/safe")
-    @with_retries
     async def _update_safe(request: Request) -> t.List[t.Dict]:
         """Update wallet safe"""
         # TODO: Extract login check as decorator
@@ -958,13 +924,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/services")
-    @with_retries
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
         return JSONResponse(content=operate.service_manager().json)
 
     @app.get("/api/v2/services/validate")
-    @with_retries
     async def _validate_services(request: Request) -> JSONResponse:
         """Validate all services."""
         service_manager = operate.service_manager()
@@ -979,7 +943,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/services/deployment")
-    @with_retries
     async def _get_services_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
         service_manager = operate.service_manager()
@@ -992,7 +955,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output)
 
     @app.get("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _get_service(request: Request) -> JSONResponse:
         """Get a service."""
         service_config_id = request.path_params["service_config_id"]
@@ -1010,7 +972,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/service/{service_config_id}/deployment")
-    @with_retries
     async def _get_service_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
         service_config_id = request.path_params["service_config_id"]
@@ -1024,7 +985,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=deployment_json)
 
     @app.get("/api/v2/service/{service_config_id}/agent_performance")
-    @with_retries
     async def _get_agent_performance(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1039,7 +999,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/service/{service_config_id}/funding_requirements")
-    @with_retries
     async def _get_funding_requirements(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1055,7 +1014,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # TODO deprecate
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
-    @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1070,7 +1028,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/v2/service")
-    @with_retries
     async def _create_services_v2(request: Request) -> JSONResponse:
         """Create a service."""
         if operate.password is None:
@@ -1082,7 +1039,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @app.post("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
         if operate.password is None:
@@ -1113,7 +1069,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.put("/api/v2/service/{service_config_id}")
     @app.patch("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _update_service(request: Request) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
@@ -1149,7 +1104,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
-    @with_retries
     async def _stop_service_locally(request: Request) -> JSONResponse:
         """Stop a service deployment."""
 
@@ -1172,7 +1126,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     # TODO Deprecate
     @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
-    @with_retries
     async def _withdraw_onchain(request: Request) -> JSONResponse:
         """Withdraw all the funds from a service."""
 
@@ -1241,7 +1194,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
 
     @app.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
-    @with_retries
     async def _terminate_and_withdraw(request: Request) -> JSONResponse:
         """Terminate the service and withdraw all the funds to Master Safe"""
 
@@ -1355,7 +1307,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/bridge/bridge_refill_requirements")
-    @with_retries
     async def _bridge_refill_requirements(request: Request) -> JSONResponse:
         """Get the bridge refill requirements."""
         if operate.password is None:
@@ -1390,7 +1341,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/bridge/execute")
-    @with_retries
     async def _bridge_execute(request: Request) -> JSONResponse:
         """Execute bridge transaction."""
         if operate.password is None:
@@ -1420,14 +1370,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.get("/api/bridge/last_executed_bundle_id")
-    @with_retries
     async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
         """Get last executed bundle id."""
         content = {"id": operate.bridge_manager.last_executed_bundle_id()}
         return JSONResponse(content=content, status_code=HTTPStatus.OK)
 
     @app.get("/api/bridge/status/{id}")
-    @with_retries
     async def _bridge_status(request: Request) -> JSONResponse:
         """Get bridge transaction status."""
 
@@ -1456,7 +1404,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/wallet/recovery/initiate")
-    @with_retries
     async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
         """Initiate wallet recovery."""
         if operate.user_account is None:
@@ -1500,7 +1447,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/wallet/recovery/complete")
-    @with_retries
     async def _wallet_recovery_complete(request: Request) -> JSONResponse:
         """Complete wallet recovery."""
         if operate.user_account is None:
