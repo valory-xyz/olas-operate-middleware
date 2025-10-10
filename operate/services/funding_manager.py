@@ -56,7 +56,6 @@ from operate.ledger.profiles import (
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
-from operate.utils import merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
@@ -192,7 +191,6 @@ class FundingManager:
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
             number_of_agents = len(service.agent_addresses)
-            # os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc  # TODO do we need this?
 
             requirements: defaultdict = defaultdict(int)
 
@@ -673,7 +671,7 @@ class FundingManager:
             service_initial_shortfalls,
         )
         master_safe_topup = master_safe_thresholds
-        master_safe_balances = merge_sum_dicts(
+        master_safe_balances = ChainAmounts.add(
             self._get_master_safe_balances(master_safe_thresholds),
             self._aggregate_as_master_safe_amounts(excess_master_eoa_balances),
         )
@@ -686,15 +684,15 @@ class FundingManager:
         # Prepare output values
         protocol_bonded_assets = protocol_balances
         protocol_asset_requirements = protocol_thresholds
-        refill_requirements = merge_sum_dicts(
+        refill_requirements = ChainAmounts.add(
             master_eoa_critical_shortfalls,
             master_safe_shortfalls,
         )
-        total_requirements = merge_sum_dicts(  # TODO Review if this is correct
+        total_requirements = ChainAmounts.add(  # TODO Review if this is correct
             master_eoa_critical_shortfalls,
             master_safe_thresholds,
         )
-        balances = merge_sum_dicts(
+        balances = ChainAmounts.add(
             master_eoa_balances,
             master_safe_balances,
         )

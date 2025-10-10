@@ -333,20 +333,24 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
     The standard format follows the convention {chain: {address: {token: amount}}}
     """
 
+    @classmethod
+    def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
+        """Add multiple ChainAmounts objects together"""
+        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+
+        for ca in chainamounts:
+            for chain, addresses in ca.items():
+                result_addresses = result.setdefault(chain, {})
+                for address, assets in addresses.items():
+                    result_assets = result_addresses.setdefault(address, {})
+                    for asset, amount in assets.items():
+                        result_assets[asset] = result_assets.get(asset, 0) + amount
+
+        return cls(result)
+
     def __add__(self, other: "ChainAmounts") -> "ChainAmounts":
-        """Add two ChainAmounts together"""
-        output = copy.deepcopy(self)
-        for chain, addresses in other.items():
-            if chain not in output:
-                output[chain] = {}
-            for address, balances in addresses.items():
-                if address not in output[chain]:
-                    output[chain][address] = {}
-                for asset, amount in balances.items():
-                    if asset not in output[chain][address]:
-                        output[chain][address][asset] = 0
-                    output[chain][address][asset] += amount
-        return output
+        """Fallback to classmethod for a single addition"""
+        return self.add(self, other)
 
     def __mul__(self, multiplier: float) -> "ChainAmounts":
         """Multiply all amounts by the specified multiplier"""
