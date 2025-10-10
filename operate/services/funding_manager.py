@@ -190,7 +190,7 @@ class FundingManager:
         self.logger.info(
             f"[FUNDING MANAGER] Computing protocol asset requirements for service {service.service_config_id}"
         )
-        protocol_asset_requirements: ChainAmounts = {}
+        protocol_asset_requirements = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
@@ -238,7 +238,7 @@ class FundingManager:
 
             protocol_asset_requirements[chain] = {master_safe: dict(requirements)}
 
-        return dict(protocol_asset_requirements)
+        return protocol_asset_requirements
 
         # TODO address this comment
         # This computation assumes the service will be/has been minted with these
@@ -252,7 +252,7 @@ class FundingManager:
     ) -> ChainAmounts:
         """Computes the bonded assets: current agent bonds and current security deposit"""
 
-        protocol_bonded_assets: ChainAmounts = {}
+        protocol_bonded_assets = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
             bonded_assets: defaultdict = defaultdict(int)
@@ -384,7 +384,7 @@ class FundingManager:
 
             protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
 
-        return dict(protocol_bonded_assets)
+        return protocol_bonded_assets
 
     @staticmethod
     def _compute_shortfalls(
