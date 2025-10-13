@@ -293,12 +293,16 @@ class TestBridgeManager:
                     },
                 }
             ),
-            "bridge_refill_requirements": {
-                "ethereum": {
-                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                },
-                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
-            },
+            "bridge_refill_requirements": ChainAmounts(
+                {
+                    "ethereum": {
+                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                    },
+                    "gnosis": {
+                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
+                    },
+                }
+            ),
             "bridge_request_status": [
                 {
                     "eta": None,
