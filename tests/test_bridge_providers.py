@@ -55,7 +55,7 @@ from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain, ChainAmounts, LedgerType
 
 from tests.constants import OPERATE_TEST
 
@@ -225,14 +225,16 @@ class TestNativeBridgeProvider:
         # Get requirements
         br = provider.requirements(provider_request)
         assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong requirements."
-        expected_br = {
-            "ethereum": {
-                wallet_address: {
-                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                    OLAS[Chain.ETHEREUM]: 1000000000000000000,
+        expected_br = ChainAmounts(
+            {
+                "ethereum": {
+                    wallet_address: {
+                        ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
+                        OLAS[Chain.ETHEREUM]: 1000000000000000000,
+                    }
                 }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -454,11 +456,13 @@ class TestProvider:
         assert (
             br[Chain.ETHEREUM.value][wallet_address][ZERO_ADDRESS] == 0
         ), "Wrong requirements."
-        expected_br = {
-            Chain.ETHEREUM.value: {
-                wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
+        expected_br = ChainAmounts(
+            {
+                Chain.ETHEREUM.value: {
+                    wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
+                }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -595,9 +599,9 @@ class TestProvider:
         assert not diff, "Wrong status."
 
         br = provider.requirements(provider_request)
-        expected_br = {
-            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
-        }
+        expected_br = ChainAmounts(
+            {"gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}}
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -810,15 +814,17 @@ class TestProvider:
         assert (
             br[Chain.ETHEREUM.value][wallet_address][ZERO_ADDRESS] > 0
         ), "Wrong requirements."
-        expected_br = {
-            Chain.ETHEREUM.value: {
-                wallet_address: {
-                    ZERO_ADDRESS: br[Chain.ETHEREUM.value][wallet_address][
-                        ZERO_ADDRESS
-                    ],
+        expected_br = ChainAmounts(
+            {
+                Chain.ETHEREUM.value: {
+                    wallet_address: {
+                        ZERO_ADDRESS: br[Chain.ETHEREUM.value][wallet_address][
+                            ZERO_ADDRESS
+                        ],
+                    }
                 }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)

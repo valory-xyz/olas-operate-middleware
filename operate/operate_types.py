@@ -333,20 +333,42 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
     The standard format follows the convention {chain: {address: {token: amount}}}
     """
 
+    @classmethod
+    def shortfalls(
+        cls, requirements: "ChainAmounts", balances: "ChainAmounts"
+    ) -> "ChainAmounts":
+        """Return the shortfalls between requirements and balances."""
+        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+
+        for chain, addresses in requirements.items():
+            for address, assets in addresses.items():
+                for asset, required_amount in assets.items():
+                    available = balances.get(chain, {}).get(address, {}).get(asset, 0)
+                    shortfall = max(required_amount - available, 0)
+                    result.setdefault(chain, {}).setdefault(address, {})[
+                        asset
+                    ] = shortfall
+
+        return cls(result)
+
+    @classmethod
+    def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
+        """Add multiple ChainAmounts"""
+        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+
+        for ca in chainamounts:
+            for chain, addresses in ca.items():
+                result_addresses = result.setdefault(chain, {})
+                for address, assets in addresses.items():
+                    result_assets = result_addresses.setdefault(address, {})
+                    for asset, amount in assets.items():
+                        result_assets[asset] = result_assets.get(asset, 0) + amount
+
+        return cls(result)
+
     def __add__(self, other: "ChainAmounts") -> "ChainAmounts":
-        """Add two ChainAmounts together"""
-        output = copy.deepcopy(self)
-        for chain, addresses in other.items():
-            if chain not in output:
-                output[chain] = {}
-            for address, balances in addresses.items():
-                if address not in output[chain]:
-                    output[chain][address] = {}
-                for asset, amount in balances.items():
-                    if asset not in output[chain][address]:
-                        output[chain][address][asset] = 0
-                    output[chain][address][asset] += amount
-        return output
+        """Add two ChainAmounts"""
+        return ChainAmounts.add(self, other)
 
     def __mul__(self, multiplier: float) -> "ChainAmounts":
         """Multiply all amounts by the specified multiplier"""

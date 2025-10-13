@@ -41,6 +41,7 @@ from operate.constants import (
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
+    NO_STAKING_PROGRAM_ID,
     SERVICE_SAFE_PLACEHOLDER,
     ZERO_ADDRESS,
 )
@@ -52,11 +53,11 @@ from operate.ledger.profiles import (
     OLAS,
     USDC,
     WRAPPED_NATIVE_ASSET,
+    get_token_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
-from operate.utils import merge_sum_dicts
 from operate.utils.gnosis import drain_eoa, get_asset_balance
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
@@ -126,20 +127,23 @@ class FundingManager:
         ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
 
-        # drain ERC20 tokens from service safe
-        for token_name, token_address in (
-            ("OLAS", OLAS[chain]),
-            (
-                f"W{get_currency_denom(chain)}",
-                WRAPPED_NATIVE_ASSET[chain],
-            ),
-            ("USDC", USDC[chain]),
-        ):
+        # Drain ERC20 tokens from service Safe
+        tokens = {
+            WRAPPED_NATIVE_ASSET[chain],
+            OLAS[chain],
+            USDC[chain],
+        } | service.chain_configs[
+            chain.value
+        ].chain_data.user_params.fund_requirements.keys()
+        tokens.discard(ZERO_ADDRESS)
+
+        for token_address in tokens:
             token_instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
                 contract_address=token_address,
             )
             balance = token_instance.functions.balanceOf(chain_data.multisig).call()
+            token_name = get_token_name(chain, token_address)
             if balance == 0:
                 self.logger.info(
                     f"No {token_name} to drain from service safe: {chain_data.multisig}"
@@ -158,7 +162,7 @@ class FundingManager:
                 amount=balance,
             )
 
-        # drain native asset from service safe
+        # Drain native asset from service Safe
         balance = ledger_api.get_balance(chain_data.multisig)
         if balance == 0:
             self.logger.info(
@@ -187,16 +191,19 @@ class FundingManager:
         self.logger.info(
             f"[FUNDING MANAGER] Computing protocol asset requirements for service {service.service_config_id}"
         )
-        protocol_asset_requirements: ChainAmounts = {}
+        protocol_asset_requirements = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
             user_params = chain_config.chain_data.user_params
             number_of_agents = len(service.agent_addresses)
-            # os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc  # TODO do we need this?
 
             requirements: defaultdict = defaultdict(int)
 
-            if not user_params.use_staking or not user_params.staking_program_id:
+            if (
+                not user_params.use_staking
+                or not user_params.staking_program_id
+                or user_params.staking_program_id == NO_STAKING_PROGRAM_ID
+            ):
                 protocol_agent_bonds = (
                     max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
                 )
@@ -236,7 +243,7 @@ class FundingManager:
 
             protocol_asset_requirements[chain] = {master_safe: dict(requirements)}
 
-        return dict(protocol_asset_requirements)
+        return protocol_asset_requirements
 
         # TODO address this comment
         # This computation assumes the service will be/has been minted with these
@@ -250,7 +257,7 @@ class FundingManager:
     ) -> ChainAmounts:
         """Computes the bonded assets: current agent bonds and current security deposit"""
 
-        protocol_bonded_assets: ChainAmounts = {}
+        protocol_bonded_assets = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
             bonded_assets: defaultdict = defaultdict(int)
@@ -382,7 +389,7 @@ class FundingManager:
 
             protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
 
-        return dict(protocol_bonded_assets)
+        return protocol_bonded_assets
 
     @staticmethod
     def _compute_shortfalls(
@@ -673,7 +680,7 @@ class FundingManager:
             service_initial_shortfalls,
         )
         master_safe_topup = master_safe_thresholds
-        master_safe_balances = merge_sum_dicts(
+        master_safe_balances = ChainAmounts.add(
             self._get_master_safe_balances(master_safe_thresholds),
             self._aggregate_as_master_safe_amounts(excess_master_eoa_balances),
         )
@@ -686,15 +693,15 @@ class FundingManager:
         # Prepare output values
         protocol_bonded_assets = protocol_balances
         protocol_asset_requirements = protocol_thresholds
-        refill_requirements = merge_sum_dicts(
+        refill_requirements = ChainAmounts.add(
             master_eoa_critical_shortfalls,
             master_safe_shortfalls,
         )
-        total_requirements = merge_sum_dicts(  # TODO Review if this is correct
+        total_requirements = ChainAmounts.add(  # TODO Review if this is correct
             master_eoa_critical_shortfalls,
             master_safe_thresholds,
         )
-        balances = merge_sum_dicts(
+        balances = ChainAmounts.add(
             master_eoa_balances,
             master_safe_balances,
         )
