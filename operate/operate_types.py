@@ -334,8 +334,26 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
     """
 
     @classmethod
+    def shortfalls(
+        cls, requirements: "ChainAmounts", balances: "ChainAmounts"
+    ) -> "ChainAmounts":
+        """Return the shortfalls between requirements and balances."""
+        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+
+        for chain, addresses in requirements.items():
+            for address, assets in addresses.items():
+                for asset, required_amount in assets.items():
+                    available = balances.get(chain, {}).get(address, {}).get(asset, 0)
+                    shortfall = max(required_amount - available, 0)
+                    result.setdefault(chain, {}).setdefault(address, {})[
+                        asset
+                    ] = shortfall
+
+        return cls(result)
+
+    @classmethod
     def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
-        """Add multiple ChainAmounts objects together"""
+        """Add multiple ChainAmounts"""
         result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
 
         for ca in chainamounts:
@@ -349,8 +367,8 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
         return cls(result)
 
     def __add__(self, other: "ChainAmounts") -> "ChainAmounts":
-        """Fallback to classmethod for a single addition"""
-        return self.add(self, other)
+        """Add two ChainAmounts"""
+        return ChainAmounts.add(self, other)
 
     def __mul__(self, multiplier: float) -> "ChainAmounts":
         """Multiply all amounts by the specified multiplier"""

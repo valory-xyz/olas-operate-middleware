@@ -221,7 +221,7 @@ class TestBridgeManager:
         assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
-            <= timestamp2 + bridge_manager.quote_validity_period
+            <= timestamp2 + bridge_manager.bundle_validity_period
         ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
@@ -334,7 +334,7 @@ class TestBridgeManager:
         assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
-            <= timestamp2 + bridge_manager.quote_validity_period
+            <= timestamp2 + bridge_manager.bundle_validity_period
         ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
@@ -453,7 +453,7 @@ class TestBridgeManager:
         assert brr["expiration_timestamp"] >= timestamp1, "Wrong refill requirements."
         assert (
             brr["expiration_timestamp"]
-            <= timestamp2 + bridge_manager.quote_validity_period
+            <= timestamp2 + bridge_manager.bundle_validity_period
         ), "Wrong refill requirements."
 
         diff = DeepDiff(brr, expected_brr)
