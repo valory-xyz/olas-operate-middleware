@@ -45,7 +45,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain, ChainAmounts, LedgerType
 
 from tests.constants import OPERATE_TEST
 
@@ -178,9 +178,9 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": {
-                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
-            },
+            "balances": ChainAmounts(
+                {"gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}}
+            ),
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
@@ -283,12 +283,16 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": {
-                "ethereum": {
-                    wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                },
-                "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}},
-            },
+            "balances": ChainAmounts(
+                {
+                    "ethereum": {
+                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
+                    },
+                    "gnosis": {
+                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
+                    },
+                }
+            ),
             "bridge_refill_requirements": {
                 "ethereum": {
                     wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
@@ -410,9 +414,13 @@ class TestBridgeManager:
 
         expected_brr = {
             "id": brr["id"],
-            "balances": {
-                "ethereum": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}}
-            },
+            "balances": ChainAmounts(
+                {
+                    "ethereum": {
+                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
+                    }
+                }
+            ),
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
