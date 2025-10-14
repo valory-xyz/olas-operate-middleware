@@ -138,6 +138,10 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
         "0xC05e7412439bD7e91730a6880E18d5D5873F632C",
         2182,
     ),
+    "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020": (
+        "0x77af31De935740567Cf4fF1986D04B2c964A786a",
+        0,
+    ),
 }
 
 
