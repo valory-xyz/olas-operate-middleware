@@ -200,5 +200,5 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
     tx["from"] = original_from
     if tx["gas"] == 1:
         tx["gas"] = original_gas
-        print(f"[LEDGER API] Unable to estimate gas. Restored {tx['gas']=}.")
+        print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
     tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
