@@ -185,7 +185,7 @@ def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
 # TODO This gas management should be done at a lower level in the library
 def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
     """Update transaction with gas estimate."""
-    print(f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
+    print(f"[LEDGER API] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
     original_from = tx["from"]
     original_gas = tx.get("gas", 1)
 
@@ -194,11 +194,11 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx["gas"] = 1
         ledger_api.update_with_gas_estimate(tx)
         if tx["gas"] > 1:
-            print(f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
+            print(f"[LEDGER API] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
             break
 
     tx["from"] = original_from
     if tx["gas"] == 1:
         tx["gas"] = original_gas
-        print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
+        print(f"[LEDGER API] Unable to estimate gas. Restored {tx['gas']=}.")
     tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
