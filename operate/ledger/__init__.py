@@ -27,6 +27,10 @@ from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from web3.middleware import geth_poa_middleware
+import typing as t
+from math import ceil
+
+from aea.crypto.base import LedgerApi
 
 from operate.operate_types import Chain
 
@@ -150,3 +154,54 @@ def get_default_ledger_api(chain: Chain) -> LedgerApi:
             chain=chain, rpc=get_default_rpc(chain=chain)
         )
     return DEFAULT_LEDGER_APIS[chain]
+
+
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
+GAS_ESTIMATE_BUFFER = 1.10
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas pricing management should be done at a lower level in the library
+def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas pricing."""
+    tx.pop("maxFeePerGas", None)
+    tx.pop("gasPrice", None)
+    tx.pop("maxPriorityFeePerGas", None)
+
+    gas_pricing = ledger_api.try_get_gas_pricing()
+    if gas_pricing is None:
+        raise RuntimeError("Unable to retrieve gas pricing.")
+
+    if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
+        tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+        tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+    elif "gasPrice" in gas_pricing:
+        tx["gasPrice"] = gas_pricing["gasPrice"]
+    else:
+        raise RuntimeError("Retrieved invalid gas pricing.")
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas management should be done at a lower level in the library
+def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas estimate."""
+    print(f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
+    original_from = tx["from"]
+    original_gas = tx.get("gas", 1)
+
+    for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+        tx["from"] = address
+        tx["gas"] = 1
+        ledger_api.update_with_gas_estimate(tx)
+        if tx["gas"] > 1:
+            print(f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
+            break
+
+    tx["from"] = original_from
+    if tx["gas"] == 1:
+        tx["gas"] = original_gas
+        print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
+    tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

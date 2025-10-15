@@ -39,6 +39,7 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
+from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain
 
 
@@ -338,8 +339,8 @@ class RelayProvider(Provider):
                 tx["maxFeePerGas"] = int(tx.get("maxFeePerGas", 0))
                 tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
                 tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(tx["from"])
-                Provider._update_with_gas_pricing(tx, from_ledger_api)
-                Provider._update_with_gas_estimate(tx, from_ledger_api)
+                update_tx_with_gas_pricing(tx, from_ledger_api)
+                update_tx_with_gas_estimate(tx, from_ledger_api)
                 txs.append((f"{step['id']}-{i}", tx))
 
         return txs
