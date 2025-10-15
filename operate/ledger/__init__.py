@@ -22,15 +22,12 @@
 import os
 import typing as t
 from copy import deepcopy
+from math import ceil
 
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 from web3.middleware import geth_poa_middleware
-import typing as t
-from math import ceil
-
-from aea.crypto.base import LedgerApi
 
 from operate.operate_types import Chain
 

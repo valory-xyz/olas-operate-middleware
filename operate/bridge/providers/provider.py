@@ -39,7 +39,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import update_tx_with_gas_pricing, get_default_ledger_api
+from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager

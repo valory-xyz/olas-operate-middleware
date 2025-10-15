@@ -40,7 +40,8 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
-    get_default_ledger_api, make_chain_ledger_api,
+    get_default_ledger_api,
+    make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
