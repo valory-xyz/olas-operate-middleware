@@ -20,6 +20,10 @@
 """Ledger helpers."""
 
 import os
+import typing as t
+from math import ceil
+
+from aea.crypto.base import LedgerApi
 
 from operate.operate_types import Chain
 
@@ -99,3 +103,54 @@ def get_currency_denom(chain: Chain) -> str:
 def get_currency_smallest_unit(chain: Chain) -> str:
     """Get currency denom by chain type."""
     return CURRENCY_SMALLEST_UNITS.get(chain, "Wei")
+
+
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
+GAS_ESTIMATE_BUFFER = 1.10
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas pricing management should be done at a lower level in the library
+def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas pricing."""
+    tx.pop("maxFeePerGas", None)
+    tx.pop("gasPrice", None)
+    tx.pop("maxPriorityFeePerGas", None)
+
+    gas_pricing = ledger_api.try_get_gas_pricing()
+    if gas_pricing is None:
+        raise RuntimeError("Unable to retrieve gas pricing.")
+
+    if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
+        tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+        tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+    elif "gasPrice" in gas_pricing:
+        tx["gasPrice"] = gas_pricing["gasPrice"]
+    else:
+        raise RuntimeError("Retrieved invalid gas pricing.")
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas management should be done at a lower level in the library
+def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas estimate."""
+    print(f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
+    original_from = tx["from"]
+    original_gas = tx.get("gas", 1)
+
+    for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+        tx["from"] = address
+        tx["gas"] = 1
+        ledger_api.update_with_gas_estimate(tx)
+        if tx["gas"] > 1:
+            print(f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
+            break
+
+    tx["from"] = original_from
+    if tx["gas"] == 1:
+        tx["gas"] = original_gas
+        print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
+    tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

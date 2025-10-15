@@ -42,7 +42,11 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_rpc
+from operate.ledger import (
+    get_default_rpc,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
@@ -357,10 +361,9 @@ class EthereumMasterWallet(MasterWallet):
                     "nonce": ledger_api.api.eth.get_transaction_count(wallet_address),
                 }
             )
-            return ledger_api.update_with_gas_estimate(
-                transaction=tx,
-                raise_on_try=False,
-            )
+            update_tx_with_gas_pricing(tx, ledger_api)
+            update_tx_with_gas_estimate(tx, ledger_api)
+            return tx
 
         setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
         tx_receipt = tx_settler.transact(
