@@ -527,7 +527,6 @@ class TestServiceManager(OnTestnet):
             service_manager.terminate_service_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain_str,
-                withdrawal_address=None,
             )
             assert (
                 service_manager._get_on_chain_state(  # pylint: disable=protected-access
