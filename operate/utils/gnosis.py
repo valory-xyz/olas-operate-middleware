@@ -554,10 +554,13 @@ def drain_eoa(
             chain_id=chain_id,
             raise_on_try=True,
         )
-        tx = ledger_api.update_with_gas_estimate(
-            transaction=tx,
+        empty_tx = tx.copy()
+        empty_tx["value"] = 0
+        empty_tx = ledger_api.update_with_gas_estimate(
+            transaction=empty_tx,
             raise_on_try=False,
         )
+        tx["gas"] = empty_tx["gas"]
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"

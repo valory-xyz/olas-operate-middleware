@@ -527,7 +527,7 @@ class EthereumMasterWallet(MasterWallet):
         """Drain all erc20/native assets to the given account."""
         assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
         for asset in assets:
-            balance = self.get_balance(chain=chain, from_safe=from_safe)
+            balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
             if balance <= 0:
                 continue
 

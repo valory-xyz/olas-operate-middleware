@@ -193,6 +193,20 @@ class TestFunding(OnTestnet):
 
             tenderly_increase_time(chain)
 
+        LOGGER.info("Terminate without withdrawing")
+        for chain_str, _ in service.chain_configs.items():
+            service_manager.terminate_service_on_chain_from_safe(
+                service_config_id=service_config_id,
+                chain=chain_str,
+            )
+            assert (
+                service_manager._get_on_chain_state(  # pylint: disable=protected-access
+                    service, chain_str
+                )
+                == OnChainState.PRE_REGISTRATION
+            )
+
+        LOGGER.info("Terminate and withdraw")
         app = create_app(home=operate._path)
         client = TestClient(app)
         client.post(
