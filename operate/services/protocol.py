@@ -1397,7 +1397,7 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_erc20_withdraw_messages(
+    def get_safe_b_erc20_withdraw_messages(  # pylint: disable=too-many-locals
         self,
         safe_a_address: str,
         safe_b_address: str,
@@ -1406,10 +1406,11 @@ class EthSafeTxBuilder(_ChainUtil):
         amount: int,
     ) -> list[dict]:
         """
-        Build the two messages to withdraw ERC20 from Safe B via Safe A:
+        Build the two transactions to withdraw ERC20 from Safe B via Safe A.
+
+        Builds the transactions
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ERC20 tokens
-        Follows the same pattern as get_reuse_multisig_from_safe_payload.
         """
         safe_b_instance = registry_contracts.gnosis_safe.get_instance(
             ledger_api=self.ledger_api,

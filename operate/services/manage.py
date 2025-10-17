@@ -88,7 +88,12 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances, get_owners
+from operate.utils.gnosis import (
+    drain_eoa,
+    get_asset_balance,
+    get_assets_balances,
+    get_owners,
+)
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -1278,7 +1283,7 @@ class ServiceManager:
             self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
             return
         # Unstake the service if applies
-        elif is_staked and can_unstake:
+        if is_staked and can_unstake:
             self.unstake_service_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
@@ -1354,7 +1359,6 @@ class ServiceManager:
                     master_safe if master_safe else wallet.crypto.address
                 ),  # TODO it should always be safe address
             )
-
 
     def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
         self,
@@ -2216,10 +2220,7 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
 
-        owners = get_owners(
-            ledger_api=ledger_api,
-            safe=service_safe
-        )
+        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
 
         # Drain ERC20 tokens from service Safe
         tokens = {
@@ -2250,7 +2251,9 @@ class ServiceManager:
 
             # Safe not swapped
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+                ethereum_crypto = KeysManager().get_crypto_instance(
+                    service.agent_addresses[0]
+                )
                 transfer_erc20_from_safe(
                     ledger_api=ledger_api,
                     crypto=ethereum_crypto,
@@ -2273,7 +2276,9 @@ class ServiceManager:
                     tx.settle()  # wait until mined
 
             else:
-                raise RuntimeError(f"Cannot drain service safe: unrecognized owner set {owners=}")
+                raise RuntimeError(
+                    f"Cannot drain service safe: unrecognized owner set {owners=}"
+                )
 
         # Drain native asset from service Safe
         balance = ledger_api.get_balance(service_safe)
@@ -2287,7 +2292,9 @@ class ServiceManager:
             )
 
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+                ethereum_crypto = KeysManager().get_crypto_instance(
+                    service.agent_addresses[0]
+                )
                 transfer_from_safe(
                     ledger_api=ledger_api,
                     crypto=ethereum_crypto,
@@ -2298,7 +2305,9 @@ class ServiceManager:
             elif set(owners) == {master_safe}:
                 pass
             else:
-                raise RuntimeError(f"Cannot drain service safe: unrecognized owner set {owners=}")                
+                raise RuntimeError(
+                    f"Cannot drain service safe: unrecognized owner set {owners=}"
+                )
 
         self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
 
