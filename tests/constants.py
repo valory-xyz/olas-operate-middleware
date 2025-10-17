@@ -22,9 +22,13 @@
 import os
 from pathlib import Path
 
+from aea.helpers.logging import setup_logger
+
 from operate.ledger import DEFAULT_RPCS
 from operate.operate_types import Chain
 
+
+LOGGER = setup_logger(name="operate-test")
 
 ROOT_PATH = Path(__file__).resolve().parent
 OPERATE_TEST = ".operate_test"
@@ -61,3 +65,4 @@ TESTNET_RPCS = {
     Chain.POLYGON: POLYGON_TESTNET_RPC,
     Chain.SOLANA: SOLANA_TESTNET_RPC,
 }
+CHAINS_TO_TEST = [Chain.GNOSIS, Chain.OPTIMISM]

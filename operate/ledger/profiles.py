@@ -24,7 +24,7 @@ import typing as t
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import CHAINS
+from operate.ledger import CHAINS, get_currency_denom
 from operate.operate_types import Chain, ContractAddresses
 
 
@@ -177,7 +177,22 @@ WRAPPED_NATIVE_ASSET = {
     Chain.POLYGON: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
 }
 
-ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+ERC20_TOKENS = {
+    "OLAS": OLAS,
+    "USDC": USDC,
+    "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
+}
+
+DUST = {
+    Chain.ARBITRUM_ONE: int(1e14),
+    Chain.BASE: int(1e14),
+    Chain.CELO: int(1e15),
+    Chain.ETHEREUM: int(1e14),
+    Chain.GNOSIS: int(1e15),
+    Chain.MODE: int(1e14),
+    Chain.OPTIMISM: int(1e14),
+    Chain.POLYGON: int(1e14),
+}
 
 DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.ARBITRUM_ONE: {
@@ -252,7 +267,25 @@ EXPLORER_URL = {
     },
 }
 
+NATIVE_TOKEN_NAME = "native"  # nosec
 
+
+def get_token_name(chain: Chain, token_address: str) -> str:
+    """Get token name."""
+    if token_address == ZERO_ADDRESS:
+        return NATIVE_TOKEN_NAME
+
+    if WRAPPED_NATIVE_ASSET.get(chain) == token_address:
+        return f"W{get_currency_denom(chain)}"
+
+    for symbol, tokens in ERC20_TOKENS.items():
+        if tokens.get(chain) == token_address:
+            return symbol
+
+    return token_address
+
+
+# TODO: Deprecate in favour of StakingManager method
 def get_staking_contract(
     chain: str, staking_program_id: t.Optional[str]
 ) -> t.Optional[str]:
