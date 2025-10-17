@@ -94,6 +94,14 @@ def client_no_account(tmp_path: Path) -> TestClient:
     return TestClient(app)
 
 
+def test_get_settings(client_no_account: TestClient) -> None:
+    """Test the /api/settings endpoint."""
+    response = client_no_account.get("/api/settings")
+    assert response.status_code == HTTPStatus.OK, response.json()
+    assert "version" in response.json()
+    assert "eoa_topups" in response.json()
+
+
 class TestAccountCreation:
     """Tests for POST /api/account endpoint."""
 
