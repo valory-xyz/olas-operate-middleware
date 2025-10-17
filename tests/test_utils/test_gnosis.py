@@ -35,7 +35,7 @@ class TestGnosisUtils(OnTestnet):
     """Tests for Gnosis utils."""
 
     @pytest.mark.parametrize("chain", CHAINS_TO_TEST)
-    def test_drain_eoa(test_operate: OperateApp, chain: Chain) -> None:
+    def test_drain_eoa(self, test_operate: OperateApp, chain: Chain) -> None:
         """Test draining an EOA wallet."""
         test_operate.wallet_manager.create(ledger_type=LedgerType.ETHEREUM)
         wallet = test_operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
