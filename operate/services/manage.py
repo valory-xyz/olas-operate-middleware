@@ -88,7 +88,7 @@ from operate.services.service import (
     Service,
 )
 from operate.services.utils.mech import deploy_mech
-from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances
+from operate.utils.gnosis import drain_eoa, get_asset_balance, get_assets_balances, get_owners
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
@@ -2209,8 +2209,17 @@ class ServiceManager:
         chain_config = service.chain_configs[chain.value]
         chain_data = chain_config.chain_data
         ledger_api = get_default_ledger_api(chain)
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
+        service_safe = chain_data.multisig
+        wallet = self.wallet_manager.load(chain.ledger_type)
+        master_safe = wallet.safes[chain]
+        ledger_config = chain_config.ledger_config
+        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
+
+        owners = get_owners(
+            ledger_api=ledger_api,
+            safe=service_safe
+        )
 
         # Drain ERC20 tokens from service Safe
         tokens = {
@@ -2227,43 +2236,69 @@ class ServiceManager:
                 ledger_api=ledger_api,
                 contract_address=token_address,
             )
-            balance = token_instance.functions.balanceOf(chain_data.multisig).call()
+            balance = token_instance.functions.balanceOf(service_safe).call()
             token_name = get_token_name(chain, token_address)
             if balance == 0:
                 self.logger.info(
-                    f"No {token_name} to drain from service safe: {chain_data.multisig}"
+                    f"No {token_name} to drain from service safe: {service_safe}"
                 )
                 continue
 
             self.logger.info(
-                f"Draining {balance} {token_name} from {chain_data.multisig} (service safe) to {withdrawal_address}"
-            )
-            transfer_erc20_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                token=token_address,
-                to=withdrawal_address,
-                amount=balance,
+                f"Draining {balance} {token_name} from {service_safe} (service safe) to {withdrawal_address}"
             )
 
+            # Safe not swapped
+            if set(owners) == set(service.agent_addresses):
+                ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+                transfer_erc20_from_safe(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    safe=chain_data.multisig,
+                    token=token_address,
+                    to=withdrawal_address,
+                    amount=balance,
+                )
+            elif set(owners) == {master_safe}:
+                messages = sftxb.get_safe_b_erc20_withdraw_messages(
+                    safe_a_address=master_safe,
+                    safe_b_address=service_safe,
+                    erc20_address=token_address,
+                    withdraw_wallet=withdrawal_address,
+                    amount=balance,
+                )
+                for message in messages:
+                    tx = sftxb.new_tx()
+                    tx.add(message)
+                    tx.settle()  # wait until mined
+
+            else:
+                raise RuntimeError(f"Cannot drain service safe: unrecognized owner set {owners=}")
+
         # Drain native asset from service Safe
-        balance = ledger_api.get_balance(chain_data.multisig)
+        balance = ledger_api.get_balance(service_safe)
         if balance == 0:
             self.logger.info(
-                f"No {get_currency_denom(chain)} to drain from service safe: {chain_data.multisig}"
+                f"No {get_currency_denom(chain)} to drain from service safe: {service_safe}"
             )
         else:
             self.logger.info(
-                f"Draining {balance} {get_currency_denom(chain)} from {chain_data.multisig} (service safe) to {withdrawal_address}"
+                f"Draining {balance} {get_currency_denom(chain)} from {service_safe} (service safe) to {withdrawal_address}"
             )
-            transfer_from_safe(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                safe=chain_data.multisig,
-                to=withdrawal_address,
-                amount=balance,
-            )
+
+            if set(owners) == set(service.agent_addresses):
+                ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+                transfer_from_safe(
+                    ledger_api=ledger_api,
+                    crypto=ethereum_crypto,
+                    safe=chain_data.multisig,
+                    to=withdrawal_address,
+                    amount=balance,
+                )
+            elif set(owners) == {master_safe}:
+                pass
+            else:
+                raise RuntimeError(f"Cannot drain service safe: unrecognized owner set {owners=}")                
 
         self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
 
@@ -2290,17 +2325,17 @@ class ServiceManager:
             )
             self.logger.info(f"{service.name} signer drained")
 
-    def drain_from_safe(
+    def drain(
         self, service_config_id: str, chain_str: str, withdrawal_address: str
     ) -> None:
-        """Drain from safe. Assumes owner of service safe is master safe."""
+        """Drain service safe and agent EOAs."""
         service = self.load(service_config_id=service_config_id)
         chain = Chain(chain_str)
-        # self.drain_service_safe(
-        #     service=service,
-        #     withdrawal_address=withdrawal_address,
-        #     chain=chain,
-        # )
+        self.drain_service_safe(
+            service=service,
+            withdrawal_address=withdrawal_address,
+            chain=chain,
+        )
         self.drain_agents_eoas(
             service=service,
             withdrawal_address=withdrawal_address,

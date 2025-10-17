@@ -485,6 +485,88 @@ def transfer_erc20_from_safe(
     )
 
 
+def get_safe_b_erc20_withdraw_messages(
+    ledger_api,
+    safe_b_address: str,
+    erc20_address: str,
+    withdraw_wallet: str,
+    amount_wei: int,
+) -> list[dict]:
+    """
+    Build the two messages to withdraw ERC20 from Safe B via Safe A:
+      1) approveHash(inner_tx_hash)
+      2) execTransaction(...) to transfer ERC20 tokens
+    Follows the same pattern as get_reuse_multisig_from_safe_payload.
+    """
+    safe_b_instance = registry_contracts.gnosis_safe.get_instance(
+        ledger_api=ledger_api,
+        contract_address=safe_b_address,
+    )
+    erc20_instance = registry_contracts.erc20.get_instance(
+        ledger_api=ledger_api,
+        contract_address=erc20_address,
+    )
+
+    # ERC20 transfer calldata
+    erc20_transfer_data = erc20_instance.encodeABI(
+        fn_name="transfer",
+        args=[withdraw_wallet, amount_wei],
+    )
+
+    # Compute inner Safe transaction hash
+    safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+        ledger_api=ledger_api,
+        contract_address=safe_b_address,
+        to_address=erc20_address,
+        value=0,
+        data=bytes.fromhex(erc20_transfer_data[2:]),
+        operation=SafeOperation.CALL.value,
+        safe_tx_gas=0,
+        base_gas=0,
+        gas_price=0,
+        gas_token=NULL_ADDRESS,
+        refund_receiver=NULL_ADDRESS,
+    ).get("tx_hash")
+
+    # Build approveHash message
+    approve_hash_data = safe_b_instance.encodeABI(
+        fn_name="approveHash",
+        args=[safe_tx_hash],
+    )
+    approve_hash_message = {
+        "to": safe_b_address,
+        "data": approve_hash_data[2:],  # drop 0x
+        "operation": MultiSendOperation.CALL,
+        "value": 0,
+    }
+
+    # Build execTransaction message
+    exec_data = safe_b_instance.encodeABI(
+        fn_name="execTransaction",
+        args=[
+            erc20_address,
+            0,
+            bytes.fromhex(erc20_transfer_data[2:]),
+            SafeOperation.CALL.value,
+            0,  # safeTxGas
+            0,  # baseGas
+            0,  # gasPrice
+            NULL_ADDRESS,  # gasToken
+            NULL_ADDRESS,  # refundReceiver
+            b"",  # signatures empty; rely on approveHash
+        ],
+    )
+    exec_message = {
+        "to": safe_b_address,
+        "data": exec_data[2:],
+        "operation": MultiSendOperation.CALL,
+        "value": 0,
+    }
+
+    return [approve_hash_message, exec_message]
+
+
+
 def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,

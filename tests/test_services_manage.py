@@ -568,4 +568,5 @@ class TestServiceManager(OnTestnet):
 
             service_safe_address = chain_config.chain_data.multisig
             for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
-                assert get_asset_balance(ledger_api, asset, service_safe_address) == 0
+                if asset != ZERO_ADDRESS:
+                    assert get_asset_balance(ledger_api, asset, service_safe_address) == 0

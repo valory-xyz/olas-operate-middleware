@@ -1031,7 +1031,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     service_config_id=service_config_id,
                     chain=chain,
                 )
-                service_manager.drain_from_safe(
+                service_manager.drain(
                     service_config_id=service_config_id,
                     chain_str=chain,
                     withdrawal_address=withdrawal_address,

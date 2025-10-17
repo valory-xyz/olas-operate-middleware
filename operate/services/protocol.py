@@ -1397,6 +1397,100 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
+    def get_safe_b_erc20_withdraw_messages(
+        self,
+        safe_a_address: str,
+        safe_b_address: str,
+        erc20_address: str,
+        withdraw_wallet: str,
+        amount: int,
+    ) -> list[dict]:
+        """
+        Build the two messages to withdraw ERC20 from Safe B via Safe A:
+        1) approveHash(inner_tx_hash)
+        2) execTransaction(...) to transfer ERC20 tokens
+        Follows the same pattern as get_reuse_multisig_from_safe_payload.
+        """
+        safe_b_instance = registry_contracts.gnosis_safe.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+        )
+        erc20_instance = registry_contracts.erc20.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=erc20_address,
+        )
+
+        txs = []
+        txs.append(
+            {
+                "to": erc20_address,
+                "data": erc20_instance.encodeABI(
+                    fn_name="transfer",
+                    args=[withdraw_wallet, amount],
+                ),
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        )
+
+        multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
+            self.chain_type
+        ]
+        multisend_tx = registry_contracts.multisend.get_multisend_tx(
+            ledger_api=self.ledger_api,
+            contract_address=multisend_address,
+            txs=txs,
+        )
+
+        # Compute inner Safe transaction hash
+        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+            to_address=multisend_address,
+            value=multisend_tx["value"],
+            data=multisend_tx["data"],
+            operation=SafeOperation.CALL.value,
+        ).get("tx_hash")
+
+        # Build approveHash message
+        approve_hash_data = safe_b_instance.encodeABI(
+            fn_name="approveHash",
+            args=[safe_tx_hash],
+        )
+        approve_hash_message = {
+            "to": safe_b_address,
+            "data": approve_hash_data[2:],  # drop 0x
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        # Build execTransaction message
+        exec_data = safe_b_instance.encodeABI(
+            fn_name="execTransaction",
+            args=[
+                multisend_address,
+                multisend_tx["value"],
+                multisend_tx["data"],
+                SafeOperation.DELEGATE_CALL.value,
+                0,  # safeTxGas
+                0,  # baseGas
+                0,  # gasPrice
+                ZERO_ADDRESS,  # gasToken
+                ZERO_ADDRESS,  # refundReceiver
+                get_packed_signature_for_approved_hash(
+                    owners=(safe_a_address,)
+                ),  # signatures empty; rely on approveHash
+            ],
+        )
+        exec_message = {
+            "to": safe_b_address,
+            "data": exec_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        return [approve_hash_message, exec_message]
+
     def get_terminate_data(self, service_id: int) -> t.Dict:
         """Get terminate tx data."""
         instance = registry_contracts.service_manager.get_instance(
