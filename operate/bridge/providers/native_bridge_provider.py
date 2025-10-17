@@ -97,7 +97,7 @@ class BridgeContractAdaptor(ABC):
         if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
             return True
 
-        for token_map in ERC20_TOKENS:
+        for token_map in ERC20_TOKENS.values():
             if (
                 Chain(from_chain) in token_map
                 and Chain(to_chain) in token_map

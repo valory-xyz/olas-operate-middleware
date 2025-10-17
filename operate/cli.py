@@ -709,7 +709,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values()
+            }
             balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},
@@ -1028,6 +1030,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 service_manager.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
                     chain=chain,
+                )
+                service_manager.drain(
+                    service_config_id=service_config_id,
+                    chain_str=chain,
                     withdrawal_address=withdrawal_address,
                 )
 

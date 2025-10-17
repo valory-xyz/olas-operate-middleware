@@ -516,7 +516,7 @@ class EthereumMasterWallet(MasterWallet):
         """Drain all erc20/native assets to the given account."""
 
         ledger_api = self.ledger_api(chain=chain, rpc=rpc)
-        assets = {token[chain] for token in ERC20_TOKENS}
+        assets = {token[chain] for token in ERC20_TOKENS.values()}
 
         if from_safe:
             assets.add(ZERO_ADDRESS)
