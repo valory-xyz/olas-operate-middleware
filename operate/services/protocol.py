@@ -1397,18 +1397,18 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_erc20_withdraw_messages(  # pylint: disable=too-many-locals
+    def get_safe_b_erc20_transfer_txs(  # pylint: disable=too-many-locals
         self,
         safe_a_address: str,
         safe_b_address: str,
-        erc20_address: str,
-        withdraw_wallet: str,
+        token: str,
+        to: str,
         amount: int,
-    ) -> list[dict]:
+    ) -> t.Tuple[t.Dict, t.Dict]:
         """
-        Build the two transactions to withdraw ERC20 from Safe B via Safe A.
+        Build the two transactions to withdraw ERC20 from Safe B via Safe A (owner).
 
-        Builds the transactions
+        Builds the transactions to be settled by Safe A:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ERC20 tokens
         """
@@ -1418,16 +1418,16 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         erc20_instance = registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=erc20_address,
+            contract_address=token,
         )
 
         txs = []
         txs.append(
             {
-                "to": erc20_address,
+                "to": token,
                 "data": erc20_instance.encodeABI(
                     fn_name="transfer",
-                    args=[withdraw_wallet, amount],
+                    args=[to, amount],
                 ),
                 "operation": MultiSendOperation.CALL,
                 "value": 0,
@@ -1490,7 +1490,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-        return [approve_hash_message, exec_message]
+        return approve_hash_message, exec_message
 
     def get_terminate_data(self, service_id: int) -> t.Dict:
         """Get terminate tx data."""

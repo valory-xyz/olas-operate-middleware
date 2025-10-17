@@ -2263,11 +2263,11 @@ class ServiceManager:
                     amount=balance,
                 )
             elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_erc20_withdraw_messages(
+                messages = sftxb.get_safe_b_erc20_transfer_txs(
                     safe_a_address=master_safe,
                     safe_b_address=service_safe,
-                    erc20_address=token_address,
-                    withdraw_wallet=withdrawal_address,
+                    token=token_address,
+                    to=withdrawal_address,
                     amount=balance,
                 )
                 for message in messages:
