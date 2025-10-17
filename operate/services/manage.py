@@ -2264,7 +2264,6 @@ class ServiceManager:
                 )
             elif set(owners) == {master_safe}:
                 messages = sftxb.get_safe_b_erc20_transfer_messages(
-                    safe_a_address=master_safe,
                     safe_b_address=service_safe,
                     token=token_address,
                     to=withdrawal_address,
@@ -2273,7 +2272,7 @@ class ServiceManager:
                 for message in messages:
                     tx = sftxb.new_tx()
                     tx.add(message)
-                    tx.settle()  # wait until mined
+                    tx.settle()
 
             else:
                 raise RuntimeError(
@@ -2303,7 +2302,16 @@ class ServiceManager:
                     amount=balance,
                 )
             elif set(owners) == {master_safe}:
-                pass
+                messages = sftxb.get_safe_b_native_transfer_messages(
+                    safe_b_address=service_safe,
+                    to=withdrawal_address,
+                    amount=balance,
+                )
+                for message in messages:
+                    tx = sftxb.new_tx()
+                    tx.add(message)
+                    tx.settle()
+
             else:
                 raise RuntimeError(
                     f"Cannot drain service safe: unrecognized owner set {owners=}"
