@@ -1397,7 +1397,7 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_erc20_transfer_txs(  # pylint: disable=too-many-locals
+    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals
         self,
         safe_a_address: str,
         safe_b_address: str,
@@ -1406,9 +1406,9 @@ class EthSafeTxBuilder(_ChainUtil):
         amount: int,
     ) -> t.Tuple[t.Dict, t.Dict]:
         """
-        Build the two transactions to withdraw ERC20 from Safe B via Safe A (owner).
+        Build the two messages (Safe calls) to withdraw ERC20 from Safe B via Safe A (owner).
 
-        Builds the transactions to be settled by Safe A:
+        Builds the messages to be settled by Safe A:
         1) approveHash(inner_tx_hash)
         2) execTransaction(...) to transfer ERC20 tokens
         """
@@ -1460,7 +1460,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         approve_hash_message = {
             "to": safe_b_address,
-            "data": approve_hash_data[2:],  # drop 0x
+            "data": approve_hash_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
@@ -1478,9 +1478,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 0,  # gasPrice
                 ZERO_ADDRESS,  # gasToken
                 ZERO_ADDRESS,  # refundReceiver
-                get_packed_signature_for_approved_hash(
-                    owners=(safe_a_address,)
-                ),  # signatures empty; rely on approveHash
+                get_packed_signature_for_approved_hash(owners=(safe_a_address,)),
             ],
         )
         exec_message = {

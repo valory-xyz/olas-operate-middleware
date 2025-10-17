@@ -2263,7 +2263,7 @@ class ServiceManager:
                     amount=balance,
                 )
             elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_erc20_transfer_txs(
+                messages = sftxb.get_safe_b_erc20_transfer_messages(
                     safe_a_address=master_safe,
                     safe_b_address=service_safe,
                     token=token_address,
