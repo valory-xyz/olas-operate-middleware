@@ -35,7 +35,6 @@ from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
-from web3 import Web3
 
 from operate.constants import (
     AGENT_LOG_DIR,
@@ -54,7 +53,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_ledger_api, get_default_rpc
+from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_TOPUPS,
@@ -62,7 +61,6 @@ from operate.ledger.profiles import (
     OLAS,
     WRAPPED_NATIVE_ASSET,
     get_staking_contract,
-    get_token_name,
 )
 from operate.operate_types import (
     Chain,
@@ -93,13 +91,10 @@ from operate.services.service import (
 )
 from operate.services.utils.mech import deploy_mech
 from operate.utils.gnosis import (
-    drain_eoa,
     get_asset_balance,
     get_assets_balances,
-    get_owners,
+    transfer_erc20_from_safe,
 )
-from operate.utils.gnosis import transfer as transfer_from_safe
-from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import MasterWalletManager
 
 
@@ -2151,223 +2146,22 @@ class ServiceManager:
                 rpc=rpc or ledger_config.rpc,
             )
 
-    def drain_service_safe(  # pylint: disable=too-many-locals
-        self, service: Service, withdrawal_address: str, chain: Chain
-    ) -> None:
-        """Drain the funds out of the service safe."""
-        service_config_id = service.service_config_id
-        self.logger.info(f"Draining service safe {service.name} ({service_config_id=})")
-        chain_config = service.chain_configs[chain.value]
-        chain_data = chain_config.chain_data
-        ledger_api = get_default_ledger_api(chain)
-        withdrawal_address = Web3.to_checksum_address(withdrawal_address)
-        service_safe = chain_data.multisig
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        master_safe = wallet.safes[chain]
-        ledger_config = chain_config.ledger_config
-        sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
-
-        owners = get_owners(ledger_api=ledger_api, safe=service_safe)
-
-        # Drain ERC20 tokens from service Safe
-        tokens = {
-            WRAPPED_NATIVE_ASSET[chain],
-            OLAS[chain],
-            USDC[chain],
-        } | service.chain_configs[
-            chain.value
-        ].chain_data.user_params.fund_requirements.keys()
-        tokens.discard(ZERO_ADDRESS)
-
-        for token_address in tokens:
-            token_instance = registry_contracts.erc20.get_instance(
-                ledger_api=ledger_api,
-                contract_address=token_address,
-            )
-            balance = token_instance.functions.balanceOf(service_safe).call()
-            token_name = get_token_name(chain, token_address)
-            if balance == 0:
-                self.logger.info(
-                    f"No {token_name} to drain from service safe: {service_safe}"
-                )
-                continue
-
-            self.logger.info(
-                f"Draining {balance} {token_name} from {service_safe} (service safe) to {withdrawal_address}"
-            )
-
-            # Safe not swapped
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
-                    service.agent_addresses[0]
-                )
-                transfer_erc20_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_erc20_transfer_messages(
-                    safe_b_address=service_safe,
-                    token=token_address,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-                for message in messages:
-                    tx = sftxb.new_tx()
-                    tx.add(message)
-                    tx.settle()
-
-            else:
-                raise RuntimeError(
-                    f"Cannot drain service safe: unrecognized owner set {owners=}"
-                )
-
-        # Drain native asset from service Safe
-        balance = ledger_api.get_balance(service_safe)
-        if balance == 0:
-            self.logger.info(
-                f"No {get_currency_denom(chain)} to drain from service safe: {service_safe}"
-            )
-        else:
-            self.logger.info(
-                f"Draining {balance} {get_currency_denom(chain)} from {service_safe} (service safe) to {withdrawal_address}"
-            )
-
-            if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
-                    service.agent_addresses[0]
-                )
-                transfer_from_safe(
-                    ledger_api=ledger_api,
-                    crypto=ethereum_crypto,
-                    safe=chain_data.multisig,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-            elif set(owners) == {master_safe}:
-                messages = sftxb.get_safe_b_native_transfer_messages(
-                    safe_b_address=service_safe,
-                    to=withdrawal_address,
-                    amount=balance,
-                )
-                for message in messages:
-                    tx = sftxb.new_tx()
-                    tx.add(message)
-                    tx.settle()
-
-            else:
-                raise RuntimeError(
-                    f"Cannot drain service safe: unrecognized owner set {owners=}"
-                )
-
-        self.logger.info(f"Service safe {service.name} drained ({service_config_id=})")
-
-    def drain_agents_eoas(
-        self, service: Service, withdrawal_address: str, chain: Chain
-    ) -> None:
-        """Drain the funds out of the service agents EOAs."""
-        service_config_id = service.service_config_id
-        ledger_api = get_default_ledger_api(chain)
-        self.logger.info(
-            f"Draining service agents {service.name} ({service_config_id=})"
-        )
-        for agent_address in service.agent_addresses:
-            ethereum_crypto = KeysManager().get_crypto_instance(agent_address)
-            balance = ledger_api.get_balance(agent_address)
-            self.logger.info(
-                f"Draining {balance} (approx) {get_currency_denom(chain)} from {agent_address} (agent) to {withdrawal_address}"
-            )
-            drain_eoa(
-                ledger_api=ledger_api,
-                crypto=ethereum_crypto,
-                withdrawal_address=withdrawal_address,
-                chain_id=chain.id,
-            )
-            self.logger.info(f"{service.name} signer drained")
-
     def drain(
         self, service_config_id: str, chain_str: str, withdrawal_address: str
     ) -> None:
         """Drain service safe and agent EOAs."""
         service = self.load(service_config_id=service_config_id)
         chain = Chain(chain_str)
-        self.drain_service_safe(
+        self.funding_manager.drain_service_safe(
             service=service,
             withdrawal_address=withdrawal_address,
             chain=chain,
         )
-        self.drain_agents_eoas(
+        self.funding_manager.drain_agents_eoas(
             service=service,
             withdrawal_address=withdrawal_address,
             chain=chain,
         )
-
-    async def funding_job(
-        self,
-        service_config_id: str,
-        loop: t.Optional[asyncio.AbstractEventLoop] = None,
-        from_safe: bool = True,
-    ) -> None:
-        """Start a background funding job."""
-        loop = loop or asyncio.get_event_loop()
-        service = self.load(service_config_id=service_config_id)
-        chain_config = service.chain_configs[service.home_chain]
-        task = asyncio.current_task()
-        task_id = id(task) if task else "Unknown task_id"
-        with ThreadPoolExecutor() as executor:
-            last_claim = 0
-            while True:
-                try:
-                    await loop.run_in_executor(
-                        executor,
-                        self.fund_service,
-                        service_config_id,  # Service id
-                        {
-                            asset_address: {
-                                "agent": {
-                                    "topup": fund_requirements.agent,
-                                    "threshold": int(
-                                        fund_requirements.agent
-                                        * DEFAULT_TOPUP_THRESHOLD
-                                    ),
-                                },
-                                "safe": {
-                                    "topup": fund_requirements.safe,
-                                    "threshold": int(
-                                        fund_requirements.safe * DEFAULT_TOPUP_THRESHOLD
-                                    ),
-                                },
-                            }
-                            for asset_address, fund_requirements in chain_config.chain_data.user_params.fund_requirements.items()
-                        },
-                        from_safe,
-                        task_id,
-                    )
-                except Exception:  # pylint: disable=broad-except
-                    logging.info(
-                        f"Error occured while funding the service\n{traceback.format_exc()}"
-                    )
-
-                # try claiming rewards every hour
-                if last_claim + 3600 < time():
-                    try:
-                        await loop.run_in_executor(
-                            executor,
-                            self.claim_on_chain_from_safe,
-                            service_config_id,
-                            service.home_chain,
-                        )
-                    except Exception:  # pylint: disable=broad-except
-                        logging.info(
-                            f"Error occured while claiming rewards\n{traceback.format_exc()}"
-                        )
-                    last_claim = time()
-
-                await asyncio.sleep(60)
 
     def deploy_service_locally(
         self,
