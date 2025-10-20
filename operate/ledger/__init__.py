@@ -93,6 +93,8 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.SOLANA: "Lamport",
 }
 
+NATIVE_CURRENCY_DECIMALS = 18
+
 
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""

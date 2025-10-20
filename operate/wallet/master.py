@@ -45,7 +45,7 @@ from operate.ledger import (
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
-from operate.ledger.profiles import DUST, ERC20_TOKENS, get_token_name
+from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
@@ -264,10 +264,10 @@ class EthereumMasterWallet(MasterWallet):
         if balance < amount:
             source = "Master Safe" if from_safe else " Master EOA"
             source_address = self.safes[chain] if from_safe else self.address
-            asset_name = get_token_name(chain, token)
+            asset = ZERO_ADDRESS
             raise InsufficientFundsException(
-                f"Cannot transfer {amount} {asset_name} from {source} {source_address} to {to} on chain {chain}. "
-                f"Balance of {source_address} is {balance} {asset_name}."
+                f"Cannot transfer {format_asset_amount(chain, asset, amount)} from {source} {source_address} to {to} on chain {chain.name}. "
+                f"Balance: {format_asset_amount(chain, asset, balance)}. Missing: {format_asset_amount(chain, asset, amount - balance)}."
             )
 
         return to
@@ -489,8 +489,10 @@ class EthereumMasterWallet(MasterWallet):
 
         if balance < amount:
             raise InsufficientFundsException(
-                f"Cannot transfer {amount} asset {asset} units to {to} on chain {chain.value.capitalize()}. "
-                f"Balance of master safe is {safe_balance}. Balance of master eoa is {eoa_balance}."
+                f"Cannot transfer {format_asset_amount(chain, asset, amount)} to {to} on chain {chain.name}. "
+                f"Balance of Master Safe {self.safes[chain]}: {format_asset_amount(chain, asset, safe_balance)}. "
+                f"Balance of Master EOA {self.address}: {format_asset_amount(chain, asset, eoa_balance)}. "
+                f"Missing: {format_asset_amount(chain, asset, amount - balance)}."
             )
 
         tx_hashes = []

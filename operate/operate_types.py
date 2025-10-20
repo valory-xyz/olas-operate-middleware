@@ -376,7 +376,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = amount * multiplier
+                    balances[asset] = int(amount * multiplier)
         return output
 
     def __sub__(self, other: "ChainAmounts") -> "ChainAmounts":
@@ -399,7 +399,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = amount // divisor
+                    balances[asset] = int(amount // divisor)
         return output
 
     def __lt__(self, other: "ChainAmounts") -> bool:

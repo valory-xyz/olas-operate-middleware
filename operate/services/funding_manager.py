@@ -54,7 +54,7 @@ from operate.ledger.profiles import (
     OLAS,
     USDC,
     WRAPPED_NATIVE_ASSET,
-    get_token_name,
+    get_asset_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
 from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingState
@@ -152,7 +152,7 @@ class FundingManager:
                 contract_address=token_address,
             )
             balance = token_instance.functions.balanceOf(service_safe).call()
-            token_name = get_token_name(chain, token_address)
+            token_name = get_asset_name(chain, token_address)
             if balance == 0:
                 self.logger.info(
                     f"No {token_name} to drain from service safe: {service_safe}"
