@@ -1152,19 +1152,26 @@ class Service(LocalResource):
         """Get funding amounts requested by the agent."""
         agent_response = {}
         funding_requests = ChainAmounts()
+
+        if self.deployment.status != DeploymentStatus.DEPLOYED:
+            return funding_requests
+
         try:
             resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
             resp.raise_for_status()
             agent_response = resp.json()
-        except Exception:  # pylint: disable=broad-except
+        except Exception as e:  # pylint: disable=broad-except
             logger.warning(
-                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDS_STATUS_URL}."
+                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDS_STATUS_URL}: {e}"
             )
 
         for chain_str, addresses in agent_response.items():
-            funding_requests.setdefault(chain_str, {})
             for address, assets in addresses.items():
-                funding_requests[chain_str].setdefault(address, {})
+                if chain_str not in self.chain_configs:
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown chain {chain_str}."
+                    )
+
                 if (
                     address not in self.agent_addresses
                     and address != self.chain_configs[chain_str].chain_data.multisig
@@ -1173,6 +1180,8 @@ class Service(LocalResource):
                         f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
                     )
 
+                funding_requests.setdefault(chain_str, {})
+                funding_requests[chain_str].setdefault(address, {})
                 for asset, amounts in assets.items():
                     try:
                         funding_requests[chain_str][address][asset] = int(
