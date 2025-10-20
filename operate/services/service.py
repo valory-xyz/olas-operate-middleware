@@ -1168,19 +1168,17 @@ class Service(LocalResource):
         for chain_str, addresses in agent_response.items():
             for address, assets in addresses.items():
                 if chain_str not in self.chain_configs:
-                    logger.warning(
+                    raise ValueError(
                         f"Service {self.service_config_id} asked funding for an unknown chain {chain_str}."
                     )
-                    continue
 
                 if (
                     address not in self.agent_addresses
                     and address != self.chain_configs[chain_str].chain_data.multisig
                 ):
-                    logger.warning(
+                    raise ValueError(
                         f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
                     )
-                    continue
 
                 funding_requests.setdefault(chain_str, {})
                 funding_requests[chain_str].setdefault(address, {})
