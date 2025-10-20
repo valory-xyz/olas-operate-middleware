@@ -1152,6 +1152,10 @@ class Service(LocalResource):
         """Get funding amounts requested by the agent."""
         agent_response = {}
         funding_requests = ChainAmounts()
+
+        if self.deployment.status != DeploymentStatus.DEPLOYED:
+            return funding_requests
+
         try:
             resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
             resp.raise_for_status()
