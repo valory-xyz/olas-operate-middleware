@@ -1176,6 +1176,7 @@ class Service(LocalResource):
                     logger.warning(
                         f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
                     )
+                    continue
 
                 funding_requests.setdefault(chain_str, {})
                 funding_requests[chain_str].setdefault(address, {})
