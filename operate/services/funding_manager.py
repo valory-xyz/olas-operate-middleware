@@ -183,10 +183,10 @@ class FundingManager:
                     to=withdrawal_address,
                     amount=balance,
                 )
+                tx = sftxb.new_tx()
                 for message in messages:
-                    tx = sftxb.new_tx()
                     tx.add(message)
-                    tx.settle()
+                tx.settle()
 
             else:
                 raise RuntimeError(
@@ -221,10 +221,10 @@ class FundingManager:
                     to=withdrawal_address,
                     amount=balance,
                 )
+                tx = sftxb.new_tx()
                 for message in messages:
-                    tx = sftxb.new_tx()
                     tx.add(message)
-                    tx.settle()
+                tx.settle()
 
             else:
                 raise RuntimeError(
