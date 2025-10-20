@@ -624,7 +624,7 @@ class FundingManager:
             thresholds=master_eoa_topups // 2,
             topups=master_eoa_topups,
         )
-        self._fund_chain_amounts(master_eoa_shortfalls)
+        self.fund_chain_amounts(master_eoa_shortfalls)
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
@@ -792,9 +792,10 @@ class FundingManager:
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self._fund_chain_amounts(service.get_initial_funding_amounts())
+        self.fund_chain_amounts(service.get_initial_funding_amounts())
 
-    def _fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+        """Fund chain amounts"""
         required = self._aggregate_as_master_safe_amounts(amounts)
         balances = self._get_master_safe_balances(required)
 
@@ -849,7 +850,7 @@ class FundingManager:
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self._fund_chain_amounts(amounts)
+            self.fund_chain_amounts(amounts)
             self._funding_requests_cooldown_until[service_config_id] = (
                 time() + self.funding_requests_cooldown_seconds
             )

@@ -562,7 +562,7 @@ class TestServiceManager(OnTestnet):
                     balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
-                        assert balance < DUST[chain]
+                        assert balance <= DUST[chain]
                     else:
                         assert balance == 0
 

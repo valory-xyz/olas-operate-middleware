@@ -1327,10 +1327,37 @@ class ServiceManager:
 
         if counter_current_safe_owners == counter_instances:
             self.logger.info(
-                "Service funded for safe swap"
+                "[SERVICE MANAGER] Funding agent EOA for Safe swap."
             )  # TODO: is this safe swapping needed anymore?
-            # TODO the funding below seems too much just for safe swapping!
-            self.funding_manager.fund_service_initial(service)
+
+            requirements = ChainAmounts(
+                {
+                    chain: {
+                        current_safe_owners[0]: {
+                            ZERO_ADDRESS: chain_data.user_params.fund_requirements[
+                                ZERO_ADDRESS
+                            ].agent
+                        }
+                    }
+                }
+            )
+            balances = ChainAmounts(
+                {
+                    chain: {
+                        current_safe_owners[0]: {
+                            ZERO_ADDRESS: get_asset_balance(
+                                ledger_api=sftxb.ledger_api,
+                                asset_address=ZERO_ADDRESS,
+                                address=service.agent_addresses[0],
+                            )
+                        }
+                    }
+                }
+            )
+            shortfalls = ChainAmounts.shortfalls(
+                requirements=requirements, balances=balances
+            )
+            self.funding_manager.fund_chain_amounts(shortfalls)
 
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain

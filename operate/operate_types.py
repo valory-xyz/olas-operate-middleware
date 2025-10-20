@@ -326,7 +326,7 @@ class MechMarketplaceConfig:
     priority_mech_service_id: int
 
 
-class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
+class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
     """
     Class that represents chain amounts as a dictionary
 
@@ -338,7 +338,7 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
         cls, requirements: "ChainAmounts", balances: "ChainAmounts"
     ) -> "ChainAmounts":
         """Return the shortfalls between requirements and balances."""
-        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, int]]] = {}
 
         for chain, addresses in requirements.items():
             for address, assets in addresses.items():
@@ -354,7 +354,7 @@ class ChainAmounts(t.Dict[str, t.Dict[str, t.Dict[str, int]]]):
     @classmethod
     def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
         """Add multiple ChainAmounts"""
-        result: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, int]]] = {}
 
         for ca in chainamounts:
             for chain, addresses in ca.items():

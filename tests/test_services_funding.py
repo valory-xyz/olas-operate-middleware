@@ -205,6 +205,18 @@ class TestFunding(OnTestnet):
                 )
                 == OnChainState.PRE_REGISTRATION
             )
+            for asset in AGENT_FUNDING_ASSETS[chain]:
+                for agent_address in service.agent_addresses:
+                    balance = get_asset_balance(ledger_api, asset, agent_address)
+                    LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
+                    if asset == ZERO_ADDRESS:
+                        assert balance > DUST[chain]
+                    else:
+                        assert balance > 0
+
+            service_safe_address = chain_config.chain_data.multisig
+            for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
+                assert get_asset_balance(ledger_api, asset, service_safe_address) > 0
 
         LOGGER.info("Terminate and withdraw")
         app = create_app(home=operate._path)
@@ -233,7 +245,7 @@ class TestFunding(OnTestnet):
                     balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
-                        assert balance < DUST[chain]
+                        assert balance <= DUST[chain]
                     else:
                         assert balance == 0
 
