@@ -50,7 +50,8 @@ from operate.ledger.profiles import (
     OLAS,
     USDC,
 )
-from operate.operate_types import Chain, LedgerType, OnChainState
+from operate.operate_types import Chain, DeploymentStatus, LedgerType, OnChainState
+from operate.services.service import Deployment
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance
 
@@ -889,6 +890,11 @@ class TestFunding(OnTestnet):
 
         operate.password = password
         operate.service_manager().deploy_service_onchain_from_safe(service_config_id)
+        service = operate.service_manager().load(service_config_id)
+        deployment = Deployment.new(service.path)
+        deployment.status = DeploymentStatus.DEPLOYED
+        deployment.store()
+        service._deployment = deployment
 
         response = client.get(
             url=f"/api/v2/service/{service_config_id}/funding_requirements",
@@ -964,7 +970,6 @@ class TestFunding(OnTestnet):
         # Agent asks funds - Funding requirements
         # ---------------------------------------
 
-        service = operate.service_manager().load(service_config_id)
         agent_safe = service.chain_configs[chain1.value].chain_data.multisig
         fund_requests = {
             chain1.value: {
