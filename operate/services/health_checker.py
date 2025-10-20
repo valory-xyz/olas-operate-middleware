@@ -36,10 +36,10 @@ from operate.services.manage import ServiceManager  # type: ignore
 class HealthChecker:
     """Health checker manager."""
 
-    SLEEP_PERIOD_DEFAULT = 30
+    SLEEP_PERIOD_DEFAULT = 5  # seconds
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
-    REQUEST_TIMEOUT_DEFAULT = 90
-    NUMBER_OF_FAILS_DEFAULT = 10
+    REQUEST_TIMEOUT_DEFAULT = 90  # seconds
+    NUMBER_OF_FAILS_DEFAULT = 60
 
     def __init__(
         self,
@@ -180,7 +180,7 @@ class HealthChecker:
                             f"[HEALTH_CHECKER] {service_config_id} not healthy for {fails} time in a row"
                         )
                     else:
-                        self.logger.info(
+                        self.logger.debug(
                             f"[HEALTH_CHECKER] {service_config_id} is HEALTHY"
                         )
                         # reset fails if comes healty

@@ -20,6 +20,13 @@
 """Ledger helpers."""
 
 import os
+import typing as t
+from copy import deepcopy
+from math import ceil
+
+from aea.crypto.base import LedgerApi
+from aea.crypto.registries import make_ledger_api
+from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
 
 from operate.operate_types import Chain
 
@@ -88,14 +95,106 @@ CURRENCY_SMALLEST_UNITS = {
 
 def get_default_rpc(chain: Chain) -> str:
     """Get default RPC chain type."""
-    return DEFAULT_RPCS.get(chain, ETHEREUM_RPC)
+    return DEFAULT_RPCS[chain]
 
 
 def get_currency_denom(chain: Chain) -> str:
     """Get currency denom by chain type."""
-    return CURRENCY_DENOMS.get(chain, "ETH")
+    return CURRENCY_DENOMS.get(chain, "NATIVE")
 
 
 def get_currency_smallest_unit(chain: Chain) -> str:
     """Get currency denom by chain type."""
     return CURRENCY_SMALLEST_UNITS.get(chain, "Wei")
+
+
+DEFAULT_LEDGER_APIS: t.Dict[Chain, LedgerApi] = {}
+
+
+def make_chain_ledger_api(
+    chain: Chain,
+    rpc: t.Optional[str] = None,
+) -> LedgerApi:
+    """Get default RPC chain type."""
+
+    if chain not in DEFAULT_LEDGER_APIS:
+        if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
+            raise NotImplementedError("Solana not yet supported.")
+
+        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+                5, GWEI
+            )
+
+        ledger_api = make_ledger_api(
+            chain.ledger_type.name.lower(),
+            address=rpc or get_default_rpc(chain=chain),
+            chain_id=chain.id,
+            gas_price_strategies=gas_price_strategies,
+            poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
+        )
+
+        DEFAULT_LEDGER_APIS[chain] = ledger_api
+
+    return DEFAULT_LEDGER_APIS[chain]
+
+
+def get_default_ledger_api(chain: Chain) -> LedgerApi:
+    """Get default RPC chain type."""
+    if chain not in DEFAULT_LEDGER_APIS:
+        DEFAULT_LEDGER_APIS[chain] = make_chain_ledger_api(
+            chain=chain, rpc=get_default_rpc(chain=chain)
+        )
+    return DEFAULT_LEDGER_APIS[chain]
+
+
+GAS_ESTIMATE_FALLBACK_ADDRESSES = [
+    "0x000000000000000000000000000000000000dEaD",
+    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
+]
+GAS_ESTIMATE_BUFFER = 1.10
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas pricing management should be done at a lower level in the library
+def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas pricing."""
+    tx.pop("maxFeePerGas", None)
+    tx.pop("gasPrice", None)
+    tx.pop("maxPriorityFeePerGas", None)
+
+    gas_pricing = ledger_api.try_get_gas_pricing()
+    if gas_pricing is None:
+        raise RuntimeError("Unable to retrieve gas pricing.")
+
+    if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
+        tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
+        tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+    elif "gasPrice" in gas_pricing:
+        tx["gasPrice"] = gas_pricing["gasPrice"]
+    else:
+        raise RuntimeError("Retrieved invalid gas pricing.")
+
+
+# TODO backport to open aea/autonomy
+# TODO This gas management should be done at a lower level in the library
+def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+    """Update transaction with gas estimate."""
+    print(f"[LEDGER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
+    original_from = tx["from"]
+    original_gas = tx.get("gas", 1)
+
+    for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
+        tx["from"] = address
+        tx["gas"] = 1
+        ledger_api.update_with_gas_estimate(tx)
+        if tx["gas"] > 1:
+            print(f"[LEDGER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
+            break
+
+    tx["from"] = original_from
+    if tx["gas"] == 1:
+        tx["gas"] = original_gas
+        print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
+    tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

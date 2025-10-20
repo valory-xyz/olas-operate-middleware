@@ -29,7 +29,6 @@ import uuid
 from abc import ABC, abstractmethod
 from contextlib import suppress
 from dataclasses import dataclass
-from math import ceil
 
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
@@ -42,15 +41,11 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import update_tx_with_gas_pricing
 from operate.operate_types import Chain
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
-
-GAS_ESTIMATE_FALLBACK_ADDRESSES = [
-    "0x000000000000000000000000000000000000dEaD",
-    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
-]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 PROVIDER_REQUEST_PREFIX = "r-"
@@ -66,8 +61,6 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
 ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').to_0x_hex()[:10]
-
-GAS_ESTIMATE_BUFFER = 1.10
 
 
 @dataclass
@@ -282,7 +275,7 @@ class Provider(ABC):
             self.logger.debug(
                 f"[PROVIDER] Processing transaction {tx_label} for request {provider_request.id}."
             )
-            self._update_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
@@ -468,48 +461,3 @@ class Provider(ABC):
         receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
-
-    # TODO backport to open aea/autonomy
-    # TODO This gas pricing management should possibly be done at a lower level in the library
-    @staticmethod
-    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        tx.pop("maxFeePerGas", None)
-        tx.pop("gasPrice", None)
-        tx.pop("maxPriorityFeePerGas", None)
-
-        gas_pricing = ledger_api.try_get_gas_pricing()
-        if gas_pricing is None:
-            raise RuntimeError("Unable to retrieve gas pricing.")
-
-        if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
-            tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-            tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
-        elif "gasPrice" in gas_pricing:
-            tx["gasPrice"] = gas_pricing["gasPrice"]
-        else:
-            raise RuntimeError("Retrieved invalid gas pricing.")
-
-    # TODO backport to open aea/autonomy
-    @staticmethod
-    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        print(
-            f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
-        )
-        original_from = tx["from"]
-        original_gas = tx.get("gas", 1)
-
-        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
-            tx["from"] = address
-            tx["gas"] = 1
-            ledger_api.update_with_gas_estimate(tx)
-            if tx["gas"] > 1:
-                print(
-                    f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
-                )
-                break
-
-        tx["from"] = original_from
-        if tx["gas"] == 1:
-            tx["gas"] = original_gas
-            print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
-        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
