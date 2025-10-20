@@ -654,6 +654,7 @@ class TestFunding(OnTestnet):
         service_template = _get_service_template_trader()
 
         chain1 = Chain.GNOSIS
+        unconfigured_chain = Chain.OPTIMISM
         chains = (chain1,)
         c1_cfg = service_template["configurations"][chain1.value]
         c1_staking_bond = 50000000000000000000
@@ -975,7 +976,16 @@ class TestFunding(OnTestnet):
                         "deficit": 42000000000000000000,
                     }
                 }
-            }
+            },
+            unconfigured_chain.value: {
+                agent_safe: {
+                    ZERO_ADDRESS: {
+                        "requirement": 0,  # isn't used here
+                        "balance": 0,  # isn't used here
+                        "deficit": 42000000000000000000,
+                    }
+                }
+            },
         }
 
         expected_json["agent_funding_requests"] = {
