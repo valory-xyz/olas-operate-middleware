@@ -32,8 +32,6 @@ from http import HTTPStatus
 from pathlib import Path
 from types import FrameType
 
-import psutil
-import requests
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from fastapi import FastAPI, Request
@@ -75,6 +73,7 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.health_checker import HealthChecker
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
+from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
@@ -363,49 +362,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Load the ML model
-        watchdog_task = set_parent_watchdog(app)
-        yield
-        # Clean up the ML models and release the resources
+        async def stop_app():
+            logger.info("Stopping services due to parent death...")
+            stop_deployment_manager()
+            await run_in_executor(pause_all_services)
+            app._server.should_exit = True  # pylint: disable=protected-access
+            logger.info("App stopped due to parent death.")
+
+        watchdog = ParentWatchdog(on_parent_exit=stop_app)
+        watchdog.start()
+
+        yield  # --- app is running ---
 
         with suppress(Exception):
-            watchdog_task.cancel()
-
-        with suppress(Exception):
-            await watchdog_task
+            await watchdog.stop()
 
     app = FastAPI(lifespan=lifespan)
-
-    def set_parent_watchdog(app):
-        async def stop_app():
-            logger.info("Stopping services on demand...")
-
-            stop_deployment_manager()  # TODO: make it async?
-            await run_in_executor(pause_all_services)
-
-            logger.info("Stopping services on demand done.")
-            app._server.should_exit = True  # pylint: disable=protected-access
-            logger.info("Stopping app.")
-
-        async def check_parent_alive():
-            try:
-                logger.info(
-                    f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
-                )
-                while True:
-                    parent = psutil.Process(os.getpid()).parent()
-                    if not parent:
-                        logger.info("Parent is not alive, going to stop")
-                        await stop_app()
-                        return
-                    await asyncio.sleep(3)
-
-            except Exception:  # pylint: disable=broad-except
-                logger.exception("Parent alive check crashed!")
-
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(check_parent_alive())
-        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -1280,6 +1252,11 @@ def _daemon(
     ] = None,
 ) -> None:
     """Launch operate daemon."""
+    # try automatically shutdown previous instance before creating the app
+    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
+        app_single_instance = AppSingleInstance(port)
+        app_single_instance.shutdown_previous_instance()
+
     app = create_app(home=home)
 
     config_kwargs = {
@@ -1298,23 +1275,6 @@ def _daemon(
                 "ssl_version": 2,
             }
         )
-
-    # try automatically shutdown previous instance
-    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
-        url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
-        logger.info(f"trying to stop  previous instance with {url}")
-        try:
-            requests.get(
-                f"https://{host}:{port}/shutdown", timeout=3, verify=False  # nosec
-            )
-        except requests.exceptions.SSLError:
-            logger.warning("SSL failed, trying HTTP fallback...")
-            try:
-                requests.get(f"http://{host}:{port}/shutdown", timeout=3)
-            except Exception:  # pylint: disable=broad-except
-                logger.exception("Failed to stop previous instance")
-        except Exception:  # pylint: disable=broad-except
-            logger.exception("Failed to stop previous instance")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access
