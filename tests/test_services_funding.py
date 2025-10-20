@@ -193,6 +193,32 @@ class TestFunding(OnTestnet):
 
             tenderly_increase_time(chain)
 
+        LOGGER.info("Terminate without withdrawing")
+        for chain_str, _ in service.chain_configs.items():
+            service_manager.terminate_service_on_chain_from_safe(
+                service_config_id=service_config_id,
+                chain=chain_str,
+            )
+            assert (
+                service_manager._get_on_chain_state(  # pylint: disable=protected-access
+                    service, chain_str
+                )
+                == OnChainState.PRE_REGISTRATION
+            )
+            for asset in AGENT_FUNDING_ASSETS[chain]:
+                for agent_address in service.agent_addresses:
+                    balance = get_asset_balance(ledger_api, asset, agent_address)
+                    LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
+                    if asset == ZERO_ADDRESS:
+                        assert balance > DUST[chain]
+                    else:
+                        assert balance > 0
+
+            service_safe_address = chain_config.chain_data.multisig
+            for asset in SERVICE_SAFE_FUNDING_ASSETS[chain]:
+                assert get_asset_balance(ledger_api, asset, service_safe_address) > 0
+
+        LOGGER.info("Terminate and withdraw")
         app = create_app(home=operate._path)
         client = TestClient(app)
         client.post(
@@ -219,7 +245,7 @@ class TestFunding(OnTestnet):
                     balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
-                        assert balance < DUST[chain]
+                        assert balance <= DUST[chain]
                     else:
                         assert balance == 0
 

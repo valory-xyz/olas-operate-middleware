@@ -35,7 +35,6 @@ from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import CHAIN_PROFILES, ChainType
 from autonomy.chain.metadata import IPFS_URI_PREFIX
-from web3 import Web3
 
 from operate.constants import (
     AGENT_LOG_DIR,
@@ -1246,7 +1245,6 @@ class ServiceManager:
         self,
         service_config_id: str,
         chain: str,
-        withdrawal_address: t.Optional[str] = None,
     ) -> None:
         """Terminate service on-chain"""
 
@@ -1256,10 +1254,7 @@ class ServiceManager:
         ledger_config = chain_config.ledger_config
         chain_data = chain_config.chain_data
         wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-        safe = wallet.safes[Chain(chain)]  # type: ignore
-
-        if withdrawal_address:
-            withdrawal_address = Web3.to_checksum_address(withdrawal_address)
+        master_safe = wallet.safes[Chain(chain)]  # type: ignore
 
         # TODO fixme
         os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc
@@ -1284,23 +1279,23 @@ class ServiceManager:
             )
 
         # Cannot unstake, terminate flow.
-        if is_staked and not can_unstake and withdrawal_address is None:
+        if is_staked and not can_unstake:
             self.logger.info("Service cannot be terminated on-chain: cannot unstake.")
             return
-
         # Unstake the service if applies
-        if is_staked and (can_unstake or withdrawal_address is not None):
+        if is_staked and can_unstake:
             self.unstake_service_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
                 staking_program_id=current_staking_program,
             )
+        # At least claim the rewards if we cannot unstake yet
         elif is_staked:
-            # at least claim the rewards if we cannot unstake yet
             self.claim_on_chain_from_safe(
                 service_config_id=service_config_id,
                 chain=chain,
             )
+            return
 
         if self._get_on_chain_state(service=service, chain=chain) in (
             OnChainState.ACTIVE_REGISTRATION,
@@ -1330,20 +1325,39 @@ class ServiceManager:
         counter_current_safe_owners = Counter(s.lower() for s in current_safe_owners)
         counter_instances = Counter(s.lower() for s in service.agent_addresses)
 
-        if withdrawal_address is not None:
-            # we don't drain signer yet, because the owner swapping tx may need to happen
-            self.funding_manager.drain_service_safe(
-                service=service,
-                withdrawal_address=withdrawal_address,
-                chain=Chain(chain),
-            )
-
         if counter_current_safe_owners == counter_instances:
-            if withdrawal_address is None:
-                self.logger.info(
-                    "Service funded for safe swap"
-                )  # TODO: is this safe swapping needed anymore?
-                self.funding_manager.fund_service_initial(service)
+            self.logger.info(
+                "[SERVICE MANAGER] Funding agent EOA for Safe swap."
+            )  # TODO: is this safe swapping needed anymore?
+
+            requirements = ChainAmounts(
+                {
+                    chain: {
+                        current_safe_owners[0]: {
+                            ZERO_ADDRESS: chain_data.user_params.fund_requirements[
+                                ZERO_ADDRESS
+                            ].agent
+                        }
+                    }
+                }
+            )
+            balances = ChainAmounts(
+                {
+                    chain: {
+                        current_safe_owners[0]: {
+                            ZERO_ADDRESS: get_asset_balance(
+                                ledger_api=sftxb.ledger_api,
+                                asset_address=ZERO_ADDRESS,
+                                address=service.agent_addresses[0],
+                            )
+                        }
+                    }
+                }
+            )
+            shortfalls = ChainAmounts.shortfalls(
+                requirements=requirements, balances=balances
+            )
+            self.funding_manager.fund_chain_amounts(shortfalls)
 
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
@@ -1357,15 +1371,8 @@ class ServiceManager:
                 multisig=chain_data.multisig,  # TODO this can be read from the registry
                 owner_cryptos=[owner_crypto],  # TODO allow multiple owners
                 new_owner_address=(
-                    safe if safe else wallet.crypto.address
+                    master_safe if master_safe else wallet.crypto.address
                 ),  # TODO it should always be safe address
-            )
-
-        if withdrawal_address is not None:
-            self.funding_manager.drain_agents_eoas(
-                service=service,
-                withdrawal_address=withdrawal_address,
-                chain=Chain(chain),
             )
 
     def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
@@ -2165,6 +2172,23 @@ class ServiceManager:
                 chain=ledger_config.chain,
                 rpc=rpc or ledger_config.rpc,
             )
+
+    def drain(
+        self, service_config_id: str, chain_str: str, withdrawal_address: str
+    ) -> None:
+        """Drain service safe and agent EOAs."""
+        service = self.load(service_config_id=service_config_id)
+        chain = Chain(chain_str)
+        self.funding_manager.drain_service_safe(
+            service=service,
+            withdrawal_address=withdrawal_address,
+            chain=chain,
+        )
+        self.funding_manager.drain_agents_eoas(
+            service=service,
+            withdrawal_address=withdrawal_address,
+            chain=chain,
+        )
 
     def deploy_service_locally(
         self,
