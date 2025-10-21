@@ -1873,10 +1873,11 @@ class ServiceManager:
             staking_program_id=current_staking_program,
         )
         if staking_contract is None:
-            raise RuntimeError(
+            self.logger.warning(
                 "No staking contract found for the "
                 f"{current_staking_program=}. Not claiming the rewards."
             )
+            return 0
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         if not sftxb.staking_rewards_claimable(
