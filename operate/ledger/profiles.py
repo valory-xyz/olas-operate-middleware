@@ -20,11 +20,18 @@
 """Chain profiles."""
 
 import typing as t
+from functools import cache
 
+from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import CHAINS, get_currency_denom
+from operate.ledger import (
+    CHAINS,
+    NATIVE_CURRENCY_DECIMALS,
+    get_currency_denom,
+    get_default_ledger_api,
+)
 from operate.operate_types import Chain, ContractAddresses
 
 
@@ -237,6 +244,8 @@ DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
     for chain, amounts in DEFAULT_EOA_TOPUPS.items()
 }
 
+DEFAULT_EOA_THRESHOLD = 0.5
+
 EXPLORER_URL = {
     Chain.ARBITRUM_ONE: {
         "tx": "https://arbiscan.io/tx/{tx_hash}",
@@ -272,22 +281,43 @@ EXPLORER_URL = {
     },
 }
 
-NATIVE_TOKEN_NAME = "native"  # nosec
 
-
-def get_token_name(chain: Chain, token_address: str) -> str:
+@cache
+def get_asset_name(chain: Chain, asset_address: str) -> str:
     """Get token name."""
-    if token_address == ZERO_ADDRESS:
-        return NATIVE_TOKEN_NAME
+    if asset_address == ZERO_ADDRESS:
+        return get_currency_denom(chain)
 
-    if WRAPPED_NATIVE_ASSET.get(chain) == token_address:
+    if WRAPPED_NATIVE_ASSET.get(chain) == asset_address:
         return f"W{get_currency_denom(chain)}"
 
     for symbol, tokens in ERC20_TOKENS.items():
-        if tokens.get(chain) == token_address:
+        if tokens.get(chain) == asset_address:
             return symbol
 
-    return token_address
+    return asset_address
+
+
+@cache
+def get_asset_decimals(chain: Chain, asset_address: str) -> int:
+    """Get token decimals."""
+    if asset_address == ZERO_ADDRESS:
+        return NATIVE_CURRENCY_DECIMALS
+    erc20_token = registry_contracts.erc20.get_instance(
+        ledger_api=get_default_ledger_api(chain),
+        contract_address=asset_address,
+    )
+    return erc20_token.functions.decimals().call()
+
+
+def format_asset_amount(
+    chain: Chain, asset_address: str, amount: int, precision: int = 4
+) -> str:
+    """Convert smallest unit to human-readable string with token symbol."""
+    decimals = get_asset_decimals(chain, asset_address)
+    symbol = get_asset_name(chain, asset_address)
+    value = amount / (10**decimals)
+    return f"{value:.{precision}f} {symbol}"
 
 
 # TODO: Deprecate in favour of StakingManager method

@@ -56,6 +56,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
@@ -95,7 +96,7 @@ from operate.utils.gnosis import (
     get_assets_balances,
     transfer_erc20_from_safe,
 )
-from operate.wallet.master import MasterWalletManager
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
 # pylint: disable=redefined-builtin
@@ -1326,10 +1327,6 @@ class ServiceManager:
         counter_instances = Counter(s.lower() for s in service.agent_addresses)
 
         if counter_current_safe_owners == counter_instances:
-            self.logger.info(
-                "[SERVICE MANAGER] Funding agent EOA for Safe swap."
-            )  # TODO: is this safe swapping needed anymore?
-
             requirements = ChainAmounts(
                 {
                     chain: {
@@ -1354,15 +1351,33 @@ class ServiceManager:
                     }
                 }
             )
-            shortfalls = ChainAmounts.shortfalls(
-                requirements=requirements, balances=balances
-            )
-            self.funding_manager.fund_chain_amounts(shortfalls)
+            if balances < requirements * DEFAULT_EOA_THRESHOLD:
+                self.logger.info("[SERVICE MANAGER] Funding agent EOA for Safe swap.")
+                shortfalls = ChainAmounts.shortfalls(
+                    requirements=requirements, balances=balances
+                )
+                try:
+                    self.funding_manager.fund_chain_amounts(shortfalls)
+                except InsufficientFundsException as e:
+                    recovery_module_address = CONTRACTS[Chain(chain)]["recovery_module"]
+                    is_recovery_module_enabled = (
+                        registry_contracts.gnosis_safe.is_module_enabled(
+                            ledger_api=sftxb.ledger_api,
+                            contract_address=chain_data.multisig,
+                            module_address=recovery_module_address,
+                        ).get("enabled")
+                    )
+                    if is_recovery_module_enabled:
+                        self.logger.info(
+                            "[SERVICE MANAGER] Could not fund Agent EOA for service swap, but recovery module is enabled."
+                        )
+                        return
+                    raise e
 
             self._enable_recovery_module(
                 service_config_id=service_config_id, chain=chain
             )
-            self.logger.info("Swapping Safe owners")
+            self.logger.info("[SERVICE MANAGER] Swapping Safe owners")
             owner_crypto = self.keys_manager.get_crypto_instance(
                 address=current_safe_owners[0]
             )

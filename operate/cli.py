@@ -1199,19 +1199,32 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     withdrawal_address=master_safe,
                 )
 
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to terminate service and withdraw funds. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
         except Exception as e:  # pylint: disable=broad-except
             logger.error(
-                f"Terminate and withdraw failed: {e}\n{traceback.format_exc()}"
+                f"Terminate service and withdraw funds failed: {e}\n{traceback.format_exc()}"
             )
             return JSONResponse(
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 content={
-                    "error": "Failed to terminate and withdraw funds. Please check the logs."
+                    "error": "Failed to terminate service and withdraw funds. Please check the logs."
                 },
             )
 
         return JSONResponse(
-            content={"error": None, "message": "Terminate and withdraw successful"}
+            content={
+                "error": None,
+                "message": "Terminate service and withdraw funds successful",
+            }
         )
 
     @app.post("/api/v2/service/{service_config_id}/fund")
