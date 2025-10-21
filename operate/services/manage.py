@@ -56,6 +56,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_PRIORITY_MECH,
     OLAS,
@@ -1350,7 +1351,7 @@ class ServiceManager:
                     }
                 }
             )
-            if balances < requirements // 2:
+            if balances < requirements * DEFAULT_EOA_THRESHOLD:
                 self.logger.info("[SERVICE MANAGER] Funding agent EOA for Safe swap.")
                 shortfalls = ChainAmounts.shortfalls(
                     requirements=requirements, balances=balances

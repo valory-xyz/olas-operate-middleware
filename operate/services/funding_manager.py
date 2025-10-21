@@ -49,6 +49,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_currency_denom, get_default_ledger_api
 from operate.ledger.profiles import (
     CONTRACTS,
+    DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
     OLAS,
@@ -621,7 +622,7 @@ class FundingManager:
         master_eoa_balances = self._get_master_eoa_balances(master_eoa_topups)
         master_eoa_shortfalls = self._compute_shortfalls(
             balances=master_eoa_balances,
-            thresholds=master_eoa_topups // 2,
+            thresholds=master_eoa_topups * DEFAULT_EOA_THRESHOLD,
             topups=master_eoa_topups,
         )
         self.fund_chain_amounts(master_eoa_shortfalls)

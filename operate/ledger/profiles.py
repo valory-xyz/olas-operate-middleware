@@ -244,6 +244,8 @@ DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
     for chain, amounts in DEFAULT_EOA_TOPUPS.items()
 }
 
+DEFAULT_EOA_THRESHOLD = 0.5
+
 EXPLORER_URL = {
     Chain.ARBITRUM_ONE: {
         "tx": "https://arbiscan.io/tx/{tx_hash}",
