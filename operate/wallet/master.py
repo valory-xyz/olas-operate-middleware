@@ -280,7 +280,7 @@ class EthereumMasterWallet(MasterWallet):
         tx_fee = estimate_transfer_tx_fee(
             chain=chain, sender_address=self.address, to=to
         )
-        if amount + tx_fee >= balance >= amount - DUST[chain]:
+        if balance - tx_fee < amount <= balance:
             # we assume that the user wants to drain the EOA
             # we also account for dust here because withdraw call use some EOA balance to drain the safes first
             amount = balance - tx_fee
@@ -486,6 +486,10 @@ class EthereumMasterWallet(MasterWallet):
         safe_balance = self.get_balance(chain=chain, asset=asset, from_safe=True)
         eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
         balance = safe_balance + eoa_balance
+        if asset == ZERO_ADDRESS:
+            # to account for gas fees burned in previous txs
+            # in this case we will set the amount = eoa_balance below
+            balance += DUST[chain]
 
         if balance < amount:
             raise InsufficientFundsException(
@@ -509,6 +513,14 @@ class EthereumMasterWallet(MasterWallet):
         amount -= from_safe_amount
 
         if amount > 0:
+            eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
+            if (
+                asset == ZERO_ADDRESS
+                and eoa_balance <= amount <= eoa_balance + DUST[chain]
+            ):
+                # to make the internal function drain the EOA
+                amount = eoa_balance
+
             tx_hash = self.transfer(
                 to=to, amount=amount, chain=chain, asset=asset, from_safe=False, rpc=rpc
             )

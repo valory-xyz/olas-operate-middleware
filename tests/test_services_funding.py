@@ -594,9 +594,7 @@ class TestFunding(OnTestnet):
             ledger_api, ZERO_ADDRESS, dst_address
         )
         amount_transfer = master_safe_balance + master_eoa_balance
-        amount_transfer_native = (
-            master_safe_balance_native + master_eoa_balance_native - DUST[chain]
-        )
+        amount_transfer_native = master_safe_balance_native + master_eoa_balance_native
         response = client.post(
             url="/api/wallet/withdraw",
             json={
