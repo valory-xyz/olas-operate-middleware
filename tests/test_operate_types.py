@@ -56,15 +56,6 @@ def test_mul(sample_a: ChainAmounts) -> None:
     assert result["chain2"]["addr3"]["tokenZ"] == 200
 
 
-def test_truediv(sample_a: ChainAmounts) -> None:
-    """Test division of a ChainAmounts instance by a scalar."""
-    result = sample_a / 2
-    assert result["chain1"]["addr1"]["tokenX"] == 5  # 10 / 2
-    assert result["chain1"]["addr1"]["tokenY"] == 2.5  # 5 / 2
-    assert result["chain1"]["addr2"]["tokenX"] == 1.5  # 3 / 2
-    assert result["chain2"]["addr3"]["tokenZ"] == 50.0  # 100 / 2
-
-
 def test_floordiv(sample_a: ChainAmounts) -> None:
     """Test floor division of a ChainAmounts instance by a scalar."""
     result = sample_a // 2
@@ -90,8 +81,6 @@ def test_sub(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:
 def test_division_by_zero(sample_a: ChainAmounts) -> None:
     """Test division by zero raises ValueError."""
     with pytest.raises(ValueError):
-        _ = sample_a / 0
-    with pytest.raises(ValueError):
         _ = sample_a // 0
 
 
@@ -101,7 +90,6 @@ def test_immutability(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:
     _ = sample_a + sample_b
     _ = sample_a - sample_b
     _ = sample_a * 3
-    _ = sample_a / 2
     _ = sample_a // 2
     # original data unchanged
     assert sample_a == original_a

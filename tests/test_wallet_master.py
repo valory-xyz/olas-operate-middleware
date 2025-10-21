@@ -31,7 +31,7 @@ import pytest
 from operate.constants import KEYS_DIR, WALLETS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
-from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC
+from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
 from operate.operate_types import Chain
 from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
 from operate.wallet.master import (
@@ -287,7 +287,7 @@ class TestMasterWallet(OnTestnet):
 
                 with pytest.raises(
                     InsufficientFundsException,
-                    match=f"^Cannot transfer {amount}.*",
+                    match=f"^Cannot transfer {format_asset_amount(chain, asset, amount)}.*",
                 ):
                     wallet.transfer(
                         to=receiver_addr,
@@ -331,7 +331,7 @@ class TestMasterWallet(OnTestnet):
 
             with pytest.raises(
                 InsufficientFundsException,
-                match=f"^Cannot transfer {amount}.*",
+                match=f"^Cannot transfer {format_asset_amount(chain, asset, amount)}.*",
             ):
                 wallet.transfer(
                     to=receiver_addr,

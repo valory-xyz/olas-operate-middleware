@@ -383,13 +383,6 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         """Subtract two ChainAmounts"""
         return self + (other * -1)
 
-    def __truediv__(self, divisor: float) -> "ChainAmounts":
-        """Divide all amounts by the specified divisor"""
-        if divisor == 0:
-            raise ValueError("Cannot divide by zero")
-
-        return self * (1 / divisor)
-
     def __floordiv__(self, divisor: float) -> "ChainAmounts":
         """Divide all amounts by the specified divisor"""
         if divisor == 0:
