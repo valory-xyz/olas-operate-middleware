@@ -248,7 +248,7 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         from_safe: bool,
-        token: str = ZERO_ADDRESS,
+        asset: str = ZERO_ADDRESS,
     ) -> str:
         """Checks conditions before transfer. Returns the to address checksummed."""
         if amount <= 0:
@@ -260,11 +260,10 @@ class EthereumMasterWallet(MasterWallet):
         if from_safe and chain not in self.safes:
             raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
 
-        balance = self.get_balance(chain=chain, asset=token, from_safe=from_safe)
+        balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
         if balance < amount:
             source = "Master Safe" if from_safe else " Master EOA"
             source_address = self.safes[chain] if from_safe else self.address
-            asset = ZERO_ADDRESS
             raise InsufficientFundsException(
                 f"Cannot transfer {format_asset_amount(chain, asset, amount)} from {source} {source_address} to {to} on chain {chain.name}. "
                 f"Balance: {format_asset_amount(chain, asset, balance)}. Missing: {format_asset_amount(chain, asset, amount - balance)}."
@@ -360,7 +359,7 @@ class EthereumMasterWallet(MasterWallet):
     ) -> t.Optional[str]:
         """Transfer erc20 from safe wallet."""
         to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=True, token=token
+            to=to, amount=amount, chain=chain, from_safe=True, asset=token
         )
 
         return transfer_erc20_from_safe(
@@ -382,7 +381,7 @@ class EthereumMasterWallet(MasterWallet):
     ) -> t.Optional[str]:
         """Transfer erc20 from EOA wallet."""
         to = self._pre_transfer_checks(
-            to=to, amount=amount, chain=chain, from_safe=False, token=token
+            to=to, amount=amount, chain=chain, from_safe=False, asset=token
         )
 
         wallet_address = self.address
