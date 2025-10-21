@@ -323,3 +323,37 @@ class MechMarketplaceConfig:
     mech_marketplace_address: str
     priority_mech_address: str
     priority_mech_service_id: int
+
+
+class Version:
+    """Version class."""
+
+    def __init__(self, version: str) -> None:
+        """Initialize the version."""
+        version = version.strip()
+        version_parts = version.split(".") if version else []
+        self.major = int(version_parts[0]) if len(version_parts) > 0 else 0
+        self.minor = int(version_parts[1]) if len(version_parts) > 1 else 0
+        self.patch = int(version_parts[2]) if len(version_parts) > 2 else 0
+
+    def __str__(self) -> str:
+        """String representation of the version."""
+        return f"{self.major}.{self.minor}.{self.patch}"
+
+    def __eq__(self, other: object) -> bool:
+        """Equality comparison."""
+        if not isinstance(other, Version):
+            return NotImplemented
+        return (
+            self.major == other.major
+            and self.minor == other.minor
+            and self.patch == other.patch
+        )
+
+    def __lt__(self, other: "Version") -> bool:
+        """Less than comparison."""
+        if self.major != other.major:
+            return self.major < other.major
+        if self.minor != other.minor:
+            return self.minor < other.minor
+        return self.patch < other.patch
