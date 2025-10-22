@@ -438,6 +438,67 @@ Get Master EOA private key.
 }
 ```
 
+### `POST /api/wallet/mnemonic`
+
+Get Master EOA mnemonic.
+
+**Request Body:**
+
+```json
+{
+  "password": "your_password",
+  "ledger_type": "ethereum"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "mnemonic": "0x..."
+}
+```
+
+**Response (Mnemonic file does not exist - 404):**
+
+```json
+{
+  "error": "Mnemonic file does not exist."
+}
+```
+
+**Response (No account - 404):**
+
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid password - 401):**
+
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve mnemonic. Please check the logs."
+}
+```
+
 ### `GET /api/extended/wallet`
 
 Get extended wallet information including safes and additional metadata.

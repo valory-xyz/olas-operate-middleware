@@ -641,9 +641,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 )
             return JSONResponse(content={"mnemonic": mnemonic})
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Password update error: {e}\n{traceback.format_exc()}")
+            logger.error(f"Failed to retrieve mnemonic: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={"error": "Failed to update password. Please check the logs."},
+                content={
+                    "error": "Failed to retrieve mnemonic. Please check the logs."
+                },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
