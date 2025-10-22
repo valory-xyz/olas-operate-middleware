@@ -28,11 +28,12 @@ from pathlib import Path
 
 import pytest
 
+from operate.cli import OperateApp
 from operate.constants import KEYS_DIR, WALLETS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
-from operate.operate_types import Chain
+from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
 from operate.wallet.master import (
     EthereumMasterWallet,
@@ -40,7 +41,12 @@ from operate.wallet.master import (
     MasterWallet,
 )
 
-from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance
+from tests.conftest import (
+    OnTestnet,
+    OperateTestEnv,
+    create_wallets,
+    tenderly_add_balance,
+)
 from tests.constants import LOGGER, RUNNING_IN_CI
 
 
@@ -355,6 +361,16 @@ class TestMasterWallet(OnTestnet):
 
     def test_decrypt_mnemonic(
         self,
-        test_env: OperateTestEnv,
+        test_operate: OperateApp,
     ) -> None:
-        pass
+        """test_decrypt_mnemonic"""
+        password = test_operate.password
+        wallet_manager = test_operate.wallet_manager
+        mnemonics = create_wallets(wallet_manager)
+
+        assert len(wallet_manager.json) > 0
+        for ledger_type in LedgerType:
+            if wallet_manager.exists(ledger_type):
+                wallet = wallet_manager.load(ledger_type)
+                decrypted_mnemonic = wallet.decrypt_mnemonic(password)
+                assert mnemonics[ledger_type] == decrypted_mnemonic
