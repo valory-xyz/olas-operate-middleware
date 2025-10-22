@@ -41,12 +41,7 @@ from operate.wallet.master import (
     MasterWallet,
 )
 
-from tests.conftest import (
-    OnTestnet,
-    OperateTestEnv,
-    create_wallets,
-    tenderly_add_balance,
-)
+from tests.conftest import OnTestnet, create_wallets, tenderly_add_balance
 from tests.constants import LOGGER, RUNNING_IN_CI
 
 

@@ -411,6 +411,7 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
 def create_wallets(
     wallet_manager: MasterWalletManager,
 ) -> t.Dict[LedgerType, t.List[str]]:
+    """Create wallets"""
     mnemonics: t.Dict[LedgerType, t.List[str]] = {}
     for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
         _, mnemonic = wallet_manager.create(ledger_type=ledger_type)
