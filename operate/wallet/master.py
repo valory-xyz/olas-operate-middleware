@@ -183,7 +183,7 @@ class MasterWallet(LocalResource):
         """Create a new master wallet."""
         raise NotImplementedError()
 
-    def decrypt_mnemonic(self, password: str) -> t.Optional[str]:
+    def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
         raise NotImplementedError()
 
@@ -613,7 +613,7 @@ class EthereumMasterWallet(MasterWallet):
         wallet.password = password
         return wallet, mnemonic.split()
 
-    def decrypt_mnemonic(self, password: str) -> t.Optional[str]:
+    def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
         eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
 
@@ -638,8 +638,8 @@ class EthereumMasterWallet(MasterWallet):
         )
         fernet_key = base64.urlsafe_b64encode(key)
         fernet = Fernet(fernet_key)
-        plaintext = fernet.decrypt(ciphertext)
-        return plaintext.decode("utf-8")
+        mnemonic = fernet.decrypt(ciphertext).decode("utf-8")
+        return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:
         """Updates password."""
