@@ -55,6 +55,11 @@ class LedgerType(str, enum.Enum):
         """Key filename."""
         return f"{self.name.lower()}.txt"
 
+    @property
+    def mnemonic_file(self) -> str:
+        """Mnemonic filename."""
+        return f"{self.name.lower()}.mnemonic.txt"
+
     @classmethod
     def from_id(cls, chain_id: int) -> "LedgerType":
         """Load from chain ID."""
