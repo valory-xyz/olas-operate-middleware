@@ -609,7 +609,7 @@ class ServiceManager:
                 ]
 
             except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(f"{e}: {traceback.format_exc()}")
+                self.logger.debug(f"{e}: {traceback.format_exc()}")
                 self.logger.warning(
                     "Cannot determine type of activity checker contract. Using default parameters. "
                     "NOTE: This will be an exception in the future!"
