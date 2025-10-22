@@ -86,6 +86,7 @@ class MasterWallet(LocalResource):
     safe_nonce: t.Optional[int] = None
 
     _key: str
+    _mnemonic: str
     _crypto: t.Optional[Crypto] = None
     _password: t.Optional[str] = None
     _crypto_cls: t.Type[Crypto]
@@ -113,6 +114,11 @@ class MasterWallet(LocalResource):
     def key_path(self) -> Path:
         """Key path."""
         return self.path / self._key
+
+    @property
+    def mnemonic_path(self) -> Path:
+        """Mnemonic path."""
+        return self.path / self._mnemonic
 
     @staticmethod
     def ledger_api(
@@ -248,6 +254,7 @@ class EthereumMasterWallet(MasterWallet):
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
+    _mnemonic = ledger_type.mnemonic_file
     _crypto_cls = EthereumCrypto
 
     def _pre_transfer_checks(
@@ -600,7 +607,7 @@ class EthereumMasterWallet(MasterWallet):
     def _store_mnemonic(  # pylint: disable=too-many-locals
         cls, password: str, mnemonic: str, path: Path
     ) -> None:
-        eoa_mnemonic_path = path / cls.ledger_type.mnemonic_file
+        eoa_mnemonic_path = path / cls._mnemonic
 
         if eoa_mnemonic_path.exists():
             raise FileExistsError(
