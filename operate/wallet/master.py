@@ -19,21 +19,25 @@
 
 """Master key implementation"""
 
+import base64
 import json
 import os
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import argon2
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
+from cryptography.fernet import Fernet
 from web3 import Account, Web3
 
 from operate.constants import (
+    FERNET_KEY_LENGTH,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
@@ -156,6 +160,10 @@ class MasterWallet(LocalResource):
     @classmethod
     def new(cls, password: str, path: Path) -> t.Tuple["MasterWallet", t.List[str]]:
         """Create a new master wallet."""
+        raise NotImplementedError()
+
+    def decrypt_mnemonic(self, password: str) -> t.Optional[str]:
+        """Retrieve the mnemonic"""
         raise NotImplementedError()
 
     def create_safe(
@@ -554,16 +562,24 @@ class EthereumMasterWallet(MasterWallet):
             )
 
     @classmethod
-    def new(
+    def new(  # pylint: disable=too-many-locals
         cls, password: str, path: Path
     ) -> t.Tuple["EthereumMasterWallet", t.List[str]]:
         """Create a new master wallet."""
         # Backport support on aea
 
         eoa_wallet_path = path / cls._key
+        eoa_mnemonic_path = path / cls.ledger_type.mnemonic_file
+
         if eoa_wallet_path.exists():
             raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
 
+        if eoa_mnemonic_path.exists():
+            raise FileExistsError(
+                f"Mnemonic file already exists at {eoa_mnemonic_path}."
+            )
+
+        # Store private key (Ethereum V3 keystore JSON)
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
@@ -579,11 +595,58 @@ class EthereumMasterWallet(MasterWallet):
             encoding="utf-8",
         )
 
+        # Store encrypted mnemonic
+        ph = argon2.PasswordHasher()
+        salt = os.urandom(ph.salt_len)
+        key = argon2.low_level.hash_secret_raw(
+            secret=password.encode(),
+            salt=salt,
+            time_cost=ph.time_cost,
+            memory_cost=ph.memory_cost,
+            parallelism=ph.parallelism,
+            hash_len=FERNET_KEY_LENGTH,
+            type=argon2.Type.ID,
+        )
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
+        ciphertext = fernet.encrypt(mnemonic.encode())
+        data_to_store = (salt + ciphertext).hex()
+        with open(eoa_mnemonic_path, "w", encoding="utf-8") as f:
+            f.write(data_to_store)
+
         # Create wallet
         wallet = EthereumMasterWallet(path=path, address=crypto.address, safe_chains=[])
         wallet.store()
         wallet.password = password
         return wallet, mnemonic.split()
+
+    def decrypt_mnemonic(self, password: str) -> t.Optional[str]:
+        """Retrieve the mnemonic"""
+        eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
+
+        if not eoa_mnemonic_path.exists():
+            return None
+
+        with open(eoa_mnemonic_path, "r", encoding="utf-8") as f:
+            data = bytes.fromhex(f.read())
+
+        ph = argon2.PasswordHasher()
+        salt_len = ph.salt_len
+        salt = data[:salt_len]
+        ciphertext = data[salt_len:]
+        key = argon2.low_level.hash_secret_raw(
+            secret=password.encode(),
+            salt=salt,
+            time_cost=ph.time_cost,
+            memory_cost=ph.memory_cost,
+            parallelism=ph.parallelism,
+            hash_len=FERNET_KEY_LENGTH,
+            type=argon2.Type.ID,
+        )
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
+        plaintext = fernet.decrypt(ciphertext)
+        return plaintext.decode("utf-8")
 
     def update_password(self, new_password: str) -> None:
         """Updates password."""
