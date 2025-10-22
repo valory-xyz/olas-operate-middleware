@@ -24,6 +24,7 @@ import enum
 import os
 import typing as t
 from dataclasses import dataclass
+from pathlib import Path
 
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
@@ -59,7 +60,7 @@ class LedgerType(str, enum.Enum):
     @property
     def mnemonic_file(self) -> str:
         """Mnemonic filename."""
-        return f"{self.name.lower()}.mnemonic.txt"
+        return f"{self.name.lower()}.mnemonic.json"
 
     @classmethod
     def from_id(cls, chain_id: int) -> "LedgerType":
@@ -408,3 +409,21 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
                     if amount >= other.get(chain, {}).get(address, {}).get(asset, 0):
                         return False
         return True
+
+
+@dataclass
+class EncryptedMnemonic(LocalResource):
+    """EncryptedMnemonic type."""
+
+    path: Path
+    version: int
+    cipher: str
+    cipherparams: t.Dict[str, t.Union[int, str]]
+    ciphertext: str
+    kdf: str
+    kdfparams: t.Dict[str, t.Union[int, str]]
+
+    @classmethod
+    def load(cls, path: Path) -> "EncryptedMnemonic":
+        """Load EncryptedMnemonic."""
+        return super().load(path)  # type: ignore
