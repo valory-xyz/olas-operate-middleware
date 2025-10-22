@@ -629,10 +629,10 @@ class EthereumMasterWallet(MasterWallet):
         encrypted_mnemonic = EncryptedMnemonic(
             path=eoa_mnemonic_path,
             version=1,
-            cipher=fernet.__class__.__qualname__,
+            cipher=f"{fernet.__class__.__module__}.{fernet.__class__.__qualname__}",
             cipherparams={},  # Fernet token (ciphertext variable) already stores them
             ciphertext=ciphertext.hex(),
-            kdf=ph.__class__.__qualname__,
+            kdf=f"{ph.__class__.__module__}.{ph.__class__.__qualname__}",
             kdfparams={
                 "salt": salt.hex(),
                 "time_cost": time_cost,
