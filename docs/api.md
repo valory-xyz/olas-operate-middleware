@@ -122,7 +122,7 @@ Update account password.
 
 ```json
 {
-  "mnemonic": "word1 word2 word3 ...",
+  "mnemonic": ["word1", "word2", "word3", ...],
   "new_password": "your_new_password"
 }
 ```
@@ -455,7 +455,7 @@ Get Master EOA mnemonic.
 
 ```json
 {
-  "mnemonic": "0x..."
+  "mnemonic": ["word1", "word2", "word3", ...]
 }
 ```
 
