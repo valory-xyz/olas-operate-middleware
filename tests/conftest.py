@@ -415,6 +415,9 @@ def create_wallets(
     mnemonics: t.Dict[LedgerType, t.List[str]] = {}
     for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
         _, mnemonic = wallet_manager.create(ledger_type=ledger_type)
+        wallet = wallet_manager.load(ledger_type=ledger_type)
+        assert wallet.key_path.exists()
+        assert wallet.mnemonic_path.exists()
         mnemonics[ledger_type] = mnemonic
     return mnemonics
 
