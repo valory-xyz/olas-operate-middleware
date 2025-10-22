@@ -19,7 +19,6 @@
 
 """Master key implementation"""
 
-import base64
 import json
 import logging
 import os
@@ -28,7 +27,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import argon2
 from aea.crypto.base import Crypto, LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
@@ -36,7 +34,6 @@ from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
 from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
-from cryptography.fernet import Fernet
 from web3 import Account, Web3
 
 from operate.constants import (
@@ -619,20 +616,7 @@ class EthereumMasterWallet(MasterWallet):
             return None
 
         encrypted_data = EncryptedData.load(eoa_mnemonic_path)
-        kdfparams = encrypted_data.kdfparams
-        key = argon2.low_level.hash_secret_raw(
-            secret=password.encode(),
-            salt=bytes.fromhex(kdfparams["salt"]),
-            time_cost=kdfparams["time_cost"],
-            memory_cost=kdfparams["memory_cost"],
-            parallelism=kdfparams["parallelism"],
-            hash_len=kdfparams["hash_len"],
-            type=argon2.Type[kdfparams["type"]],
-        )
-        fernet_key = base64.urlsafe_b64encode(key)
-        fernet = Fernet(fernet_key)
-        ciphertext = bytes.fromhex(encrypted_data.ciphertext)
-        mnemonic = fernet.decrypt(ciphertext).decode("utf-8")
+        mnemonic = encrypted_data.decrypt(password).decode("utf-8")
         return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:

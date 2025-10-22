@@ -389,6 +389,24 @@ class EncryptedData(LocalResource):
             },
         )
 
+    def decrypt(self, password: str) -> bytes:
+        """Decrypts the EncryptedData"""
+        kdfparams = self.kdfparams
+        key = argon2.low_level.hash_secret_raw(
+            secret=password.encode(),
+            salt=bytes.fromhex(kdfparams["salt"]),
+            time_cost=kdfparams["time_cost"],
+            memory_cost=kdfparams["memory_cost"],
+            parallelism=kdfparams["parallelism"],
+            hash_len=kdfparams["hash_len"],
+            type=argon2.Type[kdfparams["type"]],
+        )
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
+        ciphertext_bytes = bytes.fromhex(self.ciphertext)
+        plaintext_bytes = fernet.decrypt(ciphertext_bytes)
+        return plaintext_bytes
+
     @classmethod
     def load(cls, path: Path) -> "EncryptedData":
         """Load EncryptedData."""
