@@ -623,7 +623,7 @@ class EthereumMasterWallet(MasterWallet):
             path=eoa_mnemonic_path,
             version=1,
             cipher=fernet.__class__.__qualname__,
-            cipherparams={},
+            cipherparams={},  # Fernet token (ciphertext variable) already stores them
             ciphertext=ciphertext.hex(),
             kdf=ph.__class__.__qualname__,
             kdfparams={
