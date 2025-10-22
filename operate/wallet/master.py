@@ -40,7 +40,6 @@ from cryptography.fernet import Fernet
 from web3 import Account, Web3
 
 from operate.constants import (
-    FERNET_KEY_LENGTH,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
@@ -52,7 +51,7 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
-from operate.operate_types import Chain, EncryptedMnemonic, LedgerType
+from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
@@ -607,42 +606,10 @@ class EthereumMasterWallet(MasterWallet):
                 f"Mnemonic file already exists at {eoa_mnemonic_path}."
             )
 
-        ph = argon2.PasswordHasher()
-        salt = os.urandom(ph.salt_len)
-        time_cost = ph.time_cost
-        memory_cost = ph.memory_cost
-        parallelism = ph.parallelism
-        hash_len = FERNET_KEY_LENGTH
-        argon2_type = argon2.Type.ID
-        key = argon2.low_level.hash_secret_raw(
-            secret=password.encode(),
-            salt=salt,
-            time_cost=time_cost,
-            memory_cost=memory_cost,
-            parallelism=parallelism,
-            hash_len=hash_len,
-            type=argon2_type,
+        encrypted_data = EncryptedData.new(
+            path=eoa_mnemonic_path, password=password, plaintext_bytes=mnemonic.encode()
         )
-        fernet_key = base64.urlsafe_b64encode(key)
-        fernet = Fernet(fernet_key)
-        ciphertext = fernet.encrypt(mnemonic.encode())
-        encrypted_mnemonic = EncryptedMnemonic(
-            path=eoa_mnemonic_path,
-            version=1,
-            cipher=f"{fernet.__class__.__module__}.{fernet.__class__.__qualname__}",
-            cipherparams={},  # Fernet token (ciphertext variable) already stores them
-            ciphertext=ciphertext.hex(),
-            kdf=f"{ph.__class__.__module__}.{ph.__class__.__qualname__}",
-            kdfparams={
-                "salt": salt.hex(),
-                "time_cost": time_cost,
-                "memory_cost": memory_cost,
-                "parallelism": parallelism,
-                "hash_len": hash_len,
-                "type": argon2_type.name,
-            },
-        )
-        encrypted_mnemonic.store()
+        encrypted_data.store()
 
     def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
@@ -651,8 +618,8 @@ class EthereumMasterWallet(MasterWallet):
         if not eoa_mnemonic_path.exists():
             return None
 
-        encrypted_mnemonic = EncryptedMnemonic.load(eoa_mnemonic_path)
-        kdfparams = encrypted_mnemonic.kdfparams
+        encrypted_data = EncryptedData.load(eoa_mnemonic_path)
+        kdfparams = encrypted_data.kdfparams
         key = argon2.low_level.hash_secret_raw(
             secret=password.encode(),
             salt=bytes.fromhex(kdfparams["salt"]),
@@ -664,7 +631,7 @@ class EthereumMasterWallet(MasterWallet):
         )
         fernet_key = base64.urlsafe_b64encode(key)
         fernet = Fernet(fernet_key)
-        ciphertext = bytes.fromhex(encrypted_mnemonic.ciphertext)
+        ciphertext = bytes.fromhex(encrypted_data.ciphertext)
         mnemonic = fernet.decrypt(ciphertext).decode("utf-8")
         return mnemonic.split()
 

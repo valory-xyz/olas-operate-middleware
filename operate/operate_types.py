@@ -19,17 +19,20 @@
 
 """Types module."""
 
+import base64
 import enum
 import os
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 
+import argon2
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
+from cryptography.fernet import Fernet
 from typing_extensions import TypedDict
 
-from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.constants import FERNET_KEY_LENGTH, NO_STAKING_PROGRAM_ID
 from operate.resource import LocalResource
 
 
@@ -332,8 +335,8 @@ class MechMarketplaceConfig:
 
 
 @dataclass
-class EncryptedMnemonic(LocalResource):
-    """EncryptedMnemonic type."""
+class EncryptedData(LocalResource):
+    """EncryptedData type."""
 
     path: Path
     version: int
@@ -344,6 +347,49 @@ class EncryptedMnemonic(LocalResource):
     kdfparams: t.Dict[str, t.Union[int, str]]
 
     @classmethod
-    def load(cls, path: Path) -> "EncryptedMnemonic":
-        """Load EncryptedMnemonic."""
+    def new(cls, path: Path, password: str, plaintext_bytes: bytes) -> "EncryptedData":
+        """Creates a new EncryptedData"""
+        ph = argon2.PasswordHasher()
+        salt = os.urandom(ph.salt_len)
+        time_cost = ph.time_cost
+        memory_cost = ph.memory_cost
+        parallelism = ph.parallelism
+        hash_len = FERNET_KEY_LENGTH
+        argon2_type = argon2.Type.ID
+        key = argon2.low_level.hash_secret_raw(
+            secret=password.encode(),
+            salt=salt,
+            time_cost=time_cost,
+            memory_cost=memory_cost,
+            parallelism=parallelism,
+            hash_len=hash_len,
+            type=argon2_type,
+        )
+
+        fernet_key = base64.urlsafe_b64encode(key)
+        fernet = Fernet(fernet_key)
+        ciphertext_bytes = fernet.encrypt(plaintext_bytes)
+
+        return cls(
+            path=path,
+            version=1,
+            cipher=f"{fernet.__class__.__module__}.{fernet.__class__.__qualname__}",
+            cipherparams={  # Fernet token (ciphertext variable) already stores them
+                "version": ciphertext_bytes[0]
+            },
+            ciphertext=ciphertext_bytes.hex(),
+            kdf=f"{ph.__class__.__module__}.{ph.__class__.__qualname__}",
+            kdfparams={
+                "salt": salt.hex(),
+                "time_cost": time_cost,
+                "memory_cost": memory_cost,
+                "parallelism": parallelism,
+                "hash_len": hash_len,
+                "type": argon2_type.name,
+            },
+        )
+
+    @classmethod
+    def load(cls, path: Path) -> "EncryptedData":
+        """Load EncryptedData."""
         return super().load(path)  # type: ignore
