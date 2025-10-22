@@ -572,16 +572,25 @@ class EthereumMasterWallet(MasterWallet):
         # Backport support on aea
 
         eoa_wallet_path = path / cls._key
+        eoa_mnemonic_path = path / cls._mnemonic
 
         if eoa_wallet_path.exists():
             raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
+
+        if eoa_mnemonic_path.exists():
+            raise FileExistsError(
+                f"Mnemonic file already exists at {eoa_mnemonic_path}."
+            )
 
         # Store private key (Ethereum V3 keystore JSON)
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
         eoa_wallet_path.parent.mkdir(parents=True, exist_ok=True)
-        cls._store_mnemonic(password=password, mnemonic=mnemonic, path=path)
+        encrypted_mnemonic = EncryptedData.new(
+            path=eoa_mnemonic_path, password=password, plaintext_bytes=mnemonic.encode()
+        )
+        encrypted_mnemonic.store()
         eoa_wallet_path.write_text(
             data=json.dumps(
                 Account.encrypt(
@@ -599,22 +608,6 @@ class EthereumMasterWallet(MasterWallet):
         wallet.password = password
         return wallet, mnemonic.split()
 
-    @classmethod
-    def _store_mnemonic(  # pylint: disable=too-many-locals
-        cls, password: str, mnemonic: str, path: Path
-    ) -> None:
-        eoa_mnemonic_path = path / cls._mnemonic
-
-        if eoa_mnemonic_path.exists():
-            raise FileExistsError(
-                f"Mnemonic file already exists at {eoa_mnemonic_path}."
-            )
-
-        encrypted_data = EncryptedData.new(
-            path=eoa_mnemonic_path, password=password, plaintext_bytes=mnemonic.encode()
-        )
-        encrypted_data.store()
-
     def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
         eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
@@ -622,8 +615,8 @@ class EthereumMasterWallet(MasterWallet):
         if not eoa_mnemonic_path.exists():
             return None
 
-        encrypted_data = EncryptedData.load(eoa_mnemonic_path)
-        mnemonic = encrypted_data.decrypt(password).decode("utf-8")
+        encrypted_mnemonic = EncryptedData.load(eoa_mnemonic_path)
+        mnemonic = encrypted_mnemonic.decrypt(password).decode("utf-8")
         return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:
