@@ -31,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 from pathlib import Path
+from time import time
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
@@ -156,7 +157,13 @@ class OperateApp:
         if not backup_required:
             return
 
-        backup_path = self._path.parent / f"{OPERATE}_v{found_version}_bkp"
+        backup_path = self._path.parent / f"{OPERATE}_v{found_version}_bak"
+        if backup_path.exists():
+            logger.info(f"Backup directory {backup_path} already exists.")
+            backup_path = (
+                self._path.parent / f"{OPERATE}_v{found_version}_bak_{int(time())}"
+            )
+
         logger.info(f"Backing up existing {OPERATE} directory to {backup_path}")
         shutil.copytree(self._path, backup_path)
         version_file.write_text(str(current_version))

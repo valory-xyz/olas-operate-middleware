@@ -208,7 +208,7 @@ class TestOperateApp:
         found_service.mkdir(parents=True, exist_ok=True)
         if found_version is not None:
             (found_operate / VERSION_FILE).write_text(found_version)
-            found_backup_path = tmp_path / f"{OPERATE}_v0.0.0_bkp"
+            found_backup_path = tmp_path / f"{OPERATE}_v0.0.0_bak"
             shutil.copytree(found_operate, found_backup_path)
 
         (found_service / DEPLOYMENT_DIR).mkdir(parents=True, exist_ok=True)
@@ -216,15 +216,15 @@ class TestOperateApp:
 
         if found_version is None:
             assert not Path(tmp_path / OPERATE / VERSION_FILE).exists()
-            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bkp"))) == 0
+            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak"))) == 0
         else:
             assert Path(tmp_path / OPERATE / VERSION_FILE).read_text() == found_version
-            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bkp"))) == 1
+            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak"))) == 1
 
         with patch("operate.cli.__version__", current_version):
             OperateApp(home=tmp_path / OPERATE)
 
-        backup_paths = sorted(list(Path(tmp_path).glob(f"{OPERATE}_v*_bkp")))
+        backup_paths = sorted(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak")))
         if found_version is None:
             # when no backup existed before, current .operate should be backed up
             assert len(backup_paths) == 1
