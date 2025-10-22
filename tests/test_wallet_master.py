@@ -48,7 +48,7 @@ from tests.constants import LOGGER, RUNNING_IN_CI
 TX_FEE_TOLERANCE = 2
 
 
-class TestMasterWallet(OnTestnet):
+class TestMasterWalletOnTestnet(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @staticmethod
@@ -354,6 +354,10 @@ class TestMasterWallet(OnTestnet):
                     from_safe=True,
                 )
 
+
+class TestMasterWallet:
+    """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
+
     def test_decrypt_mnemonic(
         self,
         test_operate: OperateApp,
@@ -364,8 +368,8 @@ class TestMasterWallet(OnTestnet):
         mnemonics = create_wallets(wallet_manager)
 
         assert len(wallet_manager.json) > 0
-        for ledger_type in LedgerType:
-            if wallet_manager.exists(ledger_type):
-                wallet = wallet_manager.load(ledger_type)
-                decrypted_mnemonic = wallet.decrypt_mnemonic(password)
-                assert mnemonics[ledger_type] == decrypted_mnemonic
+        for wallet_json in wallet_manager.json:
+            ledger_type = LedgerType(wallet_json["ledger_type"])
+            wallet = wallet_manager.load(ledger_type)
+            decrypted_mnemonic = wallet.decrypt_mnemonic(password)
+            assert mnemonics[ledger_type] == decrypted_mnemonic
