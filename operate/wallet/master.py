@@ -116,7 +116,7 @@ class MasterWallet(LocalResource):
 
     @property
     def mnemonic_path(self) -> Path:
-        """Key path."""
+        """Mnemonic path."""
         return self.path / self._mnemonic
 
     def ledger_api(
