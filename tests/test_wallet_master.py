@@ -40,7 +40,7 @@ from operate.wallet.master import (
     MasterWallet,
 )
 
-from tests.conftest import OnTestnet, tenderly_add_balance
+from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance
 from tests.constants import LOGGER, RUNNING_IN_CI
 
 
@@ -352,3 +352,9 @@ class TestMasterWallet(OnTestnet):
                     asset=asset,
                     from_safe=True,
                 )
+
+    def test_decrypt_mnemonic(
+        self,
+        test_env: OperateTestEnv,
+    ) -> None:
+        pass
