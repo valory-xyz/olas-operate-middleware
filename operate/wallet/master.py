@@ -582,11 +582,12 @@ class EthereumMasterWallet(MasterWallet):
                 f"Mnemonic file already exists at {eoa_mnemonic_path}."
             )
 
-        # Store private key (Ethereum V3 keystore JSON)
+        eoa_wallet_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Store private key (Ethereum V3 keystore JSON) and encrypted mnemonic
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
-        eoa_wallet_path.parent.mkdir(parents=True, exist_ok=True)
         encrypted_mnemonic = EncryptedData.new(
             path=eoa_mnemonic_path, password=password, plaintext_bytes=mnemonic.encode()
         )
