@@ -48,7 +48,7 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import ERC20_TOKENS, OLAS, USDC
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
@@ -81,6 +81,7 @@ class MasterWallet(LocalResource):
     safe_nonce: t.Optional[int] = None
 
     _key: str
+    _mnemonic: str
     _crypto: t.Optional[Crypto] = None
     _password: t.Optional[str] = None
     _crypto_cls: t.Type[Crypto]
@@ -108,6 +109,11 @@ class MasterWallet(LocalResource):
     def key_path(self) -> Path:
         """Key path."""
         return self.path / self._key
+
+    @property
+    def mnemonic_path(self) -> Path:
+        """Mnemonic path."""
+        return self.path / self._mnemonic
 
     def ledger_api(
         self,
@@ -179,6 +185,10 @@ class MasterWallet(LocalResource):
         """Create a new master wallet."""
         raise NotImplementedError()
 
+    def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
+        """Retrieve the mnemonic"""
+        raise NotImplementedError()
+
     def create_safe(
         self,
         chain: Chain,
@@ -243,6 +253,7 @@ class EthereumMasterWallet(MasterWallet):
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
+    _mnemonic = ledger_type.mnemonic_file
     _crypto_cls = EthereumCrypto
 
     def _transfer_from_eoa(
@@ -555,12 +566,24 @@ class EthereumMasterWallet(MasterWallet):
         # Backport support on aea
 
         eoa_wallet_path = path / cls._key
+        eoa_mnemonic_path = path / cls._mnemonic
+
         if eoa_wallet_path.exists():
             raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
 
+        if eoa_mnemonic_path.exists():
+            raise FileExistsError(
+                f"Mnemonic file already exists at {eoa_mnemonic_path}."
+            )
+
+        # Store private key (Ethereum V3 keystore JSON)
         account = Account()
         account.enable_unaudited_hdwallet_features()
         crypto, mnemonic = account.create_with_mnemonic()
+        encrypted_mnemonic = EncryptedData.new(
+            path=eoa_mnemonic_path, password=password, plaintext_bytes=mnemonic.encode()
+        )
+        encrypted_mnemonic.store()
         eoa_wallet_path.write_text(
             data=json.dumps(
                 Account.encrypt(
@@ -577,6 +600,17 @@ class EthereumMasterWallet(MasterWallet):
         wallet.store()
         wallet.password = password
         return wallet, mnemonic.split()
+
+    def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
+        """Retrieve the mnemonic"""
+        eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
+
+        if not eoa_mnemonic_path.exists():
+            return None
+
+        encrypted_mnemonic = EncryptedData.load(eoa_mnemonic_path)
+        mnemonic = encrypted_mnemonic.decrypt(password).decode("utf-8")
+        return mnemonic.split()
 
     def update_password(self, new_password: str) -> None:
         """Updates password."""

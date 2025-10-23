@@ -626,9 +626,45 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
+        # TODO Should fail if not provided
         ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
         wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
         return JSONResponse(content={"private_key": wallet.crypto.private_key})
+
+    @app.post("/api/wallet/mnemonic")
+    async def _get_mnemonic(request: Request) -> t.List[t.Dict]:
+        """Get Master EOA mnemonic."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        data = await request.json()
+        password = data.get("password")
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        if operate.password != password:
+            return JSONResponse(
+                content={"error": "Password is not valid."},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        try:
+            ledger_type = LedgerType(data.get("ledger_type"))
+            wallet = operate.wallet_manager.load(ledger_type=ledger_type)
+            mnemonic = wallet.decrypt_mnemonic(password=password)
+            if mnemonic is None:
+                return JSONResponse(
+                    content={"error": "Mnemonic file does not exist."},
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
+            return JSONResponse(content={"mnemonic": mnemonic})
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Failed to retrieve mnemonic: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve mnemonic. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @app.get("/api/extended/wallet")
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:

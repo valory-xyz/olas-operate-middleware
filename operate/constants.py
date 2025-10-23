@@ -35,6 +35,8 @@ USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
 VERSION_FILE = "operate.version"
 
+FERNET_KEY_LENGTH = 32
+
 AGENT_PERSISTENT_STORAGE_DIR = "persistent_data"
 AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
 AGENT_LOG_DIR = "benchmarks"

@@ -105,7 +105,7 @@ Update account password.
 
 ```json
 {
-  "mnemonic": "word1 word2 word3 ...",
+  "mnemonic": ["word1", "word2", "word3", ...],
   "new_password": "your_new_password"
 }
 ```
@@ -340,6 +340,67 @@ Get Master EOA private key.
 ```json
 {
   "error": "Password is not valid."
+}
+```
+
+### `POST /api/wallet/mnemonic`
+
+Get Master EOA mnemonic.
+
+**Request Body:**
+
+```json
+{
+  "password": "your_password",
+  "ledger_type": "ethereum"
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "mnemonic": ["word1", "word2", "word3", ...]
+}
+```
+
+**Response (Mnemonic file does not exist - 404):**
+
+```json
+{
+  "error": "Mnemonic file does not exist."
+}
+```
+
+**Response (No account - 404):**
+
+```json
+{
+  "error": "User account not found."
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Invalid password - 401):**
+
+```json
+{
+  "error": "Password is not valid."
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve mnemonic. Please check the logs."
 }
 ```
 
