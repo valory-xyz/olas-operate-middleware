@@ -33,6 +33,7 @@ DEPLOYMENT_JSON = "deployment.json"
 CONFIG_JSON = "config.json"
 USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
+VERSION_FILE = "operate.version"
 SETTINGS_JSON = "settings.json"
 FUNDING_REQUIREMENTS_JSON = "funding_requirements.json"
 DEFAULT_TOPUP_THRESHOLD = 0.5
@@ -46,6 +47,7 @@ AGENT_PERSISTENT_STORAGE_DIR = "persistent_data"
 AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
 AGENT_LOG_DIR = "benchmarks"
 AGENT_LOG_ENV_VAR = "LOG_DIR"
+AGENT_RUNNER_PREFIX = "agent_runner"
 
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 

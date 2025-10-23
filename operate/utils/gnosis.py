@@ -175,11 +175,7 @@ def create_safe(
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=(
-                [crypto.address]
-                if backup_owner is None
-                else [crypto.address, backup_owner]
-            ),
+            owners=([crypto.address]),
             threshold=1,
             salt_nonce=salt_nonce,
         )
@@ -210,7 +206,12 @@ def create_safe(
         contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
     )
     (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    return event["args"]["proxy"], salt_nonce, tx_hash
+    safe_address = event["args"]["proxy"]
+    if backup_owner is not None:
+        add_owner(
+            ledger_api=ledger_api, crypto=crypto, safe=safe_address, owner=backup_owner
+        )
+    return safe_address, salt_nonce, tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
