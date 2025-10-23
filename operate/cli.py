@@ -649,7 +649,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             ledger_type = LedgerType(data.get("ledger_type"))
-            wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
+            wallet = operate.wallet_manager.load(ledger_type=ledger_type)
             mnemonic = wallet.decrypt_mnemonic(password=password)
             if mnemonic is None:
                 return JSONResponse(
