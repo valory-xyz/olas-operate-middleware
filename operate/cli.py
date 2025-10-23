@@ -22,6 +22,7 @@ import asyncio
 import atexit
 import multiprocessing
 import os
+import shutil
 import signal
 import traceback
 import typing as t
@@ -30,6 +31,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 from pathlib import Path
+from time import time
 from types import FrameType
 
 from aea.helpers.logging import setup_logger
@@ -45,11 +47,15 @@ from operate import __version__, services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
+    AGENT_RUNNER_PREFIX,
+    DEPLOYMENT_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
     USER_JSON,
+    VERSION_FILE,
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
@@ -60,7 +66,7 @@ from operate.ledger.profiles import (
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.operate_types import Chain, DeploymentStatus, LedgerType, Version
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
 from operate.quickstart.reset_configs import reset_configs
@@ -114,11 +120,11 @@ class OperateApp:
         home: t.Optional[Path] = None,
     ) -> None:
         """Initialize object."""
-        super().__init__()
         self._path = (home or OPERATE_HOME).resolve()
         self._services = self._path / SERVICES_DIR
         self._keys = self._path / KEYS_DIR
         self.setup()
+        self._backup_operate_if_new_version()
 
         services.manage.KeysManager(
             path=self._keys,
@@ -131,6 +137,48 @@ class OperateApp:
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
         mm.migrate_qs_configs()
+
+    def _backup_operate_if_new_version(self) -> None:
+        """Backup .operate directory if this is a new version."""
+        current_version = Version(__version__)
+        backup_required = False
+        version_file = self._path / VERSION_FILE
+        if not version_file.exists():
+            backup_required = True
+            found_version = "0.10.21"  # first version with version file
+        else:
+            found_version = Version(version_file.read_text())
+            if current_version.major > found_version.major or (
+                current_version.major == found_version.major
+                and current_version.minor > found_version.minor
+            ):
+                backup_required = True
+
+        if not backup_required:
+            return
+
+        backup_path = self._path.parent / f"{OPERATE}_v{found_version}_bak"
+        if backup_path.exists():
+            logger.info(f"Backup directory {backup_path} already exists.")
+            backup_path = (
+                self._path.parent / f"{OPERATE}_v{found_version}_bak_{int(time())}"
+            )
+
+        logger.info(f"Backing up existing {OPERATE} directory to {backup_path}")
+        shutil.copytree(self._path, backup_path)
+        version_file.write_text(str(current_version))
+
+        # remove recoverable files from the backup to save space
+        service_dir = backup_path / SERVICES_DIR
+        for service_path in service_dir.iterdir():
+            deployment_dir = service_path / DEPLOYMENT_DIR
+            if deployment_dir.exists():
+                shutil.rmtree(deployment_dir)
+
+            for agent_runner_path in service_path.glob(f"{AGENT_RUNNER_PREFIX}*"):
+                agent_runner_path.unlink()
+
+        logger.info("Backup completed.")
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""

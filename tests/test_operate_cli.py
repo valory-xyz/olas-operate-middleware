@@ -21,15 +21,27 @@
 
 import hashlib
 import json
+import shutil
 from pathlib import Path
+from typing import Optional
+from unittest.mock import patch
+from uuid import uuid4
 
 import argon2
 import pytest
 from web3 import Web3
 
 from operate.cli import OperateApp
-from operate.constants import OPERATE, USER_JSON
-from operate.operate_types import LedgerType
+from operate.constants import (
+    AGENT_RUNNER_PREFIX,
+    DEPLOYMENT_DIR,
+    OPERATE,
+    SERVICES_DIR,
+    USER_JSON,
+    VERSION_FILE,
+)
+from operate.operate_types import LedgerType, Version
+from operate.services.service import SERVICE_CONFIG_PREFIX
 
 from tests.conftest import random_string
 
@@ -179,3 +191,67 @@ class TestOperateApp:
         assert password_sha != data["password_hash"]
         ph = argon2.PasswordHasher()
         assert ph.verify(data["password_hash"], password)
+
+    @pytest.mark.parametrize("found_version", [None, "0.1.0", "0.5.0", "1.0.0"])
+    @pytest.mark.parametrize("current_version", ["0.1.0", "0.5.0", "1.0.0"])
+    def test_backup_operate_if_new_version(
+        self, tmp_path: Path, found_version: Optional[str], current_version: str
+    ) -> None:
+        """Test operate.backup_operate_if_new_version()"""
+
+        # prepare existing .operate directory (and backup if found_version is not None)
+        found_operate = tmp_path / OPERATE
+        found_operate.mkdir(parents=True, exist_ok=True)
+        found_service = (
+            found_operate / SERVICES_DIR / f"{SERVICE_CONFIG_PREFIX}{uuid4()}"
+        )
+        found_service.mkdir(parents=True, exist_ok=True)
+        if found_version is not None:
+            (found_operate / VERSION_FILE).write_text(found_version)
+            found_backup_path = tmp_path / f"{OPERATE}_v0.0.0_bak"
+            shutil.copytree(found_operate, found_backup_path)
+
+        (found_service / DEPLOYMENT_DIR).mkdir(parents=True, exist_ok=True)
+        (found_service / f"{AGENT_RUNNER_PREFIX}_{uuid4()}").touch()
+
+        if found_version is None:
+            assert not Path(tmp_path / OPERATE / VERSION_FILE).exists()
+            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak"))) == 0
+        else:
+            assert Path(tmp_path / OPERATE / VERSION_FILE).read_text() == found_version
+            assert len(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak"))) == 1
+
+        with patch("operate.cli.__version__", current_version):
+            OperateApp(home=tmp_path / OPERATE)
+
+        backup_paths = sorted(list(Path(tmp_path).glob(f"{OPERATE}_v*_bak")))
+        if found_version is None:
+            # when no backup existed before, current .operate should be backed up
+            assert len(backup_paths) == 1
+            assert not (backup_paths[0] / VERSION_FILE).exists()
+            assert (
+                Path(tmp_path / OPERATE / VERSION_FILE).read_text() == current_version
+            )
+        elif Version(current_version) > Version(found_version):
+            # when a newer version is detected, a new backup should be created
+            assert len(backup_paths) == 2
+            assert (backup_paths[0] / VERSION_FILE).read_text() == found_version
+            assert (backup_paths[1] / VERSION_FILE).read_text() == found_version
+            assert (
+                Path(tmp_path / OPERATE / VERSION_FILE).read_text() == current_version
+            )
+        else:
+            # when the version is the same or older, no new backup should be created
+            assert len(backup_paths) == 1
+            assert (backup_paths[0] / VERSION_FILE).read_text() == found_version
+            assert Path(tmp_path / OPERATE / VERSION_FILE).read_text() == found_version
+
+        for backup_path in backup_paths:
+            # recoverable files should be removed from the backup
+            service_dir = backup_path / SERVICES_DIR
+            for service_path in service_dir.iterdir():
+                deployment_dir = service_path / DEPLOYMENT_DIR
+                assert not deployment_dir.exists()
+
+                for agent_runner_path in service_path.glob(f"{AGENT_RUNNER_PREFIX}_*"):
+                    assert not agent_runner_path.exists()

@@ -58,7 +58,7 @@ from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST, TESTNET_RPCS
+from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 def random_string(length: int = 16) -> str:
@@ -146,6 +146,11 @@ def temp_keys_dir() -> Generator[Path, None, None]:
 
 class OnTestnet:
     """TestOnTestnet"""
+
+    # TODO: Remove this skip after optimizing tenderly usage
+    pytestmark = pytest.mark.skipif(
+        RUNNING_IN_CI, reason="To avoid exhausting tenderly limits."
+    )
 
     @pytest.fixture(autouse=True)
     def _patch_rpcs(self, monkeypatch: pytest.MonkeyPatch) -> None:
