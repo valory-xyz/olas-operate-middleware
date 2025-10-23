@@ -67,7 +67,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         )
         assert amount > 0
         assert amount < initial_balance_sender
-        TestMasterWallet._assert_transfer(
+        TestMasterWalletOnTestnet._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
@@ -88,7 +88,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
             chain=chain, asset=asset, from_safe=from_safe
         )
         amount = initial_balance_sender
-        TestMasterWallet._assert_transfer(
+        TestMasterWalletOnTestnet._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
