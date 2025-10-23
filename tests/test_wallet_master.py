@@ -28,11 +28,12 @@ from pathlib import Path
 
 import pytest
 
+from operate.cli import OperateApp
 from operate.constants import KEYS_DIR, WALLETS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
-from operate.operate_types import Chain
+from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance
 from operate.wallet.master import (
     EthereumMasterWallet,
@@ -40,14 +41,14 @@ from operate.wallet.master import (
     MasterWallet,
 )
 
-from tests.conftest import OnTestnet, tenderly_add_balance
+from tests.conftest import OnTestnet, create_wallets, tenderly_add_balance
 from tests.constants import LOGGER, RUNNING_IN_CI
 
 
 TX_FEE_TOLERANCE = 2
 
 
-class TestMasterWallet(OnTestnet):
+class TestMasterWalletOnTestnet(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
     @staticmethod
@@ -66,7 +67,7 @@ class TestMasterWallet(OnTestnet):
         )
         assert amount > 0
         assert amount < initial_balance_sender
-        TestMasterWallet._assert_transfer(
+        TestMasterWalletOnTestnet._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
@@ -87,7 +88,7 @@ class TestMasterWallet(OnTestnet):
             chain=chain, asset=asset, from_safe=from_safe
         )
         amount = initial_balance_sender
-        TestMasterWallet._assert_transfer(
+        TestMasterWalletOnTestnet._assert_transfer(
             chain=chain,
             wallet=wallet,
             receiver_addr=receiver_addr,
@@ -352,3 +353,23 @@ class TestMasterWallet(OnTestnet):
                     asset=asset,
                     from_safe=True,
                 )
+
+
+class TestMasterWallet:
+    """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
+
+    def test_decrypt_mnemonic(
+        self,
+        test_operate: OperateApp,
+    ) -> None:
+        """test_decrypt_mnemonic"""
+        password = test_operate.password
+        wallet_manager = test_operate.wallet_manager
+        mnemonics = create_wallets(wallet_manager)
+
+        assert len(wallet_manager.json) > 0
+        for wallet_json in wallet_manager.json:
+            ledger_type = LedgerType(wallet_json["ledger_type"])
+            wallet = wallet_manager.load(ledger_type)
+            decrypted_mnemonic = wallet.decrypt_mnemonic(password)
+            assert mnemonics[ledger_type] == decrypted_mnemonic

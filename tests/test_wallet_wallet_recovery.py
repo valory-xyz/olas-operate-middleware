@@ -22,6 +22,7 @@
 
 # pylint: disable=too-many-locals
 
+import typing as t
 import uuid
 
 import pytest
@@ -29,7 +30,7 @@ import pytest
 from operate.cli import OperateApp
 from operate.constants import MSG_INVALID_PASSWORD
 from operate.ledger import get_default_ledger_api
-from operate.operate_types import Chain
+from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -52,7 +53,10 @@ class TestWalletRecovery(OnTestnet):
 
     @staticmethod
     def _assert_recovered(
-        old_wallet_manager: MasterWalletManager, wallet_manager: MasterWalletManager
+        old_wallet_manager: MasterWalletManager,
+        wallet_manager: MasterWalletManager,
+        password: str,
+        mnemonics: t.Dict[LedgerType, t.List[str]],
     ) -> None:
         old_ledger_types = {item.ledger_type for item in old_wallet_manager}
         ledger_types = {item.ledger_type for item in wallet_manager}
@@ -65,6 +69,7 @@ class TestWalletRecovery(OnTestnet):
             )
             assert old_wallet.safes == wallet.safes
             assert old_wallet.safe_chains == wallet.safe_chains
+            assert wallet.decrypt_mnemonic(password) == mnemonics[wallet.ledger_type]
 
     def test_normal_flow(
         self,
@@ -86,6 +91,7 @@ class TestWalletRecovery(OnTestnet):
         assert step_1_output.get("id") is not None
         assert step_1_output.get("wallets") is not None
         assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+        new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
         for item in step_1_output["wallets"]:
             assert item.get("current_wallet") is not None
@@ -95,6 +101,10 @@ class TestWalletRecovery(OnTestnet):
             assert item.get("new_mnemonic") is not None
             assert item["new_wallet"].get("safes") is not None
             assert set(item["new_wallet"]["safes"]) == set()
+            current_ledger_type = LedgerType(item["current_wallet"].get("ledger_type"))
+            new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
+            assert current_ledger_type == new_ledger_type
+            new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
         bundle_id = step_1_output["id"]
 
@@ -138,7 +148,9 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
-        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
+        TestWalletRecovery._assert_recovered(
+            old_wallet_manager, wallet_manager, new_password, new_mnemonics
+        )
 
         # Attempt to do a recovery with the same bundle will result in error
         operate = OperateApp(
@@ -171,6 +183,7 @@ class TestWalletRecovery(OnTestnet):
         assert step_1_output.get("id") is not None
         assert step_1_output.get("wallets") is not None
         assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+        new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
         for item in step_1_output["wallets"]:
             assert item.get("current_wallet") is not None
@@ -180,6 +193,10 @@ class TestWalletRecovery(OnTestnet):
             assert item.get("new_mnemonic") is not None
             assert item["new_wallet"].get("safes") is not None
             assert set(item["new_wallet"]["safes"]) == set()
+            current_ledger_type = LedgerType(item["current_wallet"].get("ledger_type"))
+            new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
+            assert current_ledger_type == new_ledger_type
+            new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
         bundle_id = step_1_output["id"]
 
@@ -249,7 +266,9 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
-        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
+        TestWalletRecovery._assert_recovered(
+            old_wallet_manager, wallet_manager, new_password, new_mnemonics
+        )
 
     @pytest.mark.parametrize("raise_if_inconsistent_owners", [True, False])
     def test_exceptions(
@@ -296,6 +315,24 @@ class TestWalletRecovery(OnTestnet):
         step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
+
+        assert step_1_output.get("id") is not None
+        assert step_1_output.get("wallets") is not None
+        assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+        new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
+
+        for item in step_1_output["wallets"]:
+            assert item.get("current_wallet") is not None
+            assert item["current_wallet"].get("safes") is not None
+            assert len(set(item["current_wallet"]["safes"])) >= 2
+            assert item.get("new_wallet") is not None
+            assert item.get("new_mnemonic") is not None
+            assert item["new_wallet"].get("safes") is not None
+            assert set(item["new_wallet"]["safes"]) == set()
+            current_ledger_type = LedgerType(item["current_wallet"].get("ledger_type"))
+            new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
+            assert current_ledger_type == new_ledger_type
+            new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
         bundle_id = step_1_output["id"]
 
@@ -453,7 +490,9 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
-        TestWalletRecovery._assert_recovered(old_wallet_manager, wallet_manager)
+        TestWalletRecovery._assert_recovered(
+            old_wallet_manager, wallet_manager, new_password, new_mnemonics
+        )
 
         # Attempt to do a recovery with the same bundle will result in error
         operate = OperateApp(
