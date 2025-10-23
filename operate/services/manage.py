@@ -609,7 +609,7 @@ class ServiceManager:
                 ]
 
             except Exception as e:  # pylint: disable=broad-except
-                self.logger.error(f"{e}: {traceback.format_exc()}")
+                self.logger.debug(f"{e}: {traceback.format_exc()}")
                 self.logger.warning(
                     "Cannot determine type of activity checker contract. Using default parameters. "
                     "NOTE: This will be an exception in the future!"
@@ -1908,10 +1908,11 @@ class ServiceManager:
             staking_program_id=current_staking_program,
         )
         if staking_contract is None:
-            raise RuntimeError(
+            self.logger.warning(
                 "No staking contract found for the "
                 f"{current_staking_program=}. Not claiming the rewards."
             )
+            return 0
 
         sftxb = self.get_eth_safe_tx_builder(ledger_config=ledger_config)
         if not sftxb.staking_rewards_claimable(
