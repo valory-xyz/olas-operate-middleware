@@ -42,10 +42,9 @@ from operate.bridge.providers.provider import Provider, ProviderRequest
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import USDC
-from operate.operate_types import Chain
+from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
-from operate.utils import merge_sum_dicts, subtract_dicts
 from operate.wallet.master import MasterWalletManager
 
 
@@ -187,13 +186,13 @@ class BridgeManager:
         path: Path,
         wallet_manager: MasterWalletManager,
         logger: logging.Logger,
-        quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
+        bundle_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
         self.logger = logger
-        self.quote_validity_period = quote_validity_period
+        self.bundle_validity_period = bundle_validity_period
         self.path.mkdir(exist_ok=True)
         (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)
         self.data: BridgeManagerData = cast(
@@ -251,7 +250,7 @@ class BridgeManager:
             self.logger.info("[BRIDGE MANAGER] Force bundle update.")
             self.quote_bundle(bundle)
             self._store_data()
-        elif now > bundle.timestamp + self.quote_validity_period:
+        elif now > bundle.timestamp + self.bundle_validity_period:
             self.logger.info("[BRIDGE MANAGER] Bundle expired.")
             self.quote_bundle(bundle)
             self._store_data()
@@ -335,7 +334,7 @@ class BridgeManager:
 
         bundle = self._get_updated_bundle(requests_params, force_update)
 
-        balances = {}
+        balances = ChainAmounts()
         for chain in bundle.get_from_chains():
             ledger_api = self.wallet_manager.load(chain.ledger_type).ledger_api(chain)
             balances[chain.value] = get_assets_balances(
@@ -346,9 +345,8 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements = cast(
-            t.Dict[str, t.Dict[str, t.Dict[str, int]]],
-            subtract_dicts(bridge_total_requirements, balances),
+        bridge_refill_requirements = ChainAmounts.shortfalls(
+            bridge_total_requirements, balances
         )
 
         is_refill_required = any(
@@ -364,7 +362,7 @@ class BridgeManager:
                 "balances": balances,
                 "bridge_refill_requirements": bridge_refill_requirements,
                 "bridge_total_requirements": bridge_total_requirements,
-                "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
+                "expiration_timestamp": bundle.timestamp + self.bundle_validity_period,
                 "is_refill_required": is_refill_required,
             }
         )
@@ -441,14 +439,14 @@ class BridgeManager:
             "bridge_request_status": provider_request_status,
         }
 
-    def bridge_total_requirements(self, bundle: ProviderRequestBundle) -> t.Dict:
+    def bridge_total_requirements(self, bundle: ProviderRequestBundle) -> ChainAmounts:
         """Sum bridge requirements."""
         requirements = []
         for provider_request in bundle.provider_requests:
             provider = self._providers[provider_request.provider_id]
             requirements.append(provider.requirements(provider_request))
 
-        return merge_sum_dicts(*requirements)
+        return ChainAmounts.add(*requirements)
 
     def quote_bundle(self, bundle: ProviderRequestBundle) -> None:
         """Update the bundle with the quotes."""

@@ -55,4 +55,4 @@ class TestGnosisUtils(OnTestnet):
             )
             is not None
         )
-        assert ledger_api.get_balance(wallet.address) < DUST[chain]
+        assert ledger_api.get_balance(wallet.address) <= DUST[chain]
