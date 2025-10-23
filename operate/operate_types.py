@@ -24,10 +24,11 @@ import copy
 import enum
 import os
 import typing as t
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import argon2
+from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
 from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
 from cryptography.fernet import Fernet
@@ -455,10 +456,10 @@ class EncryptedData(LocalResource):
     path: Path
     version: int
     cipher: str
-    cipherparams: t.Dict[str, t.Union[int, str]]
-    ciphertext: str
+    cipherparams: t.Dict[str, t.Union[int, str]] = field(repr=False)
+    ciphertext: str = field(repr=False)
     kdf: str
-    kdfparams: t.Dict[str, t.Union[int, str]]
+    kdfparams: t.Dict[str, t.Union[int, str]] = field(repr=False)
 
     @classmethod
     def new(cls, path: Path, password: str, plaintext_bytes: bytes) -> "EncryptedData":
@@ -524,4 +525,4 @@ class EncryptedData(LocalResource):
     @classmethod
     def load(cls, path: Path) -> "EncryptedData":
         """Load EncryptedData."""
-        return super().load(path)  # type: ignore
+        return cast(EncryptedData, super().load(path))
