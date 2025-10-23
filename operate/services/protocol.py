@@ -57,6 +57,7 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
+from web3.types import TxReceipt
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -112,9 +113,7 @@ class GnosisSafeTransaction:
         self._txs.append(tx)
         return self
 
-    def build(  # pylint: disable=unused-argument
-        self, *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def build(self) -> t.Dict:
         """Build the transaction."""
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
@@ -164,19 +163,18 @@ class GnosisSafeTransaction:
         )
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> t.Dict:
+    def settle(self) -> TxReceipt:
         """Settle the transaction."""
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-        )
-        setattr(tx_settler, "build", self.build)  # noqa: B010
-        return tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                tx_builder=self.build,
+            )
+            .transact()
+            .settle()
+            .tx_receipt
         )
 
 
@@ -321,19 +319,10 @@ class StakingManager(OnChainHelper):
         service_id: int,
         service_registry: str,
         staking_contract: str,
-    ) -> None:
+    ) -> str:
         """Stake the service"""
         self.check_staking_compatibility(
             service_id=service_id, staking_contract=staking_contract
-        )
-
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
         )
 
         # we make use of the ERC20 contract to build the approval transaction
@@ -342,47 +331,46 @@ class StakingManager(OnChainHelper):
         # this is very bad way to do it but it works because the ERC721 contract expects two arguments
         # for approve call (spender, token_id), and the ERC20 contract wrapper used here from open-autonomy
         # passes the amount as the second argument.
-        def _build_approval_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return registry_contracts.erc20.get_approve_tx(
+        TxSettler(
+            ledger_api=self.ledger_api,
+            crypto=self.crypto,
+            chain_type=self.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=lambda: registry_contracts.erc20.get_approve_tx(
                 ledger_api=self.ledger_api,
                 contract_address=service_registry,
                 spender=staking_contract,
                 sender=self.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
-            )
+            ),
+        ).transact().settle()
 
-        setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
-        )
-
-        def _build_staking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="stake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="stake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_staking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def check_if_unstaking_possible(
@@ -415,40 +403,33 @@ class StakingManager(OnChainHelper):
         if staked_duration < minimum_staking_duration and available_rewards > 0:
             raise ValueError("Service cannot be unstaked yet.")
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    def unstake(self, service_id: int, staking_contract: str) -> str:
         """Unstake the service"""
 
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-
-        def _build_unstaking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return self.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: self.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=self.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="unstake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": self.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="unstake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": self.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_unstaking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def get_stake_approval_tx_data(
@@ -465,8 +446,8 @@ class StakingManager(OnChainHelper):
         return registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=service_registry,
-        ).encodeABI(
-            fn_name="approve",
+        ).encode_abi(
+            abi_element_identifier="approve",
             args=[
                 staking_contract,
                 service_id,
@@ -482,8 +463,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="stake",
+        ).encode_abi(
+            abi_element_identifier="stake",
             args=[service_id],
         )
 
@@ -496,8 +477,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="unstake",
+        ).encode_abi(
+            abi_element_identifier="unstake",
             args=[service_id],
         )
 
@@ -506,8 +487,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="claim",
+        ).encode_abi(
+            abi_element_identifier="claim",
             args=[service_id],
         )
 
@@ -518,8 +499,8 @@ class StakingManager(OnChainHelper):
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="forcedUnstake",
+        ).encode_abi(
+            abi_element_identifier="forcedUnstake",
             args=[service_id],
         )
 
@@ -1221,8 +1202,8 @@ class EthSafeTxBuilder(_ChainUtil):
         instance = self.service_manager_instance
         if update_token is None:
             safe = self.safe
-            txd = instance.encodeABI(
-                fn_name="create",
+            txd = instance.encode_abi(
+                abi_element_identifier="create",
                 args=[
                     safe,
                     token or ETHEREUM_ERC20,
@@ -1233,8 +1214,8 @@ class EthSafeTxBuilder(_ChainUtil):
                 ],
             )
         else:
-            txd = instance.encodeABI(
-                fn_name="update",
+            txd = instance.encode_abi(
+                abi_element_identifier="update",
                 args=[
                     token or ETHEREUM_ERC20,
                     manager.metadata_hash,
@@ -1263,8 +1244,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=erc20_contract,
         )
-        txd = instance.encodeABI(
-            fn_name="approve",
+        txd = instance.encode_abi(
+            abi_element_identifier="approve",
             args=[spender, amount],
         )
         return {
@@ -1280,8 +1261,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="activateRegistration",
+        txd = instance.encode_abi(
+            abi_element_identifier="activateRegistration",
             args=[service_id],
         )
         return {
@@ -1304,8 +1285,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="registerAgents",
+        txd = instance.encode_abi(
+            abi_element_identifier="registerAgents",
             args=[
                 service_id,
                 instances,
@@ -1379,8 +1360,8 @@ class EthSafeTxBuilder(_ChainUtil):
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
 
-        deploy_data = registry_instance.encodeABI(
-            fn_name="deploy",
+        deploy_data = registry_instance.encode_abi(
+            abi_element_identifier="deploy",
             args=[
                 service_id,
                 gnosis_safe_multisig,
@@ -1445,8 +1426,8 @@ class EthSafeTxBuilder(_ChainUtil):
         ).get("tx_hash")
 
         # Build approveHash message
-        approve_hash_data = safe_b_instance.encodeABI(
-            fn_name="approveHash",
+        approve_hash_data = safe_b_instance.encode_abi(
+            abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
         approve_hash_message = {
@@ -1457,8 +1438,8 @@ class EthSafeTxBuilder(_ChainUtil):
         }
 
         # Build execTransaction message
-        exec_data = safe_b_instance.encodeABI(
-            fn_name="execTransaction",
+        exec_data = safe_b_instance.encode_abi(
+            abi_element_identifier="execTransaction",
             args=[
                 multisend_address,
                 multisend_tx["value"],
@@ -1508,8 +1489,8 @@ class EthSafeTxBuilder(_ChainUtil):
         txs.append(
             {
                 "to": token,
-                "data": erc20_instance.encodeABI(
-                    fn_name="transfer",
+                "data": erc20_instance.encode_abi(
+                    abi_element_identifier="transfer",
                     args=[to, amount],
                 ),
                 "operation": MultiSendOperation.CALL,
@@ -1537,8 +1518,8 @@ class EthSafeTxBuilder(_ChainUtil):
         ).get("tx_hash")
 
         # Build approveHash message
-        approve_hash_data = safe_b_instance.encodeABI(
-            fn_name="approveHash",
+        approve_hash_data = safe_b_instance.encode_abi(
+            abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
         approve_hash_message = {
@@ -1549,8 +1530,8 @@ class EthSafeTxBuilder(_ChainUtil):
         }
 
         # Build execTransaction message
-        exec_data = safe_b_instance.encodeABI(
-            fn_name="execTransaction",
+        exec_data = safe_b_instance.encode_abi(
+            abi_element_identifier="execTransaction",
             args=[
                 multisend_address,
                 multisend_tx["value"],
@@ -1579,8 +1560,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="terminate",
+        txd = instance.encode_abi(
+            abi_element_identifier="terminate",
             args=[service_id],
         )
         return {
@@ -1596,8 +1577,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=self.contracts["service_manager"],
         )
-        txd = instance.encodeABI(
-            fn_name="unbond",
+        txd = instance.encode_abi(
+            abi_element_identifier="unbond",
             args=[service_id],
         )
         return {
@@ -1757,8 +1738,8 @@ class EthSafeTxBuilder(_ChainUtil):
         #     ledger_api=self.ledger_api,  # noqa: E800
         #     contract_address=self.contracts["recovery_module"],  # noqa: E800
         # )  # noqa: E800
-        txd = instance.encodeABI(
-            fn_name="recoverAccess",
+        txd = instance.encode_abi(
+            abi_element_identifier="recoverAccess",
             args=[service_id],
         )
         return {
@@ -1779,8 +1760,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=safe_address,
         )
-        txd = instance.encodeABI(
-            fn_name="enableModule",
+        txd = instance.encode_abi(
+            abi_element_identifier="enableModule",
             args=[module_address],
         )
         return {
@@ -1861,8 +1842,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
                 "to": multisig_address,
                 "data": HexBytes(
                     bytes.fromhex(
-                        multisig_instance.encodeABI(
-                            fn_name="addOwnerWithThreshold",
+                        multisig_instance.encode_abi(
+                            abi_element_identifier="addOwnerWithThreshold",
                             args=[_owner, 1],
                         )[2:]
                     )
@@ -1877,8 +1858,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="removeOwner",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="removeOwner",
                         args=[new_owners[0], master_safe, 1],
                     )[2:]
                 )
@@ -1893,8 +1874,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="changeThreshold",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="changeThreshold",
                         args=[threshold],
                     )[2:]
                 )
@@ -1919,8 +1900,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         data=multisend_tx["data"],
         operation=1,
     ).get("tx_hash")
-    approve_hash_data = multisig_instance.encodeABI(
-        fn_name="approveHash",
+    approve_hash_data = multisig_instance.encode_abi(
+        abi_element_identifier="approveHash",
         args=[
             safe_tx_hash,
         ],
@@ -1932,8 +1913,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         "value": 0,
     }
 
-    safe_exec_data = multisig_instance.encodeABI(
-        fn_name="execTransaction",
+    safe_exec_data = multisig_instance.encode_abi(
+        abi_element_identifier="execTransaction",
         args=[
             multisend_address,  # to address
             multisend_tx["value"],  # value

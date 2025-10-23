@@ -20,105 +20,19 @@
 """Types module."""
 
 import enum
-import os
 import typing as t
 from dataclasses import dataclass
 
 from autonomy.chain.config import ChainType
-from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
+from autonomy.chain.config import LedgerType as LedgerTypeOA
 from typing_extensions import TypedDict
 
 from operate.constants import NO_STAKING_PROGRAM_ID
 from operate.resource import LocalResource
 
 
-CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
-
-_CHAIN_ID_TO_CHAIN_NAME = {
-    chain_id: chain_name for chain_name, chain_id in CHAIN_NAME_TO_CHAIN_ID.items()
-}
-
-
-class LedgerType(str, enum.Enum):
-    """Ledger type enum."""
-
-    ETHEREUM = "ethereum"
-    SOLANA = "solana"
-
-    @property
-    def config_file(self) -> str:
-        """Config filename."""
-        return f"{self.name.lower()}.json"
-
-    @property
-    def key_file(self) -> str:
-        """Key filename."""
-        return f"{self.name.lower()}.txt"
-
-    @classmethod
-    def from_id(cls, chain_id: int) -> "LedgerType":
-        """Load from chain ID."""
-        return Chain(_CHAIN_ID_TO_CHAIN_NAME[chain_id]).ledger_type
-
-
-# Dynamically create the Chain enum from the ChainType
-# TODO: Migrate this to open-autonomy and remove this modified version of Chain here and use the one from open-autonomy
-# This version of open-autonomy must support the LedgerType to support SOLANA in the future
-# If solana support is not fuly implemented, decide to keep this half-baked feature.
-#
-# TODO: Once the above issue is properly implemented in Open Autonomy, remove the following
-# lines from tox.ini:
-#
-#    exclude = ^(operate/operate_types\.py|scripts/setup_wallet\.py|operate/ledger/profiles\.py|operate/ledger/__init__\.py|operate/wallet/master\.py|operate/services/protocol\.py|operate/services/manage\.py|operate/cli\.py)$
-#
-#    [mypy-operate.*]
-#    follow_imports = skip  # noqa
-#
-# These lines were itroduced to resolve mypy issues with the temporary Chain/ChainType solution.
-Chain = enum.Enum(
-    "Chain",
-    [(member.name, member.value) for member in ChainType]
-    + [
-        ("SOLANA", "solana"),
-    ],
-)
-
-
-class ChainMixin:
-    """Mixin for some new functions in the ChainType class."""
-
-    @property
-    def id(self) -> t.Optional[int]:
-        """Chain ID"""
-        if self == Chain.CUSTOM:
-            chain_id = os.environ.get("CUSTOM_CHAIN_ID")
-            if chain_id is None:
-                return None
-            return int(chain_id)
-        return CHAIN_NAME_TO_CHAIN_ID[self.value]
-
-    @property
-    def ledger_type(self) -> LedgerType:
-        """Ledger type."""
-        if self in (Chain.SOLANA,):
-            return LedgerType.SOLANA
-        return LedgerType.ETHEREUM
-
-    @classmethod
-    def from_string(cls, chain: str) -> "Chain":
-        """Load from string."""
-        return Chain(chain.lower())
-
-    @classmethod
-    def from_id(cls, chain_id: int) -> "Chain":
-        """Load from chain ID."""
-        return Chain(_CHAIN_ID_TO_CHAIN_NAME[chain_id])
-
-
-# Add the ChainMixin methods to the Chain enum
-for name in dir(ChainMixin):
-    if not name.startswith("__"):
-        setattr(Chain, name, getattr(ChainMixin, name))
+LedgerType = LedgerTypeOA
+Chain = ChainType
 
 
 class DeploymentStatus(enum.IntEnum):
