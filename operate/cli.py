@@ -626,6 +626,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
+        # TODO Should fail if not provided
         ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
         wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
         return JSONResponse(content={"private_key": wallet.crypto.private_key})
@@ -646,9 +647,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
-        ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
-        wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
         try:
+            ledger_type = LedgerType(data.get("ledger_type"))
+            wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
             mnemonic = wallet.decrypt_mnemonic(password=password)
             if mnemonic is None:
                 return JSONResponse(
