@@ -56,10 +56,17 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.services.manage import ServiceManager
+from operate.settings import Settings
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import (
+    CHAINS_TO_TEST,
+    LOGGER,
+    OPERATE_TEST,
+    RUNNING_IN_CI,
+    TESTNET_RPCS,
+)
 
 
 def random_string(length: int = 16) -> str:
@@ -430,6 +437,7 @@ def create_wallets(
 @pytest.fixture
 def test_operate(tmp_path: Path, password: str) -> OperateApp:
     """Sets up a test operate app."""
+    Settings._instances.clear()
     operate = OperateApp(
         home=tmp_path / OPERATE_TEST,
     )
@@ -446,7 +454,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
 
     def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
         ledger_types = {wallet.ledger_type for wallet in wallet_manager}
-        for chain in [Chain.GNOSIS, Chain.OPTIMISM]:
+        for chain in CHAINS_TO_TEST:
             ledger_type = chain.ledger_type
             if ledger_type in ledger_types:
                 wallet = wallet_manager.load(ledger_type=ledger_type)

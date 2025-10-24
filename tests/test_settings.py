@@ -30,35 +30,49 @@ from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.resource import serialize
 from operate.settings import SETTINGS_JSON_VERSION, Settings
 
+from tests.conftest import OperateTestEnv, create_wallets
+from tests.constants import CHAINS_TO_TEST
 
-def test_settings_no_file(tmp_path: Path) -> None:
+
+def test_settings_no_file(test_operate: OperateApp) -> None:
     """Test loading settings when no file is present."""
-    assert os.path.exists(tmp_path / SETTINGS_JSON) is False
-    settings = Settings(path=tmp_path)
+    create_wallets(wallet_manager=test_operate.wallet_manager)
+    assert os.path.exists(test_operate._path / SETTINGS_JSON) is False
+    settings: Settings = Settings()
     settings.store()
-    assert os.path.exists(tmp_path / SETTINGS_JSON) is True
+    assert os.path.exists(test_operate._path / SETTINGS_JSON) is True
 
 
-def test_settings_default_values() -> None:
+def test_settings_default_values(test_env: OperateTestEnv) -> None:
     """Test settings default values."""
-    settings = Settings()
-    assert settings.version == SETTINGS_JSON_VERSION
-    assert settings.eoa_topups == DEFAULT_EOA_TOPUPS
-    assert settings.get_eoa_topups(with_safe=True) == DEFAULT_EOA_TOPUPS
-    assert settings.get_eoa_topups() == {
-        chain: {asset: amount * 2 for asset, amount in asset_amount.items()}
+    test_env.operate.password = test_env.password
+    settings: Settings = Settings()
+    expected_eoa_topups = {
+        chain: {
+            asset: amount if chain in CHAINS_TO_TEST else amount * 2
+            for asset, amount in asset_amount.items()
+        }
         for chain, asset_amount in DEFAULT_EOA_TOPUPS.items()
     }
+    assert settings.version == SETTINGS_JSON_VERSION
+    assert settings.eoa_topups == DEFAULT_EOA_TOPUPS
+    assert settings.get_eoa_topups() == expected_eoa_topups
     assert settings.json == {
         "version": SETTINGS_JSON_VERSION,
-        "eoa_topups": serialize(DEFAULT_EOA_TOPUPS),
+        "eoa_topups": serialize(expected_eoa_topups),
+        "eoa_thresholds": serialize(
+            {
+                chain: {asset: amount // 2 for asset, amount in asset_amount.items()}
+                for chain, asset_amount in expected_eoa_topups.items()
+            }
+        ),
     }
 
 
 def test_settings_persistence(tmp_path: Path, test_operate: OperateApp) -> None:
     """Test settings persistence."""
+    create_wallets(wallet_manager=test_operate.wallet_manager)
     existing_settings = test_operate.settings
-    assert existing_settings.get_eoa_topups(with_safe=True) == DEFAULT_EOA_TOPUPS
     assert "new_chain" not in existing_settings.eoa_topups
     existing_settings.eoa_topups["new_chain"] = {"new_asset": 12345}
     existing_settings.store()
@@ -67,23 +81,23 @@ def test_settings_persistence(tmp_path: Path, test_operate: OperateApp) -> None:
     new_operate = OperateApp(home=tmp_path)
 
     loaded_settings = new_operate.settings
-    assert loaded_settings.get_eoa_topups(with_safe=True) == DEFAULT_EOA_TOPUPS | {
-        "new_chain": {"new_asset": 12345}
-    }
+    assert loaded_settings.eoa_topups["new_chain"]["new_asset"] == 12345
 
 
-def test_settings_version_mismatch(tmp_path: Path) -> None:
+def test_settings_version_mismatch(test_operate: OperateApp) -> None:
     """Test settings version mismatch."""
-    settings = Settings(path=tmp_path)
+    create_wallets(wallet_manager=test_operate.wallet_manager)
+    settings: Settings = Settings(path=test_operate._path)
     settings.store()
 
-    with open(tmp_path / SETTINGS_JSON) as f:
+    with open(test_operate._path / SETTINGS_JSON) as f:
         data = json.load(f)
 
     data["version"] = 999  # incompatible version
-    with open(tmp_path / SETTINGS_JSON, "w") as f:
+    with open(test_operate._path / SETTINGS_JSON, "w") as f:
         json.dump(data, f)
 
+    Settings._instances.clear()
     with pytest.raises(ValueError) as e:
-        Settings(path=tmp_path)
+        Settings(path=test_operate._path)
         assert str(e) == "Settings version 999 is not supported. Expected version 1."

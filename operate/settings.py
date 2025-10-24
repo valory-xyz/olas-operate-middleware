@@ -23,8 +23,10 @@ from typing import Any, Dict, Optional
 
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
-from operate.operate_types import ChainAmounts
-from operate.resource import LocalResource
+from operate.operate_types import LedgerType
+from operate.resource import LocalResource, serialize
+from operate.utils import SingletonMeta
+from operate.wallet.master import MasterWalletManager
 
 
 SETTINGS_JSON_VERSION = 1
@@ -34,7 +36,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-class Settings(LocalResource):
+class Settings(LocalResource, metaclass=SingletonMeta):
     """Settings for operate."""
 
     _file = SETTINGS_JSON
@@ -44,6 +46,10 @@ class Settings(LocalResource):
 
     def __init__(self, path: Optional[Path] = None, **kwargs: Any) -> None:
         """Initialize settings."""
+        if "wallet_manager" not in kwargs:
+            raise ValueError("wallet_manager is required to initialize Settings.")
+
+        self.wallet_manager: MasterWalletManager = kwargs.pop("wallet_manager")
         super().__init__(path=path)
         if path is not None and (path / self._file).exists():
             self.load(path)
@@ -58,13 +64,30 @@ class Settings(LocalResource):
                 f"Settings version {self.version} is not supported. Expected version {SETTINGS_JSON_VERSION}."
             )
 
-    def get_eoa_topups(self, with_safe: bool = False) -> ChainAmounts:
-        """Get the EOA topups."""
-        return (
-            self.eoa_topups
-            if with_safe
-            else {
-                chain: {asset: amount * 2 for asset, amount in asset_amount.items()}
-                for chain, asset_amount in self.eoa_topups.items()
+    @property
+    def json(self) -> Dict[str, Any]:
+        """Get the settings as a JSON serializable dictionary."""
+        eoa_topups = self.get_eoa_topups()
+        return serialize(
+            {
+                "version": self.version,
+                "eoa_topups": eoa_topups,
+                "eoa_thresholds": {
+                    chain: {
+                        asset: amount // 2 for asset, amount in asset_amount.items()
+                    }
+                    for chain, asset_amount in eoa_topups.items()
+                },
             }
         )
+
+    def get_eoa_topups(self) -> Dict[str, Dict[str, int]]:
+        """Get the EOA topups."""
+        eth_master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        return {
+            chain: {
+                asset: amount if chain in eth_master_wallet.safes else amount * 2
+                for asset, amount in asset_amount.items()
+            }
+            for chain, asset_amount in self.eoa_topups.items()
+        }
