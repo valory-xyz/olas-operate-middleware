@@ -142,11 +142,13 @@ class OperateApp:
             logger=logger,
         )
         self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
-        self.settings = Settings(path=self._path)
 
         self._wallet_manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
+        )
+        self.settings: Settings = Settings(
+            wallet_manager=self.wallet_manager, path=self._path
         )
         self._wallet_manager.setup()
         self._funding_manager = FundingManager(
@@ -170,6 +172,7 @@ class OperateApp:
         """Set the password."""
         self._password = value
         self._wallet_manager.password = value
+        self.settings.wallet_manager.password = value
 
     def _backup_operate_if_new_version(self) -> None:
         """Backup .operate directory if this is a new version."""
