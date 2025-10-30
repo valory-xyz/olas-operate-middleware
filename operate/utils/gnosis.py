@@ -275,6 +275,9 @@ def send_safe_txs(
         chain_type=Chain.from_id(
             ledger_api._chain_id  # pylint: disable=protected-access
         ),
+        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+        retries=ON_CHAIN_INTERACT_RETRIES,
+        sleep=ON_CHAIN_INTERACT_SLEEP,
     )
     setattr(tx_settler, "build", _build_tx)  # noqa: B010
     tx_receipt = tx_settler.transact(
@@ -444,6 +447,9 @@ def transfer(
         chain_type=Chain.from_id(
             ledger_api._chain_id  # pylint: disable=protected-access
         ),
+        timeout=ON_CHAIN_INTERACT_TIMEOUT,
+        retries=ON_CHAIN_INTERACT_RETRIES,
+        sleep=ON_CHAIN_INTERACT_SLEEP,
     )
     setattr(tx_settler, "build", _build_tx)  # noqa: B010
     tx_receipt = tx_settler.transact(
