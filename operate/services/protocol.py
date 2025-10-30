@@ -68,6 +68,7 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.utils.gnosis import (
@@ -162,6 +163,8 @@ class GnosisSafeTransaction:
             operation=SafeOperation.DELEGATE_CALL.value,
             nonce=self.ledger_api.api.eth.get_transaction_count(owner),
         )
+        update_tx_with_gas_pricing(tx, self.ledger_api)
+        update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
     def settle(self) -> t.Dict:
