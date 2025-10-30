@@ -173,6 +173,9 @@ class GnosisSafeTransaction:
             ledger_api=self.ledger_api,
             crypto=self.crypto,
             chain_type=self.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
         )
         setattr(tx_settler, "build", self.build)  # noqa: B010
         return tx_settler.transact(
