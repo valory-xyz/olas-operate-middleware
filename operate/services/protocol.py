@@ -70,7 +70,11 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger import get_default_ledger_api
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
 from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
@@ -167,6 +171,8 @@ class GnosisSafeTransaction:
             operation=SafeOperation.DELEGATE_CALL.value,
             nonce=self.ledger_api.api.eth.get_transaction_count(owner),
         )
+        update_tx_with_gas_pricing(tx, self.ledger_api)
+        update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
     def settle(self) -> t.Dict:
@@ -175,6 +181,9 @@ class GnosisSafeTransaction:
             ledger_api=self.ledger_api,
             crypto=self.crypto,
             chain_type=self.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
         )
         setattr(tx_settler, "build", self.build)  # noqa: B010
         return tx_settler.transact(
