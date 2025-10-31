@@ -70,7 +70,11 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
-from operate.ledger import get_default_ledger_api
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
 from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain as OperateChain
