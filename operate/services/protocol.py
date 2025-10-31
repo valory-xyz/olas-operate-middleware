@@ -76,7 +76,6 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import CONTRACTS, STAKING
-from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN

@@ -224,7 +224,9 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         )
 
         self._run_aea_command("-s", "add-key", "ethereum", cwd=working_dir / "agent")
-        self._run_aea_command("-s", "add-key", "ethereum", "--connection", cwd=working_dir / "agent")
+        self._run_aea_command(
+            "-s", "add-key", "ethereum", "--connection", cwd=working_dir / "agent"
+        )
 
         self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
 
