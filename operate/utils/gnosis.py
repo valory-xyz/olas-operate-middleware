@@ -22,6 +22,7 @@
 import binascii
 import itertools
 import secrets
+import time
 import typing as t
 from enum import Enum
 
@@ -207,10 +208,28 @@ def create_safe(
     )
     (event,) = instance.events.ProxyCreation().process_receipt(receipt)
     safe_address = event["args"]["proxy"]
+
     if backup_owner is not None:
-        add_owner(
-            ledger_api=ledger_api, crypto=crypto, safe=safe_address, owner=backup_owner
-        )
+        retry_delays = [60, 120, 180, 240]  # 1 min, 2 min, 3 min, 4 min
+        for attempt, delay in enumerate(retry_delays, start=1):
+            try:
+                add_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=safe_address,
+                    owner=backup_owner,
+                )
+                break  # success
+            except Exception as e:  # pylint: disable=broad-except
+                if attempt == len(retry_delays):
+                    raise RuntimeError(
+                        f"Failed to add backup owner {backup_owner} after {len(retry_delays)} attempts: {e}"
+                    ) from e
+                print(
+                    f"Retry add owner {attempt}/{len(retry_delays)} in {delay} seconds due to error: {e}"
+                )
+                time.sleep(delay)
+
     return safe_address, salt_nonce, tx_hash
 
 
