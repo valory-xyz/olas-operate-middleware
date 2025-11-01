@@ -210,8 +210,8 @@ def create_safe(
     safe_address = event["args"]["proxy"]
 
     if backup_owner is not None:
-        retry_delays = [60, 120, 180, 240]  # 1 min, 2 min, 3 min, 4 min
-        for attempt, delay in enumerate(retry_delays, start=1):
+        retry_delays = [0, 60, 120, 180, 240]
+        for attempt in range(1, len(retry_delays) + 1):
             try:
                 add_owner(
                     ledger_api=ledger_api,
@@ -225,10 +225,11 @@ def create_safe(
                     raise RuntimeError(
                         f"Failed to add backup owner {backup_owner} after {len(retry_delays)} attempts: {e}"
                     ) from e
+                next_delay = retry_delays[attempt]
                 logger.error(
-                    f"Retry add owner {attempt}/{len(retry_delays)} in {delay} seconds due to error: {e}"
+                    f"Retry add owner {attempt}/{len(retry_delays)} in {next_delay} seconds due to error: {e}"
                 )
-                time.sleep(delay)
+                time.sleep(next_delay)
 
     return safe_address, salt_nonce, tx_hash
 
