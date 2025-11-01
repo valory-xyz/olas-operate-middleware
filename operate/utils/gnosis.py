@@ -21,7 +21,6 @@
 
 import binascii
 import itertools
-import secrets
 import typing as t
 from enum import Enum
 
@@ -153,65 +152,6 @@ def skill_input_hex_to_payload(payload: str) -> dict:
         data=bytes.fromhex(payload[640:]),
     )
     return tx_params
-
-
-def _get_nonce() -> int:
-    """Generate a nonce for the Safe deployment."""
-    return secrets.SystemRandom().randint(0, 2**256 - 1)
-
-
-def create_safe(
-    ledger_api: LedgerApi,
-    crypto: Crypto,
-    backup_owner: t.Optional[str] = None,
-    salt_nonce: t.Optional[int] = None,
-) -> t.Tuple[str, int, str]:
-    """Create gnosis safe."""
-    salt_nonce = salt_nonce or _get_nonce()
-
-    def _build(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
-        tx = registry_contracts.gnosis_safe.get_deploy_transaction(
-            ledger_api=ledger_api,
-            deployer_address=crypto.address,
-            owners=([crypto.address]),
-            threshold=1,
-            salt_nonce=salt_nonce,
-        )
-        del tx["contract_address"]
-        return tx
-
-    tx_settler = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=ChainProfile.CUSTOM,
-        timeout=ON_CHAIN_INTERACT_TIMEOUT,
-        retries=ON_CHAIN_INTERACT_RETRIES,
-        sleep=ON_CHAIN_INTERACT_SLEEP,
-    )
-    setattr(  # noqa: B010
-        tx_settler,
-        "build",
-        _build,
-    )
-    receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-    )
-    tx_hash = receipt.get("transactionHash", "").hex()
-    instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
-        ledger_api=ledger_api,
-        contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
-    )
-    (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    safe_address = event["args"]["proxy"]
-    if backup_owner is not None:
-        add_owner(
-            ledger_api=ledger_api, crypto=crypto, safe=safe_address, owner=backup_owner
-        )
-    return safe_address, salt_nonce, tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
