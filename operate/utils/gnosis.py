@@ -225,7 +225,7 @@ def create_safe(
                     raise RuntimeError(
                         f"Failed to add backup owner {backup_owner} after {len(retry_delays)} attempts: {e}"
                     ) from e
-                print(
+                logger.error(
                     f"Retry add owner {attempt}/{len(retry_delays)} in {delay} seconds due to error: {e}"
                 )
                 time.sleep(delay)
