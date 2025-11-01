@@ -21,6 +21,7 @@
 
 import json
 import os
+import secrets
 import typing as t
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,9 +50,8 @@ from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
-from operate.utils.gnosis import add_owner
-from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
+    add_owner,
     estimate_transfer_tx_fee,
     get_asset_balance,
     get_owners,
@@ -237,7 +237,9 @@ class MasterWallet(LocalResource):
 
 
 @dataclass
-class EthereumMasterWallet(MasterWallet):
+class EthereumMasterWallet(
+    MasterWallet
+):  # pylint: disable=too-many-instance-attributes
     """Master wallet manager."""
 
     path: Path
@@ -680,20 +682,73 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Create safe."""
-        if chain in self.safes:
-            raise ValueError(f"Wallet already has a Safe on chain {chain}.")
-
-        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
-            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-            crypto=self.crypto,
-            backup_owner=backup_owner,
-            salt_nonce=self.safe_nonce,
+        self.safe_nonce = self.safe_nonce or secrets.SystemRandom().randint(
+            0, 2**256 - 1
         )
-        self.safe_chains.append(chain)
-        if self.safes is None:
-            self.safes = {}
-        self.safes[chain] = safe
-        self.store()
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
+
+        def _build(  # pylint: disable=unused-argument
+            *args: t.Any, **kwargs: t.Any
+        ) -> t.Dict:
+            tx = registry_contracts.gnosis_safe.get_deploy_transaction(
+                ledger_api=ledger_api,
+                deployer_address=self.crypto.address,
+                owners=([self.crypto.address]),
+                threshold=1,
+                salt_nonce=self.safe_nonce,
+            )
+            del tx["contract_address"]
+            return tx
+
+        tx_settler = TxSettler(
+            ledger_api=ledger_api,
+            crypto=self.crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+        setattr(  # noqa: B010
+            tx_settler,
+            "build",
+            _build,
+        )
+        tx_hash = None
+        try:
+            receipt = tx_settler.transact(
+                method=lambda: {},
+                contract="",
+                kwargs={},
+            )
+            tx_hash = receipt.get("transactionHash", "").hex()
+            instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
+                ledger_api=ledger_api,
+                contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
+            )
+            (event,) = instance.events.ProxyCreation().process_receipt(receipt)
+            if self.safes is None:
+                self.safes = {}
+
+            self.safes[chain] = event["args"]["proxy"]
+            if chain not in self.safe_chains:
+                self.safe_chains.append(chain)
+
+            self.store()
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Error creating Gnosis Safe: {e}")
+
+        try:
+            owners = get_owners(ledger_api=ledger_api, safe=self.safes[chain])
+            if backup_owner is not None and backup_owner not in owners:
+                add_owner(
+                    ledger_api=ledger_api,
+                    crypto=self.crypto,
+                    safe=self.safes[chain],
+                    owner=backup_owner,
+                )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Error adding backup owner to Gnosis Safe: {e}")
+
         return tx_hash
 
     def update_backup_owner(
