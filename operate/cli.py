@@ -34,6 +34,7 @@ from pathlib import Path
 from time import time
 from types import FrameType
 
+import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from fastapi import FastAPI, Request
@@ -96,6 +97,10 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
 )
+
+
+# TODO Backport to Open Autonomy
+autonomy.chain.tx.ERRORS_TO_RETRY += ("replacement transaction underpriced",)
 
 
 DEFAULT_MAX_RETRIES = 3
