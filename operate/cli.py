@@ -34,6 +34,7 @@ from pathlib import Path
 from time import time
 from types import FrameType
 
+import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from fastapi import FastAPI, Request
@@ -96,6 +97,25 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
 )
+
+
+# TODO Backport to Open Autonomy
+def should_rebuild(error: str) -> bool:
+    """Check if we should rebuild the transaction."""
+    for _error in (
+        "wrong transaction nonce",
+        "OldNonce",
+        "nonce too low",
+        "replacement transaction underpriced",
+    ):
+        if _error in error:
+            return True
+    return False
+
+
+autonomy.chain.tx.ERRORS_TO_RETRY += ("replacement transaction underpriced",)
+autonomy.chain.tx.should_rebuild = should_rebuild
+# End backport to Open Autonomy
 
 
 DEFAULT_MAX_RETRIES = 3
