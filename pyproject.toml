@@ -52,6 +52,7 @@ deepdiff = "^8.6.1"
 twikit = "==2.2.0"
 halo = "==0.0.31"
 argon2-cffi = "==23.1.0"
+requests-mock = "^1.12.1"
 multiaddr = "==0.0.9"
 
 [tool.poetry.group.development.dependencies]

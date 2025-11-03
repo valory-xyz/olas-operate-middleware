@@ -22,6 +22,7 @@
 import binascii
 import itertools
 import secrets
+import time
 import typing as t
 from enum import Enum
 
@@ -39,6 +40,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 
 
@@ -206,10 +208,29 @@ def create_safe(
     )
     (event,) = instance.events.ProxyCreation().process_receipt(receipt)
     safe_address = event["args"]["proxy"]
+
     if backup_owner is not None:
-        add_owner(
-            ledger_api=ledger_api, crypto=crypto, safe=safe_address, owner=backup_owner
-        )
+        retry_delays = [0, 60, 120, 180, 240]
+        for attempt in range(1, len(retry_delays) + 1):
+            try:
+                add_owner(
+                    ledger_api=ledger_api,
+                    crypto=crypto,
+                    safe=safe_address,
+                    owner=backup_owner,
+                )
+                break  # success
+            except Exception as e:  # pylint: disable=broad-except
+                if attempt == len(retry_delays):
+                    raise RuntimeError(
+                        f"Failed to add backup owner {backup_owner} after {len(retry_delays)} attempts: {e}"
+                    ) from e
+                next_delay = retry_delays[attempt]
+                logger.error(
+                    f"Retry add owner {attempt}/{len(retry_delays)} in {next_delay} seconds due to error: {e}"
+                )
+                time.sleep(next_delay)
+
     return safe_address, salt_nonce, tx_hash
 
 
@@ -492,6 +513,33 @@ def transfer_erc20_from_safe(
     )
 
 
+def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
+    """Estimate transfer transaction fee."""
+    ledger_api = get_default_ledger_api(chain)
+    tx = ledger_api.get_transfer_transaction(
+        sender_address=sender_address,
+        destination_address=to,
+        amount=0,
+        tx_fee=0,
+        tx_nonce="0x",
+        chain_id=chain.id,
+        raise_on_try=True,
+    )
+    tx = ledger_api.update_with_gas_estimate(
+        transaction=tx,
+        raise_on_try=False,
+    )
+    chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    if chain in (
+        Chain.ARBITRUM_ONE,
+        Chain.BASE,
+        Chain.OPTIMISM,
+        Chain.MODE,
+    ):
+        chain_fee += ledger_api.get_l1_data_fee(tx)
+    return chain_fee
+
+
 def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
@@ -512,10 +560,22 @@ def drain_eoa(
         *args: t.Any, **kwargs: t.Any
     ) -> t.Dict:
         """Build transaction"""
+        chain_fee = estimate_transfer_tx_fee(
+            chain=Chain.from_id(chain_id),
+            sender_address=crypto.address,
+            to=withdrawal_address,
+        )
+
+        amount = ledger_api.get_balance(crypto.address) - chain_fee
+        if amount <= 0:
+            raise ChainInteractionError(
+                f"No balance to drain from wallet: {crypto.address}"
+            )
+
         tx = ledger_api.get_transfer_transaction(
             sender_address=crypto.address,
             destination_address=withdrawal_address,
-            amount=0,
+            amount=amount,
             tx_fee=0,
             tx_nonce="0x",
             chain_id=chain_id,
@@ -528,21 +588,6 @@ def drain_eoa(
             raise_on_try=False,
         )
         tx["gas"] = empty_tx["gas"]
-
-        chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (
-            Chain.ARBITRUM_ONE,
-            Chain.BASE,
-            Chain.OPTIMISM,
-            Chain.MODE,
-        ):
-            chain_fee += ledger_api.get_l1_data_fee(tx)
-
-        tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
-        if tx["value"] <= 0:
-            raise ChainInteractionError(
-                f"No balance to drain from wallet: {crypto.address}"
-            )
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"

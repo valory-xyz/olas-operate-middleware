@@ -32,7 +32,6 @@ from dataclasses import dataclass
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -40,8 +39,8 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import update_tx_with_gas_pricing
-from operate.operate_types import Chain
+from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
+from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
@@ -218,28 +217,12 @@ class Provider(ABC):
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
         from_chain = provider_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        return get_default_ledger_api(Chain(from_chain))
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = provider_request.params["to"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        to_chain = provider_request.params["to"]["chain"]
+        return get_default_ledger_api(Chain(to_chain))
 
     @abstractmethod
     def quote(self, provider_request: ProviderRequest) -> None:
@@ -253,7 +236,7 @@ class Provider(ABC):
         """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
-    def requirements(self, provider_request: ProviderRequest) -> t.Dict:
+    def requirements(self, provider_request: ProviderRequest) -> ChainAmounts:
         """Gets the requirements to execute the quote, with updated gas estimation."""
         self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
@@ -267,14 +250,16 @@ class Provider(ABC):
         txs = self._get_txs(provider_request)
 
         if not txs:
-            return {
-                from_chain: {
-                    from_address: {
-                        ZERO_ADDRESS: 0,
-                        from_token: 0,
+            return ChainAmounts(
+                {
+                    from_chain: {
+                        from_address: {
+                            ZERO_ADDRESS: 0,
+                            from_token: 0,
+                        }
                     }
                 }
-            }
+            )
 
         total_native = 0
         total_gas_fees = 0
@@ -312,13 +297,15 @@ class Provider(ABC):
             f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."
         )
 
-        result = {
-            from_chain: {
-                from_address: {
-                    ZERO_ADDRESS: total_native,
+        result = ChainAmounts(
+            {
+                from_chain: {
+                    from_address: {
+                        ZERO_ADDRESS: total_native,
+                    }
                 }
             }
-        }
+        )
 
         if from_token != ZERO_ADDRESS:
             result[from_chain][from_address][from_token] = total_token

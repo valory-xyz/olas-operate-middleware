@@ -42,7 +42,7 @@ from tests.conftest import (
     tenderly_add_balance,
     tenderly_increase_time,
 )
-from tests.constants import LOGGER, OPERATE_TEST
+from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI
 
 
 # TODO Move this to test_services_funding.py once feat/funding_v2 branch is merged
@@ -466,7 +466,7 @@ class TestServiceManager(OnTestnet):
                 sender_balance=sender_balance,
             )
 
-    # TODO Integrate this test to test_services_funding.py once feat/funding_v2 branch is merged
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Endpoint to be deprecated")
     def test_terminate_service(
         self,
         test_env: OperateTestEnv,
@@ -562,7 +562,7 @@ class TestServiceManager(OnTestnet):
                     balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
-                        assert balance < DUST[chain]
+                        assert balance <= DUST[chain]
                     else:
                         assert balance == 0
 

@@ -32,6 +32,7 @@ import os
 import random
 import string
 import tempfile
+import typing as t
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Generator
@@ -176,6 +177,7 @@ class OperateTestEnv:
     password: str
     operate: OperateApp
     wallet_manager: MasterWalletManager
+    mnemonics: t.Dict[LedgerType, t.List[str]]
     service_manager: ServiceManager
     bridge_manager: BridgeManager
     keys_manager: KeysManager
@@ -411,6 +413,20 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
     )
 
 
+def create_wallets(
+    wallet_manager: MasterWalletManager,
+) -> t.Dict[LedgerType, t.List[str]]:
+    """Create wallets"""
+    mnemonics: t.Dict[LedgerType, t.List[str]] = {}
+    for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
+        _, mnemonic = wallet_manager.create(ledger_type=ledger_type)
+        wallet = wallet_manager.load(ledger_type=ledger_type)
+        assert wallet.key_path.exists()
+        assert wallet.mnemonic_path.exists()
+        mnemonics[ledger_type] = mnemonic
+    return mnemonics
+
+
 @pytest.fixture
 def test_operate(tmp_path: Path, password: str) -> OperateApp:
     """Sets up a test operate app."""
@@ -427,10 +443,6 @@ def test_operate(tmp_path: Path, password: str) -> OperateApp:
 @pytest.fixture
 def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> OperateTestEnv:
     """Sets up a test environment."""
-
-    def _create_wallets(wallet_manager: MasterWalletManager) -> None:
-        for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
-            wallet_manager.create(ledger_type=ledger_type)
 
     def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
         ledger_types = {wallet.ledger_type for wallet in wallet_manager}
@@ -464,7 +476,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
 
     assert backup_owner != backup_owner2
 
-    _create_wallets(wallet_manager=test_operate.wallet_manager)
+    mnemonics = create_wallets(wallet_manager=test_operate.wallet_manager)
     _create_safes(
         wallet_manager=test_operate.wallet_manager,
         backup_owner=backup_owner,
@@ -481,6 +493,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
         password=password,
         operate=test_operate,
         wallet_manager=test_operate.wallet_manager,
+        mnemonics=mnemonics,
         service_manager=test_operate.service_manager(),
         bridge_manager=test_operate.bridge_manager,
         keys_manager=keys_manager,

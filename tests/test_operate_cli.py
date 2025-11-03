@@ -35,6 +35,9 @@ from operate.cli import OperateApp
 from operate.constants import (
     AGENT_RUNNER_PREFIX,
     DEPLOYMENT_DIR,
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
     OPERATE,
     SERVICES_DIR,
     USER_JSON,
@@ -44,11 +47,6 @@ from operate.operate_types import LedgerType, Version
 from operate.services.service import SERVICE_CONFIG_PREFIX
 
 from tests.conftest import random_string
-
-
-MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
-MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
-MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
 
 def random_mnemonic(num_words: int = 12) -> str:

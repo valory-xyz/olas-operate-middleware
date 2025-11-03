@@ -20,6 +20,7 @@
 """Types module."""
 
 import base64
+import copy
 import enum
 import os
 import typing as t
@@ -367,6 +368,85 @@ class Version:
         if self.minor != other.minor:
             return self.minor < other.minor
         return self.patch < other.patch
+
+
+class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
+    """
+    Class that represents chain amounts as a dictionary
+
+    The standard format follows the convention {chain: {address: {token: amount}}}
+    """
+
+    @classmethod
+    def shortfalls(
+        cls, requirements: "ChainAmounts", balances: "ChainAmounts"
+    ) -> "ChainAmounts":
+        """Return the shortfalls between requirements and balances."""
+        result: dict[str, dict[str, dict[str, int]]] = {}
+
+        for chain, addresses in requirements.items():
+            for address, assets in addresses.items():
+                for asset, required_amount in assets.items():
+                    available = balances.get(chain, {}).get(address, {}).get(asset, 0)
+                    shortfall = max(required_amount - available, 0)
+                    result.setdefault(chain, {}).setdefault(address, {})[
+                        asset
+                    ] = shortfall
+
+        return cls(result)
+
+    @classmethod
+    def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
+        """Add multiple ChainAmounts"""
+        result: dict[str, dict[str, dict[str, int]]] = {}
+
+        for ca in chainamounts:
+            for chain, addresses in ca.items():
+                result_addresses = result.setdefault(chain, {})
+                for address, assets in addresses.items():
+                    result_assets = result_addresses.setdefault(address, {})
+                    for asset, amount in assets.items():
+                        result_assets[asset] = result_assets.get(asset, 0) + amount
+
+        return cls(result)
+
+    def __add__(self, other: "ChainAmounts") -> "ChainAmounts":
+        """Add two ChainAmounts"""
+        return ChainAmounts.add(self, other)
+
+    def __mul__(self, multiplier: float) -> "ChainAmounts":
+        """Multiply all amounts by the specified multiplier"""
+        output = copy.deepcopy(self)
+        for _, addresses in output.items():
+            for _, balances in addresses.items():
+                for asset, amount in balances.items():
+                    balances[asset] = int(amount * multiplier)
+        return output
+
+    def __sub__(self, other: "ChainAmounts") -> "ChainAmounts":
+        """Subtract two ChainAmounts"""
+        return self + (other * -1)
+
+    def __floordiv__(self, divisor: float) -> "ChainAmounts":
+        """Divide all amounts by the specified divisor"""
+        if divisor == 0:
+            raise ValueError("Cannot divide by zero")
+
+        output = copy.deepcopy(self)
+        for _, addresses in output.items():
+            for _, balances in addresses.items():
+                for asset, amount in balances.items():
+                    balances[asset] = int(amount // divisor)
+        return output
+
+    def __lt__(self, other: "ChainAmounts") -> bool:
+        """Return True if all amounts in self are strictly less than the corresponding amounts in other."""
+        for chain, addresses in self.items():
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    if amount >= other.get(chain, {}).get(address, {}).get(asset, 0):
+                        return False
+        return True
 
 
 @dataclass
