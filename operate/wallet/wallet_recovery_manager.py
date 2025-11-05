@@ -26,7 +26,7 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
-from operate.constants import USER_JSON, WALLETS_DIR
+from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR
 from operate.utils.gnosis import get_owners
 from operate.wallet.master import MasterWalletManager
 
@@ -49,7 +49,7 @@ class WalletRecoveryManager:
         logger: Logger,
         wallet_manager: MasterWalletManager,
     ) -> None:
-        """Initialize master wallet manager."""
+        """Initialize wallet recovery manager."""
         self.path = path
         self.logger = logger
         self.wallet_manager = wallet_manager
@@ -77,7 +77,7 @@ class WalletRecoveryManager:
 
         new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(
-            path=new_wallets_path, logger=self.logger, password=new_password
+            path=new_wallets_path, password=new_password
         )
         new_wallet_manager.setup()
 
@@ -145,10 +145,10 @@ class WalletRecoveryManager:
 
         new_user_account = UserAccount.load(new_root / USER_JSON)
         if not new_user_account.is_valid(password=password):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         new_wallet_manager = MasterWalletManager(
-            path=new_wallets_path, logger=self.logger, password=password
+            path=new_wallets_path, password=password
         )
 
         ledger_types = {item.ledger_type for item in self.wallet_manager}

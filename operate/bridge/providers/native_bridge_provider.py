@@ -53,6 +53,7 @@ from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.data.contracts.optimism_mintable_erc20.contract import (
     OptimismMintableERC20,
 )
+from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.ledger.profiles import ERC20_TOKENS, EXPLORER_URL
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
@@ -96,7 +97,7 @@ class BridgeContractAdaptor(ABC):
         if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
             return True
 
-        for token_map in ERC20_TOKENS:
+        for token_map in ERC20_TOKENS.values():
             if (
                 Chain(from_chain) in token_map
                 and Chain(to_chain) in token_map
@@ -512,8 +513,8 @@ class NativeBridgeProvider(Provider):
             amount=to_amount,
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
-        Provider._update_with_gas_pricing(approve_tx, from_ledger_api)
-        Provider._update_with_gas_estimate(approve_tx, from_ledger_api)
+        update_tx_with_gas_pricing(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(approve_tx, from_ledger_api)
         return approve_tx
 
     def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
@@ -534,8 +535,8 @@ class NativeBridgeProvider(Provider):
             from_ledger_api=from_ledger_api, provider_request=provider_request
         )
 
-        Provider._update_with_gas_pricing(bridge_tx, from_ledger_api)
-        Provider._update_with_gas_estimate(bridge_tx, from_ledger_api)
+        update_tx_with_gas_pricing(bridge_tx, from_ledger_api)
+        update_tx_with_gas_estimate(bridge_tx, from_ledger_api)
         return bridge_tx
 
     def _get_txs(

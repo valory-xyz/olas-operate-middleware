@@ -22,6 +22,7 @@ import asyncio
 import atexit
 import multiprocessing
 import os
+import shutil
 import signal
 import traceback
 import typing as t
@@ -30,14 +31,12 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, suppress
 from http import HTTPStatus
 from pathlib import Path
+from time import time
 from types import FrameType
 
-import psutil
-import requests
+import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
-from compose.project import ProjectError
-from docker.errors import APIError
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -49,22 +48,35 @@ from operate import __version__, services
 from operate.account.user import UserAccount
 from operate.bridge.bridge_manager import BridgeManager
 from operate.constants import (
+    AGENT_RUNNER_PREFIX,
+    DEPLOYMENT_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    MSG_INVALID_MNEMONIC,
+    MSG_INVALID_PASSWORD,
+    MSG_NEW_PASSWORD_MISSING,
+    OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
     USER_JSON,
+    VERSION_FILE,
     WALLETS_DIR,
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
 from operate.ledger.profiles import (
-    DEFAULT_MASTER_EOA_FUNDS,
+    DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
     ERC20_TOKENS,
 )
 from operate.migration import MigrationManager
-from operate.operate_types import Chain, DeploymentStatus, LedgerType
+from operate.operate_types import (
+    Chain,
+    ChainAmounts,
+    DeploymentStatus,
+    LedgerType,
+    Version,
+)
 from operate.quickstart.analyse_logs import analyse_logs
 from operate.quickstart.claim_staking_rewards import claim_staking_rewards
 from operate.quickstart.reset_configs import reset_configs
@@ -74,14 +86,36 @@ from operate.quickstart.run_service import run_service
 from operate.quickstart.stop_service import stop_service
 from operate.quickstart.terminate_on_chain_service import terminate_service
 from operate.services.deployment_runner import stop_deployment_manager
+from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
+from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_assets_balances
-from operate.wallet.master import MasterWalletManager
+from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
+from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
 )
+
+
+# TODO Backport to Open Autonomy
+def should_rebuild(error: str) -> bool:
+    """Check if we should rebuild the transaction."""
+    for _error in (
+        "wrong transaction nonce",
+        "OldNonce",
+        "nonce too low",
+        "replacement transaction underpriced",
+    ):
+        if _error in error:
+            return True
+    return False
+
+
+autonomy.chain.tx.ERRORS_TO_RETRY += ("replacement transaction underpriced",)
+autonomy.chain.tx.should_rebuild = should_rebuild
+# End backport to Open Autonomy
 
 
 DEFAULT_MAX_RETRIES = 3
@@ -117,23 +151,87 @@ class OperateApp:
         home: t.Optional[Path] = None,
     ) -> None:
         """Initialize object."""
-        super().__init__()
         self._path = (home or OPERATE_HOME).resolve()
         self._services = self._path / SERVICES_DIR
         self._keys = self._path / KEYS_DIR
         self.setup()
+        self._backup_operate_if_new_version()
 
         services.manage.KeysManager(
             path=self._keys,
             logger=logger,
         )
-        self.password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self.settings = Settings(path=self._path)
+
+        self._wallet_manager = MasterWalletManager(
+            path=self._path / WALLETS_DIR,
+            password=self.password,
+        )
+        self._wallet_manager.setup()
+        self._funding_manager = FundingManager(
+            wallet_manager=self._wallet_manager,
+            logger=logger,
+        )
 
         mm = MigrationManager(self._path, logger)
         mm.migrate_user_account()
         mm.migrate_services(self.service_manager())
         mm.migrate_wallets(self.wallet_manager)
         mm.migrate_qs_configs()
+
+    @property
+    def password(self) -> t.Optional[str]:
+        """Get the password."""
+        return self._password
+
+    @password.setter
+    def password(self, value: t.Optional[str]) -> None:
+        """Set the password."""
+        self._password = value
+        self._wallet_manager.password = value
+
+    def _backup_operate_if_new_version(self) -> None:
+        """Backup .operate directory if this is a new version."""
+        current_version = Version(__version__)
+        backup_required = False
+        version_file = self._path / VERSION_FILE
+        if not version_file.exists():
+            backup_required = True
+            found_version = "0.10.21"  # first version with version file
+        else:
+            found_version = Version(version_file.read_text())
+            if current_version.major > found_version.major or (
+                current_version.major == found_version.major
+                and current_version.minor > found_version.minor
+            ):
+                backup_required = True
+
+        if not backup_required:
+            return
+
+        backup_path = self._path.parent / f"{OPERATE}_v{found_version}_bak"
+        if backup_path.exists():
+            logger.info(f"Backup directory {backup_path} already exists.")
+            backup_path = (
+                self._path.parent / f"{OPERATE}_v{found_version}_bak_{int(time())}"
+            )
+
+        logger.info(f"Backing up existing {OPERATE} directory to {backup_path}")
+        shutil.copytree(self._path, backup_path)
+        version_file.write_text(str(current_version))
+
+        # remove recoverable files from the backup to save space
+        service_dir = backup_path / SERVICES_DIR
+        for service_path in service_dir.iterdir():
+            deployment_dir = service_path / DEPLOYMENT_DIR
+            if deployment_dir.exists():
+                shutil.rmtree(deployment_dir)
+
+            for agent_runner_path in service_path.glob(f"{AGENT_RUNNER_PREFIX}*"):
+                agent_runner_path.unlink()
+
+        logger.info("Backup completed.")
 
     def create_user_account(self, password: str) -> UserAccount:
         """Create a user account."""
@@ -147,13 +245,13 @@ class OperateApp:
         """Updates current password"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         if not (
             self.user_account.is_valid(old_password)
             and self.wallet_manager.is_password_valid(old_password)
         ):
-            raise ValueError("Password is not valid.")
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
@@ -164,11 +262,11 @@ class OperateApp:
         """Updates current password using the mnemonic"""
 
         if not new_password:
-            raise ValueError("'new_password' is required.")
+            raise ValueError(MSG_NEW_PASSWORD_MISSING)
 
         mnemonic = mnemonic.strip().lower()
         if not self.wallet_manager.is_mnemonic_valid(mnemonic):
-            raise ValueError("Seed phrase is not valid.")
+            raise ValueError(MSG_INVALID_MNEMONIC)
 
         wallet_manager = self.wallet_manager
         wallet_manager.update_password_with_mnemonic(mnemonic, new_password)
@@ -181,9 +279,15 @@ class OperateApp:
         return services.manage.ServiceManager(
             path=self._services,
             wallet_manager=self.wallet_manager,
+            funding_manager=self.funding_manager,
             logger=logger,
             skip_dependency_check=skip_dependency_check,
         )
+
+    @property
+    def funding_manager(self) -> FundingManager:
+        """Load funding manager."""
+        return self._funding_manager
 
     @property
     def user_account(self) -> t.Optional[UserAccount]:
@@ -195,13 +299,7 @@ class OperateApp:
     @property
     def wallet_manager(self) -> MasterWalletManager:
         """Load wallet manager."""
-        manager = MasterWalletManager(
-            path=self._path / WALLETS_DIR,
-            password=self.password,
-            logger=logger,
-        )
-        manager.setup()
-        return manager
+        return self._wallet_manager
 
     @property
     def wallet_recoverey_manager(self) -> WalletRecoveryManager:
@@ -234,7 +332,7 @@ class OperateApp:
         """Json representation of the app."""
         return {
             "name": "Operate HTTP server",
-            "version": "0.1.0.rc0",
+            "version": (__version__),
             "home": str(self._path),
         }
 
@@ -254,7 +352,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.warning("Healthchecker is off!!!")
     operate = OperateApp(home=home)
 
-    funding_jobs: t.Dict[str, asyncio.Task] = {}
+    funding_job: t.Optional[asyncio.Task] = None
     health_checker = HealthChecker(
         operate.service_manager(), number_of_fails=number_of_fails, logger=logger
     )
@@ -274,25 +372,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             raise exception
         return res
 
-    def schedule_funding_job(
-        service_config_id: str,
-        from_safe: bool = True,
-    ) -> None:
-        """Schedule a funding job."""
-        logger.info(f"Starting funding job for {service_config_id}")
-        if service_config_id in funding_jobs:
-            logger.info(f"Cancelling existing funding job for {service_config_id}")
-            cancel_funding_job(service_config_id=service_config_id)
-
-        loop = asyncio.get_running_loop()
-        funding_jobs[service_config_id] = loop.create_task(
-            operate.service_manager().funding_job(
-                service_config_id=service_config_id,
-                loop=loop,
-                from_safe=from_safe,
-            )
-        )
-
     def schedule_healthcheck_job(
         service_config_id: str,
     ) -> None:
@@ -301,13 +380,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             # dont start health checker if it's switched off
             health_checker.start_for_service(service_config_id)
 
-    def cancel_funding_job(service_config_id: str) -> None:
+    def schedule_funding_job() -> None:
+        """Schedule the funding job."""
+        cancel_funding_job()  # cancel previous job if any
+        logger.info("Starting the funding job")
+
+        loop = asyncio.get_event_loop()
+        nonlocal funding_job
+        funding_job = loop.create_task(
+            operate.funding_manager.funding_job(
+                service_manager=operate.service_manager(),
+                loop=loop,
+            )
+        )
+
+    def cancel_funding_job() -> None:
         """Cancel funding job."""
-        if service_config_id not in funding_jobs:
+        nonlocal funding_job
+        if funding_job is None:
             return
-        status = funding_jobs[service_config_id].cancel()
+
+        status = funding_job.cancel()
         if not status:
-            logger.info(f"Funding job cancellation for {service_config_id} failed")
+            logger.info("Funding job cancellation failed")
 
     def pause_all_services_on_startup() -> None:
         logger.info("Stopping services on startup...")
@@ -346,7 +441,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     f"Deployment {service_config_id} stopping failed. but continue"
                 )
             logger.info(f"Cancelling funding job for {service_config_id}")
-            cancel_funding_job(service_config_id=service_config_id)
             health_checker.stop_for_service(service_config_id=service_config_id)
 
     def pause_all_services_on_exit(signum: int, frame: t.Optional[FrameType]) -> None:
@@ -365,49 +459,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
-        # Load the ML model
-        watchdog_task = set_parent_watchdog(app)
-        yield
-        # Clean up the ML models and release the resources
+        async def stop_app():
+            logger.info("Stopping services due to parent death...")
+            stop_deployment_manager()
+            await run_in_executor(pause_all_services)
+            app._server.should_exit = True  # pylint: disable=protected-access
+            logger.info("App stopped due to parent death.")
+
+        watchdog = ParentWatchdog(on_parent_exit=stop_app)
+        watchdog.start()
+
+        yield  # --- app is running ---
 
         with suppress(Exception):
-            watchdog_task.cancel()
+            cancel_funding_job()
 
         with suppress(Exception):
-            await watchdog_task
+            await watchdog.stop()
 
     app = FastAPI(lifespan=lifespan)
-
-    def set_parent_watchdog(app):
-        async def stop_app():
-            logger.info("Stopping services on demand...")
-
-            stop_deployment_manager()  # TODO: make it async?
-            await run_in_executor(pause_all_services)
-
-            logger.info("Stopping services on demand done.")
-            app._server.should_exit = True  # pylint: disable=protected-access
-            logger.info("Stopping app.")
-
-        async def check_parent_alive():
-            try:
-                logger.info(
-                    f"Parent alive check task started: ppid is {os.getppid()} and own pid is {os.getpid()}"
-                )
-                while True:
-                    parent = psutil.Process(os.getpid()).parent()
-                    if not parent:
-                        logger.info("Parent is not alive, going to stop")
-                        await stop_app()
-                        return
-                    await asyncio.sleep(3)
-
-            except Exception:  # pylint: disable=broad-except
-                logger.exception("Parent alive check crashed!")
-
-        loop = asyncio.get_running_loop()
-        task = loop.create_task(check_parent_alive())
-        return task
 
     app.add_middleware(
         CORSMiddleware,
@@ -415,37 +485,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     )
 
-    def with_retries(f: t.Callable) -> t.Callable:
-        """Retries decorator."""
-
-        async def _call(request: Request) -> JSONResponse:
-            """Call the endpoint."""
-            logger.info(f"Calling `{f.__name__}` with retries enabled")
-            retries = 0
-            while retries < DEFAULT_MAX_RETRIES:
-                try:
-                    return await f(request)
-                except (APIError, ProjectError) as e:
-                    logger.error(f"Error {e}\n{traceback.format_exc()}")
-                    if "has active endpoints" in str(e):
-                        error_msg = "Service is already running."
-                    else:
-                        error_msg = "Service deployment failed. Please check the logs."
-                    return JSONResponse(
-                        content={"error": error_msg},
-                        status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                    )
-                except Exception as e:  # pylint: disable=broad-except
-                    logger.error(f"Error {str(e)}\n{traceback.format_exc()}")
-                retries += 1
+    @app.middleware("http")
+    async def handle_internal_server_error(request: Request, call_next):
+        try:
+            response = await call_next(request)
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Error {str(e)}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={
-                    "error": "Operation failed after multiple attempts. Please try again later."
-                },
+                content={"error": str(e)},
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
-
-        return _call
+        return response
 
     @app.get(f"/{shutdown_endpoint}")
     async def _kill_server(request: Request) -> JSONResponse:
@@ -464,19 +514,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"stopped": True})
 
     @app.get("/api")
-    @with_retries
     async def _get_api(request: Request) -> JSONResponse:
         """Get API info."""
         return JSONResponse(content=operate.json)
 
+    @app.get("/api/settings")
+    async def _get_settings(request: Request) -> JSONResponse:
+        """Get settings."""
+        return JSONResponse(content=operate.settings.json)
+
     @app.get("/api/account")
-    @with_retries
     async def _get_account(request: Request) -> t.Dict:
         """Get account information."""
         return {"is_setup": operate.user_account is not None}
 
     @app.post("/api/account")
-    @with_retries
     async def _setup_account(request: Request) -> t.Dict:
         """Setup account."""
         if operate.user_account is not None:
@@ -498,7 +550,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"error": None})
 
     @app.put("/api/account")
-    @with_retries
     async def _update_password(  # pylint: disable=too-many-return-statements
         request: Request,
     ) -> t.Dict:
@@ -568,7 +619,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/account/login")
-    @with_retries
     async def _validate_password(request: Request) -> t.Dict:
         """Validate password."""
         if operate.user_account is None:
@@ -577,18 +627,18 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         data = await request.json()
         if not operate.user_account.is_valid(password=data["password"]):
             return JSONResponse(
-                content={"error": "Password is not valid."},
+                content={"error": MSG_INVALID_PASSWORD},
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
         operate.password = data["password"]
+        schedule_funding_job()
         return JSONResponse(
             content={"message": "Login successful."},
             status_code=HTTPStatus.OK,
         )
 
     @app.get("/api/wallet")
-    @with_retries
     async def _get_wallets(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
@@ -597,7 +647,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=wallets)
 
     @app.post("/api/wallet")
-    @with_retries
     async def _create_wallet(request: Request) -> t.List[t.Dict]:
         """Create wallet"""
         if operate.user_account is None:
@@ -620,9 +669,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content={"wallet": wallet.json, "mnemonic": mnemonic})
 
     @app.post("/api/wallet/private_key")
-    @with_retries
     async def _get_private_key(request: Request) -> t.List[t.Dict]:
         """Get Master EOA private key."""
+        if operate.user_account is None:
+            return ACCOUNT_NOT_FOUND_ERROR
+
+        data = await request.json()
+        password = data.get("password")
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+        if operate.password != password:
+            return JSONResponse(
+                content={"error": MSG_INVALID_PASSWORD},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        # TODO Should fail if not provided
+        ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
+        wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
+        return JSONResponse(content={"private_key": wallet.crypto.private_key})
+
+    @app.post("/api/wallet/mnemonic")
+    async def _get_mnemonic(request: Request) -> t.List[t.Dict]:
+        """Get Master EOA mnemonic."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
 
@@ -636,12 +705,26 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.UNAUTHORIZED,
             )
 
-        ledger_type = data.get("ledger_type", LedgerType.ETHEREUM.value)
-        wallet = operate.wallet_manager.load(ledger_type=LedgerType(ledger_type))
-        return JSONResponse(content={"private_key": wallet.crypto.private_key})
+        try:
+            ledger_type = LedgerType(data.get("ledger_type"))
+            wallet = operate.wallet_manager.load(ledger_type=ledger_type)
+            mnemonic = wallet.decrypt_mnemonic(password=password)
+            if mnemonic is None:
+                return JSONResponse(
+                    content={"error": "Mnemonic file does not exist."},
+                    status_code=HTTPStatus.NOT_FOUND,
+                )
+            return JSONResponse(content={"mnemonic": mnemonic})
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Failed to retrieve mnemonic: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve mnemonic. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
 
     @app.get("/api/extended/wallet")
-    @with_retries
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
@@ -650,7 +733,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=wallets)
 
     @app.get("/api/wallet/safe")
-    @with_retries
     async def _get_safes(request: Request) -> t.List[t.Dict]:
         """Create wallet safe"""
         all_safes = []
@@ -662,7 +744,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=all_safes)
 
     @app.get("/api/wallet/safe/{chain}")
-    @with_retries
     async def _get_safe(request: Request) -> t.List[t.Dict]:
         """Get safe address"""
         chain = Chain.from_string(request.path_params["chain"])
@@ -742,14 +823,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
         if transfer_excess_assets:
-            asset_addresses = {ZERO_ADDRESS} | {token[chain] for token in ERC20_TOKENS}
+            asset_addresses = {ZERO_ADDRESS} | {
+                token[chain] for token in ERC20_TOKENS.values()
+            }
             balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},
                 asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-            initial_funds = subtract_dicts(balances, DEFAULT_MASTER_EOA_FUNDS[chain])
+            initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
 
         logger.info(f"_create_safe Computed {initial_funds=}")
 
@@ -763,10 +846,13 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
             transfer_txs = {}
             for asset, amount in initial_funds.items():
+                if amount <= 0:
+                    continue
+
                 logger.info(
                     f"_create_safe Transfer to={safe_address} {amount=} {chain} {asset=}"
                 )
-                tx_hash = wallet.transfer_asset(
+                tx_hash = wallet.transfer(
                     to=safe_address,
                     amount=int(amount),
                     chain=chain,
@@ -792,7 +878,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.put("/api/wallet/safe")
-    @with_retries
     async def _update_safe(request: Request) -> t.List[t.Dict]:
         """Update wallet safe"""
         # TODO: Extract login check as decorator
@@ -844,14 +929,88 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             }
         )
 
+    @app.post("/api/wallet/withdraw")
+    async def _wallet_withdraw(request: Request) -> JSONResponse:
+        """Withdraw from Master Safe / master eoa"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        data = await request.json()
+        if not operate.user_account.is_valid(password=data["password"]):
+            return JSONResponse(
+                content={"error": MSG_INVALID_PASSWORD},
+                status_code=HTTPStatus.UNAUTHORIZED,
+            )
+
+        try:
+            withdraw_assets = data.get("withdraw_assets", {})
+            to = data["to"]
+            wallet_manager = operate.wallet_manager
+            transfer_txs: t.Dict[str, t.Dict[str, t.List[str]]] = {}
+
+            # TODO: Ensure master wallet has enough funding.
+            for chain_str, tokens in withdraw_assets.items():
+                chain = Chain(chain_str)
+                wallet = wallet_manager.load(chain.ledger_type)
+                transfer_txs[chain_str] = {}
+
+                # Process ERC20 first
+                for asset, amount in tokens.items():
+                    if asset != ZERO_ADDRESS:
+                        txs = wallet.transfer_from_safe_then_eoa(
+                            to=to,
+                            amount=int(amount),
+                            chain=chain,
+                            asset=asset,
+                        )
+                        transfer_txs[chain_str][asset] = txs
+
+                # Process native last
+                if ZERO_ADDRESS in tokens:
+                    asset = ZERO_ADDRESS
+                    amount = tokens[asset]
+                    txs = wallet.transfer_from_safe_then_eoa(
+                        to=to,
+                        amount=int(amount),
+                        chain=chain,
+                        asset=asset,
+                    )
+                    transfer_txs[chain_str][asset] = txs
+
+        except InsufficientFundsException as e:
+            logger.error(f"Insufficient funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": f"Failed to withdraw funds. Insufficient funds: {e}",
+                    "transfer_txs": transfer_txs,
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"Failed to withdraw funds: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to withdraw funds. Please check the logs.",
+                    "transfer_txs": transfer_txs,
+                },
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": "Funds withdrawn successfully.",
+                "transfer_txs": transfer_txs,
+            }
+        )
+
     @app.get("/api/v2/services")
-    @with_retries
     async def _get_services(request: Request) -> JSONResponse:
         """Get all services."""
         return JSONResponse(content=operate.service_manager().json)
 
     @app.get("/api/v2/services/validate")
-    @with_retries
     async def _validate_services(request: Request) -> JSONResponse:
         """Validate all services."""
         service_manager = operate.service_manager()
@@ -866,7 +1025,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/services/deployment")
-    @with_retries
     async def _get_services_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
         service_manager = operate.service_manager()
@@ -879,7 +1037,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output)
 
     @app.get("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _get_service(request: Request) -> JSONResponse:
         """Get a service."""
         service_config_id = request.path_params["service_config_id"]
@@ -897,7 +1054,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.get("/api/v2/service/{service_config_id}/deployment")
-    @with_retries
     async def _get_service_deployment(request: Request) -> JSONResponse:
         """Get a service deployment."""
         service_config_id = request.path_params["service_config_id"]
@@ -911,7 +1067,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=deployment_json)
 
     @app.get("/api/v2/service/{service_config_id}/agent_performance")
-    @with_retries
     async def _get_agent_performance(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -925,8 +1080,22 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             .get_agent_performance()
         )
 
+    @app.get("/api/v2/service/{service_config_id}/funding_requirements")
+    async def _get_funding_requirements(request: Request) -> JSONResponse:
+        """Get the service refill requirements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        return JSONResponse(
+            content=operate.service_manager().funding_requirements(
+                service_config_id=service_config_id
+            )
+        )
+
+    # TODO deprecate
     @app.get("/api/v2/service/{service_config_id}/refill_requirements")
-    @with_retries
     async def _get_refill_requirements(request: Request) -> JSONResponse:
         """Get the service refill requirements."""
         service_config_id = request.path_params["service_config_id"]
@@ -941,7 +1110,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         )
 
     @app.post("/api/v2/service")
-    @with_retries
     async def _create_services_v2(request: Request) -> JSONResponse:
         """Create a service."""
         if operate.password is None:
@@ -953,7 +1121,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @app.post("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
         """Deploy a service."""
         if operate.password is None:
@@ -971,11 +1138,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             manager.deploy_service_onchain_from_safe(
                 service_config_id=service_config_id
             )
-            manager.fund_service(service_config_id=service_config_id)
             manager.deploy_service_locally(service_config_id=service_config_id)
 
         await run_in_executor(_fn)
-        schedule_funding_job(service_config_id=service_config_id)
         schedule_healthcheck_job(service_config_id=service_config_id)
 
         return JSONResponse(
@@ -986,7 +1151,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.put("/api/v2/service/{service_config_id}")
     @app.patch("/api/v2/service/{service_config_id}")
-    @with_retries
     async def _update_service(request: Request) -> JSONResponse:
         """Update a service."""
         if operate.password is None:
@@ -1022,7 +1186,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         return JSONResponse(content=output.json)
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
-    @with_retries
     async def _stop_service_locally(request: Request) -> JSONResponse:
         """Stop a service deployment."""
 
@@ -1041,11 +1204,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         await run_in_executor(deployment.stop)
         logger.info(f"Cancelling funding job for {service_config_id}")
-        cancel_funding_job(service_config_id=service_config_id)
         return JSONResponse(content=deployment.json)
 
+    # TODO Deprecate
     @app.post("/api/v2/service/{service_config_id}/onchain/withdraw")
-    @with_retries
     async def _withdraw_onchain(request: Request) -> JSONResponse:
         """Withdraw all the funds from a service."""
 
@@ -1074,16 +1236,20 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 service_manager.terminate_service_on_chain_from_safe(
                     service_config_id=service_config_id,
                     chain=chain,
+                )
+                service_manager.drain(
+                    service_config_id=service_config_id,
+                    chain_str=chain,
                     withdrawal_address=withdrawal_address,
                 )
 
-                # drain the master safe and master signer for the home chain
+                # drain the Master Safe and master signer for the home chain
                 chain = Chain(service.home_chain)
                 master_wallet = service_manager.wallet_manager.load(
                     ledger_type=chain.ledger_type
                 )
 
-                # drain the master safe
+                # drain the Master Safe
                 logger.info(
                     f"Draining the Master Safe {master_wallet.safes[chain]} on chain {chain.value} (withdrawal address {withdrawal_address})."
                 )
@@ -1113,8 +1279,137 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(content={"error": None, "message": "Withdrawal successful"})
 
+    @app.post("/api/v2/service/{service_config_id}/terminate_and_withdraw")
+    async def _terminate_and_withdraw(request: Request) -> JSONResponse:
+        """Terminate the service and withdraw all the funds to Master Safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+        wallet_manager = operate.wallet_manager
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            pause_all_services()
+            service = service_manager.load(service_config_id=service_config_id)
+            for chain in service.chain_configs:
+                wallet = wallet_manager.load(Chain(chain).ledger_type)
+                master_safe = wallet.safes[Chain(chain)]
+                service_manager.terminate_service_on_chain_from_safe(
+                    service_config_id=service_config_id,
+                    chain=chain,
+                )
+                service_manager.drain(
+                    service_config_id=service_config_id,
+                    chain_str=chain,
+                    withdrawal_address=master_safe,
+                )
+
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to terminate service and withdraw funds. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to terminate service and withdraw funds. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Terminate service and withdraw funds failed: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to terminate service and withdraw funds. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": "Terminate service and withdraw funds successful",
+            }
+        )
+
+    @app.post("/api/v2/service/{service_config_id}/fund")
+    async def fund_service(  # pylint: disable=too-many-return-statements
+        request: Request,
+    ) -> JSONResponse:
+        """Fund agent or service safe via Master Safe"""
+
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        service_manager = operate.service_manager()
+
+        if not service_manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        try:
+            data = await request.json()
+            service_manager.fund_service(
+                service_config_id=service_config_id,
+                amounts=ChainAmounts(
+                    {
+                        chain_str: {
+                            address: {
+                                asset: int(amount) for asset, amount in assets.items()
+                            }
+                            for address, assets in addresses.items()
+                        }
+                        for chain_str, addresses in data.items()
+                    }
+                ),
+            )
+        except ValueError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except InsufficientFundsException as e:
+            logger.error(
+                f"Failed to fund from Master Safe. Insufficient funds: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": f"Failed to fund from Master Safe. Insufficient funds: {e}"
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+        except FundingInProgressError as e:
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.CONFLICT,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to fund from Master Safe: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                content={
+                    "error": "Failed to fund from Master Safe. Please check the logs."
+                },
+            )
+
+        return JSONResponse(
+            content={"error": None, "message": "Funded from Master Safe successfully"}
+        )
+
     @app.post("/api/bridge/bridge_refill_requirements")
-    @with_retries
     async def _bridge_refill_requirements(request: Request) -> JSONResponse:
         """Get the bridge refill requirements."""
         if operate.password is None:
@@ -1149,7 +1444,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/bridge/execute")
-    @with_retries
     async def _bridge_execute(request: Request) -> JSONResponse:
         """Execute bridge transaction."""
         if operate.password is None:
@@ -1179,14 +1473,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.get("/api/bridge/last_executed_bundle_id")
-    @with_retries
     async def _bridge_last_executed_bundle_id(request: Request) -> t.List[t.Dict]:
         """Get last executed bundle id."""
         content = {"id": operate.bridge_manager.last_executed_bundle_id()}
         return JSONResponse(content=content, status_code=HTTPStatus.OK)
 
     @app.get("/api/bridge/status/{id}")
-    @with_retries
     async def _bridge_status(request: Request) -> JSONResponse:
         """Get bridge transaction status."""
 
@@ -1215,7 +1507,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/wallet/recovery/initiate")
-    @with_retries
     async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
         """Initiate wallet recovery."""
         if operate.user_account is None:
@@ -1259,7 +1550,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
     @app.post("/api/wallet/recovery/complete")
-    @with_retries
     async def _wallet_recovery_complete(request: Request) -> JSONResponse:
         """Complete wallet recovery."""
         if operate.user_account is None:
@@ -1326,6 +1616,11 @@ def _daemon(
     ] = None,
 ) -> None:
     """Launch operate daemon."""
+    # try automatically shutdown previous instance before creating the app
+    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
+        app_single_instance = AppSingleInstance(port)
+        app_single_instance.shutdown_previous_instance()
+
     app = create_app(home=home)
 
     config_kwargs = {
@@ -1344,23 +1639,6 @@ def _daemon(
                 "ssl_version": 2,
             }
         )
-
-    # try automatically shutdown previous instance
-    if TRY_TO_SHUTDOWN_PREVIOUS_INSTANCE:
-        url = f"http{'s' if ssl_keyfile and ssl_certfile else ''}://{host}:{port}/shutdown"
-        logger.info(f"trying to stop  previous instance with {url}")
-        try:
-            requests.get(
-                f"https://{host}:{port}/shutdown", timeout=3, verify=False  # nosec
-            )
-        except requests.exceptions.SSLError:
-            logger.warning("SSL failed, trying HTTP fallback...")
-            try:
-                requests.get(f"http://{host}:{port}/shutdown", timeout=3)
-            except Exception:  # pylint: disable=broad-except
-                logger.exception("Failed to stop previous instance")
-        except Exception:  # pylint: disable=broad-except
-            logger.exception("Failed to stop previous instance")
 
     server = Server(Config(**config_kwargs))
     app._server = server  # pylint: disable=protected-access

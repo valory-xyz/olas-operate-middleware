@@ -159,7 +159,7 @@ class MigrationManager:
 
         self.logger.info("Migrating wallet configs done.")
 
-    def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals
+    def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         self,
         path: Path,
     ) -> bool:

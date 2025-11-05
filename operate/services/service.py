@@ -35,6 +35,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from traceback import print_exc
 
+import requests
 from aea.configurations.constants import (
     DEFAULT_LEDGER,
     LEDGER,
@@ -42,6 +43,7 @@ from aea.configurations.constants import (
     PRIVATE_KEY_PATH_SCHEMA,
     SKILL,
 )
+from aea.helpers.logging import setup_logger
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
@@ -64,17 +66,22 @@ from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
+    AGENT_FUNDS_STATUS_URL,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     CONFIG_JSON,
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
     HEALTHCHECK_JSON,
+    SERVICE_SAFE_PLACEHOLDER,
+    ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
+from operate.ledger import get_default_rpc
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     AgentRelease,
     Chain,
+    ChainAmounts,
     ChainConfig,
     ChainConfigs,
     DeployedNodes,
@@ -106,6 +113,8 @@ NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
 AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
+
+logger = setup_logger("operate.services.service")
 
 
 def mkdirs(build_dir: Path) -> None:
@@ -848,11 +857,12 @@ class Service(LocalResource):
             )
         )
 
-        ledger_configs = ServiceHelper(path=package_absolute_path).ledger_configs()
-
         chain_configs = {}
-        for chain, config in service_template["configurations"].items():
-            ledger_config = ledger_configs[chain]
+        for chain_str, config in service_template["configurations"].items():
+            chain = Chain(chain_str)
+            ledger_config = LedgerConfig(
+                rpc=get_default_rpc(Chain(chain_str)), chain=chain
+            )
             ledger_config.rpc = config["rpc"]
 
             chain_data = OnChainData(
@@ -862,7 +872,7 @@ class Service(LocalResource):
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
-            chain_configs[chain] = ChainConfig(
+            chain_configs[chain_str] = ChainConfig(
                 ledger_config=ledger_config,
                 chain_data=chain_data,
             )
@@ -1144,3 +1154,69 @@ class Service(LocalResource):
 
         if updated:
             self.store()
+
+    def get_initial_funding_amounts(self) -> ChainAmounts:
+        """Get funding amounts as a dict structure."""
+        amounts = ChainAmounts()
+
+        for chain_str, chain_config in self.chain_configs.items():
+            fund_requirements = chain_config.chain_data.user_params.fund_requirements
+            service_safe = chain_config.chain_data.multisig
+
+            if service_safe is None or service_safe == ZERO_ADDRESS:
+                service_safe = SERVICE_SAFE_PLACEHOLDER
+
+            chain_amounts = amounts.setdefault(chain_str, {})
+            for asset, req in fund_requirements.items():
+                chain_amounts.setdefault(service_safe, {})[asset] = req.safe
+                for agent_address in self.agent_addresses:
+                    chain_amounts.setdefault(agent_address, {})[asset] = req.agent
+
+        return amounts
+
+    def get_funding_requests(self) -> ChainAmounts:
+        """Get funding amounts requested by the agent."""
+        agent_response = {}
+        funding_requests = ChainAmounts()
+
+        if self.deployment.status != DeploymentStatus.DEPLOYED:
+            return funding_requests
+
+        try:
+            resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
+            resp.raise_for_status()
+            agent_response = resp.json()
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(
+                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDS_STATUS_URL}: {e}"
+            )
+
+        for chain_str, addresses in agent_response.items():
+            for address, assets in addresses.items():
+                if chain_str not in self.chain_configs:
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown chain {chain_str}."
+                    )
+
+                if (
+                    address not in self.agent_addresses
+                    and address != self.chain_configs[chain_str].chain_data.multisig
+                ):
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
+                    )
+
+                funding_requests.setdefault(chain_str, {})
+                funding_requests[chain_str].setdefault(address, {})
+                for asset, amounts in assets.items():
+                    try:
+                        funding_requests[chain_str][address][asset] = int(
+                            amounts["deficit"]
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"[FUNDING MANAGER] Invalid funding amount {amounts['deficit']} for asset {asset} on chain {chain_str} for address {address}. Setting to 0."
+                        )
+                        funding_requests[chain_str][address][asset] = 0
+
+        return funding_requests

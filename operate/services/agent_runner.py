@@ -33,7 +33,7 @@ import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
-from operate.constants import CONFIG_JSON
+from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON
 
 
 @dataclass
@@ -90,7 +90,7 @@ class AgentRunnerManager:
         else:
             raise ValueError(f"unsupported arch: {platform.machine()}")
 
-        exec_name = f"agent_runner_{os_name}_{arch}"
+        exec_name = f"{AGENT_RUNNER_PREFIX}_{os_name}_{arch}"
         if platform.system() == "Windows":
             exec_name += ".exe"
         return exec_name

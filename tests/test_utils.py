@@ -184,39 +184,6 @@ class TestSingletonMeta:
         assert instance_a1.name == "First A"
         assert instance_b1.name == "First B"
 
-    def test_concurrent_access_thread_safety(self) -> None:
-        """Test that concurrent access to singleton methods is thread-safe."""
-
-        class ConcurrentSingleton(metaclass=SingletonMeta):
-            def __init__(self) -> None:
-                self.counter = 0
-
-            def increment(self) -> None:
-                current = self.counter
-                time.sleep(0.001)  # Simulate race condition
-                self.counter = current + 1
-
-        instance = ConcurrentSingleton()
-        threads = []
-        num_threads = 10
-
-        def worker() -> None:
-            singleton_instance = ConcurrentSingleton()
-            singleton_instance.increment()
-
-        # Create and start threads
-        for _ in range(num_threads):
-            thread = threading.Thread(target=worker)
-            threads.append(thread)
-            thread.start()
-
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
-
-        # Counter should be exactly num_threads if thread-safe
-        assert instance.counter == num_threads
-
     def test_concurrent_singleton_instantiation(self) -> None:
         """Test that concurrent instantiation still results in a single instance."""
 
@@ -330,20 +297,3 @@ class TestSingletonMeta:
 
         assert instance1 is instance2
         assert instance1.get_time() == instance2.get_time()
-
-    def test_class_locks_created(self) -> None:
-        """Test that class locks are properly created for each singleton class."""
-
-        class LockTestSingleton(metaclass=SingletonMeta):
-            pass
-
-        # Create an instance to ensure the class is processed
-        LockTestSingleton()
-
-        # Check that a lock was created for this class
-        assert LockTestSingleton in SingletonMeta._class_locks
-        # Check that the lock is the correct type by comparing with a known lock instance
-        expected_lock_type = type(threading.Lock())
-        assert isinstance(
-            SingletonMeta._class_locks[LockTestSingleton], expected_lock_type
-        )

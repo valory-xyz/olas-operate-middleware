@@ -28,12 +28,10 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from math import ceil
 
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -41,15 +39,11 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.operate_types import Chain
+from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
+from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.wallet.master import MasterWalletManager
 
-
-GAS_ESTIMATE_FALLBACK_ADDRESSES = [
-    "0x000000000000000000000000000000000000dEaD",
-    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
-]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 PROVIDER_REQUEST_PREFIX = "r-"
@@ -65,8 +59,6 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
 ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
-
-GAS_ESTIMATE_BUFFER = 1.10
 
 
 @dataclass
@@ -225,28 +217,12 @@ class Provider(ABC):
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
         from_chain = provider_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        return get_default_ledger_api(Chain(from_chain))
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = provider_request.params["to"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        to_chain = provider_request.params["to"]["chain"]
+        return get_default_ledger_api(Chain(to_chain))
 
     @abstractmethod
     def quote(self, provider_request: ProviderRequest) -> None:
@@ -260,7 +236,7 @@ class Provider(ABC):
         """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
-    def requirements(self, provider_request: ProviderRequest) -> t.Dict:
+    def requirements(self, provider_request: ProviderRequest) -> ChainAmounts:
         """Gets the requirements to execute the quote, with updated gas estimation."""
         self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
@@ -274,14 +250,16 @@ class Provider(ABC):
         txs = self._get_txs(provider_request)
 
         if not txs:
-            return {
-                from_chain: {
-                    from_address: {
-                        ZERO_ADDRESS: 0,
-                        from_token: 0,
+            return ChainAmounts(
+                {
+                    from_chain: {
+                        from_address: {
+                            ZERO_ADDRESS: 0,
+                            from_token: 0,
+                        }
                     }
                 }
-            }
+            )
 
         total_native = 0
         total_gas_fees = 0
@@ -291,7 +269,7 @@ class Provider(ABC):
             self.logger.debug(
                 f"[PROVIDER] Processing transaction {tx_label} for request {provider_request.id}."
             )
-            self._update_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
             gas_fees = tx.get(gas_key, 0) * tx["gas"]
             tx_value = int(tx.get("value", 0))
@@ -319,13 +297,15 @@ class Provider(ABC):
             f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."
         )
 
-        result = {
-            from_chain: {
-                from_address: {
-                    ZERO_ADDRESS: total_native,
+        result = ChainAmounts(
+            {
+                from_chain: {
+                    from_address: {
+                        ZERO_ADDRESS: total_native,
+                    }
                 }
             }
-        }
+        )
 
         if from_token != ZERO_ADDRESS:
             result[from_chain][from_address][from_token] = total_token
@@ -487,48 +467,3 @@ class Provider(ABC):
         receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
-
-    # TODO backport to open aea/autonomy
-    # TODO This gas pricing management should possibly be done at a lower level in the library
-    @staticmethod
-    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        tx.pop("maxFeePerGas", None)
-        tx.pop("gasPrice", None)
-        tx.pop("maxPriorityFeePerGas", None)
-
-        gas_pricing = ledger_api.try_get_gas_pricing()
-        if gas_pricing is None:
-            raise RuntimeError("Unable to retrieve gas pricing.")
-
-        if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
-            tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-            tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
-        elif "gasPrice" in gas_pricing:
-            tx["gasPrice"] = gas_pricing["gasPrice"]
-        else:
-            raise RuntimeError("Retrieved invalid gas pricing.")
-
-    # TODO backport to open aea/autonomy
-    @staticmethod
-    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        print(
-            f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
-        )
-        original_from = tx["from"]
-        original_gas = tx.get("gas", 1)
-
-        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
-            tx["from"] = address
-            tx["gas"] = 1
-            ledger_api.update_with_gas_estimate(tx)
-            if tx["gas"] > 1:
-                print(
-                    f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
-                )
-                break
-
-        tx["from"] = original_from
-        if tx["gas"] == 1:
-            tx["gas"] = original_gas
-            print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
-        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)

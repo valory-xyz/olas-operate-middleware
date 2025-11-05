@@ -19,7 +19,6 @@
 
 """Helper utilities."""
 
-import functools
 import shutil
 import time
 import typing as t
@@ -32,34 +31,6 @@ class SingletonMeta(type):
 
     _instances: t.Dict[t.Type, t.Any] = {}
     _lock: Lock = Lock()
-    _class_locks: t.Dict[t.Type, Lock] = {}
-
-    def __new__(
-        cls, name: str, bases: t.Tuple[type, ...], dct: t.Dict[str, t.Any]
-    ) -> t.Type:
-        """Create a new class with thread-safe methods."""
-        # Wrap all callable methods (except special methods) with thread safety
-        for key, value in list(dct.items()):
-            if callable(value) and not key.startswith("__"):
-                dct[key] = cls._make_thread_safe(value)
-
-        new_class = super().__new__(cls, name, bases, dct)
-        cls._class_locks[new_class] = Lock()
-        return new_class
-
-    @staticmethod
-    def _make_thread_safe(func: t.Callable) -> t.Callable:
-        """Wrap a function to make it thread-safe."""
-
-        @functools.wraps(func)
-        def wrapper(self: t.Any, *args: t.Any, **kwargs: t.Any) -> t.Any:
-            class_lock = SingletonMeta._class_locks.get(type(self))
-            if class_lock:
-                with class_lock:
-                    return func(self, *args, **kwargs)
-            return func(self, *args, **kwargs)
-
-        return wrapper
 
     def __call__(cls, *args: t.Any, **kwargs: t.Any) -> t.Any:
         """Override the __call__ method to control instance creation."""

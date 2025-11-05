@@ -76,6 +76,19 @@ class KeysManager(metaclass=SingletonMeta):
             )
         )
 
+    def get_private_key_file(self, address: str) -> Path:
+        """Get the path to the private key file for the given address."""
+        path = self.path / f"{address}_private_key"
+
+        if path.is_file():
+            return path
+
+        key = self.get(address)
+        private_key = key.private_key
+        path.write_text(private_key, encoding="utf-8")
+        os.chmod(path, 0o600)
+        return path
+
     def get_crypto_instance(self, address: str) -> EthereumCrypto:
         """Get EthereumCrypto instance for the given address."""
         key: Key = Key.from_json(  # type: ignore

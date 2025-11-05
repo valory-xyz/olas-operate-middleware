@@ -28,6 +28,7 @@ import os
 import tempfile
 import typing as t
 from enum import Enum
+from functools import cache
 from pathlib import Path
 from typing import Optional, Union, cast
 
@@ -59,6 +60,7 @@ from hexbytes import HexBytes
 from web3.contract import Contract
 
 from operate.constants import (
+    NO_STAKING_PROGRAM_ID,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
@@ -68,8 +70,15 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
+from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
+from operate.services.service import NON_EXISTENT_TOKEN
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -162,6 +171,8 @@ class GnosisSafeTransaction:
             operation=SafeOperation.DELEGATE_CALL.value,
             nonce=self.ledger_api.api.eth.get_transaction_count(owner),
         )
+        update_tx_with_gas_pricing(tx, self.ledger_api)
+        update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
     def settle(self) -> t.Dict:
@@ -170,6 +181,9 @@ class GnosisSafeTransaction:
             ledger_api=self.ledger_api,
             crypto=self.crypto,
             chain_type=self.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
         )
         setattr(tx_settler, "build", self.build)  # noqa: B010
         return tx_settler.transact(
@@ -180,31 +194,93 @@ class GnosisSafeTransaction:
         )
 
 
-class StakingManager(OnChainHelper):
+class StakingManager:
     """Helper class for staking a service."""
+
+    staking_ctr = t.cast(
+        StakingTokenContract,
+        StakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "staking_token")
+        ),
+    )
+
+    dual_staking_ctr = t.cast(
+        DualStakingTokenContract,
+        DualStakingTokenContract.from_dir(
+            directory=str(DATA_DIR / "contracts" / "dual_staking_token")
+        ),
+    )
 
     def __init__(
         self,
-        key: Path,
-        chain_type: ChainType = ChainType.CUSTOM,
-        password: Optional[str] = None,
+        chain: OperateChain,
     ) -> None:
         """Initialize object."""
-        super().__init__(key=key, chain_type=chain_type, password=password)
-        self.staking_ctr = t.cast(
-            StakingTokenContract,
-            StakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "staking_token")
-            ),
+        self.chain = chain
+
+    @property
+    def ledger_api(self) -> LedgerApi:
+        """Get ledger api."""
+        return get_default_ledger_api(OperateChain(self.chain.value))
+
+    @staticmethod
+    @cache
+    def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
+        """Get staking params"""
+        ledger_api = get_default_ledger_api(chain=chain)
+        instance = StakingManager.staking_ctr.get_instance(
+            ledger_api=ledger_api,
+            contract_address=staking_contract,
         )
-        self.dual_staking_ctr = t.cast(
-            DualStakingTokenContract,
-            DualStakingTokenContract.from_dir(
-                directory=str(DATA_DIR / "contracts" / "dual_staking_token")
-            ),
+        agent_ids = instance.functions.getAgentIds().call()
+        service_registry = instance.functions.serviceRegistry().call()
+        staking_token = instance.functions.stakingToken().call()
+        service_registry_token_utility = (
+            instance.functions.serviceRegistryTokenUtility().call()
+        )
+        min_staking_deposit = instance.functions.minStakingDeposit().call()
+        activity_checker = instance.functions.activityChecker().call()
+
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": {},
+        }
+        try:
+            instance = StakingManager.dual_staking_ctr.get_instance(
+                ledger_api=ledger_api,
+                contract_address=staking_contract,
+            )
+            output["additional_staking_tokens"][
+                instance.functions.secondToken().call()
+            ] = instance.functions.secondTokenAmount().call()
+        except Exception:  # pylint: disable=broad-except # nosec
+            # Contract is not a dual staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
+            pass
+
+        return output
+
+    def get_staking_params(self, staking_contract: str) -> t.Dict:
+        """Get staking params"""
+        return StakingManager._get_staking_params(
+            chain=self.chain,
+            staking_contract=staking_contract,
         )
 
-    def status(self, service_id: int, staking_contract: str) -> StakingState:
+    def staking_state(self, service_id: int, staking_contract: str) -> StakingState:
         """Is the service staked?"""
         return StakingState(
             self.staking_ctr.get_instance(
@@ -246,11 +322,12 @@ class StakingManager(OnChainHelper):
 
     def service_info(self, staking_contract: str, service_id: int) -> dict:
         """Get the service onchain info"""
-        return self.staking_ctr.get_service_info(
-            self.ledger_api,
-            staking_contract,
-            service_id,
-        ).get("data")
+        instance = self.staking_ctr.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=staking_contract,
+        )
+        service_info = instance.functions.getServiceInfo(service_id).call()
+        return service_info
 
     def agent_ids(self, staking_contract: str) -> t.List[int]:
         """Get a list of agent IDs for the given staking contract."""
@@ -306,7 +383,7 @@ class StakingManager(OnChainHelper):
         staking_contract: str,
     ) -> None:
         """Check if service can be staked."""
-        status = self.status(service_id, staking_contract)
+        status = self.staking_state(service_id, staking_contract)
         if status == StakingState.STAKED:
             raise ValueError("Service already staked")
 
@@ -316,21 +393,28 @@ class StakingManager(OnChainHelper):
         if not self.slots_available(staking_contract):
             raise ValueError("No sataking slots available.")
 
+    # TODO To be deprecated, only used in on-chain manager
     def stake(
         self,
         service_id: int,
         service_registry: str,
         staking_contract: str,
+        key: Path,
+        password: str,
     ) -> None:
         """Stake the service"""
+        och = OnChainHelper(
+            key=key, chain_type=ChainType(self.chain.value), password=password
+        )
+
         self.check_staking_compatibility(
             service_id=service_id, staking_contract=staking_contract
         )
 
         tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
+            ledger_api=och.ledger_api,
+            crypto=och.crypto,
+            chain_type=och.chain_type,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -346,10 +430,10 @@ class StakingManager(OnChainHelper):
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
             return registry_contracts.erc20.get_approve_tx(
-                ledger_api=self.ledger_api,
+                ledger_api=och.ledger_api,
                 contract_address=service_registry,
                 spender=staking_contract,
-                sender=self.crypto.address,
+                sender=och.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
             )
 
@@ -364,15 +448,15 @@ class StakingManager(OnChainHelper):
         def _build_staking_tx(  # pylint: disable=unused-argument
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
-            return self.ledger_api.build_transaction(
+            return och.ledger_api.build_transaction(
                 contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
+                    ledger_api=och.ledger_api,
                     contract_address=staking_contract,
                 ),
                 method_name="stake",
                 method_args={"serviceId": service_id},
                 tx_args={
-                    "sender_address": self.crypto.address,
+                    "sender_address": och.crypto.address,
                 },
                 raise_on_try=True,
             )
@@ -391,7 +475,7 @@ class StakingManager(OnChainHelper):
         staking_contract: str,
     ) -> None:
         """Check unstaking availability"""
-        if self.status(
+        if self.staking_state(
             service_id=service_id, staking_contract=staking_contract
         ) not in {StakingState.STAKED, StakingState.EVICTED}:
             raise ValueError("Service not staked.")
@@ -415,13 +499,23 @@ class StakingManager(OnChainHelper):
         if staked_duration < minimum_staking_duration and available_rewards > 0:
             raise ValueError("Service cannot be unstaked yet.")
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    # TODO To be deprecated, only used in on-chain manager
+    def unstake(
+        self,
+        service_id: int,
+        staking_contract: str,
+        key: Path,
+        password: str,
+    ) -> None:
         """Unstake the service"""
+        och = OnChainHelper(
+            key=key, chain_type=ChainType(self.chain.value), password=password
+        )
 
         tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
+            ledger_api=och.ledger_api,
+            crypto=och.crypto,
+            chain_type=och.chain_type,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -430,15 +524,15 @@ class StakingManager(OnChainHelper):
         def _build_unstaking_tx(  # pylint: disable=unused-argument
             *args: t.Any, **kargs: t.Any
         ) -> t.Dict:
-            return self.ledger_api.build_transaction(
+            return och.ledger_api.build_transaction(
                 contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=self.ledger_api,
+                    ledger_api=och.ledger_api,
                     contract_address=staking_contract,
                 ),
                 method_name="unstake",
                 method_args={"serviceId": service_id},
                 tx_args={
-                    "sender_address": self.crypto.address,
+                    "sender_address": och.crypto.address,
                 },
                 raise_on_try=True,
             )
@@ -523,6 +617,69 @@ class StakingManager(OnChainHelper):
             args=[service_id],
         )
 
+    def get_staking_contract(
+        self, staking_program_id: t.Optional[str]
+    ) -> t.Optional[str]:
+        """Get staking contract based on the config and the staking program."""
+        if staking_program_id == NO_STAKING_PROGRAM_ID or staking_program_id is None:
+            return None
+
+        return STAKING[self.chain].get(
+            staking_program_id,
+            staking_program_id,
+        )
+
+    def get_current_staking_program(self, service_id: int) -> t.Optional[str]:
+        """Get the current staking program of a service"""
+        ledger_api = self.ledger_api
+
+        if service_id == NON_EXISTENT_TOKEN:
+            return None
+
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=ledger_api,
+            contract_address=CONTRACTS[self.chain]["service_registry"],
+        )
+
+        service_owner = service_registry.functions.ownerOf(service_id).call()
+
+        try:
+            state = self.staking_state(
+                service_id=service_id, staking_contract=service_owner
+            )
+
+        except Exception:  # pylint: disable=broad-except
+            # Service owner is not a staking contract
+
+            # TODO The exception caught here should be ContractLogicError.
+            # This exception is typically raised when the contract reverts with
+            # a reason string. However, in some cases, the error message
+            # does not contain a reason string, which means web3.py raises
+            # a generic ValueError instead. It should be properly analyzed
+            # what exceptions might be raised by web3.py in this case. To
+            # avoid any issues we are simply catching all exceptions.
+            return None
+
+        if state == StakingState.UNSTAKED:
+            return None
+
+        for staking_program_id, val in STAKING[self.chain].items():
+            if val == service_owner:
+                return staking_program_id
+
+        # Fallback, if not possible to determine staking_program_id it means it's an "inner" staking contract
+        # (e.g., in the case of DualStakingToken). Loop trough all the known contracts.
+        for staking_program_id, staking_program_address in STAKING[self.chain].items():
+            state = self.staking_state(
+                service_id=service_id, staking_contract=staking_program_address
+            )
+            if state in (StakingState.STAKED, StakingState.EVICTED):
+                return staking_program_id
+
+        # it's staked, but we don't know which staking program
+        # so the staking_program_id should be an arbitrary staking contract
+        return service_owner
+
 
 # TODO Backport this to Open Autonomy MintHelper class
 # MintHelper should support passing custom 'description', 'name' and 'attributes'.
@@ -571,8 +728,6 @@ class MintManager(MintHelper):
 
 class _ChainUtil:
     """On chain service management."""
-
-    _cache = {}
 
     def __init__(
         self,
@@ -814,9 +969,7 @@ class _ChainUtil:
         """Check if there are available slots on the staking contract"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).slots_available(
             staking_contract=staking_contract,
         )
@@ -825,9 +978,7 @@ class _ChainUtil:
         """Check if there are available staking rewards on the staking contract"""
         self._patch()
         available_rewards = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).available_rewards(
             staking_contract=staking_contract,
         )
@@ -837,9 +988,7 @@ class _ChainUtil:
         """Check if there are claimable staking rewards on the staking contract"""
         self._patch()
         claimable_rewards = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).claimable_rewards(
             staking_contract=staking_contract,
             service_id=service_id,
@@ -850,10 +999,8 @@ class _ChainUtil:
         """Stake the service"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        ).status(
+            chain=OperateChain(self.chain_type.value),
+        ).staking_state(
             service_id=service_id,
             staking_contract=staking_contract,
         )
@@ -862,72 +1009,15 @@ class _ChainUtil:
         self, staking_contract: str, fallback_params: t.Optional[t.Dict] = None
     ) -> t.Dict:
         """Get agent IDs for the staking contract"""
-
         if staking_contract is None and fallback_params is not None:
             return fallback_params
-
-        cache = _ChainUtil._cache
-        if staking_contract in cache.setdefault("get_staking_params", {}):
-            return cache["get_staking_params"][staking_contract]
-
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
-        agent_ids = staking_manager.agent_ids(
+        return staking_manager.get_staking_params(
             staking_contract=staking_contract,
         )
-        service_registry = staking_manager.service_registry(
-            staking_contract=staking_contract,
-        )
-        staking_token = staking_manager.staking_token(
-            staking_contract=staking_contract,
-        )
-        service_registry_token_utility = staking_manager.service_registry_token_utility(
-            staking_contract=staking_contract,
-        )
-        min_staking_deposit = staking_manager.min_staking_deposit(
-            staking_contract=staking_contract,
-        )
-        activity_checker = staking_manager.activity_checker(
-            staking_contract=staking_contract,
-        )
-
-        output = {
-            "staking_contract": staking_contract,
-            "agent_ids": agent_ids,
-            "service_registry": service_registry,
-            "staking_token": staking_token,
-            "service_registry_token_utility": service_registry_token_utility,
-            "min_staking_deposit": min_staking_deposit,
-            "activity_checker": activity_checker,
-            "additional_staking_tokens": {},
-        }
-        try:
-            instance = staking_manager.dual_staking_ctr.get_instance(
-                ledger_api=self.ledger_api,
-                contract_address=staking_contract,
-            )
-            output["additional_staking_tokens"][
-                instance.functions.secondToken().call()
-            ] = instance.functions.secondTokenAmount().call()
-        except Exception:  # pylint: disable=broad-except # nosec
-            # Contract is not a dual staking contract
-
-            # TODO The exception caught here should be ContractLogicError.
-            # This exception is typically raised when the contract reverts with
-            # a reason string. However, in some cases, the error message
-            # does not contain a reason string, which means web3.py raises
-            # a generic ValueError instead. It should be properly analyzed
-            # what exceptions might be raised by web3.py in this case. To
-            # avoid any issues we are simply catching all exceptions.
-            pass
-
-        cache["get_staking_params"][staking_contract] = output
-
-        return output
 
 
 class OnChainManager(_ChainUtil):
@@ -1115,35 +1205,33 @@ class OnChainManager(_ChainUtil):
         """Stake service."""
         self._patch()
         StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).stake(
             service_id=service_id,
             service_registry=service_registry,
             staking_contract=staking_contract,
+            key=self.wallet.key_path,
+            password=self.wallet.password,
         )
 
     def unstake(self, service_id: int, staking_contract: str) -> None:
         """Unstake service."""
         self._patch()
         StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).unstake(
             service_id=service_id,
             staking_contract=staking_contract,
+            key=self.wallet.key_path,
+            password=self.wallet.password,
         )
 
     def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
         """Stake the service"""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
-        ).status(
+            chain=OperateChain(self.chain_type.value),
+        ).staking_state(
             service_id=service_id,
             staking_contract=staking_contract,
         )
@@ -1397,6 +1485,182 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
+    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals
+        self,
+        safe_b_address: str,
+        to: str,
+        amount: int,
+    ) -> t.Tuple[t.Dict, t.Dict]:
+        """
+        Build the two messages (Safe calls) to withdraw native ETH from Safe B via this Safe (owner of Safe B).
+
+        Builds the messages to be settled by this Safe:
+        1) approveHash(inner_tx_hash)
+        2) execTransaction(...) to transfer ETH
+        """
+        safe_b_instance = registry_contracts.gnosis_safe.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+        )
+
+        txs = []
+        txs.append(
+            {
+                "to": to,
+                "data": b"",
+                "operation": MultiSendOperation.CALL,
+                "value": amount,
+            }
+        )
+
+        multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
+            self.chain_type
+        ]
+        multisend_tx = registry_contracts.multisend.get_multisend_tx(
+            ledger_api=self.ledger_api,
+            contract_address=multisend_address,
+            txs=txs,
+        )
+
+        # Compute inner Safe transaction hash
+        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+            to_address=multisend_address,
+            value=multisend_tx["value"],
+            data=multisend_tx["data"],
+            operation=SafeOperation.CALL.value,
+        ).get("tx_hash")
+
+        # Build approveHash message
+        approve_hash_data = safe_b_instance.encodeABI(
+            fn_name="approveHash",
+            args=[safe_tx_hash],
+        )
+        approve_hash_message = {
+            "to": safe_b_address,
+            "data": approve_hash_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        # Build execTransaction message
+        exec_data = safe_b_instance.encodeABI(
+            fn_name="execTransaction",
+            args=[
+                multisend_address,
+                multisend_tx["value"],
+                multisend_tx["data"],
+                SafeOperation.DELEGATE_CALL.value,
+                0,  # safeTxGas
+                0,  # baseGas
+                0,  # gasPrice
+                ZERO_ADDRESS,  # gasToken
+                ZERO_ADDRESS,  # refundReceiver
+                get_packed_signature_for_approved_hash(owners=(self.safe,)),
+            ],
+        )
+        exec_message = {
+            "to": safe_b_address,
+            "data": exec_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        return approve_hash_message, exec_message
+
+    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals
+        self,
+        safe_b_address: str,
+        token: str,
+        to: str,
+        amount: int,
+    ) -> t.Tuple[t.Dict, t.Dict]:
+        """
+        Build the two messages (Safe calls) to withdraw ERC20 from Safe B via this Safe (owner of Safe B).
+
+        Builds the messages to be settled by this Safe:
+        1) approveHash(inner_tx_hash)
+        2) execTransaction(...) to transfer ERC20 tokens
+        """
+        safe_b_instance = registry_contracts.gnosis_safe.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+        )
+        erc20_instance = registry_contracts.erc20.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=token,
+        )
+
+        txs = []
+        txs.append(
+            {
+                "to": token,
+                "data": erc20_instance.encodeABI(
+                    fn_name="transfer",
+                    args=[to, amount],
+                ),
+                "operation": MultiSendOperation.CALL,
+                "value": 0,
+            }
+        )
+
+        multisend_address = ContractConfigs.get(MULTISEND_CONTRACT.name).contracts[
+            self.chain_type
+        ]
+        multisend_tx = registry_contracts.multisend.get_multisend_tx(
+            ledger_api=self.ledger_api,
+            contract_address=multisend_address,
+            txs=txs,
+        )
+
+        # Compute inner Safe transaction hash
+        safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
+            ledger_api=self.ledger_api,
+            contract_address=safe_b_address,
+            to_address=multisend_address,
+            value=multisend_tx["value"],
+            data=multisend_tx["data"],
+            operation=SafeOperation.CALL.value,
+        ).get("tx_hash")
+
+        # Build approveHash message
+        approve_hash_data = safe_b_instance.encodeABI(
+            fn_name="approveHash",
+            args=[safe_tx_hash],
+        )
+        approve_hash_message = {
+            "to": safe_b_address,
+            "data": approve_hash_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        # Build execTransaction message
+        exec_data = safe_b_instance.encodeABI(
+            fn_name="execTransaction",
+            args=[
+                multisend_address,
+                multisend_tx["value"],
+                multisend_tx["data"],
+                SafeOperation.DELEGATE_CALL.value,
+                0,  # safeTxGas
+                0,  # baseGas
+                0,  # gasPrice
+                ZERO_ADDRESS,  # gasToken
+                ZERO_ADDRESS,  # refundReceiver
+                get_packed_signature_for_approved_hash(owners=(self.safe,)),
+            ],
+        )
+        exec_message = {
+            "to": safe_b_address,
+            "data": exec_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+
+        return approve_hash_message, exec_message
+
     def get_terminate_data(self, service_id: int) -> t.Dict:
         """Get terminate tx data."""
         instance = registry_contracts.service_manager.get_instance(
@@ -1440,9 +1704,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get staking approval data"""
         self._patch()
         txd = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).get_stake_approval_tx_data(
             service_id=service_id,
             service_registry=service_registry,
@@ -1464,9 +1726,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get staking tx data"""
         self._patch()
         txd = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).get_stake_tx_data(
             service_id=service_id,
             staking_contract=staking_contract,
@@ -1487,9 +1747,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get unstaking tx data"""
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
         txd = (
             staking_manager.get_forced_unstake_tx_data(
@@ -1517,9 +1775,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get claiming tx data"""
         self._patch()
         staking_manager = StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         )
         txd = staking_manager.get_claim_tx_data(
             service_id=service_id,
@@ -1536,9 +1792,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Stake service."""
         self._patch()
         return StakingManager(
-            key=self.wallet.key_path,
-            password=self.wallet.password,
-            chain_type=self.chain_type,
+            chain=OperateChain(self.chain_type.value),
         ).slots_available(
             staking_contract=staking_contract,
         )
@@ -1548,9 +1802,7 @@ class EthSafeTxBuilder(_ChainUtil):
         self._patch()
         try:
             StakingManager(
-                key=self.wallet.key_path,
-                password=self.wallet.password,
-                chain_type=self.chain_type,
+                chain=OperateChain(self.chain_type.value),
             ).check_if_unstaking_possible(
                 service_id=service_id,
                 staking_contract=staking_contract,

@@ -20,11 +20,18 @@
 """Chain profiles."""
 
 import typing as t
+from functools import cache
 
+from autonomy.chain.base import registry_contracts
 from autonomy.chain.constants import CHAIN_PROFILES, DEFAULT_MULTISEND
 
 from operate.constants import NO_STAKING_PROGRAM_ID, ZERO_ADDRESS
-from operate.ledger import CHAINS
+from operate.ledger import (
+    CHAINS,
+    NATIVE_CURRENCY_DECIMALS,
+    get_currency_denom,
+    get_default_ledger_api,
+)
 from operate.operate_types import Chain, ContractAddresses
 
 
@@ -177,7 +184,22 @@ WRAPPED_NATIVE_ASSET = {
     Chain.POLYGON: "0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270",
 }
 
-ERC20_TOKENS = [OLAS, USDC, WRAPPED_NATIVE_ASSET]
+ERC20_TOKENS = {
+    "OLAS": OLAS,
+    "USDC": USDC,
+    "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
+}
+
+DUST = {
+    Chain.ARBITRUM_ONE: int(1e14),
+    Chain.BASE: int(1e14),
+    Chain.CELO: int(1e15),
+    Chain.ETHEREUM: int(1e14),
+    Chain.GNOSIS: int(1e15),
+    Chain.MODE: int(1e14),
+    Chain.OPTIMISM: int(1e14),
+    Chain.POLYGON: int(1e14),
+}
 
 DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     Chain.ARBITRUM_ONE: {
@@ -206,16 +228,23 @@ DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
     },
 }
 
-DEFAULT_MASTER_EOA_FUNDS = {
-    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-    Chain.BASE: {ZERO_ADDRESS: 5_000_000_000_000_000},
-    Chain.CELO: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-    Chain.ETHEREUM: {ZERO_ADDRESS: 20_000_000_000_000_000},
-    Chain.GNOSIS: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
-    Chain.MODE: {ZERO_ADDRESS: 500_000_000_000_000},
-    Chain.OPTIMISM: {ZERO_ADDRESS: 5_000_000_000_000_000},
-    Chain.POLYGON: {ZERO_ADDRESS: 1_500_000_000_000_000_000},
+DEFAULT_EOA_TOPUPS = {
+    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 2_500_000_000_000_000},
+    Chain.BASE: {ZERO_ADDRESS: 2_500_000_000_000_000},
+    Chain.CELO: {ZERO_ADDRESS: 750_000_000_000_000_000},
+    Chain.ETHEREUM: {ZERO_ADDRESS: 10_000_000_000_000_000},
+    Chain.GNOSIS: {ZERO_ADDRESS: 750_000_000_000_000_000},
+    Chain.MODE: {ZERO_ADDRESS: 250_000_000_000_000},
+    Chain.OPTIMISM: {ZERO_ADDRESS: 2_500_000_000_000_000},
+    Chain.POLYGON: {ZERO_ADDRESS: 750_000_000_000_000_000},
 }
+
+DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
+    chain: {asset: amount * 2 for asset, amount in amounts.items()}
+    for chain, amounts in DEFAULT_EOA_TOPUPS.items()
+}
+
+DEFAULT_EOA_THRESHOLD = 0.5
 
 EXPLORER_URL = {
     Chain.ARBITRUM_ONE: {
@@ -253,6 +282,45 @@ EXPLORER_URL = {
 }
 
 
+@cache
+def get_asset_name(chain: Chain, asset_address: str) -> str:
+    """Get token name."""
+    if asset_address == ZERO_ADDRESS:
+        return get_currency_denom(chain)
+
+    if WRAPPED_NATIVE_ASSET.get(chain) == asset_address:
+        return f"W{get_currency_denom(chain)}"
+
+    for symbol, tokens in ERC20_TOKENS.items():
+        if tokens.get(chain) == asset_address:
+            return symbol
+
+    return asset_address
+
+
+@cache
+def get_asset_decimals(chain: Chain, asset_address: str) -> int:
+    """Get token decimals."""
+    if asset_address == ZERO_ADDRESS:
+        return NATIVE_CURRENCY_DECIMALS
+    erc20_token = registry_contracts.erc20.get_instance(
+        ledger_api=get_default_ledger_api(chain),
+        contract_address=asset_address,
+    )
+    return erc20_token.functions.decimals().call()
+
+
+def format_asset_amount(
+    chain: Chain, asset_address: str, amount: int, precision: int = 4
+) -> str:
+    """Convert smallest unit to human-readable string with token symbol."""
+    decimals = get_asset_decimals(chain, asset_address)
+    symbol = get_asset_name(chain, asset_address)
+    value = amount / (10**decimals)
+    return f"{value:.{precision}f} {symbol}"
+
+
+# TODO: Deprecate in favour of StakingManager method
 def get_staking_contract(
     chain: str, staking_program_id: t.Optional[str]
 ) -> t.Optional[str]:
