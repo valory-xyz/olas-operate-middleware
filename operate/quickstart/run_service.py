@@ -198,7 +198,7 @@ def configure_local_config(
         config.rpc = {}
 
     for chain in template["configurations"]:
-        while not check_rpc(config.rpc.get(chain)):
+        while not check_rpc(chain, config.rpc.get(chain)):
             config.rpc[chain] = ask_or_get_from_env(
                 f"Enter a {CHAIN_TO_METADATA[chain]['name']} RPC that supports eth_newFilter [hidden input]: ",
                 True,
@@ -495,7 +495,10 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                     service_template=template,
                 )
 
-            service.env_variables = template["env_variables"]
+            for env_var_name, env_var_data in template["env_variables"].items():
+                if env_var_name not in service.env_variables:
+                    service.env_variables[env_var_name] = env_var_data
+
             service.update_user_params_from_template(service_template=template)
             service.store()
             break
@@ -556,7 +559,7 @@ def _ask_funds_from_requirements(
     """Ask for funds from requirements."""
     spinner = Halo(text="Calculating funds requirements...", spinner="dots")
     spinner.start()
-    requirements = manager.refill_requirements(
+    requirements = manager.funding_requirements(
         service_config_id=service.service_config_id
     )
     spinner.stop()
@@ -635,6 +638,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
     _maybe_create_master_eoa(operate)
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     manager = operate.service_manager()
+    manager.funding_manager.is_for_quickstart = True
 
     backup_owner = None
     while not _ask_funds_from_requirements(manager, wallet, service):
@@ -692,7 +696,8 @@ def run_service(
     )
 
     print_section("Funding the service")
-    manager.funding_manager.fund_service_initial(service=service)
+    service = get_service(manager, template)
+    manager.funding_manager.topup_service_initial(service=service)
 
     print_section("Deploying the service")
     manager.deploy_service_locally(

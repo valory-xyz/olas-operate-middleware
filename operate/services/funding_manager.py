@@ -90,6 +90,7 @@ class FundingManager:
         self._lock = threading.Lock()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
+        self.is_for_quickstart = False
 
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain
@@ -650,7 +651,11 @@ class FundingManager:
         # We assume that if the service safe is created in any chain,
         # we have requested the funding already.
         service_initial_topup = service.get_initial_funding_amounts()
-        if not all(
+        if self.is_for_quickstart:
+            service_initial_shortfalls = self.compute_service_initial_shortfalls(
+                service
+            )
+        elif not all(
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_initial_topup.values()
         ):
@@ -794,6 +799,39 @@ class FundingManager:
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
         self.fund_chain_amounts(service.get_initial_funding_amounts())
+
+    def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
+        """Compute service initial shortfalls"""
+        initial_funding_amounts = service.get_initial_funding_amounts()
+        service_balances = ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: get_asset_balance(
+                            ledger_api=get_default_ledger_api(
+                                Chain.from_string(chain_str)
+                            ),
+                            asset_address=asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+                        for asset in tokens
+                    }
+                    for address, tokens in addresses.items()
+                }
+                for chain_str, addresses in initial_funding_amounts.items()
+            }
+        )
+        return self._compute_shortfalls(
+            balances=service_balances,
+            thresholds=initial_funding_amounts,
+            topups=initial_funding_amounts,
+        )
+
+    def topup_service_initial(self, service: Service) -> None:
+        """Fund service enough to reach initial funding amounts"""
+        service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
+        self.fund_chain_amounts(service_initial_shortfalls)
 
     def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
         """Fund chain amounts"""

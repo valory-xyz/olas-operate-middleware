@@ -208,12 +208,12 @@ def ask_or_get_from_env(
     return ""
 
 
-def check_rpc(rpc_url: Optional[str] = None) -> bool:
+def check_rpc(chain: str, rpc_url: Optional[str] = None) -> bool:
     """Check RPC."""
     if rpc_url is None:
         return False
 
-    spinner = Halo(text="Checking RPC...", spinner="dots")
+    spinner = Halo(text=f"[{chain}] Checking RPC...", spinner="dots")
     spinner.start()
 
     rpc_data = {
@@ -230,7 +230,7 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
         response.raise_for_status()
         rpc_response = response.json()
     except (requests.exceptions.RequestException, ValueError, TypeError) as e:
-        spinner.fail(f"Error: Failed to send RPC request: {e}")
+        spinner.fail(f"Error: Failed to send {chain} RPC request: {e}")
         return False
 
     rpc_error_message = (
@@ -246,24 +246,24 @@ def check_rpc(rpc_url: Optional[str] = None) -> bool:
         print("  Received response:")
         print("  ", rpc_response)
         print("")
-        spinner.fail("Terminating script.")
+        spinner.fail(f"[{chain}] Terminating script.")
     elif rpc_error_message == "out of requests":
         print("Error: The provided rpc is out of requests.")
-        spinner.fail("Terminating script.")
+        spinner.fail(f"[{chain}] Terminating script.")
     elif (
         rpc_error_message == "the method eth_newfilter does not exist/is not available"
     ):
         print("Error: The provided RPC does not support 'eth_newFilter'.")
-        spinner.fail("Terminating script.")
+        spinner.fail(f"[{chain}] Terminating script.")
     elif "invalid" in rpc_error_message or "params" in rpc_error_message:
-        spinner.succeed("RPC checks passed.")
+        spinner.succeed(f"[{chain}] RPC checks passed.")
         return True
     else:
         print("Error: Unknown rpc error.")
         print("  Received response:")
         print("  ", rpc_response)
         print("")
-        spinner.fail("Terminating script.")
+        spinner.fail(f"[{chain}] Terminating script.")
 
     return False
 
