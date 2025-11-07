@@ -120,29 +120,32 @@ def make_chain_ledger_api(
 ) -> LedgerApi:
     """Get default RPC chain type."""
 
-    if chain not in DEFAULT_LEDGER_APIS:
-        if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
-            raise NotImplementedError("Solana not yet supported.")
+    if chain in DEFAULT_LEDGER_APIS:
+        ledger_api = DEFAULT_LEDGER_APIS[chain]
+        if rpc is not None and ledger_api.api.provider.endpoint_uri == rpc:
+            return ledger_api
 
-        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
-            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
-                5, GWEI
-            )
+    if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
+        raise NotImplementedError("Solana not yet supported.")
 
-        ledger_api = make_ledger_api(
-            chain.ledger_type.name.lower(),
-            address=rpc or get_default_rpc(chain=chain),
-            chain_id=chain.id,
-            gas_price_strategies=gas_price_strategies,
-            poa_chain=chain == Chain.POLYGON,
+    gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+    if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+        gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+            5, GWEI
         )
 
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
+    ledger_api = make_ledger_api(
+        chain.ledger_type.name.lower(),
+        address=rpc or get_default_rpc(chain=chain),
+        chain_id=chain.id,
+        gas_price_strategies=gas_price_strategies,
+        poa_chain=chain == Chain.POLYGON,
+    )
 
-        DEFAULT_LEDGER_APIS[chain] = ledger_api
+    if chain == Chain.OPTIMISM:
+        ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
+    DEFAULT_LEDGER_APIS[chain] = ledger_api
     return DEFAULT_LEDGER_APIS[chain]
 
 
