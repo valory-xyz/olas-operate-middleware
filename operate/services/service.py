@@ -76,7 +76,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_rpc
+from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     Chain,
@@ -97,6 +97,7 @@ from operate.operate_types import (
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
+from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
 
@@ -1147,6 +1148,29 @@ class Service(LocalResource):
                     chain_amounts.setdefault(agent_address, {})[asset] = req.agent
 
         return amounts
+
+    def get_balances(self) -> ChainAmounts:
+        """Get balances of the agent addresses and service safe."""
+        initial_funding_amounts = self.get_initial_funding_amounts()
+        return ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: get_asset_balance(
+                            ledger_api=get_default_ledger_api(
+                                Chain.from_string(chain_str)
+                            ),
+                            asset_address=asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+                        for asset in tokens
+                    }
+                    for address, tokens in addresses.items()
+                }
+                for chain_str, addresses in initial_funding_amounts.items()
+            }
+        )
 
     def get_funding_requests(self) -> ChainAmounts:
         """Get funding amounts requested by the agent."""

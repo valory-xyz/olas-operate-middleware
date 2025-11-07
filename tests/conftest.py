@@ -35,6 +35,7 @@ import tempfile
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
+from platform import system
 from typing import Generator
 
 import pytest
@@ -150,7 +151,8 @@ class OnTestnet:
 
     # TODO: Remove this skip after optimizing tenderly usage
     pytestmark = pytest.mark.skipif(
-        RUNNING_IN_CI, reason="To avoid exhausting tenderly limits."
+        RUNNING_IN_CI and system() != "Linux",
+        reason="To avoid exhausting tenderly limits.",
     )
 
     @pytest.fixture(autouse=True)
