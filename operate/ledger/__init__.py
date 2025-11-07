@@ -122,7 +122,7 @@ def make_chain_ledger_api(
 
     if chain in DEFAULT_LEDGER_APIS:
         ledger_api = DEFAULT_LEDGER_APIS[chain]
-        if rpc is not None and ledger_api.api.provider.endpoint_uri == rpc:
+        if rpc is None or ledger_api.api.provider.endpoint_uri == rpc:
             return ledger_api
 
     if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
