@@ -803,25 +803,7 @@ class FundingManager:
     def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
         """Compute service initial shortfalls"""
         initial_funding_amounts = service.get_initial_funding_amounts()
-        service_balances = ChainAmounts(
-            {
-                chain_str: {
-                    address: {
-                        asset: get_asset_balance(
-                            ledger_api=get_default_ledger_api(
-                                Chain.from_string(chain_str)
-                            ),
-                            asset_address=asset,
-                            address=address,
-                            raise_on_invalid_address=False,
-                        )
-                        for asset in tokens
-                    }
-                    for address, tokens in addresses.items()
-                }
-                for chain_str, addresses in initial_funding_amounts.items()
-            }
-        )
+        service_balances = service.get_balances()
         return self._compute_shortfalls(
             balances=service_balances,
             thresholds=initial_funding_amounts,
