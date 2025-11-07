@@ -119,31 +119,27 @@ def make_chain_ledger_api(
     rpc: t.Optional[str] = None,
 ) -> LedgerApi:
     """Get default RPC chain type."""
+    if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
+        raise NotImplementedError("Solana not yet supported.")
 
-    if chain not in DEFAULT_LEDGER_APIS:
-        if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
-            raise NotImplementedError("Solana not yet supported.")
-
-        gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
-        if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
-            gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
-                5, GWEI
-            )
-
-        ledger_api = make_ledger_api(
-            chain.ledger_type.name.lower(),
-            address=rpc or get_default_rpc(chain=chain),
-            chain_id=chain.id,
-            gas_price_strategies=gas_price_strategies,
-            poa_chain=chain == Chain.POLYGON,
+    gas_price_strategies = deepcopy(DEFAULT_GAS_PRICE_STRATEGIES)
+    if chain in (Chain.BASE, Chain.MODE, Chain.OPTIMISM):
+        gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+            5, GWEI
         )
 
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
+    ledger_api = make_ledger_api(
+        chain.ledger_type.name.lower(),
+        address=rpc or get_default_rpc(chain=chain),
+        chain_id=chain.id,
+        gas_price_strategies=gas_price_strategies,
+        poa_chain=chain == Chain.POLYGON,
+    )
 
-        DEFAULT_LEDGER_APIS[chain] = ledger_api
+    if chain == Chain.OPTIMISM:
+        ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
-    return DEFAULT_LEDGER_APIS[chain]
+    return ledger_api
 
 
 def get_default_ledger_api(chain: Chain) -> LedgerApi:
