@@ -119,12 +119,6 @@ def make_chain_ledger_api(
     rpc: t.Optional[str] = None,
 ) -> LedgerApi:
     """Get default RPC chain type."""
-
-    if chain in DEFAULT_LEDGER_APIS:
-        ledger_api = DEFAULT_LEDGER_APIS[chain]
-        if rpc is None or ledger_api.api.provider.endpoint_uri == rpc:
-            return ledger_api
-
     if chain == Chain.SOLANA:  # TODO: Complete when Solana is supported
         raise NotImplementedError("Solana not yet supported.")
 
@@ -145,8 +139,7 @@ def make_chain_ledger_api(
     if chain == Chain.OPTIMISM:
         ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
-    DEFAULT_LEDGER_APIS[chain] = ledger_api
-    return DEFAULT_LEDGER_APIS[chain]
+    return ledger_api
 
 
 def get_default_ledger_api(chain: Chain) -> LedgerApi:
