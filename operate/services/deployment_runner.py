@@ -182,7 +182,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         )
         return env
 
-    def _setup_agent(self) -> None:
+    def _setup_agent(self, password: str) -> None:
         """Setup agent."""
         working_dir = self._work_directory
         env = self._prepare_agent_env()
@@ -223,12 +223,31 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             working_dir / "agent" / "ethereum_private_key.txt",
         )
 
-        self._run_aea_command("-s", "add-key", "ethereum", cwd=working_dir / "agent")
         self._run_aea_command(
-            "-s", "add-key", "ethereum", "--connection", cwd=working_dir / "agent"
+            "-s",
+            "add-key",
+            "--password",
+            password,
+            "ethereum",
+            cwd=working_dir / "agent",
+        )
+        self._run_aea_command(
+            "-s",
+            "add-key",
+            "--password",
+            password,
+            "ethereum",
+            "--connection",
+            cwd=working_dir / "agent",
         )
 
-        self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
+        self._run_aea_command(
+            "-s",
+            "issue-certificates",
+            "--password",
+            password,
+            cwd=working_dir / "agent",
+        )
 
     def start(self, password: str) -> None:
         """Start the deployment with retries."""
@@ -244,7 +263,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _start(self, password: str) -> None:
         """Start the deployment."""
-        self._setup_agent()
+        self._setup_agent(password=password)
         self._start_tendermint()
         self._start_agent(password=password)
 
@@ -627,14 +646,15 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 # Install tendermint dependencies
                 "flask",
                 "requests",
+                "multiaddr==0.0.9",  # TODO: remove when pinned on open-aea
             ],
         )
 
-    def _setup_agent(self) -> None:
+    def _setup_agent(self, password: str) -> None:
         """Prepare agent."""
         multiprocessing.set_start_method("spawn")
         self._setup_venv()
-        super()._setup_agent()
+        super()._setup_agent(password=password)
         # Install agent dependencies
         self._run_cmd(
             args=[
