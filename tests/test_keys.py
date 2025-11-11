@@ -23,6 +23,7 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import Optional
 from unittest.mock import Mock, patch
 
 import pytest
@@ -30,11 +31,10 @@ from aea_ledger_ethereum.ethereum import EthereumCrypto
 from eth_account import Account
 
 from operate.keys import Key, KeysManager
-from operate.operate_types import LedgerType
 
 
 @pytest.fixture
-def keys_manager(temp_keys_dir: Path, password: str) -> KeysManager:
+def keys_manager(temp_keys_dir: Path, password: Optional[str]) -> KeysManager:
     """Create a KeysManager instance with a temporary directory."""
     # Clear the singleton instance to avoid interference between tests
     KeysManager._instances = {}
@@ -44,14 +44,9 @@ def keys_manager(temp_keys_dir: Path, password: str) -> KeysManager:
 
 
 @pytest.fixture
-def sample_key() -> Key:
+def sample_key(keys_manager: KeysManager) -> Key:
     """Create a sample key for testing."""
-    crypto = EthereumCrypto()
-    return Key(
-        ledger=LedgerType.ETHEREUM,
-        address=crypto.address,
-        private_key=crypto.private_key,
-    )
+    return keys_manager.get(keys_manager.create())
 
 
 @pytest.fixture
@@ -80,7 +75,11 @@ class TestKeysManager:
         # Verify the returned instance
         assert isinstance(crypto_instance, EthereumCrypto)
         assert crypto_instance.address == sample_key.address
-        assert crypto_instance.private_key == sample_key.private_key
+        assert keys_manager.password is not None
+        assert (
+            crypto_instance.private_key
+            == sample_key.get_decrypted(keys_manager.password)["private_key"]
+        )
 
     def test_get_crypto_instance_temp_file_cleanup(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
@@ -116,7 +115,11 @@ class TestKeysManager:
         # Verify the returned instance
         assert isinstance(crypto_instance, EthereumCrypto)
         assert crypto_instance.address == sample_key.address
-        assert crypto_instance.private_key == sample_key.private_key
+        assert keys_manager.password is not None
+        assert (
+            crypto_instance.private_key
+            == sample_key.get_decrypted(keys_manager.password)["private_key"]
+        )
 
         # Verify no temporary files remain
         temp_files = [f for f in keys_manager.path.iterdir() if f.suffix == ".txt"]
@@ -130,7 +133,7 @@ class TestKeysManager:
 
         # Verify we start with just the key file
         initial_files = list(keys_manager.path.iterdir())
-        assert len(initial_files) == 1
+        assert len(initial_files) == 2  # key file + .bak file
 
         # Use a mock to capture what directory the temp file is created in
         with patch(
@@ -178,13 +181,13 @@ class TestKeysManager:
 
     @pytest.mark.parametrize("backup_exists", [False, True])
     @pytest.mark.parametrize("pk_encrypted", [False, True])
-    @pytest.mark.parametrize("ledger_migrated", [False, True])
+    @pytest.mark.parametrize("password", ["test_password", None])
     def test_migrate_format_encrypts_private_key(
         self,
         keys_manager: KeysManager,
         backup_exists: bool,
         pk_encrypted: bool,
-        ledger_migrated: bool,
+        password: Optional[str],
     ) -> None:
         """Test migration encrypts plain private key and refreshes backup."""
         address = keys_manager.create()
@@ -197,15 +200,12 @@ class TestKeysManager:
         with open(key_path, "r", encoding="utf-8") as file:
             data = json.load(file)
 
-        if not pk_encrypted and not data["private_key"].startswith("0x"):
-            crypto = keys_manager.get_crypto_instance(address)
-            data["private_key"] = "0x" + crypto.decrypt(
-                keyfile_json=data["private_key"], password=keys_manager.password
-            )
-
-        if ledger_migrated:
-            old_ledger = 0 if data["ledger"] == "ethereum" else 1
-            data["ledger"] = old_ledger
+        if not pk_encrypted:
+            if not data["private_key"].startswith("0x"):
+                crypto = keys_manager.get_crypto_instance(address)
+                data["private_key"] = "0x" + crypto.decrypt(
+                    keyfile_json=data["private_key"], password=keys_manager.password
+                )
 
         with open(key_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
@@ -213,22 +213,25 @@ class TestKeysManager:
         key = keys_manager.get(address)  # This will internally migrate it
 
         # Verify everything is migrated now
-        assert not key.private_key.startswith(
-            "0x"
-        ), "Private key should be encrypted now"
-        assert (
-            key.ledger == LedgerType.ETHEREUM
-        ), "Ledger should be migrated to string type"
+        crypto = keys_manager.get_crypto_instance(address)
+        assert crypto.address == address
+        if password is None:
+            assert key.private_key.startswith(
+                "0x"
+            ), "Private key should remain unencrypted without password"
+            assert crypto.private_key == key.private_key
+        else:
+            assert not key.private_key.startswith(
+                "0x"
+            ), "Private key should be encrypted now"
+            assert (
+                crypto.private_key
+                == Account.decrypt(key.private_key, keys_manager.password).hex()
+            )
+
         # Verify backup file exists
         backup_path = keys_manager.path / f"{address}.bak"
         assert backup_path.is_file(), "Backup file should exist after migration"
-
-        crypto = keys_manager.get_crypto_instance(address)
-        assert crypto.address == address
-        assert (
-            crypto.private_key
-            == Account.decrypt(key.private_key, keys_manager.password).hex()
-        )
         assert backup_path.read_text() == json.dumps(key.json, indent=2)
 
     def test_update_password(self, keys_manager: KeysManager, password: str) -> None:

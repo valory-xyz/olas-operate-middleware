@@ -144,7 +144,7 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
     )
 
 
-class OperateApp:
+class OperateApp:  # pylint: disable=too-many-instance-attributes
     """Operate app."""
 
     def __init__(
@@ -160,7 +160,7 @@ class OperateApp:
 
         self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
         KeysManager._instances.clear()  # reset singleton instance
-        KeysManager(
+        self._keys_manager: KeysManager = KeysManager(
             path=self._keys,
             logger=logger,
             password=self._password,
@@ -260,7 +260,7 @@ class OperateApp:
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
-        KeysManager().update_password(new_password)
+        self._keys_manager.update_password(new_password)
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:

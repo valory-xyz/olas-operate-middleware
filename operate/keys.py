@@ -26,7 +26,7 @@ import tempfile
 from dataclasses import dataclass
 from logging import Logger
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
@@ -73,8 +73,36 @@ class KeysManager(metaclass=SingletonMeta):
 
         self.path: Path = kwargs["path"]
         self.logger: Logger = kwargs["logger"]
-        self.password: str = kwargs.get("password", "")
+        self.password: Optional[str] = kwargs.get("password")
         self.path.mkdir(exist_ok=True, parents=True)
+
+    def private_key_to_crypto(
+        self, private_key: str, password: Optional[str]
+    ) -> EthereumCrypto:
+        """Convert private key string to EthereumCrypto instance."""
+        with tempfile.NamedTemporaryFile(
+            dir=self.path,
+            mode="w",
+            suffix=".txt",
+            delete=False,  # Handle cleanup manually
+        ) as temp_file:
+            temp_file_name = temp_file.name
+            temp_file.write(private_key)
+            temp_file.flush()
+            temp_file.close()  # Close the file before reading
+
+            # Set proper file permissions (readable by owner only)
+            os.chmod(temp_file_name, 0o600)
+            crypto = EthereumCrypto(private_key_path=temp_file_name, password=password)
+
+            try:
+                unrecoverable_delete(
+                    Path(temp_file.name)
+                )  # Clean up the temporary file
+            except OSError as e:
+                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
+
+        return crypto
 
     def get(self, key: str) -> Key:
         """Get key object."""
@@ -102,44 +130,8 @@ class KeysManager(metaclass=SingletonMeta):
 
     def get_crypto_instance(self, address: str) -> EthereumCrypto:
         """Get EthereumCrypto instance for the given address."""
-        key: Key = Key.from_json(  # type: ignore
-            obj=json.loads(
-                (self.path / address).read_text(
-                    encoding="utf-8",
-                )
-            )
-        )
-        private_key = key.private_key
-        # Create temporary file with delete=False to handle it manually
-        with tempfile.NamedTemporaryFile(
-            dir=self.path,
-            mode="w",
-            suffix=".txt",
-            delete=False,  # Handle cleanup manually
-        ) as temp_file:
-            temp_file_name = temp_file.name
-            temp_file.write(private_key)
-            temp_file.flush()
-            temp_file.close()  # Close the file before reading
-
-            # Set proper file permissions (readable by owner only)
-            os.chmod(temp_file_name, 0o600)
-            password = None if private_key.startswith("0x") else self.password
-            crypto = EthereumCrypto(private_key_path=temp_file_name, password=password)
-
-            try:
-                with open(temp_file_name, "r+", encoding="utf-8") as f:
-                    f.seek(0)
-                    f.write("\0" * len(private_key))
-                    f.flush()
-                    f.close()
-                unrecoverable_delete(
-                    Path(temp_file.name)
-                )  # Clean up the temporary file
-            except OSError as e:
-                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
-
-        return crypto
+        key: Key = self.get(address)
+        return self.private_key_to_crypto(key.private_key, self.password)
 
     def create(self) -> str:
         """Creates new key."""
@@ -159,7 +151,7 @@ class KeysManager(metaclass=SingletonMeta):
                         address=crypto.address,
                         private_key=crypto.private_key,
                     ).json,
-                    indent=4,
+                    indent=2,
                 ),
                 encoding="utf-8",
             )
@@ -171,7 +163,7 @@ class KeysManager(metaclass=SingletonMeta):
         os.remove(self.path / key)
 
     @classmethod
-    def migrate_format(cls, path: Path, password: str) -> bool:
+    def migrate_format(cls, path: Path, password: Optional[str]) -> bool:
         """Migrate the JSON file format if needed."""
         migrated = False
         backup_path = path.with_suffix(".bak")
@@ -188,8 +180,11 @@ class KeysManager(metaclass=SingletonMeta):
             migrated = True
 
         private_key = data.get("private_key")
-        if private_key and private_key.startswith("0x"):
-            crypto: EthereumCrypto = KeysManager().get_crypto_instance(data["address"])
+        if private_key and password and private_key.startswith("0x"):
+            crypto: EthereumCrypto = KeysManager().private_key_to_crypto(
+                private_key=private_key,
+                password=None,
+            )
             encrypted_private_key = crypto.encrypt(password=password)
             data["private_key"] = encrypted_private_key
             if backup_path.exists():
