@@ -159,6 +159,7 @@ class OperateApp:
         self._backup_operate_if_new_version()
 
         self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        KeysManager._instances.clear()  # reset singleton instance
         KeysManager(
             path=self._keys,
             logger=logger,
