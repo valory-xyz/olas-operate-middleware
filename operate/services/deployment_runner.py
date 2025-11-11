@@ -56,7 +56,7 @@ class AbstractDeploymentRunner(ABC):
         self._work_directory = work_directory
 
     @abstractmethod
-    def start(self) -> None:
+    def start(self, password: str) -> None:
         """Start the deployment."""
 
     @abstractmethod
@@ -230,11 +230,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
         self._run_aea_command("-s", "issue-certificates", cwd=working_dir / "agent")
 
-    def start(self) -> None:
+    def start(self, password: str) -> None:
         """Start the deployment with retries."""
         for _ in range(self.START_TRIES):
             try:
-                self._start()
+                self._start(password=password)
                 return
             except Exception as e:  # pylint: disable=broad-except
                 self.logger.exception(f"Error on starting deployment: {e}")
@@ -242,11 +242,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             f"Failed to start the deployment after {self.START_TRIES} attempts! Check logs"
         )
 
-    def _start(self) -> None:
+    def _start(self, password: str) -> None:
         """Start the deployment."""
         self._setup_agent()
         self._start_tendermint()
-        self._start_agent()
+        self._start_agent(password=password)
 
     def stop(self) -> None:
         """Stop the deployment."""
@@ -285,7 +285,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Start tendermint  process."""
 
     @abstractmethod
-    def _start_agent(self) -> None:
+    def _start_agent(self, password: str) -> None:
         """Start aea process."""
 
     @property
@@ -318,7 +318,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         """Return tendermint path."""
         return str(Path(os.path.dirname(sys.executable)) / "tendermint_bin")  # type: ignore # pylint: disable=protected-access
 
-    def _start_agent(self) -> None:
+    def _start_agent(self, password: str) -> None:
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
@@ -326,13 +326,17 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
 
-        process = self._start_agent_process(env=env, working_dir=working_dir)
+        process = self._start_agent_process(
+            env=env, working_dir=working_dir, password=password
+        )
         (working_dir / "agent.pid").write_text(
             data=str(process.pid),
             encoding="utf-8",
         )
 
-    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
+    def _start_agent_process(
+        self, env: Dict, working_dir: Path, password: str
+    ) -> subprocess.Popen:
         """Start agent process."""
         raise NotImplementedError
 
@@ -364,7 +368,9 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
     """Mac deployment runner."""
 
-    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
+    def _start_agent_process(
+        self, env: Dict, working_dir: Path, password: str
+    ) -> subprocess.Popen:
         """Start agent process."""
         agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
@@ -372,6 +378,8 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
                 self._agent_runner_bin,
                 "-s",
                 "run",
+                "--password",
+                password,
             ],
             cwd=working_dir / "agent",
             stdout=agent_runner_log_file,
@@ -486,7 +494,9 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         """Return tendermint path."""
         return str(Path(os.path.dirname(sys.executable)) / "tendermint_win.exe")  # type: ignore # pylint: disable=protected-access
 
-    def _start_agent_process(self, env: Dict, working_dir: Path) -> subprocess.Popen:
+    def _start_agent_process(
+        self, env: Dict, working_dir: Path, password: str
+    ) -> subprocess.Popen:
         """Start agent process."""
         agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
@@ -494,6 +504,8 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
                 self._agent_runner_bin,
                 "-s",
                 "run",
+                "--password",
+                password,
             ],  # TODO: Patch for Windows failing hash
             cwd=working_dir / "agent",
             stdout=agent_runner_log_file,
@@ -533,7 +545,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         """Return aea_bin path."""
         return str(self._venv_dir / "bin" / "aea")
 
-    def _start_agent(self) -> None:
+    def _start_agent(self, password: str) -> None:
         """Start agent process."""
         working_dir = self._work_directory
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
@@ -546,6 +558,8 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 self._agent_runner_bin,
                 "-s",
                 "run",
+                "--password",
+                password,
             ],  # TODO: Patch for Windows failing hash
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
@@ -707,7 +721,7 @@ class DeploymentManager:
             "Failed to perform test connection to ipfs to check network connection!"
         )
 
-    def run_deployment(self, build_dir: Path) -> None:
+    def run_deployment(self, build_dir: Path, password: str) -> None:
         """Run deployment."""
         if self._is_stopping:
             raise RuntimeError("deployment manager stopped")
@@ -721,7 +735,7 @@ class DeploymentManager:
         self._states[build_dir] = States.STARTING
         try:
             deployment_runner = self._get_deployment_runner(build_dir=build_dir)
-            deployment_runner.start()
+            deployment_runner.start(password=password)
             self.logger.info(f"Started deployment {build_dir}")
             self._states[build_dir] = States.STARTED
         except Exception:  # pylint: disable=broad-except
@@ -729,15 +743,15 @@ class DeploymentManager:
                 f"Starting deployment failed {build_dir}. so try to stop"
             )
             self._states[build_dir] = States.ERROR
-            self.stop_deployemnt(build_dir=build_dir, force=True)
+            self.stop_deployment(build_dir=build_dir, force=True)
 
         if self._is_stopping:
             self.logger.warning(
                 f"Deployment at {build_dir} started when it was  going to stop, so stop it"
             )
-            self.stop_deployemnt(build_dir=build_dir, force=True)
+            self.stop_deployment(build_dir=build_dir, force=True)
 
-    def stop_deployemnt(self, build_dir: Path, force: bool = False) -> None:
+    def stop_deployment(self, build_dir: Path, force: bool = False) -> None:
         """Stop the deployment."""
         if (
             self.get_state(build_dir=build_dir) in [States.STARTING, States.STOPPING]
@@ -760,14 +774,14 @@ class DeploymentManager:
 deployment_manager = DeploymentManager()
 
 
-def run_host_deployment(build_dir: Path) -> None:
+def run_host_deployment(build_dir: Path, password: str) -> None:
     """Run host deployment."""
-    deployment_manager.run_deployment(build_dir=build_dir)
+    deployment_manager.run_deployment(build_dir=build_dir, password=password)
 
 
 def stop_host_deployment(build_dir: Path) -> None:
     """Stop host deployment."""
-    deployment_manager.stop_deployemnt(build_dir=build_dir)
+    deployment_manager.stop_deployment(build_dir=build_dir)
 
 
 def stop_deployment_manager() -> None:

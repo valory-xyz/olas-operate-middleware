@@ -27,18 +27,19 @@ from unittest.mock import Mock, patch
 
 import pytest
 from aea_ledger_ethereum.ethereum import EthereumCrypto
+from eth_account import Account
 
 from operate.keys import Key, KeysManager
 from operate.operate_types import LedgerType
 
 
 @pytest.fixture
-def keys_manager(temp_keys_dir: Path) -> KeysManager:
+def keys_manager(temp_keys_dir: Path, password: str) -> KeysManager:
     """Create a KeysManager instance with a temporary directory."""
     # Clear the singleton instance to avoid interference between tests
     KeysManager._instances = {}
     logger = Mock(spec=logging.Logger)
-    manager = KeysManager(path=temp_keys_dir, logger=logger)
+    manager = KeysManager(path=temp_keys_dir, logger=logger, password=password)
     return manager
 
 
@@ -174,3 +175,84 @@ class TestKeysManager:
 
         with pytest.raises(json.JSONDecodeError):
             keys_manager.get_crypto_instance(invalid_address)
+
+    @pytest.mark.parametrize("backup_exists", [False, True])
+    @pytest.mark.parametrize("pk_encrypted", [False, True])
+    @pytest.mark.parametrize("ledger_migrated", [False, True])
+    def test_migrate_format_encrypts_private_key(
+        self,
+        keys_manager: KeysManager,
+        backup_exists: bool,
+        pk_encrypted: bool,
+        ledger_migrated: bool,
+    ) -> None:
+        """Test migration encrypts plain private key and refreshes backup."""
+        address = keys_manager.create()
+        if not backup_exists:
+            backup_path = keys_manager.path / f"{address}.bak"
+            if backup_path.exists():
+                backup_path.unlink()
+
+        key_path = keys_manager.path / address
+        with open(key_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if not pk_encrypted and not data["private_key"].startswith("0x"):
+            crypto = keys_manager.get_crypto_instance(address)
+            data["private_key"] = "0x" + crypto.decrypt(
+                keyfile_json=data["private_key"], password=keys_manager.password
+            )
+
+        if ledger_migrated:
+            old_ledger = 0 if data["ledger"] == "ethereum" else 1
+            data["ledger"] = old_ledger
+
+        with open(key_path, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+
+        key = keys_manager.get(address)  # This will internally migrate it
+
+        # Verify everything is migrated now
+        assert not key.private_key.startswith(
+            "0x"
+        ), "Private key should be encrypted now"
+        assert (
+            key.ledger == LedgerType.ETHEREUM
+        ), "Ledger should be migrated to string type"
+        # Verify backup file exists
+        backup_path = keys_manager.path / f"{address}.bak"
+        assert backup_path.is_file(), "Backup file should exist after migration"
+
+        crypto = keys_manager.get_crypto_instance(address)
+        assert crypto.address == address
+        assert (
+            crypto.private_key
+            == Account.decrypt(key.private_key, keys_manager.password).hex()
+        )
+        assert backup_path.read_text() == json.dumps(key.json, indent=2)
+
+    def test_update_password(self, keys_manager: KeysManager, password: str) -> None:
+        """Test that update_password re-encrypts keys and updates backups."""
+
+        addresses = [keys_manager.create() for _ in range(2)]
+        original_private_keys = {
+            address: keys_manager.get_crypto_instance(address).private_key
+            for address in addresses
+        }
+
+        new_password = f"{password}_new"
+
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+
+        for address in addresses:
+            key = keys_manager.get(address)
+            decrypted_private_key = key.get_decrypted(password=new_password)[
+                "private_key"
+            ]
+            assert decrypted_private_key == original_private_keys[address]
+
+            backup_path = keys_manager.path / f"{address}.bak"
+            assert backup_path.is_file()
+            assert backup_path.read_text() == json.dumps(key.json, indent=2)
