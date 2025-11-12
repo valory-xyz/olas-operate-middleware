@@ -1559,14 +1559,10 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_LOGGED_IN_ERROR
 
         data = await request.json()
-        bundle_id = data.get("id")
-        password = data.get("password")
         raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
             operate.wallet_recoverey_manager.complete_recovery(
-                bundle_id=bundle_id,
-                password=password,
                 raise_if_inconsistent_owners=raise_if_inconsistent_owners,
             )
             return JSONResponse(

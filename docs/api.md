@@ -655,16 +655,14 @@ Initiate wallet recovery.
 
 ```json
 {
-  "id": "bundle_123",
-  "password": "your_new_password",
   "require_consistent_owners": true
 }
 ```
 
-`new_wallet` must be an owner of all Safes created by `current_wallet` to proceed. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
+New MasterEOA (output from `POST /api/wallet/recovery/initiate`) must be an owner of all Safes where current (old) MasterEOA is an owner. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
 
 - Current (old) MasterEOA cannot be a Safe owner.
-- All Safes must have two owners (`new_wallet` and a backup owner).
+- All Safes must have two owners (new MasterEOA and a backup owner).
 - All backup owners must match in all Safes.
 
 **Response (Success - 200):**

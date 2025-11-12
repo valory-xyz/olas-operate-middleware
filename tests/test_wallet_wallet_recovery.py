@@ -23,28 +23,20 @@
 # pylint: disable=too-many-locals
 
 import typing as t
-import uuid
 
 import pytest
 
 from operate.cli import OperateApp
-from operate.constants import MSG_INVALID_PASSWORD
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
-    RECOVERY_BUNDLE_PREFIX,
     RECOVERY_OLD_OBJECTS_DIR,
     WalletRecoveryError,
 )
 
-from tests.conftest import (
-    OnTestnet,
-    OperateTestEnv,
-    random_string,
-    tenderly_add_balance,
-)
+from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance
 from tests.constants import OPERATE_TEST
 
 
@@ -84,11 +76,20 @@ class TestWalletRecovery(OnTestnet):
 
         # Recovery step 1
         new_password = password[::-1]
+
+        assert operate.wallet_recoverey_manager.data.last_initiated_bundle_id is None
+
         step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
 
-        assert step_1_output.get("id") is not None
+        assert (
+            operate.wallet_recoverey_manager.data.last_initiated_bundle_id is not None
+        )
+        assert (
+            step_1_output.get("id")
+            == operate.wallet_recoverey_manager.data.last_initiated_bundle_id
+        )
         assert step_1_output.get("wallets") is not None
         assert len(step_1_output["wallets"]) == len(wallet_manager.json)
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
@@ -124,10 +125,7 @@ class TestWalletRecovery(OnTestnet):
                 )
 
         # Recovery step 2
-        operate.wallet_recoverey_manager.complete_recovery(
-            password=new_password,
-            bundle_id=bundle_id,
-        )
+        operate.wallet_recoverey_manager.complete_recovery()
 
         # Test that recovery was successful
         operate = OperateApp(
@@ -156,12 +154,10 @@ class TestWalletRecovery(OnTestnet):
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
-        with pytest.raises(
-            ValueError, match=f"Recovery bundle {bundle_id} has been executed already."
-        ):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=bundle_id
-            )
+        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+            operate.wallet_recoverey_manager.complete_recovery()
+
+        assert operate.wallet_recoverey_manager.data.last_initiated_bundle_id is None
 
     def test_resumed_flow(
         self,
@@ -176,11 +172,20 @@ class TestWalletRecovery(OnTestnet):
 
         # Recovery step 1
         new_password = password[::-1]
+
+        assert operate.wallet_recoverey_manager.data.last_initiated_bundle_id is None
+
         step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
             new_password=new_password
         )
 
-        assert step_1_output.get("id") is not None
+        assert (
+            operate.wallet_recoverey_manager.data.last_initiated_bundle_id is not None
+        )
+        assert (
+            step_1_output.get("id")
+            == operate.wallet_recoverey_manager.data.last_initiated_bundle_id
+        )
         assert step_1_output.get("wallets") is not None
         assert len(step_1_output["wallets"]) == len(wallet_manager.json)
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
@@ -219,10 +224,7 @@ class TestWalletRecovery(OnTestnet):
 
         # Recovery step 2 - fail
         with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password,
-                bundle_id=bundle_id,
-            )
+            operate.wallet_recoverey_manager.complete_recovery()
 
         # Resume swapping safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
@@ -241,11 +243,14 @@ class TestWalletRecovery(OnTestnet):
                     new_owner=item["new_wallet"]["address"],
                 )
 
-        # Recovery step 2
-        operate.wallet_recoverey_manager.complete_recovery(
-            password=new_password,
-            bundle_id=bundle_id,
+        # Recovery step 1 - resume incomplete bundle
+        step_1_output_resumed = operate.wallet_recoverey_manager.initiate_recovery(
+            new_password=new_password
         )
+        assert step_1_output_resumed["id"] == bundle_id
+
+        # Recovery step 2
+        operate.wallet_recoverey_manager.complete_recovery()
 
         # Test that recovery was successful
         operate = OperateApp(
@@ -269,6 +274,24 @@ class TestWalletRecovery(OnTestnet):
         TestWalletRecovery._assert_recovered(
             old_wallet_manager, wallet_manager, new_password, new_mnemonics
         )
+
+        # New recovery should have a different bundle_id
+        operate = OperateApp(
+            home=test_env.tmp_path / OPERATE_TEST,
+        )
+        assert operate.wallet_recoverey_manager.data.last_initiated_bundle_id is None
+
+        step_1_output_resumed = operate.wallet_recoverey_manager.initiate_recovery(
+            new_password=new_password
+        )
+        assert (
+            operate.wallet_recoverey_manager.data.last_initiated_bundle_id is not None
+        )
+        assert (
+            step_1_output_resumed["id"]
+            == operate.wallet_recoverey_manager.data.last_initiated_bundle_id
+        )
+        assert step_1_output_resumed["id"] != bundle_id
 
     @pytest.mark.parametrize("raise_if_inconsistent_owners", [True, False])
     def test_exceptions(
@@ -301,6 +324,9 @@ class TestWalletRecovery(OnTestnet):
             home=test_env.tmp_path / OPERATE_TEST,
         )
 
+        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+            operate.wallet_recoverey_manager.complete_recovery()
+
         with pytest.raises(
             ValueError, match="'new_password' must be a non-empty string."
         ):
@@ -310,6 +336,42 @@ class TestWalletRecovery(OnTestnet):
             ValueError, match="'new_password' must be a non-empty string."
         ):
             operate.wallet_recoverey_manager.initiate_recovery(new_password=None)  # type: ignore
+
+        # Remove backup owner for half of the chains
+        for wallet in wallet_manager:
+            wallet.password = password
+            chains = list(wallet.safes.keys())
+            mid = len(chains) // 2
+            chains_1 = chains[:mid]
+            for chain in chains_1:
+                ledger_api = get_default_ledger_api(chain)
+                remove_owner(
+                    ledger_api=ledger_api,
+                    crypto=wallet.crypto,
+                    safe=wallet.safes[chain],
+                    owner=backup_owner,
+                    threshold=1,
+                )
+
+        with pytest.raises(WalletRecoveryError, match="has less than 2 owners\\.$"):
+            operate.wallet_recoverey_manager.initiate_recovery(
+                new_password=new_password
+            )
+
+        # Restore backup owner for half of the chains
+        for wallet in wallet_manager:
+            wallet.password = password
+            chains = list(wallet.safes.keys())
+            mid = len(chains) // 2
+            chains_1 = chains[:mid]
+            for chain in chains_1:
+                ledger_api = get_default_ledger_api(chain)
+                add_owner(
+                    ledger_api=ledger_api,
+                    crypto=wallet.crypto,
+                    safe=wallet.safes[chain],
+                    owner=backup_owner,
+                )
 
         # Recovery step 1
         step_1_output = operate.wallet_recoverey_manager.initiate_recovery(
@@ -343,44 +405,15 @@ class TestWalletRecovery(OnTestnet):
             WalletRecoveryError,
             match="Wallet recovery cannot be executed while logged in.",
         ):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=bundle_id
-            )
+            operate.wallet_recoverey_manager.complete_recovery()
 
         # Logout
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
 
-        random_bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
-        with pytest.raises(
-            KeyError, match=f"Recovery bundle {random_bundle_id} does not exist."
-        ):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=random_bundle_id
-            )
-
-        with pytest.raises(ValueError, match="'bundle_id' must be a non-empty string."):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=""
-            )
-
-        with pytest.raises(ValueError, match="'bundle_id' must be a non-empty string."):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=None  # type: ignore
-            )
-
-        random_password = random_string(16)
-        with pytest.raises(ValueError, match=MSG_INVALID_PASSWORD):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=random_password, bundle_id=bundle_id
-            )
-
         with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password,
-                bundle_id=bundle_id,
-            )
+            operate.wallet_recoverey_manager.complete_recovery()
 
         # Add safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
@@ -398,8 +431,6 @@ class TestWalletRecovery(OnTestnet):
 
         with pytest.raises(WalletRecoveryError, match="^Inconsistent owners.*"):
             operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password,
-                bundle_id=bundle_id,
                 raise_if_inconsistent_owners=True,
             )
 
@@ -441,8 +472,6 @@ class TestWalletRecovery(OnTestnet):
                 match="^Inconsistent owners. Backup owners differ across Safes on chains.*",
             ):
                 operate.wallet_recoverey_manager.complete_recovery(
-                    password=new_password,
-                    bundle_id=bundle_id,
                     raise_if_inconsistent_owners=True,
                 )
 
@@ -466,8 +495,6 @@ class TestWalletRecovery(OnTestnet):
 
         # Recovery step 2
         operate.wallet_recoverey_manager.complete_recovery(
-            password=new_password,
-            bundle_id=bundle_id,
             raise_if_inconsistent_owners=raise_if_inconsistent_owners,
         )
 
@@ -494,13 +521,10 @@ class TestWalletRecovery(OnTestnet):
             old_wallet_manager, wallet_manager, new_password, new_mnemonics
         )
 
-        # Attempt to do a recovery with the same bundle will result in error
+        # Attempt to do a recovery without an initiated bundle will result in error
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
-        with pytest.raises(
-            ValueError, match=f"Recovery bundle {bundle_id} has been executed already."
-        ):
-            operate.wallet_recoverey_manager.complete_recovery(
-                password=new_password, bundle_id=bundle_id
-            )
+
+        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+            operate.wallet_recoverey_manager.complete_recovery()
