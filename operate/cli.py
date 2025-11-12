@@ -302,7 +302,7 @@ class OperateApp:
         return self._wallet_manager
 
     @property
-    def wallet_recoverey_manager(self) -> WalletRecoveryManager:
+    def wallet_recovery_manager(self) -> WalletRecoveryManager:
         """Load wallet recovery manager."""
         manager = WalletRecoveryManager(
             path=self._path / WALLET_RECOVERY_DIR,
@@ -1527,7 +1527,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
-            output = operate.wallet_recoverey_manager.initiate_recovery(
+            output = operate.wallet_recovery_manager.initiate_recovery(
                 new_password=new_password
             )
             return JSONResponse(
@@ -1549,6 +1549,27 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    @app.get("/api/wallet/recovery/funding_requirements")
+    async def _get_recovery_funding_requirements(request: Request) -> JSONResponse:
+        """Get recovery funding requirements."""
+
+        try:
+            output = operate.funding_manager.recovery_requirements()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"_recovery_funding_requirements error: {e}\n{traceback.format_exc()}"
+            )
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
     @app.post("/api/wallet/recovery/complete")
     async def _wallet_recovery_complete(request: Request) -> JSONResponse:
         """Complete wallet recovery."""
@@ -1562,7 +1583,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
-            operate.wallet_recoverey_manager.complete_recovery(
+            operate.wallet_recovery_manager.complete_recovery(
                 raise_if_inconsistent_owners=raise_if_inconsistent_owners,
             )
             return JSONResponse(

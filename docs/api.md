@@ -647,6 +647,47 @@ Initiate wallet recovery.
 }
 ```
 
+### `GET /api/wallet/recovery/funding_requirements`
+
+Get backup owner funding requirements to complete wallet recovery process.
+
+**Response (Success - 200):**
+
+```json
+{
+  "balances": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1000000000000000000
+      }
+    }
+  },
+  "total_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 2000000000000000000
+      }
+    }
+  },
+  "refill_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "is_refill_required": true
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+}
+```
+
 ### `POST /api/wallet/recovery/complete`
 
 Initiate wallet recovery.

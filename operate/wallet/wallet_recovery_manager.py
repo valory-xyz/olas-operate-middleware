@@ -76,9 +76,9 @@ class WalletRecoveryManager:
             WalletRecoveryManagerData, WalletRecoveryManagerData.load(path)
         )
 
-    def initiate_recovery(
+    def initiate_recovery(  # pylint: disable=too-many-locals
         self, new_password: str
-    ) -> t.Dict:  # pylint: disable=too-many-locals
+    ) -> t.Dict:
         """Recovery step 1"""
         self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 1 started.")
 
