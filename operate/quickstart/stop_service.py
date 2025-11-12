@@ -37,7 +37,9 @@ if TYPE_CHECKING:
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-def stop_service(operate: "OperateApp", config_path: str) -> None:
+def stop_service(
+    operate: "OperateApp", config_path: str, use_binary: bool = False
+) -> None:
     """Stop service."""
 
     with open(config_path, "r") as config_file:
@@ -57,8 +59,13 @@ def stop_service(operate: "OperateApp", config_path: str) -> None:
     configure_local_config(template, operate)
     manager = operate.service_manager()
     service = get_service(manager, template)
+    if use_binary:
+        use_docker = False
+    else:
+        use_docker = True
+
     manager.stop_service_locally(
-        service_config_id=service.service_config_id, use_docker=True, force=True
+        service_config_id=service.service_config_id, use_docker=use_docker, force=True
     )
 
     print()

@@ -993,17 +993,25 @@ Get all valid services.
 ```json
 [
   {
-    "service_config_id": "service_123",
     "name": "My Service",
-    "description": "Service description",
+    "version": 9,
+    "service_config_id": "service_123",
     "service_public_id": "valory/service_123:0.1.0",
-    "hash": "bafybeic...",
-    "keys": [
-      {
-        "ledger": "ethereum",
-        "address": "0x...",
-        "private_key": "0x..."
+    "package_path": "package",
+    "hash": "bafybei...",
+    "hash_history": {
+      "1756295395": "bafybei..."
+    },
+    "agent_release": {
+      "is_aea": true,
+      "repository": {
+        "owner": "org",
+        "name": "repo",
+        "release_tag": "v0.0.100"
       }
+    },
+    "agent_addresses": [
+      "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
     ],
     "home_chain": "gnosis",
     "chain_configs": {
@@ -1033,6 +1041,15 @@ Get all valid services.
             }
           }
         }
+      }
+    },
+    "description": "Service description",
+    "env_variables": {
+      "ENV_VAR_NAME": {
+        "name": "Environment Variable Name",
+        "description": "Description of the environment variable",
+        "value": "Value of the environment variable",
+        "provision_type": "fixed/computed/user"
       }
     }
   }
@@ -1107,17 +1124,25 @@ Get a specific service.
 
 ```json
 {
-  "service_config_id": "service_123",
   "name": "My Service",
-  "description": "Service description",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "hash": "bafybeic...",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1147,6 +1172,15 @@ Get a specific service.
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1397,124 +1431,24 @@ Create a new service.
 ```json
 {
   "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
-  "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
-    }
-  ],
-  "home_chain": "gnosis",
-  "chain_configs": {
-    "gnosis": {
-      "ledger_config": {
-        "rpc": "https://rpc.gnosis.gateway.fm",
-        "chain": "gnosis"
-      },
-      "chain_data": {
-        "instances": ["0x..."],
-        "token": "123",
-        "multisig": "0x...",
-        "staked": true,
-        "on_chain_state": 3,
-        "user_params": {
-          "staking_program_id": "pearl_alpha",
-          "nft": "bafybei...",
-          "threshold": 1,
-          "use_staking": true,
-          "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
-          "fund_requirements": {
-            "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-**Response (Success - 200):**
-
-```json
-{
+  "version": 9,
   "service_config_id": "service_123",
-  "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
-  ],
-  "home_chain": "gnosis",
-  "chain_configs": {
-    "gnosis": {
-      "ledger_config": {
-        "rpc": "https://rpc.gnosis.gateway.fm",
-        "chain": "gnosis"
-      },
-      "chain_data": {
-        "instances": ["0x..."],
-        "token": "123",
-        "multisig": "0x...",
-        "staked": true,
-        "on_chain_state": 3,
-        "user_params": {
-          "staking_program_id": "pearl_alpha",
-          "nft": "bafybei...",
-          "threshold": 1,
-          "use_staking": true,
-          "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
-          "fund_requirements": {
-            "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-**Response (Not logged in - 401):**
-
-```json
-{
-  "error": "User not logged in."
-}
-```
-
-### `PUT /api/v2/service/{service_config_id}` <br /> `PATCH /api/v2/service/{service_config_id}`
-
-Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.
-
-**Request Body:**
-
-```json
-{
-  "name": "Updated Service Name",
-  "description": "Updated description",
-  "hash": "bafybeic...",
-  "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
-    }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1546,7 +1480,15 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
       }
     }
   },
-  "allow_different_service_public_id": false
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
+    }
+  }
 }
 ```
 
@@ -1554,17 +1496,25 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 
 ```json
 {
+  "name": "My Service",
+  "version": 9,
   "service_config_id": "service_123",
-  "name": "Updated Service Name",
-  "description": "Updated description",
-  "hash": "bafybeic...",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1594,6 +1544,158 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
+    }
+  }
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+### `PUT /api/v2/service/{service_config_id}` <br /> `PATCH /api/v2/service/{service_config_id}`
+
+Update a service configuration. Use `PUT` for full updates and `PATCH` for partial updates.
+
+**Request Body:**
+
+```json
+{
+  "name": "My Service",
+  "version": 9,
+  "service_config_id": "service_123",
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
+    }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
+    }
+  },
+  "allow_different_service_public_id": false
+}
+```
+
+**Response (Success - 200):**
+
+```json
+{
+  "name": "My Service",
+  "version": 9,
+  "service_config_id": "service_123",
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
+    }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
+  ],
+  "home_chain": "gnosis",
+  "chain_configs": {
+    "gnosis": {
+      "ledger_config": {
+        "rpc": "https://rpc.gnosis.gateway.fm",
+        "chain": "gnosis"
+      },
+      "chain_data": {
+        "instances": ["0x..."],
+        "token": "123",
+        "multisig": "0x...",
+        "staked": true,
+        "on_chain_state": 3,
+        "user_params": {
+          "staking_program_id": "pearl_alpha",
+          "nft": "bafybei...",
+          "threshold": 1,
+          "use_staking": true,
+          "use_mech_marketplace": false,
+          "cost_of_bond": 10000000000000000000,
+          "fund_requirements": {
+            "0x0000000000000000000000000000000000000000": {
+              "agent": 100000000000000000,
+              "safe": 500000000000000000
+            }
+          }
+        }
+      }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1623,17 +1725,25 @@ Deploy and run a service.
 
 ```json
 {
-  "service_config_id": "service_123",
   "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1663,6 +1773,15 @@ Deploy and run a service.
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
