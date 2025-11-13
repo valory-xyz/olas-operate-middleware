@@ -19,6 +19,7 @@
 
 """Wallet recovery manager"""
 
+from operator import ne
 import shutil
 import typing as t
 import uuid
@@ -27,9 +28,12 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
-from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR
+from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR, ZERO_ADDRESS
+from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
+from operate.operate_types import ChainAmounts
 from operate.resource import LocalResource
-from operate.utils.gnosis import get_owners
+from operate.utils.gnosis import get_asset_balance, get_owners
 from operate.wallet.master import MasterWalletManager
 
 
@@ -96,7 +100,7 @@ class WalletRecoveryManager:
 
         for wallet in self.wallet_manager:
             for chain, safe in wallet.safes.items():
-                ledger_api = wallet.ledger_api(chain=chain)
+                ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
 
                 if wallet.address not in owners:
@@ -113,42 +117,13 @@ class WalletRecoveryManager:
         if last_prepared_bundle_id is not None:
             if self._bundle_has_safes_with_new_wallet(last_prepared_bundle_id):
                 self.logger.info(
-                    f"[WALLET RECOVERY MANAGER] Existing bundle {last_prepared_bundle_id} has Safes with new wallet."
+                    f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
+                )
+                return self._load_bundle(
+                    bundle_id=last_prepared_bundle_id, new_password=new_password
                 )
 
-                new_root = (
-                    self.path / last_prepared_bundle_id / RECOVERY_NEW_OBJECTS_DIR
-                )
-                new_user_account = UserAccount.load(new_root / USER_JSON)
-                if not new_user_account.is_valid(password=new_password):
-                    raise ValueError(MSG_INVALID_PASSWORD)
-
-                new_wallets_path = new_root / WALLETS_DIR
-                new_wallet_manager = MasterWalletManager(
-                    path=new_wallets_path, password=new_password
-                )
-
-                wallets = []
-                for wallet in self.wallet_manager:
-                    ledger_type = wallet.ledger_type
-                    new_wallet = new_wallet_manager.load(ledger_type=ledger_type)
-                    new_mnemonic = new_wallet.decrypt_mnemonic(password=new_password)
-                    wallets.append(
-                        {
-                            "current_wallet": wallet.json,
-                            "new_wallet": new_wallet.json,
-                            "new_mnemonic": new_mnemonic,
-                        }
-                    )
-
-                self.logger.info(
-                    "[WALLET RECOVERY MANAGER] Prepare recovery finished with existing bundle."
-                )
-                return {
-                    "id": last_prepared_bundle_id,
-                    "wallets": wallets,
-                }
-
+        # Create new recovery bundle
         bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_root.mkdir(parents=True, exist_ok=False)
@@ -160,32 +135,24 @@ class WalletRecoveryManager:
         )
         new_wallet_manager.setup()
 
-        wallets = []
         for wallet in self.wallet_manager:
             ledger_type = wallet.ledger_type
-            new_wallet, new_mnemonic = new_wallet_manager.create(
+            new_wallet, _ = new_wallet_manager.create(
                 ledger_type=ledger_type
             )
             self.logger.info(
                 f"[WALLET RECOVERY MANAGER] Created new wallet {ledger_type=} {new_wallet.address=}"
             )
-            wallets.append(
-                {
-                    "current_wallet": wallet.json,
-                    "new_wallet": new_wallet.json,
-                    "new_mnemonic": new_mnemonic,
-                }
-            )
 
         self.data.last_prepared_bundle_id = bundle_id
         self.data.store()
+
         self.logger.info(
             "[WALLET RECOVERY MANAGER] Prepare recovery finished with new bundle."
         )
-        return {
-            "id": bundle_id,
-            "wallets": wallets,
-        }
+        return self._load_bundle(
+            bundle_id=bundle_id, new_password=new_password
+        )
 
     def _bundle_has_safes_with_new_wallet(self, bundle_id: str) -> bool:
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
@@ -197,13 +164,110 @@ class WalletRecoveryManager:
                 (w for w in new_wallet_manager if w.ledger_type == wallet.ledger_type)
             )
             for chain, safe in wallet.safes.items():
-                ledger_api = wallet.ledger_api(chain=chain)
+                ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
 
                 if new_wallet.address in owners:
                     return True
 
         return False
+
+    def _load_bundle(self, bundle_id: str, new_password: t.Optional[str] = None) -> t.Dict:
+        new_root = (
+            self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
+        )
+
+        if new_password:
+            new_user_account = UserAccount.load(new_root / USER_JSON)
+            if not new_user_account.is_valid(password=new_password):
+                raise ValueError(MSG_INVALID_PASSWORD)
+
+        new_wallets_path = new_root / WALLETS_DIR
+        new_wallet_manager = MasterWalletManager(
+            path=new_wallets_path, password=new_password
+        )
+
+        wallets = []
+        for wallet in self.wallet_manager:
+            ledger_type = wallet.ledger_type
+            new_wallet = new_wallet_manager.load(ledger_type=ledger_type)
+            new_mnemonic = None
+            if new_password:
+                new_mnemonic = new_wallet.decrypt_mnemonic(password=new_password)
+            wallets.append(
+                {
+                    "current_wallet": wallet.json,
+                    "new_wallet": new_wallet.json,
+                    "new_mnemonic": new_mnemonic,
+                }
+            )
+        return {
+            "id": bundle_id,
+            "wallets": wallets,
+        }
+
+    def recovery_requirements(self) -> t.Dict[str, t.Any]:
+        """Get recovery funding requirements for backup owners."""
+
+        bundle_id = self.data.last_prepared_bundle_id
+        if not bundle_id:
+            return {}
+        
+        balances = ChainAmounts()
+        requirements = ChainAmounts()
+
+        new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
+        new_wallets_path = new_root / WALLETS_DIR
+        new_wallet_manager = MasterWalletManager(path=new_wallets_path, password=None)
+
+        for wallet in self.wallet_manager:
+            new_wallet = next(
+                (w for w in new_wallet_manager if w.ledger_type == wallet.ledger_type)
+            )
+            for chain, safe in wallet.safes.items():
+                chain_str = chain.value
+                balances.setdefault(chain_str, {})
+                requirements.setdefault(chain_str, {})
+
+                ledger_api = get_default_ledger_api(chain)
+                owners = get_owners(ledger_api=ledger_api, safe=safe)
+                backup_owners = set(owners) - {wallet.address} - {new_wallet.address}
+
+                if len(backup_owners) != 1:
+                    self.logger.warning(
+                        f"[WALLET RECOVERY MANAGER] Safe {safe} on {chain.value} has unexpected number of backup owners: {len(backup_owners)}."
+                    )
+
+                for backup_owner in backup_owners:
+                    balances[chain_str].setdefault(backup_owner, {})
+                    balances[chain_str][backup_owner][ZERO_ADDRESS] = get_asset_balance(
+                        ledger_api=ledger_api,
+                        asset_address=ZERO_ADDRESS,
+                        address=backup_owner,
+                        raise_on_invalid_address=False,
+                    )
+                    requirements[chain_str].setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)
+                    if new_wallet.address not in owners:
+                        requirements[chain_str][backup_owner][
+                            ZERO_ADDRESS
+                        ] += DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
+
+        refill_requirements = ChainAmounts.shortfalls(
+            requirements=requirements, balances=balances
+        )
+        is_refill_required = any(
+            amount > 0
+            for address in refill_requirements.values()
+            for assets in address.values()
+            for amount in assets.values()
+        )
+
+        return {
+            "balances": balances,
+            "total_requirements": requirements,
+            "refill_requirements": refill_requirements,
+            "is_refill_required": is_refill_required,
+        }
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
         self, raise_if_inconsistent_owners: bool = True
@@ -261,7 +325,7 @@ class WalletRecoveryManager:
 
             all_backup_owners = set()
             for chain, safe in wallet.safes.items():
-                ledger_api = wallet.ledger_api(chain=chain)
+                ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 if new_wallet.address not in owners:
                     raise WalletRecoveryError(
@@ -291,13 +355,13 @@ class WalletRecoveryManager:
         # Update configuration recovery
         try:
             old_root.mkdir(parents=True, exist_ok=False)
-            shutil.move(str(wallets_path), str(old_root))
+            shutil.move(wallets_path, old_root)
             for file in root.glob(f"{USER_JSON}*"):
-                shutil.move(str(file), str(old_root / file.name))
+                shutil.move(file, old_root / file.name)
 
-            shutil.move(str(new_wallets_path), str(root))
+            shutil.copytree(new_wallets_path, root / new_wallets_path.name, dirs_exist_ok=True)
             for file in new_root.glob(f"{USER_JSON}*"):
-                shutil.move(str(file), str(root / file.name))
+                shutil.copy2(file, root / file.name)
 
             self.data.last_prepared_bundle_id = None
             self.data.store()

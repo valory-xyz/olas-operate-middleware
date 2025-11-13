@@ -922,51 +922,6 @@ class FundingManager:
 
                 await asyncio.sleep(60)
 
-    def recovery_requirements(self) -> t.Dict[str, t.Any]:
-        """Get recovery funding requirements for backup owners."""
-
-        balances = ChainAmounts()
-        requirements = ChainAmounts()
-
-        for wallet in self.wallet_manager:
-            for chain, safe in wallet.safes.items():
-                chain_str = chain.value
-                balances.setdefault(chain_str, {})
-                requirements.setdefault(chain_str, {})
-
-                ledger_api = get_default_ledger_api(chain)
-                owners = get_owners(ledger_api=ledger_api, safe=safe)
-                backup_owners = set(owners) - {wallet.address}
-
-                for backup_owner in backup_owners:
-                    balances[chain_str].setdefault(backup_owner, {})
-                    balances[chain_str][backup_owner][ZERO_ADDRESS] = get_asset_balance(
-                        ledger_api=ledger_api,
-                        asset_address=ZERO_ADDRESS,
-                        address=backup_owner,
-                        raise_on_invalid_address=False,
-                    )
-                    requirements[chain_str].setdefault(backup_owner, {})
-                    requirements[chain_str][backup_owner][
-                        ZERO_ADDRESS
-                    ] = DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
-
-        refill_requirements = ChainAmounts.shortfalls(
-            requirements=requirements, balances=balances
-        )
-        is_refill_required = any(
-            amount > 0
-            for address in refill_requirements.values()
-            for assets in address.values()
-            for amount in assets.values()
-        )
-
-        return {
-            "balances": balances,
-            "total_requirements": requirements,
-            "refill_requirements": refill_requirements,
-            "is_refill_required": is_refill_required,
-        }
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.

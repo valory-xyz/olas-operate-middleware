@@ -24,14 +24,15 @@
 
 import typing as t
 
+from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 import pytest
 from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
 from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
-from operate.operate_types import Chain, LedgerType
-from operate.utils.gnosis import add_owner, remove_owner, swap_owner
+from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.utils.gnosis import add_owner, get_owners, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     RECOVERY_OLD_OBJECTS_DIR,
@@ -68,6 +69,7 @@ class TestWalletRecovery(OnTestnet):
     @staticmethod
     def _assert_recovery_requirements(
         wallet_manager: MasterWalletManager,
+        prepare_json: t.Dict,
         backup_owner: str,
         recovery_requirements: t.Dict[str, t.Any],
         is_refill_required: bool = False,
@@ -76,20 +78,23 @@ class TestWalletRecovery(OnTestnet):
         total_requirements = recovery_requirements["total_requirements"]
         refill_requirements = recovery_requirements["refill_requirements"]
 
-        assert recovery_requirements["is_refill_required"] == is_refill_required
+        expected_balances = {}
+        expected_requirements = ChainAmounts()
 
         for wallet in wallet_manager:
-            for chain in wallet.safes.keys():
+            new_wallet_json = next(
+                (w for w in prepare_json["wallets"] if w["new_wallet"]["ledger_type"] == wallet.ledger_type.value)
+            )["new_wallet"]
+            for chain, safe in wallet.safes.items():
                 chain_str = chain.value
-                assert chain_str in balances
-                assert chain_str in total_requirements
-                assert chain_str in refill_requirements
-                assert backup_owner in balances[chain_str]
-                assert backup_owner in total_requirements[chain_str]
-                assert backup_owner in refill_requirements[chain_str]
-                assert ZERO_ADDRESS in balances[chain_str][backup_owner]
-                assert ZERO_ADDRESS in total_requirements[chain_str][backup_owner]
-                assert ZERO_ADDRESS in refill_requirements[chain_str][backup_owner]
+                expected_balances.setdefault(chain_str, {}).setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)
+                expected_balances[chain_str][backup_owner][ZERO_ADDRESS] = recovery_requirements["balances"][chain_str][backup_owner][ZERO_ADDRESS]
+                expected_requirements.setdefault(chain_str, {}).setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)                
+
+                ledger_api = get_default_ledger_api(chain)
+                owners = get_owners(ledger_api=ledger_api, safe=safe)
+                if new_wallet_json["address"] not in owners:
+                    expected_requirements[chain_str][backup_owner][ZERO_ADDRESS] += DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
 
                 balance = balances[chain_str][backup_owner][ZERO_ADDRESS]
                 requirement = total_requirements[chain_str][backup_owner][ZERO_ADDRESS]
@@ -100,6 +105,19 @@ class TestWalletRecovery(OnTestnet):
                     assert shortfall > 0
                 else:
                     assert shortfall == 0
+
+        expected_refill_requirements = ChainAmounts.shortfalls(
+            requirements=expected_requirements, balances=expected_balances
+        )
+
+        expected_recovery_requirements = {
+            "balances": dict(expected_balances),
+            "total_requirements": dict(expected_requirements),
+            "refill_requirements": dict(expected_refill_requirements),
+            "is_refill_required": is_refill_required,
+        }
+
+        assert not DeepDiff(recovery_requirements, expected_recovery_requirements)
 
     @staticmethod
     def _assert_different_prepare_bundles(
@@ -170,6 +188,7 @@ class TestWalletRecovery(OnTestnet):
 
         bundle_id = prepare_json["id"]
 
+        # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
             url="/api/wallet/recovery/funding_requirements",
         )
@@ -177,6 +196,7 @@ class TestWalletRecovery(OnTestnet):
         recovery_requirements = recovery_requirements_response.json()
         TestWalletRecovery._assert_recovery_requirements(
             wallet_manager=wallet_manager,
+            prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
             is_refill_required=False,
@@ -196,6 +216,20 @@ class TestWalletRecovery(OnTestnet):
                     old_owner=item["current_wallet"]["address"],
                     new_owner=item["new_wallet"]["address"],
                 )
+
+        # Check recovery funding requirements
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
+        TestWalletRecovery._assert_recovery_requirements(
+            wallet_manager=wallet_manager,
+            prepare_json=prepare_json,
+            backup_owner=backup_owner,
+            recovery_requirements=recovery_requirements,
+            is_refill_required=False,
+        )
 
         # Complete recovery
         complete_response = operate_client.post(
@@ -241,6 +275,7 @@ class TestWalletRecovery(OnTestnet):
     ) -> None:
         """test_resumed_flow"""
         operate = test_env.operate
+        operate_client = test_env.operate_client
         wallet_manager = test_env.wallet_manager
         keys_manager = test_env.keys_manager
         backup_owner = test_env.backup_owner
@@ -286,6 +321,19 @@ class TestWalletRecovery(OnTestnet):
 
         bundle_id = prepare_json["id"]
 
+        # Check recovery funding requirements
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
+        TestWalletRecovery._assert_recovery_requirements(
+            wallet_manager=wallet_manager,
+            backup_owner=backup_owner,
+            recovery_requirements=recovery_requirements,
+            is_refill_required=False,
+        )
+
         # Incompletely swap safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in prepare_json["wallets"]:
@@ -302,6 +350,19 @@ class TestWalletRecovery(OnTestnet):
                     old_owner=item["current_wallet"]["address"],
                     new_owner=item["new_wallet"]["address"],
                 )
+
+        # Check recovery funding requirements
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
+        TestWalletRecovery._assert_recovery_requirements(
+            wallet_manager=wallet_manager,
+            backup_owner=backup_owner,
+            recovery_requirements=recovery_requirements,
+            is_refill_required=False,
+        )
 
         # Complete recovery - fail
         with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):

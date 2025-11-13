@@ -1552,7 +1552,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         """Get recovery funding requirements."""
 
         try:
-            output = operate.funding_manager.recovery_requirements()
+            output = operate.wallet_recovery_manager.recovery_requirements()
             return JSONResponse(
                 content=output,
                 status_code=HTTPStatus.OK,
