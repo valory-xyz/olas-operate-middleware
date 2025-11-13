@@ -114,10 +114,13 @@ class WalletRecoveryManager:
 
         last_prepared_bundle_id = self.data.last_prepared_bundle_id
         if last_prepared_bundle_id is not None:
-            _, num_safes_with_new_wallet, _, _ = self._get_swap_status(
-                last_prepared_bundle_id
-            )
-            if num_safes_with_new_wallet > 0:
+            (
+                _,
+                num_safes_with_new_wallet,
+                _,
+                num_safes_with_both_wallets,
+            ) = self._get_swap_status(last_prepared_bundle_id)
+            if num_safes_with_new_wallet + num_safes_with_both_wallets > 0:
                 self.logger.info(
                     f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
                 )
@@ -219,7 +222,9 @@ class WalletRecoveryManager:
             "wallets": wallets,
         }
 
-    def recovery_requirements(self) -> t.Dict[str, t.Any]:
+    def recovery_requirements(  # pylint: disable=too-many-locals
+        self,
+    ) -> t.Dict[str, t.Any]:
         """Get recovery funding requirements for backup owners."""
 
         bundle_id = self.data.last_prepared_bundle_id

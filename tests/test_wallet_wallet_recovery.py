@@ -344,6 +344,17 @@ class TestWalletRecovery(OnTestnet):
         backup_owner = test_env.backup_owner
         password = test_env.password
 
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is False
+        assert status_response["bundle_id"] is None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is False
+
         # Prepare recovery
         new_password = password[::-1]
 
@@ -384,6 +395,17 @@ class TestWalletRecovery(OnTestnet):
 
         bundle_id = prepare_json["id"]
 
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is True
+        assert status_response["bundle_id"] is not None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is True
+
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
             url="/api/wallet/recovery/funding_requirements",
@@ -392,6 +414,7 @@ class TestWalletRecovery(OnTestnet):
         recovery_requirements = recovery_requirements_response.json()
         TestWalletRecovery._assert_recovery_requirements(
             wallet_manager=wallet_manager,
+            prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
             is_refill_required=False,
@@ -414,6 +437,17 @@ class TestWalletRecovery(OnTestnet):
                     new_owner=item["new_wallet"]["address"],
                 )
 
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is True
+        assert status_response["bundle_id"] is not None
+        assert status_response["has_swaps"] is True
+        assert status_response["has_pending_swaps"] is True
+
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
             url="/api/wallet/recovery/funding_requirements",
@@ -422,6 +456,7 @@ class TestWalletRecovery(OnTestnet):
         recovery_requirements = recovery_requirements_response.json()
         TestWalletRecovery._assert_recovery_requirements(
             wallet_manager=wallet_manager,
+            prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
             is_refill_required=False,
@@ -447,6 +482,31 @@ class TestWalletRecovery(OnTestnet):
                     old_owner=item["current_wallet"]["address"],
                     new_owner=item["new_wallet"]["address"],
                 )
+
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is True
+        assert status_response["bundle_id"] is not None
+        assert status_response["has_swaps"] is True
+        assert status_response["has_pending_swaps"] is False
+
+        # Check recovery funding requirements
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
+        TestWalletRecovery._assert_recovery_requirements(
+            wallet_manager=wallet_manager,
+            prepare_json=prepare_json,
+            backup_owner=backup_owner,
+            recovery_requirements=recovery_requirements,
+            is_refill_required=False,
+        )
 
         # Prepare recovery - resume incomplete bundle
         with pytest.raises(ValueError, match=MSG_INVALID_PASSWORD):
@@ -484,6 +544,25 @@ class TestWalletRecovery(OnTestnet):
         TestWalletRecovery._assert_recovered(
             old_wallet_manager, wallet_manager, new_password, new_mnemonics
         )
+
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is False
+        assert status_response["bundle_id"] is None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is False
+
+        # Check recovery funding requirements
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
+        assert not DeepDiff(recovery_requirements, {})
 
         # New recovery should have a different bundle_id
         operate = OperateApp(
