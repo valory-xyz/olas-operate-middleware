@@ -674,6 +674,9 @@ class FundingManager:
         elif now < self._funding_requests_cooldown_until.get(service_config_id, 0):
             funding_requests = ChainAmounts()
             funding_requests_cooldown = True
+        elif self.is_for_quickstart:
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = False
         else:
             funding_requests = service.get_funding_requests()
             funding_requests_cooldown = False
