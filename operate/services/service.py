@@ -50,7 +50,7 @@ from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
 from autonomy.configurations.constants import DEFAULT_SERVICE_CONFIG_FILE
 from autonomy.configurations.loader import apply_env_variables, load_service_config
 from autonomy.constants import DEFAULT_KEYS_FILE, DOCKER_COMPOSE_YAML
-from autonomy.deploy.base import BaseDeploymentGenerator
+from autonomy.deploy.base import AUTONOMY_PKEY_PASSWORD, BaseDeploymentGenerator
 from autonomy.deploy.base import ServiceBuilder as BaseServiceBuilder
 from autonomy.deploy.constants import (
     AGENT_KEYS_DIR,
@@ -408,6 +408,8 @@ class Deployment(LocalResource):
             json.dumps(
                 [
                     KeysManager().get(address).get_decrypted(password)
+                    if password == ""  # nosec B105
+                    else KeysManager().get(address).json
                     for address in service.agent_addresses
                 ],
                 indent=4,
@@ -463,6 +465,8 @@ class Deployment(LocalResource):
             json.dumps(
                 [
                     KeysManager().get(address).get_decrypted(password)
+                    if password == ""  # nosec B105
+                    else KeysManager().get(address).json
                     for address in service.agent_addresses
                 ],
                 indent=4,
@@ -664,6 +668,7 @@ class Deployment(LocalResource):
                 }
             )
             service.consume_env_variables()
+            os.environ[AUTONOMY_PKEY_PASSWORD] = password
             if use_docker:
                 self._build_docker(password=password, force=force, chain=chain)
             if use_kubernetes:
