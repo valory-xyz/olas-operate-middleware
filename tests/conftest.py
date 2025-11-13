@@ -40,10 +40,12 @@ from typing import Generator
 
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
-from operate.cli import OperateApp
+from operate.cli import OperateApp, create_app
 from operate.constants import KEYS_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
@@ -178,6 +180,8 @@ class OperateTestEnv:
     tmp_path: Path
     password: str
     operate: OperateApp
+    operate_app: FastAPI
+    operate_client: TestClient
     wallet_manager: MasterWalletManager
     mnemonics: t.Dict[LedgerType, t.List[str]]
     service_manager: ServiceManager
@@ -490,10 +494,14 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
     # Logout
     test_operate.password = None
 
+    operate_app = create_app(home=test_operate._path)
+
     return OperateTestEnv(
         tmp_path=tmp_path,
         password=password,
         operate=test_operate,
+        operate_app=operate_app,
+        operate_client=TestClient(operate_app),
         wallet_manager=test_operate.wallet_manager,
         mnemonics=mnemonics,
         service_manager=test_operate.service_manager(),

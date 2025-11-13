@@ -27,7 +27,7 @@ from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
-from operate.constants import USER_JSON, WALLETS_DIR
+from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR
 from operate.resource import LocalResource
 from operate.utils.gnosis import get_owners
 from operate.wallet.master import MasterWalletManager
@@ -48,7 +48,7 @@ class WalletRecoveryManagerData(LocalResource):
 
     path: Path
     version: int = 1
-    last_initiated_bundle_id: t.Optional[str] = None
+    last_prepared_bundle_id: t.Optional[str] = None
 
     _file = "wallet_recovery.json"
 
@@ -76,11 +76,11 @@ class WalletRecoveryManager:
             WalletRecoveryManagerData, WalletRecoveryManagerData.load(path)
         )
 
-    def initiate_recovery(  # pylint: disable=too-many-locals
+    def prepare_recovery(  # pylint: disable=too-many-locals
         self, new_password: str
     ) -> t.Dict:
-        """Recovery step 1"""
-        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 1 started.")
+        """Prepare recovery"""
+        self.logger.info("[WALLET RECOVERY MANAGER] Prepare recovery started.")
 
         try:
             _ = self.wallet_manager.password
@@ -100,8 +100,8 @@ class WalletRecoveryManager:
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
 
                 if wallet.address not in owners:
-                    raise RuntimeError(
-                        f"Wallet {wallet.address} is not an owner of Safe {safe} on {chain.value}."
+                    self.logger.warning(
+                        f"Wallet {wallet.address} is not an owner of Safe {safe} on {chain.value}. (Interrupted swapping of Safe owners?)"
                     )
 
                 if len(owners) < 2:
@@ -109,16 +109,20 @@ class WalletRecoveryManager:
                         f"Safe {safe} on {chain.value} has less than 2 owners."
                     )
 
-        last_initiated_bundle_id = self.data.last_initiated_bundle_id
-        if last_initiated_bundle_id is not None:
-            if self._bundle_has_safes_with_new_wallet(last_initiated_bundle_id):
+        last_prepared_bundle_id = self.data.last_prepared_bundle_id
+        if last_prepared_bundle_id is not None:
+            if self._bundle_has_safes_with_new_wallet(last_prepared_bundle_id):
                 self.logger.info(
-                    f"[WALLET RECOVERY MANAGER] Existing bundle {last_initiated_bundle_id} has Safes with new wallet."
+                    f"[WALLET RECOVERY MANAGER] Existing bundle {last_prepared_bundle_id} has Safes with new wallet."
                 )
 
                 new_root = (
-                    self.path / last_initiated_bundle_id / RECOVERY_NEW_OBJECTS_DIR
+                    self.path / last_prepared_bundle_id / RECOVERY_NEW_OBJECTS_DIR
                 )
+                new_user_account = UserAccount.load(new_root / USER_JSON)
+                if not new_user_account.is_valid(password=new_password):
+                    raise ValueError(MSG_INVALID_PASSWORD)
+
                 new_wallets_path = new_root / WALLETS_DIR
                 new_wallet_manager = MasterWalletManager(
                     path=new_wallets_path, password=new_password
@@ -138,10 +142,10 @@ class WalletRecoveryManager:
                     )
 
                 self.logger.info(
-                    "[WALLET RECOVERY MANAGER] Recovery step 1 finished with existing bundle."
+                    "[WALLET RECOVERY MANAGER] Prepare recovery finished with existing bundle."
                 )
                 return {
-                    "id": last_initiated_bundle_id,
+                    "id": last_prepared_bundle_id,
                     "wallets": wallets,
                 }
 
@@ -173,10 +177,10 @@ class WalletRecoveryManager:
                 }
             )
 
-        self.data.last_initiated_bundle_id = bundle_id
+        self.data.last_prepared_bundle_id = bundle_id
         self.data.store()
         self.logger.info(
-            "[WALLET RECOVERY MANAGER] Recovery step 1 finished with new bundle."
+            "[WALLET RECOVERY MANAGER] Prepare recovery finished with new bundle."
         )
         return {
             "id": bundle_id,
@@ -204,8 +208,8 @@ class WalletRecoveryManager:
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
         self, raise_if_inconsistent_owners: bool = True
     ) -> None:
-        """Recovery step 2"""
-        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 started.")
+        """Complete recovery"""
+        self.logger.info("[WALLET RECOVERY MANAGER] Complete recovery started.")
 
         def _report_issue(msg: str) -> None:
             self.logger.warning(f"[WALLET RECOVERY MANAGER] {msg}")
@@ -221,10 +225,10 @@ class WalletRecoveryManager:
                 "Wallet recovery cannot be executed while logged in."
             )
 
-        bundle_id = self.data.last_initiated_bundle_id
+        bundle_id = self.data.last_prepared_bundle_id
 
         if not bundle_id:
-            raise WalletRecoveryError("No initiated bundle found.")
+            raise WalletRecoveryError("No prepared bundle found.")
 
         root = self.path.parent  # .operate root
         wallets_path = root / WALLETS_DIR
@@ -295,9 +299,9 @@ class WalletRecoveryManager:
             for file in new_root.glob(f"{USER_JSON}*"):
                 shutil.move(str(file), str(root / file.name))
 
-            self.data.last_initiated_bundle_id = None
+            self.data.last_prepared_bundle_id = None
             self.data.store()
         except Exception as e:
             raise RuntimeError from e
 
-        self.logger.info("[WALLET RECOVERY MANAGER] Recovery step 2 finished.")
+        self.logger.info("[WALLET RECOVERY MANAGER] Complete recovery finished.")

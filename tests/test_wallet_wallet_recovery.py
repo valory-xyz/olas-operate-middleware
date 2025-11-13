@@ -25,9 +25,10 @@
 import typing as t
 
 import pytest
+from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
-from operate.constants import ZERO_ADDRESS
+from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain, LedgerType
 from operate.utils.gnosis import add_owner, remove_owner, swap_owner
@@ -100,36 +101,61 @@ class TestWalletRecovery(OnTestnet):
                 else:
                     assert shortfall == 0
 
+    @staticmethod
+    def _assert_different_prepare_bundles(
+        prepare_json_1: t.Dict,
+        prepare_json_2: t.Dict,
+    ) -> None:
+        assert prepare_json_1.get("id") != prepare_json_2.get("id")
+        wallets_1 = prepare_json_1.get("wallets", [])
+        wallets_2 = prepare_json_2.get("wallets", [])
+        assert len(wallets_1) == len(wallets_2)
+        assert len(wallets_1) > 0
+
+        for item_1, item_2 in zip(wallets_1, wallets_2):
+            assert not DeepDiff(
+                item_1.get("current_wallet"), item_2.get("current_wallet")
+            )
+            assert (
+                item_1.get("new_wallet")["address"]
+                != item_2.get("new_wallet")["address"]
+            )
+            assert item_1.get("new_mnemonic") != item_2.get("new_mnemonic")
+
     def test_normal_flow(
         self,
         test_env: OperateTestEnv,
     ) -> None:
         """test_normal_flow"""
         operate = test_env.operate
+        operate_client = test_env.operate_client
         wallet_manager = test_env.wallet_manager
         keys_manager = test_env.keys_manager
         backup_owner = test_env.backup_owner
         password = test_env.password
 
-        # Recovery step 1
+        # Prepare recovery
         new_password = password[::-1]
 
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
-        step_1_output = operate.wallet_recovery_manager.initiate_recovery(
-            new_password=new_password
+        prepare_response = operate_client.post(
+            url="/api/wallet/recovery/prepare",
+            json={"new_password": new_password},
         )
+        assert prepare_response.status_code == 200
+        prepare_json = prepare_response.json()
 
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is not None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is not None
         assert (
-            step_1_output.get("id")
-            == operate.wallet_recovery_manager.data.last_initiated_bundle_id
+            prepare_json.get("id")
+            == operate.wallet_recovery_manager.data.last_prepared_bundle_id
         )
-        assert step_1_output.get("wallets") is not None
-        assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+        assert prepare_json.get("wallets") is not None
+        assert len(prepare_json["wallets"]) == len(wallet_manager.json)
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
@@ -142,9 +168,13 @@ class TestWalletRecovery(OnTestnet):
             assert current_ledger_type == new_ledger_type
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
-        bundle_id = step_1_output["id"]
+        bundle_id = prepare_json["id"]
 
-        recovery_requirements = operate.funding_manager.recovery_requirements()
+        recovery_requirements_response = operate_client.get(
+            url="/api/wallet/recovery/funding_requirements",
+        )
+        assert recovery_requirements_response.status_code == 200
+        recovery_requirements = recovery_requirements_response.json()
         TestWalletRecovery._assert_recovery_requirements(
             wallet_manager=wallet_manager,
             backup_owner=backup_owner,
@@ -152,13 +182,9 @@ class TestWalletRecovery(OnTestnet):
             is_refill_required=False,
         )
 
-        import pprint
-
-        pprint.pprint(recovery_requirements)
-
         # Swap safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             chains_str = list(item["current_wallet"]["safes"].keys())
             for chain_str in chains_str:
                 chain = Chain(chain_str)
@@ -171,8 +197,11 @@ class TestWalletRecovery(OnTestnet):
                     new_owner=item["new_wallet"]["address"],
                 )
 
-        # Recovery step 2
-        operate.wallet_recovery_manager.complete_recovery()
+        # Complete recovery
+        complete_response = operate_client.post(
+            url="/api/wallet/recovery/complete",
+        )
+        assert complete_response.status_code == 200
 
         # Test that recovery was successful
         operate = OperateApp(
@@ -201,10 +230,10 @@ class TestWalletRecovery(OnTestnet):
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
-        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+        with pytest.raises(WalletRecoveryError, match="No prepared bundle found."):
             operate.wallet_recovery_manager.complete_recovery()
 
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
     def test_resumed_flow(
         self,
@@ -217,25 +246,32 @@ class TestWalletRecovery(OnTestnet):
         backup_owner = test_env.backup_owner
         password = test_env.password
 
-        # Recovery step 1
+        # Prepare recovery
         new_password = password[::-1]
 
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
-        step_1_output = operate.wallet_recovery_manager.initiate_recovery(
+        prepare_json_unused = operate.wallet_recovery_manager.prepare_recovery(
+            new_password=new_password
+        )
+        prepare_json = operate.wallet_recovery_manager.prepare_recovery(
             new_password=new_password
         )
 
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is not None
-        assert (
-            step_1_output.get("id")
-            == operate.wallet_recovery_manager.data.last_initiated_bundle_id
+        TestWalletRecovery._assert_different_prepare_bundles(
+            prepare_json_unused, prepare_json
         )
-        assert step_1_output.get("wallets") is not None
-        assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is not None
+        assert (
+            prepare_json.get("id")
+            == operate.wallet_recovery_manager.data.last_prepared_bundle_id
+        )
+        assert prepare_json.get("wallets") is not None
+        assert len(prepare_json["wallets"]) == len(wallet_manager.json)
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
@@ -248,11 +284,11 @@ class TestWalletRecovery(OnTestnet):
             assert current_ledger_type == new_ledger_type
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
-        bundle_id = step_1_output["id"]
+        bundle_id = prepare_json["id"]
 
         # Incompletely swap safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             chains_str = list(item["current_wallet"]["safes"].keys())
             mid = len(chains_str) // 2
             chains_str_1 = chains_str[:mid]
@@ -267,13 +303,13 @@ class TestWalletRecovery(OnTestnet):
                     new_owner=item["new_wallet"]["address"],
                 )
 
-        # Recovery step 2 - fail
+        # Complete recovery - fail
         with pytest.raises(WalletRecoveryError, match="^Incorrect owners.*"):
             operate.wallet_recovery_manager.complete_recovery()
 
         # Resume swapping safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             chains_str = list(item["current_wallet"]["safes"].keys())
             mid = len(chains_str) // 2
             chains_str_2 = chains_str[mid:]
@@ -288,13 +324,18 @@ class TestWalletRecovery(OnTestnet):
                     new_owner=item["new_wallet"]["address"],
                 )
 
-        # Recovery step 1 - resume incomplete bundle
-        step_1_output_resumed = operate.wallet_recovery_manager.initiate_recovery(
+        # Prepare recovery - resume incomplete bundle
+        with pytest.raises(ValueError, match=MSG_INVALID_PASSWORD):
+            operate.wallet_recovery_manager.prepare_recovery(
+                new_password=new_password + "foo"
+            )
+
+        prepare_resumed_json = operate.wallet_recovery_manager.prepare_recovery(
             new_password=new_password
         )
-        assert step_1_output_resumed["id"] == bundle_id
+        assert not DeepDiff(prepare_json, prepare_resumed_json)
 
-        # Recovery step 2
+        # Complete recovery
         operate.wallet_recovery_manager.complete_recovery()
 
         # Test that recovery was successful
@@ -324,17 +365,17 @@ class TestWalletRecovery(OnTestnet):
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
-        step_1_output_resumed = operate.wallet_recovery_manager.initiate_recovery(
+        prepare_resumed_json = operate.wallet_recovery_manager.prepare_recovery(
             new_password=new_password
         )
-        assert operate.wallet_recovery_manager.data.last_initiated_bundle_id is not None
+        assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is not None
         assert (
-            step_1_output_resumed["id"]
-            == operate.wallet_recovery_manager.data.last_initiated_bundle_id
+            prepare_resumed_json["id"]
+            == operate.wallet_recovery_manager.data.last_prepared_bundle_id
         )
-        assert step_1_output_resumed["id"] != bundle_id
+        assert prepare_resumed_json["id"] != bundle_id
 
     @pytest.mark.parametrize("raise_if_inconsistent_owners", [True, False])
     def test_exceptions(
@@ -358,25 +399,25 @@ class TestWalletRecovery(OnTestnet):
             WalletRecoveryError,
             match="Wallet recovery cannot be executed while logged in.",
         ):
-            operate.wallet_recovery_manager.initiate_recovery(new_password=new_password)
+            operate.wallet_recovery_manager.prepare_recovery(new_password=new_password)
 
         # Logout
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
 
-        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+        with pytest.raises(WalletRecoveryError, match="No prepared bundle found."):
             operate.wallet_recovery_manager.complete_recovery()
 
         with pytest.raises(
             ValueError, match="'new_password' must be a non-empty string."
         ):
-            operate.wallet_recovery_manager.initiate_recovery(new_password="")  # nosec
+            operate.wallet_recovery_manager.prepare_recovery(new_password="")  # nosec
 
         with pytest.raises(
             ValueError, match="'new_password' must be a non-empty string."
         ):
-            operate.wallet_recovery_manager.initiate_recovery(new_password=None)  # type: ignore
+            operate.wallet_recovery_manager.prepare_recovery(new_password=None)  # type: ignore
 
         # Remove backup owner for half of the chains
         for wallet in wallet_manager:
@@ -395,7 +436,7 @@ class TestWalletRecovery(OnTestnet):
                 )
 
         with pytest.raises(WalletRecoveryError, match="has less than 2 owners\\.$"):
-            operate.wallet_recovery_manager.initiate_recovery(new_password=new_password)
+            operate.wallet_recovery_manager.prepare_recovery(new_password=new_password)
 
         # Restore backup owner for half of the chains
         for wallet in wallet_manager:
@@ -412,17 +453,17 @@ class TestWalletRecovery(OnTestnet):
                     owner=backup_owner,
                 )
 
-        # Recovery step 1
-        step_1_output = operate.wallet_recovery_manager.initiate_recovery(
+        # Prepare recovery
+        prepare_json = operate.wallet_recovery_manager.prepare_recovery(
             new_password=new_password
         )
 
-        assert step_1_output.get("id") is not None
-        assert step_1_output.get("wallets") is not None
-        assert len(step_1_output["wallets"]) == len(wallet_manager.json)
+        assert prepare_json.get("id") is not None
+        assert prepare_json.get("wallets") is not None
+        assert len(prepare_json["wallets"]) == len(wallet_manager.json)
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
@@ -435,7 +476,7 @@ class TestWalletRecovery(OnTestnet):
             assert current_ledger_type == new_ledger_type
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
 
-        bundle_id = step_1_output["id"]
+        bundle_id = prepare_json["id"]
 
         # Log in
         operate.password = password
@@ -456,7 +497,7 @@ class TestWalletRecovery(OnTestnet):
 
         # Add safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
-        for item in step_1_output["wallets"]:
+        for item in prepare_json["wallets"]:
             chains_str = list(item["current_wallet"]["safes"].keys())
             for chain_str in chains_str:
                 chain = Chain(chain_str)
@@ -476,7 +517,7 @@ class TestWalletRecovery(OnTestnet):
         if raise_if_inconsistent_owners:
             # Remove old MasterEOA
             crypto = keys_manager.get_crypto_instance(backup_owner)
-            for item in step_1_output["wallets"]:
+            for item in prepare_json["wallets"]:
                 chains_str = list(item["current_wallet"]["safes"].keys())
                 for chain_str in chains_str:
                     chain = Chain(chain_str)
@@ -491,7 +532,7 @@ class TestWalletRecovery(OnTestnet):
 
             # Use a different backup owner for half of the chains
             crypto = keys_manager.get_crypto_instance(backup_owner)
-            for item in step_1_output["wallets"]:
+            for item in prepare_json["wallets"]:
                 chains_str = list(item["current_wallet"]["safes"].keys())
                 mid = len(chains_str) // 2
                 chains_str_1 = chains_str[:mid]
@@ -516,7 +557,7 @@ class TestWalletRecovery(OnTestnet):
 
             # Revert original backup owner
             crypto = keys_manager.get_crypto_instance(backup_owner2)
-            for item in step_1_output["wallets"]:
+            for item in prepare_json["wallets"]:
                 chains_str = list(item["current_wallet"]["safes"].keys())
                 mid = len(chains_str) // 2
                 chains_str_1 = chains_str[:mid]
@@ -532,7 +573,7 @@ class TestWalletRecovery(OnTestnet):
                         new_owner=backup_owner,
                     )
 
-        # Recovery step 2
+        # Complete recovery
         operate.wallet_recovery_manager.complete_recovery(
             raise_if_inconsistent_owners=raise_if_inconsistent_owners,
         )
@@ -560,10 +601,10 @@ class TestWalletRecovery(OnTestnet):
             old_wallet_manager, wallet_manager, new_password, new_mnemonics
         )
 
-        # Attempt to do a recovery without an initiated bundle will result in error
+        # Attempt to do a recovery without an prepared bundle will result in error
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
 
-        with pytest.raises(WalletRecoveryError, match="No initiated bundle found."):
+        with pytest.raises(WalletRecoveryError, match="No prepared bundle found."):
             operate.wallet_recovery_manager.complete_recovery()

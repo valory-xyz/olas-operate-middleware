@@ -1506,9 +1506,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.post("/api/wallet/recovery/initiate")
-    async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
-        """Initiate wallet recovery."""
+    @app.post("/api/wallet/recovery/prepare")
+    async def _wallet_recovery_prepare(request: Request) -> JSONResponse:
+        """Prepare wallet recovery."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
 
@@ -1527,7 +1527,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
-            output = operate.wallet_recovery_manager.initiate_recovery(
+            output = operate.wallet_recovery_manager.prepare_recovery(
                 new_password=new_password
             )
             return JSONResponse(
@@ -1535,17 +1535,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.OK,
             )
         except (ValueError, WalletRecoveryError) as e:
-            logger.error(f"_recovery_initiate error: {e}")
+            logger.error(f"_recovery_prepare error: {e}")
             return JSONResponse(
-                content={"error": f"Failed to initiate recovery: {e}"},
+                content={"error": f"Failed to prepare recovery: {e}"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"_recovery_initiate error: {e}\n{traceback.format_exc()}")
+            logger.error(f"_recovery_prepare error: {e}\n{traceback.format_exc()}")
             return JSONResponse(
-                content={
-                    "error": "Failed to initiate recovery. Please check the logs."
-                },
+                content={"error": "Failed to prepare recovery. Please check the logs."},
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
@@ -1579,7 +1577,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password:
             return USER_LOGGED_IN_ERROR
 
-        data = await request.json()
+        data = {}
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.body()
+            if body:
+                data = await request.json()
+
         raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
