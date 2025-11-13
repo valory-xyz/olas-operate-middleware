@@ -19,7 +19,6 @@
 
 """Wallet recovery manager"""
 
-from operator import ne
 import shutil
 import typing as t
 import uuid
@@ -115,7 +114,10 @@ class WalletRecoveryManager:
 
         last_prepared_bundle_id = self.data.last_prepared_bundle_id
         if last_prepared_bundle_id is not None:
-            if self._bundle_has_safes_with_new_wallet(last_prepared_bundle_id):
+            _, num_safes_with_new_wallet, _, _ = self._get_swap_status(
+                last_prepared_bundle_id
+            )
+            if num_safes_with_new_wallet > 0:
                 self.logger.info(
                     f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
                 )
@@ -137,9 +139,7 @@ class WalletRecoveryManager:
 
         for wallet in self.wallet_manager:
             ledger_type = wallet.ledger_type
-            new_wallet, _ = new_wallet_manager.create(
-                ledger_type=ledger_type
-            )
+            new_wallet, _ = new_wallet_manager.create(ledger_type=ledger_type)
             self.logger.info(
                 f"[WALLET RECOVERY MANAGER] Created new wallet {ledger_type=} {new_wallet.address=}"
             )
@@ -150,14 +150,17 @@ class WalletRecoveryManager:
         self.logger.info(
             "[WALLET RECOVERY MANAGER] Prepare recovery finished with new bundle."
         )
-        return self._load_bundle(
-            bundle_id=bundle_id, new_password=new_password
-        )
+        return self._load_bundle(bundle_id=bundle_id, new_password=new_password)
 
-    def _bundle_has_safes_with_new_wallet(self, bundle_id: str) -> bool:
+    def _get_swap_status(self, bundle_id: str) -> t.Tuple[int, int, int, int]:
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(path=new_wallets_path, password=None)
+
+        num_safes = 0
+        num_safes_with_new_wallet = 0
+        num_safes_with_old_wallet = 0
+        num_safes_with_both_wallets = 0
 
         for wallet in self.wallet_manager:
             new_wallet = next(
@@ -167,15 +170,25 @@ class WalletRecoveryManager:
                 ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
 
-                if new_wallet.address in owners:
-                    return True
+                num_safes += 1
+                if new_wallet.address in owners and wallet.address in owners:
+                    num_safes_with_both_wallets += 1
+                elif new_wallet.address in owners:
+                    num_safes_with_new_wallet += 1
+                elif wallet.address in owners:
+                    num_safes_with_old_wallet += 1
 
-        return False
-
-    def _load_bundle(self, bundle_id: str, new_password: t.Optional[str] = None) -> t.Dict:
-        new_root = (
-            self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
+        return (
+            num_safes,
+            num_safes_with_new_wallet,
+            num_safes_with_old_wallet,
+            num_safes_with_both_wallets,
         )
+
+    def _load_bundle(
+        self, bundle_id: str, new_password: t.Optional[str] = None
+    ) -> t.Dict:
+        new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
 
         if new_password:
             new_user_account = UserAccount.load(new_root / USER_JSON)
@@ -212,9 +225,10 @@ class WalletRecoveryManager:
         bundle_id = self.data.last_prepared_bundle_id
         if not bundle_id:
             return {}
-        
+
         balances = ChainAmounts()
         requirements = ChainAmounts()
+        pending_backup_owner_swaps: t.Dict = {}
 
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_wallets_path = new_root / WALLETS_DIR
@@ -246,11 +260,16 @@ class WalletRecoveryManager:
                         address=backup_owner,
                         raise_on_invalid_address=False,
                     )
-                    requirements[chain_str].setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)
+                    requirements[chain_str].setdefault(backup_owner, {}).setdefault(
+                        ZERO_ADDRESS, 0
+                    )
                     if new_wallet.address not in owners:
                         requirements[chain_str][backup_owner][
                             ZERO_ADDRESS
                         ] += DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
+                        pending_backup_owner_swaps.setdefault(chain_str, [])
+                        if safe not in pending_backup_owner_swaps[chain_str]:
+                            pending_backup_owner_swaps[chain_str].append(safe)
 
         refill_requirements = ChainAmounts.shortfalls(
             requirements=requirements, balances=balances
@@ -267,6 +286,32 @@ class WalletRecoveryManager:
             "total_requirements": requirements,
             "refill_requirements": refill_requirements,
             "is_refill_required": is_refill_required,
+            "pending_backup_owner_swaps": pending_backup_owner_swaps,
+        }
+
+    def status(self) -> t.Dict[str, t.Any]:
+        """Get recovery status."""
+        bundle_id = self.data.last_prepared_bundle_id
+        if not bundle_id:
+            return {
+                "prepared": False,
+                "bundle_id": bundle_id,
+                "has_swaps": False,
+                "has_pending_swaps": False,
+            }
+
+        (
+            _,
+            num_safes_with_new_wallet,
+            num_safes_with_old_wallet,
+            num_safes_with_both_wallets,
+        ) = self._get_swap_status(bundle_id)
+
+        return {
+            "prepared": bundle_id is not None,
+            "bundle_id": bundle_id,
+            "has_swaps": num_safes_with_new_wallet + num_safes_with_both_wallets > 0,
+            "has_pending_swaps": num_safes_with_old_wallet > 0,
         }
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
@@ -359,7 +404,9 @@ class WalletRecoveryManager:
             for file in root.glob(f"{USER_JSON}*"):
                 shutil.move(file, old_root / file.name)
 
-            shutil.copytree(new_wallets_path, root / new_wallets_path.name, dirs_exist_ok=True)
+            shutil.copytree(
+                new_wallets_path, root / new_wallets_path.name, dirs_exist_ok=True
+            )
             for file in new_root.glob(f"{USER_JSON}*"):
                 shutil.copy2(file, root / file.name)
 

@@ -1568,6 +1568,25 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
+    @app.get("/api/wallet/recovery/status")
+    async def _get_recovery_status(request: Request) -> JSONResponse:
+        """Get recovery status."""
+
+        try:
+            output = operate.wallet_recovery_manager.status()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_status error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve recovery status. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
     @app.post("/api/wallet/recovery/complete")
     async def _wallet_recovery_complete(request: Request) -> JSONResponse:
         """Complete wallet recovery."""

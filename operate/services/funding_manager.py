@@ -52,7 +52,6 @@ from operate.ledger.profiles import (
     DEFAULT_EOA_THRESHOLD,
     DEFAULT_EOA_TOPUPS,
     DEFAULT_EOA_TOPUPS_WITHOUT_SAFE,
-    DEFAULT_RECOVERY_TOPUPS,
     OLAS,
     USDC,
     WRAPPED_NATIVE_ASSET,
@@ -921,7 +920,6 @@ class FundingManager:
                     last_master_eoa_funding = time()
 
                 await asyncio.sleep(60)
-
 
     # TODO Below this line - pending finish funding Job for Master EOA
     # TODO cache _resolve methods to avoid loading multiple times file.

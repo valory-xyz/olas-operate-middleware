@@ -676,7 +676,10 @@ Get backup owner funding requirements to complete wallet recovery process.
       }
     }
   },
-  "is_refill_required": true
+  "is_refill_required": true,
+  "pending_backup_owner_swaps": {
+    "gnosis": ["0x..."]
+  }
 }
 ```
 
@@ -685,6 +688,29 @@ Get backup owner funding requirements to complete wallet recovery process.
 ```json
 {
   "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+}
+```
+
+### `GET /api/wallet/recovery/status`
+
+Get recovery status.
+
+**Response (Success - 200):**
+
+```json
+{
+  "prepared": true,
+  "bundle_id": "bundle_123",
+  "has_swaps": true,
+  "has_pending_swaps": true
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery status. Please check the logs."
 }
 ```
 

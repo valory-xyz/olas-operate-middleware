@@ -24,13 +24,13 @@
 
 import typing as t
 
-from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 import pytest
 from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
 from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
+from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
 from operate.utils.gnosis import add_owner, get_owners, remove_owner, swap_owner
 from operate.wallet.master import MasterWalletManager
@@ -78,23 +78,41 @@ class TestWalletRecovery(OnTestnet):
         total_requirements = recovery_requirements["total_requirements"]
         refill_requirements = recovery_requirements["refill_requirements"]
 
-        expected_balances = {}
+        expected_balances = ChainAmounts()
         expected_requirements = ChainAmounts()
+        expected_pending_bo_swaps: t.Dict = {}
 
         for wallet in wallet_manager:
             new_wallet_json = next(
-                (w for w in prepare_json["wallets"] if w["new_wallet"]["ledger_type"] == wallet.ledger_type.value)
+                (
+                    w
+                    for w in prepare_json["wallets"]
+                    if w["new_wallet"]["ledger_type"] == wallet.ledger_type.value
+                )
             )["new_wallet"]
             for chain, safe in wallet.safes.items():
                 chain_str = chain.value
-                expected_balances.setdefault(chain_str, {}).setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)
-                expected_balances[chain_str][backup_owner][ZERO_ADDRESS] = recovery_requirements["balances"][chain_str][backup_owner][ZERO_ADDRESS]
-                expected_requirements.setdefault(chain_str, {}).setdefault(backup_owner, {}).setdefault(ZERO_ADDRESS, 0)                
+                expected_balances.setdefault(chain_str, {}).setdefault(
+                    backup_owner, {}
+                ).setdefault(ZERO_ADDRESS, 0)
+                expected_balances[chain_str][backup_owner][
+                    ZERO_ADDRESS
+                ] = recovery_requirements["balances"][chain_str][backup_owner][
+                    ZERO_ADDRESS
+                ]
+                expected_requirements.setdefault(chain_str, {}).setdefault(
+                    backup_owner, {}
+                ).setdefault(ZERO_ADDRESS, 0)
 
                 ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 if new_wallet_json["address"] not in owners:
-                    expected_requirements[chain_str][backup_owner][ZERO_ADDRESS] += DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
+                    expected_requirements[chain_str][backup_owner][
+                        ZERO_ADDRESS
+                    ] += DEFAULT_RECOVERY_TOPUPS[chain][ZERO_ADDRESS]
+                    expected_pending_bo_swaps.setdefault(chain_str, [])
+                    if safe not in expected_pending_bo_swaps[chain_str]:
+                        expected_pending_bo_swaps[chain_str].append(safe)
 
                 balance = balances[chain_str][backup_owner][ZERO_ADDRESS]
                 requirement = total_requirements[chain_str][backup_owner][ZERO_ADDRESS]
@@ -115,6 +133,7 @@ class TestWalletRecovery(OnTestnet):
             "total_requirements": dict(expected_requirements),
             "refill_requirements": dict(expected_refill_requirements),
             "is_refill_required": is_refill_required,
+            "pending_backup_owner_swaps": expected_pending_bo_swaps,
         }
 
         assert not DeepDiff(recovery_requirements, expected_recovery_requirements)
@@ -151,6 +170,17 @@ class TestWalletRecovery(OnTestnet):
         keys_manager = test_env.keys_manager
         backup_owner = test_env.backup_owner
         password = test_env.password
+
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is False
+        assert status_response["bundle_id"] is None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is False
 
         # Prepare recovery
         new_password = password[::-1]
@@ -202,6 +232,17 @@ class TestWalletRecovery(OnTestnet):
             is_refill_required=False,
         )
 
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is True
+        assert status_response["bundle_id"] is not None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is True
+
         # Swap safe owners using backup wallet
         crypto = keys_manager.get_crypto_instance(backup_owner)
         for item in prepare_json["wallets"]:
@@ -231,11 +272,33 @@ class TestWalletRecovery(OnTestnet):
             is_refill_required=False,
         )
 
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is True
+        assert status_response["bundle_id"] is not None
+        assert status_response["has_swaps"] is True
+        assert status_response["has_pending_swaps"] is False
+
         # Complete recovery
         complete_response = operate_client.post(
             url="/api/wallet/recovery/complete",
         )
         assert complete_response.status_code == 200
+
+        # Check recovery status
+        status_response = operate_client.get(
+            url="/api/wallet/recovery/status",
+        )
+        assert status_response.status_code == 200
+        status_response = status_response.json()
+        assert status_response["prepared"] is False
+        assert status_response["bundle_id"] is None
+        assert status_response["has_swaps"] is False
+        assert status_response["has_pending_swaps"] is False
 
         # Test that recovery was successful
         operate = OperateApp(
@@ -260,7 +323,7 @@ class TestWalletRecovery(OnTestnet):
             old_wallet_manager, wallet_manager, new_password, new_mnemonics
         )
 
-        # Attempt to do a recovery with the same bundle will result in error
+        # Attempt to do a recovery without a prepared bundle will result in error
         operate = OperateApp(
             home=test_env.tmp_path / OPERATE_TEST,
         )
