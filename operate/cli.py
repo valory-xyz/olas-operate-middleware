@@ -177,11 +177,11 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             logger=logger,
         )
 
-        mm = MigrationManager(self._path, logger)
-        mm.migrate_user_account()
-        mm.migrate_services(self.service_manager())
-        mm.migrate_wallets(self.wallet_manager)
-        mm.migrate_qs_configs()
+        self._migration_manager = MigrationManager(self._path, logger)
+        self._migration_manager.migrate_user_account()
+        self._migration_manager.migrate_services(self.service_manager())
+        self._migration_manager.migrate_wallets(self.wallet_manager)
+        self._migration_manager.migrate_qs_configs()
 
     @property
     def password(self) -> t.Optional[str]:
@@ -192,8 +192,9 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
         self._password = value
-        KeysManager().password = value
+        self._keys_manager.password = value
         self._wallet_manager.password = value
+        self._migration_manager.migrate_keys(self._keys_manager)
 
     def _backup_operate_if_new_version(self) -> None:
         """Backup .operate directory if this is a new version."""

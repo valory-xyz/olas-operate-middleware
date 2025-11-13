@@ -21,7 +21,6 @@
 
 import json
 import os
-import shutil
 import tempfile
 from dataclasses import dataclass
 from logging import Logger
@@ -106,7 +105,6 @@ class KeysManager(metaclass=SingletonMeta):
 
     def get(self, key: str) -> Key:
         """Get key object."""
-        KeysManager.migrate_format(self.path / key, password=self.password)
         return Key.from_json(  # type: ignore
             obj=json.loads(
                 (self.path / key).read_text(
@@ -137,6 +135,13 @@ class KeysManager(metaclass=SingletonMeta):
         """Creates new key."""
         self.path.mkdir(exist_ok=True, parents=True)
         crypto = EthereumCrypto(password=self.password)
+        key = Key(
+            ledger=LedgerType.ETHEREUM,
+            address=crypto.address,
+            private_key=crypto.encrypt(password=self.password)
+            if self.password is not None
+            else crypto.private_key,
+        )
         for path in (
             self.path / f"{crypto.address}.bak",
             self.path / crypto.address,
@@ -146,11 +151,7 @@ class KeysManager(metaclass=SingletonMeta):
 
             path.write_text(
                 json.dumps(
-                    Key(
-                        ledger=LedgerType.ETHEREUM,
-                        address=crypto.address,
-                        private_key=crypto.private_key,
-                    ).json,
+                    key.json,
                     indent=2,
                 ),
                 encoding="utf-8",
@@ -161,45 +162,6 @@ class KeysManager(metaclass=SingletonMeta):
     def delete(self, key: str) -> None:
         """Delete key."""
         os.remove(self.path / key)
-
-    @classmethod
-    def migrate_format(cls, path: Path, password: Optional[str]) -> bool:
-        """Migrate the JSON file format if needed."""
-        migrated = False
-        backup_path = path.with_suffix(".bak")
-
-        with open(path, "r", encoding="utf-8") as file:
-            data = json.load(file)
-
-        old_to_new_ledgers = {0: "ethereum", 1: "solana"}
-        if data.get("ledger") in old_to_new_ledgers:
-            data["ledger"] = old_to_new_ledgers.get(data["ledger"])
-            with open(path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=2)
-
-            migrated = True
-
-        private_key = data.get("private_key")
-        if private_key and password and private_key.startswith("0x"):
-            crypto: EthereumCrypto = KeysManager().private_key_to_crypto(
-                private_key=private_key,
-                password=None,
-            )
-            encrypted_private_key = crypto.encrypt(password=password)
-            data["private_key"] = encrypted_private_key
-            if backup_path.exists():
-                unrecoverable_delete(backup_path)
-
-            migrated = True
-
-        if migrated:
-            with open(path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=2)
-
-        if not backup_path.is_file():
-            shutil.copyfile(path, backup_path)
-
-        return migrated
 
     def update_password(self, new_password: str) -> None:
         """Update password for all keys."""

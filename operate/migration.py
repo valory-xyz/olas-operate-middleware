@@ -28,8 +28,10 @@ from pathlib import Path
 from time import time
 
 from aea_cli_ipfs.ipfs_utils import IPFSTool
+from aea_ledger_ethereum import EthereumCrypto
 
 from operate.constants import USER_JSON, ZERO_ADDRESS
+from operate.keys import KeysManager
 from operate.operate_types import Chain, LedgerType
 from operate.services.manage import ServiceManager
 from operate.services.service import (
@@ -38,7 +40,7 @@ from operate.services.service import (
     SERVICE_CONFIG_VERSION,
     Service,
 )
-from operate.utils import create_backup
+from operate.utils import create_backup, unrecoverable_delete
 from operate.wallet.master import LEDGER_TYPE_TO_WALLET_CLASS, MasterWalletManager
 
 
@@ -454,3 +456,52 @@ class MigrationManager:
             self.logger.info(
                 "[MIGRATION MANAGER] Migrated quickstart config: %s.", qs_config.name
             )
+
+    def migrate_keys(self, keys_manager: KeysManager) -> None:
+        """Migrate keys format if needed."""
+        self.logger.info("Migrating keys...")
+
+        for key_file in keys_manager.path.iterdir():
+            if not key_file.is_file() or key_file.suffix == ".bak":
+                continue
+
+            migrated = False
+            backup_path = key_file.with_suffix(".bak")
+
+            with open(key_file, "r", encoding="utf-8") as file:
+                data = json.load(file)
+
+            old_to_new_ledgers = {0: "ethereum", 1: "solana"}
+            if data.get("ledger") in old_to_new_ledgers:
+                data["ledger"] = old_to_new_ledgers.get(data["ledger"])
+                with open(key_file, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=2)
+
+                migrated = True
+
+            private_key = data.get("private_key")
+            if (
+                private_key
+                and keys_manager.password is not None
+                and private_key.startswith("0x")
+            ):
+                crypto: EthereumCrypto = keys_manager.private_key_to_crypto(
+                    private_key=private_key,
+                    password=None,
+                )
+                encrypted_private_key = crypto.encrypt(password=keys_manager.password)
+                data["private_key"] = encrypted_private_key
+                if backup_path.exists():
+                    unrecoverable_delete(backup_path)
+
+                migrated = True
+
+            if migrated:
+                with open(key_file, "w", encoding="utf-8") as file:
+                    json.dump(data, file, indent=2)
+
+            if not backup_path.exists():
+                shutil.copyfile(key_file, backup_path)
+
+            if migrated:
+                self.logger.info(f"Key {key_file.name} has been migrated.")

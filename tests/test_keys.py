@@ -31,6 +31,7 @@ from aea_ledger_ethereum.ethereum import EthereumCrypto
 from eth_account import Account
 
 from operate.keys import Key, KeysManager
+from operate.migration import MigrationManager
 
 
 @pytest.fixture
@@ -210,7 +211,11 @@ class TestKeysManager:
         with open(key_path, "w", encoding="utf-8") as file:
             json.dump(data, file, indent=2)
 
-        key = keys_manager.get(address)  # This will internally migrate it
+        migration_manager = MigrationManager(
+            home=keys_manager.path.parent, logger=logging.getLogger()
+        )
+        migration_manager.migrate_keys(keys_manager=keys_manager)
+        key = keys_manager.get(address)
 
         # Verify everything is migrated now
         crypto = keys_manager.get_crypto_instance(address)
