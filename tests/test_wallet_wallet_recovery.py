@@ -32,7 +32,13 @@ from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
-from operate.utils.gnosis import add_owner, get_owners, remove_owner, swap_owner
+from operate.utils.gnosis import (
+    add_owner,
+    get_asset_balance,
+    get_owners,
+    remove_owner,
+    swap_owner,
+)
 from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     RECOVERY_OLD_OBJECTS_DIR,
@@ -72,7 +78,7 @@ class TestWalletRecovery(OnTestnet):
         prepare_json: t.Dict,
         backup_owner: str,
         recovery_requirements: t.Dict[str, t.Any],
-        is_refill_required: bool = False,
+        expected_is_refill_required: bool = False,
     ) -> None:
         balances = recovery_requirements["balances"]
         total_requirements = recovery_requirements["total_requirements"]
@@ -92,14 +98,13 @@ class TestWalletRecovery(OnTestnet):
             )["new_wallet"]
             for chain, safe in wallet.safes.items():
                 chain_str = chain.value
+                ledger_api = get_default_ledger_api(chain)
                 expected_balances.setdefault(chain_str, {}).setdefault(
                     backup_owner, {}
                 ).setdefault(ZERO_ADDRESS, 0)
                 expected_balances[chain_str][backup_owner][
                     ZERO_ADDRESS
-                ] = recovery_requirements["balances"][chain_str][backup_owner][
-                    ZERO_ADDRESS
-                ]
+                ] = get_asset_balance(ledger_api, ZERO_ADDRESS, backup_owner)
                 expected_requirements.setdefault(chain_str, {}).setdefault(
                     backup_owner, {}
                 ).setdefault(ZERO_ADDRESS, 0)
@@ -119,7 +124,7 @@ class TestWalletRecovery(OnTestnet):
                 shortfall = refill_requirements[chain_str][backup_owner][ZERO_ADDRESS]
                 assert shortfall == max(requirement - balance, 0)
 
-                if is_refill_required:
+                if expected_is_refill_required:
                     assert shortfall > 0
                 else:
                     assert shortfall == 0
@@ -132,7 +137,7 @@ class TestWalletRecovery(OnTestnet):
             "balances": dict(expected_balances),
             "total_requirements": dict(expected_requirements),
             "refill_requirements": dict(expected_refill_requirements),
-            "is_refill_required": is_refill_required,
+            "is_refill_required": expected_is_refill_required,
             "pending_backup_owner_swaps": expected_pending_bo_swaps,
         }
 
@@ -229,7 +234,7 @@ class TestWalletRecovery(OnTestnet):
             prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
-            is_refill_required=False,
+            expected_is_refill_required=False,
         )
 
         # Check recovery status
@@ -269,7 +274,7 @@ class TestWalletRecovery(OnTestnet):
             prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
-            is_refill_required=False,
+            expected_is_refill_required=False,
         )
 
         # Check recovery status
@@ -417,7 +422,7 @@ class TestWalletRecovery(OnTestnet):
             prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
-            is_refill_required=False,
+            expected_is_refill_required=False,
         )
 
         # Incompletely swap safe owners using backup wallet
@@ -459,7 +464,7 @@ class TestWalletRecovery(OnTestnet):
             prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
-            is_refill_required=False,
+            expected_is_refill_required=False,
         )
 
         # Complete recovery - fail
@@ -505,7 +510,7 @@ class TestWalletRecovery(OnTestnet):
             prepare_json=prepare_json,
             backup_owner=backup_owner,
             recovery_requirements=recovery_requirements,
-            is_refill_required=False,
+            expected_is_refill_required=False,
         )
 
         # Prepare recovery - resume incomplete bundle

@@ -107,9 +107,10 @@ class WalletRecoveryManager:
                         f"Wallet {wallet.address} is not an owner of Safe {safe} on {chain.value}. (Interrupted swapping of Safe owners?)"
                     )
 
-                if len(owners) < 2:
+                backup_owners = set(owners) - {wallet.address}
+                if len(backup_owners) < 1:
                     raise WalletRecoveryError(
-                        f"Safe {safe} on {chain.value} has less than 2 owners."
+                        f"Safe {safe} on {chain.value} has less than 1 backup owner."
                     )
 
         last_prepared_bundle_id = self.data.last_prepared_bundle_id
