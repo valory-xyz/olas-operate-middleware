@@ -29,6 +29,7 @@ from time import time
 
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from aea_ledger_ethereum import EthereumCrypto
+from web3 import Web3
 
 from operate.constants import USER_JSON, ZERO_ADDRESS
 from operate.keys import KeysManager
@@ -462,14 +463,27 @@ class MigrationManager:
         self.logger.info("Migrating keys...")
 
         for key_file in keys_manager.path.iterdir():
-            if not key_file.is_file() or key_file.suffix == ".bak":
+            if (
+                not key_file.is_file()
+                or key_file.suffix == ".bak"
+                or not Web3.is_address(key_file.name)
+            ):
+                self.logger.warning(f"Skipping non-key file: {key_file}")
                 continue
 
             migrated = False
             backup_path = key_file.with_suffix(".bak")
 
-            with open(key_file, "r", encoding="utf-8") as file:
-                data = json.load(file)
+            try:
+                with open(key_file, "r", encoding="utf-8") as file:
+                    data = json.load(file)
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error(
+                    f"Failed to read key file: {key_file}\n"
+                    f"Key file content:\n{key_file.read_text(encoding='utf-8')}\n"
+                    f"Exception {e}: {traceback.format_exc()}"
+                )
+                raise e
 
             old_to_new_ledgers = {0: "ethereum", 1: "solana"}
             if data.get("ledger") in old_to_new_ledgers:
