@@ -308,7 +308,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         return self._wallet_manager
 
     @property
-    def wallet_recoverey_manager(self) -> WalletRecoveryManager:
+    def wallet_recovery_manager(self) -> WalletRecoveryManager:
         """Load wallet recovery manager."""
         manager = WalletRecoveryManager(
             path=self._path / WALLET_RECOVERY_DIR,
@@ -1512,9 +1512,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.post("/api/wallet/recovery/initiate")
-    async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
-        """Initiate wallet recovery."""
+    @app.post("/api/wallet/recovery/prepare")
+    async def _wallet_recovery_prepare(request: Request) -> JSONResponse:
+        """Prepare wallet recovery."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
 
@@ -1533,7 +1533,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
-            output = operate.wallet_recoverey_manager.initiate_recovery(
+            output = operate.wallet_recovery_manager.prepare_recovery(
                 new_password=new_password
             )
             return JSONResponse(
@@ -1541,16 +1541,54 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.OK,
             )
         except (ValueError, WalletRecoveryError) as e:
-            logger.error(f"_recovery_initiate error: {e}")
+            logger.error(f"_recovery_prepare error: {e}")
             return JSONResponse(
-                content={"error": f"Failed to initiate recovery: {e}"},
+                content={"error": f"Failed to prepare recovery: {e}"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"_recovery_initiate error: {e}\n{traceback.format_exc()}")
+            logger.error(f"_recovery_prepare error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": "Failed to prepare recovery. Please check the logs."},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/wallet/recovery/funding_requirements")
+    async def _get_recovery_funding_requirements(request: Request) -> JSONResponse:
+        """Get recovery funding requirements."""
+
+        try:
+            output = operate.wallet_recovery_manager.recovery_requirements()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"_recovery_funding_requirements error: {e}\n{traceback.format_exc()}"
+            )
             return JSONResponse(
                 content={
-                    "error": "Failed to initiate recovery. Please check the logs."
+                    "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/wallet/recovery/status")
+    async def _get_recovery_status(request: Request) -> JSONResponse:
+        """Get recovery status."""
+
+        try:
+            output = operate.wallet_recovery_manager.status()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_status error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve recovery status. Please check the logs."
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
@@ -1564,15 +1602,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password:
             return USER_LOGGED_IN_ERROR
 
-        data = await request.json()
-        bundle_id = data.get("id")
-        password = data.get("password")
+        data = {}
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.body()
+            if body:
+                data = await request.json()
+
         raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
-            operate.wallet_recoverey_manager.complete_recovery(
-                bundle_id=bundle_id,
-                password=password,
+            operate.wallet_recovery_manager.complete_recovery(
                 raise_if_inconsistent_owners=raise_if_inconsistent_owners,
             )
             return JSONResponse(

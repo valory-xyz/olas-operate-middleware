@@ -901,14 +901,14 @@ class MasterWalletManager:
         return [wallet.json for wallet in self]
 
     @property
-    def password(self) -> str:
+    def password(self) -> t.Optional[str]:
         """Password string."""
         if self._password is None:
             raise ValueError("Password not set.")
         return self._password
 
     @password.setter
-    def password(self, value: str) -> None:
+    def password(self, value: t.Optional[str]) -> None:
         """Set password value."""
         self._password = value
 

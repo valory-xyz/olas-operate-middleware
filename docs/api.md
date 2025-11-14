@@ -570,9 +570,9 @@ Get all safes for all wallets.
 
 ## Wallet Recovery
 
-### `POST /api/wallet/recovery/initiate`
+### `POST /api/wallet/recovery/prepare`
 
-Initiate wallet recovery.
+Prepare wallet recovery. Creates a new recovery bundle or returns the last incomplete bundle if it contains partial backup owner swaps.
 
 **Request Body:**
 
@@ -643,28 +643,93 @@ Initiate wallet recovery.
 
 ```json
 {
-  "error": "Failed to initiate recovery. Please check the logs."
+  "error": "Failed to prepare recovery. Please check the logs."
+}
+```
+
+### `GET /api/wallet/recovery/funding_requirements`
+
+Get backup owner funding requirements to complete wallet recovery process.
+
+**Response (Success - 200):**
+
+```json
+{
+  "balances": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 1000000000000000000
+      }
+    }
+  },
+  "total_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 2000000000000000000
+      }
+    }
+  },
+  "refill_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": 500000000000000000
+      }
+    }
+  },
+  "is_refill_required": true,
+  "pending_backup_owner_swaps": {
+    "gnosis": ["0x..."]
+  }
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+}
+```
+
+### `GET /api/wallet/recovery/status`
+
+Get recovery status.
+
+**Response (Success - 200):**
+
+```json
+{
+  "prepared": true,
+  "bundle_id": "bundle_123",
+  "has_swaps": true,
+  "has_pending_swaps": true
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery status. Please check the logs."
 }
 ```
 
 ### `POST /api/wallet/recovery/complete`
 
-Initiate wallet recovery.
+Complete wallet recovery.
 
 **Request Body:**
 
 ```json
 {
-  "id": "bundle_123",
-  "password": "your_new_password",
   "require_consistent_owners": true
 }
 ```
 
-`new_wallet` must be an owner of all Safes created by `current_wallet` to proceed. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
+New MasterEOA (output from `POST /api/wallet/recovery/prepare`) must be an owner of all Safes where current (old) MasterEOA is an owner. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
 
 - Current (old) MasterEOA cannot be a Safe owner.
-- All Safes must have two owners (`new_wallet` and a backup owner).
+- All Safes must have two owners (new MasterEOA and a backup owner).
 - All backup owners must match in all Safes.
 
 **Response (Success - 200):**
