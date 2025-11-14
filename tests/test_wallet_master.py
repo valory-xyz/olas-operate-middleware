@@ -182,6 +182,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         keys_manager = KeysManager(
             path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -260,6 +261,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         keys_manager = KeysManager(
             path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -319,6 +321,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         keys_manager = KeysManager(
             path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 

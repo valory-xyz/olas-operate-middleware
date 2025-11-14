@@ -2232,10 +2232,11 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
+            password=self.wallet_manager.password,
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker)
+        deployment.start(password=self.wallet_manager.password, use_docker=use_docker)
         return deployment
 
     def stop_service_locally(
