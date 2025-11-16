@@ -57,41 +57,49 @@ RELAY_PROVIDER_ID = "relay-provider"
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
-        "from_chain": "ethereum",
+        "from_chain": Chain.ETHEREUM.value,
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
-        "to_chain": "base",
+        "to_chain": Chain.BASE.value,
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
     },
-    "native-ethereum-to-mode": {
-        "from_chain": "ethereum",
-        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
-        "to_chain": "mode",
-        "to_bridge": "0x4200000000000000000000000000000000000010",
-        "bridge_eta": 300,
-        "bridge_contract_adaptor_class": OptimismContractAdaptor,
-    },
-    "native-ethereum-to-optimism": {
-        "from_chain": "ethereum",
-        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
-        "to_chain": "optimism",
+    "native-ethereum-to-celo": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x9C4955b92F34148dbcfDCD82e9c9eCe5CF2badfe",
+        "to_chain": Chain.CELO.value,
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
     },
     "native-ethereum-to-gnosis": {
-        "from_chain": "ethereum",
+        "from_chain": Chain.ETHEREUM.value,
         "from_bridge": "0x88ad09518695c6c3712AC10a214bE5109a655671",
-        "to_chain": "gnosis",
+        "to_chain": Chain.GNOSIS.value,
         "to_bridge": "0xf6A78083ca3e2a662D6dd1703c939c8aCE2e268d",
         "bridge_eta": 1800,
         "bridge_contract_adaptor_class": OmnibridgeContractAdaptor,
     },
+    "native-ethereum-to-mode": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
+        "to_chain": Chain.MODE.value,
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 300,
+        "bridge_contract_adaptor_class": OptimismContractAdaptor,
+    },
+    "native-ethereum-to-optimism": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
+        "to_chain": Chain.OPTIMISM.value,
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 300,
+        "bridge_contract_adaptor_class": OptimismContractAdaptor,
+    },
 }
 
 
-ROUTES = {
+PREFERRED_ROUTES = {
     (
         Chain.ETHEREUM,  # from_chain
         USDC[Chain.ETHEREUM],  # from_token
@@ -260,24 +268,26 @@ class BridgeManager:
 
             provider_requests = []
             for params in requests_params:
-                for provider in self._native_bridge_providers.values():
-                    if provider.can_handle_request(params):
-                        provider_requests.append(provider.create_request(params=params))
-                        break
-                else:
-                    provider_id = ROUTES.get(
-                        (
-                            Chain(params["from"]["chain"]),
-                            params["from"]["token"],
-                            Chain(params["to"]["chain"]),
-                            params["to"]["token"],
-                        ),
-                        RELAY_PROVIDER_ID,
-                    )
+                route = (
+                    Chain(params["from"]["chain"]),
+                    params["from"]["token"],
+                    Chain(params["to"]["chain"]),
+                    params["to"]["token"],
+                )
+                provider_id = PREFERRED_ROUTES.get(route)
 
-                    provider_requests.append(
-                        self._providers[provider_id].create_request(params=params)
-                    )
+                if not provider_id:
+                    for provider in self._native_bridge_providers.values():
+                        if provider.can_handle_request(params):
+                            provider_id = provider.provider_id
+                            break
+
+                if not provider_id:
+                    provider_id = RELAY_PROVIDER_ID
+
+                provider_requests.append(
+                    self._providers[provider_id].create_request(params=params)
+                )
 
             bundle = ProviderRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",

@@ -46,6 +46,26 @@ class L1StandardBridge(Contract):
     contract_id = PublicId.from_str("valory/l1_standard_bridge:0.1.0")
 
     @classmethod
+    def supports_bridge_eth_to(
+        cls,
+        ledger_api: LedgerApi,
+        contract_address: str,
+    ) -> bool:
+        """Tells if bridgeETHTo is supported (native ETH bridging)."""
+        contract_instance = cls.get_instance(
+            ledger_api=ledger_api, contract_address=contract_address
+        )        
+        try:
+            contract_instance.functions.bridgeETHTo(
+                "0x0000000000000000000000000000000000000000",
+                0,
+                b""
+            ).call({"from": PLACEHOLDER_NATIVE_TOKEN_ADDRESS, "value": 0})
+            return True
+        except Exception:  # pylint: disable=broad-except
+            return False
+
+    @classmethod
     def build_bridge_eth_to_tx(
         cls,
         ledger_api: LedgerApi,
