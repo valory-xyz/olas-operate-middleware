@@ -98,19 +98,19 @@ NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     },
 }
 
-
+# Routes are defined as the tuples (from_chain, from_token, to_chain, to_token)
 PREFERRED_ROUTES = {
     (
-        Chain.ETHEREUM,  # from_chain
-        USDC[Chain.ETHEREUM],  # from_token
-        Chain.OPTIMISM,  # to_chain
-        USDC[Chain.OPTIMISM],  # to_token
+        Chain.ETHEREUM,
+        USDC[Chain.ETHEREUM],
+        Chain.OPTIMISM,
+        USDC[Chain.OPTIMISM],
     ): LIFI_PROVIDER_ID,
     (
-        Chain.ETHEREUM,  # from_chain
-        USDC[Chain.ETHEREUM],  # from_token
-        Chain.BASE,  # to_chain
-        USDC[Chain.BASE],  # to_token
+        Chain.ETHEREUM,
+        USDC[Chain.ETHEREUM],
+        Chain.BASE,
+        USDC[Chain.BASE],
     ): LIFI_PROVIDER_ID,
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
 }

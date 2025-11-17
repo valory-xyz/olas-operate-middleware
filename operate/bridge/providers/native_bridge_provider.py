@@ -173,7 +173,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         from_chain = params["from"]["chain"]
         from_token = Web3.to_checksum_address(params["from"]["token"])
         from_ledger_api = get_default_ledger_api(Chain(from_chain))
-        to_chain = params["from"]["chain"]
+        to_chain = params["to"]["chain"]
         to_token = Web3.to_checksum_address(params["to"]["token"])
         to_ledger_api = get_default_ledger_api(Chain(to_chain))
 
