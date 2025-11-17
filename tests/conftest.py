@@ -476,6 +476,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
     keys_manager = KeysManager(
         path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
         logger=LOGGER,
+        password=password,
     )
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()

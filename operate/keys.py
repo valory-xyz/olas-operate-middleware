@@ -21,17 +21,17 @@
 
 import json
 import os
-import shutil
 import tempfile
 from dataclasses import dataclass
+from logging import Logger
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
-from operate.utils import SingletonMeta
+from operate.utils import SingletonMeta, unrecoverable_delete
 
 
 @dataclass
@@ -41,6 +41,15 @@ class Key(LocalResource):
     ledger: LedgerType
     address: str
     private_key: str
+
+    def get_decrypted(self, password: str) -> dict:
+        """Get decrypted key json."""
+        return {
+            "ledger": self.ledger.value,
+            "address": self.address,
+            "private_key": "0x"
+            + EthereumCrypto.decrypt(self.private_key, password=password),
+        }
 
     @classmethod
     def load(cls, path: Path) -> "Key":
@@ -61,13 +70,41 @@ class KeysManager(metaclass=SingletonMeta):
         if "path" not in kwargs:
             raise ValueError("Path must be provided for KeysManager")
 
-        self.path = kwargs["path"]
-        self.logger = kwargs["logger"]
+        self.path: Path = kwargs["path"]
+        self.logger: Logger = kwargs["logger"]
+        self.password: Optional[str] = kwargs.get("password")
         self.path.mkdir(exist_ok=True, parents=True)
+
+    def private_key_to_crypto(
+        self, private_key: str, password: Optional[str]
+    ) -> EthereumCrypto:
+        """Convert private key string to EthereumCrypto instance."""
+        with tempfile.NamedTemporaryFile(
+            dir=self.path,
+            mode="w",
+            suffix=".txt",
+            delete=False,  # Handle cleanup manually
+        ) as temp_file:
+            temp_file_name = temp_file.name
+            temp_file.write(private_key)
+            temp_file.flush()
+            temp_file.close()  # Close the file before reading
+
+            # Set proper file permissions (readable by owner only)
+            os.chmod(temp_file_name, 0o600)
+            crypto = EthereumCrypto(private_key_path=temp_file_name, password=password)
+
+            try:
+                unrecoverable_delete(
+                    Path(temp_file.name)
+                )  # Clean up the temporary file
+            except OSError as e:
+                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
+
+        return crypto
 
     def get(self, key: str) -> Key:
         """Get key object."""
-        KeysManager.migrate_format(self.path / key)
         return Key.from_json(  # type: ignore
             obj=json.loads(
                 (self.path / key).read_text(
@@ -91,46 +128,20 @@ class KeysManager(metaclass=SingletonMeta):
 
     def get_crypto_instance(self, address: str) -> EthereumCrypto:
         """Get EthereumCrypto instance for the given address."""
-        key: Key = Key.from_json(  # type: ignore
-            obj=json.loads(
-                (self.path / address).read_text(
-                    encoding="utf-8",
-                )
-            )
-        )
-        private_key = key.private_key
-        # Create temporary file with delete=False to handle it manually
-        with tempfile.NamedTemporaryFile(
-            dir=self.path,
-            mode="w",
-            suffix=".txt",
-            delete=False,  # Handle cleanup manually
-        ) as temp_file:
-            temp_file_name = temp_file.name
-            temp_file.write(private_key)
-            temp_file.flush()
-            temp_file.close()  # Close the file before reading
-
-            # Set proper file permissions (readable by owner only)
-            os.chmod(temp_file_name, 0o600)
-            crypto = EthereumCrypto(private_key_path=temp_file_name)
-
-            try:
-                with open(temp_file_name, "r+", encoding="utf-8") as f:
-                    f.seek(0)
-                    f.write("\0" * len(private_key))
-                    f.flush()
-                    f.close()
-                os.unlink(temp_file_name)  # Clean up the temporary file
-            except OSError as e:
-                self.logger.error(f"Failed to delete temp file {temp_file.name}: {e}")
-
-        return crypto
+        key: Key = self.get(address)
+        return self.private_key_to_crypto(key.private_key, self.password)
 
     def create(self) -> str:
         """Creates new key."""
         self.path.mkdir(exist_ok=True, parents=True)
-        crypto = EthereumCrypto()
+        crypto = EthereumCrypto(password=self.password)
+        key = Key(
+            ledger=LedgerType.ETHEREUM,
+            address=crypto.address,
+            private_key=crypto.encrypt(password=self.password)
+            if self.password is not None
+            else crypto.private_key,
+        )
         for path in (
             self.path / f"{crypto.address}.bak",
             self.path / crypto.address,
@@ -140,12 +151,8 @@ class KeysManager(metaclass=SingletonMeta):
 
             path.write_text(
                 json.dumps(
-                    Key(
-                        ledger=LedgerType.ETHEREUM,
-                        address=crypto.address,
-                        private_key=crypto.private_key,
-                    ).json,
-                    indent=4,
+                    key.json,
+                    indent=2,
                 ),
                 encoding="utf-8",
             )
@@ -156,25 +163,23 @@ class KeysManager(metaclass=SingletonMeta):
         """Delete key."""
         os.remove(self.path / key)
 
-    @classmethod
-    def migrate_format(cls, path: Path) -> bool:
-        """Migrate the JSON file format if needed."""
-        migrated = False
-        backup_path = path.with_suffix(".bak")
-        if not backup_path.is_file():
-            shutil.copyfile(path, backup_path)
-            migrated = True
+    def update_password(self, new_password: str) -> None:
+        """Update password for all keys."""
+        for key_file in self.path.iterdir():
+            if not key_file.is_file() or key_file.suffix == ".bak":
+                continue
 
-        with open(path, "r", encoding="utf-8") as file:
-            data = json.load(file)
+            key = self.get(key_file.name)
+            crypto = self.get_crypto_instance(key_file.name)
+            encrypted_private_key = crypto.encrypt(password=new_password)
+            key.private_key = encrypted_private_key
+            key.path = self.path / key_file.name
+            key.store()
 
-        old_to_new_ledgers = {0: "ethereum", 1: "solana"}
-        if data.get("ledger") in old_to_new_ledgers:
-            data["ledger"] = old_to_new_ledgers.get(data["ledger"])
-            migrated = True
+            backup_path = self.path / f"{key.address}.bak"
+            backup_path.write_text(
+                json.dumps(key.json, indent=2),
+                encoding="utf-8",
+            )
 
-        if migrated:
-            with open(path, "w", encoding="utf-8") as file:
-                json.dump(data, file, indent=2)
-
-        return migrated
+        self.password = new_password

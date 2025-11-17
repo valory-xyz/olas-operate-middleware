@@ -64,6 +64,7 @@ from operate.constants import (
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
+from operate.keys import KeysManager
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -143,7 +144,7 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
     )
 
 
-class OperateApp:
+class OperateApp:  # pylint: disable=too-many-instance-attributes
     """Operate app."""
 
     def __init__(
@@ -157,11 +158,13 @@ class OperateApp:
         self.setup()
         self._backup_operate_if_new_version()
 
-        services.manage.KeysManager(
+        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        KeysManager._instances.clear()  # reset singleton instance
+        self._keys_manager: KeysManager = KeysManager(
             path=self._keys,
             logger=logger,
+            password=self._password,
         )
-        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
         self.settings = Settings(path=self._path)
 
         self._wallet_manager = MasterWalletManager(
@@ -174,11 +177,11 @@ class OperateApp:
             logger=logger,
         )
 
-        mm = MigrationManager(self._path, logger)
-        mm.migrate_user_account()
-        mm.migrate_services(self.service_manager())
-        mm.migrate_wallets(self.wallet_manager)
-        mm.migrate_qs_configs()
+        self._migration_manager = MigrationManager(self._path, logger)
+        self._migration_manager.migrate_user_account()
+        self._migration_manager.migrate_services(self.service_manager())
+        self._migration_manager.migrate_wallets(self.wallet_manager)
+        self._migration_manager.migrate_qs_configs()
 
     @property
     def password(self) -> t.Optional[str]:
@@ -189,7 +192,9 @@ class OperateApp:
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
         self._password = value
+        self._keys_manager.password = value
         self._wallet_manager.password = value
+        self._migration_manager.migrate_keys(self._keys_manager)
 
     def _backup_operate_if_new_version(self) -> None:
         """Backup .operate directory if this is a new version."""
@@ -256,6 +261,7 @@ class OperateApp:
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
+        self._keys_manager.update_password(new_password)
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:

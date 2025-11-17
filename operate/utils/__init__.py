@@ -19,6 +19,8 @@
 
 """Helper utilities."""
 
+import os
+import platform
 import shutil
 import time
 import typing as t
@@ -107,3 +109,47 @@ def subtract_dicts(
         else:
             result[key] = max((va or 0) - (vb or 0), 0)  # type: ignore
     return result
+
+
+def safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) -> None:
+    """Safely perform file operation with retries on Windows."""
+    max_retries = 3 if platform.system() == "Windows" else 1
+
+    for attempt in range(max_retries):
+        try:
+            operation(*args, **kwargs)
+            return
+        except (PermissionError, FileNotFoundError, OSError) as e:
+            if attempt == max_retries - 1:
+                raise e
+
+            if platform.system() == "Windows":
+                # On Windows, wait a bit and retry
+                time.sleep(0.1)
+
+
+def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:
+    """Delete a file unrecoverably."""
+    if not file_path.exists():
+        return
+
+    if not file_path.is_file():
+        raise ValueError(f"{file_path} is not a file")
+
+    try:
+        file_size = os.path.getsize(file_path)
+
+        with open(file_path, "r+b") as f:
+            for _ in range(passes):
+                # Overwrite with random bytes
+                f.seek(0)
+                random_data = os.urandom(file_size)
+                f.write(random_data)
+                f.flush()  # Ensure data is written to disk
+
+        # Finally, delete the file
+        safe_file_operation(os.remove, file_path)
+    except PermissionError:
+        print(f"Permission denied to securely delete file '{file_path}'.")
+    except Exception as e:  # pylint: disable=broad-except
+        print(f"Error during secure deletion of '{file_path}': {e}")

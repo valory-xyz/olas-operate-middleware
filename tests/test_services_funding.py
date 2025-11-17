@@ -642,6 +642,7 @@ class TestFunding(OnTestnet):
         keys_manager = KeysManager(
             path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
             logger=LOGGER,
+            password=password,
         )
         backup_owner = keys_manager.create()
 
