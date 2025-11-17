@@ -189,15 +189,12 @@ class WalletRecoveryManager:
             num_safes_with_both_wallets,
         )
 
-    def _load_bundle(
-        self, bundle_id: str, new_password: t.Optional[str] = None
-    ) -> t.Dict:
+    def _load_bundle(self, bundle_id: str, new_password: str) -> t.Dict:
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
 
-        if new_password:
-            new_user_account = UserAccount.load(new_root / USER_JSON)
-            if not new_user_account.is_valid(password=new_password):
-                raise ValueError(MSG_INVALID_PASSWORD)
+        new_user_account = UserAccount.load(new_root / USER_JSON)
+        if not new_user_account.is_valid(password=new_password):
+            raise ValueError(MSG_INVALID_PASSWORD)
 
         new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(
