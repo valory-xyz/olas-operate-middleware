@@ -8,7 +8,7 @@ aea_version: '>=1.0.0, <2.0.0'
 fingerprint:
   __init__.py: bafybeifsbxn6hlccnpgqnpvaz3ph6ajl4is4mcyerr6aqp7heggagcphye
   build/L1StandardBridge.json: bafybeidq6jt7zmedtuxbbyggiqhu7w6543bunyd2vrbibg6y2svxsi2q5m
-  contract.py: bafybeib2kiztts3436vccvraeura3jb23oihgzxgrt3biakbed24edcaai
+  contract.py: bafybeienitro6gds2ny7guziwdu3uapmj3xxuzmqyvsect4zqmrouity2e
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: L1StandardBridge
