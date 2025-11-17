@@ -51,7 +51,7 @@ class L1StandardBridge(Contract):
         ledger_api: LedgerApi,
         contract_address: str,
     ) -> bool:
-        """Tells if bridgeETHTo is supported (native ETH bridging)."""
+        """Checks if native ETH bridging via `bridgeETHTo` is supported."""
         contract_instance = cls.get_instance(
             ledger_api=ledger_api, contract_address=contract_address
         )        
