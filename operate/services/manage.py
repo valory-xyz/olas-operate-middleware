@@ -813,6 +813,9 @@ class ServiceManager:
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
         on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
         on_chain_description = on_chain_metadata.get("description")
+        needs_update_agent_addresses = set(chain_data.instances) != set(
+            service.agent_addresses
+        )
 
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=target_staking_params["agent_ids"][0]
@@ -841,6 +844,7 @@ class ServiceManager:
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
+                or needs_update_agent_addresses
             )
         )
 

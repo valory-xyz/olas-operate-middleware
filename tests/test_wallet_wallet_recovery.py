@@ -45,7 +45,12 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
 )
 
-from tests.conftest import OnTestnet, OperateTestEnv, tenderly_add_balance
+from tests.conftest import (
+    OnTestnet,
+    OperateTestEnv,
+    tenderly_add_balance,
+    tenderly_increase_time,
+)
 from tests.constants import OPERATE_TEST
 
 
@@ -181,9 +186,9 @@ class TestWalletRecovery(OnTestnet):
 
         # Deploy services and logout
         operate.password = password
-        for service in operate.service_manager().json:
+        for service_config_id in operate.service_manager().get_all_service_ids():
             operate.service_manager().deploy_service_onchain_from_safe(
-                service["service_config_id"]
+                service_config_id
             )
 
         operate.password = None
@@ -358,16 +363,35 @@ class TestWalletRecovery(OnTestnet):
 
         assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
-        # Deploy services and logout
+        # Login and check that new agent addresses are correctly set on the service(s)
         operate.password = new_password
-        print("#" * 40)
-        print(operate.wallet_manager.password)
-        for service in operate.service_manager().json:
+        for service_config_id in operate.service_manager().get_all_service_ids():
+            service = operate.service_manager().load(service_config_id)
+            for chain_str in service.chain_configs.keys():
+                chain = Chain(chain_str)
+                tenderly_increase_time(chain)
+                for address in new_addresses.values():
+                    tenderly_add_balance(
+                        chain=chain, recipient=address, token=ZERO_ADDRESS
+                    )
+
             operate.service_manager().deploy_service_onchain_from_safe(
-                service["service_config_id"]
+                service_config_id
             )
-            for address in service["agent_addresses"]:
-                operate._keys_manager.get_crypto_instance(address)
+            service = operate.service_manager().load(service_config_id)
+            for chain_config in service.chain_configs.values():
+                assert set(service.agent_addresses) == set(
+                    chain_config.chain_data.instances
+                )
+
+            for address in service.agent_addresses:
+                assert (
+                    address
+                    in operate.wallet_recovery_manager.data.new_agent_keys[
+                        service_config_id
+                    ].values()
+                )
+                operate.keys_manager.get_crypto_instance(address)
 
     def test_resumed_flow(
         self,
