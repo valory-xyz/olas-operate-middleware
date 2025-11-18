@@ -200,7 +200,7 @@ class TestWalletRecovery(OnTestnet):
         assert status_response["has_pending_swaps"] is False
 
         # Prepare recovery
-        new_password = password[::-1]
+        new_password = "new_" + password[::-1]
 
         assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
@@ -366,6 +366,8 @@ class TestWalletRecovery(OnTestnet):
             operate.service_manager().deploy_service_onchain_from_safe(
                 service["service_config_id"]
             )
+            for address in service["agent_addresses"]:
+                operate._keys_manager.get_crypto_instance(address)
 
     def test_resumed_flow(
         self,

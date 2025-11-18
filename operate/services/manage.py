@@ -109,9 +109,10 @@ NUM_LOCAL_AGENT_INSTANCES = 1
 class ServiceManager:
     """Service manager."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         path: Path,
+        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         funding_manager: FundingManager,
         logger: logging.Logger,
@@ -126,7 +127,7 @@ class ServiceManager:
         :param logger: logging.Logger object.
         """
         self.path = path
-        self.keys_manager = KeysManager()
+        self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.funding_manager = funding_manager
         self.logger = logger
@@ -1923,7 +1924,9 @@ class ServiceManager:
         # TODO: remove after staking contract directly starts sending the rewards to master safe
         amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+        ethereum_crypto = self.keys_manager.get_crypto_instance(
+            service.agent_addresses[0]
+        )
         transfer_erc20_from_safe(
             ledger_api=ledger_api,
             crypto=ethereum_crypto,

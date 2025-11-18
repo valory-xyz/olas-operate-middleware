@@ -66,6 +66,6 @@ def reset_password(operate: "OperateApp") -> None:
     print('Resetting password of "ethereum" wallet...')
     operate.password = old_password
     operate.wallet_manager.update_password(new_password=new_password)
-    KeysManager().update_password(new_password=new_password)
+    operate.keys_manager.update_password(new_password=new_password)
 
     print_section("Password reset done!")

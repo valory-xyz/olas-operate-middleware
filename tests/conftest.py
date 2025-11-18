@@ -473,11 +473,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
                     amount=int(1000e6),
                 )
 
-    keys_manager = KeysManager(
-        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
-        logger=LOGGER,
-        password=password,
-    )
+    keys_manager = test_operate.keys_manager
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()
 

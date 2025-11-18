@@ -639,11 +639,7 @@ class TestFunding(OnTestnet):
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.setup()
-        keys_manager = KeysManager(
-            path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
-            logger=LOGGER,
-            password=password,
-        )
+        keys_manager = operate.keys_manager
         backup_owner = keys_manager.create()
 
         # Logout
