@@ -114,7 +114,7 @@ class KeysManager:
         )
 
     def get_json(self, key: str) -> dict:
-        """Get decrypted key json."""
+        """Get key json."""
         if self.password:
             return self.get(key).get_decrypted_json(self.password)
         return self.get(key).json
