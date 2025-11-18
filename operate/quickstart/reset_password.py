@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 
 from operate.account.user import UserAccount
 from operate.constants import USER_JSON
-from operate.keys import KeysManager
 from operate.quickstart.run_service import ask_confirm_password
 from operate.quickstart.utils import ask_or_get_from_env, print_section, print_title
 

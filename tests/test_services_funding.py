@@ -35,13 +35,11 @@ from fastapi.testclient import TestClient
 from operate.cli import OperateApp, create_app
 from operate.constants import (
     AGENT_FUNDS_STATUS_URL,
-    KEYS_DIR,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
     ZERO_ADDRESS,
 )
-from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
