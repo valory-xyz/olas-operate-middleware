@@ -46,7 +46,7 @@ from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp, create_app
-from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.constants import ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -62,7 +62,7 @@ from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 def random_string(length: int = 16) -> str:
@@ -473,11 +473,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
                     amount=int(1000e6),
                 )
 
-    keys_manager = KeysManager(
-        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
-        logger=LOGGER,
-        password=password,
-    )
+    keys_manager = test_operate.keys_manager
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()
 

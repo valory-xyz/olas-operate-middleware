@@ -159,7 +159,6 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self._backup_operate_if_new_version()
 
         self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
-        KeysManager._instances.clear()  # reset singleton instance
         self._keys_manager: KeysManager = KeysManager(
             path=self._keys,
             logger=logger,
@@ -173,6 +172,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         )
         self._wallet_manager.setup()
         self._funding_manager = FundingManager(
+            keys_manager=self._keys_manager,
             wallet_manager=self._wallet_manager,
             logger=logger,
         )
@@ -284,6 +284,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
+            keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             funding_manager=self.funding_manager,
             logger=logger,
@@ -301,6 +302,11 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         if (self._path / USER_JSON).exists():
             return UserAccount.load(self._path / USER_JSON)
         return None
+
+    @property
+    def keys_manager(self) -> KeysManager:
+        """Load keys manager."""
+        return self._keys_manager
 
     @property
     def wallet_manager(self) -> MasterWalletManager:

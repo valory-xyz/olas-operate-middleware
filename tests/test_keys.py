@@ -38,7 +38,6 @@ from operate.migration import MigrationManager
 def keys_manager(temp_keys_dir: Path, password: Optional[str]) -> KeysManager:
     """Create a KeysManager instance with a temporary directory."""
     # Clear the singleton instance to avoid interference between tests
-    KeysManager._instances = {}
     logger = Mock(spec=logging.Logger)
     manager = KeysManager(path=temp_keys_dir, logger=logger, password=password)
     return manager
@@ -79,7 +78,7 @@ class TestKeysManager:
         assert keys_manager.password is not None
         assert (
             crypto_instance.private_key
-            == sample_key.get_decrypted(keys_manager.password)["private_key"]
+            == sample_key.get_decrypted_json(keys_manager.password)["private_key"]
         )
 
     def test_get_crypto_instance_temp_file_cleanup(
@@ -119,7 +118,7 @@ class TestKeysManager:
         assert keys_manager.password is not None
         assert (
             crypto_instance.private_key
-            == sample_key.get_decrypted(keys_manager.password)["private_key"]
+            == sample_key.get_decrypted_json(keys_manager.password)["private_key"]
         )
 
         # Verify no temporary files remain
@@ -256,7 +255,7 @@ class TestKeysManager:
 
         for address in addresses:
             key = keys_manager.get(address)
-            decrypted_private_key = key.get_decrypted(password=new_password)[
+            decrypted_private_key = key.get_decrypted_json(password=new_password)[
                 "private_key"
             ]
             assert decrypted_private_key == original_private_keys[address]

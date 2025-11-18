@@ -35,13 +35,11 @@ from fastapi.testclient import TestClient
 from operate.cli import OperateApp, create_app
 from operate.constants import (
     AGENT_FUNDS_STATUS_URL,
-    KEYS_DIR,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
     ZERO_ADDRESS,
 )
-from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
@@ -639,11 +637,7 @@ class TestFunding(OnTestnet):
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.setup()
-        keys_manager = KeysManager(
-            path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
-            logger=LOGGER,
-            password=password,
-        )
+        keys_manager = operate.keys_manager
         backup_owner = keys_manager.create()
 
         # Logout
