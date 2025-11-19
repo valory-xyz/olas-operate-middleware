@@ -468,7 +468,9 @@ class MigrationManager:
                 or key_file.suffix == ".bak"
                 or not Web3.is_address(key_file.name)
             ):
-                self.logger.warning(f"Skipping non-key file: {key_file}")
+                if not key_file.suffix == ".bak":
+                    self.logger.warning(f"Skipping non-key file: {key_file}")
+
                 continue
 
             migrated = False
