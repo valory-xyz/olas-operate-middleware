@@ -193,19 +193,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         env = self._prepare_agent_env()
         agent_alias_name = "agent"
         agent_dir_full_path = Path(working_dir) / agent_alias_name
-        if agent_dir_full_path.exists():
-            # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
-            with suppress(Exception):
-                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
-
-        # Add keys
-        agent_dir_full_path.mkdir(exist_ok=True, parents=True)
-        shutil.copy(
-            working_dir / "ethereum_private_key.txt",
-            working_dir / "agent" / "ethereum_private_key.txt",
-        )
-
         if not self._is_aea:
+            if agent_dir_full_path.exists():
+                # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
+                with suppress(Exception):
+                    shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+
+            # Add keys
+            agent_dir_full_path.mkdir(exist_ok=True, parents=True)
+            shutil.copy(
+                working_dir / "ethereum_private_key.txt",
+                working_dir / "agent" / "ethereum_private_key.txt",
+            )
             return
 
         self._run_aea_command(
@@ -219,6 +218,12 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             "/dns/registry.autonolas.tech/tcp/443/https",
             cwd=working_dir,
         )
+
+        if agent_dir_full_path.exists():
+            # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
+            with suppress(Exception):
+                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+
         self._run_aea_command(
             "-s",
             "fetch",
@@ -227,6 +232,13 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             agent_alias_name,
             cwd=working_dir,
         )
+
+        # Add keys
+        shutil.copy(
+            working_dir / "ethereum_private_key.txt",
+            working_dir / "agent" / "ethereum_private_key.txt",
+        )
+
         self._run_aea_command("-s", "add-key", "ethereum", cwd=working_dir / "agent")
         self._run_aea_command(
             "-s", "add-key", "ethereum", "--connection", cwd=working_dir / "agent"
