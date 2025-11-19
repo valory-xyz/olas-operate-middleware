@@ -60,11 +60,13 @@ class TestWalletRecovery(OnTestnet):
     @staticmethod
     def _assert_recovered(
         old_wallet_manager: MasterWalletManager,
-        wallet_manager: MasterWalletManager,
+        operate: OperateApp,
         password: str,
         new_addresses: t.Dict[LedgerType, str],
         new_mnemonics: t.Dict[LedgerType, t.List[str]],
     ) -> None:
+        operate.password = password
+        wallet_manager = operate.wallet_manager
         old_ledger_types = {item.ledger_type for item in old_wallet_manager}
         ledger_types = {item.ledger_type for item in wallet_manager}
 
@@ -79,6 +81,37 @@ class TestWalletRecovery(OnTestnet):
             ledger_type = wallet.ledger_type
             assert wallet.address == new_addresses[ledger_type]
             assert wallet.decrypt_mnemonic(password) == new_mnemonics[ledger_type]
+
+        # Check that new agent addresses are correctly set on the service(s)
+        for service_config_id in operate.service_manager().get_all_service_ids():
+            service = operate.service_manager().load(service_config_id)
+            for chain_str in service.chain_configs.keys():
+                chain = Chain(chain_str)
+                tenderly_increase_time(chain)
+                for address in new_addresses.values():
+                    tenderly_add_balance(
+                        chain=chain, recipient=address, token=ZERO_ADDRESS
+                    )
+
+            operate.service_manager().deploy_service_onchain_from_safe(
+                service_config_id
+            )
+            service = operate.service_manager().load(service_config_id)
+            for chain_config in service.chain_configs.values():
+                assert set(service.agent_addresses) == set(
+                    chain_config.chain_data.instances
+                )
+
+            for address in service.agent_addresses:
+                assert (
+                    address
+                    in operate.wallet_recovery_manager.data.new_agent_keys[
+                        service_config_id
+                    ].values()
+                )
+                operate.keys_manager.get_crypto_instance(address)
+
+        operate.password = None
 
     @staticmethod
     def _assert_recovery_requirements(
@@ -346,9 +379,12 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
+        operate = OperateApp(
+            home=test_env.tmp_path / OPERATE_TEST,
+        )
         TestWalletRecovery._assert_recovered(
             old_wallet_manager,
-            wallet_manager,
+            operate,
             new_password,
             new_addresses,
             new_mnemonics,
@@ -363,36 +399,6 @@ class TestWalletRecovery(OnTestnet):
 
         assert operate.wallet_recovery_manager.data.last_prepared_bundle_id is None
 
-        # Login and check that new agent addresses are correctly set on the service(s)
-        operate.password = new_password
-        for service_config_id in operate.service_manager().get_all_service_ids():
-            service = operate.service_manager().load(service_config_id)
-            for chain_str in service.chain_configs.keys():
-                chain = Chain(chain_str)
-                tenderly_increase_time(chain)
-                for address in new_addresses.values():
-                    tenderly_add_balance(
-                        chain=chain, recipient=address, token=ZERO_ADDRESS
-                    )
-
-            operate.service_manager().deploy_service_onchain_from_safe(
-                service_config_id
-            )
-            service = operate.service_manager().load(service_config_id)
-            for chain_config in service.chain_configs.values():
-                assert set(service.agent_addresses) == set(
-                    chain_config.chain_data.instances
-                )
-
-            for address in service.agent_addresses:
-                assert (
-                    address
-                    in operate.wallet_recovery_manager.data.new_agent_keys[
-                        service_config_id
-                    ].values()
-                )
-                operate.keys_manager.get_crypto_instance(address)
-
     def test_resumed_flow(
         self,
         test_env: OperateTestEnv,
@@ -404,6 +410,14 @@ class TestWalletRecovery(OnTestnet):
         keys_manager = test_env.keys_manager
         backup_owner = test_env.backup_owner
         password = test_env.password
+
+        # Deploy services and logout
+        operate.password = password
+        for service_config_id in operate.service_manager().get_all_service_ids():
+            operate.service_manager().deploy_service_onchain_from_safe(
+                service_config_id
+            )
+        operate.password = None
 
         # Check recovery status
         status_response = operate_client.get(
@@ -608,9 +622,12 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
+        operate = OperateApp(
+            home=test_env.tmp_path / OPERATE_TEST,
+        )
         TestWalletRecovery._assert_recovered(
             old_wallet_manager,
-            wallet_manager,
+            operate,
             new_password,
             new_addresses,
             new_mnemonics,
@@ -881,9 +898,12 @@ class TestWalletRecovery(OnTestnet):
             password=password,
         )
 
+        operate = OperateApp(
+            home=test_env.tmp_path / OPERATE_TEST,
+        )
         TestWalletRecovery._assert_recovered(
             old_wallet_manager,
-            wallet_manager,
+            operate,
             new_password,
             new_addresses,
             new_mnemonics,

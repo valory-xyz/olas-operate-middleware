@@ -442,7 +442,7 @@ class WalletRecoveryManager:
             for service in self.service_manager.get_all_services()[0]:
                 service_config_id = service.service_config_id
                 service.agent_addresses = [
-                    new_agent_keys[service_config_id].get(addr, addr)
+                    new_agent_keys[service_config_id][addr]
                     for addr in service.agent_addresses
                 ]
                 service.store()
