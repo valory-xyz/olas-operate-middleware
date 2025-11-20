@@ -76,7 +76,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_rpc
+from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     AgentRelease,
@@ -98,6 +98,8 @@ from operate.operate_types import (
 from operate.resource import LocalResource
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
+from operate.utils import unrecoverable_delete
+from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
 
@@ -396,7 +398,7 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
-    def _build_kubernetes(self, force: bool = True) -> None:
+    def _build_kubernetes(self, keys_manager: KeysManager, force: bool = True) -> None:
         """Build kubernetes deployment."""
         k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
@@ -404,11 +406,20 @@ class Deployment(LocalResource):
         mkdirs(build_dir=k8s_build)
 
         service = Service.load(path=self.path)
+        keys_file = self.path / DEFAULT_KEYS_FILE
+        keys_file.write_text(
+            json.dumps(
+                [keys_manager.get_json(address) for address in service.agent_addresses],
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
         builder = ServiceBuilder.from_dir(
             path=service.package_absolute_path,
-            keys_file=self.path / DEFAULT_KEYS_FILE,
+            keys_file=keys_file,
             number_of_agents=len(service.agent_addresses),
         )
+        unrecoverable_delete(keys_file)
         builder.deplopyment_type = KubernetesGenerator.deployment_type
         (
             KubernetesGenerator(
@@ -426,6 +437,7 @@ class Deployment(LocalResource):
 
     def _build_docker(
         self,
+        keys_manager: KeysManager,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -449,10 +461,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).json
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get_json(address) for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -463,6 +472,7 @@ class Deployment(LocalResource):
                 keys_file=keys_file,
                 number_of_agents=len(service.agent_addresses),
             )
+            unrecoverable_delete(keys_file)
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
@@ -540,6 +550,7 @@ class Deployment(LocalResource):
 
     def _build_host(
         self,
+        keys_manager: KeysManager,
         force: bool = True,
         chain: t.Optional[str] = None,
         with_tm: bool = True,
@@ -577,10 +588,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).json
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get_json(address) for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -627,6 +635,7 @@ class Deployment(LocalResource):
 
     def build(
         self,
+        keys_manager: KeysManager,
         use_docker: bool = False,
         use_kubernetes: bool = False,
         force: bool = True,
@@ -662,9 +671,9 @@ class Deployment(LocalResource):
             )
             service.consume_env_variables()
             if use_docker:
-                self._build_docker(force=force, chain=chain)
+                self._build_docker(keys_manager=keys_manager, force=force, chain=chain)
             if use_kubernetes:
-                self._build_kubernetes(force=force)
+                self._build_kubernetes(keys_manager=keys_manager, force=force)
         else:
             ssl_key_path, ssl_cert_path = create_ssl_certificate(
                 ssl_dir=service.path / DEPLOYMENT_DIR / "ssl"
@@ -677,13 +686,19 @@ class Deployment(LocalResource):
             )
             service.consume_env_variables()
             is_aea = service.agent_release["is_aea"]
-            self._build_host(force=force, chain=chain, with_tm=is_aea)
+            self._build_host(
+                keys_manager=keys_manager,
+                force=force,
+                chain=chain,
+                with_tm=is_aea,
+            )
 
         os.environ.clear()
         os.environ.update(original_env)
 
     def start(
         self,
+        password: str,
         use_docker: bool = False,
         is_aea: bool = True,
     ) -> None:
@@ -704,7 +719,11 @@ class Deployment(LocalResource):
                     project_name=self.path.name,
                 )
             else:
-                run_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
+                run_host_deployment(
+                    build_dir=self.path / DEPLOYMENT_DIR,
+                    password=password,
+                    is_aea=is_aea,
+                )
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -1173,6 +1192,29 @@ class Service(LocalResource):
                     chain_amounts.setdefault(agent_address, {})[asset] = req.agent
 
         return amounts
+
+    def get_balances(self) -> ChainAmounts:
+        """Get balances of the agent addresses and service safe."""
+        initial_funding_amounts = self.get_initial_funding_amounts()
+        return ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: get_asset_balance(
+                            ledger_api=get_default_ledger_api(
+                                Chain.from_string(chain_str)
+                            ),
+                            asset_address=asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+                        for asset in tokens
+                    }
+                    for address, tokens in addresses.items()
+                }
+                for chain_str, addresses in initial_funding_amounts.items()
+            }
+        )
 
     def get_funding_requests(self) -> ChainAmounts:
         """Get funding amounts requested by the agent."""

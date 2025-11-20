@@ -180,8 +180,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -258,8 +259,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer_error_funds"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -317,8 +319,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer_error_safes"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -367,7 +370,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         wallet, _ = wallet_manager.create(LedgerType.ETHEREUM)
         chain1 = Chain.GNOSIS
         chain2 = Chain.OPTIMISM
-        backup_owner = KeysManager().create()
+        backup_owner = test_operate.keys_manager.create()
         for chain in (chain1, chain2):
             assert chain not in wallet.safes
             assert chain not in wallet.safe_chains
