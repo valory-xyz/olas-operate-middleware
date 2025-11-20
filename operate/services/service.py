@@ -406,7 +406,10 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [keys_manager.get_json(address) for address in service.agent_addresses],
+                [
+                    keys_manager.get_decrypted(address)
+                    for address in service.agent_addresses
+                ],
                 indent=4,
             ),
             encoding="utf-8",
@@ -458,7 +461,10 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [keys_manager.get_json(address) for address in service.agent_addresses],
+                [
+                    keys_manager.get_decrypted(address)
+                    for address in service.agent_addresses
+                ],
                 indent=4,
             ),
             encoding="utf-8",
@@ -584,7 +590,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [keys_manager.get_json(address) for address in service.agent_addresses],
+                [keys_manager.get(address).json for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
