@@ -130,9 +130,9 @@ class WalletRecoveryManager:
                 _,
                 num_safes_with_new_wallet,
                 _,
-                num_safes_with_both_wallets,
+                _,
             ) = self._get_swap_status(last_prepared_bundle_id)
-            if num_safes_with_new_wallet + num_safes_with_both_wallets > 0:
+            if num_safes_with_new_wallet > 0:
                 self.logger.info(
                     f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
                 )
@@ -199,9 +199,9 @@ class WalletRecoveryManager:
                 num_safes += 1
                 if new_wallet.address in owners and wallet.address in owners:
                     num_safes_with_both_wallets += 1
-                elif new_wallet.address in owners:
+                if new_wallet.address in owners:
                     num_safes_with_new_wallet += 1
-                elif wallet.address in owners:
+                if wallet.address in owners:
                     num_safes_with_old_wallet += 1
 
         return (
@@ -326,17 +326,17 @@ class WalletRecoveryManager:
             }
 
         (
-            _,
+            num_safes,
             num_safes_with_new_wallet,
-            num_safes_with_old_wallet,
-            num_safes_with_both_wallets,
+            _,
+            _,
         ) = self._get_swap_status(bundle_id)
 
         return {
             "prepared": bundle_id is not None,
             "bundle_id": bundle_id,
-            "has_swaps": num_safes_with_new_wallet + num_safes_with_both_wallets > 0,
-            "has_pending_swaps": num_safes_with_old_wallet > 0,
+            "has_swaps": num_safes_with_new_wallet > 0,
+            "has_pending_swaps": num_safes_with_new_wallet < num_safes,
         }
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
