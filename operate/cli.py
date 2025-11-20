@@ -319,6 +319,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         manager = WalletRecoveryManager(
             path=self._path / WALLET_RECOVERY_DIR,
             wallet_manager=self.wallet_manager,
+            service_manager=self.service_manager(),
             logger=logger,
         )
         return manager

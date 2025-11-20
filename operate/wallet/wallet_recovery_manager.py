@@ -22,16 +22,24 @@
 import shutil
 import typing as t
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from logging import Logger
 from pathlib import Path
 
 from operate.account.user import UserAccount
-from operate.constants import MSG_INVALID_PASSWORD, USER_JSON, WALLETS_DIR, ZERO_ADDRESS
+from operate.constants import (
+    KEYS_DIR,
+    MSG_INVALID_PASSWORD,
+    USER_JSON,
+    WALLETS_DIR,
+    ZERO_ADDRESS,
+)
+from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import ChainAmounts
 from operate.resource import LocalResource
+from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance, get_owners
 from operate.wallet.master import MasterWalletManager
 
@@ -52,6 +60,7 @@ class WalletRecoveryManagerData(LocalResource):
     path: Path
     version: int = 1
     last_prepared_bundle_id: t.Optional[str] = None
+    new_agent_keys: t.Dict[str, t.Dict[str, str]] = field(default_factory=dict)
 
     _file = "wallet_recovery.json"
 
@@ -64,11 +73,13 @@ class WalletRecoveryManager:
         path: Path,
         logger: Logger,
         wallet_manager: MasterWalletManager,
+        service_manager: ServiceManager,
     ) -> None:
         """Initialize wallet recovery manager."""
         self.path = path
         self.logger = logger
         self.wallet_manager = wallet_manager
+        self.service_manager = service_manager
 
         path.mkdir(parents=True, exist_ok=True)
         file = path / WalletRecoveryManagerData._file
@@ -148,9 +159,20 @@ class WalletRecoveryManager:
                 f"[WALLET RECOVERY MANAGER] Created new wallet {ledger_type=} {new_wallet.address=}"
             )
 
+        new_keys_manager = KeysManager(
+            path=new_root / KEYS_DIR, password=new_password, logger=self.logger
+        )
+
+        new_agent_keys = self.data.new_agent_keys
+        for service in self.service_manager.get_all_services()[0]:
+            service_config_id = service.service_config_id
+            new_agent_keys.setdefault(service_config_id, {})
+            for agent_address in service.agent_addresses:
+                new_agent_address = new_keys_manager.create()
+                new_agent_keys[service_config_id][agent_address] = new_agent_address
+
         self.data.last_prepared_bundle_id = bundle_id
         self.data.store()
-
         self.logger.info(
             "[WALLET RECOVERY MANAGER] Prepare recovery finished with new bundle."
         )
@@ -346,6 +368,7 @@ class WalletRecoveryManager:
         wallets_path = root / WALLETS_DIR
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_wallets_path = new_root / WALLETS_DIR
+        new_keys_path = new_root / KEYS_DIR
         old_root = self.path / bundle_id / RECOVERY_OLD_OBJECTS_DIR
 
         if not new_root.exists() or not new_root.is_dir():
@@ -412,6 +435,17 @@ class WalletRecoveryManager:
             )
             for file in new_root.glob(f"{USER_JSON}*"):
                 shutil.copy2(file, root / file.name)
+            for file in new_keys_path.iterdir():
+                shutil.copy2(file, root / KEYS_DIR / file.name)
+
+            new_agent_keys = self.data.new_agent_keys
+            for service in self.service_manager.get_all_services()[0]:
+                service_config_id = service.service_config_id
+                service.agent_addresses = [
+                    new_agent_keys[service_config_id][addr]
+                    for addr in service.agent_addresses
+                ]
+                service.store()
 
             self.data.last_prepared_bundle_id = None
             self.data.store()
