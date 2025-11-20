@@ -37,6 +37,7 @@ from operate.account.user import UserAccount
 from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
@@ -205,6 +206,7 @@ def configure_local_config(
                 f"{chain.upper()}_LEDGER_RPC",
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
+        DEFAULT_RPCS[Chain.from_string(chain)] = config.rpc[chain]
 
     config.principal_chain = template["home_chain"]
 

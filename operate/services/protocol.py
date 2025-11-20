@@ -28,7 +28,7 @@ import os
 import tempfile
 import typing as t
 from enum import Enum
-from functools import cache
+from functools import cache, cached_property
 from pathlib import Path
 from typing import Optional, Union, cast
 
@@ -780,6 +780,17 @@ class _ChainUtil:
             rpc=self.rpc,
         )
 
+    @cached_property
+    def service_manager_address(self) -> str:  # TODO: backport to OA
+        """Get service manager contract address."""
+        service_registry = registry_contracts.service_registry.get_instance(
+            ledger_api=self.ledger_api,
+            contract_address=CONTRACTS[OperateChain(self.chain_type.value)][
+                "service_registry"
+            ],
+        )
+        return service_registry.functions.manager().call()
+
     @property
     def service_manager_instance(self) -> Contract:
         """Load service manager contract instance."""
@@ -788,7 +799,7 @@ class _ChainUtil:
         )
         instance = self.ledger_api.get_contract_instance(
             contract_interface,
-            self.contracts["service_manager"],
+            self.service_manager_address,
         )
         return instance
 
@@ -1334,7 +1345,7 @@ class EthSafeTxBuilder(_ChainUtil):
             )
 
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -1366,7 +1377,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get activate tx data."""
         instance = registry_contracts.service_manager.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
+            contract_address=self.service_manager_address,
         )
         txd = instance.encodeABI(
             fn_name="activateRegistration",
@@ -1374,7 +1385,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "from": self.safe,
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
@@ -1390,7 +1401,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get register instances tx data."""
         instance = registry_contracts.service_manager.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
+            contract_address=self.service_manager_address,
         )
         txd = instance.encodeABI(
             fn_name="registerAgents",
@@ -1402,7 +1413,7 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "from": self.safe,
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
@@ -1418,7 +1429,7 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get the deploy data instructions for a safe"""
         registry_instance = registry_contracts.service_manager.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
+            contract_address=self.service_manager_address,
         )
         approve_hash_message = None
         if reuse_multisig:
@@ -1476,7 +1487,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ],
         )
         deploy_message = {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": deploy_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -1665,14 +1676,14 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get terminate tx data."""
         instance = registry_contracts.service_manager.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
+            contract_address=self.service_manager_address,
         )
         txd = instance.encodeABI(
             fn_name="terminate",
             args=[service_id],
         )
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -1682,14 +1693,14 @@ class EthSafeTxBuilder(_ChainUtil):
         """Get unbond tx data."""
         instance = registry_contracts.service_manager.get_instance(
             ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
+            contract_address=self.service_manager_address,
         )
         txd = instance.encodeABI(
             fn_name="unbond",
             args=[service_id],
         )
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
