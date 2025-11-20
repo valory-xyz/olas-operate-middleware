@@ -395,7 +395,7 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
-    def _build_kubernetes(self, password: str, force: bool = True) -> None:
+    def _build_kubernetes(self, keys_manager: KeysManager, force: bool = True) -> None:
         """Build kubernetes deployment."""
         k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
@@ -406,10 +406,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).get_decrypted(password)
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get_json(address) for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -437,7 +434,7 @@ class Deployment(LocalResource):
 
     def _build_docker(
         self,
-        password: str,
+        keys_manager: KeysManager,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -461,10 +458,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).get_decrypted(password)
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get_json(address) for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -551,7 +545,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
+    def _build_host(
+        self,
+        keys_manager: KeysManager,
+        force: bool = True,
+        chain: t.Optional[str] = None,
+    ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
@@ -585,10 +584,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).json
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get_json(address) for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -629,7 +625,7 @@ class Deployment(LocalResource):
 
     def build(
         self,
-        password: str,
+        keys_manager: KeysManager,
         use_docker: bool = False,
         use_kubernetes: bool = False,
         force: bool = True,
@@ -665,9 +661,9 @@ class Deployment(LocalResource):
             )
             service.consume_env_variables()
             if use_docker:
-                self._build_docker(password=password, force=force, chain=chain)
+                self._build_docker(keys_manager=keys_manager, force=force, chain=chain)
             if use_kubernetes:
-                self._build_kubernetes(password=password, force=force)
+                self._build_kubernetes(keys_manager=keys_manager, force=force)
         else:
             ssl_key_path, ssl_cert_path = create_ssl_certificate(
                 ssl_dir=service.path / DEPLOYMENT_DIR / "ssl"
@@ -679,7 +675,7 @@ class Deployment(LocalResource):
                 }
             )
             service.consume_env_variables()
-            self._build_host(force=force, chain=chain)
+            self._build_host(keys_manager=keys_manager, force=force, chain=chain)
 
         os.environ.clear()
         os.environ.update(original_env)

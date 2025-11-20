@@ -31,7 +31,7 @@ from aea_ledger_ethereum.ethereum import EthereumCrypto
 
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource
-from operate.utils import SingletonMeta, unrecoverable_delete
+from operate.utils import unrecoverable_delete
 
 
 @dataclass
@@ -42,7 +42,7 @@ class Key(LocalResource):
     address: str
     private_key: str
 
-    def get_decrypted(self, password: str) -> dict:
+    def get_decrypted_json(self, password: str) -> dict:
         """Get decrypted key json."""
         return {
             "ledger": self.ledger.value,
@@ -57,7 +57,7 @@ class Key(LocalResource):
         return super().load(path)  # type: ignore
 
 
-class KeysManager(metaclass=SingletonMeta):
+class KeysManager:
     """Keys manager."""
 
     def __init__(self, **kwargs: Any) -> None:
@@ -112,6 +112,12 @@ class KeysManager(metaclass=SingletonMeta):
                 )
             )
         )
+
+    def get_json(self, key: str) -> dict:
+        """Get key json."""
+        if self.password:
+            return self.get(key).get_decrypted_json(self.password)
+        return self.get(key).json
 
     def get_private_key_file(self, address: str) -> Path:
         """Get the path to the private key file for the given address."""

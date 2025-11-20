@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING
 
 from operate.account.user import UserAccount
 from operate.constants import USER_JSON
-from operate.keys import KeysManager
 from operate.quickstart.run_service import ask_confirm_password
 from operate.quickstart.utils import ask_or_get_from_env, print_section, print_title
 
@@ -66,6 +65,6 @@ def reset_password(operate: "OperateApp") -> None:
     print('Resetting password of "ethereum" wallet...')
     operate.password = old_password
     operate.wallet_manager.update_password(new_password=new_password)
-    KeysManager().update_password(new_password=new_password)
+    operate.keys_manager.update_password(new_password=new_password)
 
     print_section("Password reset done!")

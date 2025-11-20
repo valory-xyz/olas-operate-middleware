@@ -40,11 +40,13 @@ from typing import Generator
 
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
-from operate.cli import OperateApp
-from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.cli import OperateApp, create_app
+from operate.constants import ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -60,7 +62,7 @@ from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 def random_string(length: int = 16) -> str:
@@ -178,6 +180,8 @@ class OperateTestEnv:
     tmp_path: Path
     password: str
     operate: OperateApp
+    operate_app: FastAPI
+    operate_client: TestClient
     wallet_manager: MasterWalletManager
     mnemonics: t.Dict[LedgerType, t.List[str]]
     service_manager: ServiceManager
@@ -469,11 +473,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
                     amount=int(1000e6),
                 )
 
-    keys_manager = KeysManager(
-        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
-        logger=LOGGER,
-        password=password,
-    )
+    keys_manager = test_operate.keys_manager
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()
 
@@ -491,10 +491,14 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
     # Logout
     test_operate.password = None
 
+    operate_app = create_app(home=test_operate._path)
+
     return OperateTestEnv(
         tmp_path=tmp_path,
         password=password,
         operate=test_operate,
+        operate_app=operate_app,
+        operate_client=TestClient(operate_app),
         wallet_manager=test_operate.wallet_manager,
         mnemonics=mnemonics,
         service_manager=test_operate.service_manager(),

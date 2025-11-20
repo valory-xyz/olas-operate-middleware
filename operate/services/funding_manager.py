@@ -79,11 +79,13 @@ class FundingManager:
 
     def __init__(
         self,
+        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         logger: Logger,
         funding_requests_cooldown_seconds: int = DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     ) -> None:
         """Initialize funding manager."""
+        self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
@@ -102,7 +104,7 @@ class FundingManager:
             f"Draining service agents {service.name} ({service_config_id=})"
         )
         for agent_address in service.agent_addresses:
-            ethereum_crypto = KeysManager().get_crypto_instance(agent_address)
+            ethereum_crypto = self.keys_manager.get_crypto_instance(agent_address)
             balance = ledger_api.get_balance(agent_address)
             self.logger.info(
                 f"Draining {balance} (approx) {get_currency_denom(chain)} from {agent_address} (agent) to {withdrawal_address}"
@@ -167,7 +169,7 @@ class FundingManager:
 
             # Safe not swapped
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 )
                 transfer_erc20_from_safe(
@@ -207,7 +209,7 @@ class FundingManager:
             )
 
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 )
                 transfer_from_safe(
