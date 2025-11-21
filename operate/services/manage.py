@@ -2239,7 +2239,7 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
-            password=self.wallet_manager.password,
+            keys_manager=self.keys_manager,
         )
         if build_only:
             return deployment
