@@ -200,6 +200,14 @@ def _get_service_template_trader() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Trader agent for omen prediction markets",
             "service_version": "v0.26.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(
@@ -314,6 +322,14 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Test Multichain Service",
             "service_version": "v0.0.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(

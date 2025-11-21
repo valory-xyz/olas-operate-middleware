@@ -105,6 +105,11 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     START_TRIES = constants.DEPLOYMENT_START_TRIES_NUM
     logger = setup_logger(name="operate.base_deployment_runner")
 
+    def __init__(self, work_directory: Path, is_aea: bool) -> None:
+        """Initialize the deployment runner."""
+        super().__init__(work_directory)
+        self._is_aea = is_aea
+
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
         return (
@@ -186,6 +191,21 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Setup agent."""
         working_dir = self._work_directory
         env = self._prepare_agent_env()
+        agent_alias_name = "agent"
+        agent_dir_full_path = Path(working_dir) / agent_alias_name
+        if not self._is_aea:
+            if agent_dir_full_path.exists():
+                # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
+                with suppress(Exception):
+                    shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+
+            # Add keys
+            agent_dir_full_path.mkdir(exist_ok=True, parents=True)
+            shutil.copy(
+                working_dir / "ethereum_private_key.txt",
+                working_dir / "agent" / "ethereum_private_key.txt",
+            )
+            return
 
         self._run_aea_command(
             "init",
@@ -198,10 +218,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             "/dns/registry.autonolas.tech/tcp/443/https",
             cwd=working_dir,
         )
-
-        agent_alias_name = "agent"
-
-        agent_dir_full_path = Path(working_dir) / agent_alias_name
 
         if agent_dir_full_path.exists():
             # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
@@ -264,13 +280,16 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _start(self, password: str) -> None:
         """Start the deployment."""
         self._setup_agent(password=password)
-        self._start_tendermint()
+        if self._is_aea:
+            self._start_tendermint()
+
         self._start_agent(password=password)
 
     def stop(self) -> None:
         """Stop the deployment."""
         self._stop_agent()
-        self._stop_tendermint()
+        if self._is_aea:
+            self._stop_tendermint()
 
     def _stop_agent(self) -> None:
         """Start process."""
@@ -313,6 +332,24 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Return aea_bin path."""
         raise NotImplementedError
 
+    def get_agent_start_args(self, password: str) -> List[str]:
+        """Return agent start arguments."""
+        return (
+            [self._agent_runner_bin]
+            + (
+                [
+                    "-s",
+                    "run",
+                ]
+                if self._is_aea
+                else []
+            )
+            + [
+                "--password",
+                password,
+            ]
+        )
+
 
 class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     """Deployment runner within pyinstaller env."""
@@ -320,16 +357,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     @property
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        env = json.loads(
-            (self._work_directory / "agent.json").read_text(encoding="utf-8")
-        )
-
-        agent_publicid_str = env["AEA_AGENT"]
         service_dir = self._work_directory.parent
-
-        agent_runner_bin = get_agent_runner_path(
-            service_dir=service_dir, agent_public_id_str=agent_publicid_str
-        )
+        agent_runner_bin = get_agent_runner_path(service_dir=service_dir)
         return str(agent_runner_bin)
 
     @property
@@ -393,13 +422,7 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
         """Start agent process."""
         agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
-            args=[
-                self._agent_runner_bin,
-                "-s",
-                "run",
-                "--password",
-                password,
-            ],
+            args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
             stdout=agent_runner_log_file,
             stderr=agent_runner_log_file,
@@ -431,9 +454,9 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
 
-    def __init__(self, work_directory: Path) -> None:
+    def __init__(self, work_directory: Path, is_aea: bool) -> None:
         """Init the runner."""
-        super().__init__(work_directory)
+        super().__init__(work_directory, is_aea=is_aea)
         self._job = self.set_windows_object_job()
 
     @staticmethod
@@ -519,13 +542,7 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         """Start agent process."""
         agent_runner_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[
-                self._agent_runner_bin,
-                "-s",
-                "run",
-                "--password",
-                password,
-            ],  # TODO: Patch for Windows failing hash
+            args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
             stdout=agent_runner_log_file,
             stderr=agent_runner_log_file,
@@ -562,7 +579,12 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
     @property
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        return str(self._venv_dir / "bin" / "aea")
+        if self._is_aea:
+            return str(self._venv_dir / "bin" / "aea")
+
+        service_dir = self._work_directory.parent
+        agent_runner_bin = get_agent_runner_path(service_dir=service_dir)
+        return str(agent_runner_bin)
 
     def _start_agent(self, password: str) -> None:
         """Start agent process."""
@@ -573,13 +595,7 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         agent_runner_log_file = self._open_agent_runner_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
-            args=[
-                self._agent_runner_bin,
-                "-s",
-                "run",
-                "--password",
-                password,
-            ],  # TODO: Patch for Windows failing hash
+            args=self.get_agent_start_args(password=password),
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
             stdout=agent_runner_log_file,
@@ -629,6 +645,9 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
 
     def _setup_venv(self) -> None:
         """Perform venv setup, install deps."""
+        if not self._is_aea:
+            return
+
         self._venv_dir.mkdir(exist_ok=True)
         venv_cli(args=[str(self._venv_dir)])
         pbin = str(self._venv_dir / "bin" / "python")
@@ -655,6 +674,9 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         multiprocessing.set_start_method("spawn")
         self._setup_venv()
         super()._setup_agent(password=password)
+        if not self._is_aea:
+            return
+
         # Install agent dependencies
         self._run_cmd(
             args=[
@@ -690,9 +712,11 @@ class DeploymentManager:
         self.logger = setup_logger(name="operate.deployment_manager")
         self._states: Dict[Path, States] = {}
 
-    def _get_deployment_runner(self, build_dir: Path) -> BaseDeploymentRunner:
+    def _get_deployment_runner(
+        self, build_dir: Path, is_aea: bool
+    ) -> BaseDeploymentRunner:
         """Get deploymnent runner instance."""
-        return self._deployment_runner_class(build_dir)
+        return self._deployment_runner_class(build_dir, is_aea=is_aea)
 
     @staticmethod
     def _get_host_deployment_runner_class() -> Type[BaseDeploymentRunner]:
@@ -741,7 +765,9 @@ class DeploymentManager:
             "Failed to perform test connection to ipfs to check network connection!"
         )
 
-    def run_deployment(self, build_dir: Path, password: str) -> None:
+    def run_deployment(
+        self, build_dir: Path, password: str, is_aea: bool = True
+    ) -> None:
         """Run deployment."""
         if self._is_stopping:
             raise RuntimeError("deployment manager stopped")
@@ -754,7 +780,9 @@ class DeploymentManager:
         self.logger.info(f"Starting deployment {build_dir}...")
         self._states[build_dir] = States.STARTING
         try:
-            deployment_runner = self._get_deployment_runner(build_dir=build_dir)
+            deployment_runner = self._get_deployment_runner(
+                build_dir=build_dir, is_aea=is_aea
+            )
             deployment_runner.start(password=password)
             self.logger.info(f"Started deployment {build_dir}")
             self._states[build_dir] = States.STARTED
@@ -771,7 +799,9 @@ class DeploymentManager:
             )
             self.stop_deployment(build_dir=build_dir, force=True)
 
-    def stop_deployment(self, build_dir: Path, force: bool = False) -> None:
+    def stop_deployment(
+        self, build_dir: Path, force: bool = False, is_aea: bool = True
+    ) -> None:
         """Stop the deployment."""
         if (
             self.get_state(build_dir=build_dir) in [States.STARTING, States.STOPPING]
@@ -780,7 +810,9 @@ class DeploymentManager:
             raise ValueError("Service already in transition")
         self.logger.info(f"Stopping deployment {build_dir}...")
         self._states[build_dir] = States.STOPPING
-        deployment_runner = self._get_deployment_runner(build_dir=build_dir)
+        deployment_runner = self._get_deployment_runner(
+            build_dir=build_dir, is_aea=is_aea
+        )
         try:
             deployment_runner.stop()
             self.logger.info(f"Stopped deployment {build_dir}...")
@@ -794,14 +826,16 @@ class DeploymentManager:
 deployment_manager = DeploymentManager()
 
 
-def run_host_deployment(build_dir: Path, password: str) -> None:
+def run_host_deployment(build_dir: Path, password: str, is_aea: bool = True) -> None:
     """Run host deployment."""
-    deployment_manager.run_deployment(build_dir=build_dir, password=password)
+    deployment_manager.run_deployment(
+        build_dir=build_dir, password=password, is_aea=is_aea
+    )
 
 
-def stop_host_deployment(build_dir: Path) -> None:
+def stop_host_deployment(build_dir: Path, is_aea: bool = True) -> None:
     """Stop host deployment."""
-    deployment_manager.stop_deployment(build_dir=build_dir)
+    deployment_manager.stop_deployment(build_dir=build_dir, is_aea=is_aea)
 
 
 def stop_deployment_manager() -> None:

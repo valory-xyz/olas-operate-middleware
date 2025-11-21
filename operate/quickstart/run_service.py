@@ -485,7 +485,11 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     for service in manager.json:
         if service["name"] == template["name"]:
             old_hash = service["hash"]
-            if old_hash == template["hash"]:
+            old_version = service["agent_release"]["repository"]["version"]
+            if (
+                old_hash == template["hash"]
+                and old_version == template["agent_release"]["repository"]["version"]
+            ):
                 print(f'Loading service {template["hash"]}')
                 service = manager.load(
                     service_config_id=service["service_config_id"],
@@ -668,6 +672,7 @@ def run_service(
     config_path: str,
     build_only: bool = False,
     skip_dependency_check: bool = False,
+    use_binary: bool = False,
 ) -> None:
     """Run service."""
 
@@ -702,10 +707,17 @@ def run_service(
     manager.funding_manager.topup_service_initial(service=service)
 
     print_section("Deploying the service")
+    if use_binary:
+        use_docker = False
+        use_k8s = False
+    else:
+        use_docker = True
+        use_k8s = True
+
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=True,
-        use_kubernetes=True,
+        use_docker=use_docker,
+        use_kubernetes=use_k8s,
         build_only=build_only,
     )
     if build_only:
