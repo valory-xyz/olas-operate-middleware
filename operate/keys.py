@@ -115,7 +115,7 @@ class KeysManager:
 
     def get_decrypted(self, key: str) -> dict:
         """Get key json."""
-        if self.password:
+        if self.password is not None:
             return self.get(key).get_decrypted_json(self.password)
         return self.get(key).json
 
