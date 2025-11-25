@@ -32,17 +32,21 @@ import os
 import random
 import string
 import tempfile
+import typing as t
 from dataclasses import dataclass
 from pathlib import Path
+from platform import system
 from typing import Generator
 
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
-from operate.cli import OperateApp
-from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.cli import OperateApp, create_app
+from operate.constants import ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -58,7 +62,7 @@ from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
 def random_string(length: int = 16) -> str:
@@ -149,7 +153,8 @@ class OnTestnet:
 
     # TODO: Remove this skip after optimizing tenderly usage
     pytestmark = pytest.mark.skipif(
-        RUNNING_IN_CI, reason="To avoid exhausting tenderly limits."
+        RUNNING_IN_CI and system() != "Linux",
+        reason="To avoid exhausting tenderly limits.",
     )
 
     @pytest.fixture(autouse=True)
@@ -175,7 +180,10 @@ class OperateTestEnv:
     tmp_path: Path
     password: str
     operate: OperateApp
+    operate_app: FastAPI
+    operate_client: TestClient
     wallet_manager: MasterWalletManager
+    mnemonics: t.Dict[LedgerType, t.List[str]]
     service_manager: ServiceManager
     bridge_manager: BridgeManager
     keys_manager: KeysManager
@@ -192,6 +200,14 @@ def _get_service_template_trader() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Trader agent for omen prediction markets",
             "service_version": "v0.26.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(
@@ -306,6 +322,14 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Test Multichain Service",
             "service_version": "v0.0.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(
@@ -411,6 +435,20 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
     )
 
 
+def create_wallets(
+    wallet_manager: MasterWalletManager,
+) -> t.Dict[LedgerType, t.List[str]]:
+    """Create wallets"""
+    mnemonics: t.Dict[LedgerType, t.List[str]] = {}
+    for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
+        _, mnemonic = wallet_manager.create(ledger_type=ledger_type)
+        wallet = wallet_manager.load(ledger_type=ledger_type)
+        assert wallet.key_path.exists()
+        assert wallet.mnemonic_path.exists()
+        mnemonics[ledger_type] = mnemonic
+    return mnemonics
+
+
 @pytest.fixture
 def test_operate(tmp_path: Path, password: str) -> OperateApp:
     """Sets up a test operate app."""
@@ -427,10 +465,6 @@ def test_operate(tmp_path: Path, password: str) -> OperateApp:
 @pytest.fixture
 def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> OperateTestEnv:
     """Sets up a test environment."""
-
-    def _create_wallets(wallet_manager: MasterWalletManager) -> None:
-        for ledger_type in [LedgerType.ETHEREUM]:  # TODO Add Solana when supported
-            wallet_manager.create(ledger_type=ledger_type)
 
     def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
         ledger_types = {wallet.ledger_type for wallet in wallet_manager}
@@ -455,16 +489,13 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
                     amount=int(1000e6),
                 )
 
-    keys_manager = KeysManager(
-        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
-        logger=LOGGER,
-    )
+    keys_manager = test_operate.keys_manager
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()
 
     assert backup_owner != backup_owner2
 
-    _create_wallets(wallet_manager=test_operate.wallet_manager)
+    mnemonics = create_wallets(wallet_manager=test_operate.wallet_manager)
     _create_safes(
         wallet_manager=test_operate.wallet_manager,
         backup_owner=backup_owner,
@@ -476,11 +507,16 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
     # Logout
     test_operate.password = None
 
+    operate_app = create_app(home=test_operate._path)
+
     return OperateTestEnv(
         tmp_path=tmp_path,
         password=password,
         operate=test_operate,
+        operate_app=operate_app,
+        operate_client=TestClient(operate_app),
         wallet_manager=test_operate.wallet_manager,
+        mnemonics=mnemonics,
         service_manager=test_operate.service_manager(),
         bridge_manager=test_operate.bridge_manager,
         keys_manager=keys_manager,

@@ -34,6 +34,16 @@ CONFIG_JSON = "config.json"
 USER_JSON = "user.json"
 HEALTHCHECK_JSON = "healthcheck.json"
 VERSION_FILE = "operate.version"
+SETTINGS_JSON = "settings.json"
+FUNDING_REQUIREMENTS_JSON = "funding_requirements.json"
+DEFAULT_TOPUP_THRESHOLD = 0.5
+
+MASTER_EOA_PLACEHOLDER = "master_eoa"
+MASTER_SAFE_PLACEHOLDER = "master_safe"
+AGENT_EOA_PLACEHOLDER = "agent_eoa"
+SERVICE_SAFE_PLACEHOLDER = "service_safe"
+
+FERNET_KEY_LENGTH = 32
 
 AGENT_PERSISTENT_STORAGE_DIR = "persistent_data"
 AGENT_PERSISTENT_STORAGE_ENV_VAR = "STORE_PATH"
@@ -44,12 +54,17 @@ AGENT_RUNNER_PREFIX = "agent_runner"
 ZERO_ADDRESS = "0x0000000000000000000000000000000000000000"
 
 DEFAULT_TIMEOUT = 30
+MIN_AGENT_BOND = 1
+MIN_SECURITY_DEPOSIT = 1
+
 ON_CHAIN_INTERACT_TIMEOUT = 120.0
 ON_CHAIN_INTERACT_RETRIES = 12
 ON_CHAIN_INTERACT_SLEEP = 5.0
 MIN_PASSWORD_LENGTH = 8
+DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 
 HEALTH_CHECK_URL = "http://127.0.0.1:8716/healthcheck"  # possible DNS issues on windows so use IP address
+AGENT_FUNDS_STATUS_URL = "http://127.0.0.1:8716/funds-status"
 SAFE_WEBAPP_URL = "https://app.safe.global/home?safe=gno:"
 TM_CONTROL_URL = "http://localhost:8080"
 IPFS_ADDRESS = "https://gateway.autonolas.tech/ipfs/f01701220{hash}"
@@ -66,3 +81,6 @@ NO_STAKING_PROGRAM_ID = "no_staking"
 
 DEPLOYMENT_START_TRIES_NUM = 3
 IPFS_CHECK_URL = "https://gateway.autonolas.tech/ipfs/bafybeigcllaxn4ycjjvika3zd6eicksuriez2wtg67gx7pamhcazl3tv54/echo/README.md"
+MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
+MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
+MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec

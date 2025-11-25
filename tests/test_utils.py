@@ -22,11 +22,19 @@
 import threading
 import time
 import typing as t
+from pathlib import Path
 
 import pytest
 from deepdiff import DeepDiff
 
-from operate.utils import SingletonMeta, merge_sum_dicts, subtract_dicts
+import operate.utils as utils
+from operate.utils import (
+    SingletonMeta,
+    merge_sum_dicts,
+    safe_file_operation,
+    subtract_dicts,
+    unrecoverable_delete,
+)
 
 
 class TestUtils:
@@ -297,3 +305,118 @@ class TestSingletonMeta:
 
         assert instance1 is instance2
         assert instance1.get_time() == instance2.get_time()
+
+
+class TestSafeFileOperation:
+    """Tests for the safe_file_operation helper."""
+
+    def test_safe_file_operation_success(self) -> None:
+        """It should call the operation once when no error occurs."""
+
+        calls = []
+
+        def operation(*args: t.Any, **kwargs: t.Any) -> None:
+            calls.append((args, kwargs))
+
+        safe_file_operation(operation, 1, key="value")
+
+        assert calls == [((1,), {"key": "value"})]
+
+    def test_safe_file_operation_retries_on_windows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """It should retry up to three times on Windows before succeeding."""
+
+        monkeypatch.setattr("operate.utils.platform.system", lambda: "Windows")
+        monkeypatch.setattr("operate.utils.time.sleep", lambda _delay: None)
+
+        attempts = {"count": 0}
+
+        def flaky_operation() -> None:
+            attempts["count"] += 1
+            if attempts["count"] < 3:
+                raise PermissionError("locked")
+
+        safe_file_operation(flaky_operation)
+
+        assert attempts["count"] == 3
+
+    def test_safe_file_operation_raises_after_retries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """It should raise the last error after exhausting retries."""
+
+        monkeypatch.setattr("operate.utils.platform.system", lambda: "Windows")
+        monkeypatch.setattr("operate.utils.time.sleep", lambda _delay: None)
+
+        attempts = {"count": 0}
+
+        def failing_operation() -> None:
+            attempts["count"] += 1
+            raise FileNotFoundError("missing")
+
+        with pytest.raises(FileNotFoundError):
+            safe_file_operation(failing_operation)
+
+        assert attempts["count"] == 3
+
+
+class TestUnrecoverableDelete:
+    """Tests for the unrecoverable_delete helper."""
+
+    def test_unrecoverable_delete_removes_file(self, tmp_path: Path) -> None:
+        """It should securely remove an existing file."""
+
+        file_path = tmp_path / "secret.txt"
+        file_path.write_bytes(b"initial data")
+
+        unrecoverable_delete(file_path)
+
+        assert not file_path.exists()
+
+    def test_unrecoverable_delete_raises_for_directory(self, tmp_path: Path) -> None:
+        """It should raise a ValueError when the path is a directory."""
+
+        directory_path = tmp_path / "nested"
+        directory_path.mkdir()
+
+        with pytest.raises(ValueError, match="nested is not a file"):
+            unrecoverable_delete(directory_path)
+
+    def test_unrecoverable_delete_ignores_missing_file(self, tmp_path: Path) -> None:
+        """It should silently return when the file does not exist."""
+
+        missing_path = tmp_path / "missing.txt"
+
+        # Should not raise
+        unrecoverable_delete(missing_path)
+
+        assert not missing_path.exists()
+
+    def test_unrecoverable_delete_overwrites_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """It should overwrite file contents before deletion."""
+
+        file_path = tmp_path / "secure.txt"
+        original_data = b"top secret"
+        file_path.write_bytes(original_data)
+
+        monkeypatch.setattr("operate.utils.os.urandom", lambda size: b"\xaa" * size)
+
+        overwritten_data: t.List[bytes] = []
+        original_remove = utils.os.remove
+
+        def monitored_remove(path: t.Union[str, Path]) -> None:
+            with open(path, "rb") as file:  # type: ignore[arg-type]
+                overwritten_data.append(file.read())
+            original_remove(path)
+
+        monkeypatch.setattr("operate.utils.os.remove", monitored_remove)
+
+        unrecoverable_delete(file_path)
+
+        assert not file_path.exists()
+        assert overwritten_data
+        assert overwritten_data[0] == b"\xaa" * len(original_data)
+        assert overwritten_data[0] != original_data

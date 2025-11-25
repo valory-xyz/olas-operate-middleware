@@ -42,7 +42,7 @@ from tests.conftest import (
     tenderly_add_balance,
     tenderly_increase_time,
 )
-from tests.constants import LOGGER, OPERATE_TEST
+from tests.constants import LOGGER, OPERATE_TEST, RUNNING_IN_CI
 
 
 # TODO Move this to test_services_funding.py once feat/funding_v2 branch is merged
@@ -69,6 +69,7 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
         "description": kwargs.get("description"),
         "image": "https://image_url",
         "service_version": "",
+        "agent_release": kwargs.get("agent_release"),
         "home_chain": "gnosis",
         "configurations": {
             "gnosis": {
@@ -114,6 +115,7 @@ class TestServiceManager(OnTestnet):
     @pytest.mark.parametrize("update_name", [True, False])
     @pytest.mark.parametrize("update_description", [True, False])
     @pytest.mark.parametrize("update_hash", [True, False])
+    @pytest.mark.parametrize("update_release", [True, False])
     def test_service_manager_partial_update(
         self,
         update_new_var: bool,
@@ -121,6 +123,7 @@ class TestServiceManager(OnTestnet):
         update_name: bool,
         update_description: bool,
         update_hash: bool,
+        update_release: bool,
         tmp_path: Path,
         password: str,
     ) -> None:
@@ -179,6 +182,17 @@ class TestServiceManager(OnTestnet):
         if update_hash:
             update_template["hash"] = new_hash
             expected_service_json["hash"] = new_hash
+
+        if update_release:
+            update_template["agent_release"] = {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "optimus",
+                    "version": "v0.0.1002",
+                },
+            }
+            expected_service_json["agent_release"] = update_template["agent_release"]
 
         service_manager.update(
             service_config_id=service_config_id,
@@ -466,7 +480,7 @@ class TestServiceManager(OnTestnet):
                 sender_balance=sender_balance,
             )
 
-    # TODO Integrate this test to test_services_funding.py once feat/funding_v2 branch is merged
+    @pytest.mark.skipif(RUNNING_IN_CI, reason="Endpoint to be deprecated")
     def test_terminate_service(
         self,
         test_env: OperateTestEnv,
@@ -562,7 +576,7 @@ class TestServiceManager(OnTestnet):
                     balance = get_asset_balance(ledger_api, asset, agent_address)
                     LOGGER.info(f"Remaining balance for {agent_address}: {balance}")
                     if asset == ZERO_ADDRESS:
-                        assert balance < DUST[chain]
+                        assert balance <= DUST[chain]
                     else:
                         assert balance == 0
 

@@ -42,10 +42,9 @@ from operate.bridge.providers.provider import Provider, ProviderRequest
 from operate.bridge.providers.relay_provider import RelayProvider
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import USDC
-from operate.operate_types import Chain
+from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.services.manage import get_assets_balances
-from operate.utils import merge_sum_dicts, subtract_dicts
 from operate.wallet.master import MasterWalletManager
 
 
@@ -58,52 +57,60 @@ RELAY_PROVIDER_ID = "relay-provider"
 
 NATIVE_BRIDGE_PROVIDER_CONFIGS: t.Dict[str, t.Any] = {
     "native-ethereum-to-base": {
-        "from_chain": "ethereum",
+        "from_chain": Chain.ETHEREUM.value,
         "from_bridge": "0x3154Cf16ccdb4C6d922629664174b904d80F2C35",
-        "to_chain": "base",
+        "to_chain": Chain.BASE.value,
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
     },
-    "native-ethereum-to-mode": {
-        "from_chain": "ethereum",
-        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
-        "to_chain": "mode",
-        "to_bridge": "0x4200000000000000000000000000000000000010",
-        "bridge_eta": 300,
-        "bridge_contract_adaptor_class": OptimismContractAdaptor,
-    },
-    "native-ethereum-to-optimism": {
-        "from_chain": "ethereum",
-        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
-        "to_chain": "optimism",
+    "native-ethereum-to-celo": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x9C4955b92F34148dbcfDCD82e9c9eCe5CF2badfe",
+        "to_chain": Chain.CELO.value,
         "to_bridge": "0x4200000000000000000000000000000000000010",
         "bridge_eta": 300,
         "bridge_contract_adaptor_class": OptimismContractAdaptor,
     },
     "native-ethereum-to-gnosis": {
-        "from_chain": "ethereum",
+        "from_chain": Chain.ETHEREUM.value,
         "from_bridge": "0x88ad09518695c6c3712AC10a214bE5109a655671",
-        "to_chain": "gnosis",
+        "to_chain": Chain.GNOSIS.value,
         "to_bridge": "0xf6A78083ca3e2a662D6dd1703c939c8aCE2e268d",
         "bridge_eta": 1800,
         "bridge_contract_adaptor_class": OmnibridgeContractAdaptor,
     },
+    "native-ethereum-to-mode": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x735aDBbE72226BD52e818E7181953f42E3b0FF21",
+        "to_chain": Chain.MODE.value,
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 300,
+        "bridge_contract_adaptor_class": OptimismContractAdaptor,
+    },
+    "native-ethereum-to-optimism": {
+        "from_chain": Chain.ETHEREUM.value,
+        "from_bridge": "0x99C9fc46f92E8a1c0deC1b1747d010903E884bE1",
+        "to_chain": Chain.OPTIMISM.value,
+        "to_bridge": "0x4200000000000000000000000000000000000010",
+        "bridge_eta": 300,
+        "bridge_contract_adaptor_class": OptimismContractAdaptor,
+    },
 }
 
-
-ROUTES = {
+# Routes are defined as the tuples (from_chain, from_token, to_chain, to_token)
+PREFERRED_ROUTES = {
     (
-        Chain.ETHEREUM,  # from_chain
-        USDC[Chain.ETHEREUM],  # from_token
-        Chain.OPTIMISM,  # to_chain
-        USDC[Chain.OPTIMISM],  # to_token
+        Chain.ETHEREUM,
+        USDC[Chain.ETHEREUM],
+        Chain.OPTIMISM,
+        USDC[Chain.OPTIMISM],
     ): LIFI_PROVIDER_ID,
     (
-        Chain.ETHEREUM,  # from_chain
-        USDC[Chain.ETHEREUM],  # from_token
-        Chain.BASE,  # to_chain
-        USDC[Chain.BASE],  # to_token
+        Chain.ETHEREUM,
+        USDC[Chain.ETHEREUM],
+        Chain.BASE,
+        USDC[Chain.BASE],
     ): LIFI_PROVIDER_ID,
     (Chain.ETHEREUM, ZERO_ADDRESS, Chain.GNOSIS, ZERO_ADDRESS): RELAY_PROVIDER_ID,
 }
@@ -187,13 +194,13 @@ class BridgeManager:
         path: Path,
         wallet_manager: MasterWalletManager,
         logger: logging.Logger,
-        quote_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
+        bundle_validity_period: int = DEFAULT_BUNDLE_VALIDITY_PERIOD,
     ) -> None:
         """Initialize bridge manager."""
         self.path = path
         self.wallet_manager = wallet_manager
         self.logger = logger
-        self.quote_validity_period = quote_validity_period
+        self.bundle_validity_period = bundle_validity_period
         self.path.mkdir(exist_ok=True)
         (self.path / EXECUTED_BUNDLES_PATH).mkdir(exist_ok=True)
         self.data: BridgeManagerData = cast(
@@ -251,7 +258,7 @@ class BridgeManager:
             self.logger.info("[BRIDGE MANAGER] Force bundle update.")
             self.quote_bundle(bundle)
             self._store_data()
-        elif now > bundle.timestamp + self.quote_validity_period:
+        elif now > bundle.timestamp + self.bundle_validity_period:
             self.logger.info("[BRIDGE MANAGER] Bundle expired.")
             self.quote_bundle(bundle)
             self._store_data()
@@ -261,24 +268,26 @@ class BridgeManager:
 
             provider_requests = []
             for params in requests_params:
-                for provider in self._native_bridge_providers.values():
-                    if provider.can_handle_request(params):
-                        provider_requests.append(provider.create_request(params=params))
-                        break
-                else:
-                    provider_id = ROUTES.get(
-                        (
-                            Chain(params["from"]["chain"]),
-                            params["from"]["token"],
-                            Chain(params["to"]["chain"]),
-                            params["to"]["token"],
-                        ),
-                        RELAY_PROVIDER_ID,
-                    )
+                route = (
+                    Chain(params["from"]["chain"]),
+                    params["from"]["token"],
+                    Chain(params["to"]["chain"]),
+                    params["to"]["token"],
+                )
+                provider_id = PREFERRED_ROUTES.get(route)
 
-                    provider_requests.append(
-                        self._providers[provider_id].create_request(params=params)
-                    )
+                if not provider_id:
+                    for provider in self._native_bridge_providers.values():
+                        if provider.can_handle_request(params):
+                            provider_id = provider.provider_id
+                            break
+
+                if not provider_id:
+                    provider_id = RELAY_PROVIDER_ID
+
+                provider_requests.append(
+                    self._providers[provider_id].create_request(params=params)
+                )
 
             bundle = ProviderRequestBundle(
                 id=f"{BRIDGE_REQUEST_BUNDLE_PREFIX}{uuid.uuid4()}",
@@ -335,7 +344,7 @@ class BridgeManager:
 
         bundle = self._get_updated_bundle(requests_params, force_update)
 
-        balances = {}
+        balances = ChainAmounts()
         for chain in bundle.get_from_chains():
             ledger_api = self.wallet_manager.load(chain.ledger_type).ledger_api(chain)
             balances[chain.value] = get_assets_balances(
@@ -346,9 +355,8 @@ class BridgeManager:
 
         bridge_total_requirements = self.bridge_total_requirements(bundle)
 
-        bridge_refill_requirements = cast(
-            t.Dict[str, t.Dict[str, t.Dict[str, int]]],
-            subtract_dicts(bridge_total_requirements, balances),
+        bridge_refill_requirements = ChainAmounts.shortfalls(
+            bridge_total_requirements, balances
         )
 
         is_refill_required = any(
@@ -364,7 +372,7 @@ class BridgeManager:
                 "balances": balances,
                 "bridge_refill_requirements": bridge_refill_requirements,
                 "bridge_total_requirements": bridge_total_requirements,
-                "expiration_timestamp": bundle.timestamp + self.quote_validity_period,
+                "expiration_timestamp": bundle.timestamp + self.bundle_validity_period,
                 "is_refill_required": is_refill_required,
             }
         )
@@ -441,14 +449,14 @@ class BridgeManager:
             "bridge_request_status": provider_request_status,
         }
 
-    def bridge_total_requirements(self, bundle: ProviderRequestBundle) -> t.Dict:
+    def bridge_total_requirements(self, bundle: ProviderRequestBundle) -> ChainAmounts:
         """Sum bridge requirements."""
         requirements = []
         for provider_request in bundle.provider_requests:
             provider = self._providers[provider_request.provider_id]
             requirements.append(provider.requirements(provider_request))
 
-        return merge_sum_dicts(*requirements)
+        return ChainAmounts.add(*requirements)
 
     def quote_bundle(self, bundle: ProviderRequestBundle) -> None:
         """Update the bundle with the quotes."""
