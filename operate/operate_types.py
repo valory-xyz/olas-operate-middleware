@@ -42,14 +42,6 @@ LedgerType = LedgerTypeOA
 Chain = ChainType
 
 
-def _mnemonic_file(self: LedgerTypeOA) -> str:
-    """Mnemonic filename."""
-    return f"{self.name.lower()}.mnemonic.json"
-
-
-LedgerType.mnemonic_file = property(_mnemonic_file)
-
-
 class DeploymentStatus(enum.IntEnum):
     """Status payload."""
 

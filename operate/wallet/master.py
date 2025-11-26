@@ -81,7 +81,6 @@ class MasterWallet(LocalResource):
     safe_nonce: t.Optional[int] = None
 
     _key: str
-    _mnemonic: str
     _crypto: t.Optional[Crypto] = None
     _password: t.Optional[str] = None
     _crypto_cls: t.Type[Crypto]
@@ -110,10 +109,15 @@ class MasterWallet(LocalResource):
         """Key path."""
         return self.path / self._key
 
+    @classmethod
+    def mnemonic_filename(cls) -> str:
+        """Return deterministic mnemonic filename per ledger type."""
+        return f"{cls.ledger_type.value.lower()}.mnemonic.json"
+
     @property
     def mnemonic_path(self) -> Path:
         """Mnemonic path."""
-        return self.path / self._mnemonic
+        return self.path / self.__class__.mnemonic_filename()
 
     @staticmethod
     def ledger_api(
@@ -249,7 +253,6 @@ class EthereumMasterWallet(MasterWallet):
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
-    _mnemonic = ledger_type.mnemonic_file
     _crypto_cls = EthereumCrypto
 
     def _pre_transfer_checks(
@@ -566,7 +569,7 @@ class EthereumMasterWallet(MasterWallet):
         # Backport support on aea
 
         eoa_wallet_path = path / cls._key
-        eoa_mnemonic_path = path / cls._mnemonic
+        eoa_mnemonic_path = path / cls.mnemonic_filename()
 
         if eoa_wallet_path.exists():
             raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
@@ -605,12 +608,10 @@ class EthereumMasterWallet(MasterWallet):
 
     def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
-        eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
-
-        if not eoa_mnemonic_path.exists():
+        if not self.mnemonic_path.exists():
             return None
 
-        encrypted_mnemonic = EncryptedData.load(eoa_mnemonic_path)
+        encrypted_mnemonic = EncryptedData.load(self.mnemonic_path)
         mnemonic = encrypted_mnemonic.decrypt(password).decode("utf-8")
         return mnemonic.split()
 
