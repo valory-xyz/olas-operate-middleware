@@ -65,7 +65,7 @@ jobs:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
         python-version: [ "3.10" ]
   
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     env:
       BASE_RPC: ${{ secrets.BASE_RPC }}
