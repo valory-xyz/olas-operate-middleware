@@ -481,7 +481,7 @@ class TestService:
         # Emulate an existing service directory contents
         service_dir = tmp_path / "services"
         service_config_dir = service_dir / old_config_json_data.get(
-            "service_config_id", old_config_json_data.get("hash")
+            "service_config_id", old_config_json_data.get("hash", "")
         )
         service_config_dir.mkdir(parents=True, exist_ok=True)
 

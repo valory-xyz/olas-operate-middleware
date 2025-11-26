@@ -4,11 +4,11 @@ version: 0.1.0
 type: contract
 description: HomeOmnibridge
 license: Apache-2.0
-aea_version: '>=1.0.0, <2.0.0'
+aea_version: '>=2.0.0, <3.0.0'
 fingerprint:
   __init__.py: bafybeigrlrmwk3dhnoe4o5ovygtmudik7ybhsx2etqqjpvdi65rtlfpuhe
   build/HomeOmnibridge.json: bafybeihm4ff4mhoca2iwcogg5srqe2x6p674uxxc3v5dcci4emxfgc7qpm
-  contract.py: bafybeifitn7z4oqvycixw56lvrzvifydqyhwtph3nlaivzcm22ogn4rmfq
+  contract.py: bafybeickvhwco3ccqfe3usnzvvxayvbpuhv2aoiryroehqqpfylap7h2f4
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: HomeOmnibridge

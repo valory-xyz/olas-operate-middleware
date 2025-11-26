@@ -913,13 +913,11 @@ class TestFunding(OnTestnet):
                 expected_json["balances"][chain_str][master_safe][asset] -= (
                     cfg["fund_requirements"].get(asset, {}).get("safe", 0)
                 )
-                expected_json["bonded_assets"][chain_str][master_safe][
-                    asset
-                ] = expected_json["protocol_asset_requirements"][chain_str][
-                    master_safe
-                ][
-                    asset
-                ]
+                expected_json["bonded_assets"][chain_str][master_safe][asset] = (
+                    expected_json["protocol_asset_requirements"][chain_str][
+                        master_safe
+                    ][asset]
+                )
                 expected_json["total_requirements"][chain_str][master_safe][
                     asset
                 ] = 0  # The protocol requirements are bonded, nothing more needed.

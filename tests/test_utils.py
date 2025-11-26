@@ -380,7 +380,7 @@ class TestUnrecoverableDelete:
         directory_path = tmp_path / "nested"
         directory_path.mkdir()
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError, match="nested is not a file"):
             unrecoverable_delete(directory_path)
 
     def test_unrecoverable_delete_ignores_missing_file(self, tmp_path: Path) -> None:
@@ -402,7 +402,7 @@ class TestUnrecoverableDelete:
         original_data = b"top secret"
         file_path.write_bytes(original_data)
 
-        monkeypatch.setattr("operate.utils.os.urandom", lambda size: b"\xAA" * size)
+        monkeypatch.setattr("operate.utils.os.urandom", lambda size: b"\xaa" * size)
 
         overwritten_data: t.List[bytes] = []
         original_remove = utils.os.remove
@@ -418,5 +418,5 @@ class TestUnrecoverableDelete:
 
         assert not file_path.exists()
         assert overwritten_data
-        assert overwritten_data[0] == b"\xAA" * len(original_data)
+        assert overwritten_data[0] == b"\xaa" * len(original_data)
         assert overwritten_data[0] != original_data
