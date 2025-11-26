@@ -724,7 +724,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.get("/api/extended/wallet")
+    @app.get("/api/wallet/extended")
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
