@@ -499,7 +499,7 @@ Get Master EOA mnemonic.
 }
 ```
 
-### `GET /api/extended/wallet`
+### `GET /api/wallet/extended`
 
 Get extended wallet information including safes and additional metadata.
 
