@@ -112,9 +112,15 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
-        return (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("w+")
+        return (self._get_operate_dir() / "agent_runner.log").open("w+")
+
+    def _open_tendermint_log_file(self) -> TextIOWrapper:
+        """Open tm.log file."""
+        return (self._get_operate_dir() / "tm.log").open("w+")
+
+    def _get_operate_dir(self) -> Path:
+        """Get .operate dir."""
+        return Path(self._work_directory).parent.parent.parent
 
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
@@ -439,12 +445,12 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             **env,
         }
         env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
-
+        tm_log_file = self._open_tendermint_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=tm_log_file,
+            stderr=tm_log_file,
             env=env,
             preexec_fn=os.setpgrp,  # pylint: disable=subprocess-popen-preexec-fn # nosec
         )
@@ -559,13 +565,14 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         env = {
             **env,
         }
+        tm_log_file = self._open_tendermint_log_file()
         env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=tm_log_file,
+            stderr=tm_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
