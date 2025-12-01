@@ -104,7 +104,7 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_10": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
-        "pett_ai_agent": "mech",
+        "pett_ai_agent": "pett_ai",
     },
     Chain.OPTIMISM: {
         "optimus_alpha_2": "optimus",
