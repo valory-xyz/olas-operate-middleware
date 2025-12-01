@@ -722,6 +722,9 @@ class EthereumMasterWallet(MasterWallet):
                 "The master wallet cannot be set as the Safe backup owner."
             )
 
+        if self.address not in owners:
+            return False
+
         owners.remove(self.address)
         old_backup_owner = owners[0] if owners else None
 
@@ -769,7 +772,9 @@ class EthereumMasterWallet(MasterWallet):
             chain_str = chain.value
             ledger_api = self.ledger_api(chain=chain, rpc=rpc)
             owners = get_owners(ledger_api=ledger_api, safe=safe)
-            owners.remove(self.address)
+
+            if self.address in owners:
+                owners.remove(self.address)
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
@@ -781,8 +786,8 @@ class EthereumMasterWallet(MasterWallet):
                 balances[chain_str][safe][asset] = self.get_balance(
                     chain=chain, asset=asset, from_safe=True
                 )
-            wallet_json["safes"][chain.value] = {
-                wallet_json["safes"][chain.value]: {
+            wallet_json["safes"][chain_str] = {
+                safe: {
                     "backup_owners": owners,
                     "balances": balances[chain_str][safe],
                 }

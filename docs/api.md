@@ -702,7 +702,15 @@ Get recovery status.
   "prepared": true,
   "bundle_id": "bundle_123",
   "has_swaps": true,
-  "has_pending_swaps": true
+  "has_pending_swaps": true,
+  "pending_owner_swaps": {
+    "gnosis": {
+      "0x...": {
+        "backup_owners": ["0x..."],
+        "owners": ["0x..."]
+      }
+    }
+  }
 }
 ```
 

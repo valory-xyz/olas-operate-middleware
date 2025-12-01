@@ -236,6 +236,7 @@ class TestWalletRecovery(OnTestnet):
         assert status_response["bundle_id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert len(status_response["pending_owner_swaps"]) == 0
 
         # Prepare recovery
         new_password = "new_" + password[::-1]
@@ -259,6 +260,7 @@ class TestWalletRecovery(OnTestnet):
         new_addresses: t.Dict[LedgerType, str] = {}
         new_mnemonics: t.Dict[LedgerType, t.List[str]] = {}
 
+        expected_pending_owner_swaps = {}
         for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
             assert item["current_wallet"].get("safes") is not None
@@ -274,6 +276,12 @@ class TestWalletRecovery(OnTestnet):
             assert new_address != item["current_wallet"]["address"]
             new_addresses[new_ledger_type] = new_address
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
+            for chain_str, safe in item["current_wallet"]["safes"].items():
+                expected_pending_owner_swaps.setdefault(chain_str, {})
+                expected_pending_owner_swaps[chain_str][safe] = {
+                    "owners": [backup_owner, item["current_wallet"]["address"]],
+                    "backup_owners": [backup_owner],
+                }
 
         bundle_id = prepare_json["id"]
 
@@ -301,6 +309,11 @@ class TestWalletRecovery(OnTestnet):
         assert status_response["bundle_id"] is not None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is True
+        assert not DeepDiff(
+            status_response["pending_owner_swaps"],
+            expected_pending_owner_swaps,
+            ignore_order=True,
+        )
 
         # Swap safe owners using backup wallet
         keys_manager.password = test_env.password
@@ -342,6 +355,7 @@ class TestWalletRecovery(OnTestnet):
         assert status_response["bundle_id"] is not None
         assert status_response["has_swaps"] is True
         assert status_response["has_pending_swaps"] is False
+        assert len(status_response["pending_owner_swaps"]) == 0
 
         # Complete recovery
         complete_response = operate_client.post(
@@ -359,6 +373,7 @@ class TestWalletRecovery(OnTestnet):
         assert status_response["bundle_id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert len(status_response["pending_owner_swaps"]) == 0
 
         # Test that recovery was successful
         operate = OperateApp(

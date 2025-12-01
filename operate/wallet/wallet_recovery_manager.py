@@ -131,6 +131,7 @@ class WalletRecoveryManager:
                 num_safes_with_new_wallet,
                 _,
                 _,
+                _,
             ) = self._get_swap_status(last_prepared_bundle_id)
             if num_safes_with_new_wallet > 0:
                 self.logger.info(
@@ -178,7 +179,9 @@ class WalletRecoveryManager:
         )
         return self._load_bundle(bundle_id=bundle_id, new_password=new_password)
 
-    def _get_swap_status(self, bundle_id: str) -> t.Tuple[int, int, int, int]:
+    def _get_swap_status(  # pylint: disable=too-many-locals
+        self, bundle_id: str
+    ) -> t.Tuple[int, int, int, int, t.Dict]:
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
         new_wallets_path = new_root / WALLETS_DIR
         new_wallet_manager = MasterWalletManager(path=new_wallets_path, password=None)
@@ -187,6 +190,7 @@ class WalletRecoveryManager:
         num_safes_with_new_wallet = 0
         num_safes_with_old_wallet = 0
         num_safes_with_both_wallets = 0
+        pending_owner_swaps: t.Dict = {}
 
         for wallet in self.wallet_manager:
             new_wallet = next(
@@ -203,12 +207,22 @@ class WalletRecoveryManager:
                     num_safes_with_new_wallet += 1
                 if wallet.address in owners:
                     num_safes_with_old_wallet += 1
+                if new_wallet.address not in owners:
+                    pending_owner_swaps.setdefault(chain.value, {})
+                    backup_owners = list(
+                        set(owners) - {wallet.address, new_wallet.address}
+                    )
+                    pending_owner_swaps[chain.value][safe] = {
+                        "owners": owners,
+                        "backup_owners": backup_owners,
+                    }
 
         return (
             num_safes,
             num_safes_with_new_wallet,
             num_safes_with_old_wallet,
             num_safes_with_both_wallets,
+            pending_owner_swaps,
         )
 
     def _load_bundle(self, bundle_id: str, new_password: str) -> t.Dict:
@@ -323,6 +337,7 @@ class WalletRecoveryManager:
                 "bundle_id": bundle_id,
                 "has_swaps": False,
                 "has_pending_swaps": False,
+                "pending_owner_swaps": {},
             }
 
         (
@@ -330,6 +345,7 @@ class WalletRecoveryManager:
             num_safes_with_new_wallet,
             _,
             _,
+            pending_owner_swaps,
         ) = self._get_swap_status(bundle_id)
 
         return {
@@ -337,6 +353,7 @@ class WalletRecoveryManager:
             "bundle_id": bundle_id,
             "has_swaps": num_safes_with_new_wallet > 0,
             "has_pending_swaps": num_safes_with_new_wallet < num_safes,
+            "pending_owner_swaps": pending_owner_swaps,
         }
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
