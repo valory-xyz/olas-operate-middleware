@@ -369,9 +369,9 @@ class BridgeManager:
         status_json = self.get_status_json(bundle.id)
         status_json.update(
             {
-                "balances": balances,
-                "bridge_refill_requirements": bridge_refill_requirements,
-                "bridge_total_requirements": bridge_total_requirements,
+                "balances": balances.bigint2str_json(),
+                "bridge_refill_requirements": bridge_refill_requirements.bigint2str_json(),
+                "bridge_total_requirements": bridge_total_requirements.bigint2str_json(),
                 "expiration_timestamp": bundle.timestamp + self.bundle_validity_period,
                 "is_refill_required": is_refill_required,
             }

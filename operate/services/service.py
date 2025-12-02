@@ -800,6 +800,22 @@ class Service(LocalResource):
         obj["service_public_id"] = self.service_public_id()
         return obj
 
+    def bigint2str_json(self) -> t.Dict:
+        """To dictionary object."""
+        obj = self.json
+        for chain_str, chain_config in self.chain_configs.items():
+            obj["chain_configs"][chain_str]["chain_data"]["user_params"][
+                "cost_of_bond"
+            ] = str(chain_config.chain_data.user_params.cost_of_bond)
+            for (
+                asset,
+                amount,
+            ) in chain_config.chain_data.user_params.fund_requirements.items():
+                obj["chain_configs"][chain_str]["chain_data"]["user_params"][
+                    "fund_requirements"
+                ][asset] = str(amount)
+        return obj
+
     @staticmethod
     def determine_agent_id(service_name: str) -> int:
         """Determine the appropriate agent ID based on service name."""

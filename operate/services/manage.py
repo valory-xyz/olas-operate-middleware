@@ -190,7 +190,7 @@ class ServiceManager:
     def json(self) -> t.List[t.Dict]:
         """Returns the list of available services."""
         services, _ = self.get_all_services()
-        return [service.json for service in services]
+        return [service.bigint2str_json() for service in services]
 
     def exists(self, service_config_id: str) -> bool:
         """Check if service exists."""

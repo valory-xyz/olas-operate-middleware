@@ -68,3 +68,12 @@ class Settings(LocalResource):
                 for chain, asset_amount in self.eoa_topups.items()
             }
         )
+
+    def bigint2str_json(self) -> Dict:
+        """Get the JSON representation with bigints as strings."""
+        output = super().json
+        output["eoa_topups"] = {
+            chain: {asset: str(amount) for asset, amount in assets.items()}
+            for chain, assets in self.eoa_topups.items()
+        }
+        return output

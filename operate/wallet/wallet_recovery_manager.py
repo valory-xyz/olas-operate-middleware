@@ -307,9 +307,9 @@ class WalletRecoveryManager:
         )
 
         return {
-            "balances": balances,
-            "total_requirements": requirements,
-            "refill_requirements": refill_requirements,
+            "balances": balances.bigint2str_json(),
+            "total_requirements": requirements.bigint2str_json(),
+            "refill_requirements": refill_requirements.bigint2str_json(),
             "is_refill_required": is_refill_required,
             "pending_backup_owner_swaps": pending_backup_owner_swaps,
         }

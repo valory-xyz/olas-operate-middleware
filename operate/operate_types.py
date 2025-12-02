@@ -268,8 +268,8 @@ class DeployedNodes(LocalResource):
 class OnChainFundRequirements(LocalResource):
     """On-chain fund requirements."""
 
-    agent: float
-    safe: float
+    agent: int
+    safe: int
 
 
 OnChainTokenRequirements = t.Dict[str, OnChainFundRequirements]
@@ -392,6 +392,18 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
 
     The standard format follows the convention {chain: {address: {token: amount}}}
     """
+
+    def bigint2str_json(self) -> dict[str, dict[str, dict[str, str]]]:
+        """Get the JSON representation with bigints as strings."""
+        result: dict[str, dict[str, dict[str, str]]] = {}
+        for chain, addresses in self.items():
+            addr_out = result.setdefault(chain, {})
+            for address, assets in addresses.items():
+                asset_out = addr_out.setdefault(address, {})
+                for asset, amount in assets.items():
+                    asset_out[asset] = str(amount)
+
+        return result
 
     @classmethod
     def shortfalls(
