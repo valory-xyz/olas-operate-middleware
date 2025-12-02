@@ -124,8 +124,18 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        cmd = " ".join(args)
-        self.logger.info(f"Running aea command: {cmd} at {str(cwd)}")
+        no_password_args = []
+        for i, arg in enumerate(args):
+            if i > 0 and args[i - 1] == "--password":
+                no_password_args.append("******")
+            elif arg.startswith("--password="):
+                no_password_args.append("--password=******")
+            else:
+                no_password_args.append(arg)
+
+        self.logger.info(
+            f"Running aea command: {' '.join(no_password_args)} at {str(cwd)}"
+        )
         p = multiprocessing.Process(
             target=self.__class__._call_aea_command,  # pylint: disable=protected-access
             args=(cwd, args),
@@ -134,7 +144,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         p.join()
         if p.exitcode != 0:
             raise RuntimeError(
-                f"aea command `{cmd}`execution failed with exit code: {p.exitcode}"
+                f"aea command `{' '.join(no_password_args)}` execution failed with exit code: {p.exitcode}"
             )
 
     @staticmethod
