@@ -468,7 +468,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
 
     def _create_safes(wallet_manager: MasterWalletManager, backup_owner: str) -> None:
         ledger_types = {wallet.ledger_type for wallet in wallet_manager}
-        for chain in [Chain.GNOSIS, Chain.OPTIMISM]:
+        for chain in [Chain.GNOSIS, Chain.BASE]:
             ledger_type = chain.ledger_type
             if ledger_type in ledger_types:
                 wallet = wallet_manager.load(ledger_type=ledger_type)

@@ -19,6 +19,7 @@
 
 """Wallet recovery manager"""
 
+import enum
 import shutil
 import typing as t
 import uuid
@@ -47,6 +48,19 @@ from operate.wallet.master import MasterWalletManager
 RECOVERY_BUNDLE_PREFIX = "eb-"
 RECOVERY_NEW_OBJECTS_DIR = "new"
 RECOVERY_OLD_OBJECTS_DIR = "old"
+
+
+class WalletRecoveryStatus(str, enum.Enum):
+    """ProviderRequestStatus"""
+
+    NOT_PREPARED = "NOT_PREPARED"
+    PREPARED = "PREPARED"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+
+    def __str__(self) -> str:
+        """__str__"""
+        return self.value
 
 
 class WalletRecoveryError(Exception):
@@ -125,21 +139,13 @@ class WalletRecoveryManager:
                     )
 
         last_prepared_bundle_id = self.data.last_prepared_bundle_id
-        if last_prepared_bundle_id is not None:
-            (
-                _,
-                num_safes_with_new_wallet,
-                _,
-                _,
-                _,
-            ) = self._get_swap_status(last_prepared_bundle_id)
-            if num_safes_with_new_wallet > 0:
-                self.logger.info(
-                    f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
-                )
-                return self._load_bundle(
-                    bundle_id=last_prepared_bundle_id, new_password=new_password
-                )
+        if self.status()["num_safes_with_new_wallet"] > 0:
+            self.logger.info(
+                f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
+            )
+            return self._load_bundle(
+                bundle_id=last_prepared_bundle_id, new_password=new_password
+            )
 
         # Create new recovery bundle
         bundle_id = f"{RECOVERY_BUNDLE_PREFIX}{str(uuid.uuid4())}"
@@ -179,26 +185,43 @@ class WalletRecoveryManager:
         )
         return self._load_bundle(bundle_id=bundle_id, new_password=new_password)
 
-    def _get_swap_status(  # pylint: disable=too-many-locals
-        self, bundle_id: str
-    ) -> t.Tuple[int, int, int, int, t.Dict]:
+    def _load_bundle(  # pylint: disable=too-many-locals
+        self, bundle_id: str, new_password: t.Optional[str] = None
+    ) -> t.Dict:
         new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
+
+        new_user_account = UserAccount.load(new_root / USER_JSON)
+        if new_password is not None and not new_user_account.is_valid(
+            password=new_password
+        ):
+            raise ValueError(MSG_INVALID_PASSWORD)
+
         new_wallets_path = new_root / WALLETS_DIR
-        new_wallet_manager = MasterWalletManager(path=new_wallets_path, password=None)
+        new_wallet_manager = MasterWalletManager(
+            path=new_wallets_path, password=new_password
+        )
 
         num_safes = 0
         num_safes_with_new_wallet = 0
         num_safes_with_old_wallet = 0
         num_safes_with_both_wallets = 0
-        pending_owner_swaps: t.Dict = {}
 
+        wallets = []
         for wallet in self.wallet_manager:
             new_wallet = next(
                 (w for w in new_wallet_manager if w.ledger_type == wallet.ledger_type)
             )
+            new_mnemonic = None
+            if new_password:
+                new_mnemonic = new_wallet.decrypt_mnemonic(password=new_password)
+
+            wallet_json = wallet.json
+
             for chain, safe in wallet.safes.items():
+                chain_str = chain.value
                 ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
+                backup_owners = list(set(owners) - {wallet.address, new_wallet.address})
 
                 num_safes += 1
                 if new_wallet.address in owners and wallet.address in owners:
@@ -207,53 +230,46 @@ class WalletRecoveryManager:
                     num_safes_with_new_wallet += 1
                 if wallet.address in owners:
                     num_safes_with_old_wallet += 1
-                if new_wallet.address not in owners:
-                    pending_owner_swaps.setdefault(chain.value, {})
-                    backup_owners = list(
-                        set(owners) - {wallet.address, new_wallet.address}
-                    )
-                    pending_owner_swaps[chain.value][safe] = {
+
+                wallet_json["safes"][chain_str] = {
+                    safe: {
                         "owners": owners,
                         "backup_owners": backup_owners,
+                        "owner_to_remove": wallet.address
+                        if wallet.address in owners
+                        else None,
+                        "owner_to_add": new_wallet.address
+                        if new_wallet.address not in owners
+                        else None,
                     }
+                }
 
-        return (
-            num_safes,
-            num_safes_with_new_wallet,
-            num_safes_with_old_wallet,
-            num_safes_with_both_wallets,
-            pending_owner_swaps,
-        )
-
-    def _load_bundle(self, bundle_id: str, new_password: str) -> t.Dict:
-        new_root = self.path / bundle_id / RECOVERY_NEW_OBJECTS_DIR
-
-        new_user_account = UserAccount.load(new_root / USER_JSON)
-        if not new_user_account.is_valid(password=new_password):
-            raise ValueError(MSG_INVALID_PASSWORD)
-
-        new_wallets_path = new_root / WALLETS_DIR
-        new_wallet_manager = MasterWalletManager(
-            path=new_wallets_path, password=new_password
-        )
-
-        wallets = []
-        for wallet in self.wallet_manager:
-            ledger_type = wallet.ledger_type
-            new_wallet = new_wallet_manager.load(ledger_type=ledger_type)
-            new_mnemonic = None
-            if new_password:
-                new_mnemonic = new_wallet.decrypt_mnemonic(password=new_password)
             wallets.append(
                 {
-                    "current_wallet": wallet.json,
+                    "current_wallet": wallet_json,
                     "new_wallet": new_wallet.json,
                     "new_mnemonic": new_mnemonic,
                 }
             )
+
+        if num_safes_with_new_wallet == 0:
+            status = WalletRecoveryStatus.PREPARED
+        elif num_safes_with_new_wallet < num_safes:
+            status = WalletRecoveryStatus.IN_PROGRESS
+        else:
+            status = WalletRecoveryStatus.COMPLETED
+
         return {
             "id": bundle_id,
             "wallets": wallets,
+            "status": status,
+            "prepared": bundle_id is not None,
+            "has_swaps": num_safes_with_new_wallet > 0,
+            "has_pending_swaps": num_safes_with_new_wallet < num_safes,
+            "num_safes": num_safes,
+            "num_safes_with_new_wallet": num_safes_with_new_wallet,
+            "num_safes_with_old_wallet": num_safes_with_old_wallet,
+            "num_safes_with_both_wallets": num_safes_with_both_wallets,
         }
 
     def recovery_requirements(  # pylint: disable=too-many-locals
@@ -331,30 +347,22 @@ class WalletRecoveryManager:
     def status(self) -> t.Dict[str, t.Any]:
         """Get recovery status."""
         bundle_id = self.data.last_prepared_bundle_id
-        if not bundle_id:
+        if bundle_id is None:
             return {
+                "id": None,
+                "wallets": [],
+                "status": WalletRecoveryStatus.NOT_PREPARED,
                 "prepared": False,
                 "bundle_id": bundle_id,
                 "has_swaps": False,
                 "has_pending_swaps": False,
-                "pending_owner_swaps": {},
+                "num_safes": 0,
+                "num_safes_with_new_wallet": 0,
+                "num_safes_with_old_wallet": 0,
+                "num_safes_with_both_wallets": 0,
             }
 
-        (
-            num_safes,
-            num_safes_with_new_wallet,
-            _,
-            _,
-            pending_owner_swaps,
-        ) = self._get_swap_status(bundle_id)
-
-        return {
-            "prepared": bundle_id is not None,
-            "bundle_id": bundle_id,
-            "has_swaps": num_safes_with_new_wallet > 0,
-            "has_pending_swaps": num_safes_with_new_wallet < num_safes,
-            "pending_owner_swaps": pending_owner_swaps,
-        }
+        return self._load_bundle(bundle_id=bundle_id)
 
     def complete_recovery(  # pylint: disable=too-many-locals,too-many-statements
         self, raise_if_inconsistent_owners: bool = True
