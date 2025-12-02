@@ -223,7 +223,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             )
 
         logger.info(f"Backing up existing {OPERATE} directory to {backup_path}")
-        shutil.copytree(self._path, backup_path)
+        shutil.copytree(self._path, backup_path, ignore_dangling_symlinks=True)
         version_file.write_text(str(current_version))
 
         # remove recoverable files from the backup to save space
