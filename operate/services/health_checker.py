@@ -21,6 +21,7 @@
 import asyncio
 import json
 import logging
+import time
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
@@ -40,6 +41,8 @@ class HealthChecker:
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90  # seconds
     NUMBER_OF_FAILS_DEFAULT = 60
+    FAILFAST_NUM = 15
+    FAILFAST_TIMEOUT = 15 * 60  # 15 minutes
 
     def __init__(
         self,
@@ -121,7 +124,7 @@ class HealthChecker:
                     )
                     return False
 
-    async def healthcheck_job(
+    async def healthcheck_job(  # pylint: disable=too-many-statements
         self,
         service_config_id: str,
     ) -> None:
@@ -214,7 +217,24 @@ class HealthChecker:
                     if exception is not None:
                         raise exception
 
+            async def _stop(
+                service_manager: ServiceManager, service_config_id: str
+            ) -> None:
+                def _do_stop() -> None:
+                    service_manager.stop_service_locally(
+                        service_config_id=service_config_id
+                    )
+
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor() as executor:
+                    future = loop.run_in_executor(executor, _do_stop)
+                    await future
+                    exception = future.exception()
+                    if exception is not None:
+                        raise exception
+
             # upper cycle
+            failfast_records: t.List[float] = []
             while True:
                 self.logger.info(
                     f"[HEALTH_CHECKER] {service_config_id} wait for port ready"
@@ -224,6 +244,7 @@ class HealthChecker:
                     self.logger.info(
                         f"[HEALTH_CHECKER]  {service_config_id} port is ready, checking health every {self.sleep_period}"
                     )
+                    failfast_records = []
                     await _check_health(
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
@@ -236,7 +257,22 @@ class HealthChecker:
 
                 # perform restart
                 # TODO: blocking!!!!!!!
-                await _restart(self._service_manager, service_config_id)
+                while True:
+                    # we count every restart till success (port is up and healtcheck started)
+                    failfast_records.append(time.time())
+                    try:
+                        await _restart(self._service_manager, service_config_id)
+                        break
+                    except Exception:  # pylint: disable=broad-except
+                        if (len(failfast_records) >= self.FAILFAST_NUM) or (
+                            time.time() - failfast_records[0]
+                        ) > self.FAILFAST_TIMEOUT:
+                            await _stop(self._service_manager, service_config_id)
+                            raise
+
+                        self.logger.exception(f"Restart problem: {service_config_id}")
+                        await asyncio.sleep(30)
+
         except Exception:
             self.logger.exception(
                 f"Problems running healthcheck job for {service_config_id}"
