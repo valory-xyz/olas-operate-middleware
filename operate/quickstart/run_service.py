@@ -104,7 +104,6 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_10": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
-        "pett_ai_agent": "pett_ai",
     },
     Chain.OPTIMISM: {
         "optimus_alpha_2": "optimus",
@@ -118,6 +117,7 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
+        "pett_ai_agent": "pett_ai",
     },
     Chain.CELO: {},
     Chain.MODE: {
@@ -432,9 +432,9 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name][
-                "value"
-            ] = config.user_provided_args[env_var_name]
+            template["env_variables"][env_var_name]["value"] = (
+                config.user_provided_args[env_var_name]
+            )
 
         # TODO: Handle it in a more generic way
         if (
