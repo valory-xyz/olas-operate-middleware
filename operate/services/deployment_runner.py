@@ -112,14 +112,30 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
-        return (
-            Path(self._work_directory).parent.parent.parent / "agent_runner.log"
-        ).open("w+")
+        return (self._get_operate_dir() / "agent_runner.log").open("w+")
+
+    def _open_tendermint_log_file(self) -> TextIOWrapper:
+        """Open tm.log file."""
+        return (self._get_operate_dir() / "tm.log").open("w+")
+
+    def _get_operate_dir(self) -> Path:
+        """Get .operate dir."""
+        return Path(self._work_directory).parent.parent.parent
 
     def _run_aea_command(self, *args: str, cwd: Path) -> Any:
         """Run aea command."""
-        cmd = " ".join(args)
-        self.logger.info(f"Running aea command: {cmd} at {str(cwd)}")
+        no_password_args = []
+        for i, arg in enumerate(args):
+            if i > 0 and args[i - 1] == "--password":
+                no_password_args.append("******")
+            elif arg.startswith("--password="):
+                no_password_args.append("--password=******")
+            else:
+                no_password_args.append(arg)
+
+        self.logger.info(
+            f"Running aea command: {' '.join(no_password_args)} at {str(cwd)}"
+        )
         p = multiprocessing.Process(
             target=self.__class__._call_aea_command,  # pylint: disable=protected-access
             args=(cwd, args),
@@ -128,7 +144,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         p.join()
         if p.exitcode != 0:
             raise RuntimeError(
-                f"aea command `{cmd}`execution failed with exit code: {p.exitcode}"
+                f"aea command `{' '.join(no_password_args)}` execution failed with exit code: {p.exitcode}"
             )
 
     @staticmethod
@@ -188,82 +204,90 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         return env
 
     def _setup_agent(self, password: str) -> None:
-        """Setup agent."""
-        working_dir = self._work_directory
-        env = self._prepare_agent_env()
-        agent_alias_name = "agent"
-        agent_dir_full_path = Path(working_dir) / agent_alias_name
-        if not self._is_aea:
-            if agent_dir_full_path.exists():
-                # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
-                with suppress(Exception):
-                    shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+        """Setup agent with retries for network operations."""
+        max_attempts = 10
+        for attempt in range(1, max_attempts + 1):
+            try:
+                working_dir = self._work_directory
+                env = self._prepare_agent_env()
 
-            # Add keys
-            agent_dir_full_path.mkdir(exist_ok=True, parents=True)
-            shutil.copy(
-                working_dir / "ethereum_private_key.txt",
-                working_dir / "agent" / "ethereum_private_key.txt",
-            )
-            return
+                # Clear agent directory before each attempt to avoid partial state
+                agent_alias_name = "agent"
+                agent_dir_full_path = Path(working_dir) / agent_alias_name
+                if agent_dir_full_path.exists():
+                    with suppress(Exception):
+                        shutil.rmtree(agent_dir_full_path, ignore_errors=True)
 
-        self._run_aea_command(
-            "init",
-            "--reset",
-            "--author",
-            "valory",
-            "--remote",
-            "--ipfs",
-            "--ipfs-node",
-            "/dns/registry.autonolas.tech/tcp/443/https",
-            cwd=working_dir,
-        )
+                self._run_aea_command(
+                    "init",
+                    "--reset",
+                    "--author",
+                    "valory",
+                    "--remote",
+                    "--ipfs",
+                    "--ipfs-node",
+                    "/dns/registry.autonolas.tech/tcp/443/https",
+                    cwd=working_dir,
+                )
 
-        if agent_dir_full_path.exists():
-            # remove if exists before fetching! can have issues with retry mechanism of multiple start attempts
-            with suppress(Exception):
-                shutil.rmtree(agent_dir_full_path, ignore_errors=True)
+                self._run_aea_command(
+                    "-s",
+                    "fetch",
+                    env["AEA_AGENT"],
+                    "--alias",
+                    agent_alias_name,
+                    cwd=working_dir,
+                )
 
-        self._run_aea_command(
-            "-s",
-            "fetch",
-            env["AEA_AGENT"],
-            "--alias",
-            agent_alias_name,
-            cwd=working_dir,
-        )
+                # Add keys
+                shutil.copy(
+                    working_dir / "ethereum_private_key.txt",
+                    working_dir / "agent" / "ethereum_private_key.txt",
+                )
 
-        # Add keys
-        shutil.copy(
-            working_dir / "ethereum_private_key.txt",
-            working_dir / "agent" / "ethereum_private_key.txt",
-        )
+                self._run_aea_command(
+                    "-s",
+                    "add-key",
+                    "--password",
+                    password,
+                    "ethereum",
+                    cwd=working_dir / "agent",
+                )
+                self._run_aea_command(
+                    "-s",
+                    "add-key",
+                    "--password",
+                    password,
+                    "ethereum",
+                    "--connection",
+                    cwd=working_dir / "agent",
+                )
 
-        self._run_aea_command(
-            "-s",
-            "add-key",
-            "--password",
-            password,
-            "ethereum",
-            cwd=working_dir / "agent",
-        )
-        self._run_aea_command(
-            "-s",
-            "add-key",
-            "--password",
-            password,
-            "ethereum",
-            "--connection",
-            cwd=working_dir / "agent",
-        )
+                self._run_aea_command(
+                    "-s",
+                    "issue-certificates",
+                    "--password",
+                    password,
+                    cwd=working_dir / "agent",
+                )
 
-        self._run_aea_command(
-            "-s",
-            "issue-certificates",
-            "--password",
-            password,
-            cwd=working_dir / "agent",
-        )
+                # Success - break out of retry loop
+                self.logger.info(
+                    f"Agent setup completed successfully on attempt {attempt}"
+                )
+                break
+
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.warning(
+                    f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
+                )
+                if attempt < max_attempts:
+                    sleep_time = attempt * 5
+                    self.logger.info(f"Retrying agent setup in {sleep_time} seconds...")
+                    time.sleep(sleep_time)
+                else:
+                    self.logger.error(f"All {max_attempts} agent setup attempts failed")
+                    raise
 
     def start(self, password: str) -> None:
         """Start the deployment with retries."""
@@ -439,12 +463,12 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             **env,
         }
         env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
-
+        tm_log_file = self._open_tendermint_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=tm_log_file,
+            stderr=tm_log_file,
             env=env,
             preexec_fn=os.setpgrp,  # pylint: disable=subprocess-popen-preexec-fn # nosec
         )
@@ -559,13 +583,14 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         env = {
             **env,
         }
+        tm_log_file = self._open_tendermint_log_file()
         env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stdout=tm_log_file,
+            stderr=tm_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
