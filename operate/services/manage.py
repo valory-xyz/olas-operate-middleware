@@ -22,6 +22,7 @@
 import json
 import logging
 import os
+import time
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -104,6 +105,8 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 # At the moment, we only support running one agent per service locally on a machine.
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
 NUM_LOCAL_AGENT_INSTANCES = 1
+
+RPC_SYNC_TIMEOUT = 15
 
 
 class ServiceManager:
@@ -964,6 +967,10 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
+        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
+            time.sleep(RPC_SYNC_TIMEOUT)
+
+        # Activate service
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
@@ -1028,6 +1035,10 @@ class ServiceManager:
                 )
             ).settle()
 
+        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
+            time.sleep(RPC_SYNC_TIMEOUT)
+
+        # Register agent instances
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.ACTIVE_REGISTRATION
@@ -1093,6 +1104,9 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
+
+        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
+            time.sleep(RPC_SYNC_TIMEOUT)
 
         # Deploy service
         is_initial_funding = False
