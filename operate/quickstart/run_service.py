@@ -432,9 +432,9 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name]["value"] = (
-                config.user_provided_args[env_var_name]
-            )
+            template["env_variables"][env_var_name][
+                "value"
+            ] = config.user_provided_args[env_var_name]
 
         # TODO: Handle it in a more generic way
         if (
