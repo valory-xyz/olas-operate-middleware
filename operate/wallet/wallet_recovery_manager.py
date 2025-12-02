@@ -139,7 +139,10 @@ class WalletRecoveryManager:
                     )
 
         last_prepared_bundle_id = self.data.last_prepared_bundle_id
-        if self.status()["num_safes_with_new_wallet"] > 0:
+        if (
+            last_prepared_bundle_id is not None
+            and self.status()["num_safes_with_new_wallet"] > 0
+        ):
             self.logger.info(
                 f"[WALLET RECOVERY MANAGER] Uncompleted bundle {last_prepared_bundle_id} has Safes with new wallet."
             )
@@ -205,6 +208,7 @@ class WalletRecoveryManager:
         num_safes_with_new_wallet = 0
         num_safes_with_old_wallet = 0
         num_safes_with_both_wallets = 0
+        backup_owner_sets = set()
 
         wallets = []
         for wallet in self.wallet_manager:
@@ -222,6 +226,7 @@ class WalletRecoveryManager:
                 ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
                 backup_owners = list(set(owners) - {wallet.address, new_wallet.address})
+                backup_owner_sets.add(frozenset(backup_owners))
 
                 num_safes += 1
                 if new_wallet.address in owners and wallet.address in owners:
@@ -263,6 +268,13 @@ class WalletRecoveryManager:
             "id": bundle_id,
             "wallets": wallets,
             "status": status,
+            "all_safes_have_backup_owner": all(
+                len(owners) >= 1 for owners in backup_owner_sets
+            ),
+            "consistent_backup_owner": len(backup_owner_sets) == 1,
+            "consistent_backup_owner_count": all(
+                len(owners) == 1 for owners in backup_owner_sets
+            ),
             "prepared": bundle_id is not None,
             "has_swaps": num_safes_with_new_wallet > 0,
             "has_pending_swaps": num_safes_with_new_wallet < num_safes,
@@ -348,10 +360,25 @@ class WalletRecoveryManager:
         """Get recovery status."""
         bundle_id = self.data.last_prepared_bundle_id
         if bundle_id is None:
+            backup_owner_sets = set()
+            for wallet in self.wallet_manager:
+                for chain, safe in wallet.safes.items():
+                    ledger_api = get_default_ledger_api(chain)
+                    owners = get_owners(ledger_api=ledger_api, safe=safe)
+                    backup_owners = list(set(owners) - {wallet.address})
+                    backup_owner_sets.add(frozenset(backup_owners))
+
             return {
                 "id": None,
                 "wallets": [],
                 "status": WalletRecoveryStatus.NOT_PREPARED,
+                "all_safes_have_backup_owner": all(
+                    len(owners) >= 1 for owners in backup_owner_sets
+                ),
+                "consistent_backup_owner": len(backup_owner_sets) == 1,
+                "consistent_backup_owner_count": all(
+                    len(owners) == 1 for owners in backup_owner_sets
+                ),
                 "prepared": False,
                 "bundle_id": bundle_id,
                 "has_swaps": False,

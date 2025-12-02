@@ -796,6 +796,9 @@ class EthereumMasterWallet(MasterWallet):
 
         wallet_json["balances"] = balances
         wallet_json["extended_json"] = True
+        wallet_json["all_safes_have_backup_owner"] = all(
+            len(owners) > 0 for owners in owner_sets
+        )
         wallet_json["consistent_safe_address"] = len(set(self.safes.values())) == 1
         wallet_json["consistent_backup_owner"] = len(owner_sets) == 1
         wallet_json["consistent_backup_owner_count"] = all(
