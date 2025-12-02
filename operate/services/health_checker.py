@@ -124,10 +124,10 @@ class HealthChecker:
                     )
                     return False
 
-    async def healthcheck_job(
+    async def healthcheck_job(  # pylint: disable=too-many-statements
         self,
         service_config_id: str,
-    ) -> None:  # pylint: disable=too-many-statements
+    ) -> None:
         """Start a background health check job."""
 
         service_path = self._service_manager.load(service_config_id).path
