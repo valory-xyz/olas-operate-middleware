@@ -267,7 +267,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 )
                 break
 
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 self.logger.warning(
                     f"Agent setup attempt {attempt}/{max_attempts} failed: {e}"
                 )

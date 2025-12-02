@@ -127,7 +127,7 @@ class HealthChecker:
     async def healthcheck_job(
         self,
         service_config_id: str,
-    ) -> None:
+    ) -> None:  # pylint: disable=too-many-statements
         """Start a background health check job."""
 
         service_path = self._service_manager.load(service_config_id).path
@@ -234,7 +234,7 @@ class HealthChecker:
                         raise exception
 
             # upper cycle
-            failfast_records = []
+            failfast_records: t.List[float] = []
             while True:
                 self.logger.info(
                     f"[HEALTH_CHECKER] {service_config_id} wait for port ready"
@@ -263,7 +263,7 @@ class HealthChecker:
                     try:
                         await _restart(self._service_manager, service_config_id)
                         break
-                    except Exception as e:
+                    except Exception:  # pylint: disable=broad-except
                         if (len(failfast_records) >= self.FAILFAST_NUM) or (
                             time.time() - failfast_records[0]
                         ) > self.FAILFAST_TIMEOUT:
