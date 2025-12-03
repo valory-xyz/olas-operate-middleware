@@ -535,6 +535,7 @@ Get extended wallet information including safes and additional metadata.
       }
     },
     "extended_json": true,
+    "all_safes_have_backup_owner": true,
     "consistent_safe_address": true,
     "consistent_backup_owner": true,
     "consistent_backup_owner_count": true
@@ -592,8 +593,22 @@ Prepare wallet recovery. Creates a new recovery bundle or returns the last incom
       "current_wallet": {
         "address": "0x...",
         "safes": {
-          "gnosis": "0x...",
-          "base": "0x..."
+          "gnosis": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          },
+          "base": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          }
         },
         "safe_chains": [
           "gnosis",
@@ -610,8 +625,20 @@ Prepare wallet recovery. Creates a new recovery bundle or returns the last incom
         "safe_nonce": 1234567890
       },
       "new_mnemonic": ["word1", "word2", "word3", ...]
-    }
-  ]
+    },
+  ],
+  "status": "PREPARED",
+  "all_safes_have_backup_owner": true,
+  "consistent_safe_address": true,
+  "consistent_backup_owner": true,
+  "consistent_backup_owner_count": true,
+  "prepared": true,
+  "has_swaps": false,
+  "has_pending_swaps": true,
+  "num_safes": 2,
+  "num_safes_with_new_wallet": 0,
+  "num_safes_with_old_wallet": 2,
+  "num_safes_with_both_wallets": 0
 }
 ```
 
@@ -699,10 +726,58 @@ Get recovery status.
 
 ```json
 {
+  "id": "bundle_123",
+  "wallets": [
+    {
+      "current_wallet": {
+        "address": "0x...",
+        "safes": {
+          "gnosis": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": null,
+              "owner_to_add": null
+            }
+          },
+          "base": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          }
+        },
+        "safe_chains": [
+          "gnosis",
+          "base"
+        ],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_wallet": {
+        "address": "0x...",
+        "safes": {},
+        "safe_chains": [],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_mnemonic": null
+    },
+  ],
+  "status": "IN_PROGRESS",
+  "all_safes_have_backup_owner": true,
+  "consistent_safe_address": true,
+  "consistent_backup_owner": true,
+  "consistent_backup_owner_count": true,
   "prepared": true,
-  "bundle_id": "bundle_123",
-  "has_swaps": true,
-  "has_pending_swaps": true
+  "has_swaps": false,
+  "has_pending_swaps": true,
+  "num_safes": 2,
+  "num_safes_with_new_wallet": 1,
+  "num_safes_with_old_wallet": 1,
+  "num_safes_with_both_wallets": 0
 }
 ```
 

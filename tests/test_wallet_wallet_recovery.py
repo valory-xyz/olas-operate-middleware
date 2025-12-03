@@ -43,6 +43,7 @@ from operate.wallet.master import MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
     RECOVERY_OLD_OBJECTS_DIR,
     WalletRecoveryError,
+    WalletRecoveryStatus,
 )
 
 from tests.conftest import (
@@ -196,9 +197,10 @@ class TestWalletRecovery(OnTestnet):
         assert len(wallets_1) > 0
 
         for item_1, item_2 in zip(wallets_1, wallets_2):
-            assert not DeepDiff(
-                item_1.get("current_wallet"), item_2.get("current_wallet")
-            )
+            for chain_str, chain_safes in item_1["current_wallet"]["safes"].items():
+                assert set(item_2["current_wallet"]["safes"][chain_str].keys()) == set(
+                    chain_safes.keys()
+                )
             assert (
                 item_1.get("new_wallet")["address"]
                 != item_2.get("new_wallet")["address"]
@@ -233,9 +235,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is False
-        assert status_response["bundle_id"] is None
+        assert status_response["id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.NOT_PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Prepare recovery
         new_password = "new_" + password[::-1]
@@ -261,6 +267,7 @@ class TestWalletRecovery(OnTestnet):
 
         for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
+            current_address = item["current_wallet"]["address"]
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
             assert item.get("new_wallet") is not None
@@ -271,9 +278,16 @@ class TestWalletRecovery(OnTestnet):
             new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
             assert current_ledger_type == new_ledger_type
             new_address = item["new_wallet"]["address"]
-            assert new_address != item["current_wallet"]["address"]
+            assert new_address != current_address
             new_addresses[new_ledger_type] = new_address
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
+            for safes in item["current_wallet"]["safes"].values():
+                for safe_data in safes.values():
+                    assert len(safe_data["owners"]) == 2
+                    assert current_address in safe_data["owners"]
+                    assert backup_owner in safe_data["owners"]
+                    assert current_address == safe_data["owner_to_remove"]
+                    assert new_address == safe_data["owner_to_add"]
 
         bundle_id = prepare_json["id"]
 
@@ -298,9 +312,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is True
-        assert status_response["bundle_id"] is not None
+        assert status_response["id"] is not None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is True
+        assert status_response["status"] == WalletRecoveryStatus.PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Swap safe owners using backup wallet
         keys_manager.password = test_env.password
@@ -310,13 +328,14 @@ class TestWalletRecovery(OnTestnet):
             for chain_str in chains_str:
                 chain = Chain(chain_str)
                 ledger_api = get_default_ledger_api(chain)
-                swap_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=item["current_wallet"]["safes"][chain_str],
-                    old_owner=item["current_wallet"]["address"],
-                    new_owner=item["new_wallet"]["address"],
-                )
+                for safe_address in item["current_wallet"]["safes"][chain_str].keys():
+                    swap_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=safe_address,
+                        old_owner=item["current_wallet"]["address"],
+                        new_owner=item["new_wallet"]["address"],
+                    )
 
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
@@ -339,9 +358,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is True
-        assert status_response["bundle_id"] is not None
+        assert status_response["id"] is not None
         assert status_response["has_swaps"] is True
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.COMPLETED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Complete recovery
         complete_response = operate_client.post(
@@ -356,9 +379,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is False
-        assert status_response["bundle_id"] is None
+        assert status_response["id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.NOT_PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Test that recovery was successful
         operate = OperateApp(
@@ -426,9 +453,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is False
-        assert status_response["bundle_id"] is None
+        assert status_response["id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.NOT_PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Prepare recovery
         new_password = password[::-1]
@@ -458,6 +489,7 @@ class TestWalletRecovery(OnTestnet):
 
         for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
+            current_address = item["current_wallet"]["address"]
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
             assert item.get("new_wallet") is not None
@@ -468,9 +500,16 @@ class TestWalletRecovery(OnTestnet):
             new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
             assert current_ledger_type == new_ledger_type
             new_address = item["new_wallet"]["address"]
-            assert new_address != item["current_wallet"]["address"]
+            assert new_address != current_address
             new_addresses[new_ledger_type] = new_address
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
+            for safes in item["current_wallet"]["safes"].values():
+                for safe_data in safes.values():
+                    assert len(safe_data["owners"]) == 2
+                    assert current_address in safe_data["owners"]
+                    assert backup_owner in safe_data["owners"]
+                    assert current_address == safe_data["owner_to_remove"]
+                    assert new_address == safe_data["owner_to_add"]
 
         bundle_id = prepare_json["id"]
 
@@ -481,9 +520,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is True
-        assert status_response["bundle_id"] is not None
+        assert status_response["id"] is not None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is True
+        assert status_response["status"] == WalletRecoveryStatus.PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
@@ -509,13 +552,14 @@ class TestWalletRecovery(OnTestnet):
             for chain_str in chains_str_1:
                 chain = Chain(chain_str)
                 ledger_api = get_default_ledger_api(chain)
-                swap_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=item["current_wallet"]["safes"][chain_str],
-                    old_owner=item["current_wallet"]["address"],
-                    new_owner=item["new_wallet"]["address"],
-                )
+                for safe in item["current_wallet"]["safes"][chain_str].keys():
+                    swap_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=safe,
+                        old_owner=item["current_wallet"]["address"],
+                        new_owner=item["new_wallet"]["address"],
+                    )
 
         # Check recovery status
         status_response = operate_client.get(
@@ -524,9 +568,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is True
-        assert status_response["bundle_id"] is not None
+        assert status_response["id"] is not None
         assert status_response["has_swaps"] is True
         assert status_response["has_pending_swaps"] is True
+        assert status_response["status"] == WalletRecoveryStatus.IN_PROGRESS
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
@@ -556,13 +604,14 @@ class TestWalletRecovery(OnTestnet):
             for chain_str in chains_str_2:
                 chain = Chain(chain_str)
                 ledger_api = get_default_ledger_api(chain)
-                swap_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=item["current_wallet"]["safes"][chain_str],
-                    old_owner=item["current_wallet"]["address"],
-                    new_owner=item["new_wallet"]["address"],
-                )
+                for safe in item["current_wallet"]["safes"][chain_str].keys():
+                    swap_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=safe,
+                        old_owner=item["current_wallet"]["address"],
+                        new_owner=item["new_wallet"]["address"],
+                    )
 
         # Check recovery status
         status_response = operate_client.get(
@@ -571,9 +620,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is True
-        assert status_response["bundle_id"] is not None
+        assert status_response["id"] is not None
         assert status_response["has_swaps"] is True
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.COMPLETED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
@@ -598,7 +651,7 @@ class TestWalletRecovery(OnTestnet):
         prepare_resumed_json = operate.wallet_recovery_manager.prepare_recovery(
             new_password=new_password
         )
-        assert not DeepDiff(prepare_json, prepare_resumed_json)
+        assert prepare_json["id"] == prepare_resumed_json["id"]
 
         # Complete recovery
         operate.wallet_recovery_manager.complete_recovery()
@@ -640,9 +693,13 @@ class TestWalletRecovery(OnTestnet):
         assert status_response.status_code == 200
         status_response = status_response.json()
         assert status_response["prepared"] is False
-        assert status_response["bundle_id"] is None
+        assert status_response["id"] is None
         assert status_response["has_swaps"] is False
         assert status_response["has_pending_swaps"] is False
+        assert status_response["status"] == WalletRecoveryStatus.NOT_PREPARED
+        assert status_response["all_safes_have_backup_owner"] is True
+        assert status_response["consistent_backup_owner"] is True
+        assert status_response["consistent_backup_owner_count"] is True
 
         # Check recovery funding requirements
         recovery_requirements_response = operate_client.get(
@@ -759,6 +816,7 @@ class TestWalletRecovery(OnTestnet):
 
         for item in prepare_json["wallets"]:
             assert item.get("current_wallet") is not None
+            current_address = item["current_wallet"]["address"]
             assert item["current_wallet"].get("safes") is not None
             assert len(set(item["current_wallet"]["safes"])) >= 2
             assert item.get("new_wallet") is not None
@@ -769,9 +827,16 @@ class TestWalletRecovery(OnTestnet):
             new_ledger_type = LedgerType(item["new_wallet"].get("ledger_type"))
             assert current_ledger_type == new_ledger_type
             new_address = item["new_wallet"]["address"]
-            assert new_address != item["current_wallet"]["address"]
+            assert new_address != current_address
             new_addresses[new_ledger_type] = new_address
             new_mnemonics[new_ledger_type] = item.get("new_mnemonic")
+            for safes in item["current_wallet"]["safes"].values():
+                for safe_data in safes.values():
+                    assert len(safe_data["owners"]) == 2
+                    assert current_address in safe_data["owners"]
+                    assert backup_owner in safe_data["owners"]
+                    assert current_address == safe_data["owner_to_remove"]
+                    assert new_address == safe_data["owner_to_add"]
 
         bundle_id = prepare_json["id"]
 
@@ -800,12 +865,13 @@ class TestWalletRecovery(OnTestnet):
             for chain_str in chains_str:
                 chain = Chain(chain_str)
                 ledger_api = get_default_ledger_api(chain)
-                add_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=item["current_wallet"]["safes"][chain_str],
-                    owner=item["new_wallet"]["address"],
-                )
+                for safe in item["current_wallet"]["safes"][chain_str].keys():
+                    add_owner(
+                        ledger_api=ledger_api,
+                        crypto=crypto,
+                        safe=safe,
+                        owner=item["new_wallet"]["address"],
+                    )
 
         with pytest.raises(WalletRecoveryError, match="^Inconsistent owners.*"):
             operate.wallet_recovery_manager.complete_recovery(
@@ -821,13 +887,14 @@ class TestWalletRecovery(OnTestnet):
                 for chain_str in chains_str:
                     chain = Chain(chain_str)
                     ledger_api = get_default_ledger_api(chain)
-                    remove_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain_str],
-                        owner=item["current_wallet"]["address"],
-                        threshold=1,
-                    )
+                    for safe in item["current_wallet"]["safes"][chain_str].keys():
+                        remove_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=safe,
+                            owner=item["current_wallet"]["address"],
+                            threshold=1,
+                        )
 
             # Use a different backup owner for half of the chains
             keys_manager.password = test_env.password
@@ -839,13 +906,14 @@ class TestWalletRecovery(OnTestnet):
                 for chain_str in chains_str_1:
                     chain = Chain(chain_str)
                     ledger_api = get_default_ledger_api(chain)
-                    swap_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain_str],
-                        old_owner=backup_owner,
-                        new_owner=backup_owner2,
-                    )
+                    for safe in item["current_wallet"]["safes"][chain_str].keys():
+                        swap_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=safe,
+                            old_owner=backup_owner,
+                            new_owner=backup_owner2,
+                        )
 
             with pytest.raises(
                 WalletRecoveryError,
@@ -866,13 +934,14 @@ class TestWalletRecovery(OnTestnet):
                     chain = Chain(chain_str)
                     ledger_api = get_default_ledger_api(chain)
                     tenderly_add_balance(chain, backup_owner2)
-                    swap_owner(
-                        ledger_api=ledger_api,
-                        crypto=crypto,
-                        safe=item["current_wallet"]["safes"][chain_str],
-                        old_owner=backup_owner2,
-                        new_owner=backup_owner,
-                    )
+                    for safe in item["current_wallet"]["safes"][chain_str].keys():
+                        swap_owner(
+                            ledger_api=ledger_api,
+                            crypto=crypto,
+                            safe=safe,
+                            old_owner=backup_owner2,
+                            new_owner=backup_owner,
+                        )
 
         # Complete recovery
         operate.wallet_recovery_manager.complete_recovery(

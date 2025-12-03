@@ -722,6 +722,9 @@ class EthereumMasterWallet(MasterWallet):
                 "The master wallet cannot be set as the Safe backup owner."
             )
 
+        if self.address not in owners:
+            return False
+
         owners.remove(self.address)
         old_backup_owner = owners[0] if owners else None
 
@@ -769,7 +772,9 @@ class EthereumMasterWallet(MasterWallet):
             chain_str = chain.value
             ledger_api = self.ledger_api(chain=chain, rpc=rpc)
             owners = get_owners(ledger_api=ledger_api, safe=safe)
-            owners.remove(self.address)
+
+            if self.address in owners:
+                owners.remove(self.address)
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
@@ -781,8 +786,8 @@ class EthereumMasterWallet(MasterWallet):
                 balances[chain_str][safe][asset] = self.get_balance(
                     chain=chain, asset=asset, from_safe=True
                 )
-            wallet_json["safes"][chain.value] = {
-                wallet_json["safes"][chain.value]: {
+            wallet_json["safes"][chain_str] = {
+                safe: {
                     "backup_owners": owners,
                     "balances": balances[chain_str][safe],
                 }
@@ -791,6 +796,9 @@ class EthereumMasterWallet(MasterWallet):
 
         wallet_json["balances"] = balances.bigint2str_json()
         wallet_json["extended_json"] = True
+        wallet_json["all_safes_have_backup_owner"] = all(
+            len(owners) > 0 for owners in owner_sets
+        )
         wallet_json["consistent_safe_address"] = len(set(self.safes.values())) == 1
         wallet_json["consistent_backup_owner"] = len(owner_sets) == 1
         wallet_json["consistent_backup_owner_count"] = all(
