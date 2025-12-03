@@ -46,7 +46,7 @@ from operate.ledger import (
     update_tx_with_gas_pricing,
 )
 from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
-from operate.operate_types import Chain, EncryptedData, LedgerType
+from operate.operate_types import Chain, ChainAmounts, EncryptedData, LedgerType
 from operate.resource import LocalResource
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
@@ -766,7 +766,7 @@ class EthereumMasterWallet(MasterWallet):
         rpc = None
         wallet_json = self.json
 
-        balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        balances = ChainAmounts()
         owner_sets = set()
         for chain, safe in self.safes.items():
             chain_str = chain.value
@@ -794,7 +794,7 @@ class EthereumMasterWallet(MasterWallet):
             }
             owner_sets.add(frozenset(owners))
 
-        wallet_json["balances"] = balances
+        wallet_json["balances"] = balances.bigint2str_json()
         wallet_json["extended_json"] = True
         wallet_json["all_safes_have_backup_owner"] = all(
             len(owners) > 0 for owners in owner_sets

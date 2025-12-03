@@ -534,7 +534,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
     @app.get("/api/settings")
     async def _get_settings(request: Request) -> JSONResponse:
         """Get settings."""
-        return JSONResponse(content=operate.settings.json)
+        return JSONResponse(content=operate.settings.bigint2str_json())
 
     @app.get("/api/account")
     async def _get_account(request: Request) -> t.Dict:
@@ -1062,7 +1062,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 .load(
                     service_config_id=service_config_id,
                 )
-                .json
+                .bigint2str_json()
             )
         )
 
@@ -1129,9 +1129,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return USER_NOT_LOGGED_IN_ERROR
         template = await request.json()
         manager = operate.service_manager()
-        output = manager.create(service_template=template)
+        output = manager.create(service_template=template).bigint2str_json()
 
-        return JSONResponse(content=output.json)
+        return JSONResponse(content=output)
 
     @app.post("/api/v2/service/{service_config_id}")
     async def _deploy_and_run_service(request: Request) -> JSONResponse:
@@ -1158,7 +1158,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         return JSONResponse(
             content=(
-                operate.service_manager().load(service_config_id=service_config_id).json
+                operate.service_manager()
+                .load(service_config_id=service_config_id)
+                .bigint2str_json()
             )
         )
 
@@ -1194,9 +1196,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service_template=template,
             allow_different_service_public_id=allow_different_service_public_id,
             partial_update=partial_update,
-        )
+        ).bigint2str_json()
 
-        return JSONResponse(content=output.json)
+        return JSONResponse(content=output)
 
     @app.post("/api/v2/service/{service_config_id}/deployment/stop")
     async def _stop_service_locally(request: Request) -> JSONResponse:

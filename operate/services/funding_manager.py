@@ -789,14 +789,14 @@ class FundingManager:
             allow_start_agent = False
 
         return {
-            "balances": balances,
-            "bonded_assets": protocol_bonded_assets,
-            "total_requirements": total_requirements,
-            "refill_requirements": refill_requirements,
-            "protocol_asset_requirements": protocol_asset_requirements,
+            "balances": balances.bigint2str_json(),
+            "bonded_assets": protocol_bonded_assets.bigint2str_json(),
+            "total_requirements": total_requirements.bigint2str_json(),
+            "refill_requirements": refill_requirements.bigint2str_json(),
+            "protocol_asset_requirements": protocol_asset_requirements.bigint2str_json(),
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": funding_requests,
+            "agent_funding_requests": funding_requests.bigint2str_json(),
             "agent_funding_requests_cooldown": funding_requests_cooldown,
             "agent_funding_in_progress": funding_in_progress,
         }
