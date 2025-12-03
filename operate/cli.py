@@ -40,6 +40,7 @@ from clea import group, params, run
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from flask import json
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
@@ -90,7 +91,7 @@ from operate.services.deployment_runner import stop_deployment_manager
 from operate.services.funding_manager import FundingInProgressError, FundingManager
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
-from operate.utils import subtract_dicts
+from operate.utils import sanitize_json_ints, subtract_dicts
 from operate.utils.gnosis import get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
@@ -509,6 +510,31 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
         return response
+
+    @app.middleware("http")
+    async def sanitize_ints(request: Request, call_next):
+        response = await call_next(request)
+        content_type = response.headers.get("content-type", "")
+        if "application/json" not in content_type.lower():
+            return response
+
+        body = b"".join([chunk async for chunk in response.body_iterator])
+        if not body:
+            return response
+
+        try:
+            data = json.loads(body)
+        except Exception:  # pylint: disable=broad-except
+            return response
+
+        updated_content = sanitize_json_ints(data)
+        headers = dict(response.headers)
+        headers.pop("content-length", None)
+        return JSONResponse(
+            content=updated_content,
+            status_code=response.status_code,
+            headers=headers,
+        )
 
     @app.get(f"/{shutdown_endpoint}")
     async def _kill_server(request: Request) -> JSONResponse:

@@ -153,3 +153,19 @@ def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:
         print(f"Permission denied to securely delete file '{file_path}'.")
     except Exception as e:  # pylint: disable=broad-except
         print(f"Error during secure deletion of '{file_path}': {e}")
+
+
+JS_MAX_SAFE_INTEGER = 2**53 - 1  # 9007199254740991
+
+
+def sanitize_json_ints(obj: t.Dict) -> t.Dict:
+    """Recursively convert JSONs integers into strings."""
+    if isinstance(obj, dict):
+        return {k: sanitize_json_ints(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [sanitize_json_ints(v) for v in obj]
+    if isinstance(obj, bool):
+        return obj
+    if isinstance(obj, int):
+        return str(obj)
+    return obj
