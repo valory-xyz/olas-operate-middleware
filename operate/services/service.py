@@ -114,7 +114,7 @@ SERVICE_CONFIG_PREFIX = "sc-"
 NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
-AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 82}
+AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
 
 logger = setup_logger("operate.services.service")
 
