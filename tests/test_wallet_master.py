@@ -430,7 +430,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
 
         # Create safe on another chain, but fail while adding backup owner
         with patch("operate.utils.gnosis.add_owner", side_effect=flaky_add_owner):
-            with patch("time.sleep", lambda x: None):
+            with patch("time.sleep", return_value=None):
                 wallet.create_safe(chain=chain2, backup_owner=backup_owner)
 
         assert wallet.safe_nonce == created_nonce

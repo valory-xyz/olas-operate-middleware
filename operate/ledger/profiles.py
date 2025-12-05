@@ -46,7 +46,6 @@ for _chain in CHAINS:
                 "service_registry_token_utility": profile[
                     "service_registry_token_utility"
                 ],
-                "service_manager": profile["service_manager_token"],
                 "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
                 "gnosis_safe_same_address_multisig": profile[
                     "gnosis_safe_same_address_multisig"

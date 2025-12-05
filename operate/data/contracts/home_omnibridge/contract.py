@@ -50,7 +50,7 @@ class HomeOmnibridge(Contract):
         """Return the transaction hash of the matching TokensBridged event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
         event_signature = "TokensBridged(address,address,uint256,bytes32)"
-        event_signature_hash = Web3.keccak(text=event_signature).hex()
+        event_signature_hash = Web3.keccak(text=event_signature).to_0x_hex()
 
         topics = [
             event_signature_hash,  # TokensBridged
@@ -75,6 +75,6 @@ class HomeOmnibridge(Contract):
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
             if all(a == b for a, b in zip(decoded, non_indexed_values)):
-                return log["transactionHash"].hex()
+                return log["transactionHash"].to_0x_hex()
 
         return None

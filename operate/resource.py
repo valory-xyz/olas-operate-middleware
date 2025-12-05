@@ -40,7 +40,7 @@ N_BACKUPS = 5
 
 def serialize(obj: t.Any) -> t.Any:
     """Serialize object."""
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return serialize(asdict(obj))
     if isinstance(obj, Path):
         return str(obj)
@@ -88,7 +88,7 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
         return otype(obj)
     if otype is Path:
         return Path(obj)
-    if is_dataclass(otype):
+    if is_dataclass(otype) and hasattr(otype, "from_json"):
         return otype.from_json(obj)
     if otype is bytes:
         return bytes.fromhex(obj)

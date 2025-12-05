@@ -34,7 +34,12 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
+from operate.constants import (
+    DEFAULT_TIMEOUT,
+    IPFS_ADDRESS,
+    NO_STAKING_PROGRAM_ID,
+    USER_JSON,
+)
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import DEFAULT_RPCS
@@ -221,6 +226,7 @@ def configure_local_config(
         LedgerType.ETHEREUM.lower(),
         address=config.rpc[config.principal_chain],  # type: ignore[index]
         chain_id=home_chain.id,
+        poa_chain=chain in (Chain.OPTIMISM.value, Chain.POLYGON.value),
     )
 
     if config.staking_program_id is None:
@@ -253,7 +259,7 @@ def configure_local_config(
                 try:
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
-                    response = requests.get(ipfs_address)
+                    response = requests.get(ipfs_address, timeout=DEFAULT_TIMEOUT)
                     if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
@@ -431,9 +437,9 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name][
-                "value"
-            ] = config.user_provided_args[env_var_name]
+            template["env_variables"][env_var_name]["value"] = (
+                config.user_provided_args[env_var_name]
+            )
 
         # TODO: Handle it in a more generic way
         if (
