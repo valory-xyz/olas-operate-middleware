@@ -33,7 +33,7 @@ import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
-from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON
+from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON, DEFAULT_TIMEOUT
 
 
 @dataclass
@@ -52,7 +52,7 @@ class AgentRelease:
 
     def get_url_and_hash(self, asset_name: str) -> tuple[str, str]:
         """Get download url and asset sha256 hash."""
-        release_data = requests.get(self.release_url).json()
+        release_data = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT).json()
 
         assets_filtered = [i for i in release_data["assets"] if i["name"] == asset_name]
         if not assets_filtered:
@@ -106,7 +106,7 @@ class AgentRunnerManager:
         """Download file of agent runner."""
         try:
             # Send a GET request to the URL
-            response = requests.get(url, stream=True)
+            response = requests.get(url, stream=True, timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()  # Raise an error for bad status codes (4xx or 5xx)
 
             # Open the file in binary write mode and save the content

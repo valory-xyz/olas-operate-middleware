@@ -541,9 +541,9 @@ class TestBridgeManager:
     ) -> None:
         """test_correct_providers_bridge_token"""
         expected_provider_cls: type[Provider] = NativeBridgeProvider
-        expected_contract_adaptor_cls: t.Optional[
-            t.Type[BridgeContractAdaptor]
-        ] = OptimismContractAdaptor
+        expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]] = (
+            OptimismContractAdaptor
+        )
 
         if to_chain_enum in [
             Chain.ARBITRUM_ONE,
@@ -734,9 +734,7 @@ class TestBridgeManager:
 
             print(f"{refill_amount=}")
 
-            quoted_from_cost_usd = (
-                refill_amount * from_price_usd / (10**from_decimals)
-            )
+            quoted_from_cost_usd = refill_amount * from_price_usd / (10**from_decimals)
             expected_to_cost_usd = amount_unit * to_price_usd
             print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")
             print(f"Quoted cost on {from_chain}: {quoted_from_cost_usd}")

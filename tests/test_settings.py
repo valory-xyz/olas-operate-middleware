@@ -84,6 +84,7 @@ def test_settings_version_mismatch(tmp_path: Path) -> None:
     with open(tmp_path / SETTINGS_JSON, "w") as f:
         json.dump(data, f)
 
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(
+        ValueError, match="Settings version 999 is not supported. Expected version 1."
+    ):
         Settings(path=tmp_path)
-        assert str(e) == "Settings version 999 is not supported. Expected version 1."

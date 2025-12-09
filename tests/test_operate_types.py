@@ -43,7 +43,7 @@ def test_version() -> None:
     assert str(v1) == "0.0.0"
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_a() -> ChainAmounts:
     """Sample ChainAmounts instance A."""
     return ChainAmounts(
@@ -57,7 +57,7 @@ def sample_a() -> ChainAmounts:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_b() -> ChainAmounts:
     """Sample ChainAmounts instance B."""
     return ChainAmounts(
@@ -116,7 +116,7 @@ def test_sub(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:
 
 def test_division_by_zero(sample_a: ChainAmounts) -> None:
     """Test division by zero raises ValueError."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Cannot divide by zero"):
         _ = sample_a // 0
 
 

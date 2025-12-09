@@ -4,11 +4,11 @@ version: 0.1.0
 type: contract
 description: Dual staking token contract
 license: Apache-2.0
-aea_version: '>=1.0.0, <2.0.0'
+aea_version: '>=2.0.0, <3.0.0'
 fingerprint:
   __init__.py: bafybeickx6ot3syhywbaewl3mmnowa75dd5rogqy7pmmc5ctk4yd74pvoa
   build/DualStakingToken.json: bafybeibvh3lcvo242jqtyrfrbezgziedlymjlr7bmttvezhgjjxlgklcxa
-  contract.py: bafybeiftspqmbq23cjifektsgwtxfcf7uaeywwdbsdvp67a7yi3wqc3pnm
+  contract.py: bafybeihkaxtx36c2yka2bzisj72zsmugbpyse2g7snq3shokjerr35rpse
 fingerprint_ignore_patterns: []
 contracts: []
 class_name: DualStakingTokenContract
