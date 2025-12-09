@@ -27,7 +27,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
-from web3.middleware import geth_poa_middleware
 
 from operate.operate_types import Chain
 
@@ -133,11 +132,8 @@ def make_chain_ledger_api(
         address=rpc or get_default_rpc(chain=chain),
         chain_id=chain.id,
         gas_price_strategies=gas_price_strategies,
-        poa_chain=chain == Chain.POLYGON,
+        poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
     )
-
-    if chain == Chain.OPTIMISM:
-        ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
     return ledger_api
 

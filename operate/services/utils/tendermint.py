@@ -42,6 +42,8 @@ import requests
 from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
+from operate.constants import DEFAULT_TIMEOUT
+
 
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
@@ -474,7 +476,7 @@ class PeriodDumper:
             os.chmod(path, stat.S_IWRITE)
             func(path)
         except (FileNotFoundError, OSError):
-            return
+            pass
 
     def dump_period(self) -> None:
         """Dump tendermint run data for replay"""
@@ -532,7 +534,7 @@ def create_app(  # pylint: disable=too-many-statements
             )
             priv_key_data = json.loads(priv_key_file.read_text(encoding=ENCODING))
             del priv_key_data["priv_key"]
-            status = requests.get(TM_STATUS_ENDPOINT).json()
+            status = requests.get(TM_STATUS_ENDPOINT, timeout=DEFAULT_TIMEOUT).json()
             priv_key_data["peer_id"] = status["result"]["node_info"]["id"]
             return {
                 "params": priv_key_data,
@@ -600,7 +602,7 @@ def create_app(  # pylint: disable=too-many-statements
             endpoint = f"{tendermint_params.rpc_laddr.replace('tcp', 'http').replace(non_routable, loopback)}/block"
             height = request.args.get("height")
             params = {"height": height} if height is not None else None
-            res = requests.get(endpoint, params)
+            res = requests.get(endpoint, params, timeout=DEFAULT_TIMEOUT)
             app_hash_ = res.json()["result"]["block"]["header"]["app_hash"]
             return jsonify({"app_hash": app_hash_}), res.status_code
         except Exception as e:  # pylint: disable=W0703

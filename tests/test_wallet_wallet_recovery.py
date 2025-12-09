@@ -144,9 +144,9 @@ class TestWalletRecovery(OnTestnet):
                 expected_balances.setdefault(chain_str, {}).setdefault(
                     backup_owner, {}
                 ).setdefault(ZERO_ADDRESS, 0)
-                expected_balances[chain_str][backup_owner][
-                    ZERO_ADDRESS
-                ] = get_asset_balance(ledger_api, ZERO_ADDRESS, backup_owner)
+                expected_balances[chain_str][backup_owner][ZERO_ADDRESS] = (
+                    get_asset_balance(ledger_api, ZERO_ADDRESS, backup_owner)
+                )
                 expected_requirements.setdefault(chain_str, {}).setdefault(
                     backup_owner, {}
                 ).setdefault(ZERO_ADDRESS, 0)
