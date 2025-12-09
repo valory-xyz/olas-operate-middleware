@@ -44,6 +44,7 @@ from aea.helpers.logging import setup_logger
 from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
+from operate.utils import secure_copy_private_key
 
 from .agent_runner import get_agent_runner_path
 
@@ -239,10 +240,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     cwd=working_dir,
                 )
 
-                # Add keys
-                shutil.copy(
-                    working_dir / "ethereum_private_key.txt",
-                    working_dir / "agent" / "ethereum_private_key.txt",
+                # Add keys securely
+                secure_copy_private_key(
+                    src=working_dir / "ethereum_private_key.txt",
+                    dst=working_dir / "agent" / "ethereum_private_key.txt",
                 )
 
                 self._run_aea_command(
