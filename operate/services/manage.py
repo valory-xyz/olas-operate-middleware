@@ -22,7 +22,6 @@
 import json
 import logging
 import os
-import time
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -967,9 +966,6 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
-
         # Activate service
         if (
             self._get_on_chain_state(service=service, chain=chain)
@@ -1034,9 +1030,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
 
         # Register agent instances
         if (
@@ -1104,9 +1097,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
 
         # Deploy service
         is_initial_funding = False

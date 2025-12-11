@@ -22,7 +22,6 @@
 import binascii
 import itertools
 import secrets
-import time
 import typing as t
 from enum import Enum
 
@@ -164,7 +163,6 @@ def _get_nonce() -> int:
 def create_safe(
     ledger_api: LedgerApi,
     crypto: Crypto,
-    backup_owner: t.Optional[str] = None,
     salt_nonce: t.Optional[int] = None,
 ) -> t.Tuple[str, int, str]:
     """Create gnosis safe."""
@@ -202,29 +200,6 @@ def create_safe(
         event_name="ProxyCreation",
     )
     safe_address = event["args"]["proxy"]
-
-    if backup_owner is not None:
-        retry_delays = [0, 60, 120, 180, 240]
-        for attempt in range(1, len(retry_delays) + 1):
-            try:
-                add_owner(
-                    ledger_api=ledger_api,
-                    crypto=crypto,
-                    safe=safe_address,
-                    owner=backup_owner,
-                )
-                break  # success
-            except Exception as e:  # pylint: disable=broad-except
-                if attempt == len(retry_delays):
-                    raise RuntimeError(
-                        f"Failed to add backup owner {backup_owner} after {len(retry_delays)} attempts: {e}"
-                    ) from e
-                next_delay = retry_delays[attempt]
-                logger.error(
-                    f"Retry add owner {attempt}/{len(retry_delays)} in {next_delay} seconds due to error: {e}"
-                )
-                time.sleep(next_delay)
-
     return safe_address, salt_nonce, tx_settler.tx_hash
 
 
