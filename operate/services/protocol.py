@@ -762,15 +762,9 @@ class _ChainUtil:
         )
 
     @cached_property
-    def service_manager_address(self) -> str:  # TODO: backport to OA
+    def service_manager_address(self) -> str:
         """Get service manager contract address."""
-        service_registry = registry_contracts.service_registry.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=CONTRACTS[OperateChain(self.chain_type.value)][
-                "service_registry"
-            ],
-        )
-        return service_registry.functions.manager().call()
+        return ContractConfigs.service_manager.contracts[self.chain_type]
 
     @property
     def service_manager_instance(self) -> Contract:
@@ -1356,11 +1350,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def get_activate_data(self, service_id: int, cost_of_bond: int) -> t.Dict:
         """Get activate tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.service_manager_address,
-        )
-        txd = instance.encode_abi(
+        txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="activateRegistration",
             args=[service_id],
         )
@@ -1380,11 +1370,7 @@ class EthSafeTxBuilder(_ChainUtil):
         cost_of_bond: int,
     ) -> t.Dict:
         """Get register instances tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.service_manager_address,
-        )
-        txd = instance.encode_abi(
+        txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="registerAgents",
             args=[
                 service_id,
@@ -1408,10 +1394,6 @@ class EthSafeTxBuilder(_ChainUtil):
         use_recovery_module: bool = True,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
-        registry_instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.service_manager_address,
-        )
         approve_hash_message = None
         if reuse_multisig:
             if not use_recovery_module:
@@ -1459,7 +1441,7 @@ class EthSafeTxBuilder(_ChainUtil):
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
 
-        deploy_data = registry_instance.encode_abi(
+        deploy_data = self.service_manager_instance.encode_abi(
             abi_element_identifier="deploy",
             args=[
                 service_id,
@@ -1655,11 +1637,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def get_terminate_data(self, service_id: int) -> t.Dict:
         """Get terminate tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.service_manager_address,
-        )
-        txd = instance.encode_abi(
+        txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="terminate",
             args=[service_id],
         )
@@ -1672,11 +1650,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def get_unbond_data(self, service_id: int) -> t.Dict:
         """Get unbond tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.service_manager_address,
-        )
-        txd = instance.encode_abi(
+        txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="unbond",
             args=[service_id],
         )
