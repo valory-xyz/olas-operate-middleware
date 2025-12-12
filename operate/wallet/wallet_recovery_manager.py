@@ -240,12 +240,14 @@ class WalletRecoveryManager:
                     safe: {
                         "owners": owners,
                         "backup_owners": backup_owners,
-                        "owner_to_remove": wallet.address
-                        if wallet.address in owners
-                        else None,
-                        "owner_to_add": new_wallet.address
-                        if new_wallet.address not in owners
-                        else None,
+                        "owner_to_remove": (
+                            wallet.address if wallet.address in owners else None
+                        ),
+                        "owner_to_add": (
+                            new_wallet.address
+                            if new_wallet.address not in owners
+                            else None
+                        ),
                     }
                 }
 
