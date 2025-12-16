@@ -65,6 +65,110 @@ from operate.wallet.master import MasterWalletManager
 from tests.constants import OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add custom CLI options."""
+
+    group = parser.getgroup("profiling")
+    group.addoption(
+        "--profiler",
+        action="store",
+        default=None,
+        help=(
+            "Enable profiling. Supported values: cProfile, yappi, viztracer. "
+            "Outputs to prof/profile.prof (cProfile/yappi) or prof/viztracer.json (viztracer)."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Start profiling if requested."""
+
+    profiler_opt = config.getoption("--profiler")
+    if not profiler_opt:
+        return
+
+    profiler_opt_norm = str(profiler_opt).strip().lower()
+    if profiler_opt_norm == "cprofile":
+        import cProfile
+
+        profiler = cProfile.Profile()
+        config._operate_profiler_backend = "cprofile"
+        config._operate_cprofile = profiler
+        profiler.enable()
+        return
+
+    if profiler_opt_norm == "yappi":
+        try:
+            import yappi  # type: ignore
+        except ImportError as e:
+            raise pytest.UsageError(
+                "--profiler=yappi requires yappi to be installed"
+            ) from e
+
+        yappi.set_clock_type("wall")
+        yappi.start()
+        config._operate_profiler_backend = "yappi"
+        return
+
+    if profiler_opt_norm == "viztracer":
+        try:
+            from viztracer import VizTracer  # type: ignore
+        except ImportError as e:
+            raise pytest.UsageError(
+                "--profiler=viztracer requires viztracer to be installed"
+            ) from e
+
+        config._operate_profiler_backend = "viztracer"
+        tracer = VizTracer()
+        config._operate_viztracer = tracer
+        tracer.start()
+        return
+
+    raise pytest.UsageError(
+        "Unsupported value for --profiler. Supported: --profiler=cProfile, --profiler=yappi, --profiler=viztracer"
+    )
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Stop profiling and write stats if enabled."""
+
+    backend = getattr(config, "_operate_profiler_backend", None)
+    if backend is None:
+        return
+
+    prof_dir = Path("prof")
+    prof_dir.mkdir(parents=True, exist_ok=True)
+
+    if backend == "yappi":
+        import yappi  # type: ignore
+
+        yappi.stop()
+        output_path = prof_dir / "profile.prof"
+        yappi.get_func_stats().save(str(output_path), type="pstat")
+        yappi.clear_stats()
+        return
+
+    if backend == "cprofile":
+        profiler = getattr(config, "_operate_cprofile", None)
+        if profiler is None:
+            return
+        profiler.disable()
+        output_path = prof_dir / "profile.prof"
+        profiler.dump_stats(str(output_path))
+        return
+
+    if backend == "viztracer":
+        tracer = getattr(config, "_operate_viztracer", None)
+        if tracer is None:
+            return
+        tracer.stop()
+        output_path = prof_dir / "viztracer.json"
+        tracer.save(output_file=str(output_path))
+        return
+
+    raise pytest.UsageError(f"Unknown profiler backend: {backend}")
+
+
 def random_string(length: int = 16) -> str:
     """Random string"""
     chars = string.ascii_letters + string.digits
@@ -216,7 +320,7 @@ def _get_service_template_trader() -> ServiceTemplate:
                         "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
                         "rpc": get_default_rpc(Chain.GNOSIS),
                         "agent_id": 14,
-                        "cost_of_bond": 1000000000000000,
+                        "cost_of_bond": 50000000000000000000,
                         "fund_requirements": {
                             ZERO_ADDRESS: FundRequirementsTemplate(
                                 {

@@ -57,3 +57,6 @@ custom-script.sh
 
 # development
 .vscode/
+
+# profile files
+prof/
