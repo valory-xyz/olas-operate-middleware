@@ -2680,13 +2680,13 @@ files = [
 
 [[package]]
 name = "py-multibase"
-version = "1.0.3"
+version = "2.0.0"
 description = "Multibase implementation for Python"
 optional = false
-python-versions = "*"
+python-versions = "<4.0,>=3.10"
 files = [
-    {file = "py-multibase-1.0.3.tar.gz", hash = "sha256:d28a20efcbb61eec28f55827a0bf329c7cea80fffd933aecaea6ae8431267fe4"},
-    {file = "py_multibase-1.0.3-py2.py3-none-any.whl", hash = "sha256:2677c1fafcc0ae15ddb9c7f444c5becc2530b3889124fd4fa2959ddfefb8c15b"},
+    {file = "py_multibase-2.0.0-py3-none-any.whl", hash = "sha256:b29ce489b556134e73998a11712c406b70950812955df64084754e0774e40900"},
+    {file = "py_multibase-2.0.0.tar.gz", hash = "sha256:58c1a264195fa1ae29ea707c6fc8196446f4bdb92e0f9a0f131e0f280b238839"},
 ]
 
 [package.dependencies]
@@ -2694,21 +2694,25 @@ morphys = ">=1.0,<2.0"
 python-baseconv = ">=1.2.0,<2.0"
 six = ">=1.10.0,<2.0"
 
+[package.extras]
+dev = ["Sphinx (>=5.0.0)", "build (>=0.9.0)", "bump-my-version (>=1.2.0)", "mypy", "pre-commit", "pytest", "pytest-runner", "ruff", "towncrier (>=24,<25)", "tox (>=4.10.0)", "twine", "watchdog (>=3.0.0)", "wheel (>=0.31.0)"]
+
 [[package]]
 name = "py-multicodec"
-version = "0.2.1"
+version = "1.0.0"
 description = "Multicodec implementation in Python"
 optional = false
-python-versions = "*"
+python-versions = "<4.0,>=3.10"
 files = [
-    {file = "py-multicodec-0.2.1.tar.gz", hash = "sha256:83021ffe8c0e272d19b5b86bc5b39efa67c8e9f4735ce6cafdbc1ace767ec647"},
-    {file = "py_multicodec-0.2.1-py2.py3-none-any.whl", hash = "sha256:55b6bb53088a63e56c434cb11b29795e8805652bac43d50a8f2a9bcf5ca84e1f"},
+    {file = "py_multicodec-1.0.0-py3-none-any.whl", hash = "sha256:ae2e687bac8fdf54e3f5b3feded36b61a304d5e3c3af9438f7481f543ec15b8d"},
+    {file = "py_multicodec-1.0.0.tar.gz", hash = "sha256:78e4e3e47b6288cf635c3ca987152e6cb5510bdcdab307e7690c76ec3d5bbfeb"},
 ]
 
 [package.dependencies]
-morphys = ">=1.0,<2.0"
-six = ">=1.10.0,<2.0"
 varint = ">=1.0.2,<2.0.0"
+
+[package.extras]
+dev = ["Sphinx (>=5.0.0)", "build (>=0.9.0)", "bump-my-version (>=1.2.0)", "mypy", "pre-commit", "pytest", "pytest-runner", "ruff", "towncrier (>=24,<25)", "tox (>=4.10.0)", "twine", "watchdog (>=3.0.0)", "wheel (>=0.31.0)"]
 
 [[package]]
 name = "pycparser"
@@ -4194,4 +4198,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "<3.12,>=3.10"
-content-hash = "5d947f8963db0f494e69bb7e1aec67f792389c93d2ad30133d6c37bec5d246a6"
+content-hash = "67e44e2c0a5fe57296381fe09567c96d9b91d50ed8677d0d94a64cfa164ebbc2"

@@ -123,6 +123,7 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
+        "pett_ai_agent": "pett_ai",
     },
     Chain.CELO: {},
     Chain.MODE: {

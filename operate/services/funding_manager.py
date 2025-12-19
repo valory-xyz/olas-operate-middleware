@@ -683,12 +683,30 @@ class FundingManager:
             }
         )
         master_eoa_balances = self._get_master_eoa_balances(master_eoa_topups)
+        master_safe_balance = self._get_master_safe_balances(master_eoa_topups)
         master_eoa_shortfalls = self._compute_shortfalls(
             balances=master_eoa_balances,
             thresholds=master_eoa_topups * DEFAULT_EOA_THRESHOLD,
             topups=master_eoa_topups,
         )
-        self.fund_chain_amounts(master_eoa_shortfalls)
+        possible_to_fund_shortfalls = ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: min(
+                            amount,
+                            master_safe_balance.get(chain_str, {})
+                            .get(self._resolve_master_safe(Chain(chain_str)), {})
+                            .get(asset, 0),
+                        )
+                        for asset, amount in assets.items()
+                    }
+                    for address, assets in addresses.items()
+                }
+                for chain_str, addresses in master_eoa_shortfalls.items()
+            }
+        )
+        self.fund_chain_amounts(possible_to_fund_shortfalls)
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""

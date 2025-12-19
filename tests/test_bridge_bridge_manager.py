@@ -264,7 +264,7 @@ class TestBridgeManager:
                     "chain": Chain.OPTIMISM.value,
                     "address": wallet_address,
                     "token": USDC[Chain.OPTIMISM],
-                    "amount": int(1000 * 1e18),
+                    "amount": int(10000 * 1e18),  # Large amount to trigger error
                 },
             },
             {

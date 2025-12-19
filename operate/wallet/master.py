@@ -675,20 +675,29 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Create safe."""
-        if chain in self.safes:
-            raise ValueError(f"Wallet already has a Safe on chain {chain}.")
-
-        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
-            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-            crypto=self.crypto,
-            backup_owner=backup_owner,
-            salt_nonce=self.safe_nonce,
-        )
-        self.safe_chains.append(chain)
+        tx_hash = None
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
         if self.safes is None:
             self.safes = {}
-        self.safes[chain] = safe
-        self.store()
+
+        if chain not in self.safe_chains and chain not in self.safes:
+            safe, self.safe_nonce, tx_hash = create_gnosis_safe(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                salt_nonce=self.safe_nonce,
+            )
+            self.safe_chains.append(chain)
+            self.safes[chain] = safe
+            self.store()
+
+        if backup_owner is not None:
+            add_owner(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                safe=self.safes[chain],
+                owner=backup_owner,
+            )
+
         return tx_hash
 
     def update_backup_owner(
