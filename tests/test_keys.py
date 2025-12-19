@@ -23,34 +23,30 @@ import json
 import logging
 import tempfile
 from pathlib import Path
+from typing import Optional
 from unittest.mock import Mock, patch
 
 import pytest
 from aea_ledger_ethereum.ethereum import EthereumCrypto
+from eth_account import Account
 
 from operate.keys import Key, KeysManager
-from operate.operate_types import LedgerType
+from operate.migration import MigrationManager
 
 
 @pytest.fixture
-def keys_manager(temp_keys_dir: Path) -> KeysManager:
+def keys_manager(temp_keys_dir: Path, password: Optional[str]) -> KeysManager:
     """Create a KeysManager instance with a temporary directory."""
     # Clear the singleton instance to avoid interference between tests
-    KeysManager._instances = {}
     logger = Mock(spec=logging.Logger)
-    manager = KeysManager(path=temp_keys_dir, logger=logger)
+    manager = KeysManager(path=temp_keys_dir, logger=logger, password=password)
     return manager
 
 
 @pytest.fixture
-def sample_key() -> Key:
+def sample_key(keys_manager: KeysManager) -> Key:
     """Create a sample key for testing."""
-    crypto = EthereumCrypto()
-    return Key(
-        ledger=LedgerType.ETHEREUM,
-        address=crypto.address,
-        private_key=crypto.private_key,
-    )
+    return keys_manager.get(keys_manager.create())
 
 
 @pytest.fixture
@@ -79,7 +75,11 @@ class TestKeysManager:
         # Verify the returned instance
         assert isinstance(crypto_instance, EthereumCrypto)
         assert crypto_instance.address == sample_key.address
-        assert crypto_instance.private_key == sample_key.private_key
+        assert keys_manager.password is not None
+        assert (
+            crypto_instance.private_key
+            == sample_key.get_decrypted_json(keys_manager.password)["private_key"]
+        )
 
     def test_get_crypto_instance_temp_file_cleanup(
         self, keys_manager: KeysManager, key_file: tuple[Path, Key]
@@ -115,7 +115,11 @@ class TestKeysManager:
         # Verify the returned instance
         assert isinstance(crypto_instance, EthereumCrypto)
         assert crypto_instance.address == sample_key.address
-        assert crypto_instance.private_key == sample_key.private_key
+        assert keys_manager.password is not None
+        assert (
+            crypto_instance.private_key
+            == sample_key.get_decrypted_json(keys_manager.password)["private_key"]
+        )
 
         # Verify no temporary files remain
         temp_files = [f for f in keys_manager.path.iterdir() if f.suffix == ".txt"]
@@ -129,7 +133,7 @@ class TestKeysManager:
 
         # Verify we start with just the key file
         initial_files = list(keys_manager.path.iterdir())
-        assert len(initial_files) == 1
+        assert len(initial_files) == 2  # key file + .bak file
 
         # Use a mock to capture what directory the temp file is created in
         with patch(
@@ -174,3 +178,88 @@ class TestKeysManager:
 
         with pytest.raises(json.JSONDecodeError):
             keys_manager.get_crypto_instance(invalid_address)
+
+    @pytest.mark.parametrize("backup_exists", [False, True])
+    @pytest.mark.parametrize("pk_encrypted", [False, True])
+    @pytest.mark.parametrize("password", ["test_password", None])
+    def test_migrate_format_encrypts_private_key(
+        self,
+        keys_manager: KeysManager,
+        backup_exists: bool,
+        pk_encrypted: bool,
+        password: Optional[str],
+    ) -> None:
+        """Test migration encrypts plain private key and refreshes backup."""
+        address = keys_manager.create()
+        if not backup_exists:
+            backup_path = keys_manager.path / f"{address}.bak"
+            if backup_path.exists():
+                backup_path.unlink()
+
+        key_path = keys_manager.path / address
+        with open(key_path, "r", encoding="utf-8") as file:
+            data = json.load(file)
+
+        if not pk_encrypted:
+            if not data["private_key"].startswith("0x"):
+                crypto = keys_manager.get_crypto_instance(address)
+                data["private_key"] = "0x" + crypto.decrypt(
+                    keyfile_json=data["private_key"], password=keys_manager.password
+                )
+
+        with open(key_path, "w", encoding="utf-8") as file:
+            json.dump(data, file, indent=2)
+
+        migration_manager = MigrationManager(
+            home=keys_manager.path.parent, logger=logging.getLogger()
+        )
+        migration_manager.migrate_keys(keys_manager=keys_manager)
+        key = keys_manager.get(address)
+
+        # Verify everything is migrated now
+        crypto = keys_manager.get_crypto_instance(address)
+        assert crypto.address == address
+        if password is None:
+            assert key.private_key.startswith(
+                "0x"
+            ), "Private key should remain unencrypted without password"
+            assert crypto.private_key == key.private_key
+        else:
+            assert not key.private_key.startswith(
+                "0x"
+            ), "Private key should be encrypted now"
+            assert (
+                crypto.private_key
+                == Account.decrypt(key.private_key, keys_manager.password).to_0x_hex()
+            )
+
+        # Verify backup file exists
+        backup_path = keys_manager.path / f"{address}.bak"
+        assert backup_path.is_file(), "Backup file should exist after migration"
+        assert backup_path.read_text() == json.dumps(key.json, indent=2)
+
+    def test_update_password(self, keys_manager: KeysManager, password: str) -> None:
+        """Test that update_password re-encrypts keys and updates backups."""
+
+        addresses = [keys_manager.create() for _ in range(2)]
+        original_private_keys = {
+            address: keys_manager.get_crypto_instance(address).private_key
+            for address in addresses
+        }
+
+        new_password = f"{password}_new"
+
+        keys_manager.update_password(new_password)
+
+        assert keys_manager.password == new_password
+
+        for address in addresses:
+            key = keys_manager.get(address)
+            decrypted_private_key = key.get_decrypted_json(password=new_password)[
+                "private_key"
+            ]
+            assert decrypted_private_key == original_private_keys[address]
+
+            backup_path = keys_manager.path / f"{address}.bak"
+            assert backup_path.is_file()
+            assert backup_path.read_text() == json.dumps(key.json, indent=2)

@@ -34,6 +34,7 @@ from pathlib import Path
 from time import time
 from types import FrameType
 
+import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from fastapi import FastAPI, Request
@@ -63,6 +64,7 @@ from operate.constants import (
     WALLET_RECOVERY_DIR,
     ZERO_ADDRESS,
 )
+from operate.keys import KeysManager
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
     DEFAULT_NEW_SAFE_FUNDS,
@@ -98,6 +100,10 @@ from operate.wallet.wallet_recovery_manager import (
 )
 
 
+# TODO Backport to Open Autonomy
+autonomy.chain.tx.ERRORS_TO_RETRY |= {"replacement transaction underpriced"}
+
+
 DEFAULT_MAX_RETRIES = 3
 USER_NOT_LOGGED_IN_ERROR = JSONResponse(
     content={"error": "User not logged in."}, status_code=HTTPStatus.UNAUTHORIZED
@@ -123,7 +129,7 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
     )
 
 
-class OperateApp:
+class OperateApp:  # pylint: disable=too-many-instance-attributes
     """Operate app."""
 
     def __init__(
@@ -137,11 +143,12 @@ class OperateApp:
         self.setup()
         self._backup_operate_if_new_version()
 
-        services.manage.KeysManager(
+        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
+        self._keys_manager: KeysManager = KeysManager(
             path=self._keys,
             logger=logger,
+            password=self._password,
         )
-        self._password: t.Optional[str] = os.environ.get("OPERATE_USER_PASSWORD")
         self.settings = Settings(path=self._path)
 
         self._wallet_manager = MasterWalletManager(
@@ -150,15 +157,16 @@ class OperateApp:
         )
         self._wallet_manager.setup()
         self._funding_manager = FundingManager(
+            keys_manager=self._keys_manager,
             wallet_manager=self._wallet_manager,
             logger=logger,
         )
 
-        mm = MigrationManager(self._path, logger)
-        mm.migrate_user_account()
-        mm.migrate_services(self.service_manager())
-        mm.migrate_wallets(self.wallet_manager)
-        mm.migrate_qs_configs()
+        self._migration_manager = MigrationManager(self._path, logger)
+        self._migration_manager.migrate_user_account()
+        self._migration_manager.migrate_services(self.service_manager())
+        self._migration_manager.migrate_wallets(self.wallet_manager)
+        self._migration_manager.migrate_qs_configs()
 
     @property
     def password(self) -> t.Optional[str]:
@@ -169,7 +177,9 @@ class OperateApp:
     def password(self, value: t.Optional[str]) -> None:
         """Set the password."""
         self._password = value
+        self._keys_manager.password = value
         self._wallet_manager.password = value
+        self._migration_manager.migrate_keys(self._keys_manager)
 
     def _backup_operate_if_new_version(self) -> None:
         """Backup .operate directory if this is a new version."""
@@ -198,7 +208,7 @@ class OperateApp:
             )
 
         logger.info(f"Backing up existing {OPERATE} directory to {backup_path}")
-        shutil.copytree(self._path, backup_path)
+        shutil.copytree(self._path, backup_path, ignore_dangling_symlinks=True)
         version_file.write_text(str(current_version))
 
         # remove recoverable files from the backup to save space
@@ -236,6 +246,7 @@ class OperateApp:
         wallet_manager = self.wallet_manager
         wallet_manager.password = old_password
         wallet_manager.update_password(new_password)
+        self._keys_manager.update_password(new_password)
         self.user_account.update(old_password, new_password)
 
     def update_password_with_mnemonic(self, mnemonic: str, new_password: str) -> None:
@@ -258,6 +269,7 @@ class OperateApp:
         """Load service manager."""
         return services.manage.ServiceManager(
             path=self._services,
+            keys_manager=self.keys_manager,
             wallet_manager=self.wallet_manager,
             funding_manager=self.funding_manager,
             logger=logger,
@@ -277,16 +289,22 @@ class OperateApp:
         return None
 
     @property
+    def keys_manager(self) -> KeysManager:
+        """Load keys manager."""
+        return self._keys_manager
+
+    @property
     def wallet_manager(self) -> MasterWalletManager:
         """Load wallet manager."""
         return self._wallet_manager
 
     @property
-    def wallet_recoverey_manager(self) -> WalletRecoveryManager:
+    def wallet_recovery_manager(self) -> WalletRecoveryManager:
         """Load wallet recovery manager."""
         manager = WalletRecoveryManager(
             path=self._path / WALLET_RECOVERY_DIR,
             wallet_manager=self.wallet_manager,
+            service_manager=self.service_manager(),
             logger=logger,
         )
         return manager
@@ -381,7 +399,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return
 
         status = funding_job.cancel()
-        if not status:
+        if status:
+            funding_job = None
+        else:
             logger.info("Funding job cancellation failed")
 
     def pause_all_services_on_startup() -> None:
@@ -704,7 +724,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.get("/api/extended/wallet")
+    @app.get("/api/wallet/extended")
     async def _get_wallet_safe(request: Request) -> t.List[t.Dict]:
         """Get wallets."""
         wallets = []
@@ -1486,9 +1506,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
 
-    @app.post("/api/wallet/recovery/initiate")
-    async def _wallet_recovery_initiate(request: Request) -> JSONResponse:
-        """Initiate wallet recovery."""
+    @app.post("/api/wallet/recovery/prepare")
+    async def _wallet_recovery_prepare(request: Request) -> JSONResponse:
+        """Prepare wallet recovery."""
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
 
@@ -1507,7 +1527,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
 
         try:
-            output = operate.wallet_recoverey_manager.initiate_recovery(
+            output = operate.wallet_recovery_manager.prepare_recovery(
                 new_password=new_password
             )
             return JSONResponse(
@@ -1515,16 +1535,54 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status_code=HTTPStatus.OK,
             )
         except (ValueError, WalletRecoveryError) as e:
-            logger.error(f"_recovery_initiate error: {e}")
+            logger.error(f"_recovery_prepare error: {e}")
             return JSONResponse(
-                content={"error": f"Failed to initiate recovery: {e}"},
+                content={"error": f"Failed to prepare recovery: {e}"},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
         except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"_recovery_initiate error: {e}\n{traceback.format_exc()}")
+            logger.error(f"_recovery_prepare error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={"error": "Failed to prepare recovery. Please check the logs."},
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/wallet/recovery/funding_requirements")
+    async def _get_recovery_funding_requirements(request: Request) -> JSONResponse:
+        """Get recovery funding requirements."""
+
+        try:
+            output = operate.wallet_recovery_manager.recovery_requirements()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"_recovery_funding_requirements error: {e}\n{traceback.format_exc()}"
+            )
             return JSONResponse(
                 content={
-                    "error": "Failed to initiate recovery. Please check the logs."
+                    "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+
+    @app.get("/api/wallet/recovery/status")
+    async def _get_recovery_status(request: Request) -> JSONResponse:
+        """Get recovery status."""
+
+        try:
+            output = operate.wallet_recovery_manager.status()
+            return JSONResponse(
+                content=output,
+                status_code=HTTPStatus.OK,
+            )
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(f"_recovery_status error: {e}\n{traceback.format_exc()}")
+            return JSONResponse(
+                content={
+                    "error": "Failed to retrieve recovery status. Please check the logs."
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
@@ -1538,15 +1596,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if operate.password:
             return USER_LOGGED_IN_ERROR
 
-        data = await request.json()
-        bundle_id = data.get("id")
-        password = data.get("password")
+        data = {}
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.body()
+            if body:
+                data = await request.json()
+
         raise_if_inconsistent_owners = data.get("require_consistent_owners", True)
 
         try:
-            operate.wallet_recoverey_manager.complete_recovery(
-                bundle_id=bundle_id,
-                password=password,
+            operate.wallet_recovery_manager.complete_recovery(
                 raise_if_inconsistent_owners=raise_if_inconsistent_owners,
             )
             return JSONResponse(
@@ -1638,6 +1697,10 @@ def qs_start(
         bool,
         params.Boolean(help="Will skip the dependencies check for minting the service"),
     ] = False,
+    use_binary: Annotated[
+        bool,
+        params.Boolean(help="Will use the released binary to run the service"),
+    ] = False,
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
@@ -1648,12 +1711,17 @@ def qs_start(
         config_path=config,
         build_only=build_only,
         skip_dependency_check=skip_dependency_check,
+        use_binary=use_binary,
     )
 
 
 @_operate.command(name="quickstop")
 def qs_stop(
     config: Annotated[str, params.String(help="Quickstart config file path")],
+    use_binary: Annotated[
+        bool,
+        params.Boolean(help="Will use the released binary to run the service"),
+    ] = False,
     attended: Annotated[
         str, params.String(help="Run in attended/unattended mode (default: true")
     ] = "true",
@@ -1662,7 +1730,7 @@ def qs_stop(
     os.environ["ATTENDED"] = attended.lower()
     operate = OperateApp()
     operate.setup()
-    stop_service(operate=operate, config_path=config)
+    stop_service(operate=operate, config_path=config, use_binary=use_binary)
 
 
 @_operate.command(name="terminate")

@@ -38,7 +38,7 @@ def find_build_directory(config_file: Path, operate: "OperateApp") -> Path:
         config = json.load(f)
         config_service_hash = config.get("hash")
 
-    services = operate.service_manager().get_all_services()
+    services, _ = operate.service_manager().get_all_services()
     for service in services:
         if service.hash == config_service_hash:
             build_dir = service.path / DEPLOYMENT_DIR

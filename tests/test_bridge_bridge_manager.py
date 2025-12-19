@@ -109,7 +109,10 @@ class TestBridgeManager:
                 return None
             data = r.json()
             print(r.json())
-            return data.get(coingecko_id, {}).get("usd") * amount / (10**decimals)
+            price_usd = data.get(coingecko_id, {}).get("usd")
+            if price_usd is None:
+                return None
+            return price_usd * amount / (10**decimals)
 
         platform_id = COINGECKO_PLATFORM_IDS.get(chain)
         if not platform_id:
@@ -123,7 +126,10 @@ class TestBridgeManager:
             return None
         data = r.json()
         print(r.json())
-        return data.get(token_address, {}).get("usd") * amount / (10**decimals)
+        price_usd = data.get(token_address, {}).get("usd")
+        if price_usd is None:
+            return None
+        return price_usd * amount / (10**decimals)
 
     def test_bundle_zero(
         self,
@@ -258,7 +264,7 @@ class TestBridgeManager:
                     "chain": Chain.OPTIMISM.value,
                     "address": wallet_address,
                     "token": USDC[Chain.OPTIMISM],
-                    "amount": int(1000 * 1e18),
+                    "amount": int(10000 * 1e18),  # Large amount to trigger error
                 },
             },
             {
@@ -474,12 +480,30 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
-    @pytest.mark.parametrize("to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM])
-    def test_correct_providers_bridge_native(
+    @pytest.mark.parametrize(
+        ("to_chain_enum", "expected_provider_cls", "expected_contract_adaptor_cls"),
+        [
+            (Chain.ARBITRUM_ONE, RelayProvider, None),
+            (Chain.BASE, NativeBridgeProvider, OptimismContractAdaptor),
+            (Chain.CELO, RelayProvider, None),
+            (Chain.GNOSIS, RelayProvider, None),
+            pytest.param(
+                Chain.MODE,
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+                marks=pytest.mark.xfail(reason="MODE chain unstable"),
+            ),
+            (Chain.OPTIMISM, NativeBridgeProvider, OptimismContractAdaptor),
+            (Chain.POLYGON, RelayProvider, None),
+        ],
+    )
+    def test_correct_providers_native(
         self,
         tmp_path: Path,
         password: str,
         to_chain_enum: Chain,
+        expected_provider_cls: t.Type[Provider],
+        expected_contract_adaptor_cls: type[BridgeContractAdaptor],
     ) -> None:
         """test_correct_providers_bridge_native"""
         self._main_test_correct_providers(
@@ -489,38 +513,26 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=ZERO_ADDRESS,
-            expected_provider_cls=NativeBridgeProvider,
-            expected_contract_adaptor_cls=OptimismContractAdaptor,
-        )
-
-    @pytest.mark.parametrize(
-        ("to_chain_enum", "expected_provider_cls"),
-        [(Chain.GNOSIS, RelayProvider)],
-    )
-    def test_correct_providers_swap_native(
-        self,
-        tmp_path: Path,
-        password: str,
-        to_chain_enum: Chain,
-        expected_provider_cls: t.Type[Provider],
-    ) -> None:
-        """test_correct_providers_swap_native"""
-        self._main_test_correct_providers(
-            tmp_path=tmp_path,
-            password=password,
-            from_chain=Chain.ETHEREUM.value,
-            from_token=ZERO_ADDRESS,
-            to_chain=to_chain_enum.value,
-            to_token=ZERO_ADDRESS,
             expected_provider_cls=expected_provider_cls,
-            expected_contract_adaptor_cls=None,
+            expected_contract_adaptor_cls=expected_contract_adaptor_cls,
         )
 
     @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
+        "to_chain_enum",
+        [
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.CELO,
+            Chain.GNOSIS,
+            pytest.param(
+                Chain.MODE, marks=pytest.mark.xfail(reason="MODE chain unstable")
+            ),
+            Chain.OPTIMISM,
+            Chain.POLYGON,
+        ],
     )
-    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
-    def test_correct_providers_bridge_token(
+    @pytest.mark.parametrize("token_dict", [OLAS, USDC])
+    def test_correct_providers_token_bridge(
         self,
         tmp_path: Path,
         password: str,
@@ -529,19 +541,26 @@ class TestBridgeManager:
     ) -> None:
         """test_correct_providers_bridge_token"""
         expected_provider_cls: type[Provider] = NativeBridgeProvider
-        expected_contract_adaptor_cls: type[BridgeContractAdaptor]
-        if to_chain_enum == Chain.GNOSIS:
+        expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]] = (
+            OptimismContractAdaptor
+        )
+
+        if to_chain_enum in [
+            Chain.ARBITRUM_ONE,
+            Chain.CELO,
+            Chain.POLYGON,
+        ]:  # Superbridge reports Relay instead of native bridge for CELO
+            expected_provider_cls = RelayProvider
+            expected_contract_adaptor_cls = None
+        elif to_chain_enum == Chain.BASE and token_dict == USDC:
+            expected_provider_cls = LiFiProvider
+            expected_contract_adaptor_cls = None
+        elif to_chain_enum == Chain.GNOSIS:
+            expected_provider_cls = NativeBridgeProvider
             expected_contract_adaptor_cls = OmnibridgeContractAdaptor
-        else:
-            expected_contract_adaptor_cls = OptimismContractAdaptor
-
-        if to_chain_enum == Chain.BASE and token_dict == USDC:
+        elif to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
             expected_provider_cls = LiFiProvider
-            expected_contract_adaptor_cls = None  # type: ignore
-
-        if to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
-            expected_provider_cls = LiFiProvider
-            expected_contract_adaptor_cls = None  # type: ignore
+            expected_contract_adaptor_cls = None
 
         self._main_test_correct_providers(
             tmp_path=tmp_path,
@@ -558,16 +577,19 @@ class TestBridgeManager:
     @pytest.mark.parametrize(
         "to_chain_enum",
         [
+            Chain.ARBITRUM_ONE,
             Chain.BASE,
+            Chain.CELO,
+            Chain.GNOSIS,
             pytest.param(
                 Chain.MODE, marks=pytest.mark.xfail(reason="MODE chain unstable")
             ),
             Chain.OPTIMISM,
-            Chain.GNOSIS,
+            Chain.POLYGON,
         ],
     )
     @pytest.mark.parametrize("token_dict", [USDC, OLAS])
-    def test_correct_providers_swap_token(
+    def test_correct_providers_token_swap(
         self,
         tmp_path: Path,
         password: str,
@@ -582,6 +604,34 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=token_dict[to_chain_enum],
+            expected_provider_cls=RelayProvider,
+            expected_contract_adaptor_cls=None,
+        )
+
+    @pytest.mark.parametrize(
+        "from_chain_enum",
+        [
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISM,
+        ],
+    )
+    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
+    def test_correct_providers_token_swap_celo(
+        self,
+        tmp_path: Path,
+        password: str,
+        from_chain_enum: Chain,
+        token_dict: t.Dict,
+    ) -> None:
+        """test_correct_providers_swap_token"""
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=from_chain_enum.value,
+            from_token=ZERO_ADDRESS,
+            to_chain=Chain.CELO.value,
+            to_token=token_dict[Chain.CELO],
             expected_provider_cls=RelayProvider,
             expected_contract_adaptor_cls=None,
         )
@@ -611,7 +661,7 @@ class TestBridgeManager:
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
 
-        amount_unit = 100
+        amount_unit = 50
         if to_token in USDC.values():
             to_decimals = 6
         else:
@@ -684,9 +734,7 @@ class TestBridgeManager:
 
             print(f"{refill_amount=}")
 
-            quoted_from_cost_usd = (
-                refill_amount * from_price_usd / (10**from_decimals)
-            )
+            quoted_from_cost_usd = refill_amount * from_price_usd / (10**from_decimals)
             expected_to_cost_usd = amount_unit * to_price_usd
             print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")
             print(f"Quoted cost on {from_chain}: {quoted_from_cost_usd}")

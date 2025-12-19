@@ -35,13 +35,11 @@ from fastapi.testclient import TestClient
 from operate.cli import OperateApp, create_app
 from operate.constants import (
     AGENT_FUNDS_STATUS_URL,
-    KEYS_DIR,
     MASTER_SAFE_PLACEHOLDER,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
     ZERO_ADDRESS,
 )
-from operate.keys import KeysManager
 from operate.ledger import CHAINS, get_default_ledger_api
 from operate.ledger.profiles import (
     DEFAULT_EOA_TOPUPS,
@@ -677,10 +675,7 @@ class TestFunding(OnTestnet):
         operate.create_user_account(password=password)
         operate.password = password
         operate.wallet_manager.setup()
-        keys_manager = KeysManager(
-            path=operate._path / KEYS_DIR,  # pylint: disable=protected-access
-            logger=LOGGER,
-        )
+        keys_manager = operate.keys_manager
         backup_owner = keys_manager.create()
 
         # Logout
@@ -956,13 +951,11 @@ class TestFunding(OnTestnet):
                 expected_json["balances"][chain_str][master_safe][asset] -= (
                     cfg["fund_requirements"].get(asset, {}).get("safe", 0)
                 )
-                expected_json["bonded_assets"][chain_str][master_safe][
-                    asset
-                ] = expected_json["protocol_asset_requirements"][chain_str][
-                    master_safe
-                ][
-                    asset
-                ]
+                expected_json["bonded_assets"][chain_str][master_safe][asset] = (
+                    expected_json["protocol_asset_requirements"][chain_str][
+                        master_safe
+                    ][asset]
+                )
                 expected_json["total_requirements"][chain_str][master_safe][
                     asset
                 ] = 0  # The protocol requirements are bonded, nothing more needed.

@@ -105,13 +105,16 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
 NUM_LOCAL_AGENT_INSTANCES = 1
 
+RPC_SYNC_TIMEOUT = 15
+
 
 class ServiceManager:
     """Service manager."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         path: Path,
+        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         funding_manager: FundingManager,
         logger: logging.Logger,
@@ -126,7 +129,7 @@ class ServiceManager:
         :param logger: logging.Logger object.
         """
         self.path = path
-        self.keys_manager = KeysManager()
+        self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.funding_manager = funding_manager
         self.logger = logger
@@ -812,6 +815,9 @@ class ServiceManager:
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
         on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
         on_chain_description = on_chain_metadata.get("description")
+        needs_update_agent_addresses = set(chain_data.instances) != set(
+            service.agent_addresses
+        )
 
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=target_staking_params["agent_ids"][0]
@@ -840,6 +846,7 @@ class ServiceManager:
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
+                or needs_update_agent_addresses
             )
         )
 
@@ -959,6 +966,7 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
+        # Activate service
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
@@ -1023,6 +1031,7 @@ class ServiceManager:
                 )
             ).settle()
 
+        # Register agent instances
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.ACTIVE_REGISTRATION
@@ -1532,7 +1541,7 @@ class ServiceManager:
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
             )
 
-    def _get_current_staking_program(  # pylint: disable=no-self-use
+    def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
         staking_manager = StakingManager(Chain(chain))
@@ -1921,9 +1930,11 @@ class ServiceManager:
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
-        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+        ethereum_crypto = self.keys_manager.get_crypto_instance(
+            service.agent_addresses[0]
+        )
         transfer_erc20_from_safe(
             ledger_api=ledger_api,
             crypto=ethereum_crypto,
@@ -2206,7 +2217,7 @@ class ServiceManager:
             chain=chain,
         )
 
-    def deploy_service_locally(
+    def deploy_service_locally(  # pylint: disable=too-many-arguments
         self,
         service_config_id: str,
         chain: t.Optional[str] = None,
@@ -2232,10 +2243,15 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
+            keys_manager=self.keys_manager,
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker)
+        deployment.start(
+            password=self.wallet_manager.password,
+            use_docker=use_docker,
+            is_aea=service.agent_release["is_aea"],
+        )
         return deployment
 
     def stop_service_locally(
@@ -2255,7 +2271,11 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker=use_docker, force=force)
+        deployment.stop(
+            use_docker=use_docker,
+            force=force,
+            is_aea=service.agent_release["is_aea"],
+        )
         if delete:
             deployment.delete()
         return deployment
@@ -2322,9 +2342,9 @@ class ServiceManager:
                 allow_start_agent = False
 
             # Protocol asset requirements
-            protocol_asset_requirements[
-                chain
-            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            protocol_asset_requirements[chain] = (
+                self._compute_protocol_asset_requirements(service_config_id, chain)
+            )
             service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Bonded assets
@@ -2431,15 +2451,12 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
-                total_requirements[chain].setdefault(master_safe, {})[
-                    asset_address
-                ] = sum(
-                    agent_asset_funding_values[address]["topup"]
-                    for address in agent_asset_funding_values
-                ) + protocol_asset_requirements[
-                    chain
-                ].get(
-                    asset_address, 0
+                total_requirements[chain].setdefault(master_safe, {})[asset_address] = (
+                    sum(
+                        agent_asset_funding_values[address]["topup"]
+                        for address in agent_asset_funding_values
+                    )
+                    + protocol_asset_requirements[chain].get(asset_address, 0)
                 )
 
                 if asset_address == ZERO_ADDRESS and any(
@@ -2468,9 +2485,9 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
-            total_requirements[chain].setdefault(master_eoa, {})[
-                ZERO_ADDRESS
-            ] = eoa_funding_values["topup"]
+            total_requirements[chain].setdefault(master_eoa, {})[ZERO_ADDRESS] = (
+                eoa_funding_values["topup"]
+            )
 
         is_refill_required = any(
             amount > 0

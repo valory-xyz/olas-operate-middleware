@@ -24,11 +24,12 @@ import json
 import os
 import platform
 import shutil
-import time
 import types
 import typing as t
 from dataclasses import asdict, is_dataclass
 from pathlib import Path
+
+from operate.utils import safe_file_operation
 
 
 # pylint: disable=too-many-return-statements,no-member
@@ -39,7 +40,7 @@ N_BACKUPS = 5
 
 def serialize(obj: t.Any) -> t.Any:
     """Serialize object."""
-    if is_dataclass(obj):
+    if is_dataclass(obj) and not isinstance(obj, type):
         return serialize(asdict(obj))
     if isinstance(obj, Path):
         return str(obj)
@@ -87,28 +88,11 @@ def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
         return otype(obj)
     if otype is Path:
         return Path(obj)
-    if is_dataclass(otype):
+    if is_dataclass(otype) and hasattr(otype, "from_json"):
         return otype.from_json(obj)
     if otype is bytes:
         return bytes.fromhex(obj)
     return obj
-
-
-def _safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) -> None:
-    """Safely perform file operation with retries on Windows."""
-    max_retries = 3 if platform.system() == "Windows" else 1
-
-    for attempt in range(max_retries):
-        try:
-            operation(*args, **kwargs)
-            return
-        except (PermissionError, FileNotFoundError, OSError) as e:
-            if attempt == max_retries - 1:
-                raise e
-
-            if platform.system() == "Windows":
-                # On Windows, wait a bit and retry
-                time.sleep(0.1)
 
 
 class LocalResource:
@@ -163,13 +147,13 @@ class LocalResource:
         bak0 = path.with_name(f"{path.name}.0.bak")
 
         if path.exists() and not bak0.exists():
-            _safe_file_operation(shutil.copy2, path, bak0)
+            safe_file_operation(shutil.copy2, path, bak0)
 
         tmp_path = path.parent / f".{path.name}.tmp"
 
         # Clean up any existing tmp file
         if tmp_path.exists():
-            _safe_file_operation(tmp_path.unlink)
+            safe_file_operation(tmp_path.unlink)
 
         tmp_path.write_text(
             json.dumps(
@@ -181,11 +165,11 @@ class LocalResource:
 
         # Atomic replace to avoid corruption
         try:
-            _safe_file_operation(os.replace, tmp_path, path)
+            safe_file_operation(os.replace, tmp_path, path)
         except (PermissionError, FileNotFoundError):
             # On Windows, if the replace fails, clean up and skip
             if platform.system() == "Windows":
-                _safe_file_operation(tmp_path.unlink)
+                safe_file_operation(tmp_path.unlink)
 
         self.load(self.path)  # Validate before making backup
 
@@ -195,7 +179,7 @@ class LocalResource:
             older = path.with_name(f"{path.name}.{i + 1}.bak")
             if newer.exists():
                 if older.exists():
-                    _safe_file_operation(older.unlink)
-                _safe_file_operation(newer.rename, older)
+                    safe_file_operation(older.unlink)
+                safe_file_operation(newer.rename, older)
 
-        _safe_file_operation(shutil.copy2, path, bak0)
+        safe_file_operation(shutil.copy2, path, bak0)

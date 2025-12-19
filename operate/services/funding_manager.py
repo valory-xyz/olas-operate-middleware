@@ -79,17 +79,20 @@ class FundingManager:
 
     def __init__(
         self,
+        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         logger: Logger,
         funding_requests_cooldown_seconds: int = DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS,
     ) -> None:
         """Initialize funding manager."""
+        self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.logger = logger
         self.funding_requests_cooldown_seconds = funding_requests_cooldown_seconds
         self._lock = threading.Lock()
         self._funding_in_progress: t.Dict[str, bool] = {}
         self._funding_requests_cooldown_until: t.Dict[str, float] = {}
+        self.is_for_quickstart = False
 
     def drain_agents_eoas(
         self, service: Service, withdrawal_address: str, chain: Chain
@@ -101,7 +104,7 @@ class FundingManager:
             f"Draining service agents {service.name} ({service_config_id=})"
         )
         for agent_address in service.agent_addresses:
-            ethereum_crypto = KeysManager().get_crypto_instance(agent_address)
+            ethereum_crypto = self.keys_manager.get_crypto_instance(agent_address)
             balance = ledger_api.get_balance(agent_address)
             self.logger.info(
                 f"Draining {balance} (approx) {get_currency_denom(chain)} from {agent_address} (agent) to {withdrawal_address}"
@@ -166,7 +169,7 @@ class FundingManager:
 
             # Safe not swapped
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 )
                 transfer_erc20_from_safe(
@@ -206,7 +209,7 @@ class FundingManager:
             )
 
             if set(owners) == set(service.agent_addresses):
-                ethereum_crypto = KeysManager().get_crypto_instance(
+                ethereum_crypto = self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 )
                 transfer_from_safe(
@@ -668,7 +671,11 @@ class FundingManager:
         # We assume that if the service safe is created in any chain,
         # we have requested the funding already.
         service_initial_topup = service.get_initial_funding_amounts()
-        if not all(
+        if self.is_for_quickstart:
+            service_initial_shortfalls = self.compute_service_initial_shortfalls(
+                service
+            )
+        elif not all(
             SERVICE_SAFE_PLACEHOLDER in addresses
             for addresses in service_initial_topup.values()
         ):
@@ -686,6 +693,9 @@ class FundingManager:
         elif now < self._funding_requests_cooldown_until.get(service_config_id, 0):
             funding_requests = ChainAmounts()
             funding_requests_cooldown = True
+        elif self.is_for_quickstart:
+            funding_requests = ChainAmounts()
+            funding_requests_cooldown = False
         else:
             funding_requests = service.get_funding_requests()
             funding_requests_cooldown = False
@@ -812,6 +822,21 @@ class FundingManager:
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
         self.fund_chain_amounts(service.get_initial_funding_amounts())
+
+    def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
+        """Compute service initial shortfalls"""
+        initial_funding_amounts = service.get_initial_funding_amounts()
+        service_balances = service.get_balances()
+        return self._compute_shortfalls(
+            balances=service_balances,
+            thresholds=initial_funding_amounts,
+            topups=initial_funding_amounts,
+        )
+
+    def topup_service_initial(self, service: Service) -> None:
+        """Fund service enough to reach initial funding amounts"""
+        service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
+        self.fund_chain_amounts(service_initial_shortfalls)
 
     def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
         """Fund chain amounts"""

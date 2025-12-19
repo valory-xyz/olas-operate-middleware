@@ -34,9 +34,15 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
+from operate.constants import (
+    DEFAULT_TIMEOUT,
+    IPFS_ADDRESS,
+    NO_STAKING_PROGRAM_ID,
+    USER_JSON,
+)
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
@@ -48,6 +54,7 @@ from operate.quickstart.utils import (
     CHAIN_TO_METADATA,
     QuickstartConfig,
     ask_or_get_from_env,
+    ask_yes_or_no,
     check_rpc,
     print_box,
     print_section,
@@ -99,6 +106,8 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_6": "trader",
         "quickstart_beta_mech_marketplace_expert_7": "trader",
         "quickstart_beta_mech_marketplace_expert_8": "trader",
+        "quickstart_beta_mech_marketplace_expert_9": "trader",
+        "quickstart_beta_mech_marketplace_expert_10": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
     },
@@ -114,12 +123,49 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
+        "pett_ai_agent": "pett_ai",
     },
     Chain.CELO: {},
     Chain.MODE: {
         "optimus_alpha": "modius",
     },
 }
+
+DEPRECATED_QS_STAKING_PROGRAMS = {
+    "quickstart_beta_hobbyist",
+    "quickstart_beta_hobbyist_2",
+    "quickstart_beta_expert",
+    "quickstart_beta_expert_2",
+    "quickstart_beta_expert_3",
+    "quickstart_beta_expert_4",
+    "quickstart_beta_expert_5",
+    "quickstart_beta_expert_6",
+    "quickstart_beta_expert_7",
+    "quickstart_beta_expert_8",
+    "quickstart_beta_expert_9",
+    "quickstart_beta_expert_10",
+    "quickstart_beta_expert_11",
+    "quickstart_beta_expert_12",
+    "quickstart_beta_expert_15_mech_marketplace",
+    "quickstart_beta_expert_16_mech_marketplace",
+    "quickstart_beta_expert_17_mech_marketplace",
+    "quickstart_beta_expert_18_mech_marketplace",
+}
+
+
+def _deprecated_program_warning(program_id: str) -> bool:
+    """Confirm deprecated program warning."""
+    if program_id not in DEPRECATED_QS_STAKING_PROGRAMS:
+        return True
+
+    print_box(
+        """
+        WARNING
+        The selected staking program is deprecated.
+        Using it may prevent your agent from earning staking rewards.
+    """
+    )
+    return ask_yes_or_no("Do you want to proceed anyway?")
 
 
 def ask_confirm_password() -> str:
@@ -196,13 +242,14 @@ def configure_local_config(
         config.rpc = {}
 
     for chain in template["configurations"]:
-        while not check_rpc(config.rpc.get(chain)):
+        while not check_rpc(chain, config.rpc.get(chain)):
             config.rpc[chain] = ask_or_get_from_env(
                 f"Enter a {CHAIN_TO_METADATA[chain]['name']} RPC that supports eth_newFilter [hidden input]: ",
                 True,
                 f"{chain.upper()}_LEDGER_RPC",
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
+        DEFAULT_RPCS[Chain.from_string(chain)] = config.rpc[chain]
 
     config.principal_chain = template["home_chain"]
 
@@ -217,6 +264,7 @@ def configure_local_config(
         LedgerType.ETHEREUM.lower(),
         address=config.rpc[config.principal_chain],  # type: ignore[index]
         chain_id=home_chain.id,
+        poa_chain=chain in (Chain.OPTIMISM.value, Chain.POLYGON.value),
     )
 
     if config.staking_program_id is None:
@@ -249,7 +297,7 @@ def configure_local_config(
                 try:
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
-                    response = requests.get(ipfs_address)
+                    response = requests.get(ipfs_address, timeout=DEFAULT_TIMEOUT)
                     if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
@@ -272,7 +320,10 @@ def configure_local_config(
                 except Web3Exception:
                     metadata["available_staking_slots"] = "?"
 
-            name = metadata["name"]
+            deprecated_str = (
+                "[DEPRECATED] " if program_id in DEPRECATED_QS_STAKING_PROGRAMS else ""
+            )
+            name = deprecated_str + metadata["name"]
             description = metadata["description"]
             if "available_staking_slots" in metadata:
                 available_slots_str = (
@@ -309,12 +360,23 @@ def configure_local_config(
                         for idx, prog in available_choices.items():
                             print(f"{idx}) {prog['name']} : {prog['slots']}")
                         continue
+
+                    if not _deprecated_program_warning(
+                        available_choices[choice]["program_id"]
+                    ):
+                        continue
+
                     selected_program = available_choices[choice]
                     config.staking_program_id = selected_program["program_id"]
                     print(f"Selected staking program: {selected_program['name']}")
                     break
                 except ValueError:
                     if input_value in ids:
+                        if not _deprecated_program_warning(
+                            available_choices[choice]["program_id"]
+                        ):
+                            continue
+
                         config.staking_program_id = input_value
                         break
                     else:
@@ -427,9 +489,9 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name][
-                "value"
-            ] = config.user_provided_args[env_var_name]
+            template["env_variables"][env_var_name]["value"] = (
+                config.user_provided_args[env_var_name]
+            )
 
         # TODO: Handle it in a more generic way
         if (
@@ -481,7 +543,11 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     for service in manager.json:
         if service["name"] == template["name"]:
             old_hash = service["hash"]
-            if old_hash == template["hash"]:
+            old_version = service["agent_release"]["repository"]["version"]
+            if (
+                old_hash == template["hash"]
+                and old_version == template["agent_release"]["repository"]["version"]
+            ):
                 print(f'Loading service {template["hash"]}')
                 service = manager.load(
                     service_config_id=service["service_config_id"],
@@ -493,7 +559,10 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                     service_template=template,
                 )
 
-            service.env_variables = template["env_variables"]
+            for env_var_name, env_var_data in template["env_variables"].items():
+                if env_var_name not in service.env_variables:
+                    service.env_variables[env_var_name] = env_var_data
+
             service.update_user_params_from_template(service_template=template)
             service.store()
             break
@@ -554,7 +623,7 @@ def _ask_funds_from_requirements(
     """Ask for funds from requirements."""
     spinner = Halo(text="Calculating funds requirements...", spinner="dots")
     spinner.start()
-    requirements = manager.refill_requirements(
+    requirements = manager.funding_requirements(
         service_config_id=service.service_config_id
     )
     spinner.stop()
@@ -633,6 +702,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
     _maybe_create_master_eoa(operate)
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
     manager = operate.service_manager()
+    manager.funding_manager.is_for_quickstart = True
 
     backup_owner = None
     while not _ask_funds_from_requirements(manager, wallet, service):
@@ -660,6 +730,7 @@ def run_service(
     config_path: str,
     build_only: bool = False,
     skip_dependency_check: bool = False,
+    use_binary: bool = False,
 ) -> None:
     """Run service."""
 
@@ -690,13 +761,21 @@ def run_service(
     )
 
     print_section("Funding the service")
-    manager.funding_manager.fund_service_initial(service=service)
+    service = get_service(manager, template)
+    manager.funding_manager.topup_service_initial(service=service)
 
     print_section("Deploying the service")
+    if use_binary:
+        use_docker = False
+        use_k8s = False
+    else:
+        use_docker = True
+        use_k8s = True
+
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=True,
-        use_kubernetes=True,
+        use_docker=use_docker,
+        use_kubernetes=use_k8s,
         build_only=build_only,
     )
     if build_only:

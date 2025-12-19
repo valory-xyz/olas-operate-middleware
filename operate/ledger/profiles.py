@@ -46,7 +46,6 @@ for _chain in CHAINS:
                 "service_registry_token_utility": profile[
                     "service_registry_token_utility"
                 ],
-                "service_manager": profile["service_manager_token"],
                 "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
                 "gnosis_safe_same_address_multisig": profile[
                     "gnosis_safe_same_address_multisig"
@@ -100,6 +99,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_6": "0x22D6cd3d587D8391C3aAE83a783f26c67ab54A85",
         "quickstart_beta_mech_marketplace_expert_7": "0xaaEcdf4d0CBd6Ca0622892Ac6044472f3912A5f3",
         "quickstart_beta_mech_marketplace_expert_8": "0x168aED532a0CD8868c22Fc77937Af78b363652B1",
+        "quickstart_beta_mech_marketplace_expert_9": "0xdDa9cD214F12e7C2D58E871404A0A3B1177065C8",
+        "quickstart_beta_mech_marketplace_expert_10": "0x53a38655B4e659eF4C7F88A26fbF5c67932C7156",
         "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
         "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
         "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
@@ -123,6 +124,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "0x2585e63df7BD9De8e058884D496658a030b5c6ce",
         "agents_fun_2": "0x26FA75ef9Ccaa60E58260226A71e9d07564C01bF",
         "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",
+        "pett_ai_agent_1": "0x31183503be52391844594b4B587F0e764eB3956E",
+        "pett_ai_agent_2": "0xEA15F76D7316B09b3f89613e32d3B780619d61e2",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
@@ -242,6 +245,17 @@ DEFAULT_EOA_TOPUPS = {
 DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
     chain: {asset: amount * 2 for asset, amount in amounts.items()}
     for chain, amounts in DEFAULT_EOA_TOPUPS.items()
+}
+
+DEFAULT_RECOVERY_TOPUPS = {
+    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 625_000_000_000_000},
+    Chain.BASE: {ZERO_ADDRESS: 625_000_000_000_000},
+    Chain.CELO: {ZERO_ADDRESS: 187_500_000_000_000_000},
+    Chain.ETHEREUM: {ZERO_ADDRESS: 2_500_000_000_000_000},
+    Chain.GNOSIS: {ZERO_ADDRESS: 187_500_000_000_000_000},
+    Chain.MODE: {ZERO_ADDRESS: 62_500_000_000_000},
+    Chain.OPTIMISM: {ZERO_ADDRESS: 625_000_000_000_000},
+    Chain.POLYGON: {ZERO_ADDRESS: 187_500_000_000_000_000},
 }
 
 DEFAULT_EOA_THRESHOLD = 0.5
