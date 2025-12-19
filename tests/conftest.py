@@ -30,6 +30,7 @@ See https://docs.pytest.org/en/stable/reference/fixtures.html
 import json
 import os
 import random
+import re
 import string
 import tempfile
 import typing as t
@@ -42,6 +43,7 @@ import pytest
 import requests
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from vcr.persisters.filesystem import FilesystemPersister
 from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
@@ -133,6 +135,72 @@ def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
 
     response = requests.post(rpc, headers=headers, data=json.dumps(data), timeout=30)
     response.raise_for_status()
+
+
+class VCRPersister:
+    """Custom VCR persister to remove sensitive data."""
+
+    tenderly_chain_slug_to_chain = {
+        "mainnet": Chain.ETHEREUM,
+        "gnosis": Chain.GNOSIS,
+        "base": Chain.BASE,
+        "optimism": Chain.OPTIMISM,
+        "polygon": Chain.POLYGON,
+    }
+    chain_to_tenderly_rpc = {
+        chain: os.environ.get(f"{chain.value.upper()}_TESTNET_RPC", "").rstrip("/")
+        for chain in Chain
+    }
+    chain_to_dummy_rpc = {chain: f"https://dummy-{chain.value}-rpc" for chain in Chain}
+
+    def __init__(self) -> None:
+        """Initialize the persister."""
+        super().__init__()
+
+    @staticmethod
+    def save_cassette(cassette_path, cassette_dict, serializer) -> None:  # type: ignore[no-untyped-def]
+        """Save the cassette to the given path."""
+        for request in cassette_dict.get("requests", []):
+            chain_slugs = re.findall(
+                r"https://virtual\.(.+?)\.eu\.rpc\.tenderly\.co/.+",
+                request.uri,
+            )
+            if chain_slugs:
+                chain = VCRPersister.tenderly_chain_slug_to_chain[chain_slugs[0]]
+                dummy_rpc = VCRPersister.chain_to_dummy_rpc[chain]
+                request.uri = request.uri.replace(
+                    VCRPersister.chain_to_tenderly_rpc[chain], dummy_rpc
+                )
+
+        FilesystemPersister.save_cassette(cassette_path, cassette_dict, serializer)
+
+    @classmethod
+    def load_cassette(  # type: ignore[no-untyped-def]
+        cls,
+        cassette_path,
+        serializer,
+    ) -> tuple[list[requests.Request], list[requests.Response]]:
+        """Load the cassette from the given path."""
+        requests, responses = FilesystemPersister.load_cassette(
+            cassette_path, serializer
+        )
+        for request in requests:
+            chain_slugs = re.findall(r"https://dummy-(.+?)-rpc", request.uri)
+            if chain_slugs:
+                chain = Chain(chain_slugs[0])
+                tenderly_rpc = VCRPersister.chain_to_tenderly_rpc[chain]
+                request.uri = request.uri.replace(
+                    VCRPersister.chain_to_dummy_rpc[chain], tenderly_rpc
+                )
+
+        return requests, responses
+
+
+@pytest.fixture(scope="module")
+def vcr(vcr):  # type: ignore[no-untyped-def]
+    """Configure pytest-vcr."""
+    vcr.register_persister(VCRPersister)
+    return vcr
 
 
 @pytest.fixture
