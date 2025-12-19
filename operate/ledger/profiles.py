@@ -46,7 +46,6 @@ for _chain in CHAINS:
                 "service_registry_token_utility": profile[
                     "service_registry_token_utility"
                 ],
-                "service_manager": profile["service_manager_token"],
                 "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
                 "gnosis_safe_same_address_multisig": profile[
                     "gnosis_safe_same_address_multisig"
@@ -125,6 +124,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "0x2585e63df7BD9De8e058884D496658a030b5c6ce",
         "agents_fun_2": "0x26FA75ef9Ccaa60E58260226A71e9d07564C01bF",
         "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",
+        "pett_ai_agent_1": "0x31183503be52391844594b4B587F0e764eB3956E",
+        "pett_ai_agent_2": "0xEA15F76D7316B09b3f89613e32d3B780619d61e2",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",

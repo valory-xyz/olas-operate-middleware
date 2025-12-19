@@ -230,7 +230,7 @@ class TestKeysManager:
             ), "Private key should be encrypted now"
             assert (
                 crypto.private_key
-                == Account.decrypt(key.private_key, keys_manager.password).hex()
+                == Account.decrypt(key.private_key, keys_manager.password).to_0x_hex()
             )
 
         # Verify backup file exists

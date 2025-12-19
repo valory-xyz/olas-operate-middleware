@@ -22,7 +22,6 @@
 import json
 import logging
 import os
-import time
 import traceback
 import typing as t
 from collections import Counter, defaultdict
@@ -967,9 +966,6 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
-
         # Activate service
         if (
             self._get_on_chain_state(service=service, chain=chain)
@@ -1034,9 +1030,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
 
         # Register agent instances
         if (
@@ -1104,9 +1097,6 @@ class ServiceManager:
                     cost_of_bond=cost_of_bond,
                 )
             ).settle()
-
-        if is_first_mint:  # Hotfix to prevent RPC out-of-sync issues
-            time.sleep(RPC_SYNC_TIMEOUT)
 
         # Deploy service
         is_initial_funding = False
@@ -1551,7 +1541,7 @@ class ServiceManager:
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
             )
 
-    def _get_current_staking_program(  # pylint: disable=no-self-use
+    def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
         staking_manager = StakingManager(Chain(chain))
@@ -1940,7 +1930,7 @@ class ServiceManager:
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
-        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
         ethereum_crypto = self.keys_manager.get_crypto_instance(
             service.agent_addresses[0]
@@ -2352,9 +2342,9 @@ class ServiceManager:
                 allow_start_agent = False
 
             # Protocol asset requirements
-            protocol_asset_requirements[
-                chain
-            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            protocol_asset_requirements[chain] = (
+                self._compute_protocol_asset_requirements(service_config_id, chain)
+            )
             service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Bonded assets
@@ -2461,15 +2451,12 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
-                total_requirements[chain].setdefault(master_safe, {})[
-                    asset_address
-                ] = sum(
-                    agent_asset_funding_values[address]["topup"]
-                    for address in agent_asset_funding_values
-                ) + protocol_asset_requirements[
-                    chain
-                ].get(
-                    asset_address, 0
+                total_requirements[chain].setdefault(master_safe, {})[asset_address] = (
+                    sum(
+                        agent_asset_funding_values[address]["topup"]
+                        for address in agent_asset_funding_values
+                    )
+                    + protocol_asset_requirements[chain].get(asset_address, 0)
                 )
 
                 if asset_address == ZERO_ADDRESS and any(
@@ -2498,9 +2485,9 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
-            total_requirements[chain].setdefault(master_eoa, {})[
-                ZERO_ADDRESS
-            ] = eoa_funding_values["topup"]
+            total_requirements[chain].setdefault(master_eoa, {})[ZERO_ADDRESS] = (
+                eoa_funding_values["topup"]
+            )
 
         is_refill_required = any(
             amount > 0
