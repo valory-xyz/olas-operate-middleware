@@ -40,6 +40,8 @@ cryptography = "^46.0.3"
 [tool.poetry.group.development.dependencies]
 tomte = {version = "0.4.0", extras = ["cli"]}
 build = "1.2.2.post1"
+yappi = "^1.6.10"
+viztracer = "^1.1.1"
 
 [build-system]
 requires = ["poetry-core"]

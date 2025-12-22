@@ -80,6 +80,7 @@ from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN
+from operate.utils import concurrent_execute
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -226,37 +227,20 @@ class StakingManager:
     def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
         """Get staking params"""
         ledger_api = get_default_ledger_api(chain=chain)
-        instance = StakingManager.staking_ctr.get_instance(
-            ledger_api=ledger_api,
-            contract_address=staking_contract,
-        )
-        agent_ids = instance.functions.getAgentIds().call()
-        service_registry = instance.functions.serviceRegistry().call()
-        staking_token = instance.functions.stakingToken().call()
-        service_registry_token_utility = (
-            instance.functions.serviceRegistryTokenUtility().call()
-        )
-        min_staking_deposit = instance.functions.minStakingDeposit().call()
-        activity_checker = instance.functions.activityChecker().call()
 
-        output = {
-            "staking_contract": staking_contract,
-            "agent_ids": agent_ids,
-            "service_registry": service_registry,
-            "staking_token": staking_token,
-            "service_registry_token_utility": service_registry_token_utility,
-            "min_staking_deposit": min_staking_deposit,
-            "activity_checker": activity_checker,
-            "additional_staking_tokens": {},
-        }
+        second_token_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
+        second_token_amount_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
         try:
             instance = StakingManager.dual_staking_ctr.get_instance(
                 ledger_api=ledger_api,
                 contract_address=staking_contract,
             )
-            output["additional_staking_tokens"][
-                instance.functions.secondToken().call()
-            ] = instance.functions.secondTokenAmount().call()
+            second_token_func = instance.functions.secondToken().call
+            second_token_amount_func = instance.functions.secondTokenAmount().call
         except Exception:  # pylint: disable=broad-except # nosec
             # Contract is not a dual staking contract
 
@@ -269,6 +253,45 @@ class StakingManager:
             # avoid any issues we are simply catching all exceptions.
             pass
 
+        instance = StakingManager.staking_ctr.get_instance(
+            ledger_api=ledger_api,
+            contract_address=staking_contract,
+        )
+        (
+            agent_ids,
+            service_registry,
+            staking_token,
+            service_registry_token_utility,
+            min_staking_deposit,
+            activity_checker,
+            second_token,
+            second_token_amount,
+        ) = concurrent_execute(
+            (instance.functions.getAgentIds().call, ()),
+            (instance.functions.serviceRegistry().call, ()),
+            (instance.functions.stakingToken().call, ()),
+            (instance.functions.serviceRegistryTokenUtility().call, ()),
+            (instance.functions.minStakingDeposit().call, ()),
+            (instance.functions.activityChecker().call, ()),
+            (second_token_func, ()),
+            (second_token_amount_func, ()),
+            ignore_exceptions=True,
+        )
+
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": (
+                {second_token: second_token_amount}
+                if second_token and second_token_amount
+                else {}
+            ),
+        }
         return output
 
     def get_staking_params(self, staking_contract: str) -> t.Dict:

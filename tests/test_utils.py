@@ -30,6 +30,7 @@ from deepdiff import DeepDiff
 import operate.utils as utils
 from operate.utils import (
     SingletonMeta,
+    concurrent_execute,
     merge_sum_dicts,
     safe_file_operation,
     subtract_dicts,
@@ -420,3 +421,64 @@ class TestUnrecoverableDelete:
         assert overwritten_data
         assert overwritten_data[0] == b"\xaa" * len(original_data)
         assert overwritten_data[0] != original_data
+
+
+class TestParallelExecute:
+    """Tests for the parallel_execute helper."""
+
+    def test_parallel_execute_runs_and_preserves_order(self) -> None:
+        """It should return results aligned to funcs/args_list order."""
+
+        def add(a: int, b: int) -> int:
+            return a + b
+
+        def double(x: int) -> int:
+            return x * 2
+
+        def constant() -> str:
+            return "ok"
+
+        assert concurrent_execute(
+            (add, (1, 2)),
+            (double, (3,)),
+            (constant, ()),
+        ) == [3, 6, "ok"]
+
+    def test_parallel_execute_propagates_exceptions(self) -> None:
+        """It should propagate exceptions when ignore_exceptions is False."""
+
+        def ok() -> str:
+            return "ok"
+
+        def boom() -> None:
+            raise RuntimeError("boom")
+
+        with pytest.raises(RuntimeError, match="boom"):
+            concurrent_execute((ok, ()), (boom, ()))
+
+    def test_parallel_execute_ignores_exceptions_when_enabled(self) -> None:
+        """It should return None for failing calls when ignore_exceptions is True."""
+
+        def ok() -> str:
+            return "ok"
+
+        def boom() -> None:
+            raise RuntimeError("boom")
+
+        result = concurrent_execute(
+            (ok, ()), (boom, ()), (ok, ()), ignore_exceptions=True
+        )
+        assert result == ["ok", None, "ok"]
+
+    def test_parallel_execute_times_out(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """It should raise TimeoutError when futures exceed DEFAULT_TIMEOUT."""
+
+        from concurrent.futures import TimeoutError
+
+        monkeypatch.setattr("operate.utils.DEFAULT_TIMEOUT", 0.01)
+
+        def slow() -> None:
+            time.sleep(0.05)
+
+        with pytest.raises(TimeoutError):
+            concurrent_execute((slow, ()))
