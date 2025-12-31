@@ -166,9 +166,6 @@ def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:
         print(f"Error during secure deletion of '{file_path}': {e}")
 
 
-JS_MAX_SAFE_INTEGER = 2**53 - 1  # 9007199254740991
-
-
 def sanitize_json_ints(obj: t.Dict) -> t.Dict:
     """Recursively convert JSONs integers into strings."""
     if isinstance(obj, dict):

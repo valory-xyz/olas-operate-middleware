@@ -20,6 +20,7 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
+import json
 import multiprocessing
 import os
 import shutil
@@ -34,13 +35,11 @@ from pathlib import Path
 from time import time
 from types import FrameType
 
-import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from flask import json
 from typing_extensions import Annotated
 from uvicorn.config import Config
 from uvicorn.server import Server
@@ -99,10 +98,6 @@ from operate.wallet.wallet_recovery_manager import (
     WalletRecoveryError,
     WalletRecoveryManager,
 )
-
-
-# TODO Backport to Open Autonomy
-autonomy.chain.tx.ERRORS_TO_RETRY |= {"replacement transaction underpriced"}
 
 
 DEFAULT_MAX_RETRIES = 3
@@ -511,17 +506,17 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         try:
             data = json.loads(body)
-        except Exception:  # pylint: disable=broad-except
+        except Exception as e:  # pylint: disable=broad-except
+            logger.error(
+                f"Failed to parse JSON response body: {e}\n{traceback.format_exc()}"
+            )
             return response
 
         updated_content = sanitize_json_ints(data)
-        headers = dict(response.headers)
-        headers.pop("content-length", None)
-        return JSONResponse(
-            content=updated_content,
-            status_code=response.status_code,
-            headers=headers,
+        response.headers["content-length"] = str(
+            len(json.dumps(updated_content).encode("utf-8"))
         )
+        return response
 
     @app.get(f"/{shutdown_endpoint}")
     async def _kill_server(request: Request) -> JSONResponse:
