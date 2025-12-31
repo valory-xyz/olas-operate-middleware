@@ -35,12 +35,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
 from operate.operate_types import Chain, LedgerType
-from operate.utils.gnosis import (
-    add_owner,
-    estimate_transfer_tx_fee,
-    get_asset_balance,
-    get_owners,
-)
+from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance, get_owners
 from operate.wallet.master import (
     EthereumMasterWallet,
     InsufficientFundsException,
@@ -420,17 +415,12 @@ class TestMasterWalletOnTestnet(OnTestnet):
         assert chain2 not in wallet.safe_chains
         assert wallet.safe_nonce == created_nonce
 
-        call_count = {"count": 0}
-
-        def flaky_add_owner(*args, **kwargs) -> None:
-            call_count["count"] += 1
-            if call_count["count"] < 5:
-                raise Exception("Simulated failure")
-            return add_owner(*args, **kwargs)
-
         # Create safe on another chain, but fail while adding backup owner
-        with patch("operate.utils.gnosis.add_owner", side_effect=flaky_add_owner):
-            with patch("time.sleep", lambda x: None):
+        with patch(
+            "operate.wallet.master.add_owner",
+            side_effect=Exception("Simulated failure"),
+        ):
+            with pytest.raises(Exception, match="Simulated failure"):
                 wallet.create_safe(chain=chain2, backup_owner=backup_owner)
 
         assert wallet.safe_nonce == created_nonce
@@ -438,10 +428,26 @@ class TestMasterWalletOnTestnet(OnTestnet):
         for chain in (chain1, chain2):
             assert chain in wallet.safes
             assert chain in wallet.safe_chains
-            assert backup_owner in get_owners(
-                ledger_api=wallet.ledger_api(chain),
-                safe=wallet.safes[chain],
-            )
+
+        assert backup_owner in get_owners(
+            ledger_api=wallet.ledger_api(chain1),
+            safe=wallet.safes[chain1],
+        )
+        assert backup_owner not in get_owners(
+            ledger_api=wallet.ledger_api(chain2),
+            safe=wallet.safes[chain2],
+        )
+
+        # Try the same call again, only to add the backup owner successfully
+        wallet.create_safe(chain=chain2, backup_owner=backup_owner)
+        assert wallet.safe_nonce == created_nonce
+        for chain in (chain1, chain2):
+            assert set(
+                get_owners(
+                    ledger_api=wallet.ledger_api(chain),
+                    safe=wallet.safes[chain],
+                )
+            ) == {wallet.address, backup_owner}
 
 
 class TestMasterWallet:

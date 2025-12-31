@@ -19,13 +19,24 @@
 
 """Helper utilities."""
 
+import asyncio
+import inspect
+import logging
 import os
 import platform
 import shutil
 import time
 import typing as t
+from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FuturesTimeoutError
+from contextlib import contextmanager
 from pathlib import Path
 from threading import Lock
+
+from operate.constants import DEFAULT_TIMEOUT
+
+
+logger = logging.getLogger(__name__)
 
 
 class SingletonMeta(type):
@@ -169,3 +180,100 @@ def sanitize_json_ints(obj: t.Dict) -> t.Dict:
     if isinstance(obj, int):
         return str(obj)
     return obj
+
+
+@contextmanager
+def timing_context(label: str = "Block") -> t.Generator[None, None, None]:
+    """Context manager for timing a code block."""
+    start = time.perf_counter()
+    try:
+        yield
+    finally:
+        end = time.perf_counter()
+        logger.debug(f"[{label}] Elapsed time: {end - start:.4f} seconds")
+
+
+def concurrent_execute(
+    *func_calls: t.Tuple[t.Callable, t.Tuple],
+    ignore_exceptions: bool = False,
+) -> t.List[t.Any]:
+    """Execute callables concurrently.
+
+    This is a synchronous convenience wrapper around `parallel_execute_async`.
+    If called from within an active asyncio event loop, use
+    `await parallel_execute_async(...)` instead.
+    """
+
+    async def _runner() -> t.List[t.Any]:
+        return await concurrent_execute_async(
+            *func_calls,
+            ignore_exceptions=ignore_exceptions,
+        )
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        # No running loop in this thread.
+        return asyncio.run(_runner())
+
+    # Running inside an event loop thread.
+    # We cannot call `asyncio.run` here, so offload to a background thread.
+    # NOTE: this blocks the current thread until completion.
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, _runner())
+        return future.result()
+
+
+async def concurrent_execute_async(
+    *func_calls: t.Tuple[t.Callable, t.Tuple],
+    ignore_exceptions: bool = False,
+) -> t.List[t.Any]:
+    """Execute callables concurrently using asyncio.
+
+    - Async callables are awaited directly.
+    - Sync callables are executed via `asyncio.to_thread`.
+
+    Results are returned in the same order as `funcs`/`args_list`.
+    """
+
+    async def _invoke(func: t.Callable, args: t.Tuple) -> t.Any:
+        with timing_context(f"Executing {func.__name__}"):
+            if inspect.iscoroutinefunction(func):
+                return await t.cast(t.Awaitable[t.Any], func(*args))
+            return await asyncio.to_thread(func, *args)
+
+    results: t.List[t.Any] = [None] * len(func_calls)
+
+    async def _invoke_indexed(
+        idx: int, func: t.Callable, args: t.Tuple
+    ) -> t.Tuple[int, t.Any]:
+        try:
+            return idx, await _invoke(func, args)
+        except Exception as e:  # pylint: disable=broad-except
+            return idx, e
+
+    tasks: t.List[asyncio.Task] = [
+        asyncio.create_task(_invoke_indexed(idx, func, args))
+        for idx, (func, args) in enumerate(func_calls)
+    ]
+
+    try:
+        for task in asyncio.as_completed(tasks, timeout=DEFAULT_TIMEOUT):
+            idx, outcome = await task
+            if isinstance(outcome, BaseException):
+                if ignore_exceptions:
+                    results[idx] = None
+                else:
+                    raise outcome
+            else:
+                results[idx] = outcome
+    except asyncio.TimeoutError as e:
+        raise FuturesTimeoutError() from e
+    finally:
+        # Ensure we don't leak pending tasks.
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+    return results

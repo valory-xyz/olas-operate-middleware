@@ -108,6 +108,7 @@ class TestFunding(OnTestnet):
                 assert mock_transfer.call_count == 0
 
             # When Master EOA balance is lower than threshold
+            # But master safe doesn't have enough funds
             current_balance = get_asset_balance(
                 ledger_api=ledger_api,
                 asset_address=ZERO_ADDRESS,
@@ -118,6 +119,43 @@ class TestFunding(OnTestnet):
                 amount=current_balance - DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] // 2,
                 chain=chain,
                 from_safe=False,
+            )
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.address,
+                )
+                < DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] / 2
+            )
+            wallet.transfer(
+                to=ZERO_ADDRESS,  # burn the whole balance
+                amount=get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.safes[chain],
+                ),
+                chain=chain,
+                from_safe=True,
+            )
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.safes[chain],
+                )
+                == 0
+            )
+            with patch.object(wallet, "transfer") as mock_transfer:
+                operate.funding_manager.fund_master_eoa()
+                assert mock_transfer.call_count == 0
+
+            # Master safe has enough funds
+            tenderly_add_balance(
+                chain=chain,
+                recipient=wallet.safes[chain],
+                token=ZERO_ADDRESS,
+                amount=DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS],
             )
             assert (
                 get_asset_balance(
@@ -913,13 +951,11 @@ class TestFunding(OnTestnet):
                 expected_json["balances"][chain_str][master_safe][asset] -= (
                     cfg["fund_requirements"].get(asset, {}).get("safe", 0)
                 )
-                expected_json["bonded_assets"][chain_str][master_safe][
-                    asset
-                ] = expected_json["protocol_asset_requirements"][chain_str][
-                    master_safe
-                ][
-                    asset
-                ]
+                expected_json["bonded_assets"][chain_str][master_safe][asset] = (
+                    expected_json["protocol_asset_requirements"][chain_str][
+                        master_safe
+                    ][asset]
+                )
                 expected_json["total_requirements"][chain_str][master_safe][
                     asset
                 ] = 0  # The protocol requirements are bonded, nothing more needed.

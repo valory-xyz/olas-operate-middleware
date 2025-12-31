@@ -27,7 +27,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
-from web3.middleware import geth_poa_middleware
 
 from operate.operate_types import Chain
 
@@ -133,11 +132,8 @@ def make_chain_ledger_api(
         address=rpc or get_default_rpc(chain=chain),
         chain_id=chain.id,
         gas_price_strategies=gas_price_strategies,
-        poa_chain=chain == Chain.POLYGON,
+        poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
     )
-
-    if chain == Chain.OPTIMISM:
-        ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
     return ledger_api
 
@@ -183,7 +179,6 @@ def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
 # TODO This gas management should be done at a lower level in the library
 def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
     """Update transaction with gas estimate."""
-    print(f"[LEDGER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
     original_from = tx["from"]
     original_gas = tx.get("gas", 1)
 
@@ -192,7 +187,6 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx["gas"] = 1
         ledger_api.update_with_gas_estimate(tx)
         if tx["gas"] > 1:
-            print(f"[LEDGER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
             break
 
     tx["from"] = original_from

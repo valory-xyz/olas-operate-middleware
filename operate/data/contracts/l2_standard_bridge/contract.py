@@ -50,7 +50,7 @@ class L2StandardBridge(Contract):
         """Return the transaction hash of the matching ETHBridgeFinalized event in the given block range."""
         ledger_api = cast(EthereumApi, ledger_api)
         event_signature = "ETHBridgeFinalized(address,address,uint256,bytes)"
-        event_signature_hash = Web3.keccak(text=event_signature).hex()
+        event_signature_hash = Web3.keccak(text=event_signature).to_0x_hex()
 
         topics = [
             event_signature_hash,  # ETHBridgeFinalized
@@ -75,7 +75,7 @@ class L2StandardBridge(Contract):
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
             if all(a == b for a, b in zip(decoded, non_indexed_values)):
-                return log["transactionHash"].hex()
+                return log["transactionHash"].to_0x_hex()
 
         return None
 
@@ -98,7 +98,7 @@ class L2StandardBridge(Contract):
         event_signature = (
             "ERC20BridgeFinalized(address,address,address,address,uint256,bytes)"
         )
-        event_signature_hash = Web3.keccak(text=event_signature).hex()
+        event_signature_hash = Web3.keccak(text=event_signature).to_0x_hex()
 
         topics = [
             event_signature_hash,  # ERC20BridgeFinalized
@@ -125,6 +125,6 @@ class L2StandardBridge(Contract):
         for log in logs:
             decoded = eth_abi.decode(non_indexed_types, log["data"])
             if all(a == b for a, b in zip(decoded, non_indexed_values)):
-                return log["transactionHash"].hex()
+                return log["transactionHash"].to_0x_hex()
 
         return None

@@ -102,22 +102,7 @@ from operate.wallet.wallet_recovery_manager import (
 
 
 # TODO Backport to Open Autonomy
-def should_rebuild(error: str) -> bool:
-    """Check if we should rebuild the transaction."""
-    for _error in (
-        "wrong transaction nonce",
-        "OldNonce",
-        "nonce too low",
-        "replacement transaction underpriced",
-    ):
-        if _error in error:
-            return True
-    return False
-
-
-autonomy.chain.tx.ERRORS_TO_RETRY += ("replacement transaction underpriced",)
-autonomy.chain.tx.should_rebuild = should_rebuild
-# End backport to Open Autonomy
+autonomy.chain.tx.ERRORS_TO_RETRY |= {"replacement transaction underpriced"}
 
 
 DEFAULT_MAX_RETRIES = 3
@@ -415,7 +400,9 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             return
 
         status = funding_job.cancel()
-        if not status:
+        if status:
+            funding_job = None
+        else:
             logger.info("Funding job cancellation failed")
 
     def pause_all_services_on_startup() -> None:
