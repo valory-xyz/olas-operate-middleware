@@ -516,6 +516,11 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         response.headers["content-length"] = str(
             len(json.dumps(updated_content).encode("utf-8"))
         )
+
+        async def async_iterator():
+            yield json.dumps(updated_content).encode("utf-8")
+
+        response.body_iterator = async_iterator()
         return response
 
     @app.get(f"/{shutdown_endpoint}")

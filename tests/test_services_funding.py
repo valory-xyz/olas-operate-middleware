@@ -50,7 +50,7 @@ from operate.ledger.profiles import (
 )
 from operate.operate_types import Chain, DeploymentStatus, LedgerType, OnChainState
 from operate.services.service import Deployment
-from operate.utils import subtract_dicts
+from operate.utils import sanitize_json_ints, subtract_dicts
 from operate.utils.gnosis import get_asset_balance
 
 from tests.conftest import (
@@ -780,7 +780,7 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # ----------------------------------------
@@ -805,7 +805,7 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # -------------------------------------------------
@@ -814,6 +814,7 @@ class TestFunding(OnTestnet):
         for chain_str, addresses in response_json["refill_requirements"].items():
             for _, master_eoa_assets in addresses.items():
                 for asset, amount in master_eoa_assets.items():
+                    amount = int(amount)
                     # The sum of requirements for Master EOA and Master Safe is transferred to Master EOA.
                     tenderly_add_balance(
                         chain=Chain(chain_str),
@@ -853,7 +854,7 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # -------------------------------------------------
@@ -894,9 +895,9 @@ class TestFunding(OnTestnet):
 
         # Adjust expected Master EOA native assets
         for chain_str in expected_json["balances"]:
-            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
-                ZERO_ADDRESS
-            ]
+            real_balance_master_eoa = int(
+                response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
             assert (
                 real_balance_master_eoa
                 <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
@@ -912,7 +913,7 @@ class TestFunding(OnTestnet):
 
         expected_json["allow_start_agent"] = True
 
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # ---------------------------------------------
@@ -962,9 +963,9 @@ class TestFunding(OnTestnet):
 
         # Adjust Master EOA native assets
         for chain_str in expected_json["balances"]:
-            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
-                ZERO_ADDRESS
-            ]
+            real_balance_master_eoa = int(
+                response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
             assert (
                 real_balance_master_eoa
                 <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
@@ -978,7 +979,7 @@ class TestFunding(OnTestnet):
                 ZERO_ADDRESS
             ] = real_balance_master_eoa
 
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # ----------------------------------
@@ -992,7 +993,7 @@ class TestFunding(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         response_json = response.json()
-        diff = DeepDiff(response_json, expected_json)
+        diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
         assert not diff, diff
 
         # ---------------------------------------
@@ -1028,7 +1029,7 @@ class TestFunding(OnTestnet):
             )
             assert response.status_code == HTTPStatus.OK
             response_json = response.json()
-            diff = DeepDiff(response_json, expected_json)
+            diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
             assert not diff, diff
 
         # User funds the Master Safe with exactly the amount requested by the agent
@@ -1036,9 +1037,11 @@ class TestFunding(OnTestnet):
             chain=chain1,
             recipient=master_safes[chain1],
             token=ZERO_ADDRESS,
-            amount=expected_json["agent_funding_requests"][chain1.value][agent_safe][
-                ZERO_ADDRESS
-            ],
+            amount=int(
+                expected_json["agent_funding_requests"][chain1.value][agent_safe][
+                    ZERO_ADDRESS
+                ]
+            ),
         )
 
         # ---------------------------------------
@@ -1090,9 +1093,9 @@ class TestFunding(OnTestnet):
 
             # Adjust Master EOA native assets
             for chain_str in expected_json["balances"]:
-                real_balance_master_eoa = response_json["balances"][chain_str][
-                    master_eoa
-                ][ZERO_ADDRESS]
+                real_balance_master_eoa = int(
+                    response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                )
                 assert (
                     real_balance_master_eoa
                     <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
@@ -1107,5 +1110,5 @@ class TestFunding(OnTestnet):
                     ZERO_ADDRESS
                 ] = real_balance_master_eoa
 
-            diff = DeepDiff(response_json, expected_json)
+            diff = DeepDiff(response_json, sanitize_json_ints(expected_json))
             assert not diff, diff

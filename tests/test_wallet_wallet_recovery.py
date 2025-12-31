@@ -32,6 +32,7 @@ from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.utils import sanitize_json_ints
 from operate.utils.gnosis import (
     add_owner,
     get_asset_balance,
@@ -161,9 +162,13 @@ class TestWalletRecovery(OnTestnet):
                     if safe not in expected_pending_bo_swaps[chain_str]:
                         expected_pending_bo_swaps[chain_str].append(safe)
 
-                balance = balances[chain_str][backup_owner][ZERO_ADDRESS]
-                requirement = total_requirements[chain_str][backup_owner][ZERO_ADDRESS]
-                shortfall = refill_requirements[chain_str][backup_owner][ZERO_ADDRESS]
+                balance = int(balances[chain_str][backup_owner][ZERO_ADDRESS])
+                requirement = int(
+                    total_requirements[chain_str][backup_owner][ZERO_ADDRESS]
+                )
+                shortfall = int(
+                    refill_requirements[chain_str][backup_owner][ZERO_ADDRESS]
+                )
                 assert shortfall == max(requirement - balance, 0)
 
                 if expected_is_refill_required:
@@ -183,7 +188,9 @@ class TestWalletRecovery(OnTestnet):
             "pending_backup_owner_swaps": expected_pending_bo_swaps,
         }
 
-        assert not DeepDiff(recovery_requirements, expected_recovery_requirements)
+        assert not DeepDiff(
+            recovery_requirements, sanitize_json_ints(expected_recovery_requirements)
+        )
 
     @staticmethod
     def _assert_different_prepare_bundles(
