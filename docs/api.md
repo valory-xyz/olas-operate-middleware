@@ -46,10 +46,10 @@ Get current settings.
 
 ```json
 {
-  "version": 1,
+  "version": "1",
   "eoa_topups": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 750000000000000000
+      "0x0000000000000000000000000000000000000000": "750000000000000000"
     }
   }
 }
@@ -328,8 +328,8 @@ falling back to Master EOA if needed.
   "to": "0x...",
   "withdraw_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000,
-      "0x...": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000",
+      "0x...": "500000000000000000"
     }
   }
 }
@@ -516,8 +516,8 @@ Get extended wallet information including safes and additional metadata.
         "0x...": {
           "backup_owners": ["0x..."],
           "balances": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
           }
         }
       }
@@ -525,12 +525,12 @@ Get extended wallet information including safes and additional metadata.
     "balances": {
       "gnosis": {
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },        
       }
     },
@@ -615,14 +615,14 @@ Prepare wallet recovery. Creates a new recovery bundle or returns the last incom
           "base"
         ],
         "ledger_type": "ethereum",
-        "safe_nonce": 1234567890
+        "safe_nonce": "1234567890"
       },
       "new_wallet": {
         "address": "0x...",
         "safes": {},
         "safe_chains": [],
         "ledger_type": "ethereum",
-        "safe_nonce": 1234567890
+        "safe_nonce": "1234567890"
       },
       "new_mnemonic": ["word1", "word2", "word3", ...]
     },
@@ -635,10 +635,10 @@ Prepare wallet recovery. Creates a new recovery bundle or returns the last incom
   "prepared": true,
   "has_swaps": false,
   "has_pending_swaps": true,
-  "num_safes": 2,
-  "num_safes_with_new_wallet": 0,
-  "num_safes_with_old_wallet": 2,
-  "num_safes_with_both_wallets": 0
+  "num_safes": "2",
+  "num_safes_with_new_wallet": "0",
+  "num_safes_with_old_wallet": "2",
+  "num_safes_with_both_wallets": "0"
 }
 ```
 
@@ -685,21 +685,21 @@ Get backup owner funding requirements to complete wallet recovery process.
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
@@ -754,14 +754,14 @@ Get recovery status.
           "base"
         ],
         "ledger_type": "ethereum",
-        "safe_nonce": 1234567890
+        "safe_nonce": "1234567890"
       },
       "new_wallet": {
         "address": "0x...",
         "safes": {},
         "safe_chains": [],
         "ledger_type": "ethereum",
-        "safe_nonce": 1234567890
+        "safe_nonce": "1234567890"
       },
       "new_mnemonic": null
     },
@@ -774,10 +774,10 @@ Get recovery status.
   "prepared": true,
   "has_swaps": false,
   "has_pending_swaps": true,
-  "num_safes": 2,
-  "num_safes_with_new_wallet": 1,
-  "num_safes_with_old_wallet": 1,
-  "num_safes_with_both_wallets": 0
+  "num_safes": "2",
+  "num_safes_with_new_wallet": "1",
+  "num_safes_with_old_wallet": "1",
+  "num_safes_with_both_wallets": "0"
 }
 ```
 
@@ -824,7 +824,7 @@ New MasterEOA (output from `POST /api/wallet/recovery/prepare`) must be an owner
       "base"
     ],
     "ledger_type": "ethereum",
-    "safe_nonce": 1234567890
+    "safe_nonce": "1234567890"
   }
 ]
 ```
@@ -1134,7 +1134,7 @@ Get all valid services.
 [
   {
     "name": "My Service",
-    "version": 9,
+    "version": "9",
     "service_config_id": "service_123",
     "service_public_id": "valory/service_123:0.1.0",
     "package_path": "package",
@@ -1165,18 +1165,18 @@ Get all valid services.
           "token": "123",
           "multisig": "0x...",
           "staked": true,
-          "on_chain_state": 3,
+          "on_chain_state": "3",
           "user_params": {
             "staking_program_id": "pearl_alpha",
             "nft": "bafybei...",
-            "threshold": 1,
+            "threshold": "1",
             "use_staking": true,
             "use_mech_marketplace": false,
-            "cost_of_bond": 10000000000000000000,
+            "cost_of_bond": "10000000000000000000",
             "fund_requirements": {
               "0x0000000000000000000000000000000000000000": {
-                "agent": 100000000000000000,
-                "safe": 500000000000000000
+                "agent": "100000000000000000",
+                "safe": "500000000000000000"
               }
             }
           }
@@ -1219,7 +1219,7 @@ Get all services deployment information.
 ```json
 {
   "service_config_id1": {
-    "status": 3,  // DEPLOYED
+    "status": "3",  // DEPLOYED
     "nodes": {
       "agent": ["service_abci_0"],
       "tendermint": ["service_tm_0"]
@@ -1230,15 +1230,15 @@ Get all services deployment information.
       "is_healthy": true,
       "is_tm_healthy": true,    
       "is_transitioning_fast": true,
-      "period": 123,
-      "reset_pause_duration": 30,
+      "period": "123",
+      "reset_pause_duration": "30",
       "rounds": ["round_1", "round_2", "round_3"],
       "rounds_info": {},
-      "seconds_since_last_transition": 12.34,
+      "seconds_since_last_transition": "12.34",
     }
   },
   "service_config_id2": {
-    "status": 1,  // BUILT
+    "status": "1",  // BUILT
     "nodes": {
       "agent": [],
       "tendermint": []
@@ -1246,7 +1246,7 @@ Get all services deployment information.
     "healthcheck": {}
   },
   "service_config_id3": {
-    "status": 1,  // BUILT
+    "status": "1",  // BUILT
     "nodes": {
       "agent": [],
       "tendermint": []
@@ -1265,7 +1265,7 @@ Get a specific service.
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
@@ -1296,18 +1296,18 @@ Get a specific service.
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1342,7 +1342,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": 3,  // DEPLOYED
+  "status": "3",  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
@@ -1353,11 +1353,11 @@ Get service deployment information.
     "is_healthy": true,
     "is_tm_healthy": true,    
     "is_transitioning_fast": true,
-    "period": 123,
-    "reset_pause_duration": 30,
+    "period": "123",
+    "reset_pause_duration": "30",
     "rounds": ["round_1", "round_2", "round_3"],
     "rounds_info": {},
-    "seconds_since_last_transition": 12.34,
+    "seconds_since_last_transition": "12.34",
   }
 }
 ```
@@ -1366,7 +1366,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": 1,  // BUILT
+  "status": "1",  // BUILT
   "nodes": {
     "agent": [],
     "tendermint": []
@@ -1380,7 +1380,7 @@ Get service deployment information.
 
 ```json
 {
-  "status": 3,  // DEPLOYED
+  "status": "3",  // DEPLOYED
   "nodes": {
     "agent": ["service_abci_0"],
     "tendermint": ["service_tm_0"]
@@ -1421,7 +1421,7 @@ Get agent performance information.
       "value": "Metric value"
     }
   ],
-  "timestamp": 1234567890
+  "timestamp": "1234567890"
 }
 ```
 
@@ -1460,38 +1460,38 @@ Notes:
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "agent_funding_requests": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
@@ -1521,32 +1521,32 @@ Get service refill requirements.
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "is_refill_required": true,
@@ -1571,7 +1571,7 @@ Create a new service.
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
@@ -1602,18 +1602,18 @@ Create a new service.
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1637,7 +1637,7 @@ Create a new service.
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
@@ -1668,18 +1668,18 @@ Create a new service.
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1715,7 +1715,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "package_path": "package",
   "hash": "bafybei...",
@@ -1745,18 +1745,18 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1781,7 +1781,7 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "package_path": "package",
   "hash": "bafybei...",
@@ -1811,18 +1811,18 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1866,7 +1866,7 @@ Deploy and run a service.
 ```json
 {
   "name": "My Service",
-  "version": 9,
+  "version": "9",
   "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
   "package_path": "package",
@@ -1897,18 +1897,18 @@ Deploy and run a service.
         "token": "123",
         "multisig": "0x...",
         "staked": true,
-        "on_chain_state": 3,
+        "on_chain_state": "3",
         "user_params": {
           "staking_program_id": "pearl_alpha",
           "nft": "bafybei...",
-          "threshold": 1,
+          "threshold": "1",
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1959,7 +1959,7 @@ Stop a running service deployment locally.
 
 ```json
 {
-  "status": 5,  // STOPPED
+  "status": "5",  // STOPPED
   "nodes": {
     "agent": [],
     "tendermint": []
@@ -2178,25 +2178,25 @@ Get bridge refill requirements for cross-chain transactions.
   "balances": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bridge_refill_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "bridge_total_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1500000000000000000
+        "0x0000000000000000000000000000000000000000": "1500000000000000000"
       }
     }
   },
-  "expiration_timestamp": 1234567890,
+  "expiration_timestamp": "1234567890",
   "is_refill_required": true
 }
 ```
@@ -2234,7 +2234,7 @@ Execute bridge transaction.
   "id": "bundle_123",
   "bridge_request_status": [
     {
-      "eta": 1234567890,
+      "eta": "1234567890",
       "explorer_link": "https://gnosisscan.com/tx/0x...",
       "message": "Transaction executed successfully",
       "status": "EXECUTION_DONE",
@@ -2302,7 +2302,7 @@ Get bridge transaction status.
   "id": "bundle_123",
   "bridge_request_status": [
     {
-      "eta": 1234567890,
+      "eta": "1234567890",
       "explorer_link": "https://gnosisscan.com/tx/0x...",
       "message": "Transaction executed successfully",
       "status": "EXECUTION_DONE",
