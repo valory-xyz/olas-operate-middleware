@@ -127,6 +127,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",
         "pett_ai_agent_1": "0x31183503be52391844594b4B587F0e764eB3956E",
         "pett_ai_agent_2": "0xEA15F76D7316B09b3f89613e32d3B780619d61e2",
+        "pett_ai_agent_3": "0xFA0ca3935758cB81D35A8F1395b9Eb5a596ce301",
+        "pett_ai_agent_4": "0x00D544c10BDC0E9b0a71CeAF52C1342BB8f21c1D",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
