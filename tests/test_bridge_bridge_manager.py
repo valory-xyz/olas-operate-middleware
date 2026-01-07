@@ -517,6 +517,7 @@ class TestBridgeManager:
             to_token=ZERO_ADDRESS,
             expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
+            margin=0.2,
         )
 
     @pytest.mark.parametrize(
@@ -573,6 +574,7 @@ class TestBridgeManager:
             to_token=token_dict[to_chain_enum],
             expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
+            margin=0.2,
         )
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)

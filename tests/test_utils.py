@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 from deepdiff import DeepDiff
 
+from operate.serialization import BigInt
 import operate.utils as utils
 from operate.utils import (
     SingletonMeta,
@@ -106,27 +107,27 @@ class TestUtils:
             (
                 {"a1": {"b1": {"c1": 10, "c2": 20}}},
                 {"a1": {"b1": {"c1": 1, "c2": 2}}},
-                {"a1": {"b1": {"c1": 9, "c2": 18}}},
+                {"a1": {"b1": {"c1": BigInt(9), "c2": BigInt(18)}}},
             ),
             (
                 {"a1": {"b1": {"c1": 5, "c2": 20}}},
                 {"a1": {"b1": {"c1": 10, "c2": 0}}},
-                {"a1": {"b1": {"c1": 0, "c2": 20}}},
+                {"a1": {"b1": {"c1": BigInt(0), "c2": BigInt(20)}}},
             ),
             (
                 {"a1": {"b1": {"c1": 10, "c2": 20}, "b2": {"d1": 5, "d4": 20}}},
                 {"a1": {"b1": {"c1": 5, "c2": 0}}},
-                {"a1": {"b1": {"c1": 5, "c2": 20}, "b2": {"d1": 5, "d4": 20}}},
+                {"a1": {"b1": {"c1": BigInt(5), "c2": BigInt(20)}, "b2": {"d1": BigInt(5), "d4": BigInt(20)}}},
             ),
             (
                 {"a1": {"b1": {"c1": 10, "c2": 20}}},
                 {"a1": {"b1": {"c1": 1}}},
-                {"a1": {"b1": {"c1": 9, "c2": 20}}},
+                {"a1": {"b1": {"c1": BigInt(9), "c2": BigInt(20)}}},
             ),
             (
                 {"a1": {"b1": {"c1": 10}}},
                 {"a1": {"b1": {"c1": 1, "c2": 20}}},
-                {"a1": {"b1": {"c1": 9, "c2": 0}}},
+                {"a1": {"b1": {"c1": BigInt(9), "c2": BigInt(0)}}},
             ),
         ],
     )
