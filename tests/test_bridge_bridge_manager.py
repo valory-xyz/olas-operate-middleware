@@ -53,20 +53,21 @@ from tests.constants import OPERATE_TEST
 COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
     "polygon": "polygon-pos",
-    "arbitrum": "arbitrum-one",
-    "optimism": "optimism-ethereum",
+    "arbitrum_one": "arbitrum-one",
+    "optimism": "optimistic-ethereum",
     "binance": "binance-smart-chain",
     "avalanche": "avalanche",
     "fantom": "fantom",
     "base": "base",
     "mode": "mode",
     "gnosis": "xdai",
+    "celo": "celo",
 }
 
 COINGECKO_NATIVE_IDS = {
     "ethereum": "ethereum",
-    "polygon": "matic-network",
-    "arbitrum": "ethereum",
+    "polygon": "polygon-ecosystem-token",
+    "arbitrum_one": "ethereum",
     "optimism": "ethereum",
     "binance": "binancecoin",
     "avalanche": "avalanche-2",
@@ -74,6 +75,7 @@ COINGECKO_NATIVE_IDS = {
     "base": "ethereum",
     "mode": "ethereum",
     "gnosis": "xdai",
+    "celo": "celo",
 }
 
 
