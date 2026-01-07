@@ -27,8 +27,8 @@ from pathlib import Path
 import pytest
 from deepdiff import DeepDiff
 
-from operate.serialization import BigInt
 import operate.utils as utils
+from operate.serialization import BigInt
 from operate.utils import (
     SingletonMeta,
     concurrent_execute,
@@ -117,7 +117,12 @@ class TestUtils:
             (
                 {"a1": {"b1": {"c1": 10, "c2": 20}, "b2": {"d1": 5, "d4": 20}}},
                 {"a1": {"b1": {"c1": 5, "c2": 0}}},
-                {"a1": {"b1": {"c1": BigInt(5), "c2": BigInt(20)}, "b2": {"d1": BigInt(5), "d4": BigInt(20)}}},
+                {
+                    "a1": {
+                        "b1": {"c1": BigInt(5), "c2": BigInt(20)},
+                        "b2": {"d1": BigInt(5), "d4": BigInt(20)},
+                    }
+                },
             ),
             (
                 {"a1": {"b1": {"c1": 10, "c2": 20}}},
