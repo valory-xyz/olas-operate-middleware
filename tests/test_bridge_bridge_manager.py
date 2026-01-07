@@ -45,7 +45,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
-from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.operate_types import Chain, LedgerType
 
 from tests.constants import OPERATE_TEST
 
@@ -186,9 +186,9 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {"gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}}
-            ),
+            "balances": {
+                "gnosis": {wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}}
+            },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
@@ -208,20 +208,20 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
@@ -291,26 +291,22 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                    },
-                    "gnosis": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
-                    },
-                }
-            ),
-            "bridge_refill_requirements": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                    },
-                    "gnosis": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
-                    },
-                }
-            ),
+            "balances": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", USDC[Chain.ETHEREUM]: "0"}
+                },
+                "gnosis": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}
+                },
+            },
+            "bridge_refill_requirements": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", USDC[Chain.ETHEREUM]: "0"}
+                },
+                "gnosis": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}
+                },
+            },
             "bridge_request_status": [
                 {
                     "eta": None,
@@ -329,20 +325,20 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
@@ -426,13 +422,11 @@ class TestBridgeManager:
 
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
-                    }
+            "balances": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.ETHEREUM]: "0"}
                 }
-            ),
+            },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
@@ -452,19 +446,25 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["ethereum"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["ethereum"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["ethereum"][wallet_address][OLAS[Chain.ETHEREUM]] == 0
+            brr["balances"]["ethereum"][wallet_address][OLAS[Chain.ETHEREUM]] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["bridge_refill_requirements"]["ethereum"][wallet_address][ZERO_ADDRESS]
+            int(
+                brr["bridge_refill_requirements"]["ethereum"][wallet_address][
+                    ZERO_ADDRESS
+                ]
+            )
             > 0
         ), "Wrong refill requirements."
         assert (
-            brr["bridge_refill_requirements"]["ethereum"][wallet_address][
-                OLAS[Chain.ETHEREUM]
-            ]
+            int(
+                brr["bridge_refill_requirements"]["ethereum"][wallet_address][
+                    OLAS[Chain.ETHEREUM]
+                ]
+            )
             > 0
         ), "Wrong refill requirements."
         assert not DeepDiff(
@@ -736,7 +736,9 @@ class TestBridgeManager:
 
             print(f"{refill_amount=}")
 
-            quoted_from_cost_usd = refill_amount * from_price_usd / (10**from_decimals)
+            quoted_from_cost_usd = (
+                int(refill_amount) * from_price_usd / (10**from_decimals)
+            )
             expected_to_cost_usd = amount_unit * to_price_usd
             print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")
             print(f"Quoted cost on {from_chain}: {quoted_from_cost_usd}")

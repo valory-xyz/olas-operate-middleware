@@ -309,6 +309,20 @@ class ChainAmounts(dict[str, dict[str, dict[str, BigInt]]]):
         """Return JSON representation with amounts as strings."""
         return serialize(self)
 
+    @staticmethod
+    def from_json(obj: dict) -> "ChainAmounts":
+        """Create ChainAmounts from JSON representation."""
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
+
+        for chain, addresses in obj.items():
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    result.setdefault(chain, {}).setdefault(address, {})[asset] = (
+                        BigInt(amount)
+                    )
+
+        return ChainAmounts(result)
+
     @classmethod
     def shortfalls(
         cls, requirements: "ChainAmounts", balances: "ChainAmounts"
