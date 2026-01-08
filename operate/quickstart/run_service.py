@@ -557,6 +557,9 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 service = manager.update(
                     service_config_id=service["service_config_id"],
                     service_template=template,
+                    allow_different_service_public_id=template.get(
+                        "allow_different_service_public_id", False
+                    ),
                 )
 
             for env_var_name, env_var_data in template["env_variables"].items():
