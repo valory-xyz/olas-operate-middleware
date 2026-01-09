@@ -566,6 +566,9 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 if env_var_name not in service.env_variables:
                     service.env_variables[env_var_name] = env_var_data
 
+                if env_var_data["provision_type"] == ServiceEnvProvisionType.FIXED:
+                    service.env_variables[env_var_name]["value"] = env_var_data["value"]
+
             service.update_user_params_from_template(service_template=template)
             service.store()
             break
