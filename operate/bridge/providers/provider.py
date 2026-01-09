@@ -44,6 +44,7 @@ from operate.constants import (
 from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.wallet.master import MasterWalletManager
 
 
@@ -256,16 +257,16 @@ class Provider(ABC):
                 {
                     from_chain: {
                         from_address: {
-                            ZERO_ADDRESS: 0,
-                            from_token: 0,
+                            ZERO_ADDRESS: BigInt(0),
+                            from_token: BigInt(0),
                         }
                     }
                 }
             )
 
-        total_native = 0
-        total_gas_fees = 0
-        total_token = 0
+        total_native = BigInt(0)
+        total_gas_fees = BigInt(0)
+        total_token = BigInt(0)
 
         for tx_label, tx in txs:
             self.logger.debug(
@@ -273,8 +274,8 @@ class Provider(ABC):
             )
             update_tx_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
-            gas_fees = tx.get(gas_key, 0) * tx["gas"]
-            tx_value = int(tx.get("value", 0))
+            gas_fees = BigInt(tx.get(gas_key, 0) * tx["gas"])
+            tx_value = BigInt(int(tx.get("value", 0)))
             total_gas_fees += gas_fees
             total_native += tx_value + gas_fees
 
@@ -290,7 +291,7 @@ class Provider(ABC):
                 "data", ""
             ).startswith(ERC20_APPROVE_SELECTOR):
                 try:
-                    amount = int(tx["data"][-64:], 16)
+                    amount = BigInt(tx["data"][-64:], 16)
                     total_token += amount
                 except Exception as e:
                     raise RuntimeError("Malformed ERC20 approve transaction.") from e

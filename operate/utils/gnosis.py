@@ -41,6 +41,7 @@ from operate.constants import (
 )
 from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
+from operate.serialization import BigInt
 
 
 logger = setup_logger(name="operate.utils.gnosis")
@@ -572,7 +573,7 @@ def get_asset_balance(
     asset_address: str,
     address: str,
     raise_on_invalid_address: bool = True,
-) -> int:
+) -> BigInt:
     """
     Get the balance of a native asset or ERC20 token.
 
@@ -581,12 +582,12 @@ def get_asset_balance(
     if not Web3.is_address(address):
         if raise_on_invalid_address:
             raise ValueError(f"Invalid address: {address}")
-        return 0
+        return BigInt(0)
 
     try:
         if asset_address == ZERO_ADDRESS:
-            return ledger_api.get_balance(address, raise_on_try=True)
-        return (
+            return BigInt(ledger_api.get_balance(address, raise_on_try=True))
+        return BigInt(
             registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
                 contract_address=asset_address,
@@ -605,13 +606,13 @@ def get_assets_balances(
     asset_addresses: t.Set[str],
     addresses: t.Set[str],
     raise_on_invalid_address: bool = True,
-) -> t.Dict[str, t.Dict[str, int]]:
+) -> t.Dict[str, t.Dict[str, BigInt]]:
     """
     Get the balances of a list of native assets or ERC20 tokens.
 
     If asset address is a zero address, return the native balance.
     """
-    output: t.Dict[str, t.Dict[str, int]] = {}
+    output: t.Dict[str, t.Dict[str, BigInt]] = {}
 
     for asset, address in itertools.product(asset_addresses, addresses):
         output.setdefault(address, {})[asset] = get_asset_balance(

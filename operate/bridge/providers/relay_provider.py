@@ -101,6 +101,15 @@ RELAY_DEFAULT_GAS = {
         "swap": 400_000,
         "send": 1,
     },
+    Chain.ARBITRUM_ONE: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
 }
 
 
