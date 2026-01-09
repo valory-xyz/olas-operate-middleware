@@ -1114,6 +1114,7 @@ class ServiceManager:
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
+                is_initial_funding = False
                 is_recovery_module_enabled = (
                     registry_contracts.gnosis_safe.is_module_enabled(
                         ledger_api=sftxb.ledger_api,
@@ -1125,12 +1126,22 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
             self.logger.info(f"{is_recovery_module_enabled=}")
 
-            messages = sftxb.get_deploy_data_from_safe(
-                service_id=chain_data.token,
-                reuse_multisig=reuse_multisig,
-                master_safe=safe,
-                use_recovery_module=is_recovery_module_enabled,
-            )
+            use_polysafe = service.home_chain == Chain.POLYGON.value  # TODO: decide the gating mechanism
+            self.logger.info(f"{use_polysafe=}")
+            if use_polysafe:
+                messages = sftxb.get_deploy_poly_safe_data_from_safe(
+                    service_id=chain_data.token,
+                    master_safe=safe,
+                    crypto=self.keys_manager.get_crypto_instance(service.agent_addresses[0]),
+                    reuse_multisig=reuse_multisig,
+                )
+            else:
+                messages = sftxb.get_deploy_data_from_safe(
+                    service_id=chain_data.token,
+                    reuse_multisig=reuse_multisig,
+                    master_safe=safe,
+                    use_recovery_module=is_recovery_module_enabled,
+                )
             tx = sftxb.new_tx()
             for message in messages:
                 tx.add(message)

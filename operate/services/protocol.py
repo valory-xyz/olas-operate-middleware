@@ -43,12 +43,15 @@ from autonomy.chain.constants import (
     MULTISEND_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
+    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
+    POLY_SAFE_SAME_ADDRESS_WITH_RECOVERY_MODULE_CONTRACT
 )
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
+    get_poly_safe_deployment_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -1463,6 +1466,58 @@ class EthSafeTxBuilder(_ChainUtil):
                 gnosis_safe_multisig = ContractConfigs.get(
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
+
+        deploy_data = self.service_manager_instance.encode_abi(
+            abi_element_identifier="deploy",
+            args=[
+                service_id,
+                gnosis_safe_multisig,
+                deployment_payload,
+            ],
+        )
+        deploy_message = {
+            "to": self.service_manager_address,
+            "data": deploy_data[2:],
+            "operation": MultiSendOperation.CALL,
+            "value": 0,
+        }
+        if approve_hash_message is None:
+            return [deploy_message]
+        return [approve_hash_message, deploy_message]
+
+    def get_deploy_poly_safe_data_from_safe(
+        self,
+        service_id: int,
+        master_safe: str,
+        crypto: Crypto,
+        reuse_multisig: bool = False,
+    ) -> t.List[t.Dict[str, t.Any]]:
+        approve_hash_message = None
+        if reuse_multisig:
+            (
+                _deployment_payload,
+                error,
+            ) = get_reuse_multisig_with_recovery_from_safe_payload(
+                ledger_api=self.ledger_api,
+                chain_type=self.chain_type,
+                service_id=service_id,
+                master_safe=master_safe,
+            )
+            if _deployment_payload is None:
+                raise ValueError(error)
+            deployment_payload = _deployment_payload
+            gnosis_safe_multisig = ContractConfigs.get(
+                POLY_SAFE_SAME_ADDRESS_WITH_RECOVERY_MODULE_CONTRACT.name
+            ).contracts[self.chain_type]
+        else:
+            deployment_payload = get_poly_safe_deployment_payload(
+                ledger_api=self.ledger_api,
+                chain_type=self.chain_type,
+                crypto=crypto,
+            )
+            gnosis_safe_multisig = ContractConfigs.get(
+                POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
+            ).contracts[self.chain_type]
 
         deploy_data = self.service_manager_instance.encode_abi(
             abi_element_identifier="deploy",
