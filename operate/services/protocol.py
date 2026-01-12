@@ -44,7 +44,6 @@ from autonomy.chain.constants import (
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
     POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
-    POLY_SAFE_SAME_ADDRESS_WITH_RECOVERY_MODULE_CONTRACT
 )
 from autonomy.chain.metadata import publish_metadata
 from autonomy.chain.service import (
@@ -1507,7 +1506,7 @@ class EthSafeTxBuilder(_ChainUtil):
                 raise ValueError(error)
             deployment_payload = _deployment_payload
             gnosis_safe_multisig = ContractConfigs.get(
-                POLY_SAFE_SAME_ADDRESS_WITH_RECOVERY_MODULE_CONTRACT.name
+                RECOVERY_MODULE_CONTRACT.name  # Do not use POLY_SAFE_SAME_ADDRESS_WITH_RECOVERY_MODULE_CONTRACT here
             ).contracts[self.chain_type]
         else:
             deployment_payload = get_poly_safe_deployment_payload(
