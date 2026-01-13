@@ -34,6 +34,7 @@ from pathlib import Path
 from threading import Lock
 
 from operate.constants import DEFAULT_TIMEOUT
+from operate.serialization import BigInt
 
 
 logger = logging.getLogger(__name__)
@@ -118,7 +119,7 @@ def subtract_dicts(
                 va if isinstance(va, dict) else {}, vb if isinstance(vb, dict) else {}
             )
         else:
-            result[key] = max((va or 0) - (vb or 0), 0)  # type: ignore
+            result[key] = BigInt(max((va or 0) - (vb or 0), 0))  # type: ignore
     return result
 
 

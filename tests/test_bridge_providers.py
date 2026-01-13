@@ -57,6 +57,7 @@ from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.serialization import BigInt
 
 from tests.constants import OPERATE_TEST
 
@@ -233,7 +234,7 @@ class TestNativeBridgeProvider:
                 "ethereum": {
                     wallet_address: {
                         ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                        OLAS[Chain.ETHEREUM]: 1000000000000000000,
+                        OLAS[Chain.ETHEREUM]: BigInt(1000000000000000000),
                     }
                 }
             }
@@ -462,7 +463,10 @@ class TestProvider:
         expected_br = ChainAmounts(
             {
                 Chain.ETHEREUM.value: {
-                    wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
+                    wallet_address: {
+                        ZERO_ADDRESS: BigInt(0),
+                        OLAS[Chain.ETHEREUM]: BigInt(0),
+                    }
                 }
             }
         )
@@ -603,7 +607,14 @@ class TestProvider:
 
         br = provider.requirements(provider_request)
         expected_br = ChainAmounts(
-            {"gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}}
+            {
+                "gnosis": {
+                    wallet_address: {
+                        ZERO_ADDRESS: BigInt(0),
+                        OLAS[Chain.GNOSIS]: BigInt(0),
+                    }
+                }
+            }
         )
         diff = DeepDiff(br, expected_br)
         if diff:
