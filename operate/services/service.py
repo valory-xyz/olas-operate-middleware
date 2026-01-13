@@ -97,6 +97,7 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
 from operate.utils import unrecoverable_delete
@@ -1283,7 +1284,7 @@ class Service(LocalResource):
                 funding_requests[chain_str].setdefault(address, {})
                 for asset, amounts in assets.items():
                     try:
-                        funding_requests[chain_str][address][asset] = int(
+                        funding_requests[chain_str][address][asset] = BigInt(
                             amounts["deficit"]
                         )
                     except (ValueError, TypeError):

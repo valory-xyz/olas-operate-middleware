@@ -25,6 +25,7 @@ from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import ChainAmounts
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 
 
 SETTINGS_JSON_VERSION = 1
@@ -40,7 +41,7 @@ class Settings(LocalResource):
     _file = SETTINGS_JSON
 
     version: int
-    eoa_topups: Dict[str, Dict[str, int]]
+    eoa_topups: Dict[str, Dict[str, BigInt]]
 
     def __init__(self, path: Optional[Path] = None, **kwargs: Any) -> None:
         """Initialize settings."""
@@ -60,11 +61,13 @@ class Settings(LocalResource):
 
     def get_eoa_topups(self, with_safe: bool = False) -> ChainAmounts:
         """Get the EOA topups."""
-        return (
+        return ChainAmounts(
             self.eoa_topups
             if with_safe
             else {
-                chain: {asset: amount * 2 for asset, amount in asset_amount.items()}
+                chain: {
+                    asset: BigInt(amount * 2) for asset, amount in asset_amount.items()
+                }
                 for chain, asset_amount in self.eoa_topups.items()
             }
         )
