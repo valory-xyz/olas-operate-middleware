@@ -850,8 +850,6 @@ class ServiceManager:
             )
         )
 
-        is_update = not is_first_mint  # TODO remove
-
         self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
