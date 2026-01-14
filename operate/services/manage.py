@@ -850,6 +850,8 @@ class ServiceManager:
             )
         )
 
+        is_update = not is_first_mint  # TODO remove
+
         self.logger.info(f"{chain_data.token=}")
         self.logger.info(f"{user_params.use_staking=}")
         self.logger.info(f"{current_staking_program=}")
@@ -1126,26 +1128,20 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
             self.logger.info(f"{is_recovery_module_enabled=}")
 
-            use_polysafe = (
+            use_poly_safe = (
                 service.home_chain == Chain.POLYGON.value
             )  # TODO: decide the gating mechanism
-            self.logger.info(f"{use_polysafe=}")
-            if use_polysafe:
-                messages = sftxb.get_deploy_poly_safe_data_from_safe(
-                    service_id=chain_data.token,
-                    master_safe=safe,
-                    crypto=self.keys_manager.get_crypto_instance(
-                        service.agent_addresses[0]
-                    ),
-                    reuse_multisig=reuse_multisig,
-                )
-            else:
-                messages = sftxb.get_deploy_data_from_safe(
-                    service_id=chain_data.token,
-                    reuse_multisig=reuse_multisig,
-                    master_safe=safe,
-                    use_recovery_module=is_recovery_module_enabled,
-                )
+            self.logger.info(f"{use_poly_safe=}")
+            messages = sftxb.get_deploy_data_from_safe(
+                service_id=chain_data.token,
+                reuse_multisig=reuse_multisig,
+                master_safe=safe,
+                use_recovery_module=is_recovery_module_enabled,
+                use_poly_safe=use_poly_safe,
+                crypto=self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                ),
+            )
             tx = sftxb.new_tx()
             for message in messages:
                 tx.add(message)
