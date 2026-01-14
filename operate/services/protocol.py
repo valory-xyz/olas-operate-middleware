@@ -1418,7 +1418,7 @@ class EthSafeTxBuilder(_ChainUtil):
         reuse_multisig: bool = False,
         use_recovery_module: bool = True,
         use_poly_safe: bool = False,
-        crypto: t.Optional[Crypto] = None,
+        agent_eoa_crypto: t.Optional[Crypto] = None,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
         approve_hash_message = None
@@ -1468,13 +1468,13 @@ class EthSafeTxBuilder(_ChainUtil):
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
             elif use_recovery_module and use_poly_safe:
-                if not crypto:
+                if not agent_eoa_crypto:
                     raise ValueError("Crypto object must be provided for Poly Safe.")
 
                 deployment_payload = get_poly_safe_deployment_payload(
                     ledger_api=self.ledger_api,
                     chain_type=self.chain_type,
-                    crypto=crypto,
+                    crypto=agent_eoa_crypto,
                 )
                 gnosis_safe_multisig = ContractConfigs.get(
                     POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name

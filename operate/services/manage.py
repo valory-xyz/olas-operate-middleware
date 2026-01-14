@@ -1138,7 +1138,7 @@ class ServiceManager:
                 master_safe=safe,
                 use_recovery_module=is_recovery_module_enabled,
                 use_poly_safe=use_poly_safe,
-                crypto=self.keys_manager.get_crypto_instance(
+                agent_eoa_crypto=self.keys_manager.get_crypto_instance(
                     service.agent_addresses[0]
                 ),
             )
