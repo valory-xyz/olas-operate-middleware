@@ -77,6 +77,7 @@ from operate.constants import (
 )
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
     AgentRelease,
@@ -1200,10 +1201,13 @@ class Service(LocalResource):
 
         return amounts
 
-    def get_balances(self) -> ChainAmounts:
-        """Get balances of the agent addresses and service safe."""
+    def get_balances(self, unify_wrapped_native_tokens: bool = True) -> ChainAmounts:
+        """Get balances of the agent addresses and service safe.
+
+        :param unify_wrapped_native_tokens: Whether to consider wrapped native tokens as native tokens.
+        """
         initial_funding_amounts = self.get_initial_funding_amounts()
-        return ChainAmounts(
+        absolute_balances = ChainAmounts(
             {
                 chain_str: {
                     address: {
@@ -1222,6 +1226,27 @@ class Service(LocalResource):
                 for chain_str, addresses in initial_funding_amounts.items()
             }
         )
+        if unify_wrapped_native_tokens:
+            for chain_str, addresses in absolute_balances.items():
+                chain = Chain.from_string(chain_str)
+                wrapped_asset = WRAPPED_NATIVE_ASSET[chain]
+                for address, assets in addresses.items():
+                    if ZERO_ADDRESS in assets or wrapped_asset in assets:
+                        if ZERO_ADDRESS not in assets:
+                            assets[ZERO_ADDRESS] = 0
+
+                    if wrapped_asset in assets:
+                        assets[ZERO_ADDRESS] += assets[wrapped_asset]
+                        del assets[wrapped_asset]
+                    else:
+                        assets[ZERO_ADDRESS] += get_asset_balance(
+                            ledger_api=get_default_ledger_api(chain),
+                            asset_address=wrapped_asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+
+        return absolute_balances
 
     def get_funding_requests(self) -> ChainAmounts:
         """Get funding amounts requested by the agent."""
