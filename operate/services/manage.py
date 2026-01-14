@@ -30,6 +30,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 import requests
+from aea.configurations.data_types import PublicId
 from aea.helpers.base import IPFSHash
 from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
@@ -45,6 +46,7 @@ from operate.constants import (
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
+    POLY_SAFE_SERVICE_NAMES,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
@@ -1126,9 +1128,9 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
             self.logger.info(f"{is_recovery_module_enabled=}")
 
-            use_poly_safe = (
-                service.home_chain == Chain.POLYGON.value
-            )  # TODO: decide the gating mechanism
+            service_public_id = PublicId.from_str(service.service_public_id())
+            use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+
             self.logger.info(f"{use_poly_safe=}")
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
