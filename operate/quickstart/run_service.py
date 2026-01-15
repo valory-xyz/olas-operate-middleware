@@ -46,6 +46,7 @@ from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
+    ChainAmounts,
     LedgerType,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -566,6 +567,9 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 if env_var_name not in service.env_variables:
                     service.env_variables[env_var_name] = env_var_data
 
+                if env_var_data["provision_type"] == ServiceEnvProvisionType.FIXED:
+                    service.env_variables[env_var_name]["value"] = env_var_data["value"]
+
             service.update_user_params_from_template(service_template=template)
             service.store()
             break
@@ -646,7 +650,9 @@ def _ask_funds_from_requirements(
     )
 
     if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
-        for chain_name, balances in requirements["balances"].items():
+        for chain_name, balances in ChainAmounts.from_json(
+            requirements["balances"]
+        ).items():
             ledger_api = wallet.ledger_api(
                 chain=Chain(chain_name),
                 rpc=service.chain_configs[chain_name].ledger_config.rpc,
@@ -659,17 +665,19 @@ def _ask_funds_from_requirements(
 
         return True
 
-    for chain_name, chain_requirements in requirements["refill_requirements"].items():
+    for chain_name, chain_requirements in ChainAmounts.from_json(
+        requirements["refill_requirements"]
+    ).items():
         chain = Chain(chain_name)
         ledger_api = wallet.ledger_api(
             chain=chain,
             rpc=service.chain_configs[chain_name].ledger_config.rpc,
         )
-        for wallet_address, requirements in chain_requirements.items():
+        for wallet_address, _requirements in chain_requirements.items():
             if wallet_address in ("master_safe", "service_safe"):
                 continue  # we can't ask funds in placeholder addresses
 
-            for asset_address, requirement in requirements.items():
+            for asset_address, requirement in _requirements.items():
                 ask_funds_in_address(
                     ledger_api=ledger_api,
                     chain=chain_name,

@@ -48,6 +48,7 @@ from operate.ledger import (
 from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
@@ -211,7 +212,7 @@ class MasterWallet(LocalResource):
 
     def get_balance(
         self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True
-    ) -> int:
+    ) -> BigInt:
         """Get wallet balance on a given chain."""
         if from_safe:
             if chain not in self.safes:
@@ -770,7 +771,7 @@ class EthereumMasterWallet(MasterWallet):
         rpc = None
         wallet_json = self.json
 
-        balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        balances: t.Dict[str, t.Dict[str, t.Dict[str, BigInt]]] = {}
         owner_sets = set()
         for chain, safe in self.safes.items():
             chain_str = chain.value
@@ -784,11 +785,11 @@ class EthereumMasterWallet(MasterWallet):
 
             assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
             for asset in assets:
-                balances[chain_str][self.address][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=False
+                balances[chain_str][self.address][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=False)
                 )
-                balances[chain_str][safe][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=True
+                balances[chain_str][safe][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=True)
                 )
             wallet_json["safes"][chain_str] = {
                 safe: {

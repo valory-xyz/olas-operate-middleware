@@ -32,6 +32,7 @@ from operate.constants import MSG_INVALID_PASSWORD, ZERO_ADDRESS
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.serialization import BigInt
 from operate.utils.gnosis import (
     add_owner,
     get_asset_balance,
@@ -122,9 +123,13 @@ class TestWalletRecovery(OnTestnet):
         recovery_requirements: t.Dict[str, t.Any],
         expected_is_refill_required: bool = False,
     ) -> None:
-        balances = recovery_requirements["balances"]
-        total_requirements = recovery_requirements["total_requirements"]
-        refill_requirements = recovery_requirements["refill_requirements"]
+        balances = ChainAmounts.from_json(recovery_requirements["balances"])
+        total_requirements = ChainAmounts.from_json(
+            recovery_requirements["total_requirements"]
+        )
+        refill_requirements = ChainAmounts.from_json(
+            recovery_requirements["refill_requirements"]
+        )
 
         expected_balances = ChainAmounts()
         expected_requirements = ChainAmounts()
@@ -149,7 +154,7 @@ class TestWalletRecovery(OnTestnet):
                 )
                 expected_requirements.setdefault(chain_str, {}).setdefault(
                     backup_owner, {}
-                ).setdefault(ZERO_ADDRESS, 0)
+                ).setdefault(ZERO_ADDRESS, BigInt(0))
 
                 ledger_api = get_default_ledger_api(chain)
                 owners = get_owners(ledger_api=ledger_api, safe=safe)
@@ -176,9 +181,9 @@ class TestWalletRecovery(OnTestnet):
         )
 
         expected_recovery_requirements = {
-            "balances": dict(expected_balances),
-            "total_requirements": dict(expected_requirements),
-            "refill_requirements": dict(expected_refill_requirements),
+            "balances": expected_balances.json,
+            "total_requirements": expected_requirements.json,
+            "refill_requirements": expected_refill_requirements.json,
             "is_refill_required": expected_is_refill_required,
             "pending_backup_owner_swaps": expected_pending_bo_swaps,
         }

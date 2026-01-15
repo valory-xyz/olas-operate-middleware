@@ -58,6 +58,7 @@ from operate.ledger.profiles import (
     get_asset_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
+from operate.serialization import BigInt
 from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
 from operate.utils import concurrent_execute
@@ -253,23 +254,23 @@ class FundingManager:
             user_params = chain_config.chain_data.user_params
             number_of_agents = len(service.agent_addresses)
 
-            requirements: defaultdict = defaultdict(int)
+            requirements: defaultdict = defaultdict(BigInt)
 
             if (
                 not user_params.use_staking
                 or not user_params.staking_program_id
                 or user_params.staking_program_id == NO_STAKING_PROGRAM_ID
             ):
-                protocol_agent_bonds = (
+                protocol_agent_bonds = BigInt(
                     max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
                 )
                 protocol_security_deposit = max(
                     MIN_SECURITY_DEPOSIT, user_params.cost_of_bond
                 )
-                staking_agent_bonds = 0
-                staking_security_deposit = 0
+                staking_agent_bonds = BigInt(0)
+                staking_security_deposit = BigInt(0)
             else:
-                protocol_agent_bonds = MIN_AGENT_BOND * number_of_agents
+                protocol_agent_bonds = BigInt(MIN_AGENT_BOND * number_of_agents)
                 protocol_security_deposit = MIN_SECURITY_DEPOSIT
 
                 staking_manager = StakingManager(chain=Chain(chain))
@@ -279,10 +280,10 @@ class FundingManager:
                     ),
                 )
 
-                staking_agent_bonds = (
+                staking_agent_bonds = BigInt(
                     staking_params["min_staking_deposit"] * number_of_agents
                 )
-                staking_security_deposit = staking_params["min_staking_deposit"]
+                staking_security_deposit = BigInt(staking_params["min_staking_deposit"])
                 staking_token = staking_params["staking_token"]
                 requirements[staking_token] += staking_agent_bonds
                 requirements[staking_token] += staking_security_deposit
@@ -290,7 +291,7 @@ class FundingManager:
                 for token, amount in staking_params[
                     "additional_staking_tokens"
                 ].items():
-                    requirements[token] = amount
+                    requirements[token] = BigInt(amount)
 
             requirements[ZERO_ADDRESS] += protocol_agent_bonds
             requirements[ZERO_ADDRESS] += protocol_security_deposit
@@ -316,7 +317,7 @@ class FundingManager:
         protocol_bonded_assets = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
-            bonded_assets: defaultdict = defaultdict(int)
+            bonded_assets: defaultdict = defaultdict(BigInt)
             ledger_config = chain_config.ledger_config
             user_params = chain_config.chain_data.user_params
 
@@ -366,7 +367,8 @@ class FundingManager:
             )
 
             # Determine bonded native amount
-            security_deposit = service_info[0]
+            operator_balance = BigInt(operator_balance)
+            security_deposit = BigInt(service_info[0])
             service_state = service_info[6]
             agent_ids = service_info[7]
 
@@ -449,25 +451,25 @@ class FundingManager:
                 ),
             )
 
-            agent_bonds = 0
+            agent_bonds = BigInt(0)
             for agent_instances, agent_bond in zip(
                 agent_instances_and_bonds[: len(agent_ids)],
                 agent_instances_and_bonds[len(agent_ids) :],
             ):
                 num_agent_instances = agent_instances[0]
-                agent_bonds += num_agent_instances * agent_bond
+                agent_bonds += BigInt(num_agent_instances * agent_bond)
 
             if service_state == OnChainState.TERMINATED_BONDED:
                 num_agent_instances = service_info[5]
-                agent_bonds += num_agent_instances * token_bond
+                agent_bonds += BigInt(num_agent_instances * token_bond)
 
-            security_deposit = 0
+            security_deposit = BigInt(0)
             if (
                 OnChainState.ACTIVE_REGISTRATION
                 <= service_state
                 < OnChainState.TERMINATED_BONDED
             ):
-                security_deposit = security_deposits[1]
+                security_deposit = BigInt(security_deposits[1])
 
             bonded_assets[staking_params["staking_token"]] += agent_bonds
             bonded_assets[staking_params["staking_token"]] += security_deposit
@@ -476,7 +478,7 @@ class FundingManager:
                 for token, amount in staking_params[
                     "additional_staking_tokens"
                 ].items():
-                    bonded_assets[token] += amount
+                    bonded_assets[token] += BigInt(amount)
 
             protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
 
@@ -871,14 +873,14 @@ class FundingManager:
             allow_start_agent = False
 
         return {
-            "balances": balances,
-            "bonded_assets": protocol_bonded_assets,
-            "total_requirements": total_requirements,
-            "refill_requirements": refill_requirements,
-            "protocol_asset_requirements": protocol_asset_requirements,
+            "balances": balances.json,
+            "bonded_assets": protocol_bonded_assets.json,
+            "total_requirements": total_requirements.json,
+            "refill_requirements": refill_requirements.json,
+            "protocol_asset_requirements": protocol_asset_requirements.json,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": funding_requests,
+            "agent_funding_requests": funding_requests.json,
             "agent_funding_requests_cooldown": funding_requests_cooldown,
             "agent_funding_in_progress": funding_in_progress,
         }
