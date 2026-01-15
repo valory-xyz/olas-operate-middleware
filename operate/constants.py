@@ -86,4 +86,4 @@ MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
 MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
 MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
-POLY_SAFE_SERVICE_NAMES = frozenset(("polymarket_trader"))
+POLY_SAFE_SERVICE_NAMES = frozenset(("polymarket_trader",))
