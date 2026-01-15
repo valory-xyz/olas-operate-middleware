@@ -143,7 +143,7 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.POLYGON: {
         "polygon_beta_1": "0x9f1936f6afb5eaaa2220032cf5e265f2cc9511cc",
         "polygon_beta_2": "0x22d58680f643333f93205b956a4aa1dc203a16ad",
-        "polygon_beta_3": "0x8887c2852986e7cbac99b6065ffe53074a6bcc26", # Note: “Polygon Alpha 3” is a typo in apps — the correct name is Polygon Beta 3.
+        "polygon_beta_3": "0x8887c2852986e7cbac99b6065ffe53074a6bcc26",  # Note: “Polygon Alpha 3” is a typo in apps — the correct name is Polygon Beta 3.
     },
 }
 
