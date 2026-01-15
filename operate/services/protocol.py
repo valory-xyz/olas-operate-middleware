@@ -41,6 +41,7 @@ from autonomy.chain.constants import (
     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
     GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
+    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
@@ -49,6 +50,7 @@ from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
+    get_poly_safe_deployment_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -1408,12 +1410,14 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": cost_of_bond,
         }
 
-    def get_deploy_data_from_safe(
+    def get_deploy_data_from_safe(  # pylint: disable=too-many-arguments
         self,
         service_id: int,
         master_safe: str,
         reuse_multisig: bool = False,
         use_recovery_module: bool = True,
+        use_poly_safe: bool = False,
+        agent_eoa_crypto: t.Optional[Crypto] = None,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
         approve_hash_message = None
@@ -1452,12 +1456,28 @@ class EthSafeTxBuilder(_ChainUtil):
                     RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
         else:  # Deploy a new multisig
-            if not use_recovery_module:
+            if not use_recovery_module and not use_poly_safe:
                 deployment_payload = get_deployment_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
                 ).contracts[self.chain_type]
-            else:
+            elif use_recovery_module and use_poly_safe:
+                if not agent_eoa_crypto:
+                    raise ValueError("Crypto object must be provided for Poly Safe.")
+
+                deployment_payload = get_poly_safe_deployment_payload(
+                    ledger_api=self.ledger_api,
+                    chain_type=self.chain_type,
+                    crypto=agent_eoa_crypto,
+                )
+                gnosis_safe_multisig = ContractConfigs.get(
+                    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
+            elif not use_recovery_module and use_poly_safe:
+                raise ValueError(
+                    "Poly Safe deployment without recovery module is not supported."
+                )
+            else:  # Normal case: use_recovery_module and not use_poly_safe
                 deployment_payload = get_deployment_with_recovery_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
