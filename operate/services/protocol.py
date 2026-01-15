@@ -1410,7 +1410,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": cost_of_bond,
         }
 
-    def get_deploy_data_from_safe(
+    def get_deploy_data_from_safe(  # pylint: disable=too-many-arguments
         self,
         service_id: int,
         master_safe: str,
@@ -1461,11 +1461,6 @@ class EthSafeTxBuilder(_ChainUtil):
                 gnosis_safe_multisig = ContractConfigs.get(
                     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
                 ).contracts[self.chain_type]
-            elif use_recovery_module and not use_poly_safe:
-                deployment_payload = get_deployment_with_recovery_payload()
-                gnosis_safe_multisig = ContractConfigs.get(
-                    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
-                ).contracts[self.chain_type]
             elif use_recovery_module and use_poly_safe:
                 if not agent_eoa_crypto:
                     raise ValueError("Crypto object must be provided for Poly Safe.")
@@ -1482,6 +1477,11 @@ class EthSafeTxBuilder(_ChainUtil):
                 raise ValueError(
                     "Poly Safe deployment without recovery module is not supported."
                 )
+            else:  # Normal case: use_recovery_module and not use_poly_safe
+                deployment_payload = get_deployment_with_recovery_payload()
+                gnosis_safe_multisig = ContractConfigs.get(
+                    SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
 
         deploy_data = self.service_manager_instance.encode_abi(
             abi_element_identifier="deploy",
