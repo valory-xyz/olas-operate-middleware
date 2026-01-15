@@ -140,7 +140,11 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
         "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
     },
-    Chain.POLYGON: {},
+    Chain.POLYGON: {
+        "polygon_beta_1": "0x9F1936f6afB5EAaA2220032Cf5e265F2Cc9511Cc",
+        "polygon_beta_2": "0x22D58680F643333F93205B956a4Aa1dC203a16Ad",
+        "polygon_beta_3": "0x8887C2852986e7cbaC99B6065fFe53074A6BCC26",  # Note: “Polygon Alpha 3” is a typo in apps — the correct name is Polygon Beta 3.
+    },
 }
 
 
