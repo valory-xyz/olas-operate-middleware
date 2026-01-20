@@ -490,15 +490,13 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name]["value"] = (
+            template["env_variables"][env_var_name]["value"] = str(
                 config.user_provided_args[env_var_name]
             )
 
         # TODO: Handle it in a more generic way
         if (
-            template["env_variables"][env_var_name]["provision_type"]
-            == ServiceEnvProvisionType.COMPUTED
-            and "SUBGRAPH_API_KEY" in config.user_provided_args
+            "SUBGRAPH_API_KEY" in config.user_provided_args
             and "{SUBGRAPH_API_KEY}" in template["env_variables"][env_var_name]["value"]
         ):
             template["env_variables"][env_var_name]["value"] = template[
@@ -567,7 +565,10 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 if env_var_name not in service.env_variables:
                     service.env_variables[env_var_name] = env_var_data
 
-                if env_var_data["provision_type"] == ServiceEnvProvisionType.FIXED:
+                if env_var_data["provision_type"] in (
+                    ServiceEnvProvisionType.FIXED,
+                    ServiceEnvProvisionType.USER,
+                ):
                     service.env_variables[env_var_name]["value"] = env_var_data["value"]
 
             service.update_user_params_from_template(service_template=template)
