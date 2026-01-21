@@ -80,6 +80,8 @@ from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AchievementNotification,
+    AchievementsNotifications,
     AgentRelease,
     Chain,
     ChainAmounts,
@@ -1034,6 +1036,100 @@ class Service(LocalResource):
                 )  # TODO Use logger
 
         return dict(sorted(agent_performance.items()))
+
+    def get_achievements_notifications(
+        self, acknowledged: bool, not_acknowledged: bool
+    ) -> t.Dict:
+        """Return the achievements notifications"""
+
+        file = self.path / AchievementsNotifications._file
+        if not file.exists():
+            AchievementsNotifications(path=self.path).store()
+
+        achievements_notifications: AchievementsNotifications = t.cast(
+            AchievementsNotifications, AchievementsNotifications.load(self.path)
+        )
+
+        agent_achievements_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "achievements.json"
+        )
+
+        print(agent_achievements_json_path)
+
+        agent_achievements = {}
+        if agent_achievements_json_path.exists():
+            try:
+                with open(agent_achievements_json_path, "r", encoding="utf-8") as f:
+                    agent_achievements = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"Error reading file 'achievements.json': {e}")
+
+            save_changes = False
+            for achievement_id in agent_achievements:
+                if (
+                    achievement_id not in achievements_notifications.acknowledged
+                    and achievement_id
+                    not in achievements_notifications.not_acknowledged
+                ):
+                    achievements_notifications.not_acknowledged[achievement_id] = (
+                        AchievementNotification(
+                            achievement_id=achievement_id, acknowledgement_timestamp=0
+                        )
+                    )
+                    save_changes = True
+
+            if save_changes:
+                achievements_notifications.store()
+
+        output: t.Dict[str, t.Dict] = {}
+
+        if acknowledged:
+            for (
+                achievement_id,
+                achievement_notification,
+            ) in achievements_notifications.acknowledged.items():
+                output[achievement_id] = achievement_notification.json
+        if not_acknowledged:
+            for (
+                achievement_id,
+                achievement_notification,
+            ) in achievements_notifications.not_acknowledged.items():
+                output[achievement_id] = achievement_notification.json
+
+        for achievement_id, achievement_data in output.items():
+            if achievement_id in agent_achievements:
+                achievement_data.update(agent_achievements[achievement_id])
+
+        return dict(sorted(output.items()))
+
+    def acknowledge_achievement(self, achievement_id: str) -> bool:
+        """Acknowledge an achievement id"""
+
+        file = self.path / AchievementsNotifications._file
+        if not file.exists():
+            AchievementsNotifications(path=self.path).store()
+
+        achievements_notifications: AchievementsNotifications = t.cast(
+            AchievementsNotifications, AchievementsNotifications.load(self.path)
+        )
+
+        if achievement_id not in achievements_notifications.not_acknowledged:
+            return False
+
+        achievement_notification = achievements_notifications.not_acknowledged.pop(
+            achievement_id
+        )
+        achievement_notification.acknowledgement_timestamp = int(time.time())
+        achievements_notifications.acknowledged[achievement_id] = (
+            achievement_notification
+        )
+        achievements_notifications.store()
+        return True
 
     def update(
         self,

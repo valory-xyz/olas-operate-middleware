@@ -1066,6 +1066,67 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         deployment_json["healthcheck"] = service.get_latest_healthcheck()
         return JSONResponse(content=deployment_json)
 
+    @app.get("/api/v2/service/{service_config_id}/achievements")
+    async def _get_service_achievements(request: Request) -> JSONResponse:
+        """Get the service achievements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        acknowledged = (
+            request.query_params.get("acknowledged", "false").lower() == "true"
+        )
+        not_acknowledged = (
+            request.query_params.get("not_acknowledged", "true").lower() == "true"
+        )
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+
+        achievements_json = service.get_achievements_notifications(
+            acknowledged=acknowledged,
+            not_acknowledged=not_acknowledged,
+        )
+
+        return JSONResponse(content=achievements_json)
+
+    @app.post(
+        "/api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge"
+    )
+    async def _acknowledge_achievement(request: Request) -> JSONResponse:
+        """Update a service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+
+        achievement_id = request.path_params["achievement_id"]
+
+        ok = service.acknowledge_achievement(
+            achievement_id=achievement_id,
+        )
+
+        if not ok:
+            return JSONResponse(
+                content={
+                    "error": f"Failed to acknowledge achievement {achievement_id} for service {service_config_id}. Either non existent or already acknowledged."
+                },
+                status_code=HTTPStatus.NOT_FOUND,
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": f"Acknowledged achievement_id {achievement_id} for service {service_config_id} successfully.",
+            }
+        )
+
     @app.get("/api/v2/service/{service_config_id}/agent_performance")
     async def _get_agent_performance(request: Request) -> JSONResponse:
         """Get the service refill requirements."""

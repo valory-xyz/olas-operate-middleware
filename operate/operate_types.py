@@ -34,7 +34,11 @@ from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
 from typing_extensions import TypedDict
 
-from operate.constants import FERNET_KEY_LENGTH, NO_STAKING_PROGRAM_ID
+from operate.constants import (
+    ACHIEVEMENTS_NOTIFICATIONS_JSON,
+    FERNET_KEY_LENGTH,
+    NO_STAKING_PROGRAM_ID,
+)
 from operate.resource import LocalResource
 from operate.serialization import BigInt, serialize
 
@@ -218,6 +222,30 @@ class OnChainData(LocalResource):
     token: int
     multisig: str
     user_params: OnChainUserParams
+
+
+@dataclass
+class AchievementNotification(LocalResource):
+    """AchievementNotification"""
+
+    achievement_id: str
+    acknowledgement_timestamp: int
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "ChainConfig":
+        """Load the chain config."""
+        return super().from_json(obj)  # type: ignore
+
+
+@dataclass
+class AchievementsNotifications(LocalResource):
+    """AchievementsNotifications"""
+
+    path: Path
+    acknowledged: t.Dict[str, AchievementNotification] = field(default_factory=dict)
+    not_acknowledged: t.Dict[str, AchievementNotification] = field(default_factory=dict)
+
+    _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 
 
 @dataclass
