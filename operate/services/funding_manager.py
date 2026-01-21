@@ -388,7 +388,7 @@ class FundingManager:
             )
 
             if not staking_contract:
-                return dict(bonded_assets)
+                return ChainAmounts(bonded_assets)
 
             staking_manager = StakingManager(Chain(chain))
             staking_params = staking_manager.get_staking_params(

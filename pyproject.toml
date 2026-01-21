@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "olas-operate-middleware"
-version = "0.14.1"
+version = "0.14.2"
 description = ""
 authors = ["David Vilela <dvilelaf@gmail.com>", "Viraj Patel <vptl185@gmail.com>"]
 readme = "README.md"
@@ -19,11 +19,11 @@ operate = "operate.cli:main"
 
 [tool.poetry.dependencies]
 python = "<3.12,>=3.10"
-open-autonomy = "^0.21.6"
-open-aea-ledger-cosmos = "^2.0.6"
-open-aea-ledger-ethereum = "^2.0.6"
-open-aea-ledger-ethereum-flashbots = "^2.0.6"
-open-aea-cli-ipfs = "^2.0.6"
+open-autonomy = "^0.21.7"
+open-aea-ledger-cosmos = "^2.0.8"
+open-aea-ledger-ethereum = "^2.0.8"
+open-aea-ledger-ethereum-flashbots = "^2.0.8"
+open-aea-cli-ipfs = "^2.0.8"
 clea = "==0.1.0rc4"
 cytoolz = "==0.12.3"
 fastapi = "0.110.3"
