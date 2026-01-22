@@ -1030,10 +1030,9 @@ class Service(LocalResource):
                 if isinstance(data, dict):
                     agent_performance.update(data)
             except (json.JSONDecodeError, OSError) as e:
-                # Keep default values if file is invalid
-                print(
-                    f"Error reading file 'agent_performance.json': {e}"
-                )  # TODO Use logger
+                logger.warning(
+                    f"Cannot read file 'agent_performance.json': {e}"
+                )
 
         return dict(sorted(agent_performance.items()))
 
@@ -1061,8 +1060,6 @@ class Service(LocalResource):
             )
             / "achievements.json"
         )
-
-        print(agent_achievements_json_path)
 
         agent_achievements = {}
         if agent_achievements_json_path.exists():
