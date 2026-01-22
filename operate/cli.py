@@ -1108,12 +1108,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             )
         except KeyError as e:
             return JSONResponse(
-                content={"error": str(e)},
+                content={
+                    "error": f"Achievement {achievement_id} does not exist for service {service_config_id}."
+                },
                 status_code=HTTPStatus.NOT_FOUND,
             )
         except ValueError as e:
             return JSONResponse(
-                content={"error": str(e)},
+                content={
+                    "error": f"Achievement {achievement_id} was already acknowledged for service {service_config_id}."
+                },
                 status_code=HTTPStatus.BAD_REQUEST,
             )
 
