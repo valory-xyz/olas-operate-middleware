@@ -1030,22 +1030,17 @@ class Service(LocalResource):
                 if isinstance(data, dict):
                     agent_performance.update(data)
             except (json.JSONDecodeError, OSError) as e:
-                logger.warning(
-                    f"Cannot read file 'agent_performance.json': {e}"
-                )
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
         return dict(sorted(agent_performance.items()))
 
-    def get_achievements_notifications(
-        self, acknowledged: bool, not_acknowledged: bool
-    ) -> t.Dict:
-        """Return the achievements notifications"""
-
+    def _load_achievements_notifications(
+        self,
+    ) -> t.Tuple[AchievementsNotifications, t.Dict[str, t.Any]]:
         if not AchievementsNotifications.exists_at(self.path):
             AchievementsNotifications(
                 path=self.path,
-                acknowledged={},
-                not_acknowledged={},
+                notifications={},
             ).store()
 
         achievements_notifications: AchievementsNotifications = t.cast(
@@ -1061,7 +1056,7 @@ class Service(LocalResource):
             / "achievements.json"
         )
 
-        agent_achievements = {}
+        agent_achievements: t.Dict[str, t.Any] = {}
         if agent_achievements_json_path.exists():
             try:
                 with open(agent_achievements_json_path, "r", encoding="utf-8") as f:
@@ -1071,14 +1066,12 @@ class Service(LocalResource):
 
             save_changes = False
             for achievement_id in agent_achievements:
-                if (
-                    achievement_id not in achievements_notifications.acknowledged
-                    and achievement_id
-                    not in achievements_notifications.not_acknowledged
-                ):
-                    achievements_notifications.not_acknowledged[achievement_id] = (
+                if achievement_id not in achievements_notifications.notifications:
+                    achievements_notifications.notifications[achievement_id] = (
                         AchievementNotification(
-                            achievement_id=achievement_id, acknowledgement_timestamp=0
+                            achievement_id=achievement_id,
+                            acknowledged=False,
+                            acknowledgement_timestamp=0,
                         )
                     )
                     save_changes = True
@@ -1086,53 +1079,53 @@ class Service(LocalResource):
             if save_changes:
                 achievements_notifications.store()
 
+        return achievements_notifications, agent_achievements
+
+    def get_achievements_notifications(
+        self, include_acknowledged: bool
+    ) -> t.List[t.Dict]:
+        """Return the achievements notifications"""
+
+        achievements_notifications, agent_achievements = (
+            self._load_achievements_notifications()
+        )
+
         output: t.Dict[str, t.Dict] = {}
 
-        if acknowledged:
-            for (
-                achievement_id,
-                achievement_notification,
-            ) in achievements_notifications.acknowledged.items():
-                output[achievement_id] = achievement_notification.json
-        if not_acknowledged:
-            for (
-                achievement_id,
-                achievement_notification,
-            ) in achievements_notifications.not_acknowledged.items():
-                output[achievement_id] = achievement_notification.json
+        for (
+            achievement_id,
+            achievement_notification,
+        ) in achievements_notifications.notifications.items():
+            acknowledged = achievement_notification.acknowledged
+            if not acknowledged or (acknowledged and include_acknowledged):
+                if achievement_id in agent_achievements:
+                    output[achievement_id] = achievement_notification.json
+                    output[achievement_id].update(agent_achievements[achievement_id])
 
-        for achievement_id, achievement_data in output.items():
-            if achievement_id in agent_achievements:
-                achievement_data.update(agent_achievements[achievement_id])
+        return list(output.values())
 
-        return dict(sorted(output.items()))
-
-    def acknowledge_achievement(self, achievement_id: str) -> bool:
+    def acknowledge_achievement(self, achievement_id: str) -> None:
         """Acknowledge an achievement id"""
 
-        if not AchievementsNotifications.exists_at(self.path):
-            AchievementsNotifications(
-                path=self.path,
-                acknowledged={},
-                not_acknowledged={},
-            ).store()
+        achievements_notifications, _ = self._load_achievements_notifications()
 
-        achievements_notifications: AchievementsNotifications = t.cast(
-            AchievementsNotifications, AchievementsNotifications.load(self.path)
-        )
+        if achievement_id not in achievements_notifications.notifications:
+            raise KeyError(
+                f"Achievement {achievement_id} does not exist for service {self.service_config_id}."
+            )
 
-        if achievement_id not in achievements_notifications.not_acknowledged:
-            return False
-
-        achievement_notification = achievements_notifications.not_acknowledged.pop(
+        achievement_notification = achievements_notifications.notifications[
             achievement_id
-        )
+        ]
+
+        if achievement_notification.acknowledged:
+            raise ValueError(
+                f"Achievement {achievement_id} was already acknowledged for service {self.service_config_id}."
+            )
+
         achievement_notification.acknowledgement_timestamp = int(time.time())
-        achievements_notifications.acknowledged[achievement_id] = (
-            achievement_notification
-        )
+        achievement_notification.acknowledged = True
         achievements_notifications.store()
-        return True
 
     def update(
         self,

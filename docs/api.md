@@ -2157,8 +2157,7 @@ Get service achievements notifications.
 
 Query parameters:
 
-- `acknowledged` (boolean, optional, default: `false`): Include acknowledged achievements.
-- `not_acknowledged` (boolean, optional, default: `true`): Include not acknowledged achievements.
+- `include_acknowledged` (boolean, optional, default: `false`): Include acknowledged achievements.
 
 **Response (Success - 200):**
 
@@ -2166,11 +2165,13 @@ Query parameters:
 {
   "achievement_1": {
     "achievement_id": "achievement_1",
+    "acknowledged": false,
     "acknowledgement_timestamp": 0,
     "..."  # Achievement data
   },
   "achievement_2": {
     "achievement_id": "achievement_2",
+    "acknowledged": false,
     "acknowledgement_timestamp": 0,
     "..."  # Achievement data
   }
@@ -2198,11 +2199,11 @@ Acknowledge a service achievement.
 }
 ```
 
-**Response (Achievement not found or already acknowledged - 404):**
+**Response (Achievement already acknowledged - 400):**
 
 ```json
 {
-  "error": "Failed to acknowledge achievement achievement_1 for service service_123. Either non existent or already acknowledged."
+  "error": "Achievement achievement_1 was already acknowledged for service service_123."
 }
 ```
 
@@ -2214,6 +2215,13 @@ Acknowledge a service achievement.
 }
 ```
 
+**Response (Achievement not found - 404):**
+
+```json
+{
+  "error": "Achievement achievement_1 does not exist for service service_123."
+}
+```
 
 ## Bridge Management
 

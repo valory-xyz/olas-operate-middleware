@@ -229,6 +229,7 @@ class AchievementNotification(LocalResource):
     """AchievementNotification"""
 
     achievement_id: str
+    acknowledged: bool
     acknowledgement_timestamp: int
 
     @classmethod
@@ -242,8 +243,7 @@ class AchievementsNotifications(LocalResource):
     """AchievementsNotifications"""
 
     path: Path
-    acknowledged: t.Dict[str, AchievementNotification]
-    not_acknowledged: t.Dict[str, AchievementNotification]
+    notifications: t.Dict[str, AchievementNotification]
 
     _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 

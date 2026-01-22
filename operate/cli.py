@@ -1074,18 +1074,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         if not operate.service_manager().exists(service_config_id=service_config_id):
             return service_not_found_error(service_config_id=service_config_id)
 
-        acknowledged = (
-            request.query_params.get("acknowledged", "false").lower() == "true"
-        )
-        not_acknowledged = (
-            request.query_params.get("not_acknowledged", "true").lower() == "true"
+        include_acknowledged = (
+            request.query_params.get("include_acknowledged", "false").lower() == "true"
         )
 
         service = operate.service_manager().load(service_config_id=service_config_id)
 
         achievements_json = service.get_achievements_notifications(
-            acknowledged=acknowledged,
-            not_acknowledged=not_acknowledged,
+            include_acknowledged=include_acknowledged,
         )
 
         return JSONResponse(content=achievements_json)
@@ -1108,16 +1104,19 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         achievement_id = request.path_params["achievement_id"]
 
-        ok = service.acknowledge_achievement(
-            achievement_id=achievement_id,
-        )
-
-        if not ok:
+        try:
+            service.acknowledge_achievement(
+                achievement_id=achievement_id,
+            )
+        except KeyError as e:
             return JSONResponse(
-                content={
-                    "error": f"Failed to acknowledge achievement {achievement_id} for service {service_config_id}. Either non existent or already acknowledged."
-                },
+                content={"error": str(e)},
                 status_code=HTTPStatus.NOT_FOUND,
+            )
+        except ValueError as e:
+            return JSONResponse(
+                content={"error": str(e)},
+                status_code=HTTPStatus.BAD_REQUEST,
             )
 
         return JSONResponse(
