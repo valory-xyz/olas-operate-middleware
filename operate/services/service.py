@@ -80,6 +80,8 @@ from operate.ledger import get_default_ledger_api, get_default_rpc
 from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AchievementNotification,
+    AchievementsNotifications,
     AgentRelease,
     Chain,
     ChainAmounts,
@@ -1028,12 +1030,106 @@ class Service(LocalResource):
                 if isinstance(data, dict):
                     agent_performance.update(data)
             except (json.JSONDecodeError, OSError) as e:
-                # Keep default values if file is invalid
-                print(
-                    f"Error reading file 'agent_performance.json': {e}"
-                )  # TODO Use logger
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
         return dict(sorted(agent_performance.items()))
+
+    def _load_achievements_notifications(
+        self,
+    ) -> t.Tuple[AchievementsNotifications, t.Dict[str, t.Any]]:
+        if not AchievementsNotifications.exists_at(self.path):
+            AchievementsNotifications(
+                path=self.path,
+                notifications={},
+            ).store()
+
+        achievements_notifications: AchievementsNotifications = t.cast(
+            AchievementsNotifications, AchievementsNotifications.load(self.path)
+        )
+
+        agent_achievements_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "achievements.json"
+        )
+
+        agent_achievements: t.Dict[str, t.Any] = {}
+        if agent_achievements_json_path.exists():
+            try:
+                with open(agent_achievements_json_path, "r", encoding="utf-8") as f:
+                    agent_achievements = json.load(f)
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"Error reading file 'achievements.json': {e}")
+
+            save_changes = False
+            for achievement_id in agent_achievements:
+                if achievement_id not in achievements_notifications.notifications:
+                    achievements_notifications.notifications[achievement_id] = (
+                        AchievementNotification(
+                            achievement_id=achievement_id,
+                            acknowledged=False,
+                            acknowledgement_timestamp=0,
+                        )
+                    )
+                    save_changes = True
+
+            if save_changes:
+                achievements_notifications.store()
+
+        return achievements_notifications, agent_achievements
+
+    def get_achievements_notifications(
+        self, include_acknowledged: bool
+    ) -> t.List[t.Dict]:
+        """Return the achievements notifications"""
+
+        achievements_notifications, agent_achievements = (
+            self._load_achievements_notifications()
+        )
+
+        output: t.Dict[str, t.Dict] = {}
+
+        for (
+            achievement_id,
+            achievement_notification,
+        ) in achievements_notifications.notifications.items():
+            acknowledged = achievement_notification.acknowledged
+            if not acknowledged or (acknowledged and include_acknowledged):
+                if achievement_id in agent_achievements:
+                    output[achievement_id] = achievement_notification.json
+                    output[achievement_id].update(agent_achievements[achievement_id])
+                else:
+                    logger.warning(
+                        f"Achievement {achievement_id} from notifications database is not present in agent achievements file (Corrupted file?)."
+                    )
+
+        return list(output.values())
+
+    def acknowledge_achievement(self, achievement_id: str) -> None:
+        """Acknowledge an achievement id"""
+
+        achievements_notifications, _ = self._load_achievements_notifications()
+
+        if achievement_id not in achievements_notifications.notifications:
+            raise KeyError(
+                f"Achievement {achievement_id} does not exist for service {self.service_config_id}."
+            )
+
+        achievement_notification = achievements_notifications.notifications[
+            achievement_id
+        ]
+
+        if achievement_notification.acknowledged:
+            raise ValueError(
+                f"Achievement {achievement_id} was already acknowledged for service {self.service_config_id}."
+            )
+
+        achievement_notification.acknowledgement_timestamp = int(time.time())
+        achievement_notification.acknowledged = True
+        achievements_notifications.store()
 
     def update(
         self,

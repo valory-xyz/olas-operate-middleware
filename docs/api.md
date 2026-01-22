@@ -2149,6 +2149,80 @@ Funds the agent or service Safe from Master Safe. Fails (409 - Request conflict)
 }
 ```
 
+## Service achievements
+
+### `GET /api/v2/service/{service_config_id}/achievements`
+
+Get service achievements notifications.
+
+Query parameters:
+
+- `include_acknowledged` (boolean, optional, default: `false`): Include acknowledged achievements.
+
+**Response (Success - 200):**
+
+```json
+[
+  {
+    "achievement_id": "achievement_1",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  },
+  {
+    "achievement_id": "achievement_2",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  }
+]
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge`
+
+Acknowledge a service achievement.
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Acknowledged achievement achievement_1 for service service_123 successfully."
+}
+```
+
+**Response (Achievement already acknowledged - 400):**
+
+```json
+{
+  "error": "Achievement achievement_1 was already acknowledged for service service_123."
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Achievement not found - 404):**
+
+```json
+{
+  "error": "Achievement achievement_1 does not exist for service service_123."
+}
+```
+
 ## Bridge Management
 
 ### `POST /api/bridge/bridge_refill_requirements`

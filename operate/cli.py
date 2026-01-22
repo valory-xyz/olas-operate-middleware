@@ -37,7 +37,7 @@ from types import FrameType
 import autonomy.chain.tx
 from aea.helpers.logging import setup_logger
 from clea import group, params, run
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from typing_extensions import Annotated
@@ -1065,6 +1065,68 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         deployment_json = service.deployment.json
         deployment_json["healthcheck"] = service.get_latest_healthcheck()
         return JSONResponse(content=deployment_json)
+
+    @app.get("/api/v2/service/{service_config_id}/achievements")
+    async def _get_service_achievements(
+        request: Request, include_acknowledged: bool = Query(False)  # noqa: B008
+    ) -> JSONResponse:
+        """Get the service achievements."""
+        service_config_id = request.path_params["service_config_id"]
+
+        if not operate.service_manager().exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+
+        achievements_json = service.get_achievements_notifications(
+            include_acknowledged=include_acknowledged,
+        )
+
+        return JSONResponse(content=achievements_json)
+
+    @app.post(
+        "/api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge"
+    )
+    async def _acknowledge_achievement(request: Request) -> JSONResponse:
+        """Update a service."""
+        if operate.password is None:
+            return USER_NOT_LOGGED_IN_ERROR
+
+        service_config_id = request.path_params["service_config_id"]
+        manager = operate.service_manager()
+
+        if not manager.exists(service_config_id=service_config_id):
+            return service_not_found_error(service_config_id=service_config_id)
+
+        service = operate.service_manager().load(service_config_id=service_config_id)
+
+        achievement_id = request.path_params["achievement_id"]
+
+        try:
+            service.acknowledge_achievement(
+                achievement_id=achievement_id,
+            )
+        except KeyError:
+            return JSONResponse(
+                content={
+                    "error": f"Achievement {achievement_id} does not exist for service {service_config_id}."
+                },
+                status_code=HTTPStatus.NOT_FOUND,
+            )
+        except ValueError:
+            return JSONResponse(
+                content={
+                    "error": f"Achievement {achievement_id} was already acknowledged for service {service_config_id}."
+                },
+                status_code=HTTPStatus.BAD_REQUEST,
+            )
+
+        return JSONResponse(
+            content={
+                "error": None,
+                "message": f"Acknowledged achievement_id {achievement_id} for service {service_config_id} successfully.",
+            }
+        )
 
     @app.get("/api/v2/service/{service_config_id}/agent_performance")
     async def _get_agent_performance(request: Request) -> JSONResponse:
