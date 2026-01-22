@@ -2162,20 +2162,20 @@ Query parameters:
 **Response (Success - 200):**
 
 ```json
-{
-  "achievement_1": {
+[
+  {
     "achievement_id": "achievement_1",
     "acknowledged": false,
     "acknowledgement_timestamp": 0,
     "..."  # Achievement data
   },
-  "achievement_2": {
+  {
     "achievement_id": "achievement_2",
     "acknowledged": false,
     "acknowledgement_timestamp": 0,
     "..."  # Achievement data
   }
-}
+]
 ```
 
 **Response (Service not found - 404):**
