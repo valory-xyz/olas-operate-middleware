@@ -547,7 +547,9 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Drain all erc20/native assets to the given account."""
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
         for asset in assets:
             balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
             if balance <= 0:
@@ -783,7 +785,9 @@ class EthereumMasterWallet(MasterWallet):
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
-            assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+            assets = [
+                token[chain] for token in ERC20_TOKENS.values() if chain in token
+            ] + [ZERO_ADDRESS]
             for asset in assets:
                 balances[chain_str][self.address][asset] = str(
                     self.get_balance(chain=chain, asset=asset, from_safe=False)

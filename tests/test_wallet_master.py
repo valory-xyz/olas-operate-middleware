@@ -190,7 +190,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         safe_address = wallet.safes[chain]
         tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
-        tokens = [token[chain] for token in ERC20_TOKENS.values()]
+        tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
             if token == USDC[chain]:
@@ -198,7 +198,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
             tenderly_add_balance(chain, eoa_address, topup, token)
             tenderly_add_balance(chain, safe_address, topup, token)
 
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
 
         # Test 1 - Remove partial amount of all assets
         for asset in assets:
@@ -269,7 +271,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         safe_address = wallet.safes[chain]
         tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
-        tokens = [token[chain] for token in ERC20_TOKENS.values()]
+        tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
             if token == USDC[chain]:
@@ -277,7 +279,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
             tenderly_add_balance(chain, eoa_address, topup, token)
             tenderly_add_balance(chain, safe_address, topup, token)
 
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
 
         for asset in assets:
             for from_safe in (True, False):
@@ -323,7 +327,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         wallet, _ = wallet_class.new(password=password, path=tmp_path / WALLETS_DIR)
 
         chain = Chain.POLYGON  # Chain not funded
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
         for asset in assets:
             assert wallet.get_balance(chain=chain, asset=asset, from_safe=False) == 0
             with pytest.raises(
