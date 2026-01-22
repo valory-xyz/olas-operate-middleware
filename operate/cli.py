@@ -1068,7 +1068,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
     @app.get("/api/v2/service/{service_config_id}/achievements")
     async def _get_service_achievements(
-        request: Request, include_acknowledged: bool = Query(False)
+        request: Request, include_acknowledged: bool = Query(False)  # noqa: B008
     ) -> JSONResponse:
         """Get the service achievements."""
         service_config_id = request.path_params["service_config_id"]
@@ -1106,14 +1106,14 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             service.acknowledge_achievement(
                 achievement_id=achievement_id,
             )
-        except KeyError as e:
+        except KeyError:
             return JSONResponse(
                 content={
                     "error": f"Achievement {achievement_id} does not exist for service {service_config_id}."
                 },
                 status_code=HTTPStatus.NOT_FOUND,
             )
-        except ValueError as e:
+        except ValueError:
             return JSONResponse(
                 content={
                     "error": f"Achievement {achievement_id} was already acknowledged for service {service_config_id}."
