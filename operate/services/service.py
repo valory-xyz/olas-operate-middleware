@@ -1101,6 +1101,10 @@ class Service(LocalResource):
                 if achievement_id in agent_achievements:
                     output[achievement_id] = achievement_notification.json
                     output[achievement_id].update(agent_achievements[achievement_id])
+                else:
+                    logger.warning(
+                        f"Achievement {achievement_id} from notifications database is not present in agent achievements file (Corrupted file?)."
+                    )
 
         return list(output.values())
 
