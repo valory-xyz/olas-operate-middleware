@@ -66,6 +66,16 @@ class LocalResource:
         return cls(**kwargs)
 
     @classmethod
+    def exists_at(cls, path: Path) -> bool:
+        """Verifies if local resource exists at specified path."""
+        file = (
+            path / cls._file
+            if cls._file is not None and path.name != cls._file
+            else path
+        )
+        return file.exists()
+
+    @classmethod
     def load(cls, path: Path) -> "LocalResource":
         """Load local resource."""
         file = (

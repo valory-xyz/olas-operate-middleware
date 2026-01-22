@@ -242,8 +242,8 @@ class AchievementsNotifications(LocalResource):
     """AchievementsNotifications"""
 
     path: Path
-    acknowledged: t.Dict[str, AchievementNotification] = field(default_factory=dict)
-    not_acknowledged: t.Dict[str, AchievementNotification] = field(default_factory=dict)
+    acknowledged: t.Dict[str, AchievementNotification]
+    not_acknowledged: t.Dict[str, AchievementNotification]
 
     _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 

@@ -1042,9 +1042,12 @@ class Service(LocalResource):
     ) -> t.Dict:
         """Return the achievements notifications"""
 
-        file = self.path / AchievementsNotifications._file
-        if not file.exists():
-            AchievementsNotifications(path=self.path).store()
+        if not AchievementsNotifications.exists_at(self.path):
+            AchievementsNotifications(
+                path=self.path,
+                acknowledged={},
+                not_acknowledged={},
+            ).store()
 
         achievements_notifications: AchievementsNotifications = t.cast(
             AchievementsNotifications, AchievementsNotifications.load(self.path)
@@ -1110,9 +1113,12 @@ class Service(LocalResource):
     def acknowledge_achievement(self, achievement_id: str) -> bool:
         """Acknowledge an achievement id"""
 
-        file = self.path / AchievementsNotifications._file
-        if not file.exists():
-            AchievementsNotifications(path=self.path).store()
+        if not AchievementsNotifications.exists_at(self.path):
+            AchievementsNotifications(
+                path=self.path,
+                acknowledged={},
+                not_acknowledged={},
+            ).store()
 
         achievements_notifications: AchievementsNotifications = t.cast(
             AchievementsNotifications, AchievementsNotifications.load(self.path)
