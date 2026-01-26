@@ -303,7 +303,8 @@ class Provider(ABC):
                 data = tx.get("data", "").lower()
                 try:
                     if data.startswith(ERC20_APPROVE_SELECTOR):
-                        amount = BigInt(data[-64:], 16)
+                        amount_hex = data[-64:]
+                        amount = BigInt(amount_hex, 16)
                         total_token += amount
                     elif data.startswith(ERC20_TRANSFER_SELECTOR):
                         amount_hex = data[10 + 64 : 10 + 64 + 64]
