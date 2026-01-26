@@ -61,7 +61,9 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 )
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
-ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').to_0x_hex()[:10]
+# ERC-20 function selectors (first 4 bytes of the Keccak-256 hash of the function signature)
+ERC20_APPROVE_SELECTOR = "0x095ea7b3"
+ERC20_TRANSFER_SELECTOR = "0xa9059cbb"
 
 
 @dataclass
@@ -287,14 +289,28 @@ class Provider(ABC):
                 f"[PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
             )
 
-            if tx.get("to", "").lower() == from_token.lower() and tx.get(
-                "data", ""
-            ).startswith(ERC20_APPROVE_SELECTOR):
+            # TODO Move the requirements logic to be implemented by each provider.
+            #
+            # The following code parses the required ERC20 token amount. The typical case is that the bridge
+            # transactions fall into one of these cases:
+            #     a. ERC20.approve + Bridge.deposit (bridge-specific tx), or
+            #     b. ERC20.transfer
+            #
+            # Thus, the logic below assumes that there is only a single ERC20.approve OR ERC20.transfer (but not both).
+            # However, since the collection of transactions is bridge-dependent, this might not always be the case, and
+            # is suggested that the requirements() logic be implemented per-provider.
+            if tx.get("to", "").lower() == from_token.lower():
+                data = tx.get("data", "").lower()
                 try:
-                    amount = BigInt(tx["data"][-64:], 16)
-                    total_token += amount
+                    if data.startswith(ERC20_APPROVE_SELECTOR):
+                        amount = BigInt(data[-64:], 16)
+                        total_token += amount
+                    elif data.startswith(ERC20_TRANSFER_SELECTOR):
+                        amount_hex = data[10 + 64 : 10 + 64 + 64]
+                        amount = BigInt(amount_hex, 16)
+                        total_token += amount
                 except Exception as e:
-                    raise RuntimeError("Malformed ERC20 approve transaction.") from e
+                    raise RuntimeError("Malformed ERC20 transaction.") from e
 
         self.logger.info(
             f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."
