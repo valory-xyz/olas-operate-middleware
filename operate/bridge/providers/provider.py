@@ -296,8 +296,8 @@ class Provider(ABC):
             #     a. ERC20.approve + Bridge.deposit (bridge-specific tx), or
             #     b. ERC20.transfer
             #
-            # Thus, the logic below assumes that there is only a single ERC20.approve OR ERC20.transfer (but not both).
-            # However, since the collection of transactions is bridge-dependent, this might not always be the case, and
+            # Thus, the logic below assumes that there is only either an ERC20.approve OR ERC20.transfer (but not both).
+            # However, since the set of transactions is bridge-dependent, this might not always be the case, and
             # is suggested that the requirements() logic be implemented per-provider.
             if tx.get("to", "").lower() == from_token.lower():
                 data = tx.get("data", "").lower()
