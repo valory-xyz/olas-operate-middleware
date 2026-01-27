@@ -1047,22 +1047,23 @@ class Service(LocalResource):
             AchievementsNotifications, AchievementsNotifications.load(self.path)
         )
 
-        agent_achievements_json_path = (
+        agent_performance_json_path = (
             Path(
                 self.env_variables.get(
                     AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
                 ).get("value", ".")
             )
-            / "achievements.json"
+            / "agent_performance.json"
         )
 
         agent_achievements: t.Dict[str, t.Any] = {}
-        if agent_achievements_json_path.exists():
+        if agent_performance_json_path.exists():
             try:
-                with open(agent_achievements_json_path, "r", encoding="utf-8") as f:
-                    agent_achievements = json.load(f)
+                with open(agent_performance_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    agent_achievements = data.get("achievements", {}).get("items", {})
             except (json.JSONDecodeError, OSError) as e:
-                print(f"Error reading file 'achievements.json': {e}")
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
             save_changes = False
             for achievement_id in agent_achievements:
