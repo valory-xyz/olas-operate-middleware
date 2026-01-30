@@ -30,6 +30,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 import requests
+from aea.configurations.data_types import PublicId
 from aea.helpers.base import IPFSHash
 from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
@@ -45,6 +46,7 @@ from operate.constants import (
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
+    POLY_SAFE_SERVICE_NAMES,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
@@ -1114,6 +1116,7 @@ class ServiceManager:
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
+                is_initial_funding = False
                 is_recovery_module_enabled = (
                     registry_contracts.gnosis_safe.is_module_enabled(
                         ledger_api=sftxb.ledger_api,
@@ -1125,11 +1128,19 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
             self.logger.info(f"{is_recovery_module_enabled=}")
 
+            service_public_id = PublicId.from_str(service.service_public_id())
+            use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+
+            self.logger.info(f"{use_poly_safe=}")
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
                 use_recovery_module=is_recovery_module_enabled,
+                use_poly_safe=use_poly_safe,
+                agent_eoa_crypto=self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                ),
             )
             tx = sftxb.new_tx()
             for message in messages:
