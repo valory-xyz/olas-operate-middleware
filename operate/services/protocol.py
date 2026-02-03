@@ -41,6 +41,7 @@ from autonomy.chain.constants import (
     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
     GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
+    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
@@ -49,6 +50,7 @@ from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
+    get_poly_safe_deployment_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -69,7 +71,6 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
-from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import (
     get_default_ledger_api,
@@ -80,6 +81,7 @@ from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN
+from operate.utils import concurrent_execute
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -226,37 +228,20 @@ class StakingManager:
     def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
         """Get staking params"""
         ledger_api = get_default_ledger_api(chain=chain)
-        instance = StakingManager.staking_ctr.get_instance(
-            ledger_api=ledger_api,
-            contract_address=staking_contract,
-        )
-        agent_ids = instance.functions.getAgentIds().call()
-        service_registry = instance.functions.serviceRegistry().call()
-        staking_token = instance.functions.stakingToken().call()
-        service_registry_token_utility = (
-            instance.functions.serviceRegistryTokenUtility().call()
-        )
-        min_staking_deposit = instance.functions.minStakingDeposit().call()
-        activity_checker = instance.functions.activityChecker().call()
 
-        output = {
-            "staking_contract": staking_contract,
-            "agent_ids": agent_ids,
-            "service_registry": service_registry,
-            "staking_token": staking_token,
-            "service_registry_token_utility": service_registry_token_utility,
-            "min_staking_deposit": min_staking_deposit,
-            "activity_checker": activity_checker,
-            "additional_staking_tokens": {},
-        }
+        second_token_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
+        second_token_amount_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
         try:
             instance = StakingManager.dual_staking_ctr.get_instance(
                 ledger_api=ledger_api,
                 contract_address=staking_contract,
             )
-            output["additional_staking_tokens"][
-                instance.functions.secondToken().call()
-            ] = instance.functions.secondTokenAmount().call()
+            second_token_func = instance.functions.secondToken().call
+            second_token_amount_func = instance.functions.secondTokenAmount().call
         except Exception:  # pylint: disable=broad-except # nosec
             # Contract is not a dual staking contract
 
@@ -269,6 +254,45 @@ class StakingManager:
             # avoid any issues we are simply catching all exceptions.
             pass
 
+        instance = StakingManager.staking_ctr.get_instance(
+            ledger_api=ledger_api,
+            contract_address=staking_contract,
+        )
+        (
+            agent_ids,
+            service_registry,
+            staking_token,
+            service_registry_token_utility,
+            min_staking_deposit,
+            activity_checker,
+            second_token,
+            second_token_amount,
+        ) = concurrent_execute(
+            (instance.functions.getAgentIds().call, ()),
+            (instance.functions.serviceRegistry().call, ()),
+            (instance.functions.stakingToken().call, ()),
+            (instance.functions.serviceRegistryTokenUtility().call, ()),
+            (instance.functions.minStakingDeposit().call, ()),
+            (instance.functions.activityChecker().call, ()),
+            (second_token_func, ()),
+            (second_token_amount_func, ()),
+            ignore_exceptions=True,
+        )
+
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": (
+                {second_token: second_token_amount}
+                if second_token and second_token_amount
+                else {}
+            ),
+        }
         return output
 
     def get_staking_params(self, staking_contract: str) -> t.Dict:
@@ -1386,12 +1410,14 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": cost_of_bond,
         }
 
-    def get_deploy_data_from_safe(
+    def get_deploy_data_from_safe(  # pylint: disable=too-many-arguments
         self,
         service_id: int,
         master_safe: str,
         reuse_multisig: bool = False,
         use_recovery_module: bool = True,
+        use_poly_safe: bool = False,
+        agent_eoa_crypto: t.Optional[Crypto] = None,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
         approve_hash_message = None
@@ -1430,12 +1456,28 @@ class EthSafeTxBuilder(_ChainUtil):
                     RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
         else:  # Deploy a new multisig
-            if not use_recovery_module:
+            if not use_recovery_module and not use_poly_safe:
                 deployment_payload = get_deployment_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
                 ).contracts[self.chain_type]
-            else:
+            elif use_recovery_module and use_poly_safe:
+                if not agent_eoa_crypto:
+                    raise ValueError("Crypto object must be provided for Poly Safe.")
+
+                deployment_payload = get_poly_safe_deployment_payload(
+                    ledger_api=self.ledger_api,
+                    chain_type=self.chain_type,
+                    crypto=agent_eoa_crypto,
+                )
+                gnosis_safe_multisig = ContractConfigs.get(
+                    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
+            elif not use_recovery_module and use_poly_safe:
+                raise ValueError(
+                    "Poly Safe deployment without recovery module is not supported."
+                )
+            else:  # Normal case: use_recovery_module and not use_poly_safe
                 deployment_payload = get_deployment_with_recovery_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
@@ -1784,21 +1826,10 @@ class EthSafeTxBuilder(_ChainUtil):
 
     def get_recover_access_data(self, service_id: int) -> t.Dict:
         """Get recover access tx data."""
-        instance = t.cast(
-            RecoveryModule,
-            RecoveryModule.from_dir(
-                directory=str(DATA_DIR / "contracts" / "recovery_module"),
-            ),
-        ).get_instance(
+        instance = registry_contracts.recovery_module.get_instance(
             ledger_api=self.ledger_api,
             contract_address=self.contracts["recovery_module"],
         )
-        # TODO Replace the line above by this one once the recovery_module is
-        # included in the release of OpenAutonomy.
-        # instance = registry_contracts.recovery_module.get_instance(  # noqa: E800
-        #     ledger_api=self.ledger_api,  # noqa: E800
-        #     contract_address=self.contracts["recovery_module"],  # noqa: E800
-        # )  # noqa: E800
         txd = instance.encode_abi(
             abi_element_identifier="recoverAccess",
             args=[service_id],

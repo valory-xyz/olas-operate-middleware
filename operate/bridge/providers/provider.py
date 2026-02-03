@@ -44,6 +44,7 @@ from operate.constants import (
 from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.wallet.master import MasterWalletManager
 
 
@@ -60,7 +61,9 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 )
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
-ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').to_0x_hex()[:10]
+# ERC-20 function selectors (first 4 bytes of the Keccak-256 hash of the function signature)
+ERC20_APPROVE_SELECTOR = "0x095ea7b3"
+ERC20_TRANSFER_SELECTOR = "0xa9059cbb"
 
 
 @dataclass
@@ -256,16 +259,16 @@ class Provider(ABC):
                 {
                     from_chain: {
                         from_address: {
-                            ZERO_ADDRESS: 0,
-                            from_token: 0,
+                            ZERO_ADDRESS: BigInt(0),
+                            from_token: BigInt(0),
                         }
                     }
                 }
             )
 
-        total_native = 0
-        total_gas_fees = 0
-        total_token = 0
+        total_native = BigInt(0)
+        total_gas_fees = BigInt(0)
+        total_token = BigInt(0)
 
         for tx_label, tx in txs:
             self.logger.debug(
@@ -273,8 +276,8 @@ class Provider(ABC):
             )
             update_tx_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
-            gas_fees = tx.get(gas_key, 0) * tx["gas"]
-            tx_value = int(tx.get("value", 0))
+            gas_fees = BigInt(tx.get(gas_key, 0) * tx["gas"])
+            tx_value = BigInt(int(tx.get("value", 0)))
             total_gas_fees += gas_fees
             total_native += tx_value + gas_fees
 
@@ -286,14 +289,29 @@ class Provider(ABC):
                 f"[PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
             )
 
-            if tx.get("to", "").lower() == from_token.lower() and tx.get(
-                "data", ""
-            ).startswith(ERC20_APPROVE_SELECTOR):
+            # TODO Move the requirements logic to be implemented by each provider.
+            #
+            # The following code parses the required ERC20 token amount. The typical case is that the bridge
+            # transactions fall into one of these cases:
+            #     a. ERC20.approve + Bridge.deposit (bridge-specific tx), or
+            #     b. ERC20.transfer
+            #
+            # Thus, the logic below assumes that there is only either an ERC20.approve OR ERC20.transfer (but not both).
+            # However, since the set of transactions is bridge-dependent, this might not always be the case, and
+            # is suggested that the requirements() logic be implemented per-provider.
+            if tx.get("to", "").lower() == from_token.lower():
+                data = tx.get("data", "").lower()
                 try:
-                    amount = int(tx["data"][-64:], 16)
-                    total_token += amount
+                    if data.startswith(ERC20_APPROVE_SELECTOR):
+                        amount_hex = data[-64:]
+                        amount = BigInt(amount_hex, 16)
+                        total_token += amount
+                    elif data.startswith(ERC20_TRANSFER_SELECTOR):
+                        amount_hex = data[10 + 64 : 10 + 64 + 64]
+                        amount = BigInt(amount_hex, 16)
+                        total_token += amount
                 except Exception as e:
-                    raise RuntimeError("Malformed ERC20 approve transaction.") from e
+                    raise RuntimeError("Malformed ERC20 transaction.") from e
 
         self.logger.info(
             f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."

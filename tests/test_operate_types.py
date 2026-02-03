@@ -99,10 +99,10 @@ def test_floordiv(sample_a: ChainAmounts) -> None:
     assert result["chain1"]["addr1"]["tokenY"] == 2  # 5 // 2
     assert result["chain1"]["addr2"]["tokenX"] == 1  # 3 // 2
     assert result["chain2"]["addr3"]["tokenZ"] == 50  # 100 // 2
-    assert (
-        type(result["chain1"]["addr1"]["tokenY"]) is int
+    assert isinstance(
+        result["chain1"]["addr1"]["tokenY"], int
     )  # floor division should yield int when both operands are int
-    assert type(result["chain1"]["addr2"]["tokenX"]) is int
+    assert isinstance(result["chain1"]["addr2"]["tokenX"], int)
 
 
 def test_sub(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:

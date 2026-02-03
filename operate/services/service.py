@@ -77,8 +77,11 @@ from operate.constants import (
 )
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AchievementNotification,
+    AchievementsNotifications,
     AgentRelease,
     Chain,
     ChainAmounts,
@@ -96,6 +99,7 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
 from operate.utils import unrecoverable_delete
@@ -114,7 +118,7 @@ SERVICE_CONFIG_PREFIX = "sc-"
 NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
-AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
+AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
 
 logger = setup_logger("operate.services.service")
 
@@ -1026,12 +1030,107 @@ class Service(LocalResource):
                 if isinstance(data, dict):
                     agent_performance.update(data)
             except (json.JSONDecodeError, OSError) as e:
-                # Keep default values if file is invalid
-                print(
-                    f"Error reading file 'agent_performance.json': {e}"
-                )  # TODO Use logger
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
         return dict(sorted(agent_performance.items()))
+
+    def _load_achievements_notifications(
+        self,
+    ) -> t.Tuple[AchievementsNotifications, t.Dict[str, t.Any]]:
+        if not AchievementsNotifications.exists_at(self.path):
+            AchievementsNotifications(
+                path=self.path,
+                notifications={},
+            ).store()
+
+        achievements_notifications: AchievementsNotifications = t.cast(
+            AchievementsNotifications, AchievementsNotifications.load(self.path)
+        )
+
+        agent_performance_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "agent_performance.json"
+        )
+
+        agent_achievements: t.Dict[str, t.Any] = {}
+        if agent_performance_json_path.exists():
+            try:
+                with open(agent_performance_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    agent_achievements = data.get("achievements", {}).get("items", {})
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
+
+            save_changes = False
+            for achievement_id in agent_achievements:
+                if achievement_id not in achievements_notifications.notifications:
+                    achievements_notifications.notifications[achievement_id] = (
+                        AchievementNotification(
+                            achievement_id=achievement_id,
+                            acknowledged=False,
+                            acknowledgement_timestamp=0,
+                        )
+                    )
+                    save_changes = True
+
+            if save_changes:
+                achievements_notifications.store()
+
+        return achievements_notifications, agent_achievements
+
+    def get_achievements_notifications(
+        self, include_acknowledged: bool
+    ) -> t.List[t.Dict]:
+        """Return the achievements notifications"""
+
+        achievements_notifications, agent_achievements = (
+            self._load_achievements_notifications()
+        )
+
+        output: t.Dict[str, t.Dict] = {}
+
+        for (
+            achievement_id,
+            achievement_notification,
+        ) in achievements_notifications.notifications.items():
+            acknowledged = achievement_notification.acknowledged
+            if not acknowledged or (acknowledged and include_acknowledged):
+                if achievement_id in agent_achievements:
+                    output[achievement_id] = achievement_notification.json
+                    output[achievement_id].update(agent_achievements[achievement_id])
+                else:
+                    logger.warning(
+                        f"Achievement {achievement_id} from notifications database is not present in agent achievements file (Corrupted file?)."
+                    )
+
+        return list(output.values())
+
+    def acknowledge_achievement(self, achievement_id: str) -> None:
+        """Acknowledge an achievement id"""
+
+        achievements_notifications, _ = self._load_achievements_notifications()
+
+        if achievement_id not in achievements_notifications.notifications:
+            raise KeyError(
+                f"Achievement {achievement_id} does not exist for service {self.service_config_id}."
+            )
+
+        achievement_notification = achievements_notifications.notifications[
+            achievement_id
+        ]
+
+        if achievement_notification.acknowledged:
+            raise ValueError(
+                f"Achievement {achievement_id} was already acknowledged for service {self.service_config_id}."
+            )
+
+        achievement_notification.acknowledgement_timestamp = int(time.time())
+        achievement_notification.acknowledged = True
+        achievements_notifications.store()
 
     def update(
         self,
@@ -1199,10 +1298,13 @@ class Service(LocalResource):
 
         return amounts
 
-    def get_balances(self) -> ChainAmounts:
-        """Get balances of the agent addresses and service safe."""
+    def get_balances(self, unify_wrapped_native_tokens: bool = True) -> ChainAmounts:
+        """Get balances of the agent addresses and service safe.
+
+        :param unify_wrapped_native_tokens: Whether to consider wrapped native tokens as native tokens.
+        """
         initial_funding_amounts = self.get_initial_funding_amounts()
-        return ChainAmounts(
+        absolute_balances = ChainAmounts(
             {
                 chain_str: {
                     address: {
@@ -1221,6 +1323,27 @@ class Service(LocalResource):
                 for chain_str, addresses in initial_funding_amounts.items()
             }
         )
+        if unify_wrapped_native_tokens:
+            for chain_str, addresses in absolute_balances.items():
+                chain = Chain.from_string(chain_str)
+                wrapped_asset = WRAPPED_NATIVE_ASSET[chain]
+                for address, assets in addresses.items():
+                    if ZERO_ADDRESS in assets or wrapped_asset in assets:
+                        if ZERO_ADDRESS not in assets:
+                            assets[ZERO_ADDRESS] = 0
+
+                    if wrapped_asset in assets:
+                        assets[ZERO_ADDRESS] += assets[wrapped_asset]
+                        del assets[wrapped_asset]
+                    else:
+                        assets[ZERO_ADDRESS] += get_asset_balance(
+                            ledger_api=get_default_ledger_api(chain),
+                            asset_address=wrapped_asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+
+        return absolute_balances
 
     def get_funding_requests(self) -> ChainAmounts:
         """Get funding amounts requested by the agent."""
@@ -1258,7 +1381,7 @@ class Service(LocalResource):
                 funding_requests[chain_str].setdefault(address, {})
                 for asset, amounts in assets.items():
                     try:
-                        funding_requests[chain_str][address][asset] = int(
+                        funding_requests[chain_str][address][asset] = BigInt(
                             amounts["deficit"]
                         )
                     except (ValueError, TypeError):

@@ -49,7 +49,7 @@ Get current settings.
   "version": 1,
   "eoa_topups": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 750000000000000000
+      "0x0000000000000000000000000000000000000000": "750000000000000000"
     }
   }
 }
@@ -328,8 +328,8 @@ falling back to Master EOA if needed.
   "to": "0x...",
   "withdraw_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000,
-      "0x...": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000",
+      "0x...": "500000000000000000"
     }
   }
 }
@@ -516,8 +516,8 @@ Get extended wallet information including safes and additional metadata.
         "0x...": {
           "backup_owners": ["0x..."],
           "balances": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
           }
         }
       }
@@ -525,12 +525,12 @@ Get extended wallet information including safes and additional metadata.
     "balances": {
       "gnosis": {
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },        
       }
     },
@@ -685,21 +685,21 @@ Get backup owner funding requirements to complete wallet recovery process.
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
@@ -1172,11 +1172,11 @@ Get all valid services.
             "threshold": 1,
             "use_staking": true,
             "use_mech_marketplace": false,
-            "cost_of_bond": 10000000000000000000,
+            "cost_of_bond": "10000000000000000000",
             "fund_requirements": {
               "0x0000000000000000000000000000000000000000": {
-                "agent": 100000000000000000,
-                "safe": 500000000000000000
+                "agent": "100000000000000000",
+                "safe": "500000000000000000"
               }
             }
           }
@@ -1303,11 +1303,11 @@ Get a specific service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1460,38 +1460,38 @@ Notes:
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "agent_funding_requests": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
@@ -1521,32 +1521,32 @@ Get service refill requirements.
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "is_refill_required": true,
@@ -1609,11 +1609,11 @@ Create a new service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1675,11 +1675,11 @@ Create a new service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1752,11 +1752,11 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1818,11 +1818,11 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -1904,11 +1904,11 @@ Deploy and run a service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
@@ -2149,6 +2149,80 @@ Funds the agent or service Safe from Master Safe. Fails (409 - Request conflict)
 }
 ```
 
+## Service achievements
+
+### `GET /api/v2/service/{service_config_id}/achievements`
+
+Get service achievements notifications.
+
+Query parameters:
+
+- `include_acknowledged` (boolean, optional, default: `false`): Include acknowledged achievements.
+
+**Response (Success - 200):**
+
+```json
+[
+  {
+    "achievement_id": "achievement_1",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  },
+  {
+    "achievement_id": "achievement_2",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  }
+]
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge`
+
+Acknowledge a service achievement.
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Acknowledged achievement achievement_1 for service service_123 successfully."
+}
+```
+
+**Response (Achievement already acknowledged - 400):**
+
+```json
+{
+  "error": "Achievement achievement_1 was already acknowledged for service service_123."
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Achievement not found - 404):**
+
+```json
+{
+  "error": "Achievement achievement_1 does not exist for service service_123."
+}
+```
+
 ## Bridge Management
 
 ### `POST /api/bridge/bridge_refill_requirements`
@@ -2178,21 +2252,21 @@ Get bridge refill requirements for cross-chain transactions.
   "balances": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bridge_refill_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "bridge_total_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1500000000000000000
+        "0x0000000000000000000000000000000000000000": "1500000000000000000"
       }
     }
   },

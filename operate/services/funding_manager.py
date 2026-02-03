@@ -58,8 +58,10 @@ from operate.ledger.profiles import (
     get_asset_name,
 )
 from operate.operate_types import Chain, ChainAmounts, LedgerType, OnChainState
+from operate.serialization import BigInt
 from operate.services.protocol import EthSafeTxBuilder, StakingManager, StakingState
 from operate.services.service import NON_EXISTENT_TOKEN, Service
+from operate.utils import concurrent_execute
 from operate.utils.gnosis import drain_eoa, get_asset_balance, get_owners
 from operate.utils.gnosis import transfer as transfer_from_safe
 from operate.utils.gnosis import transfer_erc20_from_safe
@@ -252,23 +254,23 @@ class FundingManager:
             user_params = chain_config.chain_data.user_params
             number_of_agents = len(service.agent_addresses)
 
-            requirements: defaultdict = defaultdict(int)
+            requirements: defaultdict = defaultdict(BigInt)
 
             if (
                 not user_params.use_staking
                 or not user_params.staking_program_id
                 or user_params.staking_program_id == NO_STAKING_PROGRAM_ID
             ):
-                protocol_agent_bonds = (
+                protocol_agent_bonds = BigInt(
                     max(MIN_AGENT_BOND, user_params.cost_of_bond) * number_of_agents
                 )
                 protocol_security_deposit = max(
                     MIN_SECURITY_DEPOSIT, user_params.cost_of_bond
                 )
-                staking_agent_bonds = 0
-                staking_security_deposit = 0
+                staking_agent_bonds = BigInt(0)
+                staking_security_deposit = BigInt(0)
             else:
-                protocol_agent_bonds = MIN_AGENT_BOND * number_of_agents
+                protocol_agent_bonds = BigInt(MIN_AGENT_BOND * number_of_agents)
                 protocol_security_deposit = MIN_SECURITY_DEPOSIT
 
                 staking_manager = StakingManager(chain=Chain(chain))
@@ -278,10 +280,10 @@ class FundingManager:
                     ),
                 )
 
-                staking_agent_bonds = (
+                staking_agent_bonds = BigInt(
                     staking_params["min_staking_deposit"] * number_of_agents
                 )
-                staking_security_deposit = staking_params["min_staking_deposit"]
+                staking_security_deposit = BigInt(staking_params["min_staking_deposit"])
                 staking_token = staking_params["staking_token"]
                 requirements[staking_token] += staking_agent_bonds
                 requirements[staking_token] += staking_security_deposit
@@ -289,7 +291,7 @@ class FundingManager:
                 for token, amount in staking_params[
                     "additional_staking_tokens"
                 ].items():
-                    requirements[token] = amount
+                    requirements[token] = BigInt(amount)
 
             requirements[ZERO_ADDRESS] += protocol_agent_bonds
             requirements[ZERO_ADDRESS] += protocol_security_deposit
@@ -315,7 +317,7 @@ class FundingManager:
         protocol_bonded_assets = ChainAmounts()
 
         for chain, chain_config in service.chain_configs.items():
-            bonded_assets: defaultdict = defaultdict(int)
+            bonded_assets: defaultdict = defaultdict(BigInt)
             ledger_config = chain_config.ledger_config
             user_params = chain_config.chain_data.user_params
 
@@ -344,14 +346,29 @@ class FundingManager:
 
             # os.environ["CUSTOM_CHAIN_RPC"] = ledger_config.rpc  # TODO do we need this?
 
-            # Determine bonded native amount
-            service_registry_address = CHAIN_PROFILES[chain]["service_registry"]
+            # Fetch on-chain data
             service_registry = registry_contracts.service_registry.get_instance(
                 ledger_api=ledger_api,
-                contract_address=service_registry_address,
+                contract_address=CHAIN_PROFILES[chain]["service_registry"],
             )
-            service_info = service_registry.functions.getService(service_id).call()
-            security_deposit = service_info[0]
+            (
+                service_info,
+                operator_balance,
+                current_staking_program,
+            ) = concurrent_execute(
+                (service_registry.functions.getService(service_id).call, ()),
+                (
+                    service_registry.functions.getOperatorBalance(
+                        master_safe, service_id
+                    ).call,
+                    (),
+                ),
+                (staking_manager.get_current_staking_program, (service_id,)),
+            )
+
+            # Determine bonded native amount
+            operator_balance = BigInt(operator_balance)
+            security_deposit = BigInt(service_info[0])
             service_state = service_info[6]
             agent_ids = service_info[7]
 
@@ -362,28 +379,20 @@ class FundingManager:
             ):
                 bonded_assets[ZERO_ADDRESS] += security_deposit
 
-            operator_balance = service_registry.functions.getOperatorBalance(
-                master_safe, service_id
-            ).call()
             bonded_assets[ZERO_ADDRESS] += operator_balance
 
             # Determine bonded token amount for staking programs
-            current_staking_program = staking_manager.get_current_staking_program(
-                service_id=service_id,
-            )
             target_staking_program = user_params.staking_program_id
             staking_contract = staking_manager.get_staking_contract(
                 staking_program_id=current_staking_program or target_staking_program,
             )
 
             if not staking_contract:
-                return dict(bonded_assets)
+                return ChainAmounts(bonded_assets)
 
             staking_manager = StakingManager(Chain(chain))
             staking_params = staking_manager.get_staking_params(
-                staking_contract=staking_manager.get_staking_contract(
-                    staking_program_id=user_params.staking_program_id,
-                ),
+                staking_contract=staking_contract,
             )
 
             service_registry_token_utility_address = staking_params[
@@ -396,51 +405,80 @@ class FundingManager:
                 )
             )
 
-            agent_bonds = 0
-            for agent_id in agent_ids:
-                num_agent_instances = service_registry.functions.getInstancesForAgentId(
-                    service_id, agent_id
-                ).call()[0]
-                agent_bond = service_registry_token_utility.functions.getAgentBond(
-                    service_id, agent_id
-                ).call()
-                agent_bonds += num_agent_instances * agent_bond
+            (
+                *agent_instances_and_bonds,
+                token_bond,
+                security_deposits,
+                staking_state,
+            ) = concurrent_execute(
+                *(
+                    [
+                        (
+                            service_registry.functions.getInstancesForAgentId(
+                                service_id, agent_id
+                            ).call,
+                            (),
+                        )
+                        for agent_id in agent_ids
+                    ]
+                    + [
+                        (
+                            service_registry_token_utility.functions.getAgentBond(
+                                service_id, agent_id
+                            ).call,
+                            (),
+                        )
+                        for agent_id in agent_ids
+                    ]
+                    + [
+                        (
+                            service_registry_token_utility.functions.getOperatorBalance(
+                                master_safe, service_id
+                            ).call,
+                            (),
+                        ),
+                        (
+                            service_registry_token_utility.functions.mapServiceIdTokenDeposit(
+                                service_id
+                            ).call,
+                            (),
+                        ),
+                        (
+                            staking_manager.staking_state,
+                            (service_id, staking_params["staking_contract"]),
+                        ),
+                    ]
+                ),
+            )
+
+            agent_bonds = BigInt(0)
+            for agent_instances, agent_bond in zip(
+                agent_instances_and_bonds[: len(agent_ids)],
+                agent_instances_and_bonds[len(agent_ids) :],
+            ):
+                num_agent_instances = agent_instances[0]
+                agent_bonds += BigInt(num_agent_instances * agent_bond)
 
             if service_state == OnChainState.TERMINATED_BONDED:
                 num_agent_instances = service_info[5]
-                token_bond = (
-                    service_registry_token_utility.functions.getOperatorBalance(
-                        master_safe,
-                        service_id,
-                    ).call()
-                )
-                agent_bonds += num_agent_instances * token_bond
+                agent_bonds += BigInt(num_agent_instances * token_bond)
 
-            security_deposit = 0
+            security_deposit = BigInt(0)
             if (
                 OnChainState.ACTIVE_REGISTRATION
                 <= service_state
                 < OnChainState.TERMINATED_BONDED
             ):
-                security_deposit = (
-                    service_registry_token_utility.functions.mapServiceIdTokenDeposit(
-                        service_id
-                    ).call()[1]
-                )
+                security_deposit = BigInt(security_deposits[1])
 
             bonded_assets[staking_params["staking_token"]] += agent_bonds
             bonded_assets[staking_params["staking_token"]] += security_deposit
-
-            staking_state = staking_manager.staking_state(
-                service_id=service_id,
-                staking_contract=staking_params["staking_contract"],
-            )
 
             if staking_state in (StakingState.STAKED, StakingState.EVICTED):
                 for token, amount in staking_params[
                     "additional_staking_tokens"
                 ].items():
-                    bonded_assets[token] += amount
+                    bonded_assets[token] += BigInt(amount)
 
             protocol_bonded_assets[chain] = {master_safe: dict(bonded_assets)}
 
@@ -564,39 +602,63 @@ class FundingManager:
 
     def _get_master_safe_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
         output = ChainAmounts()
+        batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_safe = self._resolve_master_safe(chain)
-            master_safe_dict = output.setdefault(chain_str, {}).setdefault(
-                master_safe, {}
-            )
+            output.setdefault(chain_str, {}).setdefault(master_safe, {})
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
-                    master_safe_dict[asset] = get_asset_balance(
-                        ledger_api=get_default_ledger_api(chain),
-                        asset_address=asset,
-                        address=master_safe,
-                        raise_on_invalid_address=False,
+                    batch_calls_args[
+                        (
+                            get_default_ledger_api(chain),
+                            asset,
+                            master_safe,
+                            False,
+                        )
+                    ] = (
+                        chain_str,
+                        master_safe,
+                        asset,
                     )
+
+        batch_calls_results = concurrent_execute(
+            *[(get_asset_balance, args) for args in batch_calls_args.keys()]
+        )
+        for args, balance in zip(batch_calls_args.keys(), batch_calls_results):
+            chain_str, master_safe, asset = batch_calls_args[args]
+            output[chain_str][master_safe][asset] = balance
 
         return output
 
     def _get_master_eoa_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
         output = ChainAmounts()
+        batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_eoa = self._resolve_master_eoa(chain)
-            master_eoa_dict = output.setdefault(chain_str, {}).setdefault(
-                master_eoa, {}
-            )
+            output.setdefault(chain_str, {}).setdefault(master_eoa, {})
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
-                    master_eoa_dict[asset] = get_asset_balance(
-                        ledger_api=get_default_ledger_api(chain),
-                        asset_address=asset,
-                        address=master_eoa,
-                        raise_on_invalid_address=False,
+                    batch_calls_args[
+                        (
+                            get_default_ledger_api(chain),
+                            asset,
+                            master_eoa,
+                            False,
+                        )
+                    ] = (
+                        chain_str,
+                        master_eoa,
+                        asset,
                     )
+
+        batch_calls_results = concurrent_execute(
+            *[(get_asset_balance, args) for args in batch_calls_args.keys()]
+        )
+        for args, balance in zip(batch_calls_args.keys(), batch_calls_results):
+            chain_str, master_eoa, asset = batch_calls_args[args]
+            output[chain_str][master_eoa][asset] = balance
 
         return output
 
@@ -623,12 +685,30 @@ class FundingManager:
             }
         )
         master_eoa_balances = self._get_master_eoa_balances(master_eoa_topups)
+        master_safe_balance = self._get_master_safe_balances(master_eoa_topups)
         master_eoa_shortfalls = self._compute_shortfalls(
             balances=master_eoa_balances,
             thresholds=master_eoa_topups * DEFAULT_EOA_THRESHOLD,
             topups=master_eoa_topups,
         )
-        self.fund_chain_amounts(master_eoa_shortfalls)
+        possible_to_fund_shortfalls = ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: min(
+                            amount,
+                            master_safe_balance.get(chain_str, {})
+                            .get(self._resolve_master_safe(Chain(chain_str)), {})
+                            .get(asset, 0),
+                        )
+                        for asset, amount in assets.items()
+                    }
+                    for address, assets in addresses.items()
+                }
+                for chain_str, addresses in master_eoa_shortfalls.items()
+            }
+        )
+        self.fund_chain_amounts(possible_to_fund_shortfalls)
 
     def funding_requirements(self, service: Service) -> t.Dict:
         """Funding requirements"""
@@ -639,9 +719,13 @@ class FundingManager:
         total_requirements: ChainAmounts
         chains = [Chain(chain_str) for chain_str in service.chain_configs.keys()]
 
-        # Protocol shortfall
-        protocol_thresholds = self._compute_protocol_asset_requirements(service)
-        protocol_balances = self._compute_protocol_bonded_assets(service)
+        (
+            protocol_thresholds,
+            protocol_balances,
+        ) = concurrent_execute(
+            (self._compute_protocol_asset_requirements, (service,)),
+            (self._compute_protocol_bonded_assets, (service,)),
+        )
         protocol_topups = protocol_thresholds
         protocol_shortfalls = self._compute_shortfalls(
             balances=protocol_balances,
@@ -789,14 +873,14 @@ class FundingManager:
             allow_start_agent = False
 
         return {
-            "balances": balances,
-            "bonded_assets": protocol_bonded_assets,
-            "total_requirements": total_requirements,
-            "refill_requirements": refill_requirements,
-            "protocol_asset_requirements": protocol_asset_requirements,
+            "balances": balances.json,
+            "bonded_assets": protocol_bonded_assets.json,
+            "total_requirements": total_requirements.json,
+            "refill_requirements": refill_requirements.json,
+            "protocol_asset_requirements": protocol_asset_requirements.json,
             "is_refill_required": is_refill_required,
             "allow_start_agent": allow_start_agent,
-            "agent_funding_requests": funding_requests,
+            "agent_funding_requests": funding_requests.json,
             "agent_funding_requests_cooldown": funding_requests_cooldown,
             "agent_funding_in_progress": funding_in_progress,
         }

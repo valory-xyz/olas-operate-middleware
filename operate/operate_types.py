@@ -34,8 +34,13 @@ from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
 from typing_extensions import TypedDict
 
-from operate.constants import FERNET_KEY_LENGTH, NO_STAKING_PROGRAM_ID
+from operate.constants import (
+    ACHIEVEMENTS_NOTIFICATIONS_JSON,
+    FERNET_KEY_LENGTH,
+    NO_STAKING_PROGRAM_ID,
+)
 from operate.resource import LocalResource
+from operate.serialization import BigInt, serialize
 
 
 LedgerType = LedgerTypeOA
@@ -178,8 +183,8 @@ class DeployedNodes(LocalResource):
 class OnChainFundRequirements(LocalResource):
     """On-chain fund requirements."""
 
-    agent: float
-    safe: float
+    agent: BigInt
+    safe: BigInt
 
 
 OnChainTokenRequirements = t.Dict[str, OnChainFundRequirements]
@@ -192,7 +197,7 @@ class OnChainUserParams(LocalResource):
     staking_program_id: str
     nft: str
     agent_id: int
-    cost_of_bond: int
+    cost_of_bond: BigInt
     fund_requirements: OnChainTokenRequirements
 
     @property
@@ -217,6 +222,30 @@ class OnChainData(LocalResource):
     token: int
     multisig: str
     user_params: OnChainUserParams
+
+
+@dataclass
+class AchievementNotification(LocalResource):
+    """AchievementNotification"""
+
+    achievement_id: str
+    acknowledged: bool
+    acknowledgement_timestamp: int
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "ChainConfig":
+        """Load the chain config."""
+        return super().from_json(obj)  # type: ignore
+
+
+@dataclass
+class AchievementsNotifications(LocalResource):
+    """AchievementsNotifications"""
+
+    path: Path
+    notifications: t.Dict[str, AchievementNotification]
+
+    _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 
 
 @dataclass
@@ -296,35 +325,54 @@ class Version:
         return self.patch < other.patch
 
 
-class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
+class ChainAmounts(dict[str, dict[str, dict[str, BigInt]]]):
     """
     Class that represents chain amounts as a dictionary
 
     The standard format follows the convention {chain: {address: {token: amount}}}
     """
 
+    @property
+    def json(self) -> dict:
+        """Return JSON representation with amounts as strings."""
+        return serialize(self)
+
+    @staticmethod
+    def from_json(obj: dict) -> "ChainAmounts":
+        """Create ChainAmounts from JSON representation."""
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
+
+        for chain, addresses in obj.items():
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    result.setdefault(chain, {}).setdefault(address, {})[asset] = (
+                        BigInt(amount)
+                    )
+
+        return ChainAmounts(result)
+
     @classmethod
     def shortfalls(
         cls, requirements: "ChainAmounts", balances: "ChainAmounts"
     ) -> "ChainAmounts":
         """Return the shortfalls between requirements and balances."""
-        result: dict[str, dict[str, dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
 
         for chain, addresses in requirements.items():
             for address, assets in addresses.items():
                 for asset, required_amount in assets.items():
                     available = balances.get(chain, {}).get(address, {}).get(asset, 0)
                     shortfall = max(required_amount - available, 0)
-                    result.setdefault(chain, {}).setdefault(address, {})[
-                        asset
-                    ] = shortfall
+                    result.setdefault(chain, {}).setdefault(address, {})[asset] = (
+                        BigInt(shortfall)
+                    )
 
         return cls(result)
 
     @classmethod
     def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
         """Add multiple ChainAmounts"""
-        result: dict[str, dict[str, dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
 
         for ca in chainamounts:
             for chain, addresses in ca.items():
@@ -332,7 +380,9 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
                 for address, assets in addresses.items():
                     result_assets = result_addresses.setdefault(address, {})
                     for asset, amount in assets.items():
-                        result_assets[asset] = result_assets.get(asset, 0) + amount
+                        result_assets[asset] = BigInt(
+                            result_assets.get(asset, 0) + amount
+                        )
 
         return cls(result)
 
@@ -346,7 +396,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = int(amount * multiplier)
+                    balances[asset] = BigInt(int(amount * multiplier))
         return output
 
     def __sub__(self, other: "ChainAmounts") -> "ChainAmounts":
@@ -362,7 +412,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = int(amount // divisor)
+                    balances[asset] = BigInt(int(amount // divisor))
         return output
 
     def __lt__(self, other: "ChainAmounts") -> bool:

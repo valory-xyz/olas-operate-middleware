@@ -48,6 +48,7 @@ from operate.ledger import (
 from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
@@ -211,7 +212,7 @@ class MasterWallet(LocalResource):
 
     def get_balance(
         self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True
-    ) -> int:
+    ) -> BigInt:
         """Get wallet balance on a given chain."""
         if from_safe:
             if chain not in self.safes:
@@ -546,7 +547,9 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Drain all erc20/native assets to the given account."""
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
         for asset in assets:
             balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
             if balance <= 0:
@@ -675,20 +678,29 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Create safe."""
-        if chain in self.safes:
-            raise ValueError(f"Wallet already has a Safe on chain {chain}.")
-
-        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
-            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-            crypto=self.crypto,
-            backup_owner=backup_owner,
-            salt_nonce=self.safe_nonce,
-        )
-        self.safe_chains.append(chain)
+        tx_hash = None
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
         if self.safes is None:
             self.safes = {}
-        self.safes[chain] = safe
-        self.store()
+
+        if chain not in self.safe_chains and chain not in self.safes:
+            safe, self.safe_nonce, tx_hash = create_gnosis_safe(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                salt_nonce=self.safe_nonce,
+            )
+            self.safe_chains.append(chain)
+            self.safes[chain] = safe
+            self.store()
+
+        if backup_owner is not None:
+            add_owner(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                safe=self.safes[chain],
+                owner=backup_owner,
+            )
+
         return tx_hash
 
     def update_backup_owner(
@@ -761,7 +773,7 @@ class EthereumMasterWallet(MasterWallet):
         rpc = None
         wallet_json = self.json
 
-        balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        balances: t.Dict[str, t.Dict[str, t.Dict[str, BigInt]]] = {}
         owner_sets = set()
         for chain, safe in self.safes.items():
             chain_str = chain.value
@@ -773,13 +785,15 @@ class EthereumMasterWallet(MasterWallet):
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
-            assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+            assets = [
+                token[chain] for token in ERC20_TOKENS.values() if chain in token
+            ] + [ZERO_ADDRESS]
             for asset in assets:
-                balances[chain_str][self.address][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=False
+                balances[chain_str][self.address][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=False)
                 )
-                balances[chain_str][safe][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=True
+                balances[chain_str][safe][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=True)
                 )
             wallet_json["safes"][chain_str] = {
                 safe: {

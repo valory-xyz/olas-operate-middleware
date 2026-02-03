@@ -40,6 +40,7 @@ from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DEFAULT_RECOVERY_TOPUPS
 from operate.operate_types import ChainAmounts
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.services.manage import ServiceManager
 from operate.utils.gnosis import get_asset_balance, get_owners
 from operate.wallet.master import MasterWalletManager
@@ -330,7 +331,7 @@ class WalletRecoveryManager:
                         raise_on_invalid_address=False,
                     )
                     requirements[chain_str].setdefault(backup_owner, {}).setdefault(
-                        ZERO_ADDRESS, 0
+                        ZERO_ADDRESS, BigInt(0)
                     )
                     if new_wallet.address not in owners:
                         requirements[chain_str][backup_owner][
@@ -351,9 +352,9 @@ class WalletRecoveryManager:
         )
 
         return {
-            "balances": balances,
-            "total_requirements": requirements,
-            "refill_requirements": refill_requirements,
+            "balances": balances.json,
+            "total_requirements": requirements.json,
+            "refill_requirements": refill_requirements.json,
             "is_refill_required": is_refill_required,
             "pending_backup_owner_swaps": pending_backup_owner_swaps,
         }
