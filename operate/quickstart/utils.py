@@ -165,6 +165,30 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
+    "polygon": {
+        "name": "Polygon",
+        "gasFundReq": unit_to_wei(1.5),  # fund for master EOA
+        "staking_bonding_token": OLAS[Chain.POLYGON],
+        "token_data": {
+            ZERO_ADDRESS: {
+                "symbol": "POL",
+                "decimals": 18,
+            },
+            USDC[Chain.POLYGON]: {
+                "symbol": "USDC",
+                "decimals": 6,
+            },
+            OLAS[Chain.POLYGON]: {
+                "symbol": "OLAS",
+                "decimals": 18,
+            },
+        },
+        "gasParams": {
+            # this means default values will be used
+            "MAX_PRIORITY_FEE_PER_GAS": "",
+            "MAX_FEE_PER_GAS": "",
+        },
+    },
 }
 
 
