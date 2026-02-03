@@ -171,7 +171,7 @@ CHAIN_TO_METADATA = {
         "staking_bonding_token": OLAS[Chain.POLYGON],
         "token_data": {
             ZERO_ADDRESS: {
-                "symbol": "ETH",
+                "symbol": "POL",
                 "decimals": 18,
             },
             USDC[Chain.POLYGON]: {
