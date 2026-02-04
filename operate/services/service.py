@@ -1066,9 +1066,8 @@ class Service(LocalResource):
                 with open(agent_performance_json_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if isinstance(data, dict):
-                        agent_achievements = data.get("achievements", {}).get(
-                            "items", {}
-                        )
+                        data_achievements = data.get("achievements", {}) or {}
+                        agent_achievements = data_achievements.get("items", {}) or {}
                     else:
                         logger.warning(
                             f"Invalid agent_performance.json: root is {type(data).__name__}, content preview: {str(data)[:100]!r}."
