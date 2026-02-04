@@ -27,13 +27,12 @@ import time
 import typing as t
 import uuid
 from abc import ABC, abstractmethod
-from contextlib import suppress
 from dataclasses import dataclass
 
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.exceptions import TimeExhausted
+from web3.exceptions import TimeExhausted, TransactionNotFound
 
 from operate.constants import (
     ON_CHAIN_INTERACT_RETRIES,
@@ -408,9 +407,13 @@ class Provider(ABC):
                     },
                 ).transact()
 
-                with suppress(TimeExhausted):
+                try:
                     tx_settler.settle()
                     self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
+                except TimeExhausted as e:
+                    self.logger.warning(
+                        f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
+                    )
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
@@ -477,3 +480,66 @@ class Provider(ABC):
         receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
+
+    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+        """Check if the bridge transaction likely failed and is not going to settle."""
+
+        execution_data = provider_request.execution_data
+        if not execution_data or not execution_data.from_tx_hash:
+            return True
+
+        from_tx_hash = execution_data.from_tx_hash
+        now = time.time()
+        age_seconds = now - execution_data.timestamp
+
+        eta = provider_request.quote_data.eta if provider_request.quote_data else None
+
+        MIN_SOFT_TIMEOUT = 600
+        HARD_TIMEOUT = 1200
+        ETA_MULTIPLIER = 10
+        ETA_MIN_THRESHOLD = 60
+
+        eta_timeout = (
+            (eta * ETA_MULTIPLIER) if (eta and eta >= ETA_MIN_THRESHOLD) else 0
+        )
+        soft_timeout = max(MIN_SOFT_TIMEOUT, eta_timeout)
+
+        if age_seconds > HARD_TIMEOUT:
+            self.logger.warning(
+                f"[PROVIDER] Transaction {from_tx_hash} age {age_seconds//60} > HARD_TIMEOUT."
+            )
+            return True
+
+        if age_seconds <= soft_timeout:
+            return False
+
+        from_ledger_api = self._from_ledger_api(provider_request)
+        w3 = from_ledger_api.api
+
+        try:
+            receipt = w3.eth.get_transaction_receipt(from_tx_hash)
+
+            if receipt is None:
+                raise TransactionNotFound("Receipt not found")
+
+            if receipt["status"] == 1:
+                # Unusual corner case - succeeded but bridge doesn't know yet?
+                self.logger.info(
+                    f"[PROVIDER] Transaction {from_tx_hash} was mined and succeeded — waiting for provider sync"
+                )
+                return False
+            else:
+                self.logger.warning(
+                    f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
+                )
+                return True
+        except TransactionNotFound:
+            self.logger.warning(
+                f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds//60} min - likely dropped."
+            )
+            return True
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning(
+                f"[PROVIDER] Error retrieving tx {from_tx_hash}: {e} - likely dropped."
+            )
+            return True

@@ -396,6 +396,8 @@ class RelayProvider(Provider):
                 execution_data.message = str(relay_status)
             else:
                 provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                 return
             response.raise_for_status()
         except Exception as e:
@@ -403,6 +405,8 @@ class RelayProvider(Provider):
                 f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
 
         if relay_status == RelayExecutionStatus.SUCCESS:
