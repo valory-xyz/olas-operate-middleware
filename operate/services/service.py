@@ -1029,6 +1029,10 @@ class Service(LocalResource):
                     data = json.load(f)
                 if isinstance(data, dict):
                     agent_performance.update(data)
+                else:
+                    logger.warning(
+                        f"Invalid agent_performance.json: root is {type(data).__name__}, content preview: {str(data)[:100]!r}."
+                    )
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
@@ -1061,7 +1065,14 @@ class Service(LocalResource):
             try:
                 with open(agent_performance_json_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    agent_achievements = data.get("achievements", {}).get("items", {})
+                    if isinstance(data, dict):
+                        agent_achievements = data.get("achievements", {}).get(
+                            "items", {}
+                        )
+                    else:
+                        logger.warning(
+                            f"Invalid agent_performance.json: root is {type(data).__name__}, content preview: {str(data)[:100]!r}."
+                        )
             except (json.JSONDecodeError, OSError) as e:
                 logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
