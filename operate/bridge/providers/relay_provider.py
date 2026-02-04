@@ -185,7 +185,7 @@ class RelayProvider(Provider):
             "recipient": to_address,
             "destinationCurrency": to_token,
             "amount": str(to_amount),
-            "tradeType": "EXPECTED_OUTPUT",
+            "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
         for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
