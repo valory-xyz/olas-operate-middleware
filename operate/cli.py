@@ -852,8 +852,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         logger.info(f"_create_safe Computed {initial_funds=}")
 
         transfer_txs = {}
-        try:
-            for asset, amount in initial_funds.items():
+        for asset, amount in initial_funds.items():
+            try:
                 if amount <= 0:
                     continue
 
@@ -868,12 +868,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     from_safe=False,
                 )
                 transfer_txs[asset] = tx_hash
-        except Exception as e:  # pylint: disable=broad-except
-            logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
-            return JSONResponse(
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                content={"error": "Failed to fund safe. Please check the logs."},
-            )
+            except Exception as e:  # pylint: disable=broad-except
+                logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
+                return JSONResponse(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    content={"error": "Failed to fund safe. Please check the logs."},
+                )
 
         return JSONResponse(
             content={
@@ -884,8 +884,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             },
             status_code=HTTPStatus.CREATED,
         )
-
-
 
 
     @app.put("/api/wallet/safe")
