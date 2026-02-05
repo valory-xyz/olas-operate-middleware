@@ -194,3 +194,7 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx["gas"] = original_gas
         print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
     tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
+
+
+class UnsupportedChainError(Exception):
+    """Error for unsupported chains."""
