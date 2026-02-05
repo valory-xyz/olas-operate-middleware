@@ -41,7 +41,7 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
-from operate.constants import ZERO_ADDRESS
+from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
 from operate.data import DATA_DIR
 from operate.data.contracts.foreign_omnibridge.contract import ForeignOmnibridge
 from operate.data.contracts.home_omnibridge.contract import HomeOmnibridge
@@ -527,7 +527,9 @@ class NativeBridgeProvider(Provider):
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         update_tx_with_gas_pricing(approve_tx, from_ledger_api)
-        update_tx_with_gas_estimate(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return approve_tx
 
     def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
@@ -549,7 +551,9 @@ class NativeBridgeProvider(Provider):
         )
 
         update_tx_with_gas_pricing(bridge_tx, from_ledger_api)
-        update_tx_with_gas_estimate(bridge_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            bridge_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return bridge_tx
 
     def _get_txs(
