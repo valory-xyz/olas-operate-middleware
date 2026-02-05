@@ -832,7 +832,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         # 2. Determine what should be transferred
         # A default nonzero balance might be required on the Safe after creation.
         # This is possibly required to estimate gas in protocol transactions.
-        initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
         transfer_excess_assets = (
             str(data.get("transfer_excess_assets", "false")).lower() == "true"
         )
@@ -841,17 +840,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             asset_addresses = {ZERO_ADDRESS} | {
                 token[chain] for token in ERC20_TOKENS.values() if chain in token
             }
-            balances = get_assets_balances(
+            master_eoa_balances = get_assets_balances(
                 ledger_api=ledger_api,
                 addresses={wallet.address},
                 asset_addresses=asset_addresses,
                 raise_on_invalid_address=False,
             )[wallet.address]
-            initial_funds = subtract_dicts(balances, DEFAULT_EOA_TOPUPS[chain])
+            initial_funds = subtract_dicts(
+                master_eoa_balances, DEFAULT_EOA_TOPUPS[chain]
+            )
+        else:
+            initial_funds = data.get("initial_funds", DEFAULT_NEW_SAFE_FUNDS[chain])
+            safe_balances = get_assets_balances(
+                ledger_api=ledger_api,
+                addresses={safe_address},
+                asset_addresses=set(initial_funds.keys()) | {ZERO_ADDRESS},
+                raise_on_invalid_address=False,
+            )[safe_address]
+            initial_funds = subtract_dicts(initial_funds, safe_balances)
 
         logger.info(f"_create_safe Computed {initial_funds=}")
 
         transfer_txs = {}
+        transfer_errors = {}
         for asset, amount in initial_funds.items():
             try:
                 if amount <= 0:
@@ -870,21 +881,29 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 transfer_txs[asset] = tx_hash
             except Exception as e:  # pylint: disable=broad-except
                 logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
-                return JSONResponse(
-                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-                    content={"error": "Failed to fund safe. Please check the logs."},
-                )
+                transfer_errors[asset] = str(e)
 
+        if transfer_errors:
+            return JSONResponse(
+                content={
+                    "safe": safe_address,
+                    "create_tx": create_tx,
+                    "transfer_txs": transfer_txs,
+                    "transfer_errors": transfer_errors,
+                    "message": "Failed to fund Safe.",
+                },
+                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
         return JSONResponse(
             content={
+                "safe": safe_address,
                 "create_tx": create_tx,
                 "transfer_txs": transfer_txs,
-                "safe": safes.get(chain),
-                "message": "Safe created successfully",
+                "transfer_errors": transfer_errors,
+                "message": "Safe ready and funded successfully.",
             },
             status_code=HTTPStatus.CREATED,
         )
-
 
     @app.put("/api/wallet/safe")
     async def _update_safe(request: Request) -> t.List[t.Dict]:
