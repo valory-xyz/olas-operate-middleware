@@ -825,7 +825,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 # After creation the safe should be in wallet.safes
                 wallet = manager.load(ledger_type=ledger_type)  # reload
                 safe_address = wallet.safes[chain]
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-except
                 logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
                 return JSONResponse(
                     content={"error": MSG_FAILED_CREATE_SAFE, "details": str(e)},
