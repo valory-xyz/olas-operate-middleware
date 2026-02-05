@@ -42,7 +42,6 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
-    DEFAULT_GAS_ESTIMATE_MULTIPLIER,
     get_default_ledger_api,
     update_tx_with_gas_pricing,
 )
