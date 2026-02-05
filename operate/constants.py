@@ -87,4 +87,11 @@ MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
 MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
 MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
+MSG_SAFE_CREATED = "Safe created."
+MSG_SAFE_CREATED_FUNDED = "Safe created and funded successfully."
+MSG_SAFE_READY_FUNDED = "Safe ready and funded successfully."
+MSG_SAFE_ALREADY_CREATED_FUNDED = "Safe already exists and is funded."
+MSG_FAILED_FUND_SAFE = "Failed to fund Safe."
+MSG_FAILED_CREATE_SAFE = "Failed to create Safe. Please check the logs."
+
 POLY_SAFE_SERVICE_NAMES = frozenset(("polymarket_trader",))

@@ -52,9 +52,15 @@ from operate.constants import (
     DEPLOYMENT_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
+    MSG_FAILED_CREATE_SAFE,
+    MSG_FAILED_FUND_SAFE,
     MSG_INVALID_MNEMONIC,
     MSG_INVALID_PASSWORD,
     MSG_NEW_PASSWORD_MISSING,
+    MSG_SAFE_ALREADY_CREATED_FUNDED,
+    MSG_SAFE_CREATED,
+    MSG_SAFE_CREATED_FUNDED,
+    MSG_SAFE_READY_FUNDED,
     OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
@@ -822,7 +828,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             except Exception as e:
                 logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
                 return JSONResponse(
-                    content={"error": "Failed to create Safe", "details": str(e)},
+                    content={"error": MSG_FAILED_CREATE_SAFE, "details": str(e)},
                     status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
                 )
         else:
@@ -890,19 +896,35 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     "create_tx": create_tx,
                     "transfer_txs": transfer_txs,
                     "transfer_errors": transfer_errors,
-                    "message": "Failed to fund Safe.",
+                    "message": MSG_FAILED_FUND_SAFE,
                 },
                 status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
+
+        if create_tx:
+            if transfer_txs:
+                message = MSG_SAFE_CREATED_FUNDED
+                status_code = HTTPStatus.CREATED
+            else:
+                message = MSG_SAFE_CREATED
+                status_code = HTTPStatus.CREATED
+        else:
+            if transfer_txs:
+                message = MSG_SAFE_READY_FUNDED
+                status_code = HTTPStatus.OK
+            else:  # Safe already exists and is already sufficiently funded: no-op
+                message = MSG_SAFE_ALREADY_CREATED_FUNDED
+                status_code = HTTPStatus.OK
+
         return JSONResponse(
             content={
                 "safe": safe_address,
                 "create_tx": create_tx,
                 "transfer_txs": transfer_txs,
                 "transfer_errors": transfer_errors,
-                "message": "Safe ready and funded successfully.",
+                "message": message,
             },
-            status_code=HTTPStatus.CREATED,
+            status_code=status_code,
         )
 
     @app.put("/api/wallet/safe")
