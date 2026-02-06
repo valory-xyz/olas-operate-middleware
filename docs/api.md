@@ -984,7 +984,7 @@ The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) fo
 }
 ```
 
-**Response (Safe created, funding - 201):**
+**Response (Safe created, funding - 200):**
 
 ```json
 {
@@ -994,22 +994,25 @@ The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) fo
     "0x0000000000000000000000000000000000000000": "0x..."
   },
   "transfer_errors": {},
-  "message": "Safe created and funded successfully."
+  "message": "Safe created and funded successfully.",
+  "status": "SAFE_CREATED_TRANSFER_COMPLETED"
 }
 ```
 
-**Response (Safe created, no funding - 201):**
-
-**Note:**
-This case only happens if no funding is specified (i.e. create Safe without funding, `initial_funds={}`).
+**Response (Safe created, funding failed - 200):**
 
 ```json
 {
   "safe": "0x...",
   "create_tx": "0x...",
-  "transfer_txs": {},
-  "transfer_errors": {},
-  "message": "Safe created."
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe created but some funding transactions failed.",
+  "status": "SAFE_CREATED_TRANSFER_FAILED"
 }
 ```
 
@@ -1023,19 +1026,51 @@ This case only happens if no funding is specified (i.e. create Safe without fund
     "0x0000000000000000000000000000000000000000": "0x..."
   },
   "transfer_errors": {},
-  "message": "Safe ready and funded successfully."
+  "message": "Safe already exists and funded successfully.",
+  "status": "SAFE_EXISTS_TRANSFER_COMPLETED"
 }
 ```
 
-**Response (Safe exists, no funding - 200):**
+**Response (Safe exists, funding failed - 200):**
 
 ```json
 {
   "safe": "0x...",
   "create_tx": null,
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe already exists but some funding transactions failed.",
+  "status": "SAFE_EXISTS_TRANSFER_FAILED"
+}
+```
+
+**Response (Safe exists, no funding needed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
   "transfer_txs": {},
   "transfer_errors": {},
-  "message": "Safe ready and funded successfully."
+  "message": "Safe already exists and is sufficiently funded.",
+  "status": "NOOP_ALREADY_READY"
+}
+```
+
+**Response (Safe creation failed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
+  "transfer_txs": {},
+  "transfer_errors": {},
+  "message": "Failed to create Safe.",
+  "status": "SAFE_FAILED"
 }
 ```
 
@@ -1068,31 +1103,6 @@ This case only happens if no funding is specified (i.e. create Safe without fund
 ```json
 {
   "error": "User account not found."
-}
-```
-
-**Response (Creation failed - 500):**
-
-```json
-{
-  "error": "Failed to create safe. Please check the logs.",
-  "details": "details"
-}
-```
-
-**Response (Creation succeeds, funding fails - 500):**
-
-```json
-{
-  "safe": "0x...",
-  "create_tx": "0x...",
-  "transfer_txs": {
-    "0x0000000000000000000000000000000000000000": "0x..."
-  },
-  "transfer_errors": {
-    "0x0000000000000000000000000000000000000000": "..."
-  },
-  "message": "Failed to fund Safe."
 }
 ```
 
