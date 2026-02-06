@@ -1032,7 +1032,7 @@ class TestProvider:
                 },
                 "r-bfb51822-e689-4141-8328-134f0a877fdf",
                 "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-                ProviderRequestStatus.EXECUTION_UNKNOWN,
+                ProviderRequestStatus.EXECUTION_FAILED,
                 None,
                 0,
             ),
