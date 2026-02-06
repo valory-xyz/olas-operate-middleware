@@ -1254,11 +1254,10 @@ class ServiceManager:
             self.logger.warning(
                 f"Skipping ERC8004 agent wallet setup: contracts not configured for {chain}"
             )
-        except Exception as e:  # pylint: disable=broad-except
+        except Exception:  # pylint: disable=broad-except
             self.logger.error(
-                f"Failed to set agent wallet for service_id={chain_data.token}: {e}"
+                f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
             )
-            raise RuntimeError from e
 
         # TODO: yet another agent specific logic for mech, which should be abstracted
         if all(
