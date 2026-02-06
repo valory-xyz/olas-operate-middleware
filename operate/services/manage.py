@@ -55,7 +55,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_rpc
+from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
@@ -633,7 +633,7 @@ class ServiceManager:
             priority_mech_service_id=priority_mech_service_id,
         )
 
-    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         self,
         service_config_id: str,
         chain: str,
@@ -1151,9 +1151,113 @@ class ServiceManager:
         info = sftxb.info(token_id=chain_data.token)
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
+        service.store()
 
         if is_initial_funding:
             self.funding_manager.fund_service_initial(service)
+
+        # Set ERC8004 agent wallet if not set already
+        try:
+            # Check if required contracts are available
+            required_contracts = [
+                "erc8004_identity_registry",
+                "erc8004_identity_registry_bridger",
+                "sign_message_lib",
+            ]
+            if not all(
+                contract in CONTRACTS[Chain(chain)] for contract in required_contracts
+            ):
+                raise UnsupportedChainError("Missing ERC8004 contracts")
+
+            identity_registry_bridger = (
+                registry_contracts.erc8004_identity_registry_bridger.get_instance(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=CONTRACTS[Chain(chain)][
+                        "erc8004_identity_registry_bridger"
+                    ],
+                )
+            )
+            erc8004_agent_id = identity_registry_bridger.functions.mapServiceIdAgentIds(
+                chain_data.token
+            ).call()
+
+            # Get current registered agent wallet
+            identity_registry = (
+                registry_contracts.erc8004_identity_registry.get_instance(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=CONTRACTS[Chain(chain)][
+                        "erc8004_identity_registry"
+                    ],
+                )
+            )
+            registered_wallet = identity_registry.functions.getAgentWallet(
+                erc8004_agent_id
+            ).call()
+
+            # Check if agent wallet needs to be set (new multisig or unset wallet)
+            if chain_data.multisig != registered_wallet:
+                self.logger.info(
+                    f"Agent wallet setup needed: "
+                    f"service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}, "
+                    f"new_wallet={chain_data.multisig}, "
+                    f"registered_wallet={registered_wallet}"
+                )
+
+                # Get current block timestamp and compute deadline (5 minutes = 300 seconds)
+                latest_block = sftxb.ledger_api.api.eth.get_block("latest")
+                deadline = (
+                    latest_block["timestamp"] + 300
+                )  # MAX_DEADLINE_DELAY = 5 minutes
+
+                # Get required contract addresses
+                ir_address = CONTRACTS[Chain(chain)]["erc8004_identity_registry"]
+                irb_address = CONTRACTS[Chain(chain)][
+                    "erc8004_identity_registry_bridger"
+                ]
+                sign_message_lib_address = CONTRACTS[Chain(chain)]["sign_message_lib"]
+
+                # Get transaction data for agent wallet setup
+                agent_wallet_txs, _ = sftxb.get_agent_wallet_setup_txs(
+                    agent_id=erc8004_agent_id,
+                    new_wallet=chain_data.multisig,
+                    identity_registry_address=ir_address,
+                    identity_registry_bridger_address=irb_address,
+                    sign_message_lib_address=sign_message_lib_address,
+                    deadline=deadline,
+                )
+
+                agent_crypto = self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                )
+                asftx = sftxb.new_tx(crypto=agent_crypto, safe=chain_data.multisig)
+                for agent_wallet_tx in agent_wallet_txs:
+                    asftx.add(agent_wallet_tx)
+
+                receipt = asftx.settle()
+                if receipt["status"] != 1:
+                    self.logger.error(
+                        f"Agent wallet setup transaction failed: {receipt}"
+                    )
+                    raise RuntimeError("Agent wallet setup transaction failed")
+
+                self.logger.info(
+                    f"Agent wallet setup completed for service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}"
+                )
+            else:
+                self.logger.info(
+                    f"ERC8004 Agent wallet already set for service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}"
+                )
+        except UnsupportedChainError:
+            self.logger.warning(
+                f"Skipping ERC8004 agent wallet setup: contracts not configured for {chain}"
+            )
+        except Exception:  # pylint: disable=broad-except
+            self.logger.error(
+                f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
+            )
 
         # TODO: yet another agent specific logic for mech, which should be abstracted
         if all(

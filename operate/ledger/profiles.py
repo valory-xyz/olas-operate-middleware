@@ -41,23 +41,31 @@ CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
 for _chain in CHAINS:
     if _chain.value in CHAIN_PROFILES:
         profile = CHAIN_PROFILES[_chain.value]
-        CONTRACTS[_chain] = ContractAddresses(
-            {
-                "service_registry": profile["service_registry"],
-                "service_registry_token_utility": profile[
-                    "service_registry_token_utility"
-                ],
-                "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
-                "gnosis_safe_same_address_multisig": profile[
-                    "gnosis_safe_same_address_multisig"
-                ],
-                "safe_multisig_with_recovery_module": profile[
-                    "safe_multisig_with_recovery_module"
-                ],
-                "recovery_module": profile["recovery_module"],
-                "multisend": DEFAULT_MULTISEND,
-            }
-        )
+        contracts_dict = {
+            "service_registry": profile["service_registry"],
+            "service_registry_token_utility": profile["service_registry_token_utility"],
+            "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
+            "gnosis_safe_same_address_multisig": profile[
+                "gnosis_safe_same_address_multisig"
+            ],
+            "safe_multisig_with_recovery_module": profile[
+                "safe_multisig_with_recovery_module"
+            ],
+            "recovery_module": profile["recovery_module"],
+            "multisend": DEFAULT_MULTISEND,
+        }
+        # Add optional ERC8004 contracts if available
+        if "erc8004_identity_registry" in profile:
+            contracts_dict["erc8004_identity_registry"] = profile[
+                "erc8004_identity_registry"
+            ]
+        if "erc8004_identity_registry_bridger" in profile:
+            contracts_dict["erc8004_identity_registry_bridger"] = profile[
+                "erc8004_identity_registry_bridger"
+            ]
+        if "sign_message_lib" in profile:
+            contracts_dict["sign_message_lib"] = profile["sign_message_lib"]
+        CONTRACTS[_chain] = ContractAddresses(contracts_dict)
 
 STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.ARBITRUM_ONE: {},

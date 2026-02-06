@@ -1262,16 +1262,18 @@ class EthSafeTxBuilder(_ChainUtil):
             safe=safe,
         )
 
-    def new_tx(self) -> GnosisSafeTransaction:
+    def new_tx(
+        self, crypto: Optional[Crypto] = None, safe: Optional[str] = None
+    ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return EthSafeTxBuilder._new_tx(
             ledger_api=self.wallet.ledger_api(
                 chain=OperateChain.from_string(self.chain_type.value),
                 rpc=self.rpc,
             ),
-            crypto=self.crypto,
+            crypto=crypto or self.crypto,
             chain_type=self.chain_type,
-            safe=t.cast(str, self.safe),
+            safe=t.cast(str, safe or self.safe),
         )
 
     def get_mint_tx_data(  # pylint: disable=too-many-arguments
@@ -1862,6 +1864,54 @@ class EthSafeTxBuilder(_ChainUtil):
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
+
+    def get_agent_wallet_setup_txs(  # pylint: disable=too-many-arguments
+        self,
+        agent_id: int,
+        new_wallet: str,
+        identity_registry_address: str,
+        identity_registry_bridger_address: str,
+        sign_message_lib_address: str,
+        deadline: int,
+    ) -> t.Tuple[t.List[t.Dict], str]:
+        """Get agent wallet setup transactions (signMessage + setAgentWallet).
+
+        Args:
+            agent_id: Agent ID from mapServiceIdAgentIds
+            new_wallet: New wallet address (service Safe)
+            identity_registry_address: Identity Registry contract address
+            identity_registry_bridger_address: Identity Registry Bridger contract address
+            sign_message_lib_address: SignMessageLib contract address
+            deadline: Deadline timestamp
+
+        Returns:
+            Tuple of (list of tx dicts for multisend, digest for signing)
+        """
+        # Compute EIP-712 digest using identity_registry contract package
+        digest = registry_contracts.erc8004_identity_registry.compute_eip712_agent_wallet_set_digest(
+            ledger_api=self.ledger_api,
+            contract_address=identity_registry_address,
+            agent_id=agent_id,
+            new_wallet=new_wallet,
+            identity_registry_bridger_address=identity_registry_bridger_address,
+            deadline=deadline,
+        )
+
+        # Get signMessage transaction from sign_message_lib contract package
+        sign_message_tx = registry_contracts.sign_message_lib.get_sign_message_tx_data(
+            ledger_api=self.ledger_api,
+            contract_address=sign_message_lib_address,
+            digest=digest,
+        )
+
+        # Get setAgentWallet transaction from identity_registry_bridger contract package
+        set_agent_wallet_tx = registry_contracts.erc8004_identity_registry_bridger.get_set_agent_wallet_tx_data(
+            ledger_api=self.ledger_api,
+            contract_address=identity_registry_bridger_address,
+            deadline=deadline,
+        )
+
+        return [sign_message_tx, set_agent_wallet_tx], digest
 
 
 def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:

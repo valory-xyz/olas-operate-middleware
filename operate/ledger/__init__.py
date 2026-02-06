@@ -198,3 +198,7 @@ def update_tx_with_gas_estimate(
         tx["gas"] = original_gas
         print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
     tx["gas"] = ceil(tx["gas"] * gas_estimate_multiplier)
+
+
+class UnsupportedChainError(Exception):
+    """Error for unsupported chains."""
