@@ -1000,6 +1000,9 @@ The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) fo
 
 **Response (Safe created, no funding - 201):**
 
+**Note:**
+This case only happens if no funding is specified (i.e. create Safe without funding, `initial_funds={}`).
+
 ```json
 {
   "safe": "0x...",
