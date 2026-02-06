@@ -36,6 +36,7 @@ from operate.constants import (
     MSG_SAFE_CREATION_FAILED,
     MSG_SAFE_EXISTS_AND_FUNDED,
     MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
+    MSG_SAFE_EXISTS_TRANSFER_FAILED,
     OPERATE,
     ZERO_ADDRESS,
 )
@@ -743,17 +744,15 @@ class TestWalletCreateSafe(OnTestnet):
 
         monkeypatch.setattr(EthereumMasterWallet, "create_safe", original_create_safe)
 
-        # Step 5: Second call - failure on USDC transfer
+        # Step 5: Second call - failure on all transfers
         original_transfer = EthereumMasterWallet.transfer
 
-        def mock_transfer_failure(
+        def mock_transfer_failure_all(
             self: t.Any, to: str, amount: int, chain: Chain, asset: str, **kwargs: t.Any
         ) -> str | None:
-            if asset == USDC[chain]:
-                raise RuntimeError("Mock USDC transfer failure")
-            return original_transfer(self, to, amount, chain, asset, **kwargs)
+            raise RuntimeError("Mock transfer failure")
 
-        monkeypatch.setattr(EthereumMasterWallet, "transfer", mock_transfer_failure)
+        monkeypatch.setattr(EthereumMasterWallet, "transfer", mock_transfer_failure_all)
 
         response = client.post(
             url="/api/wallet/safe",
@@ -770,13 +769,46 @@ class TestWalletCreateSafe(OnTestnet):
         assert create_tx is not None
         assert isinstance(data["transfer_txs"], dict)
         assert USDC[chain] in data.get("transfer_errors", {})
-        assert len(data["transfer_txs"]) == len(excess_initial_funds) - 1
-        assert not data.get("transfer_errors", {}).get(ZERO_ADDRESS)
-        assert not data.get("transfer_errors", {}).get(OLAS[chain])
+        assert ZERO_ADDRESS in data.get("transfer_errors", {})
+        assert OLAS[chain] in data.get("transfer_errors", {})
+        assert len(data["transfer_txs"]) == 0
         assert data["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
         assert MSG_SAFE_CREATED_TRANSFER_FAILED in data["message"]
 
-        # Step 6: Third call - USDC transfer succeeds
+        # Step 6: Third call - failure on USDC transfer
+        def mock_transfer_failure_usdc(
+            self: t.Any, to: str, amount: int, chain: Chain, asset: str, **kwargs: t.Any
+        ) -> str | None:
+            if asset == USDC[chain]:
+                raise RuntimeError("Mock USDC transfer failure")
+            return original_transfer(self, to, amount, chain, asset, **kwargs)
+
+        monkeypatch.setattr(
+            EthereumMasterWallet, "transfer", mock_transfer_failure_usdc
+        )
+
+        response = client.post(
+            url="/api/wallet/safe",
+            json={
+                "chain": chain.value,
+                "transfer_excess_assets": "true",
+            },
+        )
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
+        safe_address = data["safe"]
+        assert safe_address.startswith("0x")
+        create_tx = data["create_tx"]
+        assert create_tx is None
+        assert isinstance(data["transfer_txs"], dict)
+        assert USDC[chain] in data.get("transfer_errors", {})
+        assert len(data["transfer_txs"]) == len(excess_initial_funds) - 1
+        assert not data.get("transfer_errors", {}).get(ZERO_ADDRESS)
+        assert not data.get("transfer_errors", {}).get(OLAS[chain])
+        assert data["status"] == CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
+        assert MSG_SAFE_EXISTS_TRANSFER_FAILED in data["message"]
+
+        # Step 7: Fourth call - USDC transfer succeeds
         monkeypatch.setattr(EthereumMasterWallet, "transfer", original_transfer)
 
         response = client.post(
@@ -803,7 +835,7 @@ class TestWalletCreateSafe(OnTestnet):
             native_asset_tolerance=0.05,
         )
 
-        # Step 7: Fourth call - no more transfers needed (no-op)
+        # Step 8: Fifth call - no more transfers needed (no-op)
         response = client.post(
             url="/api/wallet/safe",
             json={
@@ -820,14 +852,14 @@ class TestWalletCreateSafe(OnTestnet):
         assert data["status"] == CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
         assert MSG_SAFE_EXISTS_AND_FUNDED in data["message"]
 
-        # Step 8: Verify safe now appears in wallet
+        # Step 9: Verify safe now appears in wallet
         response = client.get(url="/api/wallet")
         assert response.status_code == HTTPStatus.OK
         updated_wallet = next(w for w in response.json() if w["address"] == master_eoa)
         assert chain.value in updated_wallet["safes"]
         assert updated_wallet["safes"][chain.value] == safe_address
 
-        # Step 9: Verify actual balances on Safe match expected excess
+        # Step 10: Verify actual balances on Safe match expected excess
         self._assert_safe_balances(
             chain=chain,
             safe_address=safe_address,
