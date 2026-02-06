@@ -88,7 +88,7 @@ MSG_NEW_PASSWORD_MISSING = "'new_password' is required."  # nosec
 MSG_INVALID_PASSWORD = "Password is not valid."  # nosec
 MSG_INVALID_MNEMONIC = "Seed phrase is not valid."  # nosec
 
-MSG_SAFE_FAILED = "Failed to create Safe."
+MSG_SAFE_CREATION_FAILED = "Failed to create Safe."
 MSG_SAFE_CREATED_TRANSFER_COMPLETED = "Safe created and funded successfully."
 MSG_SAFE_CREATED_TRANSFER_FAILED = "Safe created but some funding transactions failed."
 MSG_SAFE_EXISTS_TRANSFER_COMPLETED = "Safe already exists and funded successfully."

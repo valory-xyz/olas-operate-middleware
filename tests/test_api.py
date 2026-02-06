@@ -33,9 +33,9 @@ from operate.constants import (
     MIN_PASSWORD_LENGTH,
     MSG_SAFE_CREATED_TRANSFER_COMPLETED,
     MSG_SAFE_CREATED_TRANSFER_FAILED,
+    MSG_SAFE_CREATION_FAILED,
     MSG_SAFE_EXISTS_AND_FUNDED,
     MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
-    MSG_SAFE_FAILED,
     OPERATE,
     ZERO_ADDRESS,
 )
@@ -738,8 +738,8 @@ class TestWalletCreateSafe(OnTestnet):
         )
         assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert data["status"] == CreateSafeStatus.SAFE_FAILED
-        assert MSG_SAFE_FAILED in data["message"]
+        assert data["status"] == CreateSafeStatus.SAFE_CREATION_FAILED
+        assert MSG_SAFE_CREATION_FAILED in data["message"]
 
         monkeypatch.setattr(EthereumMasterWallet, "create_safe", original_create_safe)
 
@@ -817,7 +817,7 @@ class TestWalletCreateSafe(OnTestnet):
         assert data["create_tx"] is None
         assert data["transfer_txs"] == {}
         assert not data["transfer_errors"]
-        assert data["status"] == CreateSafeStatus.NOOP_ALREADY_READY
+        assert data["status"] == CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
         assert MSG_SAFE_EXISTS_AND_FUNDED in data["message"]
 
         # Step 8: Verify safe now appears in wallet

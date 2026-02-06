@@ -58,10 +58,10 @@ from operate.constants import (
     MSG_NEW_PASSWORD_MISSING,
     MSG_SAFE_CREATED_TRANSFER_COMPLETED,
     MSG_SAFE_CREATED_TRANSFER_FAILED,
+    MSG_SAFE_CREATION_FAILED,
     MSG_SAFE_EXISTS_AND_FUNDED,
     MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
     MSG_SAFE_EXISTS_TRANSFER_FAILED,
-    MSG_SAFE_FAILED,
     OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
@@ -143,8 +143,8 @@ class CreateSafeStatus(str, enum.Enum):
     SAFE_CREATED_TRANSFER_FAILED = "SAFE_CREATED_TRANSFER_FAILED"
     SAFE_EXISTS_TRANSFER_COMPLETED = "SAFE_EXISTS_TRANSFER_COMPLETED"
     SAFE_EXISTS_TRANSFER_FAILED = "SAFE_EXISTS_TRANSFER_FAILED"
-    SAFE_FAILED = "SAFE_FAILED"
-    NOOP_ALREADY_READY = "NOOP_ALREADY_READY"
+    SAFE_CREATION_FAILED = "SAFE_CREATION_FAILED"
+    SAFE_EXISTS_ALREADY_FUNDED = "SAFE_EXISTS_ALREADY_FUNDED"
 
     def __str__(self) -> str:
         """__str__"""
@@ -846,12 +846,12 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
                 return JSONResponse(
                     content={
-                        "status": CreateSafeStatus.SAFE_FAILED,
+                        "status": CreateSafeStatus.SAFE_CREATION_FAILED,
                         "safe": None,
                         "create_tx": None,
                         "transfer_txs": {},
                         "transfer_errors": {},
-                        "message": MSG_SAFE_FAILED,
+                        "message": MSG_SAFE_CREATION_FAILED,
                     },
                     status_code=HTTPStatus.OK,
                 )
@@ -928,7 +928,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
                 message = MSG_SAFE_EXISTS_TRANSFER_COMPLETED
         else:  # No create_tx and no transfer_txs means the Safe already exists and is sufficiently funded.
-            status = CreateSafeStatus.NOOP_ALREADY_READY
+            status = CreateSafeStatus.SAFE_EXISTS_ALREADY_FUNDED
             message = MSG_SAFE_EXISTS_AND_FUNDED
 
         return JSONResponse(

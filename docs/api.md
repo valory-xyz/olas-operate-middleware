@@ -1057,7 +1057,7 @@ The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) fo
   "transfer_txs": {},
   "transfer_errors": {},
   "message": "Safe already exists and is sufficiently funded.",
-  "status": "NOOP_ALREADY_READY"
+  "status": "SAFE_EXISTS_ALREADY_FUNDED"
 }
 ```
 
@@ -1070,7 +1070,7 @@ The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) fo
   "transfer_txs": {},
   "transfer_errors": {},
   "message": "Failed to create Safe.",
-  "status": "SAFE_FAILED"
+  "status": "SAFE_CREATION_FAILED"
 }
 ```
 
