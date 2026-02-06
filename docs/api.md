@@ -955,7 +955,12 @@ Get the safe address for a specific chain.
 
 ### `POST /api/wallet/safe`
 
-Create a new Gnosis Safe.
+Create or ensure a Gnosis Safe exists for the specified chain and fund it if needed.
+
+The endpoint automatically skips Safe creation if one already exists for the chain. It will only perform transfers if additional funds are required (or if excess assets should be swept when `transfer_excess_assets` is enabled).
+
+**Important note on transactions:**  
+The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) for actions actually executed **during the current request**. If the Safe already exists and is sufficiently funded, no transactions are performed and the fields will be `null` / empty. The client is responsible for tracking transaction hashes across multiple calls if needed (e.g. for confirmation or monitoring).
 
 **Request Body:**
 
@@ -969,7 +974,7 @@ Create a new Gnosis Safe.
 }
 ```
 
-**Request Body (with asset transfer):**
+**Request Body (with transfer excess assets):**
 
 ```json
 {
@@ -979,25 +984,93 @@ Create a new Gnosis Safe.
 }
 ```
 
-**Response (Success - 201):**
+**Response (Safe created, funding - 200):**
 
 ```json
 {
+  "safe": "0x...",
   "create_tx": "0x...",
   "transfer_txs": {
     "0x0000000000000000000000000000000000000000": "0x..."
   },
-  "safe": "0x...",
-  "message": "Safe created successfully"
+  "transfer_errors": {},
+  "message": "Safe created and funded successfully.",
+  "status": "SAFE_CREATED_TRANSFER_COMPLETED"
 }
 ```
 
-**Response (Safe exists - 200):**
+**Response (Safe created, funding failed - 200):**
 
 ```json
 {
   "safe": "0x...",
-  "message": "Safe already exists for this chain."
+  "create_tx": "0x...",
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe created but some funding transactions failed.",
+  "status": "SAFE_CREATED_TRANSFER_FAILED"
+}
+```
+
+**Response (Safe exists, funding - 200):**
+
+```json
+{
+  "safe": "0x...",
+  "create_tx": null,
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {},
+  "message": "Safe already exists and funded successfully.",
+  "status": "SAFE_EXISTS_TRANSFER_COMPLETED"
+}
+```
+
+**Response (Safe exists, funding failed - 200):**
+
+```json
+{
+  "safe": "0x...",
+  "create_tx": null,
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe already exists but some funding transactions failed.",
+  "status": "SAFE_EXISTS_TRANSFER_FAILED"
+}
+```
+
+**Response (Safe exists, no funding needed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
+  "transfer_txs": {},
+  "transfer_errors": {},
+  "message": "Safe already exists and is sufficiently funded.",
+  "status": "SAFE_EXISTS_ALREADY_FUNDED"
+}
+```
+
+**Response (Safe creation failed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
+  "transfer_txs": {},
+  "transfer_errors": {},
+  "message": "Failed to create Safe.",
+  "status": "SAFE_CREATION_FAILED"
 }
 ```
 
@@ -1030,14 +1103,6 @@ Create a new Gnosis Safe.
 ```json
 {
   "error": "User account not found."
-}
-```
-
-**Response (Creation failed - 500):**
-
-```json
-{
-  "error": "Failed to create safe. Please check the logs."
 }
 ```
 
