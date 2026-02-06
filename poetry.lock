@@ -2402,13 +2402,13 @@ open-aea-ledger-ethereum = ">=2.0.0,<2.1.0"
 
 [[package]]
 name = "open-autonomy"
-version = "0.21.8"
+version = "0.21.9"
 description = "A framework for the creation of autonomous agent services."
 optional = false
 python-versions = ">=3.10"
 files = [
-    {file = "open_autonomy-0.21.8-py3-none-any.whl", hash = "sha256:763cd5cc8ee8839a995ef82a19fc3a4a58510aa8a601df36c7cf4e3bfb77d12d"},
-    {file = "open_autonomy-0.21.8.tar.gz", hash = "sha256:4b18c2579f6cf4c2518ef32579c85447cc2624629db0a105e261200eb2b540e2"},
+    {file = "open_autonomy-0.21.9-py3-none-any.whl", hash = "sha256:6657161269dd3c65b21ab0dcb3848a8a00d7d650ab4e0c8c3d8395f5a0a73060"},
+    {file = "open_autonomy-0.21.9.tar.gz", hash = "sha256:35c004d1eade03de075ec6377cc4287294f53c7c332bdf962039102a00e4c5e9"},
 ]
 
 [package.dependencies]
@@ -4255,4 +4255,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "<3.12,>=3.10"
-content-hash = "77812cf5547c25d86fcf2e1c7d8c5ff665fd5721812650f1f33b90a68c1dcc8d"
+content-hash = "80225cb23b1df582bf2cf87a5157da9d35ff2b7cf14e0e429ce6755c46ee0ddc"

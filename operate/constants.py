@@ -63,6 +63,7 @@ MIN_SECURITY_DEPOSIT = BigInt(1)
 ON_CHAIN_INTERACT_TIMEOUT = 120.0
 ON_CHAIN_INTERACT_RETRIES = 12
 ON_CHAIN_INTERACT_SLEEP = 5.0
+BRIDGE_GAS_ESTIMATE_MULTIPLIER = 1.2
 MIN_PASSWORD_LENGTH = 8
 DEFAULT_FUNDING_REQUESTS_COOLDOWN_SECONDS = 300  # Seconds to wait after an agent has been funded during which it will not be asked for fund requirements again
 

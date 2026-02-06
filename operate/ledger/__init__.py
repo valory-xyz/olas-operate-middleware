@@ -151,7 +151,7 @@ GAS_ESTIMATE_FALLBACK_ADDRESSES = [
     "0x000000000000000000000000000000000000dEaD",
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
 ]
-GAS_ESTIMATE_BUFFER = 1.10
+DEFAULT_GAS_ESTIMATE_MULTIPLIER = 1.10
 
 
 # TODO backport to open aea/autonomy
@@ -177,7 +177,11 @@ def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
 
 # TODO backport to open aea/autonomy
 # TODO This gas management should be done at a lower level in the library
-def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+def update_tx_with_gas_estimate(
+    tx: t.Dict,
+    ledger_api: LedgerApi,
+    gas_estimate_multiplier: float = DEFAULT_GAS_ESTIMATE_MULTIPLIER,
+) -> None:
     """Update transaction with gas estimate."""
     original_from = tx["from"]
     original_gas = tx.get("gas", 1)
@@ -193,4 +197,4 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
     if tx["gas"] == 1:
         tx["gas"] = original_gas
         print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
-    tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
+    tx["gas"] = ceil(tx["gas"] * gas_estimate_multiplier)
