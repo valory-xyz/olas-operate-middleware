@@ -888,7 +888,7 @@ class TestFunding(OnTestnet):
                     "transfer_excess_assets": True,
                 },
             )
-            assert response.status_code == HTTPStatus.CREATED
+            assert response.status_code == HTTPStatus.OK
             master_safes[chain] = response.json()["safe"]
 
         response = client.get(
