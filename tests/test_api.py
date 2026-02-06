@@ -28,14 +28,14 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
-from operate.cli import create_app
+from operate.cli import CreateSafeStatus, create_app
 from operate.constants import (
     MIN_PASSWORD_LENGTH,
-    MSG_FAILED_CREATE_SAFE,
-    MSG_FAILED_FUND_SAFE,
-    MSG_SAFE_ALREADY_CREATED_FUNDED,
-    MSG_SAFE_CREATED_FUNDED,
-    MSG_SAFE_READY_FUNDED,
+    MSG_SAFE_CREATED_TRANSFER_COMPLETED,
+    MSG_SAFE_CREATED_TRANSFER_FAILED,
+    MSG_SAFE_EXISTS_AND_FUNDED,
+    MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
+    MSG_SAFE_FAILED,
     OPERATE,
     ZERO_ADDRESS,
 )
@@ -462,7 +462,7 @@ class TestWalletCreateSafe(OnTestnet):
             "/api/wallet/safe",
             json={"chain": chain.value},
         )
-        assert response.status_code == HTTPStatus.CREATED
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["safe"].startswith("0x")
         safe_address = data["safe"]
@@ -471,7 +471,8 @@ class TestWalletCreateSafe(OnTestnet):
         default_initial_funds = DEFAULT_NEW_SAFE_FUNDS[chain]
         assert len(data["transfer_txs"]) == len(default_initial_funds)
         assert not data["transfer_errors"]
-        assert MSG_SAFE_CREATED_FUNDED in data["message"]
+        assert data["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+        assert MSG_SAFE_CREATED_TRANSFER_COMPLETED in data["message"]
 
         # Step 4: Verify safe now appears in wallet
         response = client.get("/api/wallet")
@@ -543,18 +544,17 @@ class TestWalletCreateSafe(OnTestnet):
                 "initial_funds": custom_initial_funds,
             },
         )
-        assert response.status_code == HTTPStatus.CREATED
-        create_data = response.json()
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
 
-        safe_address = create_data["safe"]
+        safe_address = data["safe"]
         assert safe_address.startswith("0x")
-        assert create_data["create_tx"] is not None
-        assert isinstance(create_data["transfer_txs"], dict)
-        assert set(create_data["transfer_txs"].keys()) == set(
-            custom_initial_funds.keys()
-        )
-        assert not create_data["transfer_errors"]
-        assert MSG_SAFE_CREATED_FUNDED in create_data["message"]
+        assert data["create_tx"] is not None
+        assert isinstance(data["transfer_txs"], dict)
+        assert set(data["transfer_txs"].keys()) == set(custom_initial_funds.keys())
+        assert not data["transfer_errors"]
+        assert data["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+        assert MSG_SAFE_CREATED_TRANSFER_COMPLETED in data["message"]
 
         # Step 5: Verify safe now appears in wallet
         response = client.get(url="/api/wallet")
@@ -619,8 +619,8 @@ class TestWalletCreateSafe(OnTestnet):
                 "transfer_excess_assets": "true",
             },
         )
-        assert response.status_code == HTTPStatus.CREATED
-        create_data = response.json()
+        assert response.status_code == HTTPStatus.OK
+        data = response.json()
 
         # Step 5: Determine excess initial funds
         ledger_api = get_default_ledger_api(chain=chain)
@@ -644,15 +644,14 @@ class TestWalletCreateSafe(OnTestnet):
             DEFAULT_EOA_TOPUPS[chain],
         )
 
-        safe_address = create_data["safe"]
+        safe_address = data["safe"]
         assert safe_address.startswith("0x")
-        assert create_data["create_tx"] is not None
-        assert isinstance(create_data["transfer_txs"], dict)
-        assert set(create_data["transfer_txs"].keys()) == set(
-            excess_initial_funds.keys()
-        )
-        assert not create_data["transfer_errors"]
-        assert MSG_SAFE_CREATED_FUNDED in create_data["message"]
+        assert data["create_tx"] is not None
+        assert isinstance(data["transfer_txs"], dict)
+        assert set(data["transfer_txs"].keys()) == set(excess_initial_funds.keys())
+        assert not data["transfer_errors"]
+        assert data["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+        assert MSG_SAFE_CREATED_TRANSFER_COMPLETED in data["message"]
 
         # Step 4: Verify safe now appears in wallet
         response = client.get(url="/api/wallet")
@@ -737,9 +736,10 @@ class TestWalletCreateSafe(OnTestnet):
                 "transfer_excess_assets": "true",
             },
         )
-        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
-        assert MSG_FAILED_CREATE_SAFE in data["error"]
+        assert data["status"] == CreateSafeStatus.SAFE_FAILED
+        assert MSG_SAFE_FAILED in data["message"]
 
         monkeypatch.setattr(EthereumMasterWallet, "create_safe", original_create_safe)
 
@@ -762,7 +762,7 @@ class TestWalletCreateSafe(OnTestnet):
                 "transfer_excess_assets": "true",
             },
         )
-        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         safe_address = data["safe"]
         assert safe_address.startswith("0x")
@@ -773,7 +773,8 @@ class TestWalletCreateSafe(OnTestnet):
         assert len(data["transfer_txs"]) == len(excess_initial_funds) - 1
         assert not data.get("transfer_errors", {}).get(ZERO_ADDRESS)
         assert not data.get("transfer_errors", {}).get(OLAS[chain])
-        assert MSG_FAILED_FUND_SAFE in data["message"]
+        assert data["status"] == CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
+        assert MSG_SAFE_CREATED_TRANSFER_FAILED in data["message"]
 
         # Step 6: Third call - USDC transfer succeeds
         monkeypatch.setattr(EthereumMasterWallet, "transfer", original_transfer)
@@ -791,7 +792,16 @@ class TestWalletCreateSafe(OnTestnet):
         assert data["create_tx"] is None
         assert USDC[chain] in data["transfer_txs"]
         assert not data["transfer_errors"]
-        assert MSG_SAFE_READY_FUNDED in data["message"]
+        assert data["status"] == CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
+        assert MSG_SAFE_EXISTS_TRANSFER_COMPLETED in data["message"]
+
+        # Verify balances
+        self._assert_safe_balances(
+            chain=chain,
+            safe_address=safe_address,
+            expected_balances=excess_initial_funds,
+            native_asset_tolerance=0.05,
+        )
 
         # Step 7: Fourth call - no more transfers needed (no-op)
         response = client.post(
@@ -807,7 +817,8 @@ class TestWalletCreateSafe(OnTestnet):
         assert data["create_tx"] is None
         assert data["transfer_txs"] == {}
         assert not data["transfer_errors"]
-        assert MSG_SAFE_ALREADY_CREATED_FUNDED in data["message"]
+        assert data["status"] == CreateSafeStatus.NOOP_ALREADY_READY
+        assert MSG_SAFE_EXISTS_AND_FUNDED in data["message"]
 
         # Step 8: Verify safe now appears in wallet
         response = client.get(url="/api/wallet")

@@ -20,6 +20,7 @@
 """Operate app CLI module."""
 import asyncio
 import atexit
+import enum
 import multiprocessing
 import os
 import shutil
@@ -52,15 +53,15 @@ from operate.constants import (
     DEPLOYMENT_DIR,
     KEYS_DIR,
     MIN_PASSWORD_LENGTH,
-    MSG_FAILED_CREATE_SAFE,
-    MSG_FAILED_FUND_SAFE,
     MSG_INVALID_MNEMONIC,
     MSG_INVALID_PASSWORD,
     MSG_NEW_PASSWORD_MISSING,
-    MSG_SAFE_ALREADY_CREATED_FUNDED,
-    MSG_SAFE_CREATED,
-    MSG_SAFE_CREATED_FUNDED,
-    MSG_SAFE_READY_FUNDED,
+    MSG_SAFE_CREATED_TRANSFER_COMPLETED,
+    MSG_SAFE_CREATED_TRANSFER_FAILED,
+    MSG_SAFE_EXISTS_AND_FUNDED,
+    MSG_SAFE_EXISTS_TRANSFER_COMPLETED,
+    MSG_SAFE_EXISTS_TRANSFER_FAILED,
+    MSG_SAFE_FAILED,
     OPERATE,
     OPERATE_HOME,
     SERVICES_DIR,
@@ -133,6 +134,21 @@ def service_not_found_error(service_config_id: str) -> JSONResponse:
         content={"error": f"Service {service_config_id} not found"},
         status_code=HTTPStatus.NOT_FOUND,
     )
+
+
+class CreateSafeStatus(str, enum.Enum):
+    """ProviderRequestStatus"""
+
+    SAFE_CREATED_TRANSFER_COMPLETED = "SAFE_CREATED_TRANSFER_COMPLETED"
+    SAFE_CREATED_TRANSFER_FAILED = "SAFE_CREATED_TRANSFER_FAILED"
+    SAFE_EXISTS_TRANSFER_COMPLETED = "SAFE_EXISTS_TRANSFER_COMPLETED"
+    SAFE_EXISTS_TRANSFER_FAILED = "SAFE_EXISTS_TRANSFER_FAILED"
+    SAFE_FAILED = "SAFE_FAILED"
+    NOOP_ALREADY_READY = "NOOP_ALREADY_READY"
+
+    def __str__(self) -> str:
+        """__str__"""
+        return self.value
 
 
 class OperateApp:  # pylint: disable=too-many-instance-attributes
@@ -778,6 +794,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         request: Request,
     ) -> t.List[t.Dict]:
         """Create wallet safe"""
+
         if operate.user_account is None:
             return ACCOUNT_NOT_FOUND_ERROR
 
@@ -828,8 +845,15 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             except Exception as e:  # pylint: disable=broad-except
                 logger.error(f"Safe creation failed: {e}\n{traceback.format_exc()}")
                 return JSONResponse(
-                    content={"error": MSG_FAILED_CREATE_SAFE, "details": str(e)},
-                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+                    content={
+                        "status": CreateSafeStatus.SAFE_FAILED,
+                        "safe": None,
+                        "create_tx": None,
+                        "transfer_txs": {},
+                        "transfer_errors": {},
+                        "message": MSG_SAFE_FAILED,
+                    },
+                    status_code=HTTPStatus.OK,
                 )
         else:
             safe_address = wallet.safes[chain]
@@ -889,42 +913,34 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 logger.error(f"Safe funding failed: {e}\n{traceback.format_exc()}")
                 transfer_errors[asset] = str(e)
 
-        if transfer_errors:
-            return JSONResponse(
-                content={
-                    "safe": safe_address,
-                    "create_tx": create_tx,
-                    "transfer_txs": transfer_txs,
-                    "transfer_errors": transfer_errors,
-                    "message": MSG_FAILED_FUND_SAFE,
-                },
-                status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
-            )
-
         if create_tx:
-            if transfer_txs:
-                message = MSG_SAFE_CREATED_FUNDED
-                status_code = HTTPStatus.CREATED
+            if transfer_errors:
+                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_FAILED
+                message = MSG_SAFE_CREATED_TRANSFER_FAILED
+            else:  # If there are no transfer_txs, it means the Safe is sufficiently funded.
+                status = CreateSafeStatus.SAFE_CREATED_TRANSFER_COMPLETED
+                message = MSG_SAFE_CREATED_TRANSFER_COMPLETED
+        elif transfer_txs:
+            if transfer_errors:
+                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_FAILED
+                message = MSG_SAFE_EXISTS_TRANSFER_FAILED
             else:
-                message = MSG_SAFE_CREATED
-                status_code = HTTPStatus.CREATED
-        else:
-            if transfer_txs:
-                message = MSG_SAFE_READY_FUNDED
-                status_code = HTTPStatus.OK
-            else:  # Safe already exists and is already sufficiently funded: no-op
-                message = MSG_SAFE_ALREADY_CREATED_FUNDED
-                status_code = HTTPStatus.OK
+                status = CreateSafeStatus.SAFE_EXISTS_TRANSFER_COMPLETED
+                message = MSG_SAFE_EXISTS_TRANSFER_COMPLETED
+        else:  # No create_tx and no transfer_txs means the Safe already exists and is sufficiently funded.
+            status = CreateSafeStatus.NOOP_ALREADY_READY
+            message = MSG_SAFE_EXISTS_AND_FUNDED
 
         return JSONResponse(
             content={
+                "status": status,
                 "safe": safe_address,
                 "create_tx": create_tx,
                 "transfer_txs": transfer_txs,
                 "transfer_errors": transfer_errors,
                 "message": message,
             },
-            status_code=status_code,
+            status_code=HTTPStatus.OK,
         )
 
     @app.put("/api/wallet/safe")
