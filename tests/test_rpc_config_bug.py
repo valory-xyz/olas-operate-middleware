@@ -19,14 +19,12 @@
 
 """Tests for RPC configuration bug."""
 
-import typing as t
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
 from operate.constants import ZERO_ADDRESS
-from operate.ledger import make_chain_ledger_api
 from operate.operate_types import (
     Chain,
     ChainConfig,

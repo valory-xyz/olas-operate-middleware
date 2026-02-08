@@ -111,12 +111,18 @@ poetry shell
 ```
 
 ### Code Quality
+
+**IMPORTANT**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
+
 ```bash
 # Format code (run before committing)
 tox -p -e black -e isort
 
-# Run all quality checks
+# Run ALL quality checks (REQUIRED before committing)
 tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
+
+# Quick check (most common linters)
+tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy
 ```
 
 ### Testing
