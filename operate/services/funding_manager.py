@@ -828,7 +828,9 @@ class FundingManager:
                 master_eoa_topups[chain_str][master_eoa].setdefault(asset, 0)
 
         master_eoa_thresholds = master_eoa_topups // 2
-        master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds, service=service)
+        master_eoa_balances = self._get_master_eoa_balances(
+            master_eoa_thresholds, service=service
+        )
 
         # BEGIN Bridging patch: remove excess balances for chains without a Safe:
         (

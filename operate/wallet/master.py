@@ -238,8 +238,7 @@ class MasterWallet(LocalResource):
 
         # Use custom RPC if provided, otherwise fall back to default
         ledger_api = (
-            make_chain_ledger_api(chain, rpc) if rpc
-            else get_default_ledger_api(chain)
+            make_chain_ledger_api(chain, rpc) if rpc else get_default_ledger_api(chain)
         )
 
         return get_asset_balance(

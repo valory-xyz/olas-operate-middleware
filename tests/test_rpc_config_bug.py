@@ -82,8 +82,11 @@ class TestRPCConfigBug:
         """Test that MasterWallet.get_balance uses custom RPC when provided."""
         # This test will FAIL before the fix, PASS after the fix
 
-        with patch("operate.wallet.master.make_chain_ledger_api") as mock_make_api, \
-             patch("operate.wallet.master.get_asset_balance") as mock_get_balance:
+        with patch(
+            "operate.wallet.master.make_chain_ledger_api"
+        ) as mock_make_api, patch(
+            "operate.wallet.master.get_asset_balance"
+        ) as mock_get_balance:
 
             mock_make_api.return_value = mock_ledger_api
             mock_get_balance.return_value = 1000000000000000000
@@ -109,8 +112,11 @@ class TestRPCConfigBug:
         mock_ledger_api: MagicMock,
     ) -> None:
         """Test that MasterWallet.get_balance uses default when no RPC provided."""
-        with patch("operate.wallet.master.get_default_ledger_api") as mock_get_default, \
-             patch("operate.wallet.master.get_asset_balance") as mock_get_balance:
+        with patch(
+            "operate.wallet.master.get_default_ledger_api"
+        ) as mock_get_default, patch(
+            "operate.wallet.master.get_asset_balance"
+        ) as mock_get_balance:
 
             mock_get_default.return_value = mock_ledger_api
             mock_get_balance.return_value = 1000000000000000000
@@ -136,8 +142,11 @@ class TestRPCConfigBug:
         custom_rpc: str,
     ) -> None:
         """Test that get_balance for EOA (not Safe) also respects custom RPC."""
-        with patch("operate.wallet.master.make_chain_ledger_api") as mock_make_api, \
-             patch("operate.wallet.master.get_asset_balance") as mock_get_balance:
+        with patch(
+            "operate.wallet.master.make_chain_ledger_api"
+        ) as mock_make_api, patch(
+            "operate.wallet.master.get_asset_balance"
+        ) as mock_get_balance:
 
             mock_ledger_api = MagicMock()
             mock_make_api.return_value = mock_ledger_api
@@ -167,8 +176,11 @@ class TestRPCConfigBug:
         """Test that custom RPC is used when checking ERC20 token balance."""
         usdc_address = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # USDC on Polygon
 
-        with patch("operate.wallet.master.make_chain_ledger_api") as mock_make_api, \
-             patch("operate.wallet.master.get_asset_balance") as mock_get_balance:
+        with patch(
+            "operate.wallet.master.make_chain_ledger_api"
+        ) as mock_make_api, patch(
+            "operate.wallet.master.get_asset_balance"
+        ) as mock_get_balance:
 
             mock_ledger_api = MagicMock()
             mock_make_api.return_value = mock_ledger_api
@@ -242,7 +254,9 @@ class TestRPCConfigBug:
         }
 
         # Mock the ledger API creation
-        with patch("operate.services.funding_manager.make_chain_ledger_api") as mock_make_api:
+        with patch(
+            "operate.services.funding_manager.make_chain_ledger_api"
+        ) as mock_make_api:
             mock_ledger_api = MagicMock()
             mock_ledger_api.get_balance.return_value = 1000000000000000000
             mock_make_api.return_value = mock_ledger_api
