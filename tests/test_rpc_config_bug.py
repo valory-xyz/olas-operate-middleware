@@ -27,7 +27,13 @@ import pytest
 
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import make_chain_ledger_api
-from operate.operate_types import Chain, ChainConfig, LedgerConfig, OnChainData, OnChainUserParams
+from operate.operate_types import (
+    Chain,
+    ChainConfig,
+    LedgerConfig,
+    OnChainData,
+    OnChainUserParams,
+)
 from operate.wallet.master import EthereumMasterWallet
 
 
@@ -195,8 +201,8 @@ class TestRPCConfigBug:
 
         from operate.keys import KeysManager
         from operate.services.funding_manager import FundingManager
-        from operate.wallet.master import MasterWalletManager
         from operate.services.service import Service
+        from operate.wallet.master import MasterWalletManager
 
         # Create mocks
         keys_manager = Mock(spec=KeysManager)

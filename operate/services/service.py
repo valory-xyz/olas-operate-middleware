@@ -76,7 +76,11 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_ledger_api, get_default_rpc, make_chain_ledger_api
+from operate.ledger import (
+    get_default_ledger_api,
+    get_default_rpc,
+    make_chain_ledger_api,
+)
 from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (

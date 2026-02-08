@@ -46,7 +46,11 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_ledger_api, make_chain_ledger_api
+from operate.ledger import (
+    get_currency_denom,
+    get_default_ledger_api,
+    make_chain_ledger_api,
+)
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
