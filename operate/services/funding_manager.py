@@ -914,7 +914,7 @@ class FundingManager:
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self.fund_chain_amounts(service.get_initial_funding_amounts())
+        self.fund_chain_amounts(service.get_initial_funding_amounts(), service=service)
 
     def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
         """Compute service initial shortfalls"""
@@ -929,12 +929,14 @@ class FundingManager:
     def topup_service_initial(self, service: Service) -> None:
         """Fund service enough to reach initial funding amounts"""
         service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
-        self.fund_chain_amounts(service_initial_shortfalls)
+        self.fund_chain_amounts(service_initial_shortfalls, service=service)
 
-    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+    def fund_chain_amounts(
+        self, amounts: ChainAmounts, service: t.Optional[Service] = None
+    ) -> None:
         """Fund chain amounts"""
         required = self._aggregate_as_master_safe_amounts(amounts)
-        balances = self._get_master_safe_balances(required)
+        balances = self._get_master_safe_balances(required, service=service)
 
         if balances < required:
             raise InsufficientFundsException(
@@ -987,7 +989,7 @@ class FundingManager:
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts)
+            self.fund_chain_amounts(amounts, service=service)
             self._funding_requests_cooldown_until[service_config_id] = (
                 time() + self.funding_requests_cooldown_seconds
             )
