@@ -46,7 +46,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_ledger_api
+from operate.ledger import get_currency_denom, get_default_ledger_api, make_chain_ledger_api
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
@@ -101,7 +101,10 @@ class FundingManager:
     ) -> None:
         """Drain the funds out of the service agents EOAs."""
         service_config_id = service.service_config_id
-        ledger_api = get_default_ledger_api(chain)
+        # Use service's custom RPC from chain_configs
+        chain_config = service.chain_configs[chain.value]
+        ledger_config = chain_config.ledger_config
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
         self.logger.info(
             f"Draining service agents {service.name} ({service_config_id=})"
         )
@@ -127,12 +130,13 @@ class FundingManager:
         self.logger.info(f"Draining service safe {service.name} ({service_config_id=})")
         chain_config = service.chain_configs[chain.value]
         chain_data = chain_config.chain_data
-        ledger_api = get_default_ledger_api(chain)
+        ledger_config = chain_config.ledger_config
+        # Use service's custom RPC from chain_configs
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
         service_safe = chain_data.multisig
         wallet = self.wallet_manager.load(chain.ledger_type)
         master_safe = wallet.safes[chain]
-        ledger_config = chain_config.ledger_config
         sftxb = EthSafeTxBuilder(
             rpc=ledger_config.rpc,
             wallet=wallet,

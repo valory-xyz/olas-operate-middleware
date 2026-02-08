@@ -76,7 +76,7 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_ledger_api, get_default_rpc
+from operate.ledger import get_default_ledger_api, get_default_rpc, make_chain_ledger_api
 from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
@@ -1314,14 +1314,24 @@ class Service(LocalResource):
         :param unify_wrapped_native_tokens: Whether to consider wrapped native tokens as native tokens.
         """
         initial_funding_amounts = self.get_initial_funding_amounts()
+
+        # Create ledger APIs using service's custom RPCs from chain_configs
+        ledger_apis = {}
+        for chain_str in initial_funding_amounts.keys():
+            chain = Chain.from_string(chain_str)
+            if chain_str in self.chain_configs:
+                rpc = self.chain_configs[chain_str].ledger_config.rpc
+                ledger_apis[chain_str] = make_chain_ledger_api(chain, rpc=rpc)
+            else:
+                # Fallback to default if chain_config doesn't exist (shouldn't happen)
+                ledger_apis[chain_str] = get_default_ledger_api(chain)
+
         absolute_balances = ChainAmounts(
             {
                 chain_str: {
                     address: {
                         asset: get_asset_balance(
-                            ledger_api=get_default_ledger_api(
-                                Chain.from_string(chain_str)
-                            ),
+                            ledger_api=ledger_apis[chain_str],
                             asset_address=asset,
                             address=address,
                             raise_on_invalid_address=False,
@@ -1347,7 +1357,7 @@ class Service(LocalResource):
                         del assets[wrapped_asset]
                     else:
                         assets[ZERO_ADDRESS] += get_asset_balance(
-                            ledger_api=get_default_ledger_api(chain),
+                            ledger_api=ledger_apis[chain_str],
                             asset_address=wrapped_asset,
                             address=address,
                             raise_on_invalid_address=False,

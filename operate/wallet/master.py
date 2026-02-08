@@ -211,9 +211,23 @@ class MasterWallet(LocalResource):
         raise NotImplementedError()
 
     def get_balance(
-        self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True
+        self,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
     ) -> BigInt:
-        """Get wallet balance on a given chain."""
+        """Get wallet balance on a given chain.
+
+        Args:
+            chain: The chain to check balance on
+            asset: Asset address (ZERO_ADDRESS for native token)
+            from_safe: Whether to check Safe balance (True) or EOA balance (False)
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+
+        Returns:
+            Balance as BigInt
+        """
         if from_safe:
             if chain not in self.safes:
                 raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
@@ -222,8 +236,14 @@ class MasterWallet(LocalResource):
         else:
             address = self.address
 
+        # Use custom RPC if provided, otherwise fall back to default
+        ledger_api = (
+            make_chain_ledger_api(chain, rpc) if rpc
+            else get_default_ledger_api(chain)
+        )
+
         return get_asset_balance(
-            ledger_api=get_default_ledger_api(chain),
+            ledger_api=ledger_api,
             asset_address=asset,
             address=address,
         )
