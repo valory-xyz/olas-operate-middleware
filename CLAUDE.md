@@ -121,6 +121,8 @@ tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e sa
 
 ### Testing
 
+For detailed information about test coverage, gaps, and testing strategy, see [TESTING.md](TESTING.md).
+
 Tests are separated into unit and integration tests:
 
 ```bash
