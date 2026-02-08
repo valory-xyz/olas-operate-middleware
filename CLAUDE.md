@@ -6,6 +6,99 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Olas Operate Middleware is a cross-platform Python package for running autonomous agents powered by the OLAS Network. It provides a daemon service with a FastAPI-based HTTP server that manages agent services, wallets, and blockchain interactions.
 
+## Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         OLAS OPERATE MIDDLEWARE                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+         User/Frontend              CLI User
+               │                       │
+               │ HTTP                  │ Commands
+               ▼                       ▼
+         ┌──────────┐            ┌─────────┐
+         │ FastAPI  │            │   CLI   │
+         │  Server  │            │ operate │
+         │  (HTTP)  │            │  .cli   │
+         └─────┬────┘            └────┬────┘
+               │                      │
+               └──────────┬───────────┘
+                          │
+          ┌───────────────┼───────────────────────────┐
+          │               │                           │
+          ▼               ▼                           ▼
+    ┌──────────┐   ┌─────────────┐          ┌──────────────┐
+    │  User    │   │   Service   │          │    Wallet    │
+    │ Account  │   │   Manager   │          │   Manager    │
+    │          │   │             │          │   (Master)   │
+    └──────────┘   └──────┬──────┘          └───────┬──────┘
+                          │                         │
+                          │                         │
+                ┌─────────┼─────────┐              │
+                │         │         │              │
+                ▼         ▼         ▼              │
+         ┌─────────┐ ┌──────┐ ┌─────────┐         │
+         │ Service │ │Proto │ │ Funding │         │
+         │Instance │ │ col  │ │ Manager │         │
+         └────┬────┘ └──┬───┘ └────┬────┘         │
+              │         │          │              │
+              │         │          │              │
+    ┌─────────┼─────────┤          │              │
+    │         │         │          │              │
+    ▼         ▼         ▼          ▼              ▼
+┌────────┐ ┌──────┐ ┌────────┐ ┌──────────────────────────┐
+│ Agent  │ │Deploy│ │ Health │ │   Wallet Hierarchy       │
+│ Runner │ │Runner│ │Checker │ │                          │
+└───┬────┘ └──┬───┘ └────────┘ │  Master EOA              │
+    │         │                 │      └─→ Master Safe     │
+    │         │                 │            ├─→ Agent Safe│
+    │         │                 │            └─→ Agent EOA │
+    ▼         ▼                 └──────────────────────────┘
+┌────────┐ ┌─────────┐                    │
+│ Docker │ │  IPFS   │                    │
+│Contain.│ │ Configs │                    │
+└────────┘ └─────────┘                    │
+                                          │
+    ┌─────────────────────────────────────┘
+    │
+    │         ┌──────────────┐
+    └────────→│ Bridge Mgr   │
+              │ (LiFi/Relay) │
+              └──────┬───────┘
+                     │
+                     ▼
+         ┌────────────────────────┐
+         │   Blockchain Networks  │
+         │  • Ethereum  • Gnosis  │
+         │  • Base      • Optimism│
+         │  • Mode                │
+         └────────────────────────┘
+```
+
+### Key Data Flows
+
+**Service Deployment:**
+```
+User → HTTP API → ServiceManager → Service → Agent Runner → Docker
+                                      ↓
+                                   Protocol → Blockchain (on-chain registration)
+```
+
+**Wallet Funding:**
+```
+Master EOA → Master Safe → Agent Safe/EOA → Service Operations
+                ↑
+         Funding Manager (monitors & refills)
+```
+
+**Service Health Monitoring:**
+```
+Health Checker → healthcheck.json → Funding Manager → Master Safe
+      ↓
+Service Status Updates
+```
+
 ## Development Commands
 
 ### Environment Setup
