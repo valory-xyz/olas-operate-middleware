@@ -31,6 +31,7 @@ from tests.conftest import OnTestnet, tenderly_add_balance
 from tests.constants import CHAINS_TO_TEST
 
 
+@pytest.mark.integration
 class TestGnosisUtils(OnTestnet):
     """Tests for Gnosis utils."""
 

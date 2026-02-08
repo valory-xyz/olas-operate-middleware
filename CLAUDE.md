@@ -27,16 +27,33 @@ tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e sa
 ```
 
 ### Testing
+
+Tests are separated into unit and integration tests:
+
 ```bash
+# Run unit tests only (fast, no RPC needed) - RECOMMENDED for local development
+tox -e unit-tests
+# Result: 130 tests, ~2 minutes
+
+# Run integration tests (requires testnet RPC environment variables)
+tox -e integration-tests
+# Requires: BASE_TESTNET_RPC, ETHEREUM_TESTNET_RPC, GNOSIS_TESTNET_RPC, etc.
+
 # Run all tests
-pytest tests/
+tox -e all-tests
 
 # Run specific test file
-pytest tests/test_services_service.py -v
+tox -e unit-tests -- tests/test_services_service.py -v
 
 # Run specific test function
-pytest tests/test_services_service.py::test_function_name -v
+tox -e unit-tests -- tests/test_services_service.py::test_function_name -v
 ```
+
+**Important:**
+- Always use `tox -e unit-tests` for local development (not `poetry run pytest`)
+- Unit tests run without network/RPC dependencies
+- Integration tests are marked with `@pytest.mark.integration`
+- The `tox -e unit-tests` command properly installs the package, avoiding version parsing issues
 
 ### Starting the Daemon
 ```bash
@@ -129,9 +146,9 @@ operate daemon
 
 **Testing**
 - Tests use `pytest` with fixtures in `conftest.py`
+- Tests are separated: unit tests (fast, no network) and integration tests (require testnet RPCs)
+- Integration tests marked with `@pytest.mark.integration`
 - Temporary directories via `tmp_path` fixture
-- Mock external services (RPC calls, IPFS, Docker)
-- Tests require environment variables for RPC endpoints
 
 **Service Configuration**
 - Services use `service.yaml` format from open-autonomy

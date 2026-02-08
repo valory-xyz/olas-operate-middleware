@@ -54,7 +54,31 @@ jobs:
     #   run: tox -e liccheck
     # tox -p -e vulture -e darglint
 
-  test:
+  unit-tests:
+    continue-on-error: False
+    needs:
+      - linter_checks
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+        python-version: [ "3.10" ]
+
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v3
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Run unit tests
+        run: |
+          pip install tomte[tox]==0.4.0
+          tox -e unit-tests
+
+  integration-tests:
     continue-on-error: True
     needs:
       - linter_checks
@@ -64,7 +88,7 @@ jobs:
       matrix:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
         python-version: [ "3.10" ]
-  
+
     timeout-minutes: 60
 
     env:
@@ -86,7 +110,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Run unit tests
+      - name: Run integration tests
         run: |
           pip install tomte[tox]==0.4.0
-          tox -e unit-tests
+          tox -e integration-tests

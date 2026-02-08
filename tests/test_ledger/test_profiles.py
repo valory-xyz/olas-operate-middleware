@@ -30,6 +30,7 @@ from operate.utils.gnosis import get_asset_balance
 from tests.constants import RUNNING_IN_CI
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(RUNNING_IN_CI, reason="Requires real mainnet funds.")
 @pytest.mark.parametrize("chain", [Chain.GNOSIS, Chain.OPTIMISM, Chain.BASE])
 def test_rpc_sync(chain: Chain) -> None:
