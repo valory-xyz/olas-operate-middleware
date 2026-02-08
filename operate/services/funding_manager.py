@@ -332,7 +332,8 @@ class FundingManager:
                 continue
 
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-            ledger_api = get_default_ledger_api(Chain(chain))
+            # Use service's custom RPC from chain_configs
+            ledger_api = make_chain_ledger_api(Chain(chain), rpc=ledger_config.rpc)
             staking_manager = StakingManager(Chain(chain))
 
             if Chain(chain) not in wallet.safes:
@@ -604,18 +605,29 @@ class FundingManager:
 
         return critical_shortfalls, remaining_shortfalls
 
-    def _get_master_safe_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+    def _get_master_safe_balances(
+        self, thresholds: ChainAmounts, service: t.Optional[Service] = None
+    ) -> ChainAmounts:
         output = ChainAmounts()
         batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_safe = self._resolve_master_safe(chain)
             output.setdefault(chain_str, {}).setdefault(master_safe, {})
+
+            # Use service's custom RPC if available, otherwise use default
+            if service and chain_str in service.chain_configs:
+                ledger_api = make_chain_ledger_api(
+                    chain, rpc=service.chain_configs[chain_str].ledger_config.rpc
+                )
+            else:
+                ledger_api = get_default_ledger_api(chain)
+
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
                     batch_calls_args[
                         (
-                            get_default_ledger_api(chain),
+                            ledger_api,
                             asset,
                             master_safe,
                             False,
@@ -635,18 +647,29 @@ class FundingManager:
 
         return output
 
-    def _get_master_eoa_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+    def _get_master_eoa_balances(
+        self, thresholds: ChainAmounts, service: t.Optional[Service] = None
+    ) -> ChainAmounts:
         output = ChainAmounts()
         batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_eoa = self._resolve_master_eoa(chain)
             output.setdefault(chain_str, {}).setdefault(master_eoa, {})
+
+            # Use service's custom RPC if available, otherwise use default
+            if service and chain_str in service.chain_configs:
+                ledger_api = make_chain_ledger_api(
+                    chain, rpc=service.chain_configs[chain_str].ledger_config.rpc
+                )
+            else:
+                ledger_api = get_default_ledger_api(chain)
+
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
                     batch_calls_args[
                         (
-                            get_default_ledger_api(chain),
+                            ledger_api,
                             asset,
                             master_eoa,
                             False,
@@ -801,7 +824,7 @@ class FundingManager:
                 master_eoa_topups[chain_str][master_eoa].setdefault(asset, 0)
 
         master_eoa_thresholds = master_eoa_topups // 2
-        master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds)
+        master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds, service=service)
 
         # BEGIN Bridging patch: remove excess balances for chains without a Safe:
         (
@@ -831,7 +854,7 @@ class FundingManager:
         )
         master_safe_topup = master_safe_thresholds
         master_safe_balances = ChainAmounts.add(
-            self._get_master_safe_balances(master_safe_thresholds),
+            self._get_master_safe_balances(master_safe_thresholds, service=service),
             self._aggregate_as_master_safe_amounts(excess_master_eoa_balances),
         )
         master_safe_shortfalls = self._compute_shortfalls(
