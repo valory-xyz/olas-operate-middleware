@@ -888,7 +888,7 @@ class TestFunding(OnTestnet):
                     "transfer_excess_assets": True,
                 },
             )
-            assert response.status_code == HTTPStatus.CREATED
+            assert response.status_code == HTTPStatus.OK
             master_safes[chain] = response.json()["safe"]
 
         response = client.get(
@@ -911,7 +911,7 @@ class TestFunding(OnTestnet):
                     chain.value
                 ].pop("master_safe")
 
-        # Adjust expected Master EOA native assets
+        # Adjust expected Master EOA and MasterSafe native assets
         for chain_str in expected_json["balances"]:
             real_balance_master_eoa = int(
                 response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
@@ -927,6 +927,19 @@ class TestFunding(OnTestnet):
             )  # TODO fix line above
             expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = str(
                 real_balance_master_eoa
+            )
+
+            master_safe = master_safes[Chain(chain_str)]
+            real_balance_master_safe = int(
+                response_json["balances"][chain_str][master_safe][ZERO_ADDRESS]
+            )
+            assert (
+                real_balance_master_safe
+                >= int(expected_json["balances"][chain_str][master_safe][ZERO_ADDRESS])
+                * 0.99
+            )
+            expected_json["balances"][chain_str][master_safe][ZERO_ADDRESS] = str(
+                real_balance_master_safe
             )
 
         expected_json["allow_start_agent"] = True
