@@ -376,6 +376,7 @@ def test_get_private_key(
         assert response.json().get("private_key") is None
 
 
+@pytest.mark.integration
 class TestWalletCreateSafe(OnTestnet):
     """Tests for wallet-related endpoints."""
 

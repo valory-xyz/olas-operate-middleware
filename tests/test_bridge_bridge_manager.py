@@ -79,6 +79,7 @@ COINGECKO_NATIVE_IDS = {
 }
 
 
+@pytest.mark.integration
 class TestBridgeManager:
     """Tests for bridge.bridge_manager.BridgeManager class."""
 

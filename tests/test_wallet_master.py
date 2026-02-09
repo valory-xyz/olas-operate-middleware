@@ -49,6 +49,7 @@ from tests.constants import LOGGER, RUNNING_IN_CI
 TX_FEE_TOLERANCE = 2
 
 
+@pytest.mark.integration
 class TestMasterWalletOnTestnet(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
