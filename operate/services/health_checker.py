@@ -21,6 +21,7 @@
 import asyncio
 import json
 import logging
+import threading
 import time
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
@@ -54,6 +55,7 @@ class HealthChecker:
     ) -> None:
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
+        self._jobs_lock = threading.Lock()  # Protect _jobs dict operations
         self._service_manager = service_manager
         self.logger = logger
         self.port_up_timeout = port_up_timeout or self.PORT_UP_TIMEOUT_DEFAULT
@@ -65,28 +67,45 @@ class HealthChecker:
         self.logger.info(
             f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
         )
-        if service_config_id in self._jobs:
-            self.stop_for_service(service_config_id=service_config_id)
 
-        loop = asyncio.get_running_loop()
-        self._jobs[service_config_id] = loop.create_task(
-            self.healthcheck_job(
-                service_config_id=service_config_id,
+        # Thread-safe job management: check and stop existing job atomically
+        with self._jobs_lock:
+            if service_config_id in self._jobs:
+                # Stop existing job (cancel and clean up)
+                old_task = self._jobs[service_config_id]
+                old_task.cancel()
+                # Remove from dict - task will handle cancellation
+                del self._jobs[service_config_id]
+                self.logger.info(
+                    f"[HEALTH_CHECKER]: Cancelled existing job for {service_config_id}"
+                )
+
+            # Create new job
+            loop = asyncio.get_running_loop()
+            self._jobs[service_config_id] = loop.create_task(
+                self.healthcheck_job(
+                    service_config_id=service_config_id,
+                )
             )
-        )
 
     def stop_for_service(self, service_config_id: str) -> None:
         """Stop for a specific service."""
-        if service_config_id not in self._jobs:
-            return
-        self.logger.info(
-            f"[HEALTH_CHECKER]: Cancelling existing healthcheck_jobs job for {service_config_id}"
-        )
-        status = self._jobs[service_config_id].cancel()
-        if not status:
+        # Thread-safe job cancellation
+        with self._jobs_lock:
+            if service_config_id not in self._jobs:
+                return
+
             self.logger.info(
-                f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
+                f"[HEALTH_CHECKER]: Cancelling existing healthcheck_jobs job for {service_config_id}"
             )
+            task = self._jobs[service_config_id]
+            status = task.cancel()
+            if not status:
+                self.logger.info(
+                    f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
+                )
+            # Remove from dict - task will handle cancellation
+            del self._jobs[service_config_id]
 
     async def check_service_health(
         self, service_config_id: str, service_path: t.Optional[Path] = None
