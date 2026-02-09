@@ -90,9 +90,10 @@ def validate_pid(pid: int, expected_process_names: Optional[list] = None) -> boo
                 proc_name = proc.name()
                 logger.debug(f"PID {pid} process name: {proc_name}")
 
-                # Match against any expected name
+                # Match against any expected name (case-insensitive)
                 if not any(
-                    expected in proc_name.lower() for expected in expected_process_names
+                    expected.lower() in proc_name.lower()
+                    for expected in expected_process_names
                 ):
                     logger.warning(
                         f"PID {pid} process name '{proc_name}' "
