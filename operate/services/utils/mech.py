@@ -44,7 +44,14 @@ MECH_FACTORY_ADDRESS = {
             "Token": "0x31ffDC795FDF36696B8eDF7583A3D115995a45FA",
             "Nevermined": "0x65fd74C29463afe08c879a3020323DD7DF02DA57",
         },
-    }
+    },
+    Chain.BASE: {
+        "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020": {
+            "Native": "0x2E008211f34b25A7d7c102403c6C2C3B665a1abe",
+            "Token": "0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe",
+            "Nevermined": "0x847bBE8b474e0820215f818858e23F5f5591855A",
+        },
+    },
 }
 
 logger = getLogger(__name__)
