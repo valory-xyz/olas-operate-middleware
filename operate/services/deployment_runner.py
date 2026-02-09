@@ -458,8 +458,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             # Process started but PID file write failed - try to kill process
             try:
                 kill_process(process.pid)
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
             raise
 
     def _start_agent_process(
@@ -495,8 +495,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
             # Process started but PID file write failed - try to kill process
             try:
                 kill_process(process.pid)
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
             raise
 
     def _start_tendermint_process(
@@ -711,8 +711,8 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             # Process started but PID file write failed - try to kill process
             try:
                 kill_process(process.pid)
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
             raise
 
     def _start_tendermint(self) -> None:
@@ -753,8 +753,8 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
             # Process started but PID file write failed - try to kill process
             try:
                 kill_process(process.pid)
-            except Exception:  # pylint: disable=broad-except
-                pass
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
             raise
 
     @property
