@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Olas Operate Middleware is a cross-platform Python package for running autonomous agents powered by the OLAS Network. It provides a daemon service with a FastAPI-based HTTP server that manages agent services, wallets, and blockchain interactions.
 
+## Stability and Quality Improvement Plan
+
+For a comprehensive plan to improve production stability, testing, and code quality, see [STABILITY_AND_QUALITY_IMPROVEMENT_PLAN.md](STABILITY_AND_QUALITY_IMPROVEMENT_PLAN.md). This plan outlines a phased approach to:
+- **Phase 1**: Critical stability fixes (RPC bugs, error handling, race conditions, resource leaks)
+- **Phase 2**: Testing and reliability improvements (test coverage, error scenarios)
+- **Phase 3**: Architecture refactoring (God classes, DRY violations, separation of concerns)
+- **Phase 4**: Ongoing code quality improvements
+
 ## Architecture Diagram
 
 ```
