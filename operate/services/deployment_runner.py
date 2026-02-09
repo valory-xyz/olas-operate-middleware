@@ -155,9 +155,13 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             os.chdir(cwd)
             # pylint: disable-next=import-outside-toplevel
             from aea.cli.core import cli as call_aea
+
             call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
                 args, standalone_mode=False
             )
+            # os._exit(0) is needed in case of run onlinux woth form subprocess method
+            # otherwise its going to perform all actions  successfully bu return code 1 to the calling coder
+            # it looks like aea+pyinstaller+multiprocessexit hooks issue on process stops
             os._exit(0)
         except Exception:
             print(f"Error on calling aea command: {args}")
@@ -217,7 +221,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                 if agent_dir_full_path.exists():
                     with suppress(Exception):
                         shutil.rmtree(agent_dir_full_path, ignore_errors=True)
-                        
+
                 self._run_aea_command(
                     "init",
                     "--reset",
@@ -477,6 +481,7 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 
 class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
     pass
+
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
