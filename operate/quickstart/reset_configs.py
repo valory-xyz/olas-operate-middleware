@@ -89,7 +89,7 @@ def reset_configs(operate: "OperateApp", config_path: str) -> None:
             env_var=f"{chain_name.upper()}_LEDGER_RPC",
             old_value=config.rpc[chain_name],
             hidden=True,
-            validator=check_rpc,
+            validator=lambda x: check_rpc(chain_name, x),  # noqa: B023
         )
 
     if config.user_provided_args is None:

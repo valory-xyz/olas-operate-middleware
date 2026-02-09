@@ -39,7 +39,9 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
+from operate.serialization import BigInt
 
 
 logger = setup_logger(name="operate.utils.gnosis")
@@ -162,54 +164,44 @@ def _get_nonce() -> int:
 def create_safe(
     ledger_api: LedgerApi,
     crypto: Crypto,
-    backup_owner: t.Optional[str] = None,
     salt_nonce: t.Optional[int] = None,
 ) -> t.Tuple[str, int, str]:
     """Create gnosis safe."""
     salt_nonce = salt_nonce or _get_nonce()
 
-    def _build(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def _build() -> t.Dict:
         tx = registry_contracts.gnosis_safe.get_deploy_transaction(
             ledger_api=ledger_api,
             deployer_address=crypto.address,
-            owners=(
-                [crypto.address]
-                if backup_owner is None
-                else [crypto.address, backup_owner]
-            ),
+            owners=([crypto.address]),
             threshold=1,
             salt_nonce=salt_nonce,
         )
         del tx["contract_address"]
         return tx
 
-    tx_settler = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=ChainProfile.CUSTOM,
-        timeout=ON_CHAIN_INTERACT_TIMEOUT,
-        retries=ON_CHAIN_INTERACT_RETRIES,
-        sleep=ON_CHAIN_INTERACT_SLEEP,
+    tx_settler = (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=ChainProfile.CUSTOM,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=_build,
+        )
+        .transact()
+        .settle()
     )
-    setattr(  # noqa: B010
-        tx_settler,
-        "build",
-        _build,
+    (event,) = tx_settler.get_events(
+        contract=registry_contracts.gnosis_safe_proxy_factory.get_instance(
+            ledger_api=ledger_api,
+            contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
+        ),
+        event_name="ProxyCreation",
     )
-    receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-    )
-    tx_hash = receipt.get("transactionHash", "").hex()
-    instance = registry_contracts.gnosis_safe_proxy_factory.get_instance(
-        ledger_api=ledger_api,
-        contract_address="0xa6b71e26c5e0845f74c812102ca7114b6a896ab2",
-    )
-    (event,) = instance.events.ProxyCreation().process_receipt(receipt)
-    return event["args"]["proxy"], salt_nonce, tx_hash
+    safe_address = event["args"]["proxy"]
+    return safe_address, salt_nonce, tx_settler.tx_hash
 
 
 def get_owners(ledger_api: LedgerApi, safe: str) -> t.List[str]:
@@ -226,16 +218,14 @@ def send_safe_txs(
     ledger_api: LedgerApi,
     crypto: Crypto,
     to: t.Optional[str] = None,
-) -> t.Optional[str]:
+) -> str:
     """Send internal safe transaction."""
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
     to_address = to or safe
 
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[str]:
+    def _build_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -268,22 +258,22 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    tx_settler = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=Chain.from_id(
-            ledger_api._chain_id  # pylint: disable=protected-access
-        ),
+    return (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
+            tx_builder=_build_tx,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+        .transact()
+        .settle()
+        .tx_hash
     )
-    setattr(tx_settler, "build", _build_tx)  # noqa: B010
-    tx_receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-        dry_run=False,
-    )
-    tx_hash = tx_receipt.get("transactionHash", "").hex()
-    return tx_hash
 
 
 def add_owner(
@@ -297,8 +287,8 @@ def add_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="addOwnerWithThreshold",
+    txd = instance.encode_abi(
+        abi_element_identifier="addOwnerWithThreshold",
         args=[
             owner,
             1,
@@ -343,8 +333,8 @@ def swap_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="swapOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="swapOwner",
         args=[
             prev_owner,
             old_owner,
@@ -373,8 +363,8 @@ def remove_owner(
         ledger_api=ledger_api,
         contract_address=safe,
     )
-    txd = instance.encodeABI(
-        fn_name="removeOwner",
+    txd = instance.encode_abi(
+        abi_element_identifier="removeOwner",
         args=[
             prev_owner,
             owner,
@@ -395,16 +385,14 @@ def transfer(
     safe: str,
     to: str,
     amount: t.Union[float, int],
-) -> t.Optional[str]:
+) -> str:
     """Transfer assets from safe to given address."""
     amount = int(amount)
     owner = ledger_api.api.to_checksum_address(
         crypto.address,
     )
 
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Optional[str]:
+    def _build_tx() -> t.Optional[str]:
         safe_tx_hash = registry_contracts.gnosis_safe.get_raw_safe_transaction_hash(
             ledger_api=ledger_api,
             contract_address=safe,
@@ -437,22 +425,22 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    tx_settler = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=Chain.from_id(
-            ledger_api._chain_id  # pylint: disable=protected-access
-        ),
+    return (
+        TxSettler(
+            ledger_api=ledger_api,
+            crypto=crypto,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
+            tx_builder=_build_tx,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+        )
+        .transact()
+        .settle()
+        .tx_hash
     )
-    setattr(tx_settler, "build", _build_tx)  # noqa: B010
-    tx_receipt = tx_settler.transact(
-        method=lambda: {},
-        contract="",
-        kwargs={},
-        dry_run=False,
-    )
-    tx_hash = tx_receipt.get("transactionHash", "").hex()
-    return tx_hash
 
 
 def transfer_erc20_from_safe(
@@ -469,8 +457,8 @@ def transfer_erc20_from_safe(
         ledger_api=ledger_api,
         contract_address=token,
     )
-    txd = instance.encodeABI(
-        fn_name="transfer",
+    txd = instance.encode_abi(
+        abi_element_identifier="transfer",
         args=[
             to,
             amount,
@@ -485,6 +473,33 @@ def transfer_erc20_from_safe(
     )
 
 
+def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
+    """Estimate transfer transaction fee."""
+    ledger_api = get_default_ledger_api(chain)
+    tx = ledger_api.get_transfer_transaction(
+        sender_address=sender_address,
+        destination_address=to,
+        amount=0,
+        tx_fee=0,
+        tx_nonce="0x",
+        chain_id=chain.id,
+        raise_on_try=True,
+    )
+    tx = ledger_api.update_with_gas_estimate(
+        transaction=tx,
+        raise_on_try=False,
+    )
+    chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    if chain in (
+        Chain.ARBITRUM_ONE,
+        Chain.BASE,
+        Chain.OPTIMISM,
+        Chain.MODE,
+    ):
+        chain_fee += ledger_api.get_l1_data_fee(tx)
+    return chain_fee
+
+
 def drain_eoa(
     ledger_api: LedgerApi,
     crypto: Crypto,
@@ -492,47 +507,37 @@ def drain_eoa(
     chain_id: int,
 ) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
-    tx_helper = TxSettler(
-        ledger_api=ledger_api,
-        crypto=crypto,
-        chain_type=ChainProfile.CUSTOM,
-        timeout=ON_CHAIN_INTERACT_TIMEOUT,
-        retries=ON_CHAIN_INTERACT_RETRIES,
-        sleep=ON_CHAIN_INTERACT_SLEEP,
-    )
 
-    def _build_tx(  # pylint: disable=unused-argument
-        *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def _build_tx() -> t.Dict:
         """Build transaction"""
+        chain_fee = estimate_transfer_tx_fee(
+            chain=Chain.from_id(chain_id),
+            sender_address=crypto.address,
+            to=withdrawal_address,
+        )
+
+        amount = ledger_api.get_balance(crypto.address) - chain_fee
+        if amount <= 0:
+            raise ChainInteractionError(
+                f"No balance to drain from wallet: {crypto.address}"
+            )
+
         tx = ledger_api.get_transfer_transaction(
             sender_address=crypto.address,
             destination_address=withdrawal_address,
-            amount=0,
+            amount=amount,
             tx_fee=0,
             tx_nonce="0x",
             chain_id=chain_id,
             raise_on_try=True,
         )
-        tx = ledger_api.update_with_gas_estimate(
-            transaction=tx,
+        empty_tx = tx.copy()
+        empty_tx["value"] = 0
+        empty_tx = ledger_api.update_with_gas_estimate(
+            transaction=empty_tx,
             raise_on_try=False,
         )
-
-        chain_fee = tx["gas"] * tx["maxFeePerGas"]
-        if Chain.from_id(chain_id) in (
-            Chain.ARBITRUM_ONE,
-            Chain.BASE,
-            Chain.OPTIMISM,
-            Chain.MODE,
-        ):
-            chain_fee += ledger_api.get_l1_data_fee(tx)
-
-        tx["value"] = ledger_api.get_balance(crypto.address) - chain_fee
-        if tx["value"] <= 0:
-            raise ChainInteractionError(
-                f"No balance to drain from wallet: {crypto.address}"
-            )
+        tx["gas"] = empty_tx["gas"]
 
         logger.info(
             f"Draining {tx['value']} native units from wallet: {crypto.address}"
@@ -540,13 +545,20 @@ def drain_eoa(
 
         return tx
 
-    setattr(tx_helper, "build", _build_tx)  # noqa: B010
     try:
-        tx_receipt = tx_helper.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=crypto,
+                chain_type=ChainProfile.CUSTOM,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
     except ChainInteractionError as e:
         if "No balance to drain from wallet" in str(e):
@@ -555,19 +567,13 @@ def drain_eoa(
 
         raise e
 
-    tx_hash = tx_receipt.get("transactionHash", None)
-    if tx_hash is not None:
-        return tx_hash.hex()
-
-    return None
-
 
 def get_asset_balance(
     ledger_api: LedgerApi,
     asset_address: str,
     address: str,
     raise_on_invalid_address: bool = True,
-) -> int:
+) -> BigInt:
     """
     Get the balance of a native asset or ERC20 token.
 
@@ -576,12 +582,12 @@ def get_asset_balance(
     if not Web3.is_address(address):
         if raise_on_invalid_address:
             raise ValueError(f"Invalid address: {address}")
-        return 0
+        return BigInt(0)
 
     try:
         if asset_address == ZERO_ADDRESS:
-            return ledger_api.get_balance(address, raise_on_try=True)
-        return (
+            return BigInt(ledger_api.get_balance(address, raise_on_try=True))
+        return BigInt(
             registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
                 contract_address=asset_address,
@@ -600,13 +606,13 @@ def get_assets_balances(
     asset_addresses: t.Set[str],
     addresses: t.Set[str],
     raise_on_invalid_address: bool = True,
-) -> t.Dict[str, t.Dict[str, int]]:
+) -> t.Dict[str, t.Dict[str, BigInt]]:
     """
     Get the balances of a list of native assets or ERC20 tokens.
 
     If asset address is a zero address, return the native balance.
     """
-    output: t.Dict[str, t.Dict[str, int]] = {}
+    output: t.Dict[str, t.Dict[str, BigInt]] = {}
 
     for asset, address in itertools.product(asset_addresses, addresses):
         output.setdefault(address, {})[asset] = get_asset_balance(

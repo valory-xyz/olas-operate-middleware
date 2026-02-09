@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "olas-operate-middleware"
-version = "0.10.19"
+version = "0.14.9"
 description = ""
 authors = ["David Vilela <dvilelaf@gmail.com>", "Viraj Patel <vptl185@gmail.com>"]
 readme = "README.md"
@@ -18,44 +18,31 @@ include = [
 operate = "operate.cli:main"
 
 [tool.poetry.dependencies]
-python = "<3.12,>=3.9"
-open-autonomy = "^0.20.2"
-open-aea-ledger-cosmos = "==1.65.0"
-open-aea-ledger-ethereum = "==1.65.0"
-open-aea-ledger-ethereum-flashbots = "==1.65.0"
-open-aea-cli-ipfs = "==1.65.0"
+python = "<3.12,>=3.10"
+open-autonomy = "^0.21.9"
+open-aea-ledger-cosmos = "^2.0.8"
+open-aea-ledger-ethereum = "^2.0.8"
+open-aea-ledger-ethereum-flashbots = "^2.0.8"
+open-aea-cli-ipfs = "^2.0.8"
 clea = "==0.1.0rc4"
 cytoolz = "==0.12.3"
-docker = "6.1.2"
 fastapi = "0.110.3"
-eth-hash = "==0.7.0"
-eth-account = "==0.8.0"
-eth-keyfile = "==0.6.1"
-eth-keys = "==0.4.0"
-eth-rlp = "==0.3.0"
-eth-typing = "==3.5.2"
-eth-utils = "==2.2.0"
-eth-abi = "==4.0.0"
-frozenlist = "==1.4.1"
-hexbytes = "==0.3.1"
-ipfshttpclient = "==0.8.0a2"
-jsonschema = "==4.3.3"
-multidict = "==6.0.5"
-requests-toolbelt = "1.0.0"
-starlette = "0.37.2"
 uvicorn = "==0.27.0"
-web3 = "6.20.4"
 psutil = "^5.9.8"
 pyinstaller = "^6.8.0"
-aiohttp = "3.9.5"
 deepdiff = "^8.6.1"
-twikit = "==2.2.0"
 halo = "==0.0.31"
 argon2-cffi = "==23.1.0"
+requests-mock = "^1.12.1"
+multiaddr = "==0.0.9"
+cryptography = "^46.0.3"
 
 [tool.poetry.group.development.dependencies]
-tomte = {version = "0.2.17", extras = ["cli"]}
+tomte = {version = "0.4.0", extras = ["cli"]}
 build = "1.2.2.post1"
+yappi = "^1.6.10"
+viztracer = "^1.1.1"
+httpx = "^0.28.1"
 
 [build-system]
 requires = ["poetry-core"]

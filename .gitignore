@@ -48,6 +48,7 @@ leak_report
 *.dist
 *.build
 /electron/bins/
+.pytest_cache/
 
 # logs
 *.log
@@ -57,3 +58,6 @@ custom-script.sh
 
 # development
 .vscode/
+
+# profile files
+prof/

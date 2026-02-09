@@ -28,28 +28,25 @@ import typing as t
 import uuid
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from math import ceil
 
 from aea.crypto.base import LedgerApi
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
-from web3.middleware import geth_poa_middleware
+from web3.exceptions import TimeExhausted, TransactionNotFound
 
 from operate.constants import (
+    BRIDGE_GAS_ESTIMATE_MULTIPLIER,
     ON_CHAIN_INTERACT_RETRIES,
     ON_CHAIN_INTERACT_SLEEP,
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.operate_types import Chain
+from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
+from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.wallet.master import MasterWalletManager
 
-
-GAS_ESTIMATE_FALLBACK_ADDRESSES = [
-    "0x000000000000000000000000000000000000dEaD",
-    "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
-]
 
 DEFAULT_MAX_QUOTE_RETRIES = 3
 PROVIDER_REQUEST_PREFIX = "r-"
@@ -64,9 +61,9 @@ MESSAGE_EXECUTION_FAILED_SETTLEMENT = (
 )
 MESSAGE_REQUIREMENTS_QUOTE_FAILED = "Cannot compute requirements for failed quote."
 
-ERC20_APPROVE_SELECTOR = "0x095ea7b3"  # First 4 bytes of Web3.keccak(text='approve(address,uint256)').hex()[:10]
-
-GAS_ESTIMATE_BUFFER = 1.10
+# ERC-20 function selectors (first 4 bytes of the Keccak-256 hash of the function signature)
+ERC20_APPROVE_SELECTOR = "0x095ea7b3"
+ERC20_TRANSFER_SELECTOR = "0xa9059cbb"
 
 
 @dataclass
@@ -225,28 +222,12 @@ class Provider(ABC):
     def _from_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
         from_chain = provider_request.params["from"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        return get_default_ledger_api(Chain(from_chain))
 
     def _to_ledger_api(self, provider_request: ProviderRequest) -> LedgerApi:
         """Get the from ledger api."""
-        from_chain = provider_request.params["to"]["chain"]
-        chain = Chain(from_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        ledger_api = wallet.ledger_api(chain)
-
-        # TODO: Backport to open aea/autonomy
-        if chain == Chain.OPTIMISM:
-            ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
-
-        return ledger_api
+        to_chain = provider_request.params["to"]["chain"]
+        return get_default_ledger_api(Chain(to_chain))
 
     @abstractmethod
     def quote(self, provider_request: ProviderRequest) -> None:
@@ -260,7 +241,7 @@ class Provider(ABC):
         """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
-    def requirements(self, provider_request: ProviderRequest) -> t.Dict:
+    def requirements(self, provider_request: ProviderRequest) -> ChainAmounts:
         """Gets the requirements to execute the quote, with updated gas estimation."""
         self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
@@ -274,27 +255,29 @@ class Provider(ABC):
         txs = self._get_txs(provider_request)
 
         if not txs:
-            return {
-                from_chain: {
-                    from_address: {
-                        ZERO_ADDRESS: 0,
-                        from_token: 0,
+            return ChainAmounts(
+                {
+                    from_chain: {
+                        from_address: {
+                            ZERO_ADDRESS: BigInt(0),
+                            from_token: BigInt(0),
+                        }
                     }
                 }
-            }
+            )
 
-        total_native = 0
-        total_gas_fees = 0
-        total_token = 0
+        total_native = BigInt(0)
+        total_gas_fees = BigInt(0)
+        total_token = BigInt(0)
 
         for tx_label, tx in txs:
             self.logger.debug(
                 f"[PROVIDER] Processing transaction {tx_label} for request {provider_request.id}."
             )
-            self._update_with_gas_pricing(tx, from_ledger_api)
+            update_tx_with_gas_pricing(tx, from_ledger_api)
             gas_key = "gasPrice" if "gasPrice" in tx else "maxFeePerGas"
-            gas_fees = tx.get(gas_key, 0) * tx["gas"]
-            tx_value = int(tx.get("value", 0))
+            gas_fees = BigInt(tx.get(gas_key, 0) * tx["gas"])
+            tx_value = BigInt(int(tx.get("value", 0)))
             total_gas_fees += gas_fees
             total_native += tx_value + gas_fees
 
@@ -306,26 +289,43 @@ class Provider(ABC):
                 f"[PROVIDER] {from_ledger_api.api.eth.get_block('latest').baseFeePerGas=}"
             )
 
-            if tx.get("to", "").lower() == from_token.lower() and tx.get(
-                "data", ""
-            ).startswith(ERC20_APPROVE_SELECTOR):
+            # TODO Move the requirements logic to be implemented by each provider.
+            #
+            # The following code parses the required ERC20 token amount. The typical case is that the bridge
+            # transactions fall into one of these cases:
+            #     a. ERC20.approve + Bridge.deposit (bridge-specific tx), or
+            #     b. ERC20.transfer
+            #
+            # Thus, the logic below assumes that there is only either an ERC20.approve OR ERC20.transfer (but not both).
+            # However, since the set of transactions is bridge-dependent, this might not always be the case, and
+            # is suggested that the requirements() logic be implemented per-provider.
+            if tx.get("to", "").lower() == from_token.lower():
+                data = tx.get("data", "").lower()
                 try:
-                    amount = int(tx["data"][-64:], 16)
-                    total_token += amount
+                    if data.startswith(ERC20_APPROVE_SELECTOR):
+                        amount_hex = data[-64:]
+                        amount = BigInt(amount_hex, 16)
+                        total_token += amount
+                    elif data.startswith(ERC20_TRANSFER_SELECTOR):
+                        amount_hex = data[10 + 64 : 10 + 64 + 64]
+                        amount = BigInt(amount_hex, 16)
+                        total_token += amount
                 except Exception as e:
-                    raise RuntimeError("Malformed ERC20 approve transaction.") from e
+                    raise RuntimeError("Malformed ERC20 transaction.") from e
 
         self.logger.info(
             f"[PROVIDER] Total gas fees for request {provider_request.id}: {total_gas_fees} native units."
         )
 
-        result = {
-            from_chain: {
-                from_address: {
-                    ZERO_ADDRESS: total_native,
+        result = ChainAmounts(
+            {
+                from_chain: {
+                    from_address: {
+                        ZERO_ADDRESS: total_native,
+                    }
                 }
             }
-        }
+        )
 
         if from_token != ZERO_ADDRESS:
             result[from_chain][from_address][from_token] = total_token
@@ -390,48 +390,43 @@ class Provider(ABC):
             from_address = provider_request.params["from"]["address"]
             wallet = self.wallet_manager.load(chain.ledger_type)
             from_ledger_api = self._from_ledger_api(provider_request)
-            tx_settler = TxSettler(
-                ledger_api=from_ledger_api,
-                crypto=wallet.crypto,
-                chain_type=Chain(provider_request.params["from"]["chain"]),
-                timeout=ON_CHAIN_INTERACT_TIMEOUT,
-                retries=ON_CHAIN_INTERACT_RETRIES,
-                sleep=ON_CHAIN_INTERACT_SLEEP,
-            )
-            tx_hashes = []
 
             for tx_label, tx in txs:
                 self.logger.info(f"[PROVIDER] Executing transaction {tx_label}.")
-                nonce = from_ledger_api.api.eth.get_transaction_count(from_address)
-                tx["nonce"] = nonce  # TODO: backport to TxSettler
-                setattr(  # noqa: B010
-                    tx_settler, "build", lambda *args, **kwargs: tx  # noqa: B023
-                )
-                tx_receipt = tx_settler.transact(
-                    method=lambda: {},
-                    contract="",
-                    kwargs={},
-                    dry_run=False,
-                )
-                self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
-                tx_hashes.append(tx_receipt.get("transactionHash", "").hex())
+                tx_settler = TxSettler(
+                    ledger_api=from_ledger_api,
+                    crypto=wallet.crypto,
+                    chain_type=Chain(provider_request.params["from"]["chain"]),
+                    timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                    retries=ON_CHAIN_INTERACT_RETRIES,
+                    sleep=ON_CHAIN_INTERACT_SLEEP,
+                    tx_builder=lambda: {
+                        **tx,  # noqa: B023
+                        "nonce": from_ledger_api.api.eth.get_transaction_count(
+                            from_address
+                        ),
+                    },
+                    gas_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
+                ).transact()
+
+                try:
+                    tx_settler.settle()
+                    self.logger.info(f"[PROVIDER] Transaction {tx_label} settled.")
+                except TimeExhausted as e:
+                    self.logger.warning(
+                        f"[PROVIDER] Transaction {tx_label} settlement timed out: {e}."
+                    )
 
             execution_data = ExecutionData(
                 elapsed_time=time.time() - timestamp,
                 message=None,
                 timestamp=int(timestamp),
-                from_tx_hash=tx_hashes[-1],
+                from_tx_hash=tx_settler.tx_hash,
                 to_tx_hash=None,
                 provider_data=None,
             )
             provider_request.execution_data = execution_data
-            if len(tx_hashes) == len(txs):
-                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
-            else:
-                provider_request.execution_data.message = (
-                    MESSAGE_EXECUTION_FAILED_SETTLEMENT
-                )
-                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
@@ -488,47 +483,65 @@ class Provider(ABC):
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
 
-    # TODO backport to open aea/autonomy
-    # TODO This gas pricing management should possibly be done at a lower level in the library
-    @staticmethod
-    def _update_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        tx.pop("maxFeePerGas", None)
-        tx.pop("gasPrice", None)
-        tx.pop("maxPriorityFeePerGas", None)
+    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+        """Check if the bridge transaction likely failed and is not going to settle."""
 
-        gas_pricing = ledger_api.try_get_gas_pricing()
-        if gas_pricing is None:
-            raise RuntimeError("Unable to retrieve gas pricing.")
+        execution_data = provider_request.execution_data
+        if not execution_data or not execution_data.from_tx_hash:
+            return True
 
-        if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
-            tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-            tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
-        elif "gasPrice" in gas_pricing:
-            tx["gasPrice"] = gas_pricing["gasPrice"]
-        else:
-            raise RuntimeError("Retrieved invalid gas pricing.")
+        from_tx_hash = execution_data.from_tx_hash
+        now = time.time()
+        age_seconds = now - execution_data.timestamp
 
-    # TODO backport to open aea/autonomy
-    @staticmethod
-    def _update_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
-        print(
-            f"[PROVIDER] Trying to update transaction gas {tx['from']=} {tx['gas']=}."
+        eta = provider_request.quote_data.eta if provider_request.quote_data else None
+
+        MIN_SOFT_TIMEOUT = 600
+        HARD_TIMEOUT = 1200
+        ETA_MULTIPLIER = 10
+        ETA_MIN_THRESHOLD = 60
+
+        eta_timeout = (
+            (eta * ETA_MULTIPLIER) if (eta and eta >= ETA_MIN_THRESHOLD) else 0
         )
-        original_from = tx["from"]
-        original_gas = tx.get("gas", 1)
+        soft_timeout = max(MIN_SOFT_TIMEOUT, eta_timeout)
 
-        for address in [original_from] + GAS_ESTIMATE_FALLBACK_ADDRESSES:
-            tx["from"] = address
-            tx["gas"] = 1
-            ledger_api.update_with_gas_estimate(tx)
-            if tx["gas"] > 1:
-                print(
-                    f"[PROVIDER] Gas estimated successfully {tx['from']=} {tx['gas']=}."
+        if age_seconds > HARD_TIMEOUT:
+            self.logger.warning(
+                f"[PROVIDER] Transaction {from_tx_hash} age {age_seconds//60} > HARD_TIMEOUT."
+            )
+            return True
+
+        if age_seconds <= soft_timeout:
+            return False
+
+        from_ledger_api = self._from_ledger_api(provider_request)
+        w3 = from_ledger_api.api
+
+        try:
+            receipt = w3.eth.get_transaction_receipt(from_tx_hash)
+
+            if receipt is None:
+                raise TransactionNotFound("Receipt not found")
+
+            if receipt["status"] == 1:
+                # Unusual corner case - succeeded but bridge doesn't know yet?
+                self.logger.info(
+                    f"[PROVIDER] Transaction {from_tx_hash} was mined and succeeded — waiting for provider sync"
                 )
-                break
-
-        tx["from"] = original_from
-        if tx["gas"] == 1:
-            tx["gas"] = original_gas
-            print(f"[PROVIDER] Unable to estimate gas. Restored {tx['gas']=}.")
-        tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
+                return False
+            else:
+                self.logger.warning(
+                    f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
+                )
+                return True
+        except TransactionNotFound:
+            self.logger.warning(
+                f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds//60} min - likely dropped."
+            )
+            return True
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.warning(
+                f"[PROVIDER] Error retrieving tx {from_tx_hash}: {e} - likely dropped."
+            )
+            return True

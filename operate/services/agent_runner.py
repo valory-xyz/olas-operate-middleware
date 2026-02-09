@@ -19,6 +19,7 @@
 # -------------------------------------------------------------
 """Source dode to download and run agent from the repos."""
 import hashlib
+import json
 import os
 import platform
 import shutil
@@ -32,6 +33,8 @@ import requests
 from aea.configurations.data_types import PublicId
 from aea.helpers.logging import setup_logger
 
+from operate.constants import AGENT_RUNNER_PREFIX, CONFIG_JSON, DEFAULT_TIMEOUT
+
 
 @dataclass
 class AgentRelease:
@@ -40,6 +43,7 @@ class AgentRelease:
     owner: str
     repo: str
     release: str
+    is_aea: bool
 
     @property
     def release_url(self) -> str:
@@ -48,7 +52,7 @@ class AgentRelease:
 
     def get_url_and_hash(self, asset_name: str) -> tuple[str, str]:
         """Get download url and asset sha256 hash."""
-        release_data = requests.get(self.release_url).json()
+        release_data = requests.get(self.release_url, timeout=DEFAULT_TIMEOUT).json()
 
         assets_filtered = [i for i in release_data["assets"] if i["name"] == asset_name]
         if not assets_filtered:
@@ -62,25 +66,10 @@ class AgentRelease:
         return file_url, file_hash
 
 
-# list of agents releases supported
-AGENTS_SUPPORTED = {
-    "valory/trader": AgentRelease(
-        owner="valory-xyz", repo="trader", release="v0.27.2-rc.1"
-    ),
-    "valory/optimus": AgentRelease(
-        owner="valory-xyz", repo="optimus", release="v0.0.1051"
-    ),
-    "dvilela/memeooorr": AgentRelease(
-        owner="valory-xyz", repo="meme-ooorr", release="v0.0.101"
-    ),
-}
-
-
 class AgentRunnerManager:
     """Agent Runner Manager."""
 
     logger = setup_logger(name="operate.agent_runner_manager")
-    AGENTS = AGENTS_SUPPORTED
 
     @staticmethod
     def get_agent_runner_executable_name() -> str:
@@ -101,7 +90,7 @@ class AgentRunnerManager:
         else:
             raise ValueError(f"unsupported arch: {platform.machine()}")
 
-        exec_name = f"agent_runner_{os_name}_{arch}"
+        exec_name = f"{AGENT_RUNNER_PREFIX}_{os_name}_{arch}"
         if platform.system() == "Windows":
             exec_name += ".exe"
         return exec_name
@@ -117,7 +106,7 @@ class AgentRunnerManager:
         """Download file of agent runner."""
         try:
             # Send a GET request to the URL
-            response = requests.get(url, stream=True)
+            response = requests.get(url, stream=True, timeout=DEFAULT_TIMEOUT)
             response.raise_for_status()  # Raise an error for bad status codes (4xx or 5xx)
 
             # Open the file in binary write mode and save the content
@@ -131,14 +120,19 @@ class AgentRunnerManager:
             raise
 
     @classmethod
-    def get_agent_release_by_public_id(cls, agent_public_id_str: str) -> AgentRelease:
+    def get_agent_release_from_service_dir(cls, service_dir: Path) -> AgentRelease:
         """Get agent release object according to public id."""
-        agent_author, agent_name = cls.parse_agent(public_id_str=agent_public_id_str)
-
-        agent_name = f"{agent_author}/{agent_name}"
-        agent_release = cls.AGENTS.get(agent_name, None)
-        if agent_release is None:
-            raise ValueError(f"{agent_name} is not supported!")
+        service_config_file = service_dir / CONFIG_JSON
+        service_config = json.loads(service_config_file.read_text())
+        if "agent_release" not in service_config:
+            raise ValueError(f"Agent release details are not found in {service_config}")
+        agent_release_data = service_config["agent_release"]
+        agent_release = AgentRelease(
+            is_aea=agent_release_data["is_aea"],
+            owner=agent_release_data["repository"]["owner"],
+            repo=agent_release_data["repository"]["name"],
+            release=agent_release_data["repository"]["version"],
+        )
         return agent_release
 
     @staticmethod
@@ -187,13 +181,11 @@ class AgentRunnerManager:
             raise
 
     @classmethod
-    def get_agent_runner_path(cls, service_dir: Path, agent_public_id_str: str) -> str:
+    def get_agent_runner_path(cls, service_dir: Path) -> str:
         """Get path to the agent runner bin palced."""
         agent_runner_name = cls.get_agent_runner_executable_name()
         agent_runner_path: Path = service_dir / agent_runner_name
-        agent_release = cls.get_agent_release_by_public_id(
-            agent_public_id_str=agent_public_id_str
-        )
+        agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
 
         cls.update_agent_runner(
             target_path=agent_runner_path,
@@ -203,8 +195,8 @@ class AgentRunnerManager:
         return str(agent_runner_path)
 
 
-def get_agent_runner_path(service_dir: Path, agent_public_id_str: str) -> str:
+def get_agent_runner_path(service_dir: Path) -> str:
     """Get path to the agent runner bin placed."""
     return AgentRunnerManager.get_agent_runner_path(
-        service_dir=service_dir, agent_public_id_str=agent_public_id_str
+        service_dir=service_dir,
     )

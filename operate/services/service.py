@@ -35,6 +35,7 @@ from json import JSONDecodeError
 from pathlib import Path
 from traceback import print_exc
 
+import requests
 from aea.configurations.constants import (
     DEFAULT_LEDGER,
     LEDGER,
@@ -42,6 +43,7 @@ from aea.configurations.constants import (
     PRIVATE_KEY_PATH_SCHEMA,
     SKILL,
 )
+from aea.helpers.logging import setup_logger
 from aea.helpers.yaml_utils import yaml_dump, yaml_load, yaml_load_all
 from aea_cli_ipfs.ipfs_utils import IPFSTool
 from autonomy.cli.helpers.deployment import run_deployment, stop_deployment
@@ -64,16 +66,29 @@ from autonomy.deploy.generators.kubernetes.base import KubernetesGenerator
 from docker import from_env
 
 from operate.constants import (
+    AGENT_FUNDS_STATUS_URL,
     AGENT_PERSISTENT_STORAGE_ENV_VAR,
     CONFIG_JSON,
     DEPLOYMENT_DIR,
     DEPLOYMENT_JSON,
     HEALTHCHECK_JSON,
+    SERVICE_SAFE_PLACEHOLDER,
+    ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
+from operate.ledger import (
+    get_default_ledger_api,
+    get_default_rpc,
+    make_chain_ledger_api,
+)
+from operate.ledger.profiles import WRAPPED_NATIVE_ASSET
 from operate.operate_http.exceptions import NotAllowed
 from operate.operate_types import (
+    AchievementNotification,
+    AchievementsNotifications,
+    AgentRelease,
     Chain,
+    ChainAmounts,
     ChainConfig,
     ChainConfigs,
     DeployedNodes,
@@ -88,8 +103,11 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
+from operate.utils import unrecoverable_delete
+from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
 
@@ -98,13 +116,15 @@ from operate.utils.ssl import create_ssl_certificate
 SAFE_CONTRACT_ADDRESS = "safe_contract_address"
 ALL_PARTICIPANTS = "all_participants"
 CONSENSUS_THRESHOLD = "consensus_threshold"
-SERVICE_CONFIG_VERSION = 8
+SERVICE_CONFIG_VERSION = 9
 SERVICE_CONFIG_PREFIX = "sc-"
 
 NON_EXISTENT_MULTISIG = None
 NON_EXISTENT_TOKEN = -1
 
-AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25}
+AGENT_TYPE_IDS = {"mech": 37, "optimus": 40, "modius": 40, "trader": 25, "pett_ai": 80}
+
+logger = setup_logger("operate.services.service")
 
 
 def mkdirs(build_dir: Path) -> None:
@@ -317,6 +337,8 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
         use_acn: bool = False,
     ) -> "HostDeploymentGenerator":
         """Generate agent and tendermint configurations"""
+        self.build_dir.mkdir(exist_ok=True, parents=True)
+        (self.build_dir / "agent").mkdir(exist_ok=True, parents=True)
         agent = self.service_builder.generate_agent(agent_n=0)
         agent = {key: f"{value}" for key, value in agent.items()}
         (self.build_dir / "agent.json").write_text(
@@ -384,7 +406,7 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
-    def _build_kubernetes(self, force: bool = True) -> None:
+    def _build_kubernetes(self, keys_manager: KeysManager, force: bool = True) -> None:
         """Build kubernetes deployment."""
         k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
@@ -392,11 +414,23 @@ class Deployment(LocalResource):
         mkdirs(build_dir=k8s_build)
 
         service = Service.load(path=self.path)
+        keys_file = self.path / DEFAULT_KEYS_FILE
+        keys_file.write_text(
+            json.dumps(
+                [
+                    keys_manager.get_decrypted(address)
+                    for address in service.agent_addresses
+                ],
+                indent=4,
+            ),
+            encoding="utf-8",
+        )
         builder = ServiceBuilder.from_dir(
             path=service.package_absolute_path,
-            keys_file=self.path / DEFAULT_KEYS_FILE,
+            keys_file=keys_file,
             number_of_agents=len(service.agent_addresses),
         )
+        unrecoverable_delete(keys_file)
         builder.deplopyment_type = KubernetesGenerator.deployment_type
         (
             KubernetesGenerator(
@@ -414,6 +448,7 @@ class Deployment(LocalResource):
 
     def _build_docker(
         self,
+        keys_manager: KeysManager,
         force: bool = True,
         chain: t.Optional[str] = None,
     ) -> None:
@@ -438,7 +473,7 @@ class Deployment(LocalResource):
         keys_file.write_text(
             json.dumps(
                 [
-                    KeysManager().get(address).json
+                    keys_manager.get_decrypted(address)
                     for address in service.agent_addresses
                 ],
                 indent=4,
@@ -451,6 +486,7 @@ class Deployment(LocalResource):
                 keys_file=keys_file,
                 number_of_agents=len(service.agent_addresses),
             )
+            unrecoverable_delete(keys_file)
             builder.deplopyment_type = DockerComposeGenerator.deployment_type
             builder.try_update_abci_connection_params()
 
@@ -526,7 +562,13 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(self, force: bool = True, chain: t.Optional[str] = None) -> None:
+    def _build_host(
+        self,
+        keys_manager: KeysManager,
+        force: bool = True,
+        chain: t.Optional[str] = None,
+        with_tm: bool = True,
+    ) -> None:
         """Build host depployment."""
         build = self.path / DEPLOYMENT_DIR
         if build.exists() and not force:
@@ -560,10 +602,7 @@ class Deployment(LocalResource):
         keys_file = self.path / DEFAULT_KEYS_FILE
         keys_file.write_text(
             json.dumps(
-                [
-                    KeysManager().get(address).json
-                    for address in service.agent_addresses
-                ],
+                [keys_manager.get(address).json for address in service.agent_addresses],
                 indent=4,
             ),
             encoding="utf-8",
@@ -583,15 +622,21 @@ class Deployment(LocalResource):
                 consensus_threshold=None,
             )
 
-            (
-                HostDeploymentGenerator(
-                    service_builder=builder,
-                    build_dir=build.resolve(),
-                    use_tm_testnet_setup=True,
-                )
-                .generate_config_tendermint()
-                .generate()
-                .populate_private_keys()
+            deployement_generator = HostDeploymentGenerator(
+                service_builder=builder,
+                build_dir=build.resolve(),
+                use_tm_testnet_setup=True,
+            )
+            if with_tm:
+                deployement_generator.generate_config_tendermint()
+
+            deployement_generator.generate()
+            deployement_generator.populate_private_keys()
+
+            # Add keys
+            shutil.copy(
+                build / "ethereum_private_key.txt",
+                build / "agent" / "ethereum_private_key.txt",
             )
 
         except Exception as e:
@@ -604,6 +649,7 @@ class Deployment(LocalResource):
 
     def build(
         self,
+        keys_manager: KeysManager,
         use_docker: bool = False,
         use_kubernetes: bool = False,
         force: bool = True,
@@ -639,9 +685,9 @@ class Deployment(LocalResource):
             )
             service.consume_env_variables()
             if use_docker:
-                self._build_docker(force=force, chain=chain)
+                self._build_docker(keys_manager=keys_manager, force=force, chain=chain)
             if use_kubernetes:
-                self._build_kubernetes(force=force)
+                self._build_kubernetes(keys_manager=keys_manager, force=force)
         else:
             ssl_key_path, ssl_cert_path = create_ssl_certificate(
                 ssl_dir=service.path / DEPLOYMENT_DIR / "ssl"
@@ -653,12 +699,23 @@ class Deployment(LocalResource):
                 }
             )
             service.consume_env_variables()
-            self._build_host(force=force, chain=chain)
+            is_aea = service.agent_release["is_aea"]
+            self._build_host(
+                keys_manager=keys_manager,
+                force=force,
+                chain=chain,
+                with_tm=is_aea,
+            )
 
         os.environ.clear()
         os.environ.update(original_env)
 
-    def start(self, use_docker: bool = False) -> None:
+    def start(
+        self,
+        password: str,
+        use_docker: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Start the service"""
         if self.status != DeploymentStatus.BUILT:
             raise NotAllowed(
@@ -671,12 +728,16 @@ class Deployment(LocalResource):
         try:
             if use_docker:
                 run_deployment(
-                    build_dir=self.path / "deployment",
+                    build_dir=self.path / DEPLOYMENT_DIR,
                     detach=True,
                     project_name=self.path.name,
                 )
             else:
-                run_host_deployment(build_dir=self.path / "deployment")
+                run_host_deployment(
+                    build_dir=self.path / DEPLOYMENT_DIR,
+                    password=password,
+                    is_aea=is_aea,
+                )
         except Exception:
             self.status = DeploymentStatus.BUILT
             self.store()
@@ -685,7 +746,12 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.DEPLOYED
         self.store()
 
-    def stop(self, use_docker: bool = False, force: bool = False) -> None:
+    def stop(
+        self,
+        use_docker: bool = False,
+        force: bool = False,
+        is_aea: bool = True,
+    ) -> None:
         """Stop the deployment."""
         if self.status != DeploymentStatus.DEPLOYED and not force:
             return
@@ -695,11 +761,11 @@ class Deployment(LocalResource):
 
         if use_docker:
             stop_deployment(
-                build_dir=self.path / "deployment",
+                build_dir=self.path / DEPLOYMENT_DIR,
                 project_name=self.path.name,
             )
         else:
-            stop_host_deployment(build_dir=self.path / "deployment")
+            stop_host_deployment(build_dir=self.path / DEPLOYMENT_DIR, is_aea=is_aea)
 
         self.status = DeploymentStatus.BUILT
         self.store()
@@ -716,20 +782,19 @@ class Deployment(LocalResource):
 class Service(LocalResource):
     """Service class."""
 
+    name: str
     version: int
     service_config_id: str
+    path: Path
+    package_path: Path
     hash: str
     hash_history: t.Dict[int, str]
+    agent_release: AgentRelease
     agent_addresses: t.List[str]
     home_chain: str
     chain_configs: ChainConfigs
     description: str
     env_variables: EnvVariables
-
-    path: Path
-    package_path: Path
-
-    name: t.Optional[str] = None
 
     _helper: t.Optional[ServiceHelper] = None
     _deployment: t.Optional[Deployment] = None
@@ -825,11 +890,12 @@ class Service(LocalResource):
             )
         )
 
-        ledger_configs = ServiceHelper(path=package_absolute_path).ledger_configs()
-
         chain_configs = {}
-        for chain, config in service_template["configurations"].items():
-            ledger_config = ledger_configs[chain]
+        for chain_str, config in service_template["configurations"].items():
+            chain = Chain(chain_str)
+            ledger_config = LedgerConfig(
+                rpc=get_default_rpc(Chain(chain_str)), chain=chain
+            )
             ledger_config.rpc = config["rpc"]
 
             chain_data = OnChainData(
@@ -839,7 +905,7 @@ class Service(LocalResource):
                 user_params=OnChainUserParams.from_json(config),  # type: ignore
             )
 
-            chain_configs[chain] = ChainConfig(
+            chain_configs[chain_str] = ChainConfig(
                 ledger_config=ledger_config,
                 chain_data=chain_data,
             )
@@ -858,6 +924,7 @@ class Service(LocalResource):
             path=package_absolute_path.parent,
             package_path=Path(package_absolute_path.name),
             env_variables=service_template["env_variables"],
+            agent_release=service_template["agent_release"],
         )
         service.store()
         return service
@@ -966,13 +1033,118 @@ class Service(LocalResource):
                     data = json.load(f)
                 if isinstance(data, dict):
                     agent_performance.update(data)
+                else:
+                    logger.warning(
+                        f"Invalid agent_performance.json: root is {type(data).__name__}, content preview: {str(data)[:100]!r}."
+                    )
             except (json.JSONDecodeError, OSError) as e:
-                # Keep default values if file is invalid
-                print(
-                    f"Error reading file 'agent_performance.json': {e}"
-                )  # TODO Use logger
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
 
         return dict(sorted(agent_performance.items()))
+
+    def _load_achievements_notifications(
+        self,
+    ) -> t.Tuple[AchievementsNotifications, t.Dict[str, t.Any]]:
+        if not AchievementsNotifications.exists_at(self.path):
+            AchievementsNotifications(
+                path=self.path,
+                notifications={},
+            ).store()
+
+        achievements_notifications: AchievementsNotifications = t.cast(
+            AchievementsNotifications, AchievementsNotifications.load(self.path)
+        )
+
+        agent_performance_json_path = (
+            Path(
+                self.env_variables.get(
+                    AGENT_PERSISTENT_STORAGE_ENV_VAR, {"value": "."}
+                ).get("value", ".")
+            )
+            / "agent_performance.json"
+        )
+
+        agent_achievements: t.Dict[str, t.Any] = {}
+        if agent_performance_json_path.exists():
+            try:
+                with open(agent_performance_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict):
+                        data_achievements = data.get("achievements", {}) or {}
+                        agent_achievements = data_achievements.get("items", {}) or {}
+                    else:
+                        logger.warning(
+                            f"Invalid agent_performance.json: root is {type(data).__name__}, content preview: {str(data)[:100]!r}."
+                        )
+            except (json.JSONDecodeError, OSError) as e:
+                logger.warning(f"Cannot read file 'agent_performance.json': {e}")
+
+            save_changes = False
+            for achievement_id in agent_achievements:
+                if achievement_id not in achievements_notifications.notifications:
+                    achievements_notifications.notifications[achievement_id] = (
+                        AchievementNotification(
+                            achievement_id=achievement_id,
+                            acknowledged=False,
+                            acknowledgement_timestamp=0,
+                        )
+                    )
+                    save_changes = True
+
+            if save_changes:
+                achievements_notifications.store()
+
+        return achievements_notifications, agent_achievements
+
+    def get_achievements_notifications(
+        self, include_acknowledged: bool
+    ) -> t.List[t.Dict]:
+        """Return the achievements notifications"""
+
+        achievements_notifications, agent_achievements = (
+            self._load_achievements_notifications()
+        )
+
+        output: t.Dict[str, t.Dict] = {}
+
+        for (
+            achievement_id,
+            achievement_notification,
+        ) in achievements_notifications.notifications.items():
+            acknowledged = achievement_notification.acknowledged
+            if not acknowledged or (acknowledged and include_acknowledged):
+                if achievement_id in agent_achievements:
+                    output[achievement_id] = achievement_notification.json
+                    output[achievement_id].update(agent_achievements[achievement_id])
+                else:
+                    logger.warning(
+                        f"Achievement {achievement_id} from notifications database is not present in agent achievements file (Corrupted file?)."
+                    )
+
+        return list(output.values())
+
+    def acknowledge_achievement(self, achievement_id: str) -> None:
+        """Acknowledge an achievement id"""
+
+        achievements_notifications, _ = self._load_achievements_notifications()
+
+        if achievement_id not in achievements_notifications.notifications:
+            raise KeyError(
+                f"Achievement {achievement_id} does not exist for service {self.service_config_id}."
+            )
+
+        achievement_notification = achievements_notifications.notifications[
+            achievement_id
+        ]
+
+        if achievement_notification.acknowledged:
+            raise ValueError(
+                f"Achievement {achievement_id} was already acknowledged for service {self.service_config_id}."
+            )
+
+        achievement_notification.acknowledgement_timestamp = int(time.time())
+        achievement_notification.acknowledged = True
+        achievements_notifications.store()
 
     def update(
         self,
@@ -1017,6 +1189,8 @@ class Service(LocalResource):
             )
         )
         self.package_path = Path(package_absolute_path.name)
+
+        self.agent_release = service_template.get("agent_release", self.agent_release)
 
         # env_variables
         if partial_update:
@@ -1118,3 +1292,126 @@ class Service(LocalResource):
 
         if updated:
             self.store()
+
+    def get_initial_funding_amounts(self) -> ChainAmounts:
+        """Get funding amounts as a dict structure."""
+        amounts = ChainAmounts()
+
+        for chain_str, chain_config in self.chain_configs.items():
+            fund_requirements = chain_config.chain_data.user_params.fund_requirements
+            service_safe = chain_config.chain_data.multisig
+
+            if service_safe is None or service_safe == ZERO_ADDRESS:
+                service_safe = SERVICE_SAFE_PLACEHOLDER
+
+            chain_amounts = amounts.setdefault(chain_str, {})
+            for asset, req in fund_requirements.items():
+                chain_amounts.setdefault(service_safe, {})[asset] = req.safe
+                for agent_address in self.agent_addresses:
+                    chain_amounts.setdefault(agent_address, {})[asset] = req.agent
+
+        return amounts
+
+    def get_balances(self, unify_wrapped_native_tokens: bool = True) -> ChainAmounts:
+        """Get balances of the agent addresses and service safe.
+
+        :param unify_wrapped_native_tokens: Whether to consider wrapped native tokens as native tokens.
+        """
+        initial_funding_amounts = self.get_initial_funding_amounts()
+
+        # Create ledger APIs using service's custom RPCs from chain_configs
+        ledger_apis = {}
+        for chain_str in initial_funding_amounts.keys():
+            chain = Chain.from_string(chain_str)
+            if chain_str in self.chain_configs:
+                rpc = self.chain_configs[chain_str].ledger_config.rpc
+                ledger_apis[chain_str] = make_chain_ledger_api(chain, rpc=rpc)
+            else:
+                # Fallback to default if chain_config doesn't exist (shouldn't happen)
+                ledger_apis[chain_str] = get_default_ledger_api(chain)
+
+        absolute_balances = ChainAmounts(
+            {
+                chain_str: {
+                    address: {
+                        asset: get_asset_balance(
+                            ledger_api=ledger_apis[chain_str],
+                            asset_address=asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+                        for asset in tokens
+                    }
+                    for address, tokens in addresses.items()
+                }
+                for chain_str, addresses in initial_funding_amounts.items()
+            }
+        )
+        if unify_wrapped_native_tokens:
+            for chain_str, addresses in absolute_balances.items():
+                chain = Chain.from_string(chain_str)
+                wrapped_asset = WRAPPED_NATIVE_ASSET[chain]
+                for address, assets in addresses.items():
+                    if ZERO_ADDRESS in assets or wrapped_asset in assets:
+                        if ZERO_ADDRESS not in assets:
+                            assets[ZERO_ADDRESS] = 0
+
+                    if wrapped_asset in assets:
+                        assets[ZERO_ADDRESS] += assets[wrapped_asset]
+                        del assets[wrapped_asset]
+                    else:
+                        assets[ZERO_ADDRESS] += get_asset_balance(
+                            ledger_api=ledger_apis[chain_str],
+                            asset_address=wrapped_asset,
+                            address=address,
+                            raise_on_invalid_address=False,
+                        )
+
+        return absolute_balances
+
+    def get_funding_requests(self) -> ChainAmounts:
+        """Get funding amounts requested by the agent."""
+        agent_response = {}
+        funding_requests = ChainAmounts()
+
+        if self.deployment.status != DeploymentStatus.DEPLOYED:
+            return funding_requests
+
+        try:
+            resp = requests.get(AGENT_FUNDS_STATUS_URL, timeout=10)
+            resp.raise_for_status()
+            agent_response = resp.json()
+        except Exception as e:  # pylint: disable=broad-except
+            logger.warning(
+                f"[FUNDING MANAGER] Cannot read url {AGENT_FUNDS_STATUS_URL}: {e}"
+            )
+
+        for chain_str, addresses in agent_response.items():
+            for address, assets in addresses.items():
+                if chain_str not in self.chain_configs:
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown chain {chain_str}."
+                    )
+
+                if (
+                    address not in self.agent_addresses
+                    and address != self.chain_configs[chain_str].chain_data.multisig
+                ):
+                    raise ValueError(
+                        f"Service {self.service_config_id} asked funding for an unknown address {address} on chain {chain_str}."
+                    )
+
+                funding_requests.setdefault(chain_str, {})
+                funding_requests[chain_str].setdefault(address, {})
+                for asset, amounts in assets.items():
+                    try:
+                        funding_requests[chain_str][address][asset] = BigInt(
+                            amounts["deficit"]
+                        )
+                    except (ValueError, TypeError):
+                        logger.warning(
+                            f"[FUNDING MANAGER] Invalid funding amount {amounts['deficit']} for asset {asset} on chain {chain_str} for address {address}. Setting to 0."
+                        )
+                        funding_requests[chain_str][address][asset] = 0
+
+        return funding_requests

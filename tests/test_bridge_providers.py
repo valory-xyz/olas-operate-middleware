@@ -27,6 +27,7 @@ from pathlib import Path
 import pytest
 from aea.helpers.logging import setup_logger
 from deepdiff import DeepDiff
+from hexbytes import HexBytes
 from web3 import Web3
 
 from operate.bridge.bridge_manager import (
@@ -55,12 +56,13 @@ from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger import get_default_rpc
 from operate.ledger.profiles import OLAS
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.serialization import BigInt
 
 from tests.constants import OPERATE_TEST
 
 
-TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").hex()
+TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex()
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
@@ -100,13 +102,15 @@ def get_transfer_amount(
         for log in receipt["logs"]:
             if (
                 log["address"].lower() == token_address.lower()
-                and log["topics"][0].hex().lower() == TRANSFER_TOPIC.lower()
-                and Web3.to_checksum_address("0x" + log["topics"][2].hex()[-40:])
+                and log["topics"][0].to_0x_hex().lower() == TRANSFER_TOPIC.lower()
+                and Web3.to_checksum_address("0x" + log["topics"][2].to_0x_hex()[-40:])
                 == recipient
             ):
                 data = log["data"]
                 value = (
-                    int(data.hex(), 16) if isinstance(data, bytes) else int(data, 16)
+                    int(data.to_0x_hex(), 16)
+                    if isinstance(data, HexBytes)
+                    else int(data, 16)
                 )
                 return value
         return 0
@@ -225,14 +229,16 @@ class TestNativeBridgeProvider:
         # Get requirements
         br = provider.requirements(provider_request)
         assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong requirements."
-        expected_br = {
-            "ethereum": {
-                wallet_address: {
-                    ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                    OLAS[Chain.ETHEREUM]: 1000000000000000000,
+        expected_br = ChainAmounts(
+            {
+                "ethereum": {
+                    wallet_address: {
+                        ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
+                        OLAS[Chain.ETHEREUM]: BigInt(1000000000000000000),
+                    }
                 }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -306,6 +312,7 @@ class TestNativeBridgeProvider:
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
 
+@pytest.mark.integration
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
@@ -454,11 +461,16 @@ class TestProvider:
         assert (
             br[Chain.ETHEREUM.value][wallet_address][ZERO_ADDRESS] == 0
         ), "Wrong requirements."
-        expected_br = {
-            Chain.ETHEREUM.value: {
-                wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
+        expected_br = ChainAmounts(
+            {
+                Chain.ETHEREUM.value: {
+                    wallet_address: {
+                        ZERO_ADDRESS: BigInt(0),
+                        OLAS[Chain.ETHEREUM]: BigInt(0),
+                    }
+                }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -595,9 +607,16 @@ class TestProvider:
         assert not diff, "Wrong status."
 
         br = provider.requirements(provider_request)
-        expected_br = {
-            "gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}
-        }
+        expected_br = ChainAmounts(
+            {
+                "gnosis": {
+                    wallet_address: {
+                        ZERO_ADDRESS: BigInt(0),
+                        OLAS[Chain.GNOSIS]: BigInt(0),
+                    }
+                }
+            }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -810,15 +829,17 @@ class TestProvider:
         assert (
             br[Chain.ETHEREUM.value][wallet_address][ZERO_ADDRESS] > 0
         ), "Wrong requirements."
-        expected_br = {
-            Chain.ETHEREUM.value: {
-                wallet_address: {
-                    ZERO_ADDRESS: br[Chain.ETHEREUM.value][wallet_address][
-                        ZERO_ADDRESS
-                    ],
+        expected_br = ChainAmounts(
+            {
+                Chain.ETHEREUM.value: {
+                    wallet_address: {
+                        ZERO_ADDRESS: br[Chain.ETHEREUM.value][wallet_address][
+                            ZERO_ADDRESS
+                        ],
+                    }
                 }
             }
-        }
+        )
         diff = DeepDiff(br, expected_br)
         if diff:
             print(diff)
@@ -933,21 +954,21 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0xfd19fe216cf6699ebdfd8f038a74c9b24e23a7b7",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
                     "to": {
                         "chain": "gnosis",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0x87218C01bd246e99f779Bfd13d277E88C6Cb4477",
                         "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 100000000000000,
+                        "amount": 1157062023093466,
                     },
                 },
                 "r-a0b5253b-02fe-4389-9fe5-a5d17acae150",
-                "0xa6b7edc1d1fae03d43ed55158a57ee26f46628b2d698aa3fe1ff47179a9c68b9",
+                "0xdb60d262c71834cd620b49dc69febb822250937d7a2c8f3e1ba22b21b1355113",
                 ProviderRequestStatus.EXECUTION_DONE,
-                "0x38ea49248bfed5673db9a94ce6563465eeb5ca59035f9dc8e5706b33d99b1de0",
-                2,
+                "0x835d90db1f3552fc4f691a6f3851d24c04222b9d66f456e50fa4dd8dbd44280c",
+                17,
             ),
             (
                 RelayProvider,
@@ -955,21 +976,21 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
                     "to": {
                         "chain": "gnosis",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0x409D0490FB743650803B05936e78f22D273A5647",
                         "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 1000000000000000000,
+                        "amount": 27291638268124063,
                     },
                 },
                 "r-c8f00ad9-82a9-45a1-b873-dd80c2da4acb",
-                "0x5c5cbbdd466b388e04c4abbf4e366a2f49235cbead0eb265c0a197fa67b03d3b",
+                "0xe05ad614e482b61fe5016716c8dd41f5b1149d509a8e1eca6f00bdbbe3ef6b9d",
                 ProviderRequestStatus.EXECUTION_DONE,
-                "0x005307a082e68a9a71534f15ef12dbc10c32c14b2d470574eb5c72beeaabf7b3",
-                11,
+                "0x75850a31777ea9567702537be5cd6e2cf4f455069ad96d543f3a992fdb708ca7",
+                26,
             ),
             (
                 RelayProvider,
@@ -977,20 +998,20 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
                     "to": {
                         "chain": "gnosis",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0xC5E802BFBeA76e0eeccf775eFA5b005811F96136",
                         "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
                         "amount": 1000000,
                     },
                 },
                 "r-7ef5ef70-6052-40a0-b0f2-a71896668f95",
-                "0x2efeb443cbef94268073b11ef33f9c60f367f553eb16008e9766248427d8244e",
+                "0xa07eacd399371bf789c47f40c390dc96a2f057258584cc2e2d156cf8208ab704",
                 ProviderRequestStatus.EXECUTION_DONE,
-                "0x35e19e09fe527a68eea7a811f3a95b088125838cc981f4fe5836a92e826194b0",
+                "0xb57a7ee4233d2bf1fa95040ac4c26e8c2e192c94f0ea8709f640b44c3b8dc438",
                 7,
             ),
             # RelayProvider - EXECUTION_FAILED tests
@@ -1012,7 +1033,7 @@ class TestProvider:
                 },
                 "r-bfb51822-e689-4141-8328-134f0a877fdf",
                 "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-                ProviderRequestStatus.EXECUTION_UNKNOWN,
+                ProviderRequestStatus.EXECUTION_FAILED,
                 None,
                 0,
             ),
@@ -1023,21 +1044,21 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0x96faf614c8228ff834a4e45d2cc0dd2675469338",
                         "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
                     },
                     "to": {
                         "chain": "gnosis",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                        "address": "0xaf59963aee4fcc92a68d9bc3cde7cd89307d4e7e",
                         "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 1000000000000000000,
+                        "amount": 5000000000000000000,
                     },
                 },
                 "b-b5648bc4-15c0-4792-9970-cc692851ce50",
-                "0x8b7646a46e06b3fd4f61f592f6da0f66b5f29a71b13cfce4ce8a8dd2095b7827",
+                "0xbc2110dc981617079a1959cf3da9bf9ecd52785531cab33fd0fd9e4f39daaa65",
                 ProviderRequestStatus.EXECUTION_DONE,
-                "0xc8905a2193d86a58bb92f2bbe3640ef340aacfe4273efc50ad80115f3ed20206",
-                2195,
+                "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
+                2148,
             ),
             # LiFiProvider - EXECUTION_DONE tests
             (
@@ -1046,21 +1067,21 @@ class TestProvider:
                 {
                     "from": {
                         "chain": "gnosis",
-                        "address": "0xE95866Fa91ce81109aA900550133654A4795C20e",
+                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
                         "token": "0x0000000000000000000000000000000000000000",
                     },
                     "to": {
                         "chain": "base",
-                        "address": "0xE95866Fa91ce81109aA900550133654A4795C20e",
+                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
                         "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 10000000000000,
+                        "amount": 380000000000000,
                     },
                 },
                 "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
-                "0x333f5a51163576c9d90599bffa6b038dbec45f4f6f761b87e29ab59235403861",
+                "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
                 ProviderRequestStatus.EXECUTION_DONE,
-                "0x6cd9176f1da953e4464adb8bdc81fbe4133ebcd1bb6aeac49946a38ff025e623",
-                374,
+                "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
+                383,
             ),
             # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
             (
