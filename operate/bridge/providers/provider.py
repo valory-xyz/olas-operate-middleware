@@ -241,7 +241,9 @@ class Provider(ABC):
         """Get the sorted list of transactions to execute the quote."""
         raise NotImplementedError()
 
-    def requirements(self, provider_request: ProviderRequest) -> ChainAmounts:
+    def requirements(  # pylint: disable=too-many-locals
+        self, provider_request: ProviderRequest
+    ) -> ChainAmounts:
         """Gets the requirements to execute the quote, with updated gas estimation."""
         self.logger.info(f"[PROVIDER] Requirements for request {provider_request.id}.")
 
@@ -401,7 +403,7 @@ class Provider(ABC):
                     retries=ON_CHAIN_INTERACT_RETRIES,
                     sleep=ON_CHAIN_INTERACT_SLEEP,
                     tx_builder=lambda: {
-                        **tx,  # noqa: B023
+                        **tx,  # noqa: B023 # pylint: disable=cell-var-from-loop
                         "nonce": from_ledger_api.api.eth.get_transaction_count(
                             from_address
                         ),
@@ -483,7 +485,9 @@ class Provider(ABC):
         block = ledger_api.api.eth.get_block(receipt.blockNumber)
         return block.timestamp
 
-    def _bridge_tx_likely_failed(self, provider_request: ProviderRequest) -> bool:
+    def _bridge_tx_likely_failed(  # pylint: disable=too-many-locals, too-many-return-statements
+        self, provider_request: ProviderRequest
+    ) -> bool:
         """Check if the bridge transaction likely failed and is not going to settle."""
 
         execution_data = provider_request.execution_data
@@ -530,11 +534,11 @@ class Provider(ABC):
                     f"[PROVIDER] Transaction {from_tx_hash} was mined and succeeded — waiting for provider sync"
                 )
                 return False
-            else:
-                self.logger.warning(
-                    f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
-                )
-                return True
+
+            self.logger.warning(
+                f"[PROVIDER] Transaction {from_tx_hash} mined but reverted."
+            )
+            return True
         except TransactionNotFound:
             self.logger.warning(
                 f"[PROVIDER] Transaction {from_tx_hash} not seen after {age_seconds//60} min - likely dropped."

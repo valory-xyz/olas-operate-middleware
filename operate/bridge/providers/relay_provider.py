@@ -137,7 +137,9 @@ class RelayProvider(Provider):
         """Get a human-readable description of the provider."""
         return "Relay Protocol https://www.relay.link/"
 
-    def quote(self, provider_request: ProviderRequest) -> None:
+    def quote(  # pylint: disable=too-many-locals, too-many-statements
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the request with the quote."""
         self._validate(provider_request)
 
@@ -189,7 +191,9 @@ class RelayProvider(Provider):
             "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
-        for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
+        for attempt in range(  # pylint: disable=too-many-nested-blocks
+            1, DEFAULT_MAX_QUOTE_RETRIES + 1
+        ):
             start = time.time()
             try:
                 self.logger.info(f"[RELAY PROVIDER] POST {url}")
@@ -403,7 +407,7 @@ class RelayProvider(Provider):
                     provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                 return
             response.raise_for_status()
-        except Exception as e:
+        except Exception as e:  # pylint:disable=broad-except
             self.logger.error(
                 f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )

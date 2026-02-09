@@ -569,7 +569,9 @@ class NativeBridgeProvider(Provider):
             txs.append(("bridge_tx", bridge_tx))
         return txs
 
-    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
+    def _update_execution_status(  # pylint: disable=too-many-locals
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the execution status."""
 
         if provider_request.status != ProviderRequestStatus.EXECUTION_PENDING:
@@ -649,11 +651,8 @@ class NativeBridgeProvider(Provider):
                     provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                     return
 
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"Error updating execution status: {e}")
-            import traceback
-
-            traceback.print_exc()
             execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
             provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
 

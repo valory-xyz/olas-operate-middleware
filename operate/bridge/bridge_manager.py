@@ -326,7 +326,7 @@ class BridgeManager:
             safe_address = wallet.safes.get(Chain(from_chain))
 
             if from_address is None or not (
-                from_address == wallet_address or from_address == safe_address
+                from_address in (wallet_address, safe_address)
             ):
                 raise ValueError(
                     f"Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
