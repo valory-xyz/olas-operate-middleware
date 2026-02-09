@@ -307,7 +307,24 @@ pytest -m "not integration"
 ### Current Strategy
 - **Linter checks**: Run first, must pass
 - **Unit tests**: Run in parallel on 3 OS × 2 Python versions, must pass
-- **Integration tests**: Run in parallel on 3 OS × 1 Python version, can fail
+- **Integration tests**: Run in parallel on 3 OS × 1 Python version, can fail (`continue-on-error: true`)
+
+### Platform-Specific Test Behavior
+
+**Important**: Tests inheriting from `OnTestnet` (in `tests/conftest.py`) only run on **Ubuntu/Linux** in CI:
+
+```python
+pytestmark = pytest.mark.skipif(
+    RUNNING_IN_CI and system() != "Linux",
+    reason="To avoid exhausting tenderly limits.",
+)
+```
+
+**Affected test classes**:
+- `TestFunding` (`test_services_funding.py`)
+- Tests using Tenderly testnet simulation
+
+**Why**: To conserve Tenderly API usage limits, these integration tests are skipped on Windows and macOS when running in CI. Locally, they run on all platforms.
 
 ### Recommended Improvements
 1. Run unit tests on every commit (already done)
