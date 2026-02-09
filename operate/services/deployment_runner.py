@@ -162,7 +162,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             # os._exit(0) is needed in case of run onlinux woth form subprocess method
             # otherwise its going to perform all actions  successfully bu return code 1 to the calling coder
             # it looks like aea+pyinstaller+multiprocessexit hooks issue on process stops
-            os._exit(0)
+            os._exit(0)  # pylint: disable=protected-access
         except Exception:
             print(f"Error on calling aea command: {args}")
             print_exc()
@@ -480,7 +480,7 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
 
 
 class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
-    pass
+    """Linux deployment runner."""
 
 
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
