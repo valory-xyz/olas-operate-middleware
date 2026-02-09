@@ -51,7 +51,7 @@ MECH_FACTORY_ADDRESS = {
             "Token": "0x97371B1C0cDA1D04dFc43DFb50a04645b7Bc9BEe",
             "Nevermined": "0x847bBE8b474e0820215f818858e23F5f5591855A",
         },
-    }
+    },
 }
 
 logger = getLogger(__name__)
