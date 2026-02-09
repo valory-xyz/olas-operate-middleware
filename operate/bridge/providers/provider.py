@@ -406,7 +406,7 @@ class Provider(ABC):
                             from_address
                         ),
                     },
-                    gas_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
+                    gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
                 ).transact()
 
                 try:
