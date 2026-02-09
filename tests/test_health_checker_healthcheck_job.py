@@ -176,5 +176,5 @@ class TestHealthcheckJobExceptionHandlingBehavior:
 
         # Verify the pattern exists
         assert "except Exception:" in source
-        assert 'logger.exception' in source or 'self.logger.exception' in source
+        assert "logger.exception" in source or "self.logger.exception" in source
         assert "raise" in source

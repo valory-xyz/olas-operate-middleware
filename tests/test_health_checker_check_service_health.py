@@ -48,7 +48,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -88,7 +90,9 @@ class TestCheckServiceHealthErrorHandling:
         readonly_path.mkdir()
         readonly_path.chmod(0o444)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -129,7 +133,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -137,9 +143,7 @@ class TestCheckServiceHealthErrorHandling:
             mock_client_session.return_value = mock_ctx
 
             with patch.object(health_checker.logger, "error") as mock_log:
-                await health_checker.check_service_health(
-                    service_config_id, tmp_path
-                )
+                await health_checker.check_service_health(service_config_id, tmp_path)
 
                 # Should log with specific error context
                 mock_log.assert_called()
@@ -168,7 +172,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)

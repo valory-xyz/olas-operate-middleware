@@ -36,14 +36,14 @@ def _acquire_lock(file_handle: int) -> None:
     :raises PIDFileLocked: If file is already locked
     """
     if platform.system() == "Windows":
-        import msvcrt  # type: ignore[import]
+        import msvcrt  # type: ignore[import] # pylint: disable=import-outside-toplevel,import-error
 
         try:
             msvcrt.locking(file_handle, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
         except OSError as e:
             raise PIDFileLocked("PID file is locked by another process") from e
     else:
-        import fcntl
+        import fcntl  # pylint: disable=import-outside-toplevel
 
         try:
             fcntl.flock(file_handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -57,14 +57,14 @@ def _release_lock(file_handle: int) -> None:
     :param file_handle: File descriptor to unlock
     """
     if platform.system() == "Windows":
-        import msvcrt  # type: ignore[import]
+        import msvcrt  # type: ignore[import] # pylint: disable=import-outside-toplevel,import-error
 
         try:
             msvcrt.locking(file_handle, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
         except OSError:
             pass  # Best effort unlock
     else:
-        import fcntl
+        import fcntl  # pylint: disable=import-outside-toplevel
 
         try:
             fcntl.flock(file_handle, fcntl.LOCK_UN)
@@ -72,9 +72,7 @@ def _release_lock(file_handle: int) -> None:
             pass  # Best effort unlock
 
 
-def validate_pid(
-    pid: int, expected_process_names: Optional[list] = None
-) -> bool:
+def validate_pid(pid: int, expected_process_names: Optional[list] = None) -> bool:
     """Validate that PID exists and optionally matches expected process.
 
     :param pid: Process ID to validate
@@ -94,8 +92,7 @@ def validate_pid(
 
                 # Match against any expected name
                 if not any(
-                    expected in proc_name.lower()
-                    for expected in expected_process_names
+                    expected in proc_name.lower() for expected in expected_process_names
                 ):
                     logger.warning(
                         f"PID {pid} process name '{proc_name}' "
@@ -193,7 +190,7 @@ def read_pid_file(
                 # Acquire shared lock for reading
                 # (multiple readers OK, but blocks writers)
                 if platform.system() != "Windows":
-                    import fcntl
+                    import fcntl  # pylint: disable=import-outside-toplevel
 
                     fcntl.flock(f.fileno(), fcntl.LOCK_SH | fcntl.LOCK_NB)
                 try:
@@ -216,7 +213,7 @@ def read_pid_file(
                             )
                             # Release lock before removing
                             if platform.system() != "Windows":
-                                import fcntl
+                                import fcntl  # pylint: disable=import-outside-toplevel
 
                                 fcntl.flock(f.fileno(), fcntl.LOCK_UN)
                             # Remove stale file
@@ -235,13 +232,13 @@ def read_pid_file(
                     return pid
                 finally:
                     if platform.system() != "Windows":
-                        import fcntl
+                        import fcntl  # pylint: disable=import-outside-toplevel
 
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         except PIDFileLocked as e:
             last_error = e
             time.sleep(0.1)  # Wait before retry
-        except (StalePIDFile, PIDFileError):
+        except (StalePIDFile, PIDFileError):  # pylint: disable=try-except-raise
             raise  # Don't retry on these errors
         except OSError as e:
             raise PIDFileError(f"Failed to read PID file {pid_file}: {e}") from e

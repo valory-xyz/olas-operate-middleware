@@ -102,9 +102,7 @@ class TestWritePIDFile:
         # File should not be created
         assert not pid_file.exists()
 
-    def test_write_pid_file_fails_with_wrong_process_name(
-        self, tmp_path: Path
-    ) -> None:
+    def test_write_pid_file_fails_with_wrong_process_name(self, tmp_path: Path) -> None:
         """Test PID file write fails if process name doesn't match."""
         pid_file = tmp_path / "test.pid"
         current_pid = os.getpid()
@@ -200,9 +198,7 @@ class TestReadPIDFile:
         # Stale file should be removed
         assert not pid_file.exists()
 
-    def test_read_pid_file_stale_not_removed_if_disabled(
-        self, tmp_path: Path
-    ) -> None:
+    def test_read_pid_file_stale_not_removed_if_disabled(self, tmp_path: Path) -> None:
         """Test stale PID file not removed if remove_stale=False."""
         pid_file = tmp_path / "test.pid"
         nonexistent_pid = 999999
@@ -214,9 +210,7 @@ class TestReadPIDFile:
         # File should still exist
         assert pid_file.exists()
 
-    def test_read_pid_file_with_process_name_validation(
-        self, tmp_path: Path
-    ) -> None:
+    def test_read_pid_file_with_process_name_validation(self, tmp_path: Path) -> None:
         """Test reading PID file validates process name."""
         pid_file = tmp_path / "test.pid"
         current_pid = os.getpid()
@@ -229,9 +223,7 @@ class TestReadPIDFile:
         read_pid = read_pid_file(pid_file, expected_process_names=[current_name])
         assert read_pid == current_pid
 
-    def test_read_pid_file_fails_with_wrong_process_name(
-        self, tmp_path: Path
-    ) -> None:
+    def test_read_pid_file_fails_with_wrong_process_name(self, tmp_path: Path) -> None:
         """Test reading PID file fails if process name doesn't match."""
         pid_file = tmp_path / "test.pid"
         current_pid = os.getpid()
@@ -265,9 +257,7 @@ class TestRemovePIDFile:
         # Should not raise
         remove_pid_file(pid_file)
 
-    def test_remove_pid_file_refuses_if_process_running(
-        self, tmp_path: Path
-    ) -> None:
+    def test_remove_pid_file_refuses_if_process_running(self, tmp_path: Path) -> None:
         """Test removal refuses if process is still running."""
         pid_file = tmp_path / "test.pid"
         current_pid = os.getpid()

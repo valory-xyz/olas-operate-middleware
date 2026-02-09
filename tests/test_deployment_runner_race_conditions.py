@@ -35,9 +35,7 @@ class TestPIDFileRaceConditions:
         manager.logger = MagicMock()
         return manager
 
-    def test_pid_file_concurrent_write_race_condition(
-        self, tmp_path: Path
-    ) -> None:
+    def test_pid_file_concurrent_write_race_condition(self, tmp_path: Path) -> None:
         """Test that concurrent PID writes can cause race condition (to be fixed).
 
         Scenario: Two threads try to start the same process and write PID files.
@@ -81,9 +79,7 @@ class TestPIDFileRaceConditions:
         # Note: This test demonstrates the problem but doesn't always fail
         # In a real race condition, timing determines if we see the issue
 
-    def test_pid_file_read_during_write_race_condition(
-        self, tmp_path: Path
-    ) -> None:
+    def test_pid_file_read_during_write_race_condition(self, tmp_path: Path) -> None:
         """Test that reading PID during write can get partial data (to be fixed).
 
         Scenario: Thread A writes PID, Thread B reads while write in progress.
