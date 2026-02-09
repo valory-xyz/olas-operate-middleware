@@ -56,6 +56,7 @@ from tests.conftest import (
 from tests.constants import OPERATE_TEST
 
 
+@pytest.mark.integration
 class TestWalletRecovery(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 

@@ -107,6 +107,7 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
     }
 
 
+@pytest.mark.integration
 class TestServiceManager(OnTestnet):
     """Tests for services.manager.ServiceManager class."""
 

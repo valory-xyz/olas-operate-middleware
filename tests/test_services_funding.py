@@ -28,6 +28,7 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import requests_mock
 from deepdiff import DeepDiff
 from fastapi.testclient import TestClient
@@ -84,6 +85,7 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
     }
 
 
+@pytest.mark.integration
 class TestFunding(OnTestnet):
     """Tests for services.funding."""
 

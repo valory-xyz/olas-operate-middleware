@@ -46,7 +46,11 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_currency_denom, get_default_ledger_api
+from operate.ledger import (
+    get_currency_denom,
+    get_default_ledger_api,
+    make_chain_ledger_api,
+)
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
@@ -101,7 +105,10 @@ class FundingManager:
     ) -> None:
         """Drain the funds out of the service agents EOAs."""
         service_config_id = service.service_config_id
-        ledger_api = get_default_ledger_api(chain)
+        # Use service's custom RPC from chain_configs
+        chain_config = service.chain_configs[chain.value]
+        ledger_config = chain_config.ledger_config
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
         self.logger.info(
             f"Draining service agents {service.name} ({service_config_id=})"
         )
@@ -127,12 +134,13 @@ class FundingManager:
         self.logger.info(f"Draining service safe {service.name} ({service_config_id=})")
         chain_config = service.chain_configs[chain.value]
         chain_data = chain_config.chain_data
-        ledger_api = get_default_ledger_api(chain)
+        ledger_config = chain_config.ledger_config
+        # Use service's custom RPC from chain_configs
+        ledger_api = make_chain_ledger_api(chain, rpc=ledger_config.rpc)
         withdrawal_address = Web3.to_checksum_address(withdrawal_address)
         service_safe = chain_data.multisig
         wallet = self.wallet_manager.load(chain.ledger_type)
         master_safe = wallet.safes[chain]
-        ledger_config = chain_config.ledger_config
         sftxb = EthSafeTxBuilder(
             rpc=ledger_config.rpc,
             wallet=wallet,
@@ -328,7 +336,8 @@ class FundingManager:
                 continue
 
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
-            ledger_api = get_default_ledger_api(Chain(chain))
+            # Use service's custom RPC from chain_configs
+            ledger_api = make_chain_ledger_api(Chain(chain), rpc=ledger_config.rpc)
             staking_manager = StakingManager(Chain(chain))
 
             if Chain(chain) not in wallet.safes:
@@ -600,18 +609,29 @@ class FundingManager:
 
         return critical_shortfalls, remaining_shortfalls
 
-    def _get_master_safe_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+    def _get_master_safe_balances(
+        self, thresholds: ChainAmounts, service: t.Optional[Service] = None
+    ) -> ChainAmounts:
         output = ChainAmounts()
         batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_safe = self._resolve_master_safe(chain)
             output.setdefault(chain_str, {}).setdefault(master_safe, {})
+
+            # Use service's custom RPC if available, otherwise use default
+            if service and chain_str in service.chain_configs:
+                ledger_api = make_chain_ledger_api(
+                    chain, rpc=service.chain_configs[chain_str].ledger_config.rpc
+                )
+            else:
+                ledger_api = get_default_ledger_api(chain)
+
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
                     batch_calls_args[
                         (
-                            get_default_ledger_api(chain),
+                            ledger_api,
                             asset,
                             master_safe,
                             False,
@@ -631,18 +651,29 @@ class FundingManager:
 
         return output
 
-    def _get_master_eoa_balances(self, thresholds: ChainAmounts) -> ChainAmounts:
+    def _get_master_eoa_balances(
+        self, thresholds: ChainAmounts, service: t.Optional[Service] = None
+    ) -> ChainAmounts:
         output = ChainAmounts()
         batch_calls_args = {}
         for chain_str, addresses in thresholds.items():
             chain = Chain(chain_str)
             master_eoa = self._resolve_master_eoa(chain)
             output.setdefault(chain_str, {}).setdefault(master_eoa, {})
+
+            # Use service's custom RPC if available, otherwise use default
+            if service and chain_str in service.chain_configs:
+                ledger_api = make_chain_ledger_api(
+                    chain, rpc=service.chain_configs[chain_str].ledger_config.rpc
+                )
+            else:
+                ledger_api = get_default_ledger_api(chain)
+
             for _, assets in addresses.items():
                 for asset, _ in assets.items():
                     batch_calls_args[
                         (
-                            get_default_ledger_api(chain),
+                            ledger_api,
                             asset,
                             master_eoa,
                             False,
@@ -797,7 +828,9 @@ class FundingManager:
                 master_eoa_topups[chain_str][master_eoa].setdefault(asset, 0)
 
         master_eoa_thresholds = master_eoa_topups // 2
-        master_eoa_balances = self._get_master_eoa_balances(master_eoa_thresholds)
+        master_eoa_balances = self._get_master_eoa_balances(
+            master_eoa_thresholds, service=service
+        )
 
         # BEGIN Bridging patch: remove excess balances for chains without a Safe:
         (
@@ -827,7 +860,7 @@ class FundingManager:
         )
         master_safe_topup = master_safe_thresholds
         master_safe_balances = ChainAmounts.add(
-            self._get_master_safe_balances(master_safe_thresholds),
+            self._get_master_safe_balances(master_safe_thresholds, service=service),
             self._aggregate_as_master_safe_amounts(excess_master_eoa_balances),
         )
         master_safe_shortfalls = self._compute_shortfalls(
@@ -887,7 +920,7 @@ class FundingManager:
 
     def fund_service_initial(self, service: Service) -> None:
         """Fund service initially"""
-        self.fund_chain_amounts(service.get_initial_funding_amounts())
+        self.fund_chain_amounts(service.get_initial_funding_amounts(), service=service)
 
     def compute_service_initial_shortfalls(self, service: Service) -> ChainAmounts:
         """Compute service initial shortfalls"""
@@ -902,12 +935,14 @@ class FundingManager:
     def topup_service_initial(self, service: Service) -> None:
         """Fund service enough to reach initial funding amounts"""
         service_initial_shortfalls = self.compute_service_initial_shortfalls(service)
-        self.fund_chain_amounts(service_initial_shortfalls)
+        self.fund_chain_amounts(service_initial_shortfalls, service=service)
 
-    def fund_chain_amounts(self, amounts: ChainAmounts) -> None:
+    def fund_chain_amounts(
+        self, amounts: ChainAmounts, service: t.Optional[Service] = None
+    ) -> None:
         """Fund chain amounts"""
         required = self._aggregate_as_master_safe_amounts(amounts)
-        balances = self._get_master_safe_balances(required)
+        balances = self._get_master_safe_balances(required, service=service)
 
         if balances < required:
             raise InsufficientFundsException(
@@ -960,7 +995,7 @@ class FundingManager:
                             f"Failed to fund from Master Safe: Address {address} is not an agent EOA or service Safe for service {service.service_config_id}."
                         )
 
-            self.fund_chain_amounts(amounts)
+            self.fund_chain_amounts(amounts, service=service)
             self._funding_requests_cooldown_until[service_config_id] = (
                 time() + self.funding_requests_cooldown_seconds
             )

@@ -312,6 +312,7 @@ class TestNativeBridgeProvider:
         assert block == expected_block, f"Expected block {expected_block}, got {block}."
 
 
+@pytest.mark.integration
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
