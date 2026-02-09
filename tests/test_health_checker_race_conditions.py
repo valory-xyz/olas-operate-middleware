@@ -6,7 +6,6 @@ issues in health checker job management.
 """
 
 import asyncio
-import threading
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -80,9 +79,7 @@ class TestHealthCheckerJobRaceConditions:
         health_checker._jobs[service_id] = mock_task  # type: ignore[attr-defined]
 
         # Mock healthcheck_job to return immediately
-        with patch.object(
-            health_checker, "healthcheck_job", new=AsyncMock()
-        ) as mock_healthcheck:
+        with patch.object(health_checker, "healthcheck_job", new=AsyncMock()):
             # This will call stop_for_service but not wait
             health_checker.start_for_service(service_id)
 
