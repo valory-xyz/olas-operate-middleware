@@ -51,7 +51,7 @@ class TestDeploymentManagerErrorHandling:
             # Currently, run_deployment does NOT raise the exception
             # After the fix, this should raise RuntimeError
             deployment_manager.run_deployment(
-                build_dir=build_dir, password="test", is_aea=True
+                build_dir=build_dir, password="test", is_aea=True  # nosec
             )
 
             # Verify state: Line 818 sets to ERROR but line 819 calls stop_deployment
