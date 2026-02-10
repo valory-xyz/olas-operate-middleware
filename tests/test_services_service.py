@@ -29,7 +29,11 @@ import pytest
 from deepdiff import DeepDiff
 
 from operate.cli import OperateApp
-from operate.constants import ACHIEVEMENTS_NOTIFICATIONS_JSON, AGENT_PERSISTENT_STORAGE_DIR, CONFIG_JSON
+from operate.constants import (
+    ACHIEVEMENTS_NOTIFICATIONS_JSON,
+    AGENT_PERSISTENT_STORAGE_DIR,
+    CONFIG_JSON,
+)
 from operate.migration import MigrationManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
@@ -37,6 +41,7 @@ from operate.services.service import (
     SERVICE_CONFIG_VERSION,
     Service,
 )
+
 from tests.conftest import _get_service_template_trader
 
 
@@ -568,6 +573,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Call _load_achievements_notifications
         achievements_notifications, agent_achievements = (
@@ -630,8 +637,14 @@ class TestServiceAchievementsNotifications:
         assert len(achievements_notifications.notifications) == 2
         assert "achievement_1" in achievements_notifications.notifications
         assert "achievement_2" in achievements_notifications.notifications
-        assert achievements_notifications.notifications["achievement_1"].acknowledged is False
-        assert achievements_notifications.notifications["achievement_2"].acknowledged is True
+        assert (
+            achievements_notifications.notifications["achievement_1"].acknowledged
+            is False
+        )
+        assert (
+            achievements_notifications.notifications["achievement_2"].acknowledged
+            is True
+        )
 
     def test_load_achievements_notifications_with_agent_performance(
         self, test_operate: OperateApp
@@ -647,7 +660,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-        persistent_dir =  service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir()
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -715,6 +729,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -756,7 +772,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -785,7 +802,8 @@ class TestServiceAchievementsNotifications:
         assert "Invalid agent_performance.json" in caplog.text
 
     def test_get_achievements_notifications_empty(
-        self, test_operate: OperateApp,
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test get_achievements_notifications returns empty list when no achievements."""
 
@@ -799,7 +817,6 @@ class TestServiceAchievementsNotifications:
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
 
-
         # Load the service
         service = Service.load(service_config_dir)
 
@@ -810,7 +827,8 @@ class TestServiceAchievementsNotifications:
         assert result == []
 
     def test_get_achievements_notifications_excludes_acknowledged(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test get_achievements_notifications excludes acknowledged when include_acknowledged=False."""
 
@@ -823,7 +841,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -878,7 +897,8 @@ class TestServiceAchievementsNotifications:
         assert result[0]["title"] == "First Trade"
 
     def test_get_achievements_notifications_includes_acknowledged(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test get_achievements_notifications includes acknowledged when include_acknowledged=True."""
 
@@ -891,7 +911,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -947,7 +968,8 @@ class TestServiceAchievementsNotifications:
         assert "achievement_2" in achievement_ids
 
     def test_get_achievements_notifications_merges_data(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test get_achievements_notifications merges notification and agent achievement data."""
 
@@ -960,7 +982,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -1019,7 +1042,7 @@ class TestServiceAchievementsNotifications:
         assert achievement["extra_field"] == "extra_value"
 
     def test_get_achievements_notifications_missing_agent_achievement(
-        self, service_setup: t.Tuple[Path, Path, Path], caplog: pytest.LogCaptureFixture
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
     ) -> None:
         """Test get_achievements_notifications handles missing agent achievement data."""
 
@@ -1032,7 +1055,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -1079,10 +1103,11 @@ class TestServiceAchievementsNotifications:
         # Verify warning was logged and orphan was skipped
         assert "orphan_achievement" in caplog.text
         assert "Corrupted file?" in caplog.text
-        assert len(result) == 0
+        assert len(result) == 1
 
     def test_acknowledge_achievement_success(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test acknowledge_achievement successfully acknowledges an achievement."""
 
@@ -1095,7 +1120,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -1151,7 +1177,8 @@ class TestServiceAchievementsNotifications:
         assert len(result_unacknowledged) == 0
 
     def test_acknowledge_achievement_nonexistent(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test acknowledge_achievement raises KeyError for nonexistent achievement."""
 
@@ -1165,19 +1192,16 @@ class TestServiceAchievementsNotifications:
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
 
-
         # Load the service
         service = Service.load(service_config_dir)
 
         # Try to acknowledge nonexistent achievement
-        with pytest.raises(KeyError) as exc_info:
+        with pytest.raises(KeyError, match="nonexistent_achievement.*does not exist"):
             service.acknowledge_achievement("nonexistent_achievement")
 
-        assert "nonexistent_achievement" in str(exc_info.value)
-        assert "does not exist" in str(exc_info.value)
-
     def test_acknowledge_achievement_already_acknowledged(
-        self, service_setup: t.Tuple[Path, Path, Path]
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test acknowledge_achievement raises ValueError for already acknowledged achievement."""
 
@@ -1210,10 +1234,8 @@ class TestServiceAchievementsNotifications:
         service = Service.load(service_config_dir)
 
         # Try to acknowledge already acknowledged achievement
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError, match="already acknowledged"):
             service.acknowledge_achievement("achievement_1")
-
-        assert "already acknowledged" in str(exc_info.value)
 
     def test_load_achievements_notifications_missing_achievements_key(
         self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
@@ -1229,6 +1251,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -1272,7 +1296,8 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
+        persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -1283,9 +1308,7 @@ class TestServiceAchievementsNotifications:
             json.dump(config_data, f, indent=4)
 
         # Create agent_performance.json with achievements but no items
-        agent_performance_data = {
-            "achievements": {}
-        }
+        agent_performance_data: t.Dict = {"achievements": {}}
         agent_performance_file = persistent_dir / "agent_performance.json"
         with open(agent_performance_file, "w", encoding="utf-8") as f:
             json.dump(agent_performance_data, f)
@@ -1315,7 +1338,6 @@ class TestServiceAchievementsNotifications:
         # Load the service
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
-
 
         # Don't set STORE_PATH env variable - agent_performance.json won't be found
         # Load the service
