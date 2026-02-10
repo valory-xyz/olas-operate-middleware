@@ -107,15 +107,15 @@ class HealthChecker:
             # Remove from dict - task will handle cancellation
             del self._jobs[service_config_id]
 
-    async def check_service_health(
+    async def check_service_health(  # pylint: disable=too-many-return-statements
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health"""
         del service_config_id
         timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(HEALTH_CHECK_URL) as resp:
-                try:
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(HEALTH_CHECK_URL) as resp:
                     status = resp.status
 
                     if status != HTTPStatus.OK:
@@ -137,18 +137,36 @@ class HealthChecker:
                     return response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
                     )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
-                except json.JSONDecodeError as e:
-                    self.logger.error(
-                        f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
-                        exc_info=True,
-                    )
-                    return False
-                except (OSError, PermissionError) as e:
-                    self.logger.error(
-                        f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
-                        exc_info=True,
-                    )
-                    return False
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except (OSError, PermissionError) as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except aiohttp.ClientError as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except asyncio.TimeoutError as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"[HEALTH_CHECKER] Unexpected error during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
 
     async def healthcheck_job(  # pylint: disable=too-many-statements
         self,
