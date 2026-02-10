@@ -5,10 +5,12 @@ Part of Phase 1.2: Error Handling Improvements - focusing on specific exception
 handling instead of broad Exception catches.
 """
 
+import asyncio
 import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import aiohttp
 import pytest
 
 from operate.services.health_checker import HealthChecker
@@ -193,3 +195,103 @@ class TestCheckServiceHealthErrorHandling:
         assert healthcheck_file.exists()
         content = json.loads(healthcheck_file.read_text())
         assert content == {"is_healthy": True}
+
+    @pytest.mark.asyncio
+    async def test_check_service_health_handles_client_connection_error(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Test that aiohttp ClientConnectionError is handled gracefully."""
+        service_config_id = "test-service"
+
+        # Create session mock that raises ClientConnectionError
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            side_effect=aiohttp.ClientConnectionError("Connection refused")
+        )
+
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
+            # Make ClientSession() context manager return our mock session
+            mock_ctx = MagicMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_client_session.return_value = mock_ctx
+
+            result = await health_checker.check_service_health(
+                service_config_id, tmp_path
+            )
+
+        # Should return False for connection errors, not crash
+        assert result is False
+
+        # Verify error was logged
+        health_checker.logger.error.assert_called()  # type: ignore[attr-defined]
+        call_str = str(health_checker.logger.error.call_args)  # type: ignore[attr-defined]
+        assert "client error" in call_str.lower() or "http" in call_str.lower()
+
+    @pytest.mark.asyncio
+    async def test_check_service_health_handles_timeout_error(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Test that asyncio TimeoutError is handled gracefully."""
+        service_config_id = "test-service"
+
+        # Create session mock that raises TimeoutError
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(side_effect=asyncio.TimeoutError())
+
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
+            # Make ClientSession() context manager return our mock session
+            mock_ctx = MagicMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_client_session.return_value = mock_ctx
+
+            result = await health_checker.check_service_health(
+                service_config_id, tmp_path
+            )
+
+        # Should return False for timeout errors, not crash
+        assert result is False
+
+        # Verify error was logged with timeout context
+        health_checker.logger.error.assert_called()  # type: ignore[attr-defined]
+        call_str = str(health_checker.logger.error.call_args)  # type: ignore[attr-defined]
+        assert "timeout" in call_str.lower()
+
+    @pytest.mark.asyncio
+    async def test_check_service_health_handles_unexpected_error(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Test that unexpected exceptions are handled gracefully."""
+        service_config_id = "test-service"
+
+        # Create session mock that raises unexpected error
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(
+            side_effect=RuntimeError("Unexpected database error")
+        )
+
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
+            # Make ClientSession() context manager return our mock session
+            mock_ctx = MagicMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_client_session.return_value = mock_ctx
+
+            result = await health_checker.check_service_health(
+                service_config_id, tmp_path
+            )
+
+        # Should return False for any unexpected error, not crash
+        assert result is False
+
+        # Verify error was logged as unexpected
+        health_checker.logger.error.assert_called()  # type: ignore[attr-defined]
+        call_str = str(health_checker.logger.error.call_args)  # type: ignore[attr-defined]
+        assert "unexpected" in call_str.lower()
