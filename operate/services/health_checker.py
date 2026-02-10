@@ -137,15 +137,10 @@ class HealthChecker:
                     return response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
                     )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
-        except json.JSONDecodeError as e:
+        except asyncio.TimeoutError as e:
+            # NOTE: Must come before OSError since TimeoutError is a subclass of OSError in Python 3.10+
             self.logger.error(
-                f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
-                exc_info=True,
-            )
-            return False
-        except (OSError, PermissionError) as e:
-            self.logger.error(
-                f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
+                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!",
                 exc_info=True,
             )
             return False
@@ -155,9 +150,16 @@ class HealthChecker:
                 exc_info=True,
             )
             return False
-        except asyncio.TimeoutError as e:
+        except json.JSONDecodeError as e:
             self.logger.error(
-                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!",
+                f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except (OSError, PermissionError) as e:
+            # NOTE: Comes after TimeoutError to avoid catching it (TimeoutError is subclass of OSError)
+            self.logger.error(
+                f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
                 exc_info=True,
             )
             return False
