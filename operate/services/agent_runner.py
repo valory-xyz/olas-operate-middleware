@@ -171,6 +171,16 @@ class AgentRunnerManager:
             with TemporaryDirectory() as tmp_dir:
                 tmp_file = Path(tmp_dir) / "agent_runner"
                 cls.download_file(download_url, tmp_file)
+                # Verify hash of downloaded file
+                downloaded_hash = cls.get_local_file_sha256(tmp_file)
+                if downloaded_hash != remote_file_hash:
+                    raise ValueError(
+                        f"Hash verification failed for {agent_runner_name}!\n"
+                        f"Expected: {remote_file_hash}\n"
+                        f"Got:      {downloaded_hash}\n"
+                        f"Downloaded file may be corrupted or tampered."
+                    )
+                cls.logger.info(f"Hash verification passed: {downloaded_hash}")
                 shutil.copy2(tmp_file, target_path)
                 if os.name == "posix":
                     target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
