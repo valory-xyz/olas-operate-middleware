@@ -224,15 +224,11 @@ def read_pid_file(
             # File is now closed - safe to remove on Windows
             if pid_is_stale:
                 if remove_stale:
-                    logger.warning(
-                        f"Removing stale PID file {pid_file} (PID {pid})"
-                    )
+                    logger.warning(f"Removing stale PID file {pid_file} (PID {pid})")
                     try:
                         pid_file.unlink()
                     except OSError as e:
-                        logger.error(
-                            f"Failed to remove stale PID file {pid_file}: {e}"
-                        )
+                        logger.error(f"Failed to remove stale PID file {pid_file}: {e}")
                 raise StalePIDFile(
                     f"PID {pid} in {pid_file} is stale "
                     f"(process not found or name mismatch)"
