@@ -9,10 +9,12 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import aiohttp
 import pytest
 
 from operate.services.health_checker import HealthChecker
+
+
+# aiohttp used via patch target "operate.services.health_checker.aiohttp.ClientSession"
 
 
 class TestCheckServiceHealthErrorHandling:
@@ -46,7 +48,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -86,7 +90,9 @@ class TestCheckServiceHealthErrorHandling:
         readonly_path.mkdir()
         readonly_path.chmod(0o444)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -127,7 +133,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -135,18 +143,13 @@ class TestCheckServiceHealthErrorHandling:
             mock_client_session.return_value = mock_ctx
 
             with patch.object(health_checker.logger, "error") as mock_log:
-                await health_checker.check_service_health(
-                    service_config_id, tmp_path
-                )
+                await health_checker.check_service_health(service_config_id, tmp_path)
 
                 # Should log with specific error context
                 mock_log.assert_called()
-                # Currently logs generic error - will be fixed to mention JSON/decode
+                # Verify error was logged with JSON decode context
                 call_str = str(mock_log.call_args)
-                # After fix, this should assert:
-                # assert "json" in call_str.lower() or "decode" in call_str.lower()
-                # For now, just verify error was logged
-                assert "error" in call_str.lower()
+                assert "json" in call_str.lower() or "decode" in call_str.lower()
 
     @pytest.mark.asyncio
     async def test_check_service_health_succeeds_with_valid_response(
@@ -169,7 +172,9 @@ class TestCheckServiceHealthErrorHandling:
         mock_session = MagicMock()
         mock_session.get = MagicMock(return_value=mock_get_ctx)
 
-        with patch("operate.services.health_checker.aiohttp.ClientSession") as mock_client_session:
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
             # Make ClientSession() context manager return our mock session
             mock_ctx = MagicMock()
             mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
