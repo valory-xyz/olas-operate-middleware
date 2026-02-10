@@ -187,6 +187,10 @@ def read_pid_file(
 
     while time.time() - start_time < timeout:
         try:
+            # Read and validate PID (with file closed after this block)
+            pid_is_stale = False
+            pid = None
+
             with open(pid_file, "r", encoding="utf-8") as f:
                 # Acquire shared lock for reading
                 # (multiple readers OK, but blocks writers)
@@ -208,34 +212,33 @@ def read_pid_file(
 
                     # Validate PID
                     if not validate_pid(pid, expected_process_names):
-                        if remove_stale:
-                            logger.warning(
-                                f"Removing stale PID file {pid_file} (PID {pid})"
-                            )
-                            # Release lock before removing
-                            if platform.system() != "Windows":
-                                import fcntl  # pylint: disable=import-outside-toplevel
-
-                                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-                            # Remove stale file
-                            try:
-                                pid_file.unlink()
-                            except OSError as e:
-                                logger.error(
-                                    f"Failed to remove stale PID file {pid_file}: {e}"
-                                )
-                        raise StalePIDFile(
-                            f"PID {pid} in {pid_file} is stale "
-                            f"(process not found or name mismatch)"
-                        )
+                        pid_is_stale = True
 
                     logger.debug(f"Read PID {pid} from {pid_file}")
-                    return pid
                 finally:
                     if platform.system() != "Windows":
                         import fcntl  # pylint: disable=import-outside-toplevel
 
                         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+            # File is now closed - safe to remove on Windows
+            if pid_is_stale:
+                if remove_stale:
+                    logger.warning(
+                        f"Removing stale PID file {pid_file} (PID {pid})"
+                    )
+                    try:
+                        pid_file.unlink()
+                    except OSError as e:
+                        logger.error(
+                            f"Failed to remove stale PID file {pid_file}: {e}"
+                        )
+                raise StalePIDFile(
+                    f"PID {pid} in {pid_file} is stale "
+                    f"(process not found or name mismatch)"
+                )
+
+            return pid
         except PIDFileLocked as e:
             last_error = e
             time.sleep(0.1)  # Wait before retry
