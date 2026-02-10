@@ -28,13 +28,16 @@ from unittest.mock import Mock
 import pytest
 from deepdiff import DeepDiff
 
-from operate.constants import CONFIG_JSON
+from operate.cli import OperateApp
+from operate.constants import ACHIEVEMENTS_NOTIFICATIONS_JSON, AGENT_PERSISTENT_STORAGE_DIR, CONFIG_JSON
 from operate.migration import MigrationManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
     SERVICE_CONFIG_PREFIX,
     SERVICE_CONFIG_VERSION,
+    Service,
 )
+from tests.conftest import _get_service_template_trader
 
 
 DEFAULT_CONFIG_KWARGS = {
@@ -546,3 +549,782 @@ class TestService:
             print(diff)
 
         assert not diff, "Migrated data does not match expected data."
+
+
+class TestServiceAchievementsNotifications:
+    """Tests for achievements notifications functionality in services.service.Service."""
+
+    def test_load_achievements_notifications_creates_default(
+        self, test_operate: OperateApp
+    ) -> None:
+        """Test that _load_achievements_notifications creates default file if not exists."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify the file was created
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        assert achievements_file.exists()
+
+        # Verify default values
+        assert achievements_notifications.path == service_config_dir
+        assert achievements_notifications.notifications == {}
+        assert agent_achievements == {}
+
+    def test_load_achievements_notifications_with_existing_data(
+        self, test_operate: OperateApp
+    ) -> None:
+        """Test _load_achievements_notifications with existing data."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+        # Create existing achievements_notifications.json
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+                "achievement_2": {
+                    "achievement_id": "achievement_2",
+                    "acknowledged": True,
+                    "acknowledgement_timestamp": 1704063600,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify loaded data
+        assert len(achievements_notifications.notifications) == 2
+        assert "achievement_1" in achievements_notifications.notifications
+        assert "achievement_2" in achievements_notifications.notifications
+        assert achievements_notifications.notifications["achievement_1"].acknowledged is False
+        assert achievements_notifications.notifications["achievement_2"].acknowledged is True
+
+    def test_load_achievements_notifications_with_agent_performance(
+        self, test_operate: OperateApp
+    ) -> None:
+        """Test _load_achievements_notifications loads agent achievements from agent_performance.json."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+        persistent_dir =  service.path / AGENT_PERSISTENT_STORAGE_DIR
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create agent_performance.json with achievements
+        agent_performance_data = {
+            "timestamp": 1704063600,
+            "metrics": [],
+            "last_activity": None,
+            "last_chat_message": None,
+            "achievements": {
+                "items": {
+                    "achievement_1": {
+                        "title": "First Trade",
+                        "description": "Completed your first trade",
+                        "timestamp": 1704063000,
+                    },
+                    "achievement_2": {
+                        "title": "Ten Trades",
+                        "description": "Completed ten trades",
+                        "timestamp": 1704063500,
+                    },
+                }
+            },
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify agent achievements were loaded
+        assert len(agent_achievements) == 2
+        assert "achievement_1" in agent_achievements
+        assert "achievement_2" in agent_achievements
+        assert agent_achievements["achievement_1"]["title"] == "First Trade"
+
+        # Verify new notifications were created for agent achievements
+        assert len(achievements_notifications.notifications) == 2
+        assert "achievement_1" in achievements_notifications.notifications
+        assert "achievement_2" in achievements_notifications.notifications
+
+    def test_load_achievements_notifications_invalid_json(
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _load_achievements_notifications handles invalid agent_performance.json."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create invalid agent_performance.json
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            f.write("invalid json content")
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        with caplog.at_level(logging.WARNING):
+            achievements_notifications, agent_achievements = (
+                service._load_achievements_notifications()
+            )
+
+        # Verify graceful handling
+        assert agent_achievements == {}
+        assert "Cannot read file 'agent_performance.json'" in caplog.text
+
+    def test_load_achievements_notifications_non_dict_root(
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _load_achievements_notifications handles non-dict root in agent_performance.json."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create agent_performance.json with list root (invalid)
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(["item1", "item2"], f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        with caplog.at_level(logging.WARNING):
+            achievements_notifications, agent_achievements = (
+                service._load_achievements_notifications()
+            )
+
+        # Verify graceful handling
+        assert agent_achievements == {}
+        assert "Invalid agent_performance.json" in caplog.text
+
+    def test_get_achievements_notifications_empty(
+        self, test_operate: OperateApp,
+    ) -> None:
+        """Test get_achievements_notifications returns empty list when no achievements."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Get achievements notifications
+        result = service.get_achievements_notifications(include_acknowledged=False)
+
+        # Verify empty result
+        assert result == []
+
+    def test_get_achievements_notifications_excludes_acknowledged(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test get_achievements_notifications excludes acknowledged when include_acknowledged=False."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create achievements_notifications.json
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+                "achievement_2": {
+                    "achievement_id": "achievement_2",
+                    "acknowledged": True,
+                    "acknowledgement_timestamp": 1704063600,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Create agent_performance.json with matching achievements
+        agent_performance_data = {
+            "achievements": {
+                "items": {
+                    "achievement_1": {"title": "First Trade", "timestamp": 1704063000},
+                    "achievement_2": {"title": "Ten Trades", "timestamp": 1704063500},
+                }
+            }
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Get achievements notifications without acknowledged
+        result = service.get_achievements_notifications(include_acknowledged=False)
+
+        # Verify only unacknowledged achievement is returned
+        assert len(result) == 1
+        assert result[0]["achievement_id"] == "achievement_1"
+        assert result[0]["title"] == "First Trade"
+
+    def test_get_achievements_notifications_includes_acknowledged(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test get_achievements_notifications includes acknowledged when include_acknowledged=True."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create achievements_notifications.json
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+                "achievement_2": {
+                    "achievement_id": "achievement_2",
+                    "acknowledged": True,
+                    "acknowledgement_timestamp": 1704063600,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Create agent_performance.json with matching achievements
+        agent_performance_data = {
+            "achievements": {
+                "items": {
+                    "achievement_1": {"title": "First Trade", "timestamp": 1704063000},
+                    "achievement_2": {"title": "Ten Trades", "timestamp": 1704063500},
+                }
+            }
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Get achievements notifications with acknowledged
+        result = service.get_achievements_notifications(include_acknowledged=True)
+
+        # Verify all achievements are returned
+        assert len(result) == 2
+        achievement_ids = {a["achievement_id"] for a in result}
+        assert "achievement_1" in achievement_ids
+        assert "achievement_2" in achievement_ids
+
+    def test_get_achievements_notifications_merges_data(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test get_achievements_notifications merges notification and agent achievement data."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create achievements_notifications.json
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Create agent_performance.json with additional data
+        agent_performance_data = {
+            "achievements": {
+                "items": {
+                    "achievement_1": {
+                        "title": "First Trade",
+                        "description": "Completed your first trade",
+                        "timestamp": 1704063000,
+                        "extra_field": "extra_value",
+                    },
+                }
+            }
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Get achievements notifications
+        result = service.get_achievements_notifications(include_acknowledged=False)
+
+        # Verify merged data
+        assert len(result) == 1
+        achievement = result[0]
+        assert achievement["achievement_id"] == "achievement_1"
+        assert achievement["acknowledged"] is False
+        assert achievement["acknowledgement_timestamp"] == 0
+        assert achievement["title"] == "First Trade"
+        assert achievement["description"] == "Completed your first trade"
+        assert achievement["extra_field"] == "extra_value"
+
+    def test_get_achievements_notifications_missing_agent_achievement(
+        self, service_setup: t.Tuple[Path, Path, Path], caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test get_achievements_notifications handles missing agent achievement data."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create achievements_notifications.json with achievement not in agent_performance
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "orphan_achievement": {
+                    "achievement_id": "orphan_achievement",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Create agent_performance.json without the orphan achievement
+        agent_performance_data = {
+            "achievements": {
+                "items": {
+                    "other_achievement": {"title": "Other", "timestamp": 1704063000},
+                }
+            }
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Get achievements notifications
+        with caplog.at_level(logging.WARNING):
+            result = service.get_achievements_notifications(include_acknowledged=False)
+
+        # Verify warning was logged and orphan was skipped
+        assert "orphan_achievement" in caplog.text
+        assert "Corrupted file?" in caplog.text
+        assert len(result) == 0
+
+    def test_acknowledge_achievement_success(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test acknowledge_achievement successfully acknowledges an achievement."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create achievements_notifications.json
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": False,
+                    "acknowledgement_timestamp": 0,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Create agent_performance.json
+        agent_performance_data = {
+            "achievements": {
+                "items": {
+                    "achievement_1": {"title": "First Trade", "timestamp": 1704063000},
+                }
+            }
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Acknowledge the achievement
+        service.acknowledge_achievement("achievement_1")
+
+        # Verify the achievement is now acknowledged
+        result = service.get_achievements_notifications(include_acknowledged=True)
+        assert len(result) == 1
+        assert result[0]["acknowledged"] is True
+        assert result[0]["acknowledgement_timestamp"] > 0
+
+        # Verify it's not returned when include_acknowledged=False
+        result_unacknowledged = service.get_achievements_notifications(
+            include_acknowledged=False
+        )
+        assert len(result_unacknowledged) == 0
+
+    def test_acknowledge_achievement_nonexistent(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test acknowledge_achievement raises KeyError for nonexistent achievement."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Try to acknowledge nonexistent achievement
+        with pytest.raises(KeyError) as exc_info:
+            service.acknowledge_achievement("nonexistent_achievement")
+
+        assert "nonexistent_achievement" in str(exc_info.value)
+        assert "does not exist" in str(exc_info.value)
+
+    def test_acknowledge_achievement_already_acknowledged(
+        self, service_setup: t.Tuple[Path, Path, Path]
+    ) -> None:
+        """Test acknowledge_achievement raises ValueError for already acknowledged achievement."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+        # Create achievements_notifications.json with already acknowledged achievement
+        achievements_data = {
+            "path": str(service_config_dir),
+            "notifications": {
+                "achievement_1": {
+                    "achievement_id": "achievement_1",
+                    "acknowledged": True,
+                    "acknowledgement_timestamp": 1704063600,
+                },
+            },
+        }
+        achievements_file = service_config_dir / ACHIEVEMENTS_NOTIFICATIONS_JSON
+        with open(achievements_file, "w", encoding="utf-8") as f:
+            json.dump(achievements_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Try to acknowledge already acknowledged achievement
+        with pytest.raises(ValueError) as exc_info:
+            service.acknowledge_achievement("achievement_1")
+
+        assert "already acknowledged" in str(exc_info.value)
+
+    def test_load_achievements_notifications_missing_achievements_key(
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _load_achievements_notifications handles missing achievements key."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create agent_performance.json without achievements key
+        agent_performance_data = {
+            "timestamp": 1704063600,
+            "metrics": [],
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify empty achievements
+        assert agent_achievements == {}
+
+    def test_load_achievements_notifications_missing_items_key(
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _load_achievements_notifications handles missing items key in achievements."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Update service config to include STORE_PATH env variable
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        config_data["env_variables"] = {"STORE_PATH": {"value": str(persistent_dir)}}
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
+        # Create agent_performance.json with achievements but no items
+        agent_performance_data = {
+            "achievements": {}
+        }
+        agent_performance_file = persistent_dir / "agent_performance.json"
+        with open(agent_performance_file, "w", encoding="utf-8") as f:
+            json.dump(agent_performance_data, f)
+
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify empty achievements
+        assert agent_achievements == {}
+
+    def test_load_achievements_notifications_no_store_path_env(
+        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test _load_achievements_notifications when STORE_PATH env var is not set."""
+
+        test_operate.service_manager().create(
+            service_template=_get_service_template_trader()
+        )
+
+        service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+
+        # Load the service
+        service = test_operate.service_manager().load(service_config_id)
+        service_config_dir = service.path
+
+
+        # Don't set STORE_PATH env variable - agent_performance.json won't be found
+        # Load the service
+        service = Service.load(service_config_dir)
+
+        # Call _load_achievements_notifications
+        achievements_notifications, agent_achievements = (
+            service._load_achievements_notifications()
+        )
+
+        # Verify empty agent achievements (no file found)
+        assert agent_achievements == {}
