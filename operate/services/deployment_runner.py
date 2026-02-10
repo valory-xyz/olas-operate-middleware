@@ -118,11 +118,23 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._is_aea = is_aea
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
-        """Open agent_runner.log file."""
+        """Open agent_runner.log file.
+
+        TODO: Resource leak - file handle not explicitly closed.
+        File is passed to subprocess.Popen as stdout/stderr and never closed.
+        OS cleans up when subprocess dies, but explicit cleanup would be better.
+        See: RESOURCE_LEAKS.md for details.
+        """
         return (self._get_operate_dir() / "agent_runner.log").open("w+")
 
     def _open_tendermint_log_file(self) -> TextIOWrapper:
-        """Open tm.log file."""
+        """Open tm.log file.
+
+        TODO: Resource leak - file handle not explicitly closed.
+        File is passed to subprocess.Popen as stdout/stderr and never closed.
+        OS cleans up when subprocess dies, but explicit cleanup would be better.
+        See: RESOURCE_LEAKS.md for details.
+        """
         return (self._get_operate_dir() / "tm.log").open("w+")
 
     def _get_operate_dir(self) -> Path:
