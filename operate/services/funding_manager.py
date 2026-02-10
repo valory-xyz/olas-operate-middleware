@@ -1000,12 +1000,13 @@ class FundingManager:
                         )
 
             self.fund_chain_amounts(amounts, service=service)
-            self._funding_requests_cooldown_until[service_config_id] = (
-                time() + self.funding_requests_cooldown_seconds
-            )
         finally:
+            # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:
                 self._funding_in_progress[service_config_id] = False
+                self._funding_requests_cooldown_until[service_config_id] = (
+                    time() + self.funding_requests_cooldown_seconds
+                )
 
     async def funding_job(
         self,
