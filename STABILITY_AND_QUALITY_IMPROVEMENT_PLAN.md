@@ -302,105 +302,216 @@ pytest tests/test_concurrency.py -v --count=100
 
 ---
 
-## Phase 2: Testing & Reliability (Weeks 3-4, ~11-12 days) - 🔄 IN PROGRESS
+## Phase 2: Testing & Reliability (Weeks 3-4, ~11-12 days) - 🔄 REVISED STRATEGY
 
-**Goal:** Add comprehensive test coverage for critical untested components and improve test infrastructure.
+**Goal (REVISED):** Fill critical test coverage gaps strategically, not add tests everywhere.
 
-**Current Status (2026-02-10):** Test review and cleanup completed. Critical quality issues identified and resolved.
+**Status (2026-02-10):** Test review complete. **Strategy revised** based on systematic assessment.
 
-**Key Finding:** Many initially created tests were "tests in name only" - they reimplemented logic without testing actual implementations. Trimmed from ~450 planned tests to ~25-30 high-quality tests that actually test real code.
+**Key Insight:** Codebase has ~60% coverage (209 tests) but **uneven distribution**. Issue is not total count but **critical gaps** in high-impact areas.
+
+**Assessment Document:** See `TEST_COVERAGE_ASSESSMENT.md` for full file-by-file analysis.
+
+**Strategy Change:**
+- ❌ **OLD:** Add 170+ tests everywhere for quantity metrics
+- ✅ **NEW:** Fill critical gaps (agent_runner, protocol) with ~50-60 high-value tests
+
+**Completed Work:**
+- ✅ Test review and cleanup (removed 380+ lines of bad tests)
+- ✅ Created ~25-30 high-quality tests in branches
+- ✅ Systematic coverage assessment of all files
 
 **Branches Status:**
-- ✅ `feat/phase2-balance-checking-tests` - Ready for review (11 tests, all passing)
-- ✅ `feat/phase2-strategic-unit-tests` - Ready for review (many tests, needs pytest-asyncio)
-- ✅ `feat/phase2-error-path-tests` - Ready for review (3 tests, trimmed from 40+)
+- ✅ `feat/phase2-balance-checking-tests` - Ready for merge (11 tests)
+- ✅ `feat/phase2-strategic-unit-tests` - Ready for merge (needs pytest-asyncio setup)
+- ✅ `feat/phase2-error-path-tests` - Ready for merge (3 tests)
 - ❌ `feat/phase2-wallet-algorithm-tests` - DELETED (372 lines of valueless tests)
 
-### 2.1 Critical Component Testing - ✅ COMPLETE
+### 2.1 Critical Gap Filling (NEW FOCUS) - 🔄 IN PROGRESS
 
-**Status:** Tests created in `feat/phase2-strategic-unit-tests` branch. Ready for review/merge.
+**Priority 1: Fill Critical Gaps in High-Impact Areas**
 
-**Created Test Files:**
-1. ✅ `test_deployment_runner_error_handling.py` - 6 passing tests
-   - Tests real DeploymentManager methods with mocked dependencies
-   - Documents bugs in current implementation
-2. ✅ `test_deployment_runner_race_conditions.py` - Tests for PID locking and concurrency
-3. ✅ `test_health_checker_check_service_health.py` - 7 tests (need pytest-asyncio setup)
-   - Tests real HealthChecker.check_service_health() with mocked aiohttp
-4. ✅ `test_health_checker_healthcheck_job.py` - Tests for healthcheck lifecycle
-5. ✅ `test_health_checker_race_conditions.py` - Tests for concurrent job management
-6. ✅ `test_funding_manager_error_handling.py` - 4 tests
-7. ✅ `test_funding_manager_race_conditions.py` - Tests for cooldown thread safety
+#### ❌ 2.1.1 agent_runner.py Tests (HIGH PRIORITY - NOT STARTED)
 
-**Quality Assessment:** ✅ HIGH - These tests actually test real implementations with mocked external dependencies.
+**Issue:** ZERO tests for agent_runner.py - the component that runs actual autonomous agents!
 
-**Effort Actual:** Already completed in earlier phase work
+**Impact:** CRITICAL - Bugs directly affect agent execution, process management, resource cleanup
 
-### 2.2 Fast Unit Test Suite Expansion - ✅ PARTIALLY COMPLETE
+**Tests Needed (~15-20 tests, 3-4 days):**
 
-**Status:** Balance checking tests created and reviewed. Major cleanup performed.
+1. **Agent Lifecycle Tests** (5-7 tests)
+   ```python
+   def test_start_agent_creates_process():
+       """Test agent start creates Docker/K8s process."""
 
-**Created Test Files:**
-1. ✅ `test_balance_checking_mocked.py` (feat/phase2-balance-checking-tests) - 11 passing tests
-   - Tests real Service.get_initial_funding_amounts() and get_balances()
-   - Mocks IPFS and ledger APIs properly
-   - **Quality:** HIGH - Tests actual Service implementations
+   def test_stop_agent_cleans_up_resources():
+       """Test agent stop removes containers and cleanup."""
 
-2. ❌ `test_wallet_operations_mocked.py` - DELETED (372 lines)
-   - **Problem:** Just reimplemented if/else logic without testing actual implementations
-   - **Example:** `if from_safe and asset == ZERO_ADDRESS: method = "_transfer_from_safe"` then assert
-   - **Value:** ZERO - Only verified Python's if/else works, not actual wallet code
-   - **Action:** Entire file deleted from feat/phase2-wallet-algorithm-tests branch
+   def test_restart_agent_after_crash():
+       """Test agent restart logic on failure."""
+   ```
 
-**Critical Learning:**
-- ❌ **Don't create "algorithm tests"** that duplicate logic
-- ❌ **Don't test trivial behavior** (if/else, arithmetic)
-- ✅ **DO test real implementations** with mocked external dependencies
-- ✅ **DO verify actual method behavior** not reimplemented logic
+2. **Process Management Tests** (4-5 tests)
+   - PID tracking and validation
+   - Container lifecycle (Docker/K8s)
+   - Process cleanup on error
+   - Orphaned process detection
 
-**Actual Outcome:**
-- Created 11 valuable tests (vs. planned 95+)
-- Deleted 372 lines of valueless tests
-- **Key: Quality >> Quantity**
+3. **Error Handling Tests** (3-4 tests)
+   - Agent crash recovery
+   - Restart loop prevention
+   - Resource exhaustion handling
+   - Timeout scenarios
 
-**Effort Actual:** 1-2 days (including review/cleanup)
+4. **Integration Tests** (3-4 tests)
+   - Full agent start/stop cycle
+   - Multiple agents running
+   - Agent health monitoring
+   - Log collection
 
-### 2.3 Error Path Testing - ✅ COMPLETE (Minimal but Valuable)
+**Files to Create:**
+- `tests/test_agent_runner.py`
+- `tests/test_agent_runner_integration.py` (optional)
 
-**Status:** Created and heavily trimmed. Only kept tests that test real implementations.
+**Mocking Strategy:**
+- Mock Docker/K8s clients
+- Mock subprocess/process management
+- Test actual agent_runner logic
 
-**Created Test File:**
-1. ✅ `test_error_paths.py` (feat/phase2-error-path-tests) - 3 tests
-   - Tests real Service.load() error handling:
-     - Corrupted config.json (JSONDecodeError)
-     - Missing config.json file (FileNotFoundError)
-     - Missing required fields (KeyError)
-   - **Quality:** HIGH - Tests actual Service.load() implementation
+**Effort:** 3-4 days
 
-**Major Cleanup Performed:**
-- ❌ Removed ~37 valueless tests that were initially created:
-  - Tests of Python's json.loads() behavior (not our code)
-  - Tests of Python's pathlib file errors (not our code)
-  - Tests that just create and raise exceptions (no implementation tested)
-  - Tests of ChainAmounts dict creation (trivial)
-  - Tests of ZERO_ADDRESS constant format (not error testing)
+#### ⚠️ 2.1.2 protocol.py Tests (HIGH PRIORITY - PARTIALLY DONE)
 
-**Error Coverage in Other Branches:**
-- More valuable error tests exist in `feat/phase2-strategic-unit-tests`:
-  - `test_deployment_runner_error_handling.py` (6 tests)
-  - `test_health_checker_check_service_health.py` (7 tests)
-  - `test_funding_manager_error_handling.py` (4 tests)
+**Issue:** Minimal coverage (~10%) - only RPC bug tests exist
 
-**Critical Learnings:**
-- ❌ Don't test Python standard library behavior
-- ❌ Don't test that you can create/raise exceptions
-- ❌ Don't test trivial data structure creation
-- ✅ DO test how YOUR code handles errors from external dependencies
-- ✅ DO test error propagation in YOUR implementations
+**Impact:** CRITICAL - Bugs affect on-chain service registration, state updates, bonding
 
-**Actual Outcome:**
-- Created 3 valuable error tests (vs. planned 30+)
-- Focus on quality over quantity paid off
+**Current Coverage:**
+- ✅ RPC configuration (`test_rpc_config_bug.py`)
+- ❌ Service registration (not tested)
+- ❌ State updates (not tested)
+- ❌ Token operations (not tested)
+
+**Tests Needed (~10-15 tests, 2-3 days):**
+
+1. **Service Registration Tests** (4-5 tests)
+   ```python
+   def test_register_service_on_chain():
+       """Test service registration with on-chain protocol."""
+
+   def test_register_service_with_insufficient_funds():
+       """Test registration fails gracefully without funds."""
+   ```
+
+2. **Service State Update Tests** (3-4 tests)
+   - Update service state on-chain
+   - State transition validation
+   - Error handling for failed updates
+
+3. **Token Operations Tests** (2-3 tests)
+   - Service bonding
+   - Unbonding
+   - Token approval
+
+4. **Error Handling Tests** (2-3 tests)
+   - Chain connection failures
+   - Transaction revert handling
+   - Gas estimation errors
+
+**Files to Enhance:**
+- `tests/test_services_protocol.py` (new - expand from test_rpc_config_bug.py)
+
+**Mocking Strategy:**
+- Mock blockchain calls
+- Mock contract interactions
+- Test protocol logic
+
+**Effort:** 2-3 days
+
+**Total Priority 1 Effort:** 5-7 days, ~25-35 high-value tests
+
+### 2.2 Merge Existing Test Branches (INFRASTRUCTURE) - 🔄 TODO
+
+**Priority 2: Consolidate and Setup Testing Infrastructure**
+
+#### 2.2.1 Merge Strategic Test Branch (~0.5 days)
+
+**Branch:** `feat/phase2-strategic-unit-tests`
+
+**Contents:**
+- ✅ `test_deployment_runner_error_handling.py` (6 tests)
+- ✅ `test_deployment_runner_race_conditions.py`
+- ✅ `test_health_checker_check_service_health.py` (7 tests, need pytest-asyncio)
+- ✅ `test_health_checker_healthcheck_job.py`
+- ✅ `test_health_checker_race_conditions.py`
+- ✅ `test_funding_manager_error_handling.py` (4 tests)
+- ✅ `test_funding_manager_race_conditions.py`
+
+**Action:** Merge to main
+
+#### 2.2.2 Setup pytest-asyncio (~0.25 days)
+
+**Issue:** Async tests currently skipped due to pytest-asyncio not configured
+
+**Action:**
+1. Add `pytest-asyncio` to dependencies
+2. Configure in `pytest.ini`
+3. Enable 7 skipped async tests in health_checker tests
+
+**Files to Modify:**
+- `pyproject.toml` (add pytest-asyncio dependency)
+- `pytest.ini` (verify asyncio_mode configuration)
+
+#### 2.2.3 Merge Balance & Error Test Branches (~0.25 days)
+
+**Branches:**
+- `feat/phase2-balance-checking-tests` (11 tests)
+- `feat/phase2-error-path-tests` (3 tests)
+
+**Action:** Merge both to main
+
+**Total Priority 2 Effort:** ~1 day
+
+### 2.3 Medium Priority Gaps (IF TIME PERMITS) - 📋 PLANNED
+
+**Priority 3: Address Secondary Gaps**
+
+#### 2.3.1 migration.py Tests (~2 days, 8-10 tests)
+
+**Issue:** Migration logic untested - risk of config corruption during upgrades
+
+**Impact:** MEDIUM - Bugs could break service configs on version updates
+
+**Tests Needed:**
+1. Version migrations (v1→v2, v2→v3, etc.)
+2. Backward compatibility validation
+3. Rollback scenarios
+4. Corrupted config handling during migration
+5. Missing field defaults
+
+**Files to Create:**
+- `tests/test_migration.py`
+
+**Effort:** 2 days
+
+#### 2.3.2 services/utils Tests (~2-3 days, 10-15 tests)
+
+**Files:**
+- `operate/services/utils/tendermint.py` (status unknown)
+- `operate/services/utils/mech.py` (status unknown)
+
+**Action:**
+1. Investigate current test coverage
+2. Add tests for core utility functions
+3. Focus on error handling and edge cases
+
+**Files to Create/Enhance:**
+- `tests/test_services_utils_tendermint.py`
+- `tests/test_services_utils_mech.py`
+
+**Effort:** 2-3 days
+
+**Total Priority 3 Effort:** 4-5 days, ~20-25 tests (OPTIONAL)
 
 **Effort Actual:** 0.5 days
 
@@ -430,51 +541,57 @@ pytest tests/test_concurrency.py -v --count=100
 
 **Effort:** 2 days
 
-### Phase 2 Summary - ACTUAL RESULTS
+### Phase 2 Summary - REVISED PLAN
 
-**Total Effort Actual:** ~2-3 days (test creation + review/cleanup)
+**Assessment Complete:** See `TEST_COVERAGE_ASSESSMENT.md` for full analysis
 
-**What Was Actually Delivered:**
-- ✅ ~25-30 high-quality tests in feat/phase2-strategic-unit-tests (deployment_runner, health_checker, funding_manager)
-- ✅ 11 balance checking tests in feat/phase2-balance-checking-tests
-- ✅ 3 error path tests in feat/phase2-error-path-tests
-- ❌ Removed 380+ lines of valueless tests
+**Key Finding:** Codebase has ~60% coverage (209 tests) but **uneven distribution**. Most areas well-tested, but **critical gaps** in agent_runner and protocol.
 
-**Actual Metrics:**
-- **Planned:** 170+ new tests
-- **Created:** ~25-30 valuable tests that test real implementations
-- **Deleted:** 372 lines of "algorithm tests" that just reimplemented if/else logic
-- **Quality improvement:** 100% - all remaining tests test actual code
+**Revised Strategy:**
+- ❌ **OLD Plan:** Add 170+ tests everywhere (quantity focus)
+- ✅ **NEW Plan:** Fill critical gaps with ~50-60 high-value tests (quality focus)
 
-**Critical Learnings Documented:**
+**Completed (2-3 days):**
+- ✅ Systematic file-by-file coverage assessment
+- ✅ Created ~25-30 high-quality tests (deployment_runner, health_checker, funding_manager, balance checking)
+- ✅ Removed 380+ lines of valueless "algorithm tests"
+- ✅ Documented critical learnings about test quality
 
-1. ❌ **DON'T create "algorithm tests"**
-   - Tests that reimplement if/else logic without testing actual implementations
-   - Example: `if from_safe and asset == ZERO_ADDRESS: method = "_transfer_from_safe"` then assert
-   - Value: ZERO - Only verifies Python works
+**Remaining Work (6-8 days):**
 
-2. ❌ **DON'T test Python's standard library**
-   - Testing json.loads() raises JSONDecodeError
-   - Testing pathlib raises FileNotFoundError
-   - Not testing our code
+**Priority 1 - Critical Gaps (5-7 days, ~25-35 tests):**
+1. ❌ agent_runner.py tests (3-4 days, ~15-20 tests) - CRITICAL
+2. ⚠️ protocol.py tests (2-3 days, ~10-15 tests) - Expand existing
 
-3. ❌ **DON'T test trivial behavior**
-   - Testing you can create/raise an exception
-   - Testing dict/dataclass creation
-   - No implementation being tested
+**Priority 2 - Infrastructure (1 day):**
+3. ✅ Merge existing test branches
+4. ✅ Setup pytest-asyncio
 
-4. ✅ **DO test real implementations**
-   - Create real objects (Service, DeploymentManager, HealthChecker)
-   - Mock external dependencies (RPC, aiohttp, subprocess)
-   - Test actual method behavior and error handling
+**Priority 3 - Optional (4-5 days, ~20-25 tests):**
+5. migration.py tests (2 days, ~8-10 tests)
+6. tendermint/mech utils tests (2-3 days, ~10-15 tests)
 
-**Branch Status:**
-- ✅ feat/phase2-balance-checking-tests - Ready for merge
-- ✅ feat/phase2-strategic-unit-tests - Ready for merge (needs pytest-asyncio)
-- ✅ feat/phase2-error-path-tests - Ready for merge
-- ❌ feat/phase2-wallet-algorithm-tests - Deleted
+**Estimated Total Addition:**
+- **Minimum:** ~40-50 tests (Priorities 1-2 only)
+- **Maximum:** ~70-80 tests (all priorities)
+- **Quality:** HIGH - all test real implementations
 
-**Key Takeaway:** Quality >>> Quantity. Better to have 10 tests that test real code than 100 tests that verify Python works.
+**Critical Learnings Applied:**
+
+1. ❌ **DON'T create "algorithm tests"** that reimplement logic
+2. ❌ **DON'T test Python's standard library** behavior
+3. ❌ **DON'T test trivial behavior** (exception creation, dict creation)
+4. ✅ **DO test real implementations** with mocked external dependencies
+5. ✅ **DO focus on high-impact areas** (agent_runner, protocol)
+6. ✅ **DO prioritize quality over quantity**
+
+**Key Insight:** Better to have 50 tests that catch real bugs in critical areas than 200 tests that verify Python works.
+
+**Next Steps:**
+1. Start with agent_runner.py tests (highest impact)
+2. Expand protocol.py tests
+3. Merge existing branches and setup pytest-asyncio
+4. Consider medium priority gaps if time permits
 
 ---
 
