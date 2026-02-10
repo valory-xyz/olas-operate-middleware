@@ -118,9 +118,16 @@ class HealthChecker:
                     return response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
                     )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
-                except Exception as e:  # pylint: disable=broad-except
+                except json.JSONDecodeError as e:
                     self.logger.error(
-                        f"[HEALTH_CHECKER] error {e}. set not healthy!", exc_info=True
+                        f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
+                        exc_info=True,
+                    )
+                    return False
+                except (OSError, PermissionError) as e:
+                    self.logger.error(
+                        f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
+                        exc_info=True,
                     )
                     return False
 
