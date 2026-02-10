@@ -340,7 +340,7 @@ class Provider(ABC):
 
         self._validate(provider_request)
 
-        if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED):
+        if provider_request.status in (ProviderRequestStatus.QUOTE_FAILED,):
             self.logger.info(f"[PROVIDER] {MESSAGE_EXECUTION_FAILED_QUOTE_FAILED}.")
             execution_data = ExecutionData(
                 elapsed_time=0,
