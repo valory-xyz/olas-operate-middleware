@@ -159,10 +159,6 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
                 args, standalone_mode=False
             )
-            # os._exit(0) is needed in case of run onlinux woth form subprocess method
-            # otherwise its going to perform all actions  successfully bu return code 1 to the calling coder
-            # it looks like aea+pyinstaller+multiprocessexit hooks issue on process stops
-            os._exit(0)  # pylint: disable=protected-access
         except Exception:
             print(f"Error on calling aea command: {args}")
             print_exc()
@@ -479,10 +475,6 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
         return process
 
 
-class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
-    """Linux deployment runner."""
-
-
 class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
     """Windows deployment runner."""
 
@@ -761,9 +753,7 @@ class DeploymentManager:
                 return PyInstallerHostDeploymentRunnerMac
             if platform.system() == "Windows":
                 return PyInstallerHostDeploymentRunnerWindows
-            if platform.system() == "Linux":
-                return PyInstallerHostDeploymentRunnerLinux
-            raise ValueError(f"Platform is not supported {platform.system()}")
+            raise ValueError(f"Platform not supported {platform.system()}")
 
         return HostPythonHostDeploymentRunner
 
