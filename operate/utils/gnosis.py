@@ -28,7 +28,6 @@ from enum import Enum
 from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.exceptions import ChainInteractionError
 from autonomy.chain.tx import TxSettler
 from web3 import Web3
@@ -39,7 +38,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import get_default_ledger_api
+from operate.ledger import DEFAULT_GAS_PRICE_MULTIPLIER, get_default_ledger_api
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 
@@ -180,14 +179,16 @@ def create_safe(
         del tx["contract_address"]
         return tx
 
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
     tx_settler = (
         TxSettler(
             ledger_api=ledger_api,
             crypto=crypto,
-            chain_type=ChainProfile.CUSTOM,
+            chain_type=chain,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
+            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
             tx_builder=_build,
         )
         .transact()
@@ -258,17 +259,17 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
     return (
         TxSettler(
             ledger_api=ledger_api,
             crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
+            chain_type=chain,
             tx_builder=_build_tx,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
+            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
         )
         .transact()
         .settle()
@@ -425,17 +426,17 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
     return (
         TxSettler(
             ledger_api=ledger_api,
             crypto=crypto,
-            chain_type=Chain.from_id(
-                ledger_api._chain_id  # pylint: disable=protected-access
-            ),
+            chain_type=chain,
             tx_builder=_build_tx,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
+            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
         )
         .transact()
         .settle()
@@ -473,6 +474,21 @@ def transfer_erc20_from_safe(
     )
 
 
+def gas_fees_spent_in_tx(
+    ledger_api: LedgerApi,
+    tx_hash: str,
+) -> int:
+    """Get gas fees spent in a transaction."""
+    tx_receipt = ledger_api.api.eth.get_transaction_receipt(tx_hash)
+    if tx_receipt:
+        # Use effectiveGasPrice (EIP-1559) or fallback to gasPrice (legacy)
+        gas_price = tx_receipt.get("effectiveGasPrice") or tx_receipt.get("gasPrice", 0)
+        gas_fee = tx_receipt["gasUsed"] * gas_price
+        return gas_fee
+
+    raise ChainInteractionError(f"Cannot fetch transaction receipt for {tx_hash}.")
+
+
 def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
     """Estimate transfer transaction fee."""
     ledger_api = get_default_ledger_api(chain)
@@ -489,7 +505,9 @@ def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
         transaction=tx,
         raise_on_try=False,
     )
-    chain_fee = tx["gas"] * tx["maxFeePerGas"]
+    chain_fee = int(
+        tx["gas"] * tx["maxFeePerGas"] * DEFAULT_GAS_PRICE_MULTIPLIER[chain]
+    )
     if chain in (
         Chain.ARBITRUM_ONE,
         Chain.BASE,
@@ -507,11 +525,12 @@ def drain_eoa(
     chain_id: int,
 ) -> t.Optional[str]:
     """Drain all the native tokens from the crypto wallet."""
+    chain = Chain.from_id(chain_id)
 
     def _build_tx() -> t.Dict:
         """Build transaction"""
         chain_fee = estimate_transfer_tx_fee(
-            chain=Chain.from_id(chain_id),
+            chain=chain,
             sender_address=crypto.address,
             to=withdrawal_address,
         )
@@ -550,10 +569,11 @@ def drain_eoa(
             TxSettler(
                 ledger_api=ledger_api,
                 crypto=crypto,
-                chain_type=ChainProfile.CUSTOM,
+                chain_type=chain,
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
+                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
                 tx_builder=_build_tx,
             )
             .transact()

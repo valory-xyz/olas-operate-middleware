@@ -92,6 +92,18 @@ CURRENCY_SMALLEST_UNITS = {
     Chain.SOLANA: "Lamport",
 }
 
+# Max relative increase that each chain can have in a block
+DEFAULT_GAS_PRICE_MULTIPLIER = {
+    Chain.ARBITRUM_ONE: 1.1,
+    Chain.BASE: 1.1,
+    Chain.CELO: 1.125,
+    Chain.ETHEREUM: 1.125,
+    Chain.GNOSIS: 1.125,
+    Chain.MODE: 1.1,
+    Chain.OPTIMISM: 1.1,
+    Chain.POLYGON: 1.125,
+}
+
 NATIVE_CURRENCY_DECIMALS = 18
 
 
@@ -166,11 +178,15 @@ def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
     if gas_pricing is None:
         raise RuntimeError("Unable to retrieve gas pricing.")
 
+    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
+    gas_price_multiplier = DEFAULT_GAS_PRICE_MULTIPLIER[chain]
     if "maxFeePerGas" in gas_pricing and "maxPriorityFeePerGas" in gas_pricing:
-        tx["maxFeePerGas"] = gas_pricing["maxFeePerGas"]
-        tx["maxPriorityFeePerGas"] = gas_pricing["maxPriorityFeePerGas"]
+        tx["maxFeePerGas"] = int(gas_pricing["maxFeePerGas"] * gas_price_multiplier)
+        tx["maxPriorityFeePerGas"] = int(
+            gas_pricing["maxPriorityFeePerGas"] * gas_price_multiplier
+        )
     elif "gasPrice" in gas_pricing:
-        tx["gasPrice"] = gas_pricing["gasPrice"]
+        tx["gasPrice"] = int(gas_pricing["gasPrice"] * gas_price_multiplier)
     else:
         raise RuntimeError("Retrieved invalid gas pricing.")
 
