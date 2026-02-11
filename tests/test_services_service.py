@@ -661,7 +661,7 @@ class TestServiceAchievementsNotifications:
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
         persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
-        persistent_dir.mkdir()
+        persistent_dir.mkdir(parents=True, exist_ok=True)
 
         # Update service config to include STORE_PATH env variable
         config_json_path = service_config_dir / CONFIG_JSON
@@ -750,9 +750,7 @@ class TestServiceAchievementsNotifications:
 
         # Call _load_achievements_notifications
         with caplog.at_level(logging.WARNING):
-            achievements_notifications, agent_achievements = (
-                service._load_achievements_notifications()
-            )
+            _, agent_achievements = service._load_achievements_notifications()
 
         # Verify graceful handling
         assert agent_achievements == {}
@@ -793,9 +791,7 @@ class TestServiceAchievementsNotifications:
 
         # Call _load_achievements_notifications
         with caplog.at_level(logging.WARNING):
-            achievements_notifications, agent_achievements = (
-                service._load_achievements_notifications()
-            )
+            _, agent_achievements = service._load_achievements_notifications()
 
         # Verify graceful handling
         assert agent_achievements == {}
@@ -1275,15 +1271,14 @@ class TestServiceAchievementsNotifications:
         service = Service.load(service_config_dir)
 
         # Call _load_achievements_notifications
-        achievements_notifications, agent_achievements = (
-            service._load_achievements_notifications()
-        )
+        _, agent_achievements = service._load_achievements_notifications()
 
         # Verify empty achievements
         assert agent_achievements == {}
 
     def test_load_achievements_notifications_missing_items_key(
-        self, test_operate: OperateApp, caplog: pytest.LogCaptureFixture
+        self,
+        test_operate: OperateApp,
     ) -> None:
         """Test _load_achievements_notifications handles missing items key in achievements."""
 
@@ -1317,9 +1312,7 @@ class TestServiceAchievementsNotifications:
         service = Service.load(service_config_dir)
 
         # Call _load_achievements_notifications
-        achievements_notifications, agent_achievements = (
-            service._load_achievements_notifications()
-        )
+        _, agent_achievements = service._load_achievements_notifications()
 
         # Verify empty achievements
         assert agent_achievements == {}
@@ -1339,14 +1332,25 @@ class TestServiceAchievementsNotifications:
         service = test_operate.service_manager().load(service_config_id)
         service_config_dir = service.path
 
+        # Remove STORE_PATH env variable from config so it is truly unset
+        config_json_path = service_config_dir / CONFIG_JSON
+        with open(config_json_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+        env_vars = config_data.get("env_variables", {})
+        env_vars.pop("STORE_PATH", None)
+        if env_vars:
+            config_data["env_variables"] = env_vars
+        else:
+            config_data.pop("env_variables", None)
+        with open(config_json_path, "w", encoding="utf-8") as f:
+            json.dump(config_data, f, indent=4)
+
         # Don't set STORE_PATH env variable - agent_performance.json won't be found
         # Load the service
         service = Service.load(service_config_dir)
 
         # Call _load_achievements_notifications
-        achievements_notifications, agent_achievements = (
-            service._load_achievements_notifications()
-        )
+        _, agent_achievements = service._load_achievements_notifications()
 
         # Verify empty agent achievements (no file found)
         assert agent_achievements == {}
