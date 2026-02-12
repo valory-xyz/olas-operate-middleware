@@ -38,7 +38,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import DEFAULT_GAS_PRICE_MULTIPLIER, get_default_ledger_api
+from operate.ledger import get_default_ledger_api
 from operate.operate_types import Chain
 from operate.serialization import BigInt
 
@@ -188,7 +188,9 @@ def create_safe(
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
+            gas_price_multiplier=(
+                1.125 if chain == Chain.POLYGON else 1.0
+            ),  # TODO: remove after safe creation failure is recoverable
             tx_builder=_build,
         )
         .transact()
@@ -259,17 +261,17 @@ def send_safe_txs(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
     return (
         TxSettler(
             ledger_api=ledger_api,
             crypto=crypto,
-            chain_type=chain,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
             tx_builder=_build_tx,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
         )
         .transact()
         .settle()
@@ -426,17 +428,17 @@ def transfer(
             nonce=ledger_api.api.eth.get_transaction_count(owner),
         )
 
-    chain = Chain.from_id(ledger_api._chain_id)  # pylint: disable=protected-access
     return (
         TxSettler(
             ledger_api=ledger_api,
             crypto=crypto,
-            chain_type=chain,
+            chain_type=Chain.from_id(
+                ledger_api._chain_id  # pylint: disable=protected-access
+            ),
             tx_builder=_build_tx,
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
         )
         .transact()
         .settle()
@@ -505,9 +507,7 @@ def estimate_transfer_tx_fee(chain: Chain, sender_address: str, to: str) -> int:
         transaction=tx,
         raise_on_try=False,
     )
-    chain_fee = int(
-        tx["gas"] * tx["maxFeePerGas"] * DEFAULT_GAS_PRICE_MULTIPLIER[chain]
-    )
+    chain_fee = tx["gas"] * tx["maxFeePerGas"]
     if chain in (
         Chain.ARBITRUM_ONE,
         Chain.BASE,
@@ -573,7 +573,6 @@ def drain_eoa(
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
                 tx_builder=_build_tx,
             )
             .transact()

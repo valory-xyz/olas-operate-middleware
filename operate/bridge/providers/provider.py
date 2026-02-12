@@ -41,11 +41,7 @@ from operate.constants import (
     ON_CHAIN_INTERACT_TIMEOUT,
     ZERO_ADDRESS,
 )
-from operate.ledger import (
-    DEFAULT_GAS_PRICE_MULTIPLIER,
-    get_default_ledger_api,
-    update_tx_with_gas_pricing,
-)
+from operate.ledger import get_default_ledger_api, update_tx_with_gas_pricing
 from operate.operate_types import Chain, ChainAmounts
 from operate.resource import LocalResource
 from operate.serialization import BigInt
@@ -413,7 +409,6 @@ class Provider(ABC):
                         ),
                     },
                     gas_estimate_multiplier=BRIDGE_GAS_ESTIMATE_MULTIPLIER,
-                    gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
                 ).transact()
 
                 try:

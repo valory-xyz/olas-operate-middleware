@@ -39,7 +39,6 @@ from operate.constants import (
     ZERO_ADDRESS,
 )
 from operate.ledger import (
-    DEFAULT_GAS_PRICE_MULTIPLIER,
     get_default_ledger_api,
     make_chain_ledger_api,
     update_tx_with_gas_estimate,
@@ -360,7 +359,6 @@ class EthereumMasterWallet(MasterWallet):
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
                 tx_builder=_build_tx,
             )
             .transact()
@@ -449,7 +447,6 @@ class EthereumMasterWallet(MasterWallet):
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[chain],
                 tx_builder=_build_transfer_tx,
             )
             .transact()

@@ -73,7 +73,6 @@ from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import (
-    DEFAULT_GAS_PRICE_MULTIPLIER,
     get_default_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
@@ -188,7 +187,6 @@ class GnosisSafeTransaction:
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[self.chain_type],
             )
             .transact()
             .settle()
@@ -448,7 +446,6 @@ class StakingManager:
             timeout=ON_CHAIN_INTERACT_TIMEOUT,
             retries=ON_CHAIN_INTERACT_RETRIES,
             sleep=ON_CHAIN_INTERACT_SLEEP,
-            gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[och.chain_type],
             tx_builder=lambda: registry_contracts.erc20.get_approve_tx(
                 ledger_api=och.ledger_api,
                 contract_address=service_registry,
@@ -466,7 +463,6 @@ class StakingManager:
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[och.chain_type],
                 tx_builder=lambda: och.ledger_api.build_transaction(
                     contract_instance=self.staking_ctr.get_instance(
                         ledger_api=och.ledger_api,
@@ -536,7 +532,6 @@ class StakingManager:
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
-                gas_price_multiplier=DEFAULT_GAS_PRICE_MULTIPLIER[och.chain_type],
                 tx_builder=lambda: och.ledger_api.build_transaction(
                     contract_instance=self.staking_ctr.get_instance(
                         ledger_api=och.ledger_api,
