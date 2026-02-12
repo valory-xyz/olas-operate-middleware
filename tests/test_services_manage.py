@@ -117,6 +117,7 @@ class TestServiceManager(OnTestnet):
     @pytest.mark.parametrize("update_description", [True, False])
     @pytest.mark.parametrize("update_hash", [True, False])
     @pytest.mark.parametrize("update_release", [True, False])
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_partial_update(
         self,
         update_new_var: bool,
@@ -128,7 +129,11 @@ class TestServiceManager(OnTestnet):
         tmp_path: Path,
         password: str,
     ) -> None:
-        """Test operate.service_manager().update()"""
+        """Test operate.service_manager().update().
+
+        Note: This test makes real IPFS downloads and may be flaky due to network
+        issues or IPFS registry unavailability. See IPFS_DOWNLOAD_ISSUES.md for details.
+        """
 
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
@@ -219,6 +224,7 @@ class TestServiceManager(OnTestnet):
     @pytest.mark.parametrize("update_name", [True, False])
     @pytest.mark.parametrize("update_description", [True, False])
     @pytest.mark.parametrize("update_hash", [True, False])
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_update(
         self,
         update_new_var: bool,
@@ -230,7 +236,11 @@ class TestServiceManager(OnTestnet):
         tmp_path: Path,
         password: str,
     ) -> None:
-        """Test operate.service_manager().update()"""
+        """Test operate.service_manager().update().
+
+        Note: This test makes real IPFS downloads and may be flaky due to network
+        issues or IPFS registry unavailability. See IPFS_DOWNLOAD_ISSUES.md for details.
+        """
 
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
