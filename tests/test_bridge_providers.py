@@ -67,8 +67,7 @@ TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
-# Shared test parameterizations for execution status tests
-EXECUTION_STATUS_SUCCESS_CASES = [
+EXECUTION_STATUS_CASES = [
     # RelayProvider - EXECUTION_DONE tests
     (
         RelayProvider,
@@ -1269,7 +1268,7 @@ class TestProvider:
             "expected_to_tx_hash",
             "expected_elapsed_time",
         ),
-        EXECUTION_STATUS_SUCCESS_CASES,
+        EXECUTION_STATUS_CASES,
     )
     def test_update_execution_status(
         self,
@@ -1377,7 +1376,7 @@ class TestProvider:
             "expected_to_tx_hash",
             "expected_elapsed_time",
         ),
-        EXECUTION_STATUS_SUCCESS_CASES,
+        EXECUTION_STATUS_CASES,
     )
     def test_update_execution_status_failure_then_success(
         self,
