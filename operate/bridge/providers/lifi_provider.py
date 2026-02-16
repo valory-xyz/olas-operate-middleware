@@ -350,30 +350,33 @@ class LiFiProvider(Provider):
                 "substatusMessage", response_json.get("message")
             )
             response.raise_for_status()
+            if lifi_status == LiFiTransactionStatus.DONE:
+                self.logger.info(
+                    f"[LI.FI PROVIDER] Execution done for {provider_request.id}."
+                )
+                from_ledger_api = self._from_ledger_api(provider_request)
+                to_ledger_api = self._to_ledger_api(provider_request)
+                to_tx_hash = response_json.get("receiving", {}).get("txHash")
+                execution_data.message = None
+                execution_data.to_tx_hash = to_tx_hash
+                execution_data.elapsed_time = Provider._tx_timestamp(
+                    to_tx_hash, to_ledger_api
+                ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+                provider_request.status = ProviderRequestStatus.EXECUTION_DONE
+            elif lifi_status == LiFiTransactionStatus.FAILED:
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            elif lifi_status == LiFiTransactionStatus.PENDING:
+                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+            else:
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
         except Exception as e:  # pylint:disable=broad-except
             self.logger.error(
                 f"[LI.FI PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
-
-        if lifi_status == LiFiTransactionStatus.DONE:
-            self.logger.info(
-                f"[LI.FI PROVIDER] Execution done for {provider_request.id}."
-            )
-            from_ledger_api = self._from_ledger_api(provider_request)
-            to_ledger_api = self._to_ledger_api(provider_request)
-            to_tx_hash = response_json.get("receiving", {}).get("txHash")
-            execution_data.message = None
-            execution_data.to_tx_hash = to_tx_hash
-            execution_data.elapsed_time = Provider._tx_timestamp(
-                to_tx_hash, to_ledger_api
-            ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
-            provider_request.status = ProviderRequestStatus.EXECUTION_DONE
-        elif lifi_status == LiFiTransactionStatus.FAILED:
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-        elif lifi_status == LiFiTransactionStatus.PENDING:
-            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
-        else:
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""

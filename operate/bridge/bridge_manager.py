@@ -214,6 +214,7 @@ class BridgeManager:
                     from_bridge=config["from_bridge"],
                     to_bridge=config["to_bridge"],
                     bridge_eta=config["bridge_eta"],
+                    logger=logger,
                 ),
                 provider_id,
                 wallet_manager,
@@ -380,6 +381,8 @@ class BridgeManager:
 
     def execute_bundle(self, bundle_id: str) -> t.Dict:
         """Execute the bundle"""
+
+        self.logger.info(f"[BRIDGE MANAGER] Executing bundle {bundle_id}.")
 
         bundle = self.data.last_requested_bundle
 
