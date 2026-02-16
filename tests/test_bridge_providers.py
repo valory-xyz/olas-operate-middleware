@@ -67,6 +67,413 @@ TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
+# Shared test parameterizations for execution status tests
+EXECUTION_STATUS_SUCCESS_CASES = [
+    # RelayProvider - EXECUTION_DONE tests
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "optimism",
+                "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
+                "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+                "amount": 16000000,
+            },
+        },
+        "r-ecfb8c21-e8d3-474b-9f10-0a2926da404d",
+        "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
+        0,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "mode",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 100000000000000,
+            },
+        },
+        "r-abdb69ae-5d8b-48a1-bce3-e4ab15b7063b",
+        "0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab",
+        2,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "mode",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
+                "amount": 1000000000000000000,
+            },
+        },
+        "r-c8c78cb7-dc66-47c8-9c17-0b5a22db3d2d",
+        "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x0fb271e795c84da71e50549c390965648610aebd8560766a5fb420e0043b0518",
+        8,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "mode",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",
+                "amount": 1000000,
+            },
+        },
+        "r-18b91fc9-6e0f-4e7e-98c8-f28dfbe289ba",
+        "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d",
+        2,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0xfd19fe216cf6699ebdfd8f038a74c9b24e23a7b7",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "gnosis",
+                "address": "0x87218C01bd246e99f779Bfd13d277E88C6Cb4477",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 1157062023093466,
+            },
+        },
+        "r-a0b5253b-02fe-4389-9fe5-a5d17acae150",
+        "0xdb60d262c71834cd620b49dc69febb822250937d7a2c8f3e1ba22b21b1355113",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x835d90db1f3552fc4f691a6f3851d24c04222b9d66f456e50fa4dd8dbd44280c",
+        17,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "gnosis",
+                "address": "0x409D0490FB743650803B05936e78f22D273A5647",
+                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "amount": 27291638268124063,
+            },
+        },
+        "r-c8f00ad9-82a9-45a1-b873-dd80c2da4acb",
+        "0xe05ad614e482b61fe5016716c8dd41f5b1149d509a8e1eca6f00bdbbe3ef6b9d",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x75850a31777ea9567702537be5cd6e2cf4f455069ad96d543f3a992fdb708ca7",
+        26,
+    ),
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "optimism",
+                "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "gnosis",
+                "address": "0xC5E802BFBeA76e0eeccf775eFA5b005811F96136",
+                "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
+                "amount": 1000000,
+            },
+        },
+        "r-7ef5ef70-6052-40a0-b0f2-a71896668f95",
+        "0xa07eacd399371bf789c47f40c390dc96a2f057258584cc2e2d156cf8208ab704",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0xb57a7ee4233d2bf1fa95040ac4c26e8c2e192c94f0ea8709f640b44c3b8dc438",
+        7,
+    ),
+    # RelayProvider - EXECUTION_FAILED tests
+    (
+        RelayProvider,
+        None,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "gnosis",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 1000000000000000000,
+            },
+        },
+        "r-bfb51822-e689-4141-8328-134f0a877fdf",
+        "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+        ProviderRequestStatus.EXECUTION_FAILED,
+        None,
+        0,
+    ),
+    # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
+    (
+        NativeBridgeProvider,
+        OmnibridgeContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x96faf614c8228ff834a4e45d2cc0dd2675469338",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "gnosis",
+                "address": "0xaf59963aee4fcc92a68d9bc3cde7cd89307d4e7e",
+                "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
+                "amount": 5000000000000000000,
+            },
+        },
+        "b-b5648bc4-15c0-4792-9970-cc692851ce50",
+        "0xbc2110dc981617079a1959cf3da9bf9ecd52785531cab33fd0fd9e4f39daaa65",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
+        2148,
+    ),
+    # LiFiProvider - EXECUTION_DONE tests
+    (
+        LiFiProvider,
+        None,
+        {
+            "from": {
+                "chain": "gnosis",
+                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 380000000000000,
+            },
+        },
+        "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
+        "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
+        383,
+    ),
+    # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 300000000000000,
+            },
+        },
+        "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
+        "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
+        178,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "amount": 100000000000000000,
+            },
+        },
+        "b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
+        "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
+        184,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 30750000000000000,
+            },
+        },
+        "b-7ca71220-4336-414f-985e-bdfe11707c71",
+        "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
+        198,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "amount": 100000000000000000000,
+            },
+        },
+        "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+        "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+        ProviderRequestStatus.EXECUTION_DONE,
+        "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
+        186,
+    ),
+    # NativeBridgeProvider (Optimism bridge) - EXECUTION_FAILED tests
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 42,  # Wrong amount
+            },
+        },
+        "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
+        "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
+        ProviderRequestStatus.EXECUTION_FAILED,
+        None,
+        0,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "amount": 100000000000000000,
+            },
+        },
+        "b-42",  # Wrong id
+        "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
+        ProviderRequestStatus.EXECUTION_FAILED,
+        None,
+        0,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0000000000000000000000000000000000000000",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0x54330d28ca3357F294334BDC454a032e7f353416",  # Wrong address
+                "token": "0x0000000000000000000000000000000000000000",
+                "amount": 30750000000000000,
+            },
+        },
+        "b-7ca71220-4336-414f-985e-bdfe11707c71",
+        "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
+        ProviderRequestStatus.EXECUTION_FAILED,
+        None,
+        0,
+    ),
+    (
+        NativeBridgeProvider,
+        OptimismContractAdaptor,
+        {
+            "from": {
+                "chain": "ethereum",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
+            },
+            "to": {
+                "chain": "base",
+                "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
+                "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
+                "amount": 100000000000000000000,
+            },
+        },
+        "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
+        "0x7cefa52970f4e1b12a07b9795b8f03de2bbc2ee7c42cba5913d923316e96b3c5",  # Wrong from_tx_hash
+        ProviderRequestStatus.EXECUTION_FAILED,
+        None,
+        0,
+    ),
+]
+
+
 def get_transfer_amount(
     w3: Web3, tx_hash: str, token_address: str, recipient: str
 ) -> int:
@@ -862,410 +1269,7 @@ class TestProvider:
             "expected_to_tx_hash",
             "expected_elapsed_time",
         ),
-        [
-            # RelayProvider - EXECUTION_DONE tests
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "optimism",
-                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                        "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                        "amount": 16000000,
-                    },
-                },
-                "r-ecfb8c21-e8d3-474b-9f10-0a2926da404d",
-                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
-                0,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 100000000000000,
-                    },
-                },
-                "r-abdb69ae-5d8b-48a1-bce3-e4ab15b7063b",
-                "0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab",
-                2,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
-                        "amount": 1000000000000000000,
-                    },
-                },
-                "r-c8c78cb7-dc66-47c8-9c17-0b5a22db3d2d",
-                "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x0fb271e795c84da71e50549c390965648610aebd8560766a5fb420e0043b0518",
-                8,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",
-                        "amount": 1000000,
-                    },
-                },
-                "r-18b91fc9-6e0f-4e7e-98c8-f28dfbe289ba",
-                "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d",
-                2,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0xfd19fe216cf6699ebdfd8f038a74c9b24e23a7b7",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0x87218C01bd246e99f779Bfd13d277E88C6Cb4477",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 1157062023093466,
-                    },
-                },
-                "r-a0b5253b-02fe-4389-9fe5-a5d17acae150",
-                "0xdb60d262c71834cd620b49dc69febb822250937d7a2c8f3e1ba22b21b1355113",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x835d90db1f3552fc4f691a6f3851d24c04222b9d66f456e50fa4dd8dbd44280c",
-                17,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0x409D0490FB743650803B05936e78f22D273A5647",
-                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 27291638268124063,
-                    },
-                },
-                "r-c8f00ad9-82a9-45a1-b873-dd80c2da4acb",
-                "0xe05ad614e482b61fe5016716c8dd41f5b1149d509a8e1eca6f00bdbbe3ef6b9d",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x75850a31777ea9567702537be5cd6e2cf4f455069ad96d543f3a992fdb708ca7",
-                26,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0xC5E802BFBeA76e0eeccf775eFA5b005811F96136",
-                        "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
-                        "amount": 1000000,
-                    },
-                },
-                "r-7ef5ef70-6052-40a0-b0f2-a71896668f95",
-                "0xa07eacd399371bf789c47f40c390dc96a2f057258584cc2e2d156cf8208ab704",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xb57a7ee4233d2bf1fa95040ac4c26e8c2e192c94f0ea8709f640b44c3b8dc438",
-                7,
-            ),
-            # RelayProvider - EXECUTION_FAILED tests
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 1000000000000000000,
-                    },
-                },
-                "r-bfb51822-e689-4141-8328-134f0a877fdf",
-                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-                ProviderRequestStatus.EXECUTION_FAILED,
-                None,
-                0,
-            ),
-            # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
-            (
-                NativeBridgeProvider,
-                OmnibridgeContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x96faf614c8228ff834a4e45d2cc0dd2675469338",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0xaf59963aee4fcc92a68d9bc3cde7cd89307d4e7e",
-                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 5000000000000000000,
-                    },
-                },
-                "b-b5648bc4-15c0-4792-9970-cc692851ce50",
-                "0xbc2110dc981617079a1959cf3da9bf9ecd52785531cab33fd0fd9e4f39daaa65",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
-                2148,
-            ),
-            # LiFiProvider - EXECUTION_DONE tests
-            (
-                LiFiProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "gnosis",
-                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 380000000000000,
-                    },
-                },
-                "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
-                "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
-                383,
-            ),
-            # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 300000000000000,
-                    },
-                },
-                "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
-                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
-                178,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000,
-                    },
-                },
-                "b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
-                "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
-                184,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 30750000000000000,
-                    },
-                },
-                "b-7ca71220-4336-414f-985e-bdfe11707c71",
-                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
-                198,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000000,
-                    },
-                },
-                "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
-                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
-                186,
-            ),
-            # NativeBridgeProvider (Optimism bridge) - EXECUTION_FAILED tests
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 42,  # Wrong amount
-                    },
-                },
-                "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
-                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
-                ProviderRequestStatus.EXECUTION_FAILED,
-                None,
-                0,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000,
-                    },
-                },
-                "b-42",  # Wrong id
-                "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
-                ProviderRequestStatus.EXECUTION_FAILED,
-                None,
-                0,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x54330d28ca3357F294334BDC454a032e7f353416",  # Wrong address
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 30750000000000000,
-                    },
-                },
-                "b-7ca71220-4336-414f-985e-bdfe11707c71",
-                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
-                ProviderRequestStatus.EXECUTION_FAILED,
-                None,
-                0,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000000,
-                    },
-                },
-                "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
-                "0x7cefa52970f4e1b12a07b9795b8f03de2bbc2ee7c42cba5913d923316e96b3c5",  # Wrong from_tx_hash
-                ProviderRequestStatus.EXECUTION_FAILED,
-                None,
-                0,
-            ),
-        ],
+        EXECUTION_STATUS_SUCCESS_CASES,
     )
     def test_update_execution_status(
         self,
@@ -1373,298 +1377,7 @@ class TestProvider:
             "expected_to_tx_hash",
             "expected_elapsed_time",
         ),
-        [
-            # RelayProvider - EXECUTION_DONE tests
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "optimism",
-                        "address": "0x4713683AeC1057B70e1B5F86b61FddBe650a7b72",
-                        "token": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
-                        "amount": 16000000,
-                    },
-                },
-                "r-ecfb8c21-e8d3-474b-9f10-0a2926da404d",
-                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x386eb995abd6d5c3a80b0c51dbec2b94b93a2664950afc635cfdbafe0cd0307e",
-                0,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 100000000000000,
-                    },
-                },
-                "r-abdb69ae-5d8b-48a1-bce3-e4ab15b7063b",
-                "0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab",
-                2,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0xcfD1D50ce23C46D3Cf6407487B2F8934e96DC8f9",
-                        "amount": 1000000000000000000,
-                    },
-                },
-                "r-c8c78cb7-dc66-47c8-9c17-0b5a22db3d2d",
-                "0xad982ac128a9d0069ed93ca10ebf6595e1c192554c2290a7f99ddf605efd69bb",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x0fb271e795c84da71e50549c390965648610aebd8560766a5fb420e0043b0518",
-                8,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "mode",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0xd988097fb8612cc24eeC14542bC03424c656005f",
-                        "amount": 1000000,
-                    },
-                },
-                "r-18b91fc9-6e0f-4e7e-98c8-f28dfbe289ba",
-                "0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d",
-                2,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0xfd19fe216cf6699ebdfd8f038a74c9b24e23a7b7",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0x87218C01bd246e99f779Bfd13d277E88C6Cb4477",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 1157062023093466,
-                    },
-                },
-                "r-a0b5253b-02fe-4389-9fe5-a5d17acae150",
-                "0xdb60d262c71834cd620b49dc69febb822250937d7a2c8f3e1ba22b21b1355113",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x835d90db1f3552fc4f691a6f3851d24c04222b9d66f456e50fa4dd8dbd44280c",
-                17,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0x409D0490FB743650803B05936e78f22D273A5647",
-                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 27291638268124063,
-                    },
-                },
-                "r-c8f00ad9-82a9-45a1-b873-dd80c2da4acb",
-                "0xe05ad614e482b61fe5016716c8dd41f5b1149d509a8e1eca6f00bdbbe3ef6b9d",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x75850a31777ea9567702537be5cd6e2cf4f455069ad96d543f3a992fdb708ca7",
-                26,
-            ),
-            (
-                RelayProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "optimism",
-                        "address": "0x1231deb6f5749ef6ce6943a275a1d3e7486f4eae",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0xC5E802BFBeA76e0eeccf775eFA5b005811F96136",
-                        "token": "0xDDAfbb505ad214D7b80b1f830fcCc89B60fb7A83",
-                        "amount": 1000000,
-                    },
-                },
-                "r-7ef5ef70-6052-40a0-b0f2-a71896668f95",
-                "0xa07eacd399371bf789c47f40c390dc96a2f057258584cc2e2d156cf8208ab704",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xb57a7ee4233d2bf1fa95040ac4c26e8c2e192c94f0ea8709f640b44c3b8dc438",
-                7,
-            ),
-            # NativeBridgeProvider (Omnibridge) - EXECUTION_DONE tests
-            (
-                NativeBridgeProvider,
-                OmnibridgeContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x96faf614c8228ff834a4e45d2cc0dd2675469338",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "gnosis",
-                        "address": "0xaf59963aee4fcc92a68d9bc3cde7cd89307d4e7e",
-                        "token": "0xcE11e14225575945b8E6Dc0D4F2dD4C570f79d9f",
-                        "amount": 5000000000000000000,
-                    },
-                },
-                "b-b5648bc4-15c0-4792-9970-cc692851ce50",
-                "0xbc2110dc981617079a1959cf3da9bf9ecd52785531cab33fd0fd9e4f39daaa65",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x48b3367c3dad388a1f0c1dec5063fe45969022975c53f212734285ac93c5e214",
-                2148,
-            ),
-            # LiFiProvider - EXECUTION_DONE tests
-            (
-                LiFiProvider,
-                None,
-                {
-                    "from": {
-                        "chain": "gnosis",
-                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x770569f85346b971114e11e4bb5f7ac776673469",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 380000000000000,
-                    },
-                },
-                "b-184035d4-18b4-42e1-8983-d30f7daff1b9",
-                "0xbd10fbe1321fc51c94f0bbb94bb9e467b180eedc6f7c942cf48a0321b6eaf8e4",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x407a815ac865ea888f31d26c7105609c1337daed934c9e09bf2c6ebf448b30ed",
-                383,
-            ),
-            # NativeBridgeProvider (Optimism bridge) - EXECUTION_DONE tests
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 300000000000000,
-                    },
-                },
-                "b-76a298b9-b243-4cfb-b48a-f59183ae0e85",
-                "0xf649cdce0075a950ed031cc32775990facdcefc8d2bfff695a8023895dd47ebd",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xc97722c1310b94043fb37219285cb4f80ce4189f158033b84c935ec54166eb19",
-                178,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0x308508F09F81A6d28679db6da73359c72f8e22C5",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000,
-                    },
-                },
-                "b-7221ece2-e15e-4aec-bac2-7fd4c4d4851a",
-                "0xa1139bb4ba963d7979417f49fed03b365c1f1bfc31d0100257caed888a491c4c",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x9b8f8998b1cd8f256914751606f772bee9ebbf459b3a1c8ca177838597464739",
-                184,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0000000000000000000000000000000000000000",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0000000000000000000000000000000000000000",
-                        "amount": 30750000000000000,
-                    },
-                },
-                "b-7ca71220-4336-414f-985e-bdfe11707c71",
-                "0xcf2b263ab1149bc6691537d09f3ed97e1ac4a8411a49ca9d81219c32f98228ba",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0x5718e6f0da2e0b1a02bcb53db239cef49a731f9f52cccf193f7d0abe62e971d4",
-                198,
-            ),
-            (
-                NativeBridgeProvider,
-                OptimismContractAdaptor,
-                {
-                    "from": {
-                        "chain": "ethereum",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x0001A500A6B18995B03f44bb040A5fFc28E45CB0",
-                    },
-                    "to": {
-                        "chain": "base",
-                        "address": "0xC0a12402089ce761E6496892AF4754350639bf94",
-                        "token": "0x54330d28ca3357F294334BDC454a032e7f353416",
-                        "amount": 100000000000000000000,
-                    },
-                },
-                "b-fef67eea-d55c-45f0-8b5b-e7987c843ced",
-                "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
-                ProviderRequestStatus.EXECUTION_DONE,
-                "0xf4ccb5f6547c188e638ac3d84f80158e3d7462211e15bc3657f8585b0bbffb68",
-                186,
-            ),
-        ],
+        EXECUTION_STATUS_SUCCESS_CASES,
     )
     def test_update_execution_status_failure_then_success(
         self,
@@ -1743,11 +1456,15 @@ class TestProvider:
         exc = ConnectionError("Simulated RPC exception")
 
         with patch("web3.eth.Eth.get_transaction_receipt") as mock:
-            mock.side_effect = [exc]  # only fails once
-            provider.status_json(provider_request)  # fails
-            assert (
-                provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
-            ), "Wrong execution status."
+            mock.side_effect = [exc]
+            provider.status_json(provider_request)
+
+            # We only check for cases where the final state is expected to be EXECUTION_DONE.
+            # Failures might be identified early and wouldn't enter in the EXECUTION_UNKNOWN case.
+            if expected_status == ProviderRequestStatus.EXECUTION_DONE:
+                assert (
+                    provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
+                ), "Wrong execution status."
 
         provider.status_json(provider_request)
         assert provider_request.status == expected_status, "Wrong execution status."
