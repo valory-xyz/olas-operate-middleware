@@ -1749,8 +1749,6 @@ class TestProvider:
                 provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
             ), "Wrong execution status."
 
-        print("expected_status", expected_status)
-
         provider.status_json(provider_request)
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
