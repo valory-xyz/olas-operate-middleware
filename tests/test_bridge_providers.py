@@ -1459,13 +1459,15 @@ class TestProvider:
             mock.side_effect = [exc]
             provider.status_json(provider_request)
 
-            # We only check for cases where the final state is expected to be EXECUTION_DONE.
-            # Failures might be identified early and wouldn't enter in the EXECUTION_UNKNOWN case.
+            # We only check for cases where the final status is expected to be EXECUTION_DONE.
+            # EXECUTION_FAILED states might be identified early (e.g., via API), and wouldn't
+            # enter in the EXECUTION_UNKNOWN status.
             if expected_status == ProviderRequestStatus.EXECUTION_DONE:
                 assert (
                     provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
                 ), "Wrong execution status."
 
+        execution_data.timestamp = 0  # Emulate tx was sent long enough to deduct status
         provider.status_json(provider_request)
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
