@@ -159,6 +159,7 @@ class TestNativeBridgeProvider:
                 to_chain=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_chain"],
                 to_bridge=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["to_bridge"],
                 bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key]["bridge_eta"],
+                logger=LOGGER,
             ),
             wallet_manager=operate.wallet_manager,
             logger=LOGGER,
@@ -373,6 +374,7 @@ class TestProvider:
                     bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
                         "bridge_eta"
                     ],
+                    logger=LOGGER,
                 ),
                 wallet_manager=operate.wallet_manager,
                 logger=LOGGER,
@@ -740,6 +742,7 @@ class TestProvider:
                     bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_key][
                         "bridge_eta"
                     ],
+                    logger=LOGGER,
                 ),
                 wallet_manager=operate.wallet_manager,
                 logger=LOGGER,
@@ -1302,6 +1305,7 @@ class TestProvider:
                     bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id][
                         "bridge_eta"
                     ],
+                    logger=LOGGER,
                 ),
                 wallet_manager=operate.wallet_manager,
                 logger=LOGGER,
@@ -1700,6 +1704,7 @@ class TestProvider:
                     bridge_eta=NATIVE_BRIDGE_PROVIDER_CONFIGS[provider_id][
                         "bridge_eta"
                     ],
+                    logger=LOGGER,
                 ),
                 wallet_manager=operate.wallet_manager,
                 logger=LOGGER,

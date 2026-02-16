@@ -214,6 +214,7 @@ class BridgeManager:
                     from_bridge=config["from_bridge"],
                     to_bridge=config["to_bridge"],
                     bridge_eta=config["bridge_eta"],
+                    logger=logger,
                 ),
                 provider_id,
                 wallet_manager,
