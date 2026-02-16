@@ -574,7 +574,10 @@ class NativeBridgeProvider(Provider):
     ) -> None:
         """Update the execution status."""
 
-        if provider_request.status != ProviderRequestStatus.EXECUTION_PENDING:
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
             return
 
         self.logger.info(
@@ -651,10 +654,14 @@ class NativeBridgeProvider(Provider):
                     provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                     return
 
-        except Exception as e:  # pylint: disable=broad-except
-            self.logger.error(f"Error updating execution status: {e}")
-            execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+        except Exception as e:  # pylint:disable=broad-except
+            self.logger.error(
+                f"[NATIVE BRIDGE PROVIDER] Failed to update status for request {provider_request.id}: {e}"
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:

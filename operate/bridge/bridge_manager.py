@@ -381,6 +381,8 @@ class BridgeManager:
     def execute_bundle(self, bundle_id: str) -> t.Dict:
         """Execute the bundle"""
 
+        self.logger.info(f"[BRIDGE MANAGER] Executing bundle {bundle_id}.")
+
         bundle = self.data.last_requested_bundle
 
         if not bundle:

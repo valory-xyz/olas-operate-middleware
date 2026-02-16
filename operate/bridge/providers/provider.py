@@ -386,7 +386,9 @@ class Provider(ABC):
             return
 
         try:
-            self.logger.info(f"[PROVIDER] Executing request {provider_request.id}.")
+            self.logger.info(
+                f"[PROVIDER] Executing transactions in request {provider_request.id}."
+            )
             timestamp = time.time()
             chain = Chain(provider_request.params["from"]["chain"])
             from_address = provider_request.params["from"]["address"]
@@ -429,6 +431,9 @@ class Provider(ABC):
             )
             provider_request.execution_data = execution_data
             provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+            self.logger.info(
+                f"[PROVIDER] Finished executing request {provider_request.id}."
+            )
 
         except Exception as e:  # pylint: disable=broad-except
             self.logger.error(f"[PROVIDER] Error executing request: {e}")
