@@ -79,7 +79,6 @@ STAKING_TOKEN_INSTANCE_ABI_PATH = "https://raw.githubusercontent.com/valory-xyz/
 MECH_ACTIVITY_CHECKER_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/autonolas-staking-programmes/refs/heads/main/abis/0.8.25/SingleMechActivityChecker.json"
 SERVICE_REGISTRY_TOKEN_UTILITY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/open-autonomy/refs/tags/v0.18.4/packages/valory/contracts/service_registry_token_utility/build/ServiceRegistryTokenUtility.json"  # nosec
 MECH_AGENT_FACTORY_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/autonolas-marketplace/main/abis/0.8.25/AgentFactory.json"
-MECH_MARKETPLACE_JSON_URL = "https://raw.githubusercontent.com/valory-xyz/mech-quickstart/refs/heads/main/contracts/MechMarketplace.json"
 NO_STAKING_PROGRAM_ID = "no_staking"
 
 DEPLOYMENT_START_TRIES_NUM = 3
