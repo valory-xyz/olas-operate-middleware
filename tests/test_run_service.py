@@ -132,7 +132,7 @@ _COMMON_PATCHES = {
 }
 
 
-def _apply_patches(extra: t.Optional[t.Dict[str, t.Any]] = None):
+def _apply_patches(extra: t.Optional[t.Dict[str, t.Any]] = None) -> t.List[t.Any]:
     """Build a combined context manager for all common patches."""
     patches = dict(_COMMON_PATCHES)
     if extra:
@@ -185,6 +185,7 @@ class TestConfigureLocalConfigRpcOverrides:
                 "RPC" not in prompt
             ), f"ask_or_get_from_env was called with an RPC prompt: {prompt}"
 
+        assert config.rpc is not None
         assert config.rpc["gnosis"] == "https://rpc.gnosis.example"
 
     @patch("operate.quickstart.run_service.check_rpc", side_effect=_mock_check_rpc)
@@ -223,6 +224,7 @@ class TestConfigureLocalConfigRpcOverrides:
             staking_program_id=NO_STAKING_PROGRAM_ID,
         )
 
+        assert config.rpc is not None
         assert config.rpc["gnosis"] == "https://rpc.gnosis.example"
         assert config.rpc["base"] == "https://rpc.base.example"
 
@@ -353,6 +355,7 @@ class TestConfigureLocalConfigUserProvidedArgs:
             user_provided_args={"MY_API_KEY": "secret123"},
         )
 
+        assert config.user_provided_args is not None
         assert config.user_provided_args["MY_API_KEY"] == "secret123"
         # Template env var should also be updated
         assert template["env_variables"]["MY_API_KEY"]["value"] == "secret123"
@@ -414,6 +417,7 @@ class TestConfigureLocalConfigUserProvidedArgs:
         )
 
         # VAR_A should use the override
+        assert config.user_provided_args is not None
         assert config.user_provided_args["VAR_A"] == "override_a"
         # VAR_B should have been prompted (mock returns "prompted_value")
         assert config.user_provided_args["VAR_B"] == "prompted_value"
@@ -463,6 +467,7 @@ class TestConfigureLocalConfigNoOverrides:
             if "RPC" in (call_args[0][0] if call_args[0] else "")
         ]
         assert len(rpc_prompts) > 0, "Expected an RPC prompt but none occurred"
+        assert config.rpc is not None
         assert config.rpc["gnosis"] == "https://rpc.gnosis.prompted"
 
 
