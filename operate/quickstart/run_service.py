@@ -236,13 +236,22 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
 
 
 def configure_local_config(
-    template: ServiceTemplate, operate: "OperateApp"
+    template: ServiceTemplate,
+    operate: "OperateApp",
+    rpc_overrides: t.Optional[t.Dict[str, str]] = None,
+    staking_program_id: t.Optional[str] = None,
+    user_provided_args: t.Optional[t.Dict[str, str]] = None,
 ) -> QuickstartConfig:
     """Configure local quickstart configuration."""
     config = load_local_config(operate=operate, service_name=template["name"])
 
     if config.rpc is None:
         config.rpc = {}
+
+    # Apply RPC overrides — skip prompting for chains with provided RPCs
+    if rpc_overrides:
+        for chain, rpc_url in rpc_overrides.items():
+            config.rpc[chain] = rpc_url
 
     for chain in template["configurations"]:
         while not check_rpc(chain, config.rpc.get(chain)):
@@ -269,6 +278,10 @@ def configure_local_config(
         chain_id=home_chain.id,
         poa_chain=chain in (Chain.OPTIMISM.value, Chain.POLYGON.value),
     )
+
+    # Apply staking override — skip the interactive menu
+    if staking_program_id is not None:
+        config.staking_program_id = staking_program_id
 
     if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
@@ -442,6 +455,10 @@ def configure_local_config(
 
     if config.user_provided_args is None:
         config.user_provided_args = {}
+
+    # Apply user-provided args overrides — skip prompting for provided vars
+    if user_provided_args:
+        config.user_provided_args.update(user_provided_args)
 
     if any(
         (
@@ -745,6 +762,10 @@ def run_service(
     build_only: bool = False,
     skip_dependency_check: bool = False,
     use_binary: bool = False,
+    rpc_overrides: t.Optional[t.Dict[str, str]] = None,
+    staking_program_id: t.Optional[str] = None,
+    user_provided_args: t.Optional[t.Dict[str, str]] = None,
+    use_docker: t.Optional[bool] = None,
 ) -> None:
     """Run service."""
 
@@ -756,7 +777,13 @@ def run_service(
     ask_password_if_needed(operate)
     _maybe_create_master_eoa(operate)
 
-    config = configure_local_config(template, operate)
+    config = configure_local_config(
+        template,
+        operate,
+        rpc_overrides=rpc_overrides,
+        staking_program_id=staking_program_id,
+        user_provided_args=user_provided_args,
+    )
     manager = operate.service_manager()
     service = get_service(manager, template)
 
@@ -779,17 +806,21 @@ def run_service(
     manager.funding_manager.topup_service_initial(service=service)
 
     print_section("Deploying the service")
-    if use_binary:
-        use_docker = False
-        use_k8s = False
+    if use_docker is not None:
+        # Explicit use_docker param takes precedence
+        _use_docker = use_docker
+        _use_k8s = not use_docker
+    elif use_binary:
+        _use_docker = False
+        _use_k8s = False
     else:
-        use_docker = True
-        use_k8s = True
+        _use_docker = True
+        _use_k8s = True
 
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=use_docker,
-        use_kubernetes=use_k8s,
+        use_docker=_use_docker,
+        use_kubernetes=_use_k8s,
         build_only=build_only,
     )
     if build_only:

@@ -1835,9 +1835,56 @@ def qs_start(
         bool,
         params.Boolean(help="Will use the released binary to run the service"),
     ] = False,
+    rpc: Annotated[
+        t.List[str],
+        params.StringList(
+            long_flag="--rpc",
+            help="RPC override as chain=url (repeatable)",
+        ),
+    ] = None,
+    staking: Annotated[
+        t.Optional[str],
+        params.String(
+            long_flag="--staking",
+            help="Staking program ID (e.g. 'no_staking')",
+        ),
+    ] = None,
+    env: Annotated[
+        t.List[str],
+        params.StringList(
+            long_flag="--env",
+            help="User env var as KEY=VALUE (repeatable)",
+        ),
+    ] = None,
+    no_docker: Annotated[
+        bool,
+        params.Boolean(
+            long_flag="--no-docker",
+            help="Run in host mode (no Docker)",
+        ),
+    ] = False,
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
+
+    # Parse rpc overrides: ["gnosis=https://...", "base=https://..."] -> dict
+    rpc_overrides = None
+    if rpc:
+        rpc_overrides = {}
+        for entry in rpc:
+            chain_name, url = entry.split("=", 1)
+            rpc_overrides[chain_name.strip()] = url.strip()
+
+    # Parse env overrides: ["KEY=VALUE", ...] -> dict
+    user_provided_args = None
+    if env:
+        user_provided_args = {}
+        for entry in env:
+            key, value = entry.split("=", 1)
+            user_provided_args[key.strip()] = value.strip()
+
+    use_docker_val = False if no_docker else None  # None = derive from use_binary
+
     operate = OperateApp()
     operate.setup()
     run_service(
@@ -1846,6 +1893,10 @@ def qs_start(
         build_only=build_only,
         skip_dependency_check=skip_dependency_check,
         use_binary=use_binary,
+        rpc_overrides=rpc_overrides,
+        staking_program_id=staking,
+        user_provided_args=user_provided_args,
+        use_docker=use_docker_val,
     )
 
 
