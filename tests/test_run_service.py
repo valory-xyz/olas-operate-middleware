@@ -423,6 +423,123 @@ class TestConfigureLocalConfigUserProvidedArgs:
         assert config.user_provided_args["VAR_B"] == "prompted_value"
 
 
+class TestConfigureLocalConfigStakingFallback:
+    """Tests that empty STAKING/QS_STAKING_PROGRAMS auto-defaults to no_staking."""
+
+    @patch("operate.quickstart.run_service.check_rpc", side_effect=_mock_check_rpc)
+    @patch(
+        "operate.quickstart.run_service.make_ledger_api",
+        side_effect=_mock_make_ledger_api,
+    )
+    @patch(
+        "operate.quickstart.run_service.get_staking_contract",
+        side_effect=_mock_get_staking_contract,
+    )
+    @patch("operate.quickstart.run_service.StakingTokenContract")
+    @patch("operate.quickstart.run_service.print_section")
+    @patch("operate.quickstart.run_service.STAKING", {})
+    @patch("operate.quickstart.run_service.QS_STAKING_PROGRAMS", {})
+    def test_empty_staking_dicts_default_to_no_staking(
+        self,
+        mock_print_section: MagicMock,
+        mock_staking_ctr: MagicMock,
+        mock_get_staking: MagicMock,
+        mock_ledger: MagicMock,
+        mock_check: MagicMock,
+        mock_operate: MagicMock,
+    ) -> None:
+        """When STAKING and QS_STAKING_PROGRAMS have no entry for the chain, default to no_staking."""
+        template = _make_template(home_chain="gnosis")
+
+        config = configure_local_config(
+            template,
+            mock_operate,
+            rpc_overrides={"gnosis": "https://rpc.gnosis.example"},
+        )
+
+        assert config.staking_program_id == NO_STAKING_PROGRAM_ID
+
+        # The staking selection menu should NOT have been shown
+        for call_args in mock_print_section.call_args_list:
+            text = call_args[0][0] if call_args[0] else ""
+            assert (
+                "staking program" not in text.lower()
+            ), f"Staking menu was shown: {text}"
+
+    @patch("operate.quickstart.run_service.check_rpc", side_effect=_mock_check_rpc)
+    @patch(
+        "operate.quickstart.run_service.make_ledger_api",
+        side_effect=_mock_make_ledger_api,
+    )
+    @patch(
+        "operate.quickstart.run_service.get_staking_contract",
+        side_effect=_mock_get_staking_contract,
+    )
+    @patch("operate.quickstart.run_service.StakingTokenContract")
+    @patch("operate.quickstart.run_service.print_section")
+    @patch("operate.quickstart.run_service.QS_STAKING_PROGRAMS", {})
+    def test_empty_qs_programs_only_defaults_to_no_staking(
+        self,
+        mock_print_section: MagicMock,
+        mock_staking_ctr: MagicMock,
+        mock_get_staking: MagicMock,
+        mock_ledger: MagicMock,
+        mock_check: MagicMock,
+        mock_operate: MagicMock,
+    ) -> None:
+        """When only QS_STAKING_PROGRAMS is empty for the chain, still default to no_staking."""
+        template = _make_template(home_chain="gnosis")
+
+        config = configure_local_config(
+            template,
+            mock_operate,
+            rpc_overrides={"gnosis": "https://rpc.gnosis.example"},
+        )
+
+        assert config.staking_program_id == NO_STAKING_PROGRAM_ID
+
+        # The staking selection menu should NOT have been shown
+        for call_args in mock_print_section.call_args_list:
+            text = call_args[0][0] if call_args[0] else ""
+            assert (
+                "staking program" not in text.lower()
+            ), f"Staking menu was shown: {text}"
+
+    @patch("operate.quickstart.run_service.check_rpc", side_effect=_mock_check_rpc)
+    @patch(
+        "operate.quickstart.run_service.make_ledger_api",
+        side_effect=_mock_make_ledger_api,
+    )
+    @patch(
+        "operate.quickstart.run_service.get_staking_contract",
+        side_effect=_mock_get_staking_contract,
+    )
+    @patch("operate.quickstart.run_service.StakingTokenContract")
+    @patch("operate.quickstart.run_service.print_section")
+    @patch("operate.quickstart.run_service.ask_or_get_from_env")
+    def test_explicit_override_takes_precedence_over_fallback(
+        self,
+        mock_ask: MagicMock,
+        mock_print_section: MagicMock,
+        mock_staking_ctr: MagicMock,
+        mock_get_staking: MagicMock,
+        mock_ledger: MagicMock,
+        mock_check: MagicMock,
+        mock_operate: MagicMock,
+    ) -> None:
+        """When staking_program_id is explicitly provided, it is used even if dicts are empty."""
+        template = _make_template(home_chain="gnosis")
+
+        config = configure_local_config(
+            template,
+            mock_operate,
+            rpc_overrides={"gnosis": "https://rpc.gnosis.example"},
+            staking_program_id="my_custom_staking",
+        )
+
+        assert config.staking_program_id == "my_custom_staking"
+
+
 class TestConfigureLocalConfigNoOverrides:
     """Tests that without overrides, behavior is unchanged (backward compat)."""
 
