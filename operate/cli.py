@@ -1818,8 +1818,21 @@ def _daemon(
     server.run()
 
 
+def _parse_key_value_list(
+    entries: t.Optional[t.List[str]],
+) -> t.Optional[t.Dict[str, str]]:
+    """Parse a list of 'key=value' strings into a dict, or None if empty."""
+    if not entries:
+        return None
+    result: t.Dict[str, str] = {}
+    for entry in entries:
+        key, value = entry.split("=", 1)
+        result[key.strip()] = value.strip()
+    return result
+
+
 @_operate.command(name="quickstart")
-def qs_start(
+def qs_start(  # pylint: disable=too-many-arguments,too-many-locals
     config: Annotated[str, params.String(help="Quickstart config file path")],
     attended: Annotated[
         str, params.String(help="Run in attended/unattended mode (default: true")
@@ -1866,25 +1879,6 @@ def qs_start(
 ) -> None:
     """Quickstart."""
     os.environ["ATTENDED"] = attended.lower()
-
-    # Parse rpc overrides: ["gnosis=https://...", "base=https://..."] -> dict
-    rpc_overrides = None
-    if rpc:
-        rpc_overrides = {}
-        for entry in rpc:
-            chain_name, url = entry.split("=", 1)
-            rpc_overrides[chain_name.strip()] = url.strip()
-
-    # Parse env overrides: ["KEY=VALUE", ...] -> dict
-    user_provided_args = None
-    if env:
-        user_provided_args = {}
-        for entry in env:
-            key, value = entry.split("=", 1)
-            user_provided_args[key.strip()] = value.strip()
-
-    use_docker_val = False if no_docker else None  # None = derive from use_binary
-
     operate = OperateApp()
     operate.setup()
     run_service(
@@ -1893,10 +1887,10 @@ def qs_start(
         build_only=build_only,
         skip_dependency_check=skip_dependency_check,
         use_binary=use_binary,
-        rpc_overrides=rpc_overrides,
+        rpc_overrides=_parse_key_value_list(rpc),
         staking_program_id=staking,
-        user_provided_args=user_provided_args,
-        use_docker=use_docker_val,
+        user_provided_args=_parse_key_value_list(env),
+        use_docker=False if no_docker else None,
     )
 
 
