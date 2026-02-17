@@ -127,7 +127,7 @@ def make_chain_ledger_api(
             5, GWEI
         )
     elif chain == Chain.POLYGON:
-        gas_price_strategies[EIP1559]["max_gas_fast"] = 6000
+        gas_price_strategies[EIP1559]["max_gas_fast"] = 10000
         gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
             6000, GWEI
         )
