@@ -284,6 +284,16 @@ def configure_local_config(
         config.staking_program_id = staking_program_id
 
     if config.staking_program_id is None:
+        if not STAKING.get(home_chain, {}) or not QS_STAKING_PROGRAMS.get(
+            home_chain, {}
+        ):
+            config.staking_program_id = NO_STAKING_PROGRAM_ID
+            print(
+                f"No staking programs available for {config.principal_chain}. "
+                f"Defaulting to '{NO_STAKING_PROGRAM_ID}'."
+            )
+
+    if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
         available_choices = {}
         ids = (
