@@ -1258,6 +1258,25 @@ class ServiceManager:
                 f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
             )
 
+        # Keep mech-related runtime env wiring in middleware for QS compatibility.
+        if all(
+            var in service.env_variables
+            for var in [
+                "ON_CHAIN_SERVICE_ID",
+                "ETHEREUM_LEDGER_RPC_0",
+                "GNOSIS_LEDGER_RPC_0",
+                "GNOSIS_LEDGER_RPC",
+            ]
+        ):
+            chain_rpc = service.env_variables["GNOSIS_LEDGER_RPC"]["value"]
+            service.update_env_variables_values(
+                {
+                    "ON_CHAIN_SERVICE_ID": chain_data.token,
+                    "ETHEREUM_LEDGER_RPC_0": chain_rpc,
+                    "GNOSIS_LEDGER_RPC_0": chain_rpc,
+                }
+            )
+
         # TODO: this is a patch for modius, to be standardized
         staking_chain = None
         for chain_, config in service.chain_configs.items():
