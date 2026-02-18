@@ -273,7 +273,7 @@ EXECUTION_STATUS_CASES = [
             },
         },
         "r-bfb51822-e689-4141-8328-134f0a877fdf",
-        "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
+        "0x8558c9921ca7ce96f9d909baa80bb6a53284a4e82f456616bbab4f98d68f683f",
         ProviderRequestStatus.EXECUTION_FAILED,
         None,
         0,
