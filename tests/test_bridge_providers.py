@@ -73,17 +73,25 @@ def _skip_on_external_status_unavailable(
     provider_request: ProviderRequest, expected_status: ProviderRequestStatus
 ) -> None:
     """Skip flaky integration assertions when external status providers are unavailable."""
-    if expected_status == ProviderRequestStatus.EXECUTION_DONE and provider_request.status in (
-        ProviderRequestStatus.EXECUTION_UNKNOWN,
-        ProviderRequestStatus.EXECUTION_FAILED,
+    if (
+        expected_status == ProviderRequestStatus.EXECUTION_DONE
+        and provider_request.status
+        in (
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+            ProviderRequestStatus.EXECUTION_FAILED,
+        )
     ):
-        pytest.skip("External bridge status provider/RPC unavailable during integration run.")
+        pytest.skip(
+            "External bridge status provider/RPC unavailable during integration run."
+        )
 
     if (
         expected_status == ProviderRequestStatus.EXECUTION_FAILED
         and provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
     ):
-        pytest.skip("External bridge status provider/RPC unavailable during integration run.")
+        pytest.skip(
+            "External bridge status provider/RPC unavailable during integration run."
+        )
 
 
 EXECUTION_STATUS_CASES = [
