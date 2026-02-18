@@ -23,7 +23,8 @@
 import time
 import typing as t
 from pathlib import Path
-from unittest.mock import patch
+from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 from aea.helpers.logging import setup_logger
@@ -43,6 +44,7 @@ from operate.bridge.providers.native_bridge_provider import (
     OptimismContractAdaptor,
 )
 from operate.bridge.providers.provider import (
+    ERC20_APPROVE_SELECTOR,
     ExecutionData,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_QUOTE_FAILED,
@@ -572,7 +574,13 @@ class TestNativeBridgeProvider:
         )
 
         # Create
-        provider_request = provider.create_request(params)
+        # Unit test: avoid external RPC dependency during token mapping validation.
+        with patch.object(
+            OptimismContractAdaptor._optimism_mintable_erc20_contract,
+            "l1_token",
+            return_value={"data": OLAS[Chain.ETHEREUM]},
+        ):
+            provider_request = provider.create_request(params)
         expected_request = ProviderRequest(
             params={
                 "from": {
@@ -634,15 +642,40 @@ class TestNativeBridgeProvider:
             assert not diff, "Wrong status."
             assert provider_request == expected_request, "Wrong request."
 
+        to_amount = int(params["to"]["amount"])
+        approve_data = f"{ERC20_APPROVE_SELECTOR}{'0' * 64}{to_amount:064x}"
+        mock_txs = [
+            (
+                "approve",
+                {
+                    "to": OLAS[Chain.ETHEREUM],
+                    "data": approve_data,
+                    "gas": 21000,
+                    "value": 0,
+                },
+            )
+        ]
+        mock_from_ledger_api = MagicMock()
+        mock_from_ledger_api.api.eth.gas_price = 1
+        mock_from_ledger_api.api.eth.get_block.return_value = SimpleNamespace(
+            baseFeePerGas=1
+        )
+
         # Get requirements
-        br = provider.requirements(provider_request)
+        with patch.object(provider, "_get_txs", return_value=mock_txs), patch.object(
+            provider, "_from_ledger_api", return_value=mock_from_ledger_api
+        ), patch(
+            "operate.bridge.providers.provider.update_tx_with_gas_pricing",
+            side_effect=lambda tx, _: tx.update({"gasPrice": 1}),
+        ):
+            br = provider.requirements(provider_request)
         assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong requirements."
         expected_br = ChainAmounts(
             {
                 "ethereum": {
                     wallet_address: {
                         ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                        OLAS[Chain.ETHEREUM]: BigInt(1000000000000000000),
+                        OLAS[Chain.ETHEREUM]: BigInt(to_amount),
                     }
                 }
             }
@@ -666,7 +699,13 @@ class TestNativeBridgeProvider:
         expected_request.execution_data = expected_execution_data
         expected_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
-        provider.execute(provider_request=provider_request)
+        with patch.object(provider, "_get_txs", return_value=mock_txs), patch.object(
+            provider, "_from_ledger_api", return_value=mock_from_ledger_api
+        ), patch("operate.bridge.providers.provider.TxSettler") as mock_tx_settler:
+            mock_tx_settler.return_value.transact.return_value.settle.side_effect = (
+                RuntimeError("mock settle error")
+            )
+            provider.execute(provider_request=provider_request)
         assert provider_request.execution_data is not None, "Wrong request."
         expected_execution_data.message = provider_request.execution_data.message
         expected_execution_data.elapsed_time = (
@@ -1329,7 +1368,7 @@ class TestProvider:
         execution_data = ExecutionData(
             elapsed_time=0,
             message=None,
-            timestamp=0,
+            timestamp=int(time.time()),
             from_tx_hash=from_tx_hash,
             to_tx_hash=None,
             provider_data=None,
