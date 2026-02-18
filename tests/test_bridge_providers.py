@@ -1416,16 +1416,7 @@ class TestProvider:
         with _skip_if_external_status_non_2xx():
             provider.status_json(provider_request)
 
-        if (
-            provider_class is RelayProvider
-            and expected_status == ProviderRequestStatus.EXECUTION_FAILED
-        ):
-            assert provider_request.status in (
-                ProviderRequestStatus.EXECUTION_FAILED,
-                ProviderRequestStatus.EXECUTION_UNKNOWN,
-            ), "Wrong execution status."
-        else:
-            assert provider_request.status == expected_status, "Wrong execution status."
+        assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
 
