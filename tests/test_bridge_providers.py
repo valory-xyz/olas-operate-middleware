@@ -22,6 +22,7 @@
 
 import time
 import typing as t
+from contextlib import contextmanager
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -37,6 +38,7 @@ from operate.bridge.bridge_manager import (
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
 )
+from operate.bridge.providers import lifi_provider, relay_provider
 from operate.bridge.providers.native_bridge_provider import (
     BridgeContractAdaptor,
     NativeBridgeProvider,
@@ -69,29 +71,32 @@ TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
-def _skip_on_external_status_unavailable(
-    provider_request: ProviderRequest, expected_status: ProviderRequestStatus
-) -> None:
-    """Skip flaky integration assertions when external status providers are unavailable."""
-    if (
-        expected_status == ProviderRequestStatus.EXECUTION_DONE
-        and provider_request.status
-        in (
-            ProviderRequestStatus.EXECUTION_UNKNOWN,
-            ProviderRequestStatus.EXECUTION_FAILED,
-        )
-    ):
-        pytest.skip(
-            "External bridge status provider/RPC unavailable during integration run."
-        )
+@contextmanager
+def _skip_if_external_status_non_2xx() -> t.Iterator[None]:
+    """Skip integration checks only when external status APIs return non-2xx."""
+    relay_get = relay_provider.requests.get
+    lifi_get = lifi_provider.requests.get
 
-    if (
-        expected_status == ProviderRequestStatus.EXECUTION_FAILED
-        and provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
-    ):
-        pytest.skip(
-            "External bridge status provider/RPC unavailable during integration run."
-        )
+    def _guarded_relay_get(*args: t.Any, **kwargs: t.Any) -> t.Any:
+        response = relay_get(*args, **kwargs)
+        if not 200 <= response.status_code < 300:
+            pytest.skip(
+                f"Relay status endpoint unavailable during integration run (HTTP {response.status_code})."
+            )
+        return response
+
+    def _guarded_lifi_get(*args: t.Any, **kwargs: t.Any) -> t.Any:
+        response = lifi_get(*args, **kwargs)
+        if not 200 <= response.status_code < 300:
+            pytest.skip(
+                f"LiFi status endpoint unavailable during integration run (HTTP {response.status_code})."
+            )
+        return response
+
+    with patch.object(
+        relay_provider.requests, "get", side_effect=_guarded_relay_get
+    ), patch.object(lifi_provider.requests, "get", side_effect=_guarded_lifi_get):
+        yield
 
 
 EXECUTION_STATUS_CASES = [
@@ -1408,9 +1413,8 @@ class TestProvider:
             execution_data=execution_data,
         )
 
-        provider.status_json(provider_request)
-
-        _skip_on_external_status_unavailable(provider_request, expected_status)
+        with _skip_if_external_status_non_2xx():
+            provider.status_json(provider_request)
 
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
@@ -1522,7 +1526,8 @@ class TestProvider:
 
         with patch("web3.eth.Eth.get_transaction_receipt") as mock:
             mock.side_effect = [exc]
-            provider.status_json(provider_request)
+            with _skip_if_external_status_non_2xx():
+                provider.status_json(provider_request)
 
             # We only check for cases where the final status is expected to be EXECUTION_DONE.
             # EXECUTION_FAILED states might be identified early (e.g., via API), and wouldn't
@@ -1535,9 +1540,8 @@ class TestProvider:
         if expected_status != ProviderRequestStatus.EXECUTION_DONE:
             # Emulate tx was sent long enough to deduce status only for non-success paths.
             execution_data.timestamp = 0
-        provider.status_json(provider_request)
-
-        _skip_on_external_status_unavailable(provider_request, expected_status)
+        with _skip_if_external_status_non_2xx():
+            provider.status_json(provider_request)
 
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
