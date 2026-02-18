@@ -46,7 +46,7 @@ from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
 from operate.cli import OperateApp, create_app
-from operate.constants import ZERO_ADDRESS
+from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -59,6 +59,7 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.services.manage import ServiceManager
+from operate.services.service import Service
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
@@ -293,6 +294,20 @@ class OperateTestEnv:
     keys_manager: KeysManager
     backup_owner: str
     backup_owner2: str
+
+
+@dataclass
+class TestOperateSevice:
+    """Operate test service."""
+
+    tmp_path: Path
+    password: str
+    operate: OperateApp
+    service_manager: ServiceManager
+    service: Service
+    service_config_id: str
+    service_config_dir: Path
+    service_persistent_dir: Path
 
 
 def _get_service_template_trader() -> ServiceTemplate:
@@ -564,6 +579,34 @@ def test_operate(tmp_path: Path, password: str) -> OperateApp:
     operate.password = password
     operate.wallet_manager.setup()
     return operate
+
+
+@pytest.fixture
+def test_operate_service(
+    tmp_path: Path, password: str, test_operate: OperateApp
+) -> TestOperateSevice:
+    """Sets up a test operate app."""
+
+    test_operate.service_manager().create(
+        service_template=_get_service_template_trader()
+    )
+
+    service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+    service = test_operate.service_manager().load(service_config_id)
+    service_config_dir = service.path
+    service_persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+    service_persistent_dir.mkdir(parents=True, exist_ok=True)
+
+    return TestOperateSevice(
+        tmp_path=tmp_path,
+        password=password,
+        operate=test_operate,
+        service_manager=test_operate.service_manager(),
+        service=service,
+        service_config_id=service_config_id,
+        service_config_dir=service_config_dir,
+        service_persistent_dir=service_persistent_dir,
+    )
 
 
 @pytest.fixture

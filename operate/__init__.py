@@ -39,6 +39,7 @@ except PackageNotFoundError:
         __version__ = "0.0.0+local"
 
 logging.getLogger("aea").setLevel(logging.ERROR)
+logging.getLogger("aea.ledger_apis.ethereum").setLevel(logging.WARNING)
 
 
 # Ensure CA bundle is available for requests
