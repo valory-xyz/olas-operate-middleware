@@ -22,10 +22,8 @@
 
 import time
 import typing as t
-from contextlib import contextmanager
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from aea.helpers.logging import setup_logger
@@ -38,14 +36,12 @@ from operate.bridge.bridge_manager import (
     NATIVE_BRIDGE_PROVIDER_CONFIGS,
     ProviderRequest,
 )
-from operate.bridge.providers import lifi_provider, relay_provider
 from operate.bridge.providers.native_bridge_provider import (
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
 )
 from operate.bridge.providers.provider import (
-    ERC20_APPROVE_SELECTOR,
     ExecutionData,
     MESSAGE_EXECUTION_FAILED,
     MESSAGE_EXECUTION_FAILED_QUOTE_FAILED,
@@ -287,7 +283,7 @@ EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
             },
         },
         "r-bfb51822-e689-4141-8328-134f0a877fdf",
-        "0x8558c9921ca7ce96f9d909baa80bb6a53284a4e82f456616bbab4f98d68f683f",
+        "0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0",
         ProviderRequestStatus.EXECUTION_FAILED,
         None,
         0,
@@ -618,13 +614,7 @@ class TestNativeBridgeProvider:
         )
 
         # Create
-        # Unit test: avoid external RPC dependency during token mapping validation.
-        with patch.object(
-            OptimismContractAdaptor._optimism_mintable_erc20_contract,
-            "l1_token",
-            return_value={"data": OLAS[Chain.ETHEREUM]},
-        ):
-            provider_request = provider.create_request(params)
+        provider_request = provider.create_request(params)
         expected_request = ProviderRequest(
             params={
                 "from": {
@@ -686,40 +676,15 @@ class TestNativeBridgeProvider:
             assert not diff, "Wrong status."
             assert provider_request == expected_request, "Wrong request."
 
-        to_amount = int(params["to"]["amount"])
-        approve_data = f"{ERC20_APPROVE_SELECTOR}{'0' * 64}{to_amount:064x}"
-        mock_txs = [
-            (
-                "approve",
-                {
-                    "to": OLAS[Chain.ETHEREUM],
-                    "data": approve_data,
-                    "gas": 21000,
-                    "value": 0,
-                },
-            )
-        ]
-        mock_from_ledger_api = MagicMock()
-        mock_from_ledger_api.api.eth.gas_price = 1
-        mock_from_ledger_api.api.eth.get_block.return_value = SimpleNamespace(
-            baseFeePerGas=1
-        )
-
         # Get requirements
-        with patch.object(provider, "_get_txs", return_value=mock_txs), patch.object(
-            provider, "_from_ledger_api", return_value=mock_from_ledger_api
-        ), patch(
-            "operate.bridge.providers.provider.update_tx_with_gas_pricing",
-            side_effect=lambda tx, _: tx.update({"gasPrice": 1}),
-        ):
-            br = provider.requirements(provider_request)
+        br = provider.requirements(provider_request)
         assert br["ethereum"][wallet_address][ZERO_ADDRESS] > 0, "Wrong requirements."
         expected_br = ChainAmounts(
             {
                 "ethereum": {
                     wallet_address: {
                         ZERO_ADDRESS: br["ethereum"][wallet_address][ZERO_ADDRESS],
-                        OLAS[Chain.ETHEREUM]: BigInt(to_amount),
+                        OLAS[Chain.ETHEREUM]: BigInt(1000000000000000000),
                     }
                 }
             }
@@ -743,13 +708,7 @@ class TestNativeBridgeProvider:
         expected_request.execution_data = expected_execution_data
         expected_request.status = ProviderRequestStatus.EXECUTION_FAILED
 
-        with patch.object(provider, "_get_txs", return_value=mock_txs), patch.object(
-            provider, "_from_ledger_api", return_value=mock_from_ledger_api
-        ), patch("operate.bridge.providers.provider.TxSettler") as mock_tx_settler:
-            mock_tx_settler.return_value.transact.return_value.settle.side_effect = (
-                RuntimeError("mock settle error")
-            )
-            provider.execute(provider_request=provider_request)
+        provider.execute(provider_request=provider_request)
         assert provider_request.execution_data is not None, "Wrong request."
         expected_execution_data.message = provider_request.execution_data.message
         expected_execution_data.elapsed_time = (
@@ -1408,7 +1367,7 @@ class TestProvider:
         execution_data = ExecutionData(
             elapsed_time=0,
             message=None,
-            timestamp=int(time.time()),
+            timestamp=0,
             from_tx_hash=from_tx_hash,
             to_tx_hash=None,
             provider_data=None,
@@ -1423,8 +1382,7 @@ class TestProvider:
             execution_data=execution_data,
         )
 
-        with _skip_if_external_status_non_2xx():
-            provider.status_json(provider_request)
+        provider.status_json(provider_request)
 
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
@@ -1533,8 +1491,7 @@ class TestProvider:
 
         with patch("web3.eth.Eth.get_transaction_receipt") as mock:
             mock.side_effect = [exc]
-            with _skip_if_external_status_non_2xx():
-                provider.status_json(provider_request)
+            provider.status_json(provider_request)
 
             # We only check for cases where the final status is expected to be EXECUTION_DONE.
             # EXECUTION_FAILED states might be identified early (e.g., via API), and wouldn't
@@ -1544,12 +1501,8 @@ class TestProvider:
                     provider_request.status == ProviderRequestStatus.EXECUTION_UNKNOWN
                 ), "Wrong execution status."
 
-        if expected_status != ProviderRequestStatus.EXECUTION_DONE:
-            # Emulate tx was sent long enough to deduce status only for non-success paths.
-            execution_data.timestamp = 0
-        with _skip_if_external_status_non_2xx():
-            provider.status_json(provider_request)
-
+        execution_data.timestamp = 0  # Emulate tx was sent long enough to deduct status
+        provider.status_json(provider_request)
         assert provider_request.status == expected_status, "Wrong execution status."
         assert execution_data.to_tx_hash == expected_to_tx_hash, "Wrong to_tx_hash."
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
