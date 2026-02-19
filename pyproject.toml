@@ -43,6 +43,7 @@ build = "1.2.2.post1"
 yappi = "^1.6.10"
 viztracer = "^1.1.1"
 httpx = "^0.28.1"
+pytest-recording = "^0.13.4"
 
 [build-system]
 requires = ["poetry-core"]
