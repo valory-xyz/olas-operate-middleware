@@ -509,6 +509,7 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize(
         ("to_chain_enum", "expected_provider_cls", "expected_contract_adaptor_cls"),
         [
