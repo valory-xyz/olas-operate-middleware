@@ -26,15 +26,42 @@ tox -e integration-tests
 ```
 
 ### Recorded HTTP tests (pytest-recording)
-Some tests replay previously recorded HTTP responses using `pytest-recording`
-to reduce flakiness and remove live RPC dependence.
 
-The `test_find_block_before_timestamp` test in `tests/test_bridge_providers.py`
-uses a VCR cassette.
+Several tests replay previously recorded HTTP responses using `pytest-recording` (VCR.py)
+to eliminate flakiness from live RPC calls and reduce test execution time. These cassettes
+are stored in `tests/cassettes/` and committed to git.
 
-Re-record that cassette when endpoint behavior changes:
+**Recorded tests**:
+
+1. **`TestNativeBridgeProvider::test_find_block_before_timestamp`** (11 cassettes)
+   - Records JSON-RPC requests to `https://rpc-gate.autonolas.tech/base-rpc/`
+   - Cassettes stored in: `tests/cassettes/test_bridge_providers/TestNativeBridgeProvider.test_find_block_before_timestamp[...].yaml`
+   - Execution time: ~0.78s (replayed), ~1-2min (live)
+   
+2. **`TestProvider::test_update_execution_status_failure_then_success`** (18 cassettes)
+   - Records API calls from Relay provider (`https://api.relay.link/requests/v2`)
+   - Records RPC calls to Optimism Tenderly endpoint
+   - Cassettes stored in: `tests/cassettes/test_bridge_providers/TestProvider.test_update_execution_status_failure_then_success[...].yaml`
+   - Covers RelayProvider, LiFiProvider, and NativeBridgeProvider
+   
+**Cassette Matching Strategy**:
+The VCR configuration in `tests/conftest.py` matches requests on:
+- `method`, `scheme`, `host`, `port`, `path`, `query`
+- **`body`** (critical for JSON-RPC determinism)
+
+This ensures different RPC payloads (e.g., different block numbers) match the correct cassettes.
+
+**Re-recording cassettes**:
+When API behavior changes, re-record cassettes with:
 ```bash
+# Record all cassettes for a specific test
 pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
+
+# Record for the other test
+pytest tests/test_bridge_providers.py::TestProvider::test_update_execution_status_failure_then_success --record-mode=once -v
+
+# Record all cassettes at once
+pytest tests/test_bridge_providers.py -k "vcr" --record-mode=once -v
 ```
 
 ## Test Coverage by Component
