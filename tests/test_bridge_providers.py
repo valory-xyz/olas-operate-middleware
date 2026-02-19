@@ -1258,6 +1258,7 @@ class TestProvider:
         assert not diff, "Wrong requirements."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize(
         (
             "provider_class",
