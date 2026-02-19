@@ -246,6 +246,12 @@ def password() -> str:
     return random_string(16)
 
 
+@pytest.fixture(scope="module")
+def vcr_config() -> t.Dict[str, t.Any]:
+    """VCR configuration for deterministic JSON-RPC request matching."""
+    return {"match_on": ["method", "scheme", "host", "port", "path", "query", "body"]}
+
+
 @pytest.fixture
 def temp_keys_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for keys."""

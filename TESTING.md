@@ -25,6 +25,18 @@ export POLYGON_TESTNET_RPC="https://..."
 tox -e integration-tests
 ```
 
+### Recorded HTTP tests (pytest-recording)
+Some tests replay previously recorded HTTP responses using `pytest-recording`
+to reduce flakiness and remove live RPC dependence.
+
+The `test_find_block_before_timestamp` test in `tests/test_bridge_providers.py`
+uses a VCR cassette.
+
+Re-record that cassette when endpoint behavior changes:
+```bash
+pytest tests/test_bridge_providers.py::TestNativeBridgeProvider::test_find_block_before_timestamp --record-mode=once -v
+```
+
 ## Test Coverage by Component
 
 ### ✅ Good Coverage

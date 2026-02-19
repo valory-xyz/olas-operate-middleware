@@ -691,6 +691,7 @@ class TestNativeBridgeProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize("rpc", ["https://rpc-gate.autonolas.tech/base-rpc/"])
     @pytest.mark.parametrize(
         ("timestamp", "expected_block"),
