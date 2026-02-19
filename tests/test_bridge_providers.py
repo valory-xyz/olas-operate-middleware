@@ -1366,6 +1366,7 @@ class TestProvider:
 
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize(
         (
             "provider_class",
