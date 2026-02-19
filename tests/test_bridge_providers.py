@@ -37,7 +37,6 @@ from operate.bridge.bridge_manager import (
     ProviderRequest,
 )
 from operate.bridge.providers.native_bridge_provider import (
-    BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
@@ -67,7 +66,50 @@ TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
-EXECUTION_STATUS_CASES = [
+FromBridgeParams = t.TypedDict(
+    "FromBridgeParams",
+    {
+        "chain": str,
+        "address": str,
+        "token": str,
+    },
+)
+
+ToBridgeParams = t.TypedDict(
+    "ToBridgeParams",
+    {
+        "chain": str,
+        "address": str,
+        "token": str,
+        "amount": int,
+    },
+)
+
+BridgeParams = t.TypedDict(
+    "BridgeParams",
+    {
+        "from": FromBridgeParams,
+        "to": ToBridgeParams,
+    },
+)
+
+ContractAdaptorClass = t.Type[
+    t.Union[OmnibridgeContractAdaptor, OptimismContractAdaptor]
+]
+
+ExecutionStatusCase = t.Tuple[
+    t.Type[Provider],
+    t.Optional[ContractAdaptorClass],
+    BridgeParams,
+    str,
+    str,
+    ProviderRequestStatus,
+    t.Optional[str],
+    int,
+]
+
+
+EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
     # RelayProvider - EXECUTION_DONE tests
     (
         RelayProvider,
@@ -1279,7 +1321,7 @@ class TestProvider:
             expected_to_tx_hash,
             expected_elapsed_time,
         ) = EXECUTION_STATUS_CASES[case_index]
-        
+
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1332,7 +1374,7 @@ class TestProvider:
         )
 
         provider_request = ProviderRequest(
-            params=params,
+            params=dict(params),
             provider_id=provider.provider_id,
             id=request_id,
             status=ProviderRequestStatus.EXECUTION_PENDING,
@@ -1347,6 +1389,9 @@ class TestProvider:
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
 
         if provider_request.status == ProviderRequestStatus.EXECUTION_DONE:
+            assert (
+                expected_to_tx_hash is not None
+            ), "Missing to_tx_hash for done status."
             transfer_amount = get_transfer_amount(
                 w3=Web3(
                     Web3.HTTPProvider(get_default_rpc(Chain(params["to"]["chain"])))
@@ -1381,7 +1426,7 @@ class TestProvider:
             expected_to_tx_hash,
             expected_elapsed_time,
         ) = EXECUTION_STATUS_CASES[case_index]
-        
+
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1434,7 +1479,7 @@ class TestProvider:
         )
 
         provider_request = ProviderRequest(
-            params=params,
+            params=dict(params),
             provider_id=provider.provider_id,
             id=request_id,
             status=ProviderRequestStatus.EXECUTION_PENDING,
