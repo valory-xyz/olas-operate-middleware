@@ -1260,33 +1260,26 @@ class TestProvider:
         assert provider_request == expected_request, "Wrong request."
 
     @pytest.mark.vcr
-    @pytest.mark.parametrize(
-        (
-            "provider_class",
-            "contract_adaptor_class",
-            "params",
-            "request_id",
-            "from_tx_hash",
-            "expected_status",
-            "expected_to_tx_hash",
-            "expected_elapsed_time",
-        ),
-        EXECUTION_STATUS_CASES,
-    )
+    @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status(
         self,
         tmp_path: Path,
         password: str,
-        provider_class: t.Type[Provider],
-        contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
-        params: dict,
-        request_id: str,
-        from_tx_hash: str,
-        expected_status: ProviderRequestStatus,
-        expected_to_tx_hash: str,
-        expected_elapsed_time: int,
+        case_index: int,
     ) -> None:
         """test_update_execution_status"""
+        # Unpack test case parameters
+        (
+            provider_class,
+            contract_adaptor_class,
+            params,
+            request_id,
+            from_tx_hash,
+            expected_status,
+            expected_to_tx_hash,
+            expected_elapsed_time,
+        ) = EXECUTION_STATUS_CASES[case_index]
+        
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1369,33 +1362,26 @@ class TestProvider:
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
 
     @pytest.mark.vcr
-    @pytest.mark.parametrize(
-        (
-            "provider_class",
-            "contract_adaptor_class",
-            "params",
-            "request_id",
-            "from_tx_hash",
-            "expected_status",
-            "expected_to_tx_hash",
-            "expected_elapsed_time",
-        ),
-        EXECUTION_STATUS_CASES,
-    )
+    @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status_failure_then_success(
         self,
         tmp_path: Path,
         password: str,
-        provider_class: t.Type[Provider],
-        contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
-        params: dict,
-        request_id: str,
-        from_tx_hash: str,
-        expected_status: ProviderRequestStatus,
-        expected_to_tx_hash: str,
-        expected_elapsed_time: int,
+        case_index: int,
     ) -> None:
         """test_update_execution_status_failure_then_success"""
+        # Unpack test case parameters
+        (
+            provider_class,
+            contract_adaptor_class,
+            params,
+            request_id,
+            from_tx_hash,
+            expected_status,
+            expected_to_tx_hash,
+            expected_elapsed_time,
+        ) = EXECUTION_STATUS_CASES[case_index]
+        
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
