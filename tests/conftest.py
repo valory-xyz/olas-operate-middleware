@@ -83,7 +83,6 @@ def pytest_addoption(parser: pytest.Parser) -> None:
 
 def pytest_configure(config: pytest.Config) -> None:
     """Start profiling if requested."""
-
     profiler_opt = config.getoption("--profiler")
     if not profiler_opt:
         return
@@ -244,6 +243,115 @@ def tenderly_increase_time(chain: Chain, time: int = 3 * 24 * 3600 + 1) -> None:
 def password() -> str:
     """Password fixture"""
     return random_string(16)
+
+
+def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-def]
+    """Configure VCR with custom matchers for host-agnostic JSON-RPC cassette replay."""
+    chain_keywords = {
+        "arbitrum": ["arbitrum", "arb"],
+        "base": ["base"],
+        "celo": ["celo"],
+        "ethereum": ["ethereum", "eth-mainnet", "eth"],
+        "gnosis": ["gnosis", "xdai"],
+        "mode": ["mode"],
+        "optimism": ["optimism", "op-mainnet", "op"],
+        "polygon": ["polygon", "matic"],
+        "solana": ["solana"],
+    }
+
+    def _infer_chain_from_uri(uri: str) -> str:
+        """Infer chain label from RPC URI for stable cassette matching."""
+        uri_lower = uri.lower()
+        for chain_name, keywords in chain_keywords.items():
+            if any(keyword in uri_lower for keyword in keywords):
+                return chain_name
+        return "unknown"
+
+    def _body_to_json(body: t.Any) -> t.Any:
+        """Decode request body into json when possible."""
+        if isinstance(body, bytes):
+            body_str = body.decode("utf-8", errors="ignore")
+        else:
+            body_str = str(body)
+
+        if not body_str:
+            return None
+
+        try:
+            return json.loads(body_str)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+    def _is_json_rpc_request(request: t.Any) -> bool:
+        """Whether the request is a JSON-RPC request."""
+        body_json = _body_to_json(getattr(request, "body", b""))
+        return isinstance(body_json, dict) and body_json.get("jsonrpc") == "2.0"
+
+    def rpc_body(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
+        """Match JSON-RPC bodies while ignoring volatile request id field."""
+        body_1 = _body_to_json(getattr(request_1, "body", b""))
+        body_2 = _body_to_json(getattr(request_2, "body", b""))
+
+        if isinstance(body_1, dict) and isinstance(body_2, dict):
+            is_rpc_1 = body_1.get("jsonrpc") == "2.0"
+            is_rpc_2 = body_2.get("jsonrpc") == "2.0"
+
+            if is_rpc_1 and is_rpc_2:
+                method_match = body_1.get("method") == body_2.get("method")
+                params_match = body_1.get("params") == body_2.get("params")
+                match = method_match and params_match
+                message = (
+                    "JSON-RPC method/params match"
+                    if match
+                    else "JSON-RPC method/params mismatch"
+                )
+                return match, message
+
+        body_raw_1 = getattr(request_1, "body", b"")
+        body_raw_2 = getattr(request_2, "body", b"")
+        match = body_raw_1 == body_raw_2
+        message = "Body match" if match else "Body mismatch"
+        return match, message
+
+    def rpc_uri(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
+        """Match JSON-RPC requests across different RPC hosts/providers."""
+        req1_is_rpc = _is_json_rpc_request(request_1)
+        req2_is_rpc = _is_json_rpc_request(request_2)
+
+        if req1_is_rpc and req2_is_rpc:
+            chain_1 = _infer_chain_from_uri(getattr(request_1, "uri", ""))
+            chain_2 = _infer_chain_from_uri(getattr(request_2, "uri", ""))
+
+            # Unknown: likely new cassette being recorded - match for safety
+            if "unknown" in (chain_1, chain_2):
+                return True, "RPC request with unknown chain"
+
+            match = chain_1 == chain_2
+            message = (
+                f"Chain match: {chain_1}"
+                if match
+                else f"Chain mismatch: {chain_1} != {chain_2}"
+            )
+            return match, message
+
+        # Non-RPC: strict URI match
+        uri1 = getattr(request_1, "uri", "")
+        uri2 = getattr(request_2, "uri", "")
+        match = uri1 == uri2
+        message = "URI match" if match else f"URI mismatch: {uri1} != {uri2}"
+        return match, message
+
+    # Register the custom matcher with this VCR instance
+    vcr.matchers["rpc_uri"] = rpc_uri
+    vcr.matchers["rpc_body"] = rpc_body
+
+
+@pytest.fixture(scope="module")
+def vcr_config() -> t.Dict[str, t.Any]:
+    """VCR configuration for deterministic JSON-RPC request matching."""
+    return {
+        "match_on": ["method", "rpc_uri", "query", "rpc_body"],
+    }
 
 
 @pytest.fixture

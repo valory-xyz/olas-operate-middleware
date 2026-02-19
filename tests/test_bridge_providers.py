@@ -40,7 +40,6 @@ from operate.bridge.bridge_manager import (
 )
 from operate.bridge.providers import lifi_provider, relay_provider
 from operate.bridge.providers.native_bridge_provider import (
-    BridgeContractAdaptor,
     NativeBridgeProvider,
     OmnibridgeContractAdaptor,
     OptimismContractAdaptor,
@@ -71,35 +70,50 @@ TRANSFER_TOPIC = Web3.keccak(text="Transfer(address,address,uint256)").to_0x_hex
 LOGGER = setup_logger(name="test_bridge_providers")
 
 
-@contextmanager
-def _skip_if_external_status_non_2xx() -> t.Iterator[None]:
-    """Skip integration checks only when external status APIs return non-2xx."""
-    relay_get = relay_provider.requests.get
-    lifi_get = lifi_provider.requests.get
+FromBridgeParams = t.TypedDict(
+    "FromBridgeParams",
+    {
+        "chain": str,
+        "address": str,
+        "token": str,
+    },
+)
 
-    def _guarded_relay_get(*args: t.Any, **kwargs: t.Any) -> t.Any:
-        response = relay_get(*args, **kwargs)
-        if not 200 <= response.status_code < 300:
-            pytest.skip(
-                f"Relay status endpoint unavailable during integration run (HTTP {response.status_code})."
-            )
-        return response
+ToBridgeParams = t.TypedDict(
+    "ToBridgeParams",
+    {
+        "chain": str,
+        "address": str,
+        "token": str,
+        "amount": int,
+    },
+)
 
-    def _guarded_lifi_get(*args: t.Any, **kwargs: t.Any) -> t.Any:
-        response = lifi_get(*args, **kwargs)
-        if not 200 <= response.status_code < 300:
-            pytest.skip(
-                f"LiFi status endpoint unavailable during integration run (HTTP {response.status_code})."
-            )
-        return response
+BridgeParams = t.TypedDict(
+    "BridgeParams",
+    {
+        "from": FromBridgeParams,
+        "to": ToBridgeParams,
+    },
+)
 
-    with patch.object(
-        relay_provider.requests, "get", side_effect=_guarded_relay_get
-    ), patch.object(lifi_provider.requests, "get", side_effect=_guarded_lifi_get):
-        yield
+ContractAdaptorClass = t.Type[
+    t.Union[OmnibridgeContractAdaptor, OptimismContractAdaptor]
+]
+
+ExecutionStatusCase = t.Tuple[
+    t.Type[Provider],
+    t.Optional[ContractAdaptorClass],
+    BridgeParams,
+    str,
+    str,
+    ProviderRequestStatus,
+    t.Optional[str],
+    int,
+]
 
 
-EXECUTION_STATUS_CASES = [
+EXECUTION_STATUS_CASES: t.List[ExecutionStatusCase] = [
     # RelayProvider - EXECUTION_DONE tests
     (
         RelayProvider,
@@ -760,6 +774,7 @@ class TestNativeBridgeProvider:
         assert not diff, "Wrong status."
         assert provider_request == expected_request, "Wrong request."
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize("rpc", ["https://rpc-gate.autonolas.tech/base-rpc/"])
     @pytest.mark.parametrize(
         ("timestamp", "expected_block"),
@@ -793,6 +808,7 @@ class TestNativeBridgeProvider:
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize(
         "provider_class",
         [
@@ -1326,33 +1342,27 @@ class TestProvider:
         assert not diff, "Wrong requirements."
         assert provider_request == expected_request, "Wrong request."
 
-    @pytest.mark.parametrize(
-        (
-            "provider_class",
-            "contract_adaptor_class",
-            "params",
-            "request_id",
-            "from_tx_hash",
-            "expected_status",
-            "expected_to_tx_hash",
-            "expected_elapsed_time",
-        ),
-        EXECUTION_STATUS_CASES,
-    )
+    @pytest.mark.vcr
+    @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status(
         self,
         tmp_path: Path,
         password: str,
-        provider_class: t.Type[Provider],
-        contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
-        params: dict,
-        request_id: str,
-        from_tx_hash: str,
-        expected_status: ProviderRequestStatus,
-        expected_to_tx_hash: str,
-        expected_elapsed_time: int,
+        case_index: int,
     ) -> None:
         """test_update_execution_status"""
+        # Unpack test case parameters
+        (
+            provider_class,
+            contract_adaptor_class,
+            params,
+            request_id,
+            from_tx_hash,
+            expected_status,
+            expected_to_tx_hash,
+            expected_elapsed_time,
+        ) = EXECUTION_STATUS_CASES[case_index]
+
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1405,7 +1415,7 @@ class TestProvider:
         )
 
         provider_request = ProviderRequest(
-            params=params,
+            params=dict(params),
             provider_id=provider.provider_id,
             id=request_id,
             status=ProviderRequestStatus.EXECUTION_PENDING,
@@ -1421,6 +1431,9 @@ class TestProvider:
         assert execution_data.elapsed_time == expected_elapsed_time, "Wrong timestamp."
 
         if provider_request.status == ProviderRequestStatus.EXECUTION_DONE:
+            assert (
+                expected_to_tx_hash is not None
+            ), "Missing to_tx_hash for done status."
             transfer_amount = get_transfer_amount(
                 w3=Web3(
                     Web3.HTTPProvider(get_default_rpc(Chain(params["to"]["chain"])))
@@ -1435,33 +1448,27 @@ class TestProvider:
 
             assert transfer_amount >= params["to"]["amount"], "Wrong transfer amount."
 
-    @pytest.mark.parametrize(
-        (
-            "provider_class",
-            "contract_adaptor_class",
-            "params",
-            "request_id",
-            "from_tx_hash",
-            "expected_status",
-            "expected_to_tx_hash",
-            "expected_elapsed_time",
-        ),
-        EXECUTION_STATUS_CASES,
-    )
+    @pytest.mark.vcr
+    @pytest.mark.parametrize("case_index", range(len(EXECUTION_STATUS_CASES)))
     def test_update_execution_status_failure_then_success(
         self,
         tmp_path: Path,
         password: str,
-        provider_class: t.Type[Provider],
-        contract_adaptor_class: t.Optional[t.Type[BridgeContractAdaptor]],
-        params: dict,
-        request_id: str,
-        from_tx_hash: str,
-        expected_status: ProviderRequestStatus,
-        expected_to_tx_hash: str,
-        expected_elapsed_time: int,
+        case_index: int,
     ) -> None:
         """test_update_execution_status_failure_then_success"""
+        # Unpack test case parameters
+        (
+            provider_class,
+            contract_adaptor_class,
+            params,
+            request_id,
+            from_tx_hash,
+            expected_status,
+            expected_to_tx_hash,
+            expected_elapsed_time,
+        ) = EXECUTION_STATUS_CASES[case_index]
+
         operate = OperateApp(home=tmp_path / OPERATE_TEST)
         operate.setup()
         operate.create_user_account(password=password)
@@ -1514,7 +1521,7 @@ class TestProvider:
         )
 
         provider_request = ProviderRequest(
-            params=params,
+            params=dict(params),
             provider_id=provider.provider_id,
             id=request_id,
             status=ProviderRequestStatus.EXECUTION_PENDING,
