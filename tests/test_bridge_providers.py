@@ -725,6 +725,7 @@ class TestNativeBridgeProvider:
 class TestProvider:
     """Tests for bridge.providers.Provider class."""
 
+    @pytest.mark.vcr
     @pytest.mark.parametrize(
         "provider_class",
         [
