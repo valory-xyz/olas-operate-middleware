@@ -609,9 +609,15 @@ class TestFunding(OnTestnet):
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
             <= initial_balance_native + amount_transfer_native
         )
+        gas_price = ledger_api.try_get_gas_pricing()
+        tx_fees_estimate = (
+            gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"]
+        ) * 85000 + (  # safe drain tx
+            gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"]
+        ) * 21000  # EOA drain tx
         assert (
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
-            >= initial_balance_native + amount_transfer_native - DUST[chain]
+            >= initial_balance_native + amount_transfer_native - tx_fees_estimate
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
@@ -664,9 +670,16 @@ class TestFunding(OnTestnet):
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
             <= initial_balance_native + amount_transfer_native
         )
+        gas_price = ledger_api.try_get_gas_pricing()
+        tx_fees_estimate = 2 * (
+            (gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"])
+            * 85000  # safe drain tx
+            + (gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"])
+            * 21000  # EOA drain tx
+        )
         assert (
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
-            >= initial_balance_native + amount_transfer_native - DUST[chain]
+            >= initial_balance_native + amount_transfer_native - tx_fees_estimate
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]

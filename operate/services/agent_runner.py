@@ -78,6 +78,8 @@ class AgentRunnerManager:
             os_name = "macos"
         elif platform.system() == "Windows":
             os_name = "windows"
+        elif platform.system() == "Linux":
+            os_name = "linux"
         else:
             raise ValueError("Platform not supported!")
 
@@ -85,7 +87,7 @@ class AgentRunnerManager:
             arch = "x64"
         elif platform.machine().lower() == "arm64":
             arch = "arm64"
-            if os_name == "windows":
+            if os_name in ["windows", "linux"]:
                 raise ValueError("Windows arm64 is not supported!")
         else:
             raise ValueError(f"unsupported arch: {platform.machine()}")
