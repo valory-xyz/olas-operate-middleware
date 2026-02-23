@@ -370,6 +370,9 @@ class TestLockingPlatformBranches:
                 # Should not raise
                 _release_lock(f.fileno())
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
     def test_release_lock_unix_fcntl_error_silently_ignored(
         self, tmp_path: Path
     ) -> None:
@@ -442,6 +445,40 @@ class TestWritePIDFileEdgeCases:
 
 class TestReadPIDFileEdgeCases:
     """Tests for read_pid_file edge cases."""
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
+    def test_read_pid_file_retries_on_pid_file_locked_then_raises_timeout(
+        self, tmp_path: Path
+    ) -> None:
+        """Test read_pid_file retries on PIDFileLocked and raises after timeout (lines 238-240, 247-249)."""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=PIDFileLocked("always locked")), patch(
+            "operate.utils.pid_file.time.sleep"
+        ):
+            with pytest.raises(PIDFileLocked, match="Could not acquire lock"):
+                read_pid_file(pid_file, timeout=0.05)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
+    def test_read_pid_file_fcntl_oserror_raises_pid_file_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Test read_pid_file wraps fcntl OSError in PIDFileError (lines 243-244)."""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=OSError("disk error")):
+            with pytest.raises(PIDFileError, match="Failed to read PID file"):
+                read_pid_file(pid_file)
 
     def test_read_pid_file_stale_removal_failure_logs_error(
         self, tmp_path: Path

@@ -344,6 +344,16 @@ class TestKeysManager:
         # Content should be unchanged
         assert result.read_text(encoding="utf-8") == "0xsentinelkey"
 
+    def test_delete_removes_key_file(self, keys_manager: KeysManager) -> None:
+        """Test that delete() removes the key file from disk (line 172)."""
+        address = keys_manager.create()
+        key_path = keys_manager.path / address
+        assert key_path.exists()
+
+        keys_manager.delete(address)
+
+        assert not key_path.exists()
+
     def test_create_skips_writing_when_files_already_exist(
         self, keys_manager: KeysManager
     ) -> None:

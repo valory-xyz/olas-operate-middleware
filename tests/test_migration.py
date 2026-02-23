@@ -393,3 +393,308 @@ class TestMigrateKeys:
 
         # .bak file should be re-created
         assert bak.exists()
+
+
+class TestMigrateServiceBafybei:
+    """Tests for _migrate_service with bafybei-prefixed paths."""
+
+    def test_migrate_service_bafybei_removes_deployment_dir_from_backup(
+        self, tmp_path: Path
+    ) -> None:
+        """Test _migrate_service removes the deployment dir from bafybei backup (line 189)."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        bafybei_dir = tmp_path / "bafybeitest"
+        bafybei_dir.mkdir()
+
+        # The bafybei dir has a 'deployment' subdir
+        deployment_dir = bafybei_dir / "deployment"
+        deployment_dir.mkdir()
+
+        # Provide a config.json at current version so migration returns False immediately
+        config_data = {
+            "name": "some_service",
+            "version": SERVICE_CONFIG_VERSION,
+            "env_variables": {},
+        }
+        (bafybei_dir / "config.json").write_text(
+            json.dumps(config_data), encoding="utf-8"
+        )
+
+        result = manager._migrate_service(
+            bafybei_dir
+        )  # pylint: disable=protected-access
+
+        assert result is False
+
+        # A backup directory should have been created
+        backups = list(tmp_path.glob("backup_*"))
+        assert len(backups) == 1, "Exactly one backup should be created"
+
+        # The backup should NOT contain the deployment subdir (it was removed)
+        backup_deployment = backups[0] / "deployment"
+        assert not backup_deployment.exists()
+
+
+class TestMigrateServiceV9UnsupportedPackagePath:
+    """Tests for _migrate_service with an unsupported package_path in v<9 configs."""
+
+    def test_migrate_service_v9_unsupported_package_path_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """Test _migrate_service raises RuntimeError for unknown package_path (lines 391-392)."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        service_dir = tmp_path / f"{SERVICE_CONFIG_PREFIX}v9test"
+        service_dir.mkdir()
+
+        # version=8 triggers the v<9 block; "unknown_package" is not in agents_supported
+        config_data = {
+            "name": "Test Service",
+            "version": 8,
+            "hash": "bafybeiXXX",
+            "package_path": "unknown_package",
+            "agent_addresses": ["0x1234567890123456789012345678901234567890"],
+            "home_chain": "gnosis",
+            "chain_configs": {
+                "gnosis": {
+                    "ledger_config": {"chain": "gnosis"},
+                    "chain_data": {
+                        "instances": [],
+                        "token": 1,
+                        "multisig": "0xmultisig",
+                        "staked": False,
+                        "on_chain_state": 3,
+                        "user_params": {
+                            "staking_program_id": "no_staking",
+                            "nft": "QmXXX",
+                            "cost_of_bond": 10000000000000000,
+                            "fund_requirements": {
+                                "0x0000000000000000000000000000000000000000": 10000000000000000
+                            },
+                        },
+                    },
+                }
+            },
+            "env_variables": {},
+        }
+        (service_dir / "config.json").write_text(
+            json.dumps(config_data), encoding="utf-8"
+        )
+
+        with pytest.raises(RuntimeError, match="Found unsupported"):
+            manager._migrate_service(service_dir)  # pylint: disable=protected-access
+
+
+class TestMigrateKeysNonKeyFile:
+    """Tests for migrate_keys non-key file handling (line 504)."""
+
+    def test_migrate_keys_non_key_non_bak_file_logs_warning(
+        self, tmp_path: Path
+    ) -> None:
+        """Test migrate_keys logs a warning for files that are not addresses and not .bak (line 504)."""
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+
+        # Create a file with a non-address name and no .bak extension
+        (keys_dir / "readme.txt").write_text("not a key", encoding="utf-8")
+
+        mock_keys_manager = MagicMock()
+        mock_keys_manager.path = keys_dir
+        mock_keys_manager.password = None
+
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+        manager.migrate_keys(mock_keys_manager)
+
+        warning_calls = str(
+            manager.logger.warning.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "Skipping non-key file" in warning_calls
+
+
+class TestMigrateServiceVersionMigrationPaths:
+    """Tests for _migrate_service version migration paths with IPFSTool mocked."""
+
+    def test_migrate_service_v7_replaces_0xm_multisig(self, tmp_path: Path) -> None:
+        """Test v<7 migration replaces '0xm' multisig with NON_EXISTENT_MULTISIG (line 347)."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        service_dir = tmp_path / f"{SERVICE_CONFIG_PREFIX}v6test"
+        service_dir.mkdir()
+
+        config_data = {
+            "name": "Test Service",
+            "version": 6,
+            "hash": "bafybeiFakeHash",
+            "package_path": "trader_pearl",
+            "keys": [{"address": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1"}],
+            "home_chain": "gnosis",
+            "chain_configs": {
+                "gnosis": {
+                    "ledger_config": {"chain": "gnosis"},
+                    "chain_data": {
+                        "multisig": "0xm",
+                        "instances": [],
+                        "token": 1,
+                        "staked": False,
+                        "on_chain_state": 3,
+                        "user_params": {
+                            "staking_program_id": "no_staking",
+                            "nft": "QmXXX",
+                            "cost_of_bond": 10000000000000000,
+                            "fund_requirements": {
+                                "0x0000000000000000000000000000000000000000": 10000000000000000
+                            },
+                        },
+                    },
+                }
+            },
+            "env_variables": {},
+        }
+        (service_dir / "config.json").write_text(
+            json.dumps(config_data), encoding="utf-8"
+        )
+
+        mock_pkg = service_dir / "trader_pearl"
+        mock_pkg.mkdir(exist_ok=True)
+
+        with patch("operate.migration.IPFSTool") as mock_ipfs_cls:
+            mock_ipfs_cls.return_value.download.return_value = str(mock_pkg)
+            result = manager._migrate_service(  # pylint: disable=protected-access
+                service_dir
+            )
+
+        assert result is True
+        updated = json.loads((service_dir / "config.json").read_text(encoding="utf-8"))
+        # multisig should have been replaced (no longer "0xm")
+        assert updated["chain_configs"]["gnosis"]["chain_data"]["multisig"] != "0xm"
+
+    def test_migrate_service_v8_replaces_0xm_and_migrates_keys(
+        self, tmp_path: Path
+    ) -> None:
+        """Test v<8 migration replaces '0xm' multisig (line 355) and migrates keys (lines 358-359)."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        service_dir = tmp_path / f"{SERVICE_CONFIG_PREFIX}v7test"
+        service_dir.mkdir()
+
+        config_data = {
+            "name": "Test Service",
+            "version": 7,
+            "hash": "bafybeiFakeHash",
+            "package_path": "trader_pearl",
+            "keys": [{"address": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}],
+            "home_chain": "gnosis",
+            "chain_configs": {
+                "gnosis": {
+                    "ledger_config": {"chain": "gnosis"},
+                    "chain_data": {
+                        "multisig": "0xm",
+                        "instances": [],
+                        "token": 1,
+                        "staked": False,
+                        "on_chain_state": 3,
+                        "user_params": {
+                            "staking_program_id": "no_staking",
+                            "nft": "QmXXX",
+                            "cost_of_bond": 10000000000000000,
+                            "fund_requirements": {
+                                "0x0000000000000000000000000000000000000000": 10000000000000000
+                            },
+                        },
+                    },
+                }
+            },
+            "env_variables": {},
+        }
+        (service_dir / "config.json").write_text(
+            json.dumps(config_data), encoding="utf-8"
+        )
+
+        mock_pkg = service_dir / "trader_pearl"
+        mock_pkg.mkdir(exist_ok=True)
+
+        with patch("operate.migration.IPFSTool") as mock_ipfs_cls:
+            mock_ipfs_cls.return_value.download.return_value = str(mock_pkg)
+            result = manager._migrate_service(  # pylint: disable=protected-access
+                service_dir
+            )
+
+        assert result is True
+        updated = json.loads((service_dir / "config.json").read_text(encoding="utf-8"))
+        # multisig "0xm" replaced (line 355)
+        assert updated["chain_configs"]["gnosis"]["chain_data"]["multisig"] != "0xm"
+        # keys migrated to agent_addresses (lines 358-359)
+        assert "agent_addresses" in updated
+        assert "keys" not in updated
+
+    def test_migrate_service_service_path_in_final_cleanup_and_rmtree(
+        self, tmp_path: Path
+    ) -> None:
+        """Test final cleanup uses service_path (lines 410-411) and removes existing pkg dir (line 416)."""
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+
+        service_dir = tmp_path / f"{SERVICE_CONFIG_PREFIX}v8sptest"
+        service_dir.mkdir()
+
+        config_data = {
+            "name": "Test Service",
+            "version": 8,
+            "hash": "bafybeiFakeHash",
+            "package_path": "trader_pearl",
+            "service_path": "old/path/to/trader_pearl",
+            "agent_addresses": ["0xcccccccccccccccccccccccccccccccccccccccc"],
+            "home_chain": "gnosis",
+            "chain_configs": {},
+            "env_variables": {},
+        }
+        (service_dir / "config.json").write_text(
+            json.dumps(config_data), encoding="utf-8"
+        )
+
+        # Create a pre-existing package dir to trigger shutil.rmtree (line 416)
+        existing_pkg = service_dir / "trader_pearl"
+        existing_pkg.mkdir()
+
+        mock_new_pkg = service_dir / "trader_pearl_new"
+        mock_new_pkg.mkdir()
+
+        with patch("operate.migration.IPFSTool") as mock_ipfs_cls:
+            mock_ipfs_cls.return_value.download.return_value = str(mock_new_pkg)
+            result = manager._migrate_service(  # pylint: disable=protected-access
+                service_dir
+            )
+
+        assert result is True
+        # The old existing package dir should have been removed (line 416)
+        assert not existing_pkg.exists()
+
+
+class TestMigrateKeysIntegerLedger:
+    """Tests for migrate_keys integer-ledger-type migration (lines 524-528)."""
+
+    def test_migrate_keys_converts_integer_ledger_to_string(
+        self, tmp_path: Path
+    ) -> None:
+        """Test migrate_keys converts integer ledger type (0→'ethereum') in old key files (lines 524-528)."""
+        keys_dir = tmp_path / "keys"
+        keys_dir.mkdir()
+
+        # Create a key file with an integer ledger type (old format: 0 = ethereum)
+        address = "0x" + "a" * 40
+        key_data = {
+            "ledger": 0,
+            "address": address,
+            "private_key": "0xdeadbeef",
+        }
+        (keys_dir / address).write_text(json.dumps(key_data), encoding="utf-8")
+
+        mock_keys_manager = MagicMock()
+        mock_keys_manager.path = keys_dir
+        mock_keys_manager.password = None  # no encryption path
+
+        manager = MigrationManager(home=tmp_path, logger=MagicMock())
+        manager.migrate_keys(mock_keys_manager)
+
+        updated = json.loads((keys_dir / address).read_text(encoding="utf-8"))
+        assert updated["ledger"] == "ethereum"
