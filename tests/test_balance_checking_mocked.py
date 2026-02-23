@@ -202,6 +202,12 @@ class TestServiceFundingAmounts:
             ]
             assert agent_amount == 100000000000000000  # 0.1 ETH per agent
 
+        # Safe should also have correct funding requirement
+        safe_amount = eth_amounts[SERVICE_SAFE_PLACEHOLDER][
+            "0x0000000000000000000000000000000000000000"
+        ]
+        assert safe_amount == 50000000000000000  # 0.05 ETH
+
 
 class TestServiceBalanceChecking:
     """Test service balance checking with mocked ledger APIs."""
