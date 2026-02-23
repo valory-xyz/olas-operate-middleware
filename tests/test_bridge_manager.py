@@ -175,7 +175,7 @@ class TestBridgeManagerDataLoad:
     def test_creates_default_file_when_missing(self, tmp_path: Path) -> None:
         """Test that a missing bridge.json is created with defaults."""
         assert not (tmp_path / "bridge.json").exists()
-        data = BridgeManagerData.load(tmp_path)
+        data = t.cast(BridgeManagerData, BridgeManagerData.load(tmp_path))
         assert (tmp_path / "bridge.json").exists()
         assert data.version == 1
         assert data.last_requested_bundle is None
@@ -184,16 +184,14 @@ class TestBridgeManagerDataLoad:
     def test_loads_valid_existing_file(self, tmp_path: Path) -> None:
         """Test that a valid bridge.json is loaded correctly."""
         BridgeManagerData(path=tmp_path).store()
-        data = BridgeManagerData.load(tmp_path)
+        data = t.cast(BridgeManagerData, BridgeManagerData.load(tmp_path))
         assert data.version == 1
         assert data.last_requested_bundle is None
 
     def test_handles_invalid_json_by_creating_new(self, tmp_path: Path) -> None:
         """Test that an invalid bridge.json is renamed and a new default is created."""
-        (tmp_path / "bridge.json").write_text(
-            "not-valid-json", encoding="utf-8"
-        )
-        data = BridgeManagerData.load(tmp_path)
+        (tmp_path / "bridge.json").write_text("not-valid-json", encoding="utf-8")
+        data = t.cast(BridgeManagerData, BridgeManagerData.load(tmp_path))
         assert data.version == 1
         # The bad file should have been renamed
         renamed = list(tmp_path.glob("invalid_*_bridge.json"))
@@ -209,5 +207,5 @@ class TestBridgeManagerDataLoad:
         (tmp_path / "bridge.json").write_text(
             json.dumps({"unexpected_key": 1}), encoding="utf-8"
         )
-        data = BridgeManagerData.load(tmp_path)
+        data = t.cast(BridgeManagerData, BridgeManagerData.load(tmp_path))
         assert data.version == 1
