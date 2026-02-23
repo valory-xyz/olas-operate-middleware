@@ -8,11 +8,29 @@ behavior for retry logic and top-level handlers.
 """
 
 import asyncio
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import aiohttp
 import pytest
 
 from operate.services.health_checker import HealthChecker
+
+
+# Save the REAL asyncio.sleep before any test patches it so nested-function
+# tests can still perform real timing waits inside a patch("asyncio.sleep") block.
+_REAL_SLEEP = asyncio.sleep
+
+
+async def _instant_sleep(*_args: object, **_kwargs: object) -> None:
+    """Yield to the event loop once without actually sleeping.
+
+    An empty async def with no awaits never yields to the event loop, which
+    starves timers.  Using _REAL_SLEEP(0) (the real asyncio.sleep, captured
+    before any patches) schedules a single call_soon callback so the event
+    loop can process timers and other pending tasks between iterations.
+    """
+    await _REAL_SLEEP(0)
 
 
 class TestHealthcheckJobErrorHandling:
@@ -288,3 +306,279 @@ class TestHealthCheckerJobManagement:
 
         # Logger should have been called with port-ready info
         health_checker.logger.info.assert_called()  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------------------------
+# Helpers shared by the nested-function tests
+# ---------------------------------------------------------------------------
+
+
+async def _no_timeout(coro: object, timeout: object = None, **kwargs: object) -> object:
+    """Replace asyncio.wait_for so _check_port_ready has no timeout."""
+    return await coro  # type: ignore[misc]
+
+
+class TestHealthCheckerStopForServiceEarlyReturn:
+    """Tests for the early-return guard in stop_for_service (line 96)."""
+
+    def test_stop_for_service_returns_early_when_not_in_jobs(self) -> None:
+        """Test stop_for_service returns immediately when service is not tracked (line 96)."""
+        health_checker = HealthChecker(service_manager=MagicMock(), logger=MagicMock())
+        health_checker.stop_for_service("nonexistent-service")
+        # No log calls should be made because we return before them
+        health_checker.logger.info.assert_not_called()  # type: ignore[attr-defined]
+        health_checker.logger.warning.assert_not_called()  # type: ignore[attr-defined]
+
+
+class TestHealthCheckerNestedAsyncFunctions:
+    """Tests for nested async functions inside healthcheck_job (lines 192-320).
+
+    Strategy: patch asyncio.sleep inside health_checker with _instant_sleep (no-op)
+    to avoid long internal delays.  For test-side timing we use _REAL_SLEEP which
+    was captured at module import before any patches are applied.
+    """
+
+    @pytest.fixture
+    def health_checker(self) -> HealthChecker:
+        """Return a HealthChecker wired with fast defaults."""
+        mock_sm = MagicMock()
+        mock_sm.load.return_value.path = Path("/fake/service")
+        return HealthChecker(
+            service_manager=mock_sm,
+            logger=MagicMock(),
+            sleep_period=0,
+            number_of_fails=1,
+        )
+
+    async def test_wait_for_port_logs_on_client_connection_error(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _wait_for_port catches ClientConnectionError and logs error (lines 192-196)."""
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise aiohttp.ClientConnectionError("connection refused")
+            return True
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+
+        with patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch("operate.services.health_checker.asyncio.sleep", _instant_sleep):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.1)  # real wait — gives the task time to run
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        error_calls = str(
+            health_checker.logger.error.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "error connecting http port" in error_calls
+
+    async def test_check_port_ready_returns_false_on_timeout(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_port_ready returns False when asyncio.TimeoutError is raised (lines 206-207)."""
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        with patch(
+            "operate.services.health_checker.asyncio.wait_for",
+            side_effect=asyncio.TimeoutError,
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.1)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        info_calls = str(
+            health_checker.logger.info.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "port not ready" in info_calls
+
+    async def test_check_health_client_connection_error_logs_warning(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_health catches ClientConnectionError and logs warning (lines 219-228)."""
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            if call_count[0] <= 1:
+                return True  # Port-ready check passes
+            raise aiohttp.ClientConnectionError("health port error")
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        with patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.1)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        warning_calls = str(
+            health_checker.logger.warning.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "port read failed" in warning_calls
+
+    async def test_check_health_exhausts_fails_triggers_restart(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _check_health exits and logs error after fail threshold (lines 240-243)."""
+        health_checker.number_of_fails = 1
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            return call_count[0] == 1  # True only for port-ready check
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.stop_service_locally = MagicMock()
+        health_checker._service_manager.deploy_service_locally = MagicMock()
+
+        with patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.1)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        error_calls = str(
+            health_checker.logger.error.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "restart" in error_calls
+
+    async def test_restart_calls_stop_and_deploy_service(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test _restart calls stop_service_locally and deploy_service_locally (lines 250-264)."""
+        health_checker.number_of_fails = 1
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            return call_count[0] == 1
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+
+        with patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.2)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        health_checker._service_manager.stop_service_locally.assert_called_with(
+            service_config_id="test-service"
+        )
+        health_checker._service_manager.deploy_service_locally.assert_called_with(
+            service_config_id="test-service"
+        )
+
+    async def test_restart_failfast_calls_stop_and_reraises(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test failfast triggers _stop and re-raises the restart exception (lines 269-280, 312-317)."""
+        health_checker.number_of_fails = 1
+        call_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            return call_count[0] == 1
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.deploy_service_locally.side_effect = (
+            RuntimeError("deploy failed")
+        )
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 1), patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            with pytest.raises(RuntimeError, match="deploy failed"):
+                await health_checker.healthcheck_job("test-service")
+
+        # stop_service_locally called at least once (inside _restart + inside _stop)
+        assert health_checker._service_manager.stop_service_locally.call_count >= 1
+
+    async def test_restart_logs_problem_before_failfast(
+        self, health_checker: HealthChecker
+    ) -> None:
+        """Test logger.exception and sleep are called when under failfast limit (lines 319-320)."""
+        health_checker.number_of_fails = 1
+        call_count = [0]
+        deploy_count = [0]
+
+        async def mock_check(*args: object) -> bool:
+            call_count[0] += 1
+            return call_count[0] == 1
+
+        def mock_deploy(**kwargs: object) -> None:
+            deploy_count[0] += 1
+            if deploy_count[0] == 1:
+                raise RuntimeError("temporary failure")
+
+        health_checker.check_service_health = mock_check  # type: ignore[assignment]
+        health_checker._service_manager.deploy_service_locally.side_effect = mock_deploy
+
+        with patch.object(HealthChecker, "FAILFAST_NUM", 3), patch(
+            "operate.services.health_checker.asyncio.wait_for", _no_timeout
+        ), patch(
+            "operate.services.health_checker.asyncio.sleep", _instant_sleep
+        ), patch(
+            "operate.services.health_checker.time.time", return_value=0.0
+        ):
+            task = asyncio.create_task(health_checker.healthcheck_job("test-service"))
+            await _REAL_SLEEP(0.2)
+            task.cancel()
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
+                pass
+
+        exception_calls = str(
+            health_checker.logger.exception.call_args_list  # type: ignore[attr-defined]
+        )
+        assert "Restart problem" in exception_calls
