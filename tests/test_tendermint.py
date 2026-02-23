@@ -145,6 +145,9 @@ class TestTendermintParams:
         cmd = params.build_node_command()
         assert any("abci=grpc" in arg for arg in cmd)
 
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="os.setsid not available on Windows"
+    )
     def test_get_node_command_kwargs_non_windows(self) -> None:
         """Includes preexec_fn, does NOT include creationflags on non-Windows."""
         with patch(
