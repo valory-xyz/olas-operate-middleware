@@ -179,9 +179,7 @@ class TestAgentRunnerManagerMethods:
             side_effect=requests.exceptions.ConnectionError("failed"),
         ):
             with pytest.raises(requests.exceptions.ConnectionError):
-                AgentRunnerManager.download_file(
-                    "http://example.com/file", save_path
-                )
+                AgentRunnerManager.download_file("http://example.com/file", save_path)
 
     def test_get_local_file_sha256(self, tmp_path: Path) -> None:
         """Test SHA-256 hashing of a local file."""
@@ -296,9 +294,7 @@ class TestAgentRunnerManagerMethods:
             side_effect=RuntimeError("download failed"),
         ):
             with pytest.raises(RuntimeError, match="download failed"):
-                AgentRunnerManager.update_agent_runner(
-                    target, "runner", mock_release
-                )
+                AgentRunnerManager.update_agent_runner(target, "runner", mock_release)
         assert not target.exists()
 
     def test_get_agent_runner_path_class_method(self, tmp_path: Path) -> None:

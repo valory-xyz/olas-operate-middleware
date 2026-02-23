@@ -112,9 +112,7 @@ class TestShutdownPreviousInstance:
 
         with patch.object(
             AppSingleInstance, "is_port_in_use", side_effect=is_in_use
-        ), patch.object(
-            AppSingleInstance, "try_shutdown_with_endpoint"
-        ), patch.object(
+        ), patch.object(AppSingleInstance, "try_shutdown_with_endpoint"), patch.object(
             AppSingleInstance, "try_kill_proc_using_port"
         ) as mock_kill:
             instance.shutdown_previous_instance()
@@ -125,9 +123,7 @@ class TestShutdownPreviousInstance:
         instance = AppSingleInstance(port_number=8080)
         with patch.object(
             AppSingleInstance, "is_port_in_use", return_value=True
-        ), patch.object(
-            AppSingleInstance, "try_shutdown_with_endpoint"
-        ), patch.object(
+        ), patch.object(AppSingleInstance, "try_shutdown_with_endpoint"), patch.object(
             AppSingleInstance, "try_kill_proc_using_port"
         ):
             with pytest.raises(RuntimeError, match="Port 8080 is in use"):
@@ -140,9 +136,7 @@ class TestTryShutdownWithEndpoint:
     def test_https_success(self) -> None:
         """Test that a successful HTTPS request shuts down the previous instance."""
         instance = AppSingleInstance(port_number=8080)
-        with patch(
-            "operate.utils.single_instance.requests.get"
-        ) as mock_get, patch(
+        with patch("operate.utils.single_instance.requests.get") as mock_get, patch(
             "operate.utils.single_instance.time.sleep"
         ):
             instance.try_shutdown_with_endpoint()
@@ -154,9 +148,7 @@ class TestTryShutdownWithEndpoint:
         with patch(
             "operate.utils.single_instance.requests.get",
             side_effect=[requests.exceptions.SSLError("ssl"), MagicMock()],
-        ) as mock_get, patch(
-            "operate.utils.single_instance.time.sleep"
-        ):
+        ) as mock_get, patch("operate.utils.single_instance.time.sleep"):
             instance.try_shutdown_with_endpoint()
         assert mock_get.call_count == 2
 
