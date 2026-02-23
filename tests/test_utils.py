@@ -23,6 +23,7 @@ import threading
 import time
 import typing as t
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from deepdiff import DeepDiff
@@ -32,6 +33,8 @@ from operate.serialization import BigInt
 from operate.utils import (
     SingletonMeta,
     concurrent_execute,
+    concurrent_execute_async,
+    create_backup,
     merge_sum_dicts,
     safe_file_operation,
     subtract_dicts,
@@ -488,3 +491,92 @@ class TestParallelExecute:
 
         with pytest.raises(TimeoutError):
             concurrent_execute((slow, ()))
+
+
+class TestCreateBackup:
+    """Tests for create_backup function (lines 67, 73)."""
+
+    def test_create_backup_raises_when_path_does_not_exist(
+        self, tmp_path: Path
+    ) -> None:
+        """Test create_backup raises FileNotFoundError when path doesn't exist (line 67)."""
+        missing = tmp_path / "nonexistent.txt"
+        with pytest.raises(FileNotFoundError):
+            create_backup(missing)
+
+    def test_create_backup_file(self, tmp_path: Path) -> None:
+        """Test create_backup creates a timestamped copy of a file."""
+        source = tmp_path / "data.txt"
+        source.write_text("hello", encoding="utf-8")
+        backup = create_backup(source)
+        assert backup.exists()
+        assert backup.read_text(encoding="utf-8") == "hello"
+        assert ".bak" in backup.name
+
+    def test_create_backup_directory(self, tmp_path: Path) -> None:
+        """Test create_backup uses shutil.copytree for directories (line 73)."""
+        source_dir = tmp_path / "mydir"
+        source_dir.mkdir()
+        (source_dir / "file.txt").write_text("content", encoding="utf-8")
+        backup = create_backup(source_dir)
+        assert backup.is_dir()
+        assert (backup / "file.txt").read_text(encoding="utf-8") == "content"
+        assert ".bak" in backup.name
+
+
+class TestUnrecoverableDeleteErrors:
+    """Tests for unrecoverable_delete error-handling branches (lines 164-167)."""
+
+    def test_unrecoverable_delete_handles_permission_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Test PermissionError inside the delete block is caught and printed (lines 164-165)."""
+        file_path = tmp_path / "locked.txt"
+        file_path.write_bytes(b"data")
+
+        with patch(
+            "operate.utils.os.path.getsize", side_effect=PermissionError("denied")
+        ):
+            unrecoverable_delete(file_path)  # should not raise
+
+        captured = capsys.readouterr()
+        assert "Permission denied" in captured.out
+
+    def test_unrecoverable_delete_handles_generic_exception(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Generic Exception inside the delete block is caught and printed (lines 166-167)."""
+        file_path = tmp_path / "file.txt"
+        file_path.write_bytes(b"data")
+
+        with patch("operate.utils.os.path.getsize", side_effect=RuntimeError("oops")):
+            unrecoverable_delete(file_path)  # should not raise
+
+        captured = capsys.readouterr()
+        assert "Error during secure deletion" in captured.out
+
+
+class TestConcurrentExecuteFromEventLoop:
+    """Tests for concurrent_execute when called from a running event loop (lines 207-209)."""
+
+    async def test_concurrent_execute_from_running_event_loop(self) -> None:
+        """concurrent_execute uses ThreadPoolExecutor when an event loop is already running."""
+
+        def add(a: int, b: int) -> int:
+            return a + b
+
+        result = concurrent_execute((add, (1, 2)))
+        assert result == [3]
+
+
+class TestConcurrentExecuteAsyncCallable:
+    """Tests for concurrent_execute_async with async callables (line 227)."""
+
+    async def test_concurrent_execute_with_async_callable(self) -> None:
+        """Async callables are awaited directly (line 227)."""
+
+        async def async_double(x: int) -> int:
+            return x * 2
+
+        result = await concurrent_execute_async((async_double, (5,)))
+        assert result == [10]

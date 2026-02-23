@@ -16,14 +16,18 @@
 #   limitations under the License.
 #
 # ------------------------------------------------------------------------------
-"""Read-write script for testing key file integrity."""
+"""Tests for LocalResource and key file integrity."""
 
 import json
+import os
 import platform
 import subprocess  # nosec
 import sys
 from pathlib import Path
 from time import sleep, time
+from unittest.mock import patch
+
+import pytest
 
 from operate.constants import ZERO_ADDRESS
 from operate.keys import Key
@@ -102,3 +106,69 @@ def test_no_corruption() -> None:
     assert final_key["address"] == ZERO_ADDRESS, "Key address should match"
     assert final_key["ledger"] == LedgerType.ETHEREUM, "Ledger type should match"
     assert final_key["private_key"] == "0xkey", "Public key should match"
+
+
+def test_store_raises_when_path_is_none() -> None:
+    """Test that store() raises RuntimeError when path is None."""
+    key = Key(LedgerType.ETHEREUM, ZERO_ADDRESS, "0xkey")
+    key.path = None  # type: ignore[assignment]
+    with pytest.raises(RuntimeError, match="Path value not provided"):
+        key.store()
+
+
+def test_store_cleans_up_stale_tmp_file(tmp_path: Path) -> None:
+    """Test that store() removes a pre-existing stale .tmp file before writing."""
+    key = Key(LedgerType.ETHEREUM, ZERO_ADDRESS, "0xkey")
+    key.path = tmp_path / "key.json"
+
+    # Pre-create a stale tmp file
+    tmp_file = tmp_path / ".key.json.tmp"
+    tmp_file.write_text("stale content", encoding="utf-8")
+    assert tmp_file.exists()
+
+    key.store()
+
+    # After store, the key file should exist with correct content
+    assert key.path.exists()
+    data = json.loads(key.path.read_text(encoding="utf-8"))
+    assert data["address"] == ZERO_ADDRESS
+
+    # The stale tmp file should be gone
+    assert not tmp_file.exists()
+
+
+def test_store_windows_permission_error_cleanup(tmp_path: Path) -> None:
+    """Test that on Windows PermissionError during replace, tmp file cleanup is attempted."""
+    key = Key(LedgerType.ETHEREUM, ZERO_ADDRESS, "0xkey")
+    key.path = tmp_path / "key.json"
+
+    ops_called = []
+
+    def mock_safe_file_op(op: object, *args: object, **kwargs: object) -> None:
+        """Mock safe_file_operation that tracks calls and raises PermissionError for os.replace."""
+        ops_called.append(op)
+        if op is os.replace:
+            raise PermissionError("Windows: file locked")
+        # Execute other operations normally
+        try:
+            op(*args, **kwargs)  # type: ignore[operator]
+        except (FileNotFoundError, OSError, PermissionError):
+            pass
+
+    with patch("operate.resource.platform.system", return_value="Windows"), patch(
+        "operate.resource.safe_file_operation", side_effect=mock_safe_file_op
+    ):
+        try:
+            key.store()
+        except Exception:  # pylint: disable=broad-except  # nosec B110
+            pass  # Expected: self.load() may fail since file wasn't atomically replaced
+
+    # os.replace should have been attempted
+    assert os.replace in ops_called, "os.replace should have been called"
+
+    # After PermissionError, cleanup (unlink) should be called
+    replace_idx = ops_called.index(os.replace)
+    post_replace_ops = ops_called[replace_idx + 1 :]
+    assert any(
+        "unlink" in getattr(op, "__name__", "") for op in post_replace_ops
+    ), "tmp file unlink should be called after PermissionError on Windows"

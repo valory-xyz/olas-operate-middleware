@@ -263,3 +263,117 @@ class TestKeysManager:
             backup_path = keys_manager.path / f"{address}.bak"
             assert backup_path.is_file()
             assert backup_path.read_text() == json.dumps(key.json, indent=2)
+
+    def test_keys_manager_init_without_path_raises(self) -> None:
+        """Test KeysManager raises ValueError when path kwarg is not provided."""
+        with pytest.raises(ValueError, match="Path must be provided"):
+            KeysManager(logger=Mock(spec=logging.Logger))
+
+    def test_private_key_to_crypto_temp_file_cleanup_failure_logs_error(
+        self, keys_manager: KeysManager, key_file: tuple[Path, Key]
+    ) -> None:
+        """Test that temp file cleanup failure logs error but does not propagate."""
+        _, sample_key = key_file
+
+        with patch(
+            "operate.keys.unrecoverable_delete",
+            side_effect=OSError("cleanup failed"),
+        ):
+            # Should still return a valid crypto instance
+            crypto = keys_manager.get_crypto_instance(sample_key.address)
+
+        assert crypto is not None
+        assert crypto.address == sample_key.address
+        keys_manager.logger.error.assert_called()  # type: ignore[attr-defined]
+        error_msg = str(keys_manager.logger.error.call_args)  # type: ignore[attr-defined]
+        assert "Failed to delete temp file" in error_msg
+
+    def test_get_decrypted_without_password(self, temp_keys_dir: Path) -> None:
+        """Test get_decrypted returns raw json dict when no password is set."""
+        km = KeysManager(
+            path=temp_keys_dir, logger=Mock(spec=logging.Logger), password=None
+        )
+        address = km.create()
+
+        result = km.get_decrypted(address)
+
+        key = km.get(address)
+        assert result == key.json
+        assert result["address"] == address
+
+    def test_get_decrypted_with_password(self, keys_manager: KeysManager) -> None:
+        """Test get_decrypted returns decrypted json dict when password is set."""
+        address = keys_manager.create()
+
+        result = keys_manager.get_decrypted(address)
+
+        assert result["address"] == address
+        assert result["private_key"].startswith("0x")  # decrypted key
+        assert result["ledger"] == "ethereum"
+
+    def test_get_private_key_file_creates_when_not_exists(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """Test get_private_key_file creates the private key file when absent."""
+        address = keys_manager.create()
+        pk_path = keys_manager.path / f"{address}_private_key"
+
+        assert not pk_path.exists()
+
+        result = keys_manager.get_private_key_file(address)
+
+        assert result == pk_path
+        assert pk_path.exists()
+        # Content should equal the stored private key
+        key = keys_manager.get(address)
+        assert result.read_text(encoding="utf-8") == key.private_key
+
+    def test_get_private_key_file_returns_existing_without_overwrite(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """Test get_private_key_file returns existing path without overwriting."""
+        address = keys_manager.create()
+        pk_path = keys_manager.path / f"{address}_private_key"
+
+        # Pre-create the file with sentinel content
+        pk_path.write_text("0xsentinelkey", encoding="utf-8")
+
+        result = keys_manager.get_private_key_file(address)
+
+        assert result == pk_path
+        # Content should be unchanged
+        assert result.read_text(encoding="utf-8") == "0xsentinelkey"
+
+    def test_delete_removes_key_file(self, keys_manager: KeysManager) -> None:
+        """Test that delete() removes the key file from disk (line 172)."""
+        address = keys_manager.create()
+        key_path = keys_manager.path / address
+        assert key_path.exists()
+
+        keys_manager.delete(address)
+
+        assert not key_path.exists()
+
+    def test_create_skips_writing_when_files_already_exist(
+        self, keys_manager: KeysManager
+    ) -> None:
+        """Test that create() skips writing key files that already exist (continue path)."""
+        # First call creates the files
+        address = keys_manager.create()
+
+        original_content = (keys_manager.path / address).read_text(encoding="utf-8")
+
+        # Mock EthereumCrypto to return the same address so both files already exist
+        mock_crypto = Mock()
+        mock_crypto.address = address
+        mock_crypto.private_key = "0xfakekey"
+        mock_crypto.encrypt.return_value = "encrypted_fake_key"
+
+        with patch("operate.keys.EthereumCrypto", return_value=mock_crypto):
+            result = keys_manager.create()
+
+        assert result == address
+        # The key file content should be unchanged (not overwritten)
+        assert (keys_manager.path / address).read_text(
+            encoding="utf-8"
+        ) == original_content
