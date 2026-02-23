@@ -7,19 +7,12 @@ for balance checking operations without external dependencies (RPC calls, blockc
 
 import typing as t
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from operate.operate_types import Chain
 from operate.serialization import BigInt
-from operate.services.service import (
-    NON_EXISTENT_MULTISIG,
-    NON_EXISTENT_TOKEN,
-    SERVICE_SAFE_PLACEHOLDER,
-    Service,
-)
-from operate.wallet.master import MasterWalletManager
+from operate.services.service import SERVICE_SAFE_PLACEHOLDER, Service
 
 
 @pytest.fixture
@@ -134,9 +127,7 @@ class TestServiceFundingAmounts:
 
         return service
 
-    def test_get_initial_funding_amounts_structure(
-        self, test_service: Service
-    ) -> None:
+    def test_get_initial_funding_amounts_structure(self, test_service: Service) -> None:
         """Test get_initial_funding_amounts returns correct structure."""
         amounts = test_service.get_initial_funding_amounts()
 
@@ -177,7 +168,10 @@ class TestServiceFundingAmounts:
         assert gnosis_safe_amount == 25000000000000000  # 0.025 xDAI
 
     def test_get_initial_funding_amounts_multiple_agents(
-        self, tmp_path: Path, mock_ipfs_download: t.Callable[[str, Path], str], service_template: t.Dict[str, t.Any]
+        self,
+        tmp_path: Path,
+        mock_ipfs_download: t.Callable[[str, Path], str],
+        service_template: t.Dict[str, t.Any],
     ) -> None:
         """Test funding amounts scale with number of agents."""
         storage = tmp_path / "services"
@@ -249,7 +243,7 @@ class TestServiceBalanceChecking:
         )
 
         # Call get_balances
-        balances = test_service.get_balances()
+        test_service.get_balances()
 
         # Verify ledger APIs were created for both chains
         assert mock_make_ledger.call_count >= 2  # At least ethereum and gnosis
@@ -272,7 +266,9 @@ class TestServiceBalanceChecking:
         )
 
         # Mock balance: return different amounts for different addresses
-        def mock_balance(ledger_api: t.Any, asset_address: str, address: str, **kwargs: t.Any) -> BigInt:
+        def mock_balance(
+            ledger_api: t.Any, asset_address: str, address: str, **kwargs: t.Any
+        ) -> BigInt:
             if "1111" in address:
                 return BigInt(500000000000000000)  # 0.5 ETH for agent
             return BigInt(250000000000000000)  # 0.25 ETH for safe
@@ -293,7 +289,10 @@ class TestServiceBalanceChecking:
         # Verify balance value
         agent_assets = eth_balances["0x1111111111111111111111111111111111111111"]
         assert "0x0000000000000000000000000000000000000000" in agent_assets
-        assert agent_assets["0x0000000000000000000000000000000000000000"] == 500000000000000000
+        assert (
+            agent_assets["0x0000000000000000000000000000000000000000"]
+            == 500000000000000000
+        )
 
     def test_get_balances_handles_missing_chain_config(
         self, test_service: Service, monkeypatch: pytest.MonkeyPatch
@@ -342,7 +341,9 @@ class TestBalanceQueryMocking:
         mock_ledger_api.api.eth.get_balance.return_value = 2000000000000000000  # 2 ETH
 
         # Simulate balance query
-        balance = mock_ledger_api.api.eth.get_balance("0x1234567890123456789012345678901234567890")
+        balance = mock_ledger_api.api.eth.get_balance(
+            "0x1234567890123456789012345678901234567890"
+        )
 
         # Verify mock works as expected
         assert balance == 2000000000000000000
@@ -364,9 +365,15 @@ class TestBalanceQueryMocking:
         mock_ledger_api.api.eth.get_balance.side_effect = get_balance_by_address
 
         # Query different addresses
-        balance1 = mock_ledger_api.api.eth.get_balance("0x1111111111111111111111111111111111111111")
-        balance2 = mock_ledger_api.api.eth.get_balance("0x2222222222222222222222222222222222222222")
-        balance3 = mock_ledger_api.api.eth.get_balance("0x3333333333333333333333333333333333333333")
+        balance1 = mock_ledger_api.api.eth.get_balance(
+            "0x1111111111111111111111111111111111111111"
+        )
+        balance2 = mock_ledger_api.api.eth.get_balance(
+            "0x2222222222222222222222222222222222222222"
+        )
+        balance3 = mock_ledger_api.api.eth.get_balance(
+            "0x3333333333333333333333333333333333333333"
+        )
 
         # Verify each address returns correct balance
         assert balance1 == 1000000000000000000
@@ -455,6 +462,8 @@ class TestBalanceEdgeCases:
 
         # Safe should have correct funding requirement
         assert (
-            amounts["ethereum"][deployed_safe]["0x0000000000000000000000000000000000000000"]
+            amounts["ethereum"][deployed_safe][
+                "0x0000000000000000000000000000000000000000"
+            ]
             == 50000000000000000
         )
