@@ -622,10 +622,12 @@ class TestMigrateServiceVersionMigrationPaths:
 
         assert result is True
         updated = json.loads((service_dir / "config.json").read_text(encoding="utf-8"))
-        # multisig "0xm" replaced (line 355)
-        assert updated["chain_configs"]["gnosis"]["chain_data"]["multisig"] != "0xm"
+        # multisig "0xm" replaced with NON_EXISTENT_MULTISIG (None) (line 355)
+        assert updated["chain_configs"]["gnosis"]["chain_data"]["multisig"] is None
         # keys migrated to agent_addresses (lines 358-359)
-        assert "agent_addresses" in updated
+        assert updated["agent_addresses"] == [
+            "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ]
         assert "keys" not in updated
 
     def test_migrate_service_service_path_in_final_cleanup_and_rmtree(
