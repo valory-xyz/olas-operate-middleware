@@ -431,14 +431,19 @@ class TestParentWatchdog:
             mock_parent.is_running.return_value = True
             return mock_parent
 
+        mock_logger = MagicMock()
         with patch(
             "operate.utils.single_instance.psutil.Process", side_effect=flaky_process
-        ), patch("os.getppid", return_value=1234):
+        ), patch("os.getppid", return_value=1234), patch(
+            "operate.utils.single_instance.logger", mock_logger
+        ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # first iteration logs error, second exits via _stopping
 
+        mock_logger.exception.assert_any_call("Parent check iteration failed.")
+
     async def test_watch_loop_outer_exception_is_logged(self) -> None:
-        """Test that an exception escaping the while loop is caught by the outer handler."""
+        """Test that an exception escaping the while loop is caught and logged by the outer handler."""
         on_exit = AsyncMock()
         watchdog = ParentWatchdog(on_parent_exit=on_exit, check_interval=0)
         mock_parent = MagicMock()
@@ -449,11 +454,16 @@ class TestParentWatchdog:
             sleep_call_count[0] += 1
             raise RuntimeError("sleep exploded")
 
+        mock_logger = MagicMock()
         with patch(
             "operate.utils.single_instance.psutil.Process", return_value=mock_parent
         ), patch("os.getppid", return_value=1234), patch(
             "operate.utils.single_instance.asyncio.sleep",
             side_effect=_failing_sleep,
+        ), patch(
+            "operate.utils.single_instance.logger", mock_logger
         ):
             task = asyncio.create_task(watchdog._watch_loop())
             await task  # outer except Exception catches RuntimeError; task finishes
+
+        mock_logger.exception.assert_any_call("ParentWatchdog crashed unexpectedly.")
