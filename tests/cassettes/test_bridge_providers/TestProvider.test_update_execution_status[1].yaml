@@ -1,0 +1,391 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - python-requests/2.32.4
+      accept:
+      - application/json
+    method: GET
+    uri: https://api.relay.link/requests/v2?hash=0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92&sortBy=createdAt
+  response:
+    body:
+      string: '{"requests":[{"id":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","status":"success","user":"0x308508f09f81a6d28679db6da73359c72f8e22c5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","data":{"slippageTolerance":"475","failReason":"N/A","refundFailReason":"N/A","subsidizedRequest":false,"fees":{"gas":"233096768617","fixed":"7827145322693","price":"20000000000","gateway":"2020186207787"},"feesUsd":{"gas":"0.000455","fixed":"0.015304","price":"0.000039","gateway":"0.003950"},"inTxs":[{"fee":"49108135200","data":{"to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","data":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","value":"110101948674876"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-110101948674876"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"110101948674876"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"}],"hash":"0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92","block":137938320,"type":"onchain","chainId":10,"timestamp":1751475417}],"currency":"eth","currencyObject":{},"feeCurrency":"eth","feeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFeeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFees":[],"paidAppFees":[],"metadata":{"sender":"0x308508F09F81A6d28679db6da73359c72f8e22C5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","currencyIn":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"110101948674876","amountFormatted":"0.000110101948674876","amountUsd":"0.281321","amountUsdCurrent":"0.212549","minimumAmount":"110101948674876"},"currencyOut":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","amountUsdCurrent":"0.193048","minimumAmount":"100000000000000"},"rate":"0.9082491382172863","route":{"origin":{"inputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"outputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"router":"uniswap"},"destination":{"inputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"outputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"100000000000000","amountFormatted":"0.0001","amountUsd":"0.255510","minimumAmount":"100000000000000"},"router":"uniswap"}}},"price":"100000000000000","usesExternalLiquidity":false,"timeEstimate":2,"outTxs":[{"fee":"194246847901","data":{"to":"0x308508f09f81a6d28679db6da73359c72f8e22c5","data":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","value":"100000000000000"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-100000000000000"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"100000000000000"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"}],"hash":"0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab","block":25653918,"type":"onchain","chainId":34443,"timestamp":1751475419}]},"createdAt":"2025-07-02T16:56:57.660Z","updatedAt":"2025-07-02T16:58:58.684Z"}]}'
+    headers:
+      Cache-Control:
+      - max-age=600
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 14:45:47 GMT
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - accept-encoding
+      Via:
+      - 1.1 4170419c5a319f827ce79e07010d6ac8.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - 3ghqBTy7jhWZbTzMyHYHpUKiMJe5k06xmTPTVeUNShy1ewQI8pdbYw==
+      X-Amz-Cf-Pop:
+      - MXP53-P8
+      X-Cache:
+      - Miss from cloudfront
+      access-control-allow-origin:
+      - '*'
+      strict-transport-security:
+      - max-age=86400; includeSubDomains
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getTransactionReceipt", "params": ["0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab"],
+      "id": 0}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '148'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","result":{"blockHash":"0x1551aa28429c5e68905cea1ffe1783905fd7328348a501fffb3a9e4ef2b1f716","blockNumber":"0x187729e","contractAddress":null,"cumulativeGasUsed":"0xfbbc6","effectiveGasPrice":"0x2d4","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","gasUsed":"0x5708","l1BaseFeeScalar":"0x4e20","l1BlobBaseFee":"0x1","l1BlobBaseFeeScalar":"0x95506","l1Fee":"0x2d390d8afd","l1GasPrice":"0x169c86c56","l1GasUsed":"0x640","logs":[],"logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","status":"0x1","to":"0x308508f09f81a6d28679db6da73359c72f8e22c5","transactionHash":"0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab","transactionIndex":"0x2","type":"0x2"},"id":0}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d068cd2dd3da824-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:48 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x187729e",
+      false], "id": 1}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '93'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","result":{"baseFeePerGas":"0x27e","blobGasUsed":"0x0","difficulty":"0x0","excessBlobGas":"0x0","extraData":"0x00000000fa00000006","gasLimit":"0x1c9c380","gasUsed":"0x2a472b","hash":"0x1551aa28429c5e68905cea1ffe1783905fd7328348a501fffb3a9e4ef2b1f716","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000200000000000000000040000000000000000000020080000","miner":"0x4200000000000000000000000000000000000011","mixHash":"0xef11e884c0406ef3c586c46ad6a0d5e2982af5f8d90bcb6ab815c882d234522e","nonce":"0x0000000000000000","number":"0x187729e","parentBeaconBlockRoot":"0x66ed9c86fb2aa6231179632594f7b0c90f3b1f98c81148a094c8b5e8969f469a","parentHash":"0x8a153d7a8c5226e45fbe30f2e98f98100c8e6a3da5aee51aee0407708dfe02b3","receiptsRoot":"0x05be5243d568414df748c1c50e7eedb6d198b5560853df7e8f4b6d1a10b6ae4f","requestsHash":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x602","stateRoot":"0x1abe473ee35bbb787a1fa61ad8a4007d0b3c4a7c862c8ebb9fc1a8f2339f9fdc","timestamp":"0x686564db","transactions":["0xf9da95c3a98e4bfe7cd342f516d9e0eb9d977ccba6c29b45721affb7bf5d0fda","0x5de25d3bc26bab67177ca719bc3bf18de339f64717dcab2f72bd112998d5f1d0","0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab","0x1a20938bdc3ce51c8b42de49ed18e4b69b6ff2f97bcedeec5c99bd44d48fd4f2","0xe785a6170644c690d11ff521aaaa4fbd87bb4bdef71ac6935b88ae5740cda1e0","0x06f73a89d11db23c6939f12b154d1ef20de6fc4cfa7c471e3810cee06756ad6d"],"transactionsRoot":"0x2f3a5dc10c7138f0a116ff11193a949de94a5944ea153760abcd13e75f079681","uncles":[],"withdrawals":[],"withdrawalsRoot":"0xe9b27485805be97f75ebdd592d7fa158314feab3263ac1916c224cef2338664e"},"id":1}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d068cd5fdcfe334-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:49 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getTransactionReceipt", "params": ["0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92"],
+      "id": 4}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '148'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/optimism-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":4,"result":{"blockHash":"0x8d7d800724a3e9277e4c08193e2fa7fbb2793d98d773c895c1e9dfbed870c517","blockNumber":"0x838c590","contractAddress":null,"cumulativeGasUsed":"0xf8c4f7","effectiveGasPrice":"0x13ab","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","gasUsed":"0x7f8a","l1BaseFeeScalar":"0x146b","l1BlobBaseFee":"0x1","l1BlobBaseFeeScalar":"0xf79c5","l1Fee":"0xb65463df2","l1GasPrice":"0x15cd29f62","l1GasUsed":"0x640","logs":[{"address":"0xa5f565650890fba1824ee0f21ebbbf660a179934","topics":["0x936c2ca3b35d2d0b24057b0675c459e4515f48fe132d138e213ae59ffab7f53e"],"data":"0x00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000020c78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","blockNumber":"0x838c590","transactionHash":"0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92","transactionIndex":"0x29","blockHash":"0x8d7d800724a3e9277e4c08193e2fa7fbb2793d98d773c895c1e9dfbed870c517","blockTimestamp":"0x686564d9","logIndex":"0x69","removed":false}],"logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000080000","status":"0x1","to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","transactionHash":"0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92","transactionIndex":"0x29","type":"0x2"}}
+
+        '
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - Content-Type,Authorization,User-Agent
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Allow-Origin:
+      - ''
+      CF-RAY:
+      - 9d068cd918dda79d-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:49 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=89dyH%2Bmi6ZAMF4NzV94PD3eXD%2BrHIJ5HNswU9Nip0o%2Bbn2kFVRfpeIH560pDOgnPSJ4CPvE%2FqZhlrLfb%2FP%2Fc%2FzNZiTcauL%2F1Cve6sijN%2Brt4Qyq%2F15xNO%2B6Z5qf7YsAt"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      Via:
+      - 2.0 Caddy
+      X-Host-Id:
+      - f1b546936d23e3b5-729114766a37fbe3
+      X-Node-Id:
+      - optimistic-ethereum_optimism_fra
+      X-Provider:
+      - optimism-rpc
+      cf-cache-status:
+      - DYNAMIC
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x838c590",
+      false], "id": 5}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '93'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/optimism-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":5,"result":{"baseFeePerGas":"0xb66","blobGasUsed":"0x0","difficulty":"0x0","excessBlobGas":"0x0","extraData":"0x00000000fa00000002","gasLimit":"0x2625a00","gasUsed":"0x1359c56","hash":"0x8d7d800724a3e9277e4c08193e2fa7fbb2793d98d773c895c1e9dfbed870c517","logsBloom":"0x4612b8001011041dc80114c082000200004008a811080d100a4c10506880410027099008340800021400041136663100015640420400620a0240024040380248004000001208b08a31020109100a208060e602a0006200704000443ce000202010144104020c0040610480810910081483004600008c04000a8090720d081188006000210802a000e008820280010090110294090031000800a120904a10400282c21000003005800058032001000200211440202088030800870724000841e201000aab04000041200308540042a05128990310028c131000002102080420000292082b222e5000385000220203090080002020109008608c42080448295441","miner":"0x4200000000000000000000000000000000000011","mixHash":"0xa85c0898ba72d2a3aaab0df87fad0d4e05c92aa48df563598fef007316aefc0b","nonce":"0x0000000000000000","number":"0x838c590","parentBeaconBlockRoot":"0xdf5ac5ae2cccf376201a0439a3ebab84d20bc453b1918c6ddd1232154150fbce","parentHash":"0xbad7a875959c790ea3deaa926df028d204738cb2d47b4715810288d9728e123c","receiptsRoot":"0xad34ebe4f59e57172b389529fc4ecb310d17b27fbb9460016b039d83caa847c3","requestsHash":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x74c7","stateRoot":"0x6d80915581cf9cfe9fd3c4dbfd637d0ebee7b0da84806692f265723effff1f7f","timestamp":"0x686564d9","transactions":["0xac4102fd159c3077eb0990be199f6407821363469bf840959ae81408567f9cac","0x4b12b1e93100abf1053250c95fc42651b2ecc6fb8f291a41f3eb3f0aac8cf077","0x40d25622789a4cad50bf33e176902fa700bea81d8711b65f24d09ee195dbbf18","0x2c0ef001b1053d2997b196edf8bd0ca1065b4346b7d8cca23040eb8f6b2816c0","0x3bece36d3b20133f36aec8f181cf0ce85c1a925710a4f96d109af8738876b092","0xc453e99696bb59ef3776bfa1e9d5c45be9801c0215eed56e61624d147bc7378e","0x0e1a177e6d887647d4e958d624168189d3d975f21ca4969cfda10c1e56bb2bd9","0x214e235ce252b9e0111470ac72ee221aaf2d46523948ec5a716d5ea6a8406cd2","0x2e6c37c5789b75aa3f3e16f8fb7733b2c950beff7b36158cfffa20357b9261d9","0xec41e196fe39b246e343e6c538ccf7844ac4dbae4cc7bb0ef0f02da3741af22c","0x50471d390364c66d9dddf7aed3219f944a8abc4ee73c337b189ffd8f9cdf9424","0xaaae9e49afeef9bd6f5f0c1b14c4c55b5d6d78d0e1778803f08e66b51fee891a","0xbe012c1230fb23b6c3b1229d1da9b47f4c87700926d75777556327ad45753e3f","0x0b2af493f073242ace335d67d2c96ba65cc247fece55bbd173903356b85125f3","0xfeacadbd00fe2a424d22bd87e057cea29fa6403aaab7160f23a156591f8467eb","0x1460f3495b07abe824a685598306daa3137bae3d2c3e19d150f9cc33636568f9","0xc11277b8d81d308a430246b854722e0edf0a98a06519cfcdb0ee5ad4d4a7442b","0x9f6d92515a96bb61f552d61059dd0bc590340ff25b736cb9516f71b71baed13e","0x8964b1cb5b9dfdf729f8e9b0ace6c52bda20511b9942e6dbfbc0bc9c12aa2ac5","0x12a46b2c5ee929c8c6e9b2784df96564bda411fba3f2ad0dc282f55b080a99e0","0x7de6f8ee54286641a411d0119886a41b7d40732f96a851e64faf90f66653ce31","0x4c7d62b808584f3f886ba28ea8de58a302309ab4934812b745c2da990cb4225d","0x1ae0fae5fb0c34382090d603eff8308cb081524e2d41ba4b1933911d1c4a70ed","0xdb122eec5548d9d30c16b3ccbe4513911cbfdade8ef35bfee30d464b37896072","0x4d343bfa5e77d3cd97fb35ef2afefc2d5af1e360712ea92db1c20ccd1b5f714d","0x968b39a93e78c5812bd10c542b22e715532456692e9788d66e00cf01c96df981","0x9b7f07b23cb306ad777661cc8e449a5f682ff8fb9f4e67c19852e4c4473f7db0","0xe4b3337dc385570f0f483f1490113b99d8c0f5e909aca9291287d1badd8feee6","0x933ffd639c57627d1cc629c24cd4ecb8febeed88a6696131730e6d17dd90c224","0x6940cc51064f426ac8b36a54c8f4bbd10f19a61b91c26f00b9697c9b94d3d0dd","0xfa58b3d70bc75b4ffe627f20835c0f2463f64bd964f87b1f1dbbed604d909e96","0xc049ec52a6c9b66ba7e1f355094f0da5fd2255cd95a296ec514c571283a52376","0x75645bf209aa000dca1200dd27833a06339e7a4464a2612d9deb4026f1414cab","0xbb9ed19d6e100b1fe5b7cc9441c43a841435be47b32f3afa7975df587bbd7f4e","0xcdf68b35a664d2f653de2e3985b1f0d06b5cc554bb736d8a85f3d7dbed019629","0x978bd50f4484ea564a98a9e08e98b325c0a12089e20eba2223e9819b54cb6715","0x026a88591040652888167eee11727dcf23a0d9b1ea4adbc518a014dd6185103c","0x0680363cd2123d36e1be42985f1053d85b1d3d4b47b1f439b6795f1aacff10a2","0xa858f60acdfabcc4ea60b30e42a817adcbce3f72475413fa109f50f21895d6f8","0xb5c84c380e0973f4205e3db38c15afc01fb2cfafd3e9b565650efe92ef13d0df","0xd02f997d35f848303c2abdcf216a05108c19614e85b479beb3bb59ea4bde5dd3","0xdea844011f5d3a782a73067ee326c4b96489134eae416426be867bb53c94de92","0x1a3fe5841daccd01578235a6f4983265f2d2a826272ea72dd6667eeca74fa362","0x40cd716b720167b872a33753da26a2782d8aca425b7e72871307e222d39f141e","0xbb313be5dbe2dc478c217ef951f21d056e1db00c879126567e4b3912391c4f16","0x3f95570443405a4103a03ae3c81aaaa3276edee056499d229f0e54555eeea1db","0x9d6ba538d25c5557b66148d2c18a421d4c80851f06ddbd4d0109dc8a07747055","0x20e7cf611af76cf8c90b7328221e6cffcc8b527d32be8eb5a48d1fd1e120af4a"],"transactionsRoot":"0xa8b4157d629d11ff44975ba8e5c9505b9a731627c050a2b043eed7f81af443a6","uncles":[],"withdrawals":[],"withdrawalsRoot":"0x67247a9d7e5d784a06cf85609d861c3bd9e2a216f3fbe61143b9c6b0e8c46e6a"}}
+
+        '
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - Content-Type,Authorization,User-Agent
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Allow-Origin:
+      - ''
+      CF-RAY:
+      - 9d068cdc3dc5a6bc-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Length:
+      - '2887'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:50 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=aC7v5nj5Tqdzmm8Tdx56S%2BQYfAxuKYIyurMRrEe0fyDqhsbjh5qyLdeiXB4Oe7ioUR5wTuOl7PkfU0o%2Fum6nsiK6hFjKhtpI7zjZZB6Du4XSD0BPm0khZQRe0TzDtdr0"}]}'
+      Server:
+      - cloudflare
+      Vary:
+      - Accept-Encoding
+      Via:
+      - 2.0 Caddy
+      X-Host-Id:
+      - f1b546936d23e3b5-13a1658eafb73af2
+      X-Node-Id:
+      - optimistic-ethereum_optimism_fra
+      X-Provider:
+      - optimism-rpc
+      cf-cache-status:
+      - DYNAMIC
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getTransactionByHash", "params": ["0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab"],
+      "id": 0}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '147'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","result":{"accessList":[],"blockHash":"0x1551aa28429c5e68905cea1ffe1783905fd7328348a501fffb3a9e4ef2b1f716","blockNumber":"0x187729e","chainId":"0x868b","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","gas":"0x6270","gasPrice":"0x2d4","hash":"0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab","input":"0xc78e468019366bccf6ccd08ed2980ec1af82d93f3bda96e2fdb4b3721f5490a0","maxFeePerGas":"0x316","maxPriorityFeePerGas":"0x56","nonce":"0x2440e","r":"0x33ecdfaa3e8bf1b550b1381af04ea1e78ad104266f7ceb3bd876633c64df4b4d","s":"0x5661f5d7762e95cc767394820549f4aef9d165e14d88320b513f672b3002c366","to":"0x308508f09f81a6d28679db6da73359c72f8e22c5","transactionIndex":"0x2","type":"0x2","v":"0x1","value":"0x5af3107a4000","yParity":"0x1"},"id":0}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d068cdf5a00a7c1-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:50 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "trace_transaction", "params": ["0x48f2a72d5efdf6fa4c2d1c915f4eb174533f53a3d4c3e5606ec1641d16c255ab"],
+      "id": 1}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '140'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","error":{"code":-32001,"message":"rpc method is not
+        available"},"id":1}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d068ce29867cf38-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:45:51 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 403
+      message: Forbidden
+version: 1

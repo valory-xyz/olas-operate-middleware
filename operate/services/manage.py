@@ -92,7 +92,6 @@ from operate.services.service import (
     SERVICE_CONFIG_VERSION,
     Service,
 )
-from operate.services.utils.mech import deploy_mech
 from operate.utils.gnosis import (
     get_asset_balance,
     get_assets_balances,
@@ -1257,58 +1256,6 @@ class ServiceManager:
         except Exception:  # pylint: disable=broad-except
             self.logger.error(
                 f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
-            )
-
-        # TODO: yet another agent specific logic for mech, which should be abstracted
-        if all(
-            var in service.env_variables
-            for var in [
-                "AGENT_ID",
-                "MECH_TO_CONFIG",
-                "ON_CHAIN_SERVICE_ID",
-                "ETHEREUM_LEDGER_RPC_0",
-                "GNOSIS_LEDGER_RPC_0",
-                "MECH_MARKETPLACE_ADDRESS",
-            ]
-        ):
-            if (
-                not service.env_variables["AGENT_ID"]["value"]
-                or not service.env_variables["MECH_TO_CONFIG"]["value"]
-            ):
-                mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
-                service.update_env_variables_values(
-                    {
-                        "AGENT_ID": agent_id,
-                        "MECH_TO_CONFIG": json.dumps(
-                            {
-                                mech_address: {
-                                    "use_dynamic_pricing": False,
-                                    "is_marketplace_mech": True,
-                                }
-                            },
-                            separators=(",", ":"),
-                        ),
-                        "MECH_TO_MAX_DELIVERY_RATE": json.dumps(
-                            {
-                                mech_address: service.env_variables.get(
-                                    "MECH_REQUEST_PRICE", {}
-                                ).get("value", 10000000000000000)
-                            },
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-
-            service.update_env_variables_values(
-                {
-                    "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                }
             )
 
         # TODO: this is a patch for modius, to be standardized

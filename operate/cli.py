@@ -98,7 +98,7 @@ from operate.services.funding_manager import FundingInProgressError, FundingMana
 from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
 from operate.utils import subtract_dicts
-from operate.utils.gnosis import get_assets_balances
+from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -1022,6 +1022,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                 transfer_txs[chain_str] = {}
 
                 # Process ERC20 first
+                gas_fee_spent = 0
                 for asset, amount in tokens.items():
                     if asset != ZERO_ADDRESS:
                         txs = wallet.transfer_from_safe_then_eoa(
@@ -1031,11 +1032,16 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                             asset=asset,
                         )
                         transfer_txs[chain_str][asset] = txs
+                        for tx in txs:
+                            gas_fee_spent += gas_fees_spent_in_tx(
+                                ledger_api=wallet.ledger_api(chain=chain),
+                                tx_hash=tx,
+                            )
 
                 # Process native last
                 if ZERO_ADDRESS in tokens:
                     asset = ZERO_ADDRESS
-                    amount = tokens[asset]
+                    amount = int(tokens[asset]) - gas_fee_spent
                     txs = wallet.transfer_from_safe_then_eoa(
                         to=to,
                         amount=int(amount),
