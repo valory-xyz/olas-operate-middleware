@@ -19,6 +19,7 @@
 
 """Tests for operate/ledger/__init__.py."""
 
+import typing as t
 from copy import deepcopy
 from math import ceil
 from unittest.mock import MagicMock, patch
@@ -182,11 +183,11 @@ class TestUpdateTxWithGasEstimate:
 
     def test_fallback_address_used_when_first_fails(self) -> None:
         """Test fallback address is tried when primary address fails (lines 194-199)."""
-        call_count = [0]
+        addresses_seen: t.List[str] = []
 
         def set_gas(tx: dict) -> None:
-            call_count[0] += 1
-            if call_count[0] == 1:
+            addresses_seen.append(tx["from"])
+            if len(addresses_seen) == 1:
                 tx["gas"] = 1  # Primary fails (gas unchanged at 1)
             else:
                 tx["gas"] = 120000  # Fallback succeeds
@@ -198,7 +199,9 @@ class TestUpdateTxWithGasEstimate:
 
         assert tx["from"] == "0xABCD"
         assert tx["gas"] == ceil(120000 * DEFAULT_GAS_ESTIMATE_MULTIPLIER)
-        assert call_count[0] == 2
+        assert mock_api.update_with_gas_estimate.call_count == 2
+        assert addresses_seen[0] == "0xABCD"
+        assert addresses_seen[1] == GAS_ESTIMATE_FALLBACK_ADDRESSES[0]
 
     def test_all_addresses_fail_restores_original_gas(
         self, capsys: pytest.CaptureFixture
