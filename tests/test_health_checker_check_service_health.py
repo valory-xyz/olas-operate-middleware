@@ -263,6 +263,42 @@ class TestCheckServiceHealthErrorHandling:
         assert "timeout" in call_str.lower()
 
     @pytest.mark.asyncio
+    async def test_check_service_health_non_200_status_returns_false(
+        self, health_checker: HealthChecker, tmp_path: Path
+    ) -> None:
+        """Test that a non-200 HTTP status returns False and logs a warning."""
+        service_config_id = "test-service"
+
+        mock_resp = AsyncMock()
+        mock_resp.status = 503
+        mock_resp.text = AsyncMock(return_value="Service Unavailable")
+
+        mock_get_ctx = MagicMock()
+        mock_get_ctx.__aenter__ = AsyncMock(return_value=mock_resp)
+        mock_get_ctx.__aexit__ = AsyncMock(return_value=None)
+
+        mock_session = MagicMock()
+        mock_session.get = MagicMock(return_value=mock_get_ctx)
+
+        with patch(
+            "operate.services.health_checker.aiohttp.ClientSession"
+        ) as mock_client_session:
+            mock_ctx = MagicMock()
+            mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
+            mock_ctx.__aexit__ = AsyncMock(return_value=None)
+            mock_client_session.return_value = mock_ctx
+
+            result = await health_checker.check_service_health(
+                service_config_id, tmp_path
+            )
+
+        assert result is False
+
+        health_checker.logger.warning.assert_called()  # type: ignore[attr-defined]
+        warning_str = str(health_checker.logger.warning.call_args)  # type: ignore[attr-defined]
+        assert "503" in warning_str or "bad" in warning_str.lower()
+
+    @pytest.mark.asyncio
     async def test_check_service_health_handles_unexpected_error(
         self, health_checker: HealthChecker, tmp_path: Path
     ) -> None:
