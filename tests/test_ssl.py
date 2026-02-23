@@ -70,9 +70,7 @@ class TestCreateSslCertificate:
         _, cert_path = create_ssl_certificate(tmp_path)
         cert_data = cert_path.read_bytes()
         cert = x509.load_pem_x509_certificate(cert_data)
-        common_names = cert.subject.get_attributes_for_oid(
-            x509.oid.NameOID.COMMON_NAME
-        )
+        common_names = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
         assert common_names[0].value == "localhost"
 
     def test_custom_common_name(self, tmp_path: Path) -> None:
@@ -80,9 +78,7 @@ class TestCreateSslCertificate:
         _, cert_path = create_ssl_certificate(tmp_path, common_name="myapp.local")
         cert_data = cert_path.read_bytes()
         cert = x509.load_pem_x509_certificate(cert_data)
-        common_names = cert.subject.get_attributes_for_oid(
-            x509.oid.NameOID.COMMON_NAME
-        )
+        common_names = cert.subject.get_attributes_for_oid(x509.oid.NameOID.COMMON_NAME)
         assert common_names[0].value == "myapp.local"
 
     def test_custom_validity_days(self, tmp_path: Path) -> None:
@@ -90,7 +86,7 @@ class TestCreateSslCertificate:
         _, cert_path = create_ssl_certificate(tmp_path, validity_days=30)
         cert_data = cert_path.read_bytes()
         cert = x509.load_pem_x509_certificate(cert_data)
-        delta = cert.not_valid_after_utc - cert.not_valid_before_utc
+        delta = cert.not_valid_after - cert.not_valid_before
         assert delta.days == 30
 
     def test_key_file_is_pem_encoded(self, tmp_path: Path) -> None:
