@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Data module."""
+"""Data module of OA packages that are non-existent in other repos."""
 
 from pathlib import Path
 

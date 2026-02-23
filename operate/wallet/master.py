@@ -29,7 +29,6 @@ from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
 from web3 import Account, Web3
 
@@ -54,6 +53,7 @@ from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     estimate_transfer_tx_fee,
+    gas_fees_spent_in_tx,
     get_asset_balance,
     get_owners,
     remove_owner,
@@ -355,7 +355,7 @@ class EthereumMasterWallet(MasterWallet):
             TxSettler(
                 ledger_api=ledger_api,
                 crypto=self.crypto,
-                chain_type=ChainProfile.CUSTOM,
+                chain_type=chain,
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -443,7 +443,7 @@ class EthereumMasterWallet(MasterWallet):
             TxSettler(
                 ledger_api=ledger_api,
                 crypto=self.crypto,
-                chain_type=ChainProfile.CUSTOM,
+                chain_type=chain,
                 timeout=ON_CHAIN_INTERACT_TIMEOUT,
                 retries=ON_CHAIN_INTERACT_RETRIES,
                 sleep=ON_CHAIN_INTERACT_SLEEP,
@@ -541,12 +541,16 @@ class EthereumMasterWallet(MasterWallet):
                 tx_hashes.append(tx_hash)
         amount -= from_safe_amount
 
+        # Subtract gas fees from remaining amount if this was a native currency transfer
+        if from_safe_amount > 0 and asset == ZERO_ADDRESS and tx_hash:
+            amount -= gas_fees_spent_in_tx(
+                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+                tx_hash=tx_hash,
+            )
+
         if amount > 0:
             eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
-            if (
-                asset == ZERO_ADDRESS
-                and eoa_balance <= amount <= eoa_balance + DUST[chain]
-            ):
+            if asset == ZERO_ADDRESS and eoa_balance <= amount:
                 # to make the internal function drain the EOA
                 amount = eoa_balance
 

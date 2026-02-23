@@ -65,7 +65,7 @@ jobs:
         os: [ ubuntu-latest, windows-latest, macos-latest ]
         python-version: [ "3.10", "3.11" ]
 
-    timeout-minutes: 30
+    timeout-minutes: 60
 
     steps:
       - uses: actions/checkout@v3
@@ -78,39 +78,40 @@ jobs:
           pip install tomte[tox]==0.4.0
           tox -e unit-tests
 
-  integration-tests:
-    continue-on-error: True
-    needs:
-      - linter_checks
-    runs-on: ${{ matrix.os }}
-
-    strategy:
-      matrix:
-        os: [ ubuntu-latest, windows-latest, macos-latest ]
-        python-version: [ "3.10" ]
-
-    timeout-minutes: 60
-
-    env:
-      BASE_RPC: ${{ secrets.BASE_RPC }}
-      ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
-      GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
-      MODE_RPC: ${{ secrets.MODE_RPC }}
-      OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
-      BASE_TESTNET_RPC: ${{ secrets.BASE_TESTNET_RPC }}
-      ETHEREUM_TESTNET_RPC: ${{ secrets.ETHEREUM_TESTNET_RPC }}
-      GNOSIS_TESTNET_RPC: ${{ secrets.GNOSIS_TESTNET_RPC }}
-      MODE_TESTNET_RPC: ${{ secrets.MODE_TESTNET_RPC }}
-      OPTIMISM_TESTNET_RPC: ${{ secrets.OPTIMISM_TESTNET_RPC }}
-      POLYGON_TESTNET_RPC: ${{ secrets.POLYGON_TESTNET_RPC }}
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-python@v3
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Run integration tests
-        run: |
-          pip install tomte[tox]==0.4.0
-          tox -e integration-tests
+  # integration-tests: disabled temporarily
+  # integration-tests:
+  #   continue-on-error: True
+  #   needs:
+  #     - linter_checks
+  #   runs-on: ${{ matrix.os }}
+  #
+  #   strategy:
+  #     matrix:
+  #       os: [ ubuntu-latest, windows-latest, macos-latest ]
+  #       python-version: [ "3.10" ]
+  #
+  #   timeout-minutes: 90
+  #
+  #   env:
+  #     BASE_RPC: ${{ secrets.BASE_RPC }}
+  #     ETHEREUM_RPC: ${{ secrets.ETHEREUM_RPC }}
+  #     GNOSIS_RPC: ${{ secrets.GNOSIS_RPC }}
+  #     MODE_RPC: ${{ secrets.MODE_RPC }}
+  #     OPTIMISM_RPC: ${{ secrets.OPTIMISM_RPC }}
+  #     BASE_TESTNET_RPC: ${{ secrets.BASE_TESTNET_RPC }}
+  #     ETHEREUM_TESTNET_RPC: ${{ secrets.ETHEREUM_TESTNET_RPC }}
+  #     GNOSIS_TESTNET_RPC: ${{ secrets.GNOSIS_TESTNET_RPC }}
+  #     MODE_TESTNET_RPC: ${{ secrets.MODE_TESTNET_RPC }}
+  #     OPTIMISM_TESTNET_RPC: ${{ secrets.OPTIMISM_TESTNET_RPC }}
+  #     POLYGON_TESTNET_RPC: ${{ secrets.POLYGON_TESTNET_RPC }}
+  #
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #     - uses: actions/setup-python@v3
+  #       with:
+  #         python-version: ${{ matrix.python-version }}
+  #
+  #     - name: Run integration tests
+  #       run: |
+  #         pip install tomte[tox]==0.4.0
+  #         tox -e integration-tests

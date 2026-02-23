@@ -1,0 +1,1793 @@
+interactions:
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_blockNumber", "params": [], "id": 0}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '70'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":0,"result":"0x2864b19"}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0566e64c2c963e-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:09 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=6MbSDxjRJ1ghXP4OR5wRpoWzlXVJfNx2ram3n6%2BFGK0fw5P2IiecAULtWCk3I%2B2hfA%2BrdQSNuQSI4KUOq%2Biztt9k36Ej4nhhzeRWe2pjixpk3Z54qVP%2B7%2FOyQvqr0w8G"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b19, latest, latest
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x042e938f1b3c40f7efd4bb8424facf8aa3d53160'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x143258c",
+      false], "id": 1}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '93'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":1,"result":{"hash":"0xf8a573b7c55b4c048545a77b00691a7c7e8727b55558df20403c7c59f2f60c00","parentHash":"0x4aac4a6bc88ae140788f6a9ca598d1a83c788342b3249d51bfc24c57fa552b34","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x16d49278beefc3a7de31753bd2cc790ee3aa0686dd8c1c98d6e9cf8ca43266b9","transactionsRoot":"0xa0a387bb75c253adaf95b88b472daac31a5d9ed65b1a9ad700ac7a325c82e1e9","receiptsRoot":"0x9b4fbeccce745ade9770a771d723ad067d3063c80234b79eef8db167937123e8","logsBloom":"0x3f313512ed2c3b49f760fd9ca39ff031e6536ce77275c987b6370ea337c15d2a1549e388703195690d429cd3a1537f8ca51db9df8f14bf132f3bcb22cc3ce62f1e683b5d45efefdd96dc741cd14fbee718823f603afd1efa9d036b33b1747e172a9d80798a8f20a0fd2588bff5723c786ff97c7b5aac4ccdd6effab5638bae9f308a4b47c84bb318cdae7658dad45433a7a1dbfbbb6dc8ab347e5e66f9828895b281da8a9ce89e0c4fd0ef6133f7ae9db62b81492febf8de1f2b0fa9565eeec579b3a43b6873aeefa5c7dbc7c9de98ee8461b86ef53c0e3234fc9fee9cae7a8795760a8b40f743aa7e5ddbdedc2105e8f4b658ca99e33272ca9d9a2e911eaead","difficulty":"0x0","number":"0x143258c","gasLimit":"0xa037a00","gasUsed":"0x1f72127","timestamp":"0x6710a7fb","extraData":"0x","mixHash":"0x644ef5643d6564090e9d2bbc960713ed41ddf860bafddf7921f794fc35d93d7f","nonce":"0x0000000000000000","baseFeePerGas":"0x289b6f","withdrawalsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","blobGasUsed":"0x0","excessBlobGas":"0x0","parentBeaconBlockRoot":"0x0db9beb640c7a29d703d923b6fa82a3b36b17688fea5214cb896ef0be2aeefff","size":"0x18ca6","uncles":[],"transactions":["0x3eef72d3757d22a1ba78aece714b5f03181c2d71cdec78f7c22ba0cc204b63f1","0x8025d33c04ce292a2a6d5d353fb79a1c0873743dc5ed1edcdfbac74c99d81328","0x4508faf16746cf769a21760e9769c06b739689db6bf8869257bc6411cba723ad","0xd0bd4d53937d39bca0f53a4f489452151083079f472903fe08ec9ca1f23ee822","0x89097a1c92abf628701cab8bc58dd40a26637ed6e20d10c2c6f87fcbccbe5592","0x5871c207f5cb6a34f4f81bbcb66ab09fd7254682900db9c3e9825a7563dd1aa3","0x24cd9c460ada12f8fb61bebf0bb41f76d34f768dea9da923c67b31d4de4a3d53","0xb6a394c17f61dacbff5f709192de6e932d48ed2dde3e5b816020938c5bd77236","0xe435f25d69d2db5cd562826b587783c67b6f9a8c7302527776629c22e351785a","0x41424d4f903132d1334042c406d39ecb7869d211ce31ec48c26c3f598e717019","0xc48a4ab0510679afdc9fc025540469e1f594e183c973443f8948ab7980f4fd5e","0x3a468a4a1cc93fd4d215b3ce216b110f883106549058845ad7f8a584d4213b03","0x30501e54ec399a13d6c4a78d9c9fc64f7bfedfb757aba086e794e95089b4b906","0x40d0656dfcb5ac0be0da6af66e2baeb918f136526656c3bd48e719e48923f88e","0x257b238afb3a931e318bb34ce5790017403da2eb783d0eca867ad91fde149cf1","0xc51129fa5843ab9a1c1e7a87556106fbd36d4f97b72da6ab9ea6b379f9171be2","0xb9972bb7c9ef4cafc34e01853d2ed6318b3051d55f386708b329f12e0e0e3c49","0x53ad4b26e80c017c9983964400963e3affb114ed55bbcad261414cec1c6bf92a","0x166d634da76c5b7f6dd7fefdd76421371f58c486d845a8b2b5678de2907ee706","0x4c3caedf9ae589388f4a178d988daca9c5cc0c65d80695ec1b07bf3590499a32","0x1c17ed43a475ea75bbacaaf1a9ced6517630d042667030c94b253f6aec6deaff","0xaf16368744d07a5f0788d71cb09f4e58521c6e86ee84197a2312a3ae327c080b","0xf53de3d1076f8880e8bc247c8ba8235352e1db8a593f9d621a9cb4f8bc2b2b19","0xe3c8d4c9e239e41ad3a8e14d946cabf4493fa17d726978369f1e449d10f10782","0x4961aa9a5e0b5f3bac200fd6388f48a2c48e1c99b6c79116b30b52fe16104724","0x8a44f21528d631de4fb1bfd6818a07f8c59570795c2a3a80d96f7cf01d2d0bf5","0x91d16f94f405d2921b3c69adf97150a4b844f1f0ff604a97bda823b4f65c6d5a","0x37e349feda2783f951bd6c74ffd8e831137ec093ac5c6a27fe1780c11195cc4d","0xd3fc5571d16777e70092d34fe785c4401a372c35a2780ec7229f3d68a43e4019","0xa67b0a383a4c1987c5e838400a64da0764890df810fa1825b16a67d70c47e5e0","0x31b14a315b98ef4cc6d81009052bb378edba84155f6ff4509458dab4a782c379","0xdfbc5417400d2d3236a27af2bf0852c1cba37ebf03377f05302f54b17d8878cb","0x67d39c3527f41567a0ad2169eb9596251716b32d0b585c099eed2911e6368f14","0x1606fa64004c11b7bd67cde3814b67de7bafccc8180d67a27507970f48d414b8","0xab9206b61a4c6a7f8b5d00a7e61c8532d0e082c7c18c574e8e5aab5a916aabde","0xf8592a099f64acbc1c4e7407b26893a260310ca8ae41764e20304e2a4956a27e","0xbea0cc25b11d515ffb53871461e1843f2d5d4af1ef5967ec9bf33b369bd2aec6","0x1a3744854fddd62044b1e9749bee0063221dc448d5e4c5efcc17ada2abb0ebd9","0xdd4171ff034482f7123a8478f2da326c3c30931acaa071c4fffa2a1e7e8fcf0b","0x8fb5a0bf4c9fd8c74bbfec76d3b31c74edf31ff134f51275e49a97ff87455632","0x37b162125885d29cb1e48558cce56a41db9fbc18985938abca0a7a6b4cb9d18b","0x00f5f96f95edc8031ea6a20d9f1801def008480194bb4145a209d68601c754b5","0x0696065decd30dff2ce3977e5a25546c4d26ac6f18313cf874b032719bad1663","0x11f5871077eae9ffd67b48b45f68d5a4657025f82b09c1d5900bd77e8c99b9a2","0x31d3e360c1011494f4ba6c44bc34df6bedbb54b936902f9b4eb134ae28ec9931","0xa434a988bd3b08c149acb9bf0957b55e333290bb3066912749ac555b8194f2ff","0x2ef95834b81ce85a8da9056dabb0c9825ff4572a4913af8b36f028931807a2a1","0xe28201ed6dad2c1c3afd3cae284d39fd5067d249306bb04c1edfb5761f536968","0x6c97886667f943e200c241bca1f6c3bd5ca09c23cf257be108db41fa16242575","0x785fc1699366f88534be599ac83f96c0c9d31c5b1b613e3d007fbbb600251e4b","0x7ae5b7e451bba5f45001f91acb5944d96b2301ea63bdc35876fa93a205701d0d","0x6efa25115881f3d0cd93a1454274f2c4f8ece327be832a702e98cb8aa01fd484","0x364ffa2d09036afba3bd7f4ac3529fa43b87aa8893ab1a5c144474d8dbaab9e0","0x27ba806d0e9c550b74d218a4c9c43320a79f9c42e6e9bbf86f1f990be3c177d5","0xcca7760584344d7093bbbfd2d821af78b88a8123798cf31b4a9ea9680502d2a3","0xcef9ebc45667d1f65a8d1b5be783e11bbdc4dd20bb44d56592a212651358134c","0xba1dbcdda0d06a006c6e3036738581bcae4d1ecb5dc267e83178b3d43a0b1959","0xb131b0e9bbe4ea4529f818f093ea9b081fdb2cca726536a6b405b50e7d7ac444","0x0d21cf8b88aeb10d5b4a2ef2f9f734031e4aaaabfcca02136031247764a27632","0xb403def60c6e8e40957bbb2190d2ae9775121ad701014209c14cb585165b1cdc","0x9fcdecebf4fa7094a24c7772efb5631455debe89726c82ce8652736efd8cb3bd","0x7f0ed94d0fffb83e6bed05746166e367cb2efdddf10b466d3e539909eb584a6a","0xf53eb0b7058cb71eb02f9574ca42e8fd4f5171868c4272969e792450b4ffd34f","0x75d26f8ea94fbff0ff86ef6e148ba25a6d38c19eb596dc9c1157760304035bcb","0x9d221dc9d696ac5cdd2cbb0a409fa54dfbee9d21fe06e404b375a01aefc75c8d","0x6e2d89863f8948fb1c250a9fd72c80143cf058b21dac79a840a093bd07853a04","0x3ac8dad64c883a881e660eacb70897c0523b9611856d9cd9fe020e16dc44b9df","0xc71eb37a015890041766af70df1d19f1ca45e808cfca816d8122dea74aa7f3a4","0x30ffaebe67400d1e2289a2c172d663dcec703a9d7961f855e4e1405f7c92c40b","0x1abeeb2efedc48bf4666656a7eb0990c1eac4e296a6348011333a53e828b54af","0x21a6af0295acd6a99079c9799254d112fc30f3605764c0d8df1d8049e00438d8","0x9248bbefe9b48e916f884c0ac3ca2559824c746a88eec5c71d2c9551f36137e5","0xc1bcb15f698f92877fe7ff2cabbdf891f3b4433f2b44867d175507aaca6333e8","0x5376f4703cb2efd19c8da6ab3272f9f21e7383c0eaa60f466d4502714fd30964","0x62cfef45424eacc54d6313b6f3cbd84dc982ebd7444a8efe485026ce5f0c583a","0x5e66fbd8f2668e6694a87c345b1da8f439f521873264832f4f4945ee891a5108","0xb0e3a2ced9287d20f0927d151ead4e1433fd748b16f4280227e4c2d502434fe5","0x67ca56329f86e81fc27a154d2bd5c1ad2f7a8c443efd73d4d91c363247a5284b","0x0330860b0af755f1fb8d644acc0c2256f10b7a255722075b42c58b14fdd7fbab","0x12cfec9738810332e6b3fbd1c968998330e4f8a06d556eac41d9070b84167d0f","0xb86f6f26127638571cc9c9837b1bae114e8f5f1fe49e6d3d6d2be20c72b1f5a5","0xee2d9bcd503b58c63e97d5265a02d9b8ca767a6f2e306a5ca8788df00286728d","0x778d877daa4f4e05f5a923f93a39216f008231bf09b96567f09a1818ef8216f6","0x0fe126b51dac38bacc0ad7b76d4ef3240db4623462dbf2a3de07913899402c04","0xfbdd6b34244f9a268a9001b3a2685ea356ea7ceab60129cc02c0ba305f60957e","0x68ac367c7c75e55e80a39e7d7e27401b92865b09924e2fe556ee285a5b8a64d8","0x78fe8dc33953cb89bd5d178ab6f0eda0eb15ebe563bcb0b310e9a363d98d0a83","0x4e4de0fad1be828bdccb4fd766cd4abc0452cd27949a62d57a315452f5cb161b","0xab64df934a8bec1c56d816c29abdc836af926597ab33b6944139b7d278a0527f","0xad0d23bf300f00ec4714b0931c2bd1d390cf04f4bd9f7af9d0c83035ee748a3a","0xcf72534180fd83d999a1878c34385c0cbcfb834f308a9bc6a0da844845f4c8bf","0x850543819a8d78e7fb858a431af622c25ad01ddbb29ddbc7ad47ef06d320b763","0xc87778d69a2ea051b69931490f63d7040bcbca3ea48b993aebc8f879bde69605","0x1a3beb97058e9aa7a1058ca2805fa25284eb7e72c4332986907fe2b49118ce5b","0x8ecd1c6410e6cc93571b126a18558bb278e6b98d1e196da6495d997ba98b5eb8","0x3ed0378b26930fd6f213b83317c581b9ba03444760e7f93ff2f649b6ea3d942e","0x9de48086eeb429343954b255d02ee4cb0cb46f31a9b6e7f9d230ddd110c1b3d4","0x320aeda4276d0084308565fde3851d4ae905379163ff78de06d13b8cc91d6db0","0x80e4c3f44fdd4ddc74201108f7a63f67b3da3744ef1edb6d9abb7ea38f22f1f5","0x4a6db821881e319e62b047369c668f8f4bca8bf6ed08574372084d2a9bf23ecd","0xa3cb765b4365084ba44b66669a9190557031d5c214530a662ef07445eebf2ea5","0x77dd8e83d41c4cc90415403c8407edd7c63f5ec5f31eb1b11ddad67c5f48b992","0xc18a07b5748497252a48e0c947a3fe49fd2964fafc227ba9bd610f95f0301b59","0xf650c9995badb669ca9371ba8b946e914425676313cd44938d050583c24e520b","0x04fe401370e3687bc83c9a44512926e176d8211050376c8e54b12eb4a5eed709","0xc81d9da915d5ce3e1b2c5d0b67183a8d8779729c8ea482e7b13c1322cc85c4dd","0x39d3e9315fc8965489aec71ff8e20e8f97dda2d15ca1ae8a0ebba14feeb8dcb1","0xdb70328077c258e1b7740182f4d612eeb7429f5b83390f554a1041210235b37c","0xfa7847a4a17f1995d19550864e743017a8fb3316f2c41cf62b985348efaf01d3","0xd1a3765cbddf0e4d780fc8035d4436ae273917a27c96755291d8744046cff956","0x90b4666a33bfe2beee7ee048556fdf315b920fab813f6fb66629b66c040300ca","0x144ed165e45a9ffa2d48bef4be99ee72ff596610881b14bfd27e08757bb4ac9f","0x50da0e1c42dc0804f44734346445c1991ff54fccb5a9dbe7841226ff3f6e8e15","0x404d3f95ceff7513d73f17d2968c6136279684a12c972ec4df59cf353e8b0417","0x5d3b9924d2463c8ea063b4d5c858f820393a0649b23fa1317de899bc95ff2437","0xb8dab25f6561d96e8bfc1700e36c94c2b362099249b235a1fc1b9ef3a1b14283","0x920a9f59c83e93b0de569d900954654805c36a06f879545dcd4333ef748ba4bb","0xa51f88dd7c31a5de4329b89907067d95b39eb7b0579d49bee838f080586ed0cd","0x3207c4b85f3468636a26b6ef8ffc4a1d786f0704872655bb13044f2286b99636","0x4d5e5842aa20e9db9b46cb4de3dde0d1459755d7e0d0b8b6557f6d59cc3edeec"],"withdrawals":[]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0566e96e6da773-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:10 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=xVZguevLaqnEKS4LDNMHaTwCSZZxEb8OobI6f%2FI1JbQ8P27x52OuSy0k32o9377B01RPk4mVWgXLuaPw10ZWw75hpZglTLjXP3N3braKsIFwccpcfyfjGQOKBW%2BemGLC"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b18, 0x143258c, 0x143258c
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x042e938f1b3c40f7efd4bb8424facf8aa3d53160'
+      X-Node-Id:
+      - '0x2504970f1d215f1ef128f5f3d07e36a573661944'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0xa192c5",
+      false], "id": 2}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '92'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":2,"result":{"hash":"0x530776567ec0eb9e164003d6b315efaaa2fe4840e3b07f511ec0d01c2e005189","parentHash":"0xa29990f4641e637132502b775985e734a89a5fceb70e7d8db8d65ab20a6d9150","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x25f13d62b7595e1b9846ee769ea7d9a757cb14c474b91fdc7194810512bfa4ab","transactionsRoot":"0x6dc59411835b6593f494e2181f2172a77883f3cdbe8cda308e9a34d312caf73a","receiptsRoot":"0x3b80d190f2d9ba8e94ce02753b126d9557a82158ecb25c5081e5f498d041ba7b","logsBloom":"0x000004400004000100802000000080100024420000100000280000400008000000080010000000010020000020082000000a008000400002000244200020200080400030082000400040000c008000216090000000000000008000000000a00000040000020002010002100000000804008000001010400002000190010000008002000040020001100001004100000105050400280000020010018400000100020088802000020060040000024000800070004100082040000000000008000080849003000008000000008000001000080080400000000004000004008020101010040000000000600000404000000000000021021010020800000808040048","difficulty":"0x0","number":"0xa192c5","gasLimit":"0x1c9c380","gasUsed":"0x13330f","timestamp":"0x65cd826d","extraData":"0x","mixHash":"0x4a76651cb2e0d9b86ad508594f8467db7331b5dcd3c8b2b25bc0274dd0bed20f","nonce":"0x0000000000000000","baseFeePerGas":"0x10f","withdrawalsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","size":"0x13cc","uncles":[],"transactions":["0xe8eeebd0c7476e2cc2b929c45d51e0d0a0166dde66576e83a3d2314a25bf6fe0","0xf9ae6bbf8d667288200cdb2fa376d5d56438206e98ca2a2b925d5b8b0054f0ea","0x11d8b4e6ee4e24e97c040060a9bef3b61f50b3bf841cebbcc7ca1d733eddd6c9","0x8115efde435ab10d2a9d9ea3b26b964cb2d9d2f7d820703be430b455a14536b4","0x6da29ae2f3a7965bb63898b33c72dee3cae03606bb17dfa8cb9bd3b6a657dab7","0x802a5cb20a5c471b6139a3eef0204cc344a0e2132d9aee18ff3fd21d2da7b450","0x773abbe13bfc38a3e5ca8f7a5bb3979db57bab29fcf5afba3b62d4ffb221af0d"],"withdrawals":[]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0566ecbc91a80a-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:10 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=NetvoWXs3nxzzexCvhos4vptg2qK%2FdIwvn1%2BGmkycq5gxXflvZPAibzCeRQrtrC96ojGnfDWJdHkH4oHgCGdOE7PY5%2FoyEPeuRgHN5TsYC7mWS3%2FpLIBlcBrn4ZvJpql"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b19, 0xa192c5, 0xa192c5
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x50c962",
+      false], "id": 3}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '92'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":3,"result":{"hash":"0xe16e50264b7c048f3ace8b4c67ca3e858c0447305ad6fa03eb9dd3569b51098d","parentHash":"0xa2d5c9775ff3358c8a31de516c2ce96aa767eed6b6e8a1c40515ce2ccb5251e6","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x0c617d2272278fef5c85825571e89ccd557e4b51c1d31c0227a3790cfd557b6b","transactionsRoot":"0xa6cbe702332d5138c6bea81b50d593fe681e59a6933aa7ae459a875b8ed0c936","receiptsRoot":"0x5c38aea71af5db0afbae3cba609d77719c95008e1c6c5befa11ea6dc99e0f971","logsBloom":"0x00220000210000000000800080500000010003000004000000040001200000002000000102001000200000100002000204000804048020000000002000280000041000100844014801000008000020200040040000402000000000208020406005000000020206400008000002000800008004000081040000800012000a000004200010002080800040c0000000080804000001002000080000204400000000024000000200004000000000040060820003620000008008144000000800100000000002000080000080080004201000404020000424001040004002010020000010004000000002000000000010000000408400030000400000000000100000","difficulty":"0x0","number":"0x50c962","gasLimit":"0x1c9c380","gasUsed":"0x4161f5","timestamp":"0x652befa7","extraData":"0x","mixHash":"0xf8614a2bd5168117b8b166c3a316f20bb4b13b0f13c8d93e110bfd9e67f0c64d","nonce":"0x0000000000000000","baseFeePerGas":"0x1a812","size":"0x1844","uncles":[],"transactions":["0x3cf6bc103f93ab73305d5008382aa9068dce56dc9a8b526c2106fd23106f75f0","0x18661284b5636f5e16c36e8b990a727ce2636b334356ce11299884eeec63beed","0x0168314cb6e0194d4f3bb899643fde5506b6f4b77756fb2ca6b1fec90023a9fd","0x961c476f0829379a9880a6218a5cfafef258c73e52c6bb06779c540582c39d43","0x9d187b08ae501719eb987c9db13cca2609d059a7f8784c17c23ae486fdf5e3c9","0x25e86943d3e9ca8e57c2e5252277a0e14a4be28580dc04ac95fa6450caf0ce4a","0xb4fc6e6f2ceca966635f8499974bfb10fe105064a32a4bb82fc2e644d453759e","0x408d379d09b6497005767315fca5f27052834c8305dc3851bec3fb9502084e68","0x064a3003dc12e1cc32567c3ba9e0469f0b8e502ce7beebac652b9736d75892b2","0xa352e22964dc937e7a1cf99d33b47bedbc80d98a7c2187df8468473adbaca738"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0566f02ff7e62e-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:11 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=zq1P3EJvZB%2BSp0Oe%2Fn6StF03aw2iDrqDuROxW75HfwWFMCNd7u54KWMnbxZcl2%2FxPC9xitabCxh6q4siFB6IuoEZfhDfT%2B4yhC3J1r%2FBiyrF3kAr7zNWUqwbfsGbB5t6"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b19, 0x50c962, 0x50c962
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x2864b0",
+      false], "id": 4}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '92'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":4,"result":{"hash":"0xeb61793301c4cde1700c6d9f32bc987ae711a7ede2c922ccb037dabf36580b58","parentHash":"0x8cd97aee38cbc62285fad7588892a642ca0ed5d03a7dde81440baa3c5bf341a5","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x9ac6aaac9d87886ae6e18e28963db93c277ff3b435415d3063c29c6d9d357821","transactionsRoot":"0x87649a8e556c2db230448cdcac2bceaca8434c1636dc6cc6513df7aad61aa1bc","receiptsRoot":"0xc39acd5e2a8e391343d9812aa7a5bbad5db01b005e1635dee993f313c9b73b02","logsBloom":"0x402110040001402001400004800090244000800020000002000482600000000202001900010220500004021204000080011000000201208004100220002800208400024000800088e0000428800020210050000000000000000008008000210006000040020009000004000000400800100004008000028120b0031000080008000400810000041203000840400008000000800f0120108c0801045000401800021001801000401609000000040864000200628100420000400040300401852000004002004000000200080000180140800100000000801000000000300020802010200801110000000000c0000001200104404c000000410100210000008000","difficulty":"0x0","number":"0x2864b0","gasLimit":"0x1c9c380","gasUsed":"0x11c5a7","timestamp":"0x64db2643","extraData":"0x","mixHash":"0x2486f71b881f0285ba0b0fe24e681a5f8327edfc5dfff7ddbdc02472d9095904","nonce":"0x0000000000000000","baseFeePerGas":"0x3b","size":"0x803","uncles":[],"transactions":["0x6e3baa547b587fc58025df556b45148fda5775e18006f2bb4f52912bbcb54466","0x70be4be7502771f8bd2b2492d5d39a8fa88f628dc42583f4280e2aa6d231da3c","0xd299beba548509c1b8f98f70b8dae6548843fdc0f81b5ac42ea35b94d401228f","0xb14b3418dfe8fa128d02402268801abb0a67b30763496abb076cccb5a79c2cfb","0x3ce23d0c9605ddd172d66013bc26f300265c172f7a7eff19daf186f431b2671a","0xb235279e8fe65d78a8f285bdcd1855a64b833bfabd67ba4925acdd1922978b77","0xa712e5736cd6ae40f99286e89a81e1a6990c53c307f0fbbf9b377e1fae6a1535"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0566f35c3dc4b9-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:11 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=kicFIv89A%2BuqJdS2r%2FjEg5h8wVCnww8nklaynUqhSbqCWnQ5eZVvv%2F94edXJREnjM%2Bi%2FwL2vIvSJuDd9RtFK8e2n85wL0T1c%2F4%2BQv8CD2FR8baicA4U8gi6oW%2FX85nQQ"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b1a, 0x2864b0, 0x2864b0
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x37dec937a6e9eeac461ee47b397fe6e6c00d66b7'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x143257",
+      false], "id": 5}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '92'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":5,"result":{"hash":"0x6d2ad5f58f0802c282058201c9495e68ce96df23120e8a1cfc43424e27bf2dbd","parentHash":"0x3518dbed6ae85d6dbde10ca8e8e073d98c770caaeac0c726172746d88c515958","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x0e96eaba06ea8e9c086451291b18bf8e481e0aed7d2ea791612f506caaa38394","transactionsRoot":"0xb01b8a7074357815519e8c3236afbb8e5217dbbb387cc5df170615e6fe53fe45","receiptsRoot":"0x70efac63ea3365605bdd225b7c7a0fbbd8c0e037fd8403c755bedd68d80e4bc9","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000400000000000000000008000000000000000000008000000000000000000000000000000000000000000000000020000000000000000000800000000000000000000000010000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000080000000000000000000142000000000000000000000000000000000000000000000000000020000001000000000000000000000000000000000000000000000200000000000000","difficulty":"0x0","number":"0x143257","gasLimit":"0x1c9c380","gasUsed":"0x1fab3","timestamp":"0x64b2c191","extraData":"0x","mixHash":"0x5ad559f820952784d64caf344b630252450350b46119e35d1d4a0bd21066c2cc","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x47f","uncles":[],"transactions":["0x2f1fb962be09033a0a7ab7ec896843ec331b297ff95bdc5cad258f91f5e19ea7","0x4ea137b3a0ebe52609eeb3b2b61073cc38e26f8e8ab40d934b269c31e08b5c06"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0567b40b53a751-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:42 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=AlVRXMm%2F8h4g7fzGxz3olWIRfs9cfToxJmxMBDLwxk10fQUaZHlyH0NqyJ4gEUxPpUeuiVeCjFeVsVGyH0tQb7KHs06OT%2BLLkmliJt%2BwOuANihv6crKONu%2BTgJibNy5R"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b29, 0x143257, 0x143257
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xa2ceb551e7edbc213ad1b18698d1bf0515462fe1'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0xa192b",
+      false], "id": 6}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":6,"result":{"hash":"0x5872ca67f232242007d2066a9597b6a3072ee16f8f2a5f5f2be74cdfa70edf9c","parentHash":"0x2d12cdcc60f28b6b54849a8731ad962d85544c1b9eb7a23aeb438877705f3195","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xe53d51ad1fdf0a28017dd77253aed853015e061686ad0bf3fdff44d58f05894d","transactionsRoot":"0xab23aed91616b8575e47efe924f5ee1cf66cad8d175b7a5b550aa7bc8499cd59","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0xa192b","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x649e8f39","extraData":"0x","mixHash":"0xf26eb2abc92459471562b511b3896fbc66478bb876f1110ddab51d9dfc10fe0a","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x365","uncles":[],"transactions":["0x8ea1b6fb608f5cf111d6cf9bfa6d5ade2fd766f5aac6e6bea3181f86f22e7f3d"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0567b74c09a7b5-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:43 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=FQ56CJGsk8dkLfShN1Ys1YuV3UHLeXCEOyMnXtkfwB%2FOVM%2FfytsyS2I%2FSVRbmlSiHaBYAdO3z8y2Y6JC8Qal4oHR4kKICuWFKR6CDCVhxg5Sa1fwVIKtIzRC7mRV%2F8q1"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b29, 0xa192b, 0xa192b
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x2f8ddc52a07b72f6ff5a3d0e321dbc99d1888fe8'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x50c95",
+      false], "id": 7}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":7,"result":{"hash":"0x26a79925082f97e7d8545da8d9abed12fe5b4fb6ce56bed0f8bc08646ef62390","parentHash":"0x940e0547175635d8a34d0fba49913fbdc116d5a4e014b18715e9fb0a551e9184","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x52a1d7aca47e2c6c3d80e693d1f9570c349da88fab64bb7b0d59476ff413d274","transactionsRoot":"0xe9f4015a912cc43a30f1af70af9be7661709570988cfa02d5645449e47071e1d","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x50c95","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x6494760d","extraData":"0x","mixHash":"0x1991e74af0edb9e48efcfb531b1ed77d012844cd1bacb99b05ca6a209bd6e860","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x365","uncles":[],"transactions":["0x0444f807ae06f4393b3d0d1b146327f1c1c234b4101753d21384880a94c9a12f"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0567ba6e3fa6cb-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:58 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=r4tZi0LYwFuMoJcRgaIQ6%2B14AK9vZb4xAIX3hlgaQenmXOD%2BdgfS40%2BW%2FKD9rB8NGe1uTnasrqMCnfdxItujbMMD4a%2FEq0ONHMBtQfP9uW1Pvo8WC10RQl860RsxZaNj"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b31, 0x50c95, 0x50c95
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x042e938f1b3c40f7efd4bb8424facf8aa3d53160'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x2864a",
+      false], "id": 8}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":8,"result":{"hash":"0x541cb4ea5b0b3c51832275a57f716d899d09da13f59b9f7b794954c503b5408c","parentHash":"0x6a26be3f826d581d21e3c50877393d5cc53ed3e8b4ba07ab7885ae39c5ac1935","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x65b9aa6ecd6d708fe932005e548b9ec8f054a363c22686026d62efafcbd4e53e","transactionsRoot":"0x38c011c3439c17ffe504d5aade81060f1754aadeaf5d382fbe209ac90e44d896","receiptsRoot":"0xfc1cad2f8bc886746fb9e962517a8e644bb51e07319f61278811c967cce99ef8","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x2864a","gasLimit":"0x1c9c380","gasUsed":"0xb735","timestamp":"0x648f6977","extraData":"0x","mixHash":"0xc7f263f1f6a43059cb9870c8a4ad0f81c2208d77734fa5281f31eefc1bb9c19e","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x365","uncles":[],"transactions":["0x18db187e970b432938a951530e59bde24befe1b5ab237f4651d917c7301ca549"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05681bfbe6f416-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:59 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=UTE91p8ay6O1oYbWsz3wYGLED861MTzcznTuvBMuXBBbZgTtEpobLXrWi6xQ%2FM%2BHn4l1GDkhsVeIA%2FFYCtpHjFBEfPnzRuVzxe3TC4naPVI2KiPXZvCG%2Fjc6MS%2BKMixv"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b31, 0x2864a, 0x2864a
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x37dec937a6e9eeac461ee47b397fe6e6c00d66b7'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x14324",
+      false], "id": 9}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":9,"result":{"hash":"0x86c0c8103a4b791cd5b316fa5be6950436d8fbefb99bf0acd3dd312ad3ba2a13","parentHash":"0x470f9716d4f177ff2cc03c5f3f329bcae95567b336a6785e97ba7c4ec9ad82d5","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x5622b74567a53df5ecabc448c05055f105243d0092ead118b867be87b01df9ca","transactionsRoot":"0x6f061f69783ff67e4763ff847edf4b105f5c990969d1664b62bf89a2a358a5d2","receiptsRoot":"0x637d9e6847368bb52b56e90dd608facc34122c153872e8733cb0b01caa581f85","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x14324","gasLimit":"0x1c9c380","gasUsed":"0xfa0d","timestamp":"0x648ce32b","extraData":"0x","mixHash":"0xd90272f51b0ac9e4b10ee8fadba4e4145622089afa8535c62ec8ff62fa419594","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x365","uncles":[],"transactions":["0x4b17bb68ad429cc9c66179d4b6287f706f7bf57de9a8c915fcc4f78745544dca"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05681f688e461f-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:25:59 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=HrQTRiabeahbqCp%2FiyH7tC0NQyZWzvcItdTQGKtgVWqtT11DwfRaG%2Bt3oUF8DddEaYYLus%2Bbp4Rl3ESJAl3%2FGJizUbihgiqxAUwn%2FWeTS%2FpEPyNSQgpIcHZUa2mW8kUK"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b32, 0x14324, 0x14324
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xa2ceb551e7edbc213ad1b18698d1bf0515462fe1'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0xa191",
+      false], "id": 10}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":10,"result":{"hash":"0x6b34df5fae3af171769be8db35eb56fe12b79396d304610de37d0740d5e698b6","parentHash":"0x41eb048c69f10679830e472537feab19f964d8d9e6f25475441989bdabadd389","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x879d48b8940d86c2a7ba79cc4018cffed78af0451e9b3fc0db88af4b4ca051c9","transactionsRoot":"0xeaeae1c37f906da61b4d386401f23310d274bb9869d49e6b257072ca6b6a53a4","receiptsRoot":"0xfc1cad2f8bc886746fb9e962517a8e644bb51e07319f61278811c967cce99ef8","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0xa191","gasLimit":"0x1c9c380","gasUsed":"0xb735","timestamp":"0x648ba005","extraData":"0x","mixHash":"0x95e5bf50de1507c957b4ea5e8f0f25dac2f7d96602678be2090be00da5c3512b","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0x3f9277dc8e1410b12cfe27ba9b009bfc4f88814c66454fea1ddd8a26cfc55d2a"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d056826ecf43ebe-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:01 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=KhqPspSsvdt6FDTmPBHwC3UjXuut2tgc4gVzj86dLGHaoxOJUQQi%2BCHLXZsP7n3M%2BKQQrf1dsIxbr5R%2BCy5LDk6gA9MxLMpoit%2B9n8YxYYgQz%2FTgoLjfOeXWEbmkhJ70"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b32, 0xa191, 0xa191
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x50c8",
+      false], "id": 11}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":11,"result":{"hash":"0x7d8d589fd6b4551589a7748610ae755c82b5d0a97facdbfb4d02033bb405a898","parentHash":"0x59aaec363c5781cc504bf76d3e1bfdbb686ce0fa8999c8454bb03281684784fe","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xec6e6ced33583c0358c195e78f917b1e7baf3b907cd1f7673b2dba3bf4169924","transactionsRoot":"0xc59420e38d1253d5bd8bc8827cd03829eef97dee34f6bfb8f8183a822548df92","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x50c8","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648afe73","extraData":"0x","mixHash":"0xa0a3447c69b43b9831bbd368b6c0b8c05fa6f39b6bb998d09301d4436f04566c","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0x65d2320920795f4840c9b67108ad50179d1253124eadcbc6bdf91a1ac6b5365c"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05682a0e5ce0d2-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:01 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=HHeuyI%2BQF02auSpnct3zv1K9F3NGEvJSEi8yCWcd5YGQZcRCwKEjBc0FyzvTXvXlOWTdo%2FQhH%2BpSie73vej2O5DDf1%2BEFg1f2h9AyX63q7InfDdVyptkRXw9z9zB2vvW"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b33, 0x50c8, 0x50c8
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xf18f684e0d92de426778d9114f72675302d8138d'
+      X-Node-Id:
+      - '0x2504970f1d215f1ef128f5f3d07e36a573661944'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x2863",
+      false], "id": 12}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":12,"result":{"hash":"0xfcbf370508ef424c64a10d4b3b748b08defc43cbfbcc8d95506f8e60ffe87d0a","parentHash":"0xa3d322c18fe4d4fd113e3bd1736f00ace814cae26308409184821038251c17e2","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xd0437b9de7dc34dc538d5e6f92d3c1d1f7e85614c4b2150bd8fd06f4922a3761","transactionsRoot":"0xebf829d95cf053024e01d815ca77b7668e78e6e2b61362ec49ae82b05a757809","receiptsRoot":"0x0e7c255df3e2b7ca4d55b82047531f7f3e7437ab1eb33e22eca70653c874982d","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x2863","gasLimit":"0x1c9c380","gasUsed":"0xc545","timestamp":"0x648aada9","extraData":"0x","mixHash":"0x777d98367c274e244c3ce4029eef685a4bc13ed50db630cbeaa03ab23822aecc","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0xc7a57c085948a1b4c74c39552cc26b1d1f8ee2b2fbfab48285446b13b9695078"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05682d2c5a3406-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:02 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=VjinALu5%2FMGGoba94S2veDvbIA713631ps5vKaVqBIzVBaIA3QWylmFsmks%2FAZflsO9moY%2BaWTD%2Fd%2Br%2FOi5KTccchn88UrDzaCULp%2BfkcQuPSwT1QF5YNL1pgLF73Wa0"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b32, 0x2863, 0x2863
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x1431",
+      false], "id": 13}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '91'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":13,"result":{"hash":"0xbe50d825967defa3c0a9f7e1ea6bf83d6d4238697b55bae0492b7d2e3f7e4d66","parentHash":"0xd2e2b07ce12fd5bdfae5a7234d0369bd7dc63d358ffc0f9d2c642a7bd94cdbfb","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x9917792b8455a93a4c978baed4352ccb86ab0a13da4889288877aa18d80d82eb","transactionsRoot":"0x85394e5baad85420c80daa5d947e8e14210b744fa6c370857c353ab64308d219","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x1431","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a8545","extraData":"0x","mixHash":"0xca702fbe09db0ae284c4d646cb609e299027f0445cc547c317cfddcdea25605b","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0xc64b3140ec048f49175926fb5056593febd3e52f7145cf53aa2e329249d8f138"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05683078c5da6d-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:02 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=roUGsD650g3CDMC3tziqOT55BlA%2FnKdOxxsE%2F0GoZEZ3Xa%2Fh7Be5GLNNKmdvsRE90cjqBvHUJlfyDl5Dj4SlGAtKqc%2BkcoNECp5khhZPlleOsXBrLNqekGemdI6LIp4F"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b32, 0x1431, 0x1431
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x06801706ab4f14b5e2ba5696268b319b9f598acc'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0xa18",
+      false], "id": 14}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '90'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":14,"result":{"hash":"0xa558a53f66a537e5ee16a59fa0c45bc285943a765becdb2322700d668d41ce8a","parentHash":"0x5439e1f1af77e77d1478ebdc1b5a5512ef4610f35b87af5fc36ce657f2e9c940","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xf901406ce39974222041466208b67ccee544f3b432762e02d9c78ce33594f5cc","transactionsRoot":"0x351309c19966d8f4c6afeae1edb3f7f2d81dc76b7dd980be4dfd8c9def563f19","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0xa18","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a7113","extraData":"0x","mixHash":"0x1871a80f118f424074e7b5e57a5a91547a1cca43c8f065440ab7199c6c8dad87","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0x8133fd099395c4949f3a0f56b83b269f0afe99f4a35f2333503e40f5f2e8535d"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d056833c952a77f-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:03 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=5hPdGDHxVXteNpYsHVUVZDmAbcUgQjjk1E4zD%2FihO%2BqSLTpm1Tg%2FsKC9YkPu5Lb%2BzfpqXHxgHXWnb41n10dri4lZ7ehFOk%2F5v1xr%2BBbYPtkItvHr9Y6iIZYsgwdkb0KE"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b33, 0xa18, 0xa18
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x44cb46a6d9444ae6ed657a4260ffaf1baca5b287'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x50b",
+      false], "id": 15}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '90'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":15,"result":{"hash":"0x88ce4b1311a30971856da5535e44b62a16c0973f7cf195b7048c3537ba1e930c","parentHash":"0xac431887106d591777d70f76d630db3faa8edd9fe24a7d1056b6e9d0ae07a6fa","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x800073b67d0eae3792c5d4433f5279dffbbdd35b58ada5766114da96fc523670","transactionsRoot":"0x6817424503a9568abe1a236dd8993a8853d236ea0163946e4ab3ab1c60cfc67d","receiptsRoot":"0x637d9e6847368bb52b56e90dd608facc34122c153872e8733cb0b01caa581f85","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x50b","gasLimit":"0x1c9c380","gasUsed":"0xfa0d","timestamp":"0x648a66f9","extraData":"0x","mixHash":"0x7a06f370bbc29b406bb2ad0569802ba7de3e228f626782658d531d064acd832b","nonce":"0x0000000000000000","baseFeePerGas":"0x32","size":"0x364","uncles":[],"transactions":["0x0f2749aafd12ba9b753146c1bbaff676b58f6b4955cb50c055792ba94daf4073"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05683708fea7c1-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:03 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=oF200W%2Be7kqMe4XucDGCYL6szZ2R0sI5KBYpUj8N6S5%2BuQOV9i7Uj69ekBGVJbgkO9jZBg0HzkM3SwHVaCNl3n6TBdFC6XqGCtuhUQ9mSQzFHPzoUwGoSIa7FK94%2BWCc"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b34, 0x50b, 0x50b
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x06801706ab4f14b5e2ba5696268b319b9f598acc'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x285",
+      false], "id": 16}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '90'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":16,"result":{"hash":"0x1327a35590f24171109e2e08ca998a9e63a5b02bd8d058ef1e95a786725f76f1","parentHash":"0xad82d97b63dbf86a22d69900125fbc28733ab1fd70c617847d88618358e48986","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x44f19a3a141def121277d65aad56fbc6dcc4d6c61228123d85f8300d852fa01e","transactionsRoot":"0xf8a3e5a903774bfeae5e7e1154b1ce78c21dcee9c025a46f0ea68f993e09d95e","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x285","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a61ed","extraData":"0x","mixHash":"0x16c0b2ab710fc9b8215bd90458317bdf75af414655d83afeadfd66b304c92ef7","nonce":"0x0000000000000000","baseFeePerGas":"0x9de","size":"0x366","uncles":[],"transactions":["0x68c0465d75871743f712c8abe4f8bbba414598da07d626ce106534a7bcbe14f3"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05683a6daca716-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:04 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=z3tr%2BQMykKnWt0IINLRcisBEvbit3dp72KBd41Ga%2FEGExaOUhrZNOXYUgLHo10Ohpuj%2BrOZr%2BBsZjM7kfCvG99to5kkDydyYuFaJJI3YlzgN%2FAI7Og8fKfxYv8mBuTG9"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b34, 0x285, 0x285
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x142",
+      false], "id": 17}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '90'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":17,"result":{"hash":"0xa0cc3778a252bf07b6d2fde474c97a274d50a6a7aeee4c489f91b0a84b5a36b7","parentHash":"0xc5afb762b268a30ab29f40c616c6b3d6daee7a7cb618b8d7df4c829d9c3e2a93","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xba8f3791716ddcc217af221b69157b3b484d64f13dbdf86987187f7df53272f5","transactionsRoot":"0xd5e61dea88a33c5adcbce6fcdd9dd4a7b31d036721d499fbd6959137f2bc8b43","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x142","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a5f67","extraData":"0x","mixHash":"0xedd21524bafacb780f3774c7345b84c06d1968eefc4b1f21dd4f840958050156","nonce":"0x0000000000000000","baseFeePerGas":"0x18609c","size":"0x367","uncles":[],"transactions":["0x2459b36cb846717dfe3b0d4077b2d08a0df06ff560e4e2d075a26e96eb809ae6"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05683dbef1e328-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:04 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=xYxlrqHG7GdpydjdyMZJatPiemIwTKqJoDpUxF78Ty87y1YPqFopCujFs3byFoCQ0i9eO%2BCxSrIzxX8ztG6JFo6pYXYhAmEFZO0RZm%2Frz1j4E9yjC22rzRE6zTuv%2Bf13"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2852198, 0x142, 0x142
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x042e938f1b3c40f7efd4bb8424facf8aa3d53160'
+      X-Node-Id:
+      - '0xc160e6bad5a28211579459f33bef30da9ac9e8b7'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0xa0",
+      false], "id": 18}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '89'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":18,"result":{"hash":"0x464eabb349706cdc7386c9297891707aa40506a750853adb7ec501cdc195c05a","parentHash":"0xdc5e25c71865515fb05b3fd06076fbd90f425086f24cdf33cde5dbc2026423ed","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x656c14f14da77ec03443830f9d64d7edede0cfb3b42a9d7f3d61aac7b418e61d","transactionsRoot":"0x4f247c798ac7dc5b856ca9e39b543cdcc677883e8cc5bd9dbc6f0a4154f011b3","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0xa0","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a5e23","extraData":"0x","mixHash":"0x47c3ec338a01156395810298ce0207c87d807d9731522a44ebb653e4cb3db6fb","nonce":"0x0000000000000000","baseFeePerGas":"0x26e271e","size":"0x367","uncles":[],"transactions":["0xfd7513b451af941104d47bf4c27d7adfb35d4c063b88b177bf7b3974da88838e"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0568411e40eca8-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:20 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=5KAeDffBwXuUgcVGGq3L9Yq5B%2F5nNyVm49p3kqx7ILLIrND1KToE4nnJEoB2M7RolyqZA4NkKY0iF7QaUjF5X3%2BVFZ1eI1lO5v0ZP6ceyn4pG0Uw4axMX3VqLBSXUlBp"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b3c, 0xa0, 0xa0
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x2f8ddc52a07b72f6ff5a3d0e321dbc99d1888fe8'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x4f",
+      false], "id": 19}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '89'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":19,"result":{"hash":"0x237a9e2e08f1a5295aabeefcb5ddc7449b2984aa41b3c0d785cf48c98991deee","parentHash":"0x987240e2d22c993d2bd61ff3a94923a81292f25d7163106e8bf09114624d1a38","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x6516916cf2fb7b97fa3c9647bd86350817971d90cfe32b139527b8b7a0064189","transactionsRoot":"0x61a93bc42d3fcca5cbe4c96cfd6652480a464d33b1e9a3b7f9da28666288e242","receiptsRoot":"0x637d9e6847368bb52b56e90dd608facc34122c153872e8733cb0b01caa581f85","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x4f","gasLimit":"0x1c9c380","gasUsed":"0xfa0d","timestamp":"0x648a5d81","extraData":"0x","mixHash":"0x5edf53ba2995316bcc7210ef686d007d1299c360a3cae5a0d9e6dcc4fd9b2b14","nonce":"0x0000000000000000","baseFeePerGas":"0xc46fc95","size":"0x366","uncles":[],"transactions":["0x814bc6468d923d164e2bb9eed420c95ee91851952f41b288a10f5cf57ac202cd"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0568a3e95f3ebe-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:36 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=BQzTytPXVjZUNcfqJX%2F%2BTP0zKzzlGOA1QN0Dy7j0MDv3ACzpkcWgs1WkQbX2em55EPcFm1c9w2IMnY72HqiAiAabx%2FVnBguZfhGI7yU%2Fr40r5UguLhdD%2BbLJN%2BjUro1E"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b44, 0x4f, 0x4f
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x44cb46a6d9444ae6ed657a4260ffaf1baca5b287'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x27",
+      false], "id": 20}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '89'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":20,"result":{"hash":"0x9cd94f2d20283da35297ae257f2e7490c51df9803384b3498cf1ee4a318e53bd","parentHash":"0x1d552b80d48e0d1834de0685016e00abf250236a1680c3b1d739e25d85a82f9b","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xc1134a1acba025e27f5de2b1c2c982a0ab790c366d316513a809e75e3526e456","transactionsRoot":"0xb5c5a7b1fcef91dac74eb6229b227fe0a704083e2a43dba57886c56c69fb7fc4","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x27","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a5d31","extraData":"0x","mixHash":"0xdbe16fbfebb6b426cb068df773ec98c7ed72b541d9506e061c7173ff899b6236","nonce":"0x0000000000000000","baseFeePerGas":"0x1b525871","size":"0x366","uncles":[],"transactions":["0xa6c64da5d7df80c1783734734039bb21c1ea54449069f4d088b7dbd2e58fc4bd"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0569060eaea77f-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:36 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=%2FqUCl7XarPxsziYDNcY55ONsbxmh1SM8xc4U%2FjjGVZqwvfCqV3Zyfl02raOf6CsP%2FD8Zxry0M3KnLXAcceWOKale2BgeSEOpbKmIY7yT7PpYKYOK2GvoRmAIrW0aJ5RS"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b42, 0x27, 0x27
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xc1b7918cb97d444a1286a5469341f406f86d08a3'
+      X-Node-Id:
+      - '0x2504970f1d215f1ef128f5f3d07e36a573661944'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x13",
+      false], "id": 21}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '89'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":21,"result":{"hash":"0x20be5325067f1ed75ec3b2372cafb706d3a9ba71afed43d29afdf024456e62ef","parentHash":"0x9cf0c15ce0058ba1dc501555f803159210e4cab874979afd6a8676b0fead9e2c","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xd91c26d7741b6b1f71eb8516e2c7d422da010b8b082495bbfa29edf0c15e2a49","transactionsRoot":"0xad9ddadd5d41287cdfaa519739ff04326ec7a99ac4d79c200b59de8534e2aa6b","receiptsRoot":"0x637d9e6847368bb52b56e90dd608facc34122c153872e8733cb0b01caa581f85","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x13","gasLimit":"0x1c9c380","gasUsed":"0xfa0d","timestamp":"0x648a5d09","extraData":"0x","mixHash":"0xd3984959c31d9884a2d48c231a2745002475985f4197f0695bad783b2c3c7753","nonce":"0x0000000000000000","baseFeePerGas":"0x28c15018","size":"0x366","uncles":[],"transactions":["0x774251aa9ec2df6a89f9e171280f675614c9a47e7a366de49037e910fa1fed2a"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0569093a3009ba-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:37 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=dheRTB3hOnkGkt5x1gwzbsWsDtqoDPJBLwMiQJvhvJonFXO%2Fh0BuEcaphtEKms7yusBG%2BphCPFYGrraJpgmOPYoBv%2BzaKCH2JBZlpN661hKitqERfn36W8U4MBPg37jO"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b44, 0x13, 0x13
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xa2ceb551e7edbc213ad1b18698d1bf0515462fe1'
+      X-Node-Id:
+      - '0xdb707a08b75c2cbbe7dabf9b2c362ce62531baef'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x9",
+      false], "id": 22}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '88'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":22,"result":{"hash":"0x1e3ca4674569e97c92ecd92b6d9a52a97a157ab37015d24e94523ee391ae1d54","parentHash":"0x92459c5332dee7e856d9affb68f435296eb41363309b1c6cb872cb6a139346e1","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xf02179e84939d9690e8fb44b976aeab0083c2de77337fa9bc4373b4ce2cc1bb0","transactionsRoot":"0xbbf5ffa4878ba7fdf21ce9449530541247c463cba0ed3ff9876ab126bfa4f580","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x9","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a5cf5","extraData":"0x","mixHash":"0x798df42e86f80c8440982479c52d5ade843ba782f7b6f4b4b04608eef479edaf","nonce":"0x0000000000000000","baseFeePerGas":"0x31c7728e","size":"0x366","uncles":[],"transactions":["0xcda8fe0c3eeffe78b2a2cba970e0d1ad675ed38ecd14ec037a39193b7bcd5fe9"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05690c6d85a6e3-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:37 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=VwabfmdMiyunY6buu4PG9QBpF5rAPFvUiOMfFKi0Yr0IwCKV4PnmLyi3JyXAOgWXjJT0fLL9yweC7udQ7VQu7VeJ9C%2BQBRa6z7BMf7hYhFdi2Wpa2vSw8DBeAo%2FDshnE"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b45, 0x9, 0x9
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x042e938f1b3c40f7efd4bb8424facf8aa3d53160'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x4",
+      false], "id": 23}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '88'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":23,"result":{"hash":"0x7a8a2d5f82b9e4898fe83c35e35a81316c87ee578824f44fb3a86e29ac0c7208","parentHash":"0x3b98b1e963a6c306457417645fdc862f1dd1e724c92715fe32c1d1923a41cf7e","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0x6be1fc3196c171bda838b075b3757439e4ba79b8603e1617cc47eba55d973e3b","transactionsRoot":"0xc4bb1914a2ee1e4a80a205797937d9923b82f9bc4e59c6991ba1f5506d7166e5","receiptsRoot":"0x3f71ebd8822765e8146170b0f930f55f753dbb867f55e4e605894016cd32f1e2","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x4","gasLimit":"0x1c9c380","gasUsed":"0xb741","timestamp":"0x648a5ceb","extraData":"0x","mixHash":"0xae36673a68b9370a513a06698115fd86cc7faf4d6c248a982fbc3ae29c442da2","nonce":"0x0000000000000000","baseFeePerGas":"0x37034a52","size":"0x366","uncles":[],"transactions":["0xc3bf7c2c6bf028df76c3f3550d2181804009ebce720172075b13e338b95df44f"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d05690f9a1ea73d-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:53 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=wRC9p2cA%2BzPprzm0CfR9sjw6WWZo7Oj9iO3n%2BujWZ7ny1ZWYot7Be0%2BZ53%2ByKSwEqpPBYAWRSLjP4lspjdrg4EnGZ0Nwo0hO%2FITt2%2FyGYelnY8cwxJlIQRQ3O4HNe8EV"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b4c, 0x4, 0x4
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x44cb46a6d9444ae6ed657a4260ffaf1baca5b287'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x1",
+      false], "id": 24}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '88'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":24,"result":{"hash":"0x07eee59d552f482e0f350933b8e96f824aa0bfa28267de53dcb0ddbe868a4bf9","parentHash":"0xf712aa9241cc24369b143cf6dce85f0902a9731e70d66818a3a5845b296c73dd","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xe3e10cb3963f6b88b7ba14cc76c34de65308fc0524dca48410ee53df2a43700b","transactionsRoot":"0xee45a6283d626ebed087ac705c71740d7ecb276d81b745284a68b88925dc91ae","receiptsRoot":"0x637d9e6847368bb52b56e90dd608facc34122c153872e8733cb0b01caa581f85","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x1","gasLimit":"0x1c9c380","gasUsed":"0xfa0d","timestamp":"0x648a5ce5","extraData":"0x","mixHash":"0xae36673a68b9370a513a06698115fd86cc7faf4d6c248a982fbc3ae29c442da2","nonce":"0x0000000000000000","baseFeePerGas":"0x3a699d00","size":"0x366","uncles":[],"transactions":["0x68736fb400dc3b69ab1c4c2cbe75a600aa7ba7cd8d025797ebd8a0108955c91f"]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d0569713f76a73a-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:26:53 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=U0pe6HCV8oZvLEK3e8pBj2gVOxSXNVzZPjWDJnJoIlrg8dVDb3ODlWetchOzyWP7bgE3yxGZuZPyu2hhh%2B8qbM1O2QclSk6Jg7suXPU7XNDc1%2FPVoJlVHc6ZlDkfowCR"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2852198, 0x1, 0x1
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0x44cb46a6d9444ae6ed657a4260ffaf1baca5b287'
+      X-Node-Id:
+      - '0xc160e6bad5a28211579459f33bef30da9ac9e8b7'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x0",
+      false], "id": 25}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '88'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/base-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":25,"result":{"hash":"0xf712aa9241cc24369b143cf6dce85f0902a9731e70d66818a3a5845b296c73dd","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","miner":"0x4200000000000000000000000000000000000011","stateRoot":"0xb2afcb88cd1d0ab228f0415d99b0fb90a18e8515daf5eb31f55b5c4697e18328","transactionsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","receiptsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","difficulty":"0x0","number":"0x0","gasLimit":"0x1c9c380","gasUsed":"0x0","timestamp":"0x648a5ce3","extraData":"0x616c6c20796f75722062617365206172652062656c6f6e6720746f20796f752e","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","baseFeePerGas":"0x3b9aca00","size":"0x222","uncles":[],"transactions":[]}}'
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - authorization, content-type, server
+      Access-Control-Allow-Methods:
+      - GET,POST,OPTIONS
+      Access-Control-Allow-Origin:
+      - '*'
+      Access-Control-Max-Age:
+      - '172800'
+      CF-RAY:
+      - 9d056974ba59a76f-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 11:27:09 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=CFhUPxKYx8F3VDIBhggr7qbFbI4beDOrDsXiYNuq6UQC7%2Fm518qjvpNK0roFe5GQhB41gnvY%2Bvt8m131xjK5gMAari2dh7FlGx4orWGuy4aUmJ2iLtyYo7EwfgButnzb"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Via:
+      - 2.0 Caddy
+      X-Bpi-N-Stat:
+      - 0x2864b53, 0x0, 0x0
+      X-Bpi-Rate-Limit-Lvl:
+      - L4
+      X-Gateway-Id:
+      - '0xa2ceb551e7edbc213ad1b18698d1bf0515462fe1'
+      X-Node-Id:
+      - '0xe2a33f37e2801c684d49d6b5430cc65fe680b75f'
+      X-Provider:
+      - base-rpc
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - accept-encoding
+    status:
+      code: 200
+      message: OK
+version: 1

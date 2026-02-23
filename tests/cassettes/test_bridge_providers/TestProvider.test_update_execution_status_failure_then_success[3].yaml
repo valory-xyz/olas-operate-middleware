@@ -1,0 +1,343 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - python-requests/2.32.4
+      accept:
+      - application/json
+    method: GET
+    uri: https://api.relay.link/requests/v2?hash=0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3&sortBy=createdAt
+  response:
+    body:
+      string: '{"requests":[{"id":"0x07b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","status":"success","user":"0x308508f09f81a6d28679db6da73359c72f8e22c5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","data":{"slippageTolerance":"409","failReason":"N/A","refundFailReason":"N/A","subsidizedRequest":false,"fees":{"gas":"408332064085","fixed":"8251097395953","price":"84816339964","gateway":"5141376507527"},"feesUsd":{"gas":"0.000798","fixed":"0.016133","price":"0.000165","gateway":"0.010053"},"inTxs":[{"fee":"21451898491","data":{"to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","data":"0x07b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","value":"437949353918924"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-437949353918924"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"437949353918924"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"}],"hash":"0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3","block":137892550,"type":"onchain","chainId":10,"timestamp":1751383877}],"currency":"eth","currencyObject":{},"feeCurrency":"eth","feeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFeeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFees":[],"paidAppFees":[],"metadata":{"sender":"0x308508F09F81A6d28679db6da73359c72f8e22C5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","currencyIn":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"437949353918924","amountFormatted":"0.000437949353918924","amountUsd":"1.062268","amountUsdCurrent":"0.843840","minimumAmount":"437949353918924"},"currencyOut":{"currency":{"chainId":34443,"address":"0xd988097fb8612cc24eec14542bc03424c656005f","symbol":"USDC","name":"Bridged
+        USDC","decimals":6,"metadata":{"logoURI":"https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png","verified":true}},"amount":"1027249","amountFormatted":"1.027249","amountUsd":"1.027199","amountUsdCurrent":"1.027197","minimumAmount":"1000000"},"rate":"2345.588572760336","route":{"origin":{"inputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"outputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"router":"uniswap"},"destination":{"inputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"outputCurrency":{"currency":{"chainId":34443,"address":"0xd988097fb8612cc24eec14542bc03424c656005f","symbol":"USDC","name":"Bridged
+        USDC","decimals":6,"metadata":{"logoURI":"https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png","verified":true}},"amount":"1000000","amountFormatted":"1.0","amountUsd":"0.999951","minimumAmount":"1000000"},"router":"sushiswap"}}},"price":"424081699824656","usesExternalLiquidity":false,"timeEstimate":3,"outTxs":[{"fee":"335038963725","data":{"to":"0xeeeeee9ec4769a09a76a83c7bc42b185872860ee","data":"0x6e305f80000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000500000000000000000000000000308508f09f81a6d28679db6da73359c72f8e22c50000000000000000000000000000000000000000000000000000000000000002000000000000000000000000ac4c6e212a361c968f1725b4d055b47e63f80b75000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000038000000000000000000000000000000000000000000000000000000000000003045f3bd1c8000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f00000000000000000000000000000000000000000000000000000000000f08920000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001e46be92b89000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f00000000000000000000000000000000000000000000000000000000000facb1000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee00000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000b40301ffff02013ced11c610556e5292fbc2e75d68c3899098c14c420000000000000000000000000000000000000601420000000000000000000000000000000000000601ffff01d8abc2be7ad5d17940112969973357a3a3562998013ced11c610556e5292fbc2e75d68c3899098c14c0001f0f161fda2712db8b566946122a5af183995e2ed01ffff01ee8291dd97611a064a7db0e8c9252d851674e201003ced11c610556e5292fbc2e75d68c3899098c14c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000443dad0c9c000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f000000000000000000000000308508f09f81a6d28679db6da73359c72f8e22c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000000000000000000000000000000000000000000007b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","value":"424081699824656"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-424081699824656"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"424081699824656"},"address":"0x4200000000000000000000000000000000000006"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xf0f161fda2712db8b566946122a5af183995e2ed"},"kind":"token","balanceDiff":"-1027531"},"address":"0xd8abc2be7ad5d17940112969973357a3a3562998"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x4200000000000000000000000000000000000006"},"kind":"token","balanceDiff":"424081699824656"},"address":"0xd8abc2be7ad5d17940112969973357a3a3562998"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xd988097fb8612cc24eec14542bc03424c656005f"},"kind":"token","balanceDiff":"-1027249"},"address":"0xee8291dd97611a064a7db0e8c9252d851674e201"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xf0f161fda2712db8b566946122a5af183995e2ed"},"kind":"token","balanceDiff":"1027531"},"address":"0xee8291dd97611a064a7db0e8c9252d851674e201"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xd988097fb8612cc24eec14542bc03424c656005f"},"kind":"token","balanceDiff":"1027249"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"}],"hash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","block":25608148,"type":"onchain","chainId":34443,"timestamp":1751383879}]},"createdAt":"2025-07-01T15:31:17.497Z","updatedAt":"2025-07-01T15:31:51.239Z"}]}'
+    headers:
+      Age:
+      - '302'
+      Cache-Control:
+      - max-age=600
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 14:12:08 GMT
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - accept-encoding
+      Via:
+      - 1.1 6852a2fb92649a7e923a182e8c0f9e32.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - D7lPspgzyqHRzHl9Yf7V6YQ-cTej7m6TaIHCVlXEz2pkJtjD869Iew==
+      X-Amz-Cf-Pop:
+      - MXP53-P8
+      X-Cache:
+      - Hit from cloudfront
+      access-control-allow-origin:
+      - '*'
+      strict-transport-security:
+      - max-age=86400; includeSubDomains
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - python-requests/2.32.4
+      accept:
+      - application/json
+    method: GET
+    uri: https://api.relay.link/requests/v2?hash=0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3&sortBy=createdAt
+  response:
+    body:
+      string: '{"requests":[{"id":"0x07b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","status":"success","user":"0x308508f09f81a6d28679db6da73359c72f8e22c5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","data":{"slippageTolerance":"409","failReason":"N/A","refundFailReason":"N/A","subsidizedRequest":false,"fees":{"gas":"408332064085","fixed":"8251097395953","price":"84816339964","gateway":"5141376507527"},"feesUsd":{"gas":"0.000798","fixed":"0.016133","price":"0.000165","gateway":"0.010053"},"inTxs":[{"fee":"21451898491","data":{"to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","data":"0x07b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","value":"437949353918924"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-437949353918924"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"437949353918924"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"}],"hash":"0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3","block":137892550,"type":"onchain","chainId":10,"timestamp":1751383877}],"currency":"eth","currencyObject":{},"feeCurrency":"eth","feeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFeeCurrencyObject":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"appFees":[],"paidAppFees":[],"metadata":{"sender":"0x308508F09F81A6d28679db6da73359c72f8e22C5","recipient":"0x308508F09F81A6d28679db6da73359c72f8e22C5","currencyIn":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"437949353918924","amountFormatted":"0.000437949353918924","amountUsd":"1.062268","amountUsdCurrent":"0.843840","minimumAmount":"437949353918924"},"currencyOut":{"currency":{"chainId":34443,"address":"0xd988097fb8612cc24eec14542bc03424c656005f","symbol":"USDC","name":"Bridged
+        USDC","decimals":6,"metadata":{"logoURI":"https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png","verified":true}},"amount":"1027249","amountFormatted":"1.027249","amountUsd":"1.027199","amountUsdCurrent":"1.027197","minimumAmount":"1000000"},"rate":"2345.588572760336","route":{"origin":{"inputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"outputCurrency":{"currency":{"chainId":10,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"router":"uniswap"},"destination":{"inputCurrency":{"currency":{"chainId":34443,"address":"0x0000000000000000000000000000000000000000","symbol":"ETH","name":"Ether","decimals":18,"metadata":{"logoURI":"https://assets.relay.link/icons/1/light.png","verified":true}},"amount":"424081699824656","amountFormatted":"0.000424081699824656","amountUsd":"1.028631","minimumAmount":"424081699824656"},"outputCurrency":{"currency":{"chainId":34443,"address":"0xd988097fb8612cc24eec14542bc03424c656005f","symbol":"USDC","name":"Bridged
+        USDC","decimals":6,"metadata":{"logoURI":"https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/assets/0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48/logo.png","verified":true}},"amount":"1000000","amountFormatted":"1.0","amountUsd":"0.999951","minimumAmount":"1000000"},"router":"sushiswap"}}},"price":"424081699824656","usesExternalLiquidity":false,"timeEstimate":3,"outTxs":[{"fee":"335038963725","data":{"to":"0xeeeeee9ec4769a09a76a83c7bc42b185872860ee","data":"0x6e305f80000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000500000000000000000000000000308508f09f81a6d28679db6da73359c72f8e22c50000000000000000000000000000000000000000000000000000000000000002000000000000000000000000ac4c6e212a361c968f1725b4d055b47e63f80b75000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee00000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000040000000000000000000000000000000000000000000000000000000000000038000000000000000000000000000000000000000000000000000000000000003045f3bd1c8000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f00000000000000000000000000000000000000000000000000000000000f08920000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001e46be92b89000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f00000000000000000000000000000000000000000000000000000000000facb1000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee00000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000000000000000300000000000000000000000000000000000000000000000000000000000000b40301ffff02013ced11c610556e5292fbc2e75d68c3899098c14c420000000000000000000000000000000000000601420000000000000000000000000000000000000601ffff01d8abc2be7ad5d17940112969973357a3a3562998013ced11c610556e5292fbc2e75d68c3899098c14c0001f0f161fda2712db8b566946122a5af183995e2ed01ffff01ee8291dd97611a064a7db0e8c9252d851674e201003ced11c610556e5292fbc2e75d68c3899098c14c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000443dad0c9c000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f000000000000000000000000308508f09f81a6d28679db6da73359c72f8e22c5000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000181b33712e410000000000000000000000000000000000000000000000000000000000000000007b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","value":"424081699824656"},"stateChanges":[{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"-424081699824656"},"address":"0xf70da97812cb96acdf810712aa562db8dfa3dbef"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x0000000000000000000000000000000000000000"},"kind":"token","balanceDiff":"424081699824656"},"address":"0x4200000000000000000000000000000000000006"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xf0f161fda2712db8b566946122a5af183995e2ed"},"kind":"token","balanceDiff":"-1027531"},"address":"0xd8abc2be7ad5d17940112969973357a3a3562998"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0x4200000000000000000000000000000000000006"},"kind":"token","balanceDiff":"424081699824656"},"address":"0xd8abc2be7ad5d17940112969973357a3a3562998"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xd988097fb8612cc24eec14542bc03424c656005f"},"kind":"token","balanceDiff":"-1027249"},"address":"0xee8291dd97611a064a7db0e8c9252d851674e201"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xf0f161fda2712db8b566946122a5af183995e2ed"},"kind":"token","balanceDiff":"1027531"},"address":"0xee8291dd97611a064a7db0e8c9252d851674e201"},{"change":{"data":{"tokenKind":"ft","tokenAddress":"0xd988097fb8612cc24eec14542bc03424c656005f"},"kind":"token","balanceDiff":"1027249"},"address":"0x308508f09f81a6d28679db6da73359c72f8e22c5"}],"hash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","block":25608148,"type":"onchain","chainId":34443,"timestamp":1751383879}]},"createdAt":"2025-07-01T15:31:17.497Z","updatedAt":"2025-07-01T15:31:51.239Z"}]}'
+    headers:
+      Age:
+      - '303'
+      Cache-Control:
+      - max-age=600
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 14:12:08 GMT
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - accept-encoding
+      Via:
+      - 1.1 23fbcf9e9c8a3145539f816eab21dad0.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - hcaxlGhMyvmV9_YNY88Pn6X5yOYt6HGvDSv94hS4K8IOdujkaCPJ5g==
+      X-Amz-Cf-Pop:
+      - MXP53-P8
+      X-Cache:
+      - Hit from cloudfront
+      access-control-allow-origin:
+      - '*'
+      strict-transport-security:
+      - max-age=86400; includeSubDomains
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getTransactionReceipt", "params": ["0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d"],
+      "id": 4}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '148'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","result":{"blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","contractAddress":null,"cumulativeGasUsed":"0x29ea63","effectiveGasPrice":"0x2c7","from":"0xf70da97812cb96acdf810712aa562db8dfa3dbef","gasUsed":"0x5cc23","l1BaseFeeScalar":"0x4e20","l1BlobBaseFee":"0x1","l1BlobBaseFeeScalar":"0x95506","l1Fee":"0x4df1c6ead8","l1GasPrice":"0x95f59758","l1GasUsed":"0x19fd","logs":[{"address":"0x4200000000000000000000000000000000000006","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x000000000000000000000000000000000000000000000000000181b33712e410","logIndex":"0x0","removed":false,"topics":["0xe1fffcc4923d04b559f4d29a8bfc6cda04eb5b0d3c460751c2402c5c5cc9109c","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xf0f161fda2712db8b566946122a5af183995e2ed","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x00000000000000000000000000000000000000000000000000000000000fadcb","logIndex":"0x1","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x000000000000000000000000d8abc2be7ad5d17940112969973357a3a3562998","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0x4200000000000000000000000000000000000006","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x000000000000000000000000000000000000000000000000000181b33712e410","logIndex":"0x2","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c","0x000000000000000000000000d8abc2be7ad5d17940112969973357a3a3562998"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xd8abc2be7ad5d17940112969973357a3a3562998","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x000000000000000000000000000000000000000000000000000181b33712e410fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0523500000000000000000000000000000000000000000003398d47a7559901b313d00000000000000000000000000000000000000000000000000000183ca0d3c79cfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffcf900","logIndex":"0x3","removed":false,"topics":["0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xd988097fb8612cc24eec14542bc03424c656005f","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x00000000000000000000000000000000000000000000000000000000000facb1","logIndex":"0x4","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x000000000000000000000000ee8291dd97611a064a7db0e8c9252d851674e201","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xf0f161fda2712db8b566946122a5af183995e2ed","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x00000000000000000000000000000000000000000000000000000000000fadcb","logIndex":"0x5","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c","0x000000000000000000000000ee8291dd97611a064a7db0e8c9252d851674e201"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xee8291dd97611a064a7db0e8c9252d851674e201","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffffff0534f00000000000000000000000000000000000000000000000000000000000fadcb00000000000000000000000000000000000000010005fadd9b4ca0ca4820e0830000000000000000000000000000000000000000000000000000001a57f2d19d0000000000000000000000000000000000000000000000000000000000000001","logIndex":"0x6","removed":false,"topics":["0xc42079f94a6350d7e6235f29174924f928cc2ac818eb64fed8004e115fbcca67","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xd988097fb8612cc24eec14542bc03424c656005f","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x00000000000000000000000000000000000000000000000000000000000facb1","logIndex":"0x7","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x0000000000000000000000003ced11c610556e5292fbc2e75d68c3899098c14c","0x000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0x3ced11c610556e5292fbc2e75d68c3899098c14c","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee000000000000000000000000d988097fb8612cc24eec14542bc03424c656005f000000000000000000000000000000000000000000000000000181b33712e41000000000000000000000000000000000000000000000000000000000000facb10000000000000000000000000000000000000000000000000000000000000000","logIndex":"0x8","removed":false,"topics":["0xbbb02a24579dc2e59c1609253b6ddab5457ba00895b3eda80dd41e03e2cd7e55","0x000000000000000000000000ad27827c312cd5e71311d68e180a9872d42de23d","0x000000000000000000000000eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","0x0000000000000000000000000000000000000000000000000000000000000003"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"},{"address":"0xd988097fb8612cc24eec14542bc03424c656005f","blockHash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","blockNumber":"0x186bfd4","data":"0x00000000000000000000000000000000000000000000000000000000000facb1","logIndex":"0x9","removed":false,"topics":["0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef","0x000000000000000000000000eeeeee9ec4769a09a76a83c7bc42b185872860ee","0x000000000000000000000000308508f09f81a6d28679db6da73359c72f8e22c5"],"transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3"}],"logsBloom":"0x000000000000000000000000000000000000004100000000000400000010000000000000000000000040001010000000200000000200200000120000000000080000000000000008000000080c000000000000000000002000000000c000201000000000000000000000000000000000000000000002000008008010000800000000002000000002000000008000000400004001402000000000000400000040000000000000000000100200000100000200000000800000000040200000400000000002000000000000000002102000000001000000000000000000100000000000000000000000000000000000000000000000000000400000000040000080","status":"0x1","to":"0xeeeeee9ec4769a09a76a83c7bc42b185872860ee","transactionHash":"0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","transactionIndex":"0x3","type":"0x2"},"id":4}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d0662f5a83aa747-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Security-Policy-Report-Only:
+      - script-src 'none'; report-uri https://csp-reporting.cloudflare.com/cdn-cgi/script_monitor/report?m=4osVHMOm86mnKCAuHnD_F4pQ6j7zXG3l_7_9pjjGpzE-1771510634-1.0.1.1-xriZ1.U00hXR_vXxEkr975GKneER7kgr.lyVMBACJspezSQPJznBegM.2j0I1kL8WwUItZVW5nmIY.XK7bg4fBqOmTp3U6vB5lJNM1Vvw5kfBRY6L6tCv74.FZU4DXMhiqpJQfjnNQM764OKFe9y22AU_HclN0UO0dxKEzSTjIcpHqso6AmtvVhbnw7DPY1h;
+        report-to cf-csp-endpoint
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:17:14 GMT
+      Report-To:
+      - '{"endpoints":[{"url":"https:\/\/csp-reporting.cloudflare.com\/cdn-cgi\/script_monitor\/report?m=4osVHMOm86mnKCAuHnD_F4pQ6j7zXG3l_7_9pjjGpzE-1771510634-1.0.1.1-xriZ1.U00hXR_vXxEkr975GKneER7kgr.lyVMBACJspezSQPJznBegM.2j0I1kL8WwUItZVW5nmIY.XK7bg4fBqOmTp3U6vB5lJNM1Vvw5kfBRY6L6tCv74.FZU4DXMhiqpJQfjnNQM764OKFe9y22AU_HclN0UO0dxKEzSTjIcpHqso6AmtvVhbnw7DPY1h"}],"group":"cf-csp-endpoint","max_age":86400}'
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x186bfd4",
+      false], "id": 5}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '93'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://mainnet.mode.network/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","result":{"baseFeePerGas":"0x2b2","blobGasUsed":"0x0","difficulty":"0x0","excessBlobGas":"0x0","extraData":"0x00000000fa00000006","gasLimit":"0x1c9c380","gasUsed":"0x688c6c","hash":"0x24f2fc12b56dcab6ef6262ce13a3147b492d53de21e65894a1842be12848fc23","logsBloom":"0x000000000000000000000000000000000000004100000000000400000010000000000000000000000040001010000000200000000200200000120000000000080000000000000008000000080c000000000000000000002000000000c000201000000000000000000000000000000000000000000002000008008010000800000000002000000002000000008000000400004001402000000000000400000040000000000000000000100200000100000200000000800000000040200000400000000002000000000000000002102000000001000000000000000000100000000000000000000000000000000000000000000000000000400000000040000080","miner":"0x4200000000000000000000000000000000000011","mixHash":"0x7fcd690f22e2e58f620e79308f8b9983f55e15bee9836ffa200953f0359cc20d","nonce":"0x0000000000000000","number":"0x186bfd4","parentBeaconBlockRoot":"0xe9456a3c5b32e265e61fa36569b6d5129c35623e03760e0b9203c1958b56552a","parentHash":"0xc00d6b6e0ad49345df40204ec2b1a127e00cb933e56762e82395f03e925cb135","receiptsRoot":"0x375a8c6586c8c13279500ba7cb1e91828c1fdf9949cbedda748c0a3ccf308005","requestsHash":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0xad9","stateRoot":"0xe372683967deb5ed0db93e28d405f72498ffe1a3bcdde975062fbc2ec56e73f7","timestamp":"0x6863ff47","transactions":["0x1b923f90149eb0f6e051a88bfb2c7a05a1d17425e5e6464fa07f76770b9205d9","0x95dbb517bfabb87d682f71805516b7da446bb93fee7df22d1ab389ecf9507699","0xb6f27d498e6d2967fcab3d8032be90e42400880a0660079a8ae355468db00add","0x5f83425ad08bae4fab907908387d30c3b6c5d34a21d281db3c1e61a7bba06a5d","0x46f19236ced70e343d8a885d30e8aebb21f569d6852b3a29ba460bc3bf343a1c"],"transactionsRoot":"0x20d3eddf93af470c4e11e1acad3cded03abf432431d3f76ef8fdd611cdf886d7","uncles":[],"withdrawals":[],"withdrawalsRoot":"0x58e8201321168ef900d3091548b60b872495bd9a8cc59f06c82dac4e49b24f68"},"id":5}
+
+        '
+    headers:
+      Alt-Svc:
+      - h3=":443"; ma=86400
+      CF-RAY:
+      - 9d0662f8dbba251f-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:17:14 GMT
+      Server:
+      - cloudflare
+      Strict-Transport-Security:
+      - max-age=31536000; includeSubDomains; preload
+      Transfer-Encoding:
+      - chunked
+      X-Content-Type-Options:
+      - nosniff
+      cf-cache-status:
+      - DYNAMIC
+      vary:
+      - Origin
+      via:
+      - 1.1 google
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getTransactionReceipt", "params": ["0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3"],
+      "id": 8}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '148'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/optimism-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":8,"result":{"blockHash":"0xb2d1e65af5cc4f974d80206fc30b3949a08e54f0a1f029df63fa1ef79a48f12c","blockNumber":"0x83812c6","contractAddress":null,"cumulativeGasUsed":"0xb5cfec","effectiveGasPrice":"0x1cd8","from":"0x308508f09f81a6d28679db6da73359c72f8e22c5","gasUsed":"0x7f8a","l1BaseFeeScalar":"0x146b","l1BlobBaseFee":"0x1","l1BlobBaseFeeScalar":"0xf79c5","l1Fee":"0x4f0434a0b","l1GasPrice":"0x972b74a7","l1GasUsed":"0x640","logs":[{"address":"0xa5f565650890fba1824ee0f21ebbbf660a179934","topics":["0x936c2ca3b35d2d0b24057b0675c459e4515f48fe132d138e213ae59ffab7f53e"],"data":"0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000002007b057da311002489967e3b94c0f2e3d1d4e1288897b049c1159751c98c3bd1b","blockNumber":"0x83812c6","transactionHash":"0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3","transactionIndex":"0x21","blockHash":"0xb2d1e65af5cc4f974d80206fc30b3949a08e54f0a1f029df63fa1ef79a48f12c","blockTimestamp":"0x6863ff45","logIndex":"0x2c","removed":false}],"logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000080000","status":"0x1","to":"0xa5f565650890fba1824ee0f21ebbbf660a179934","transactionHash":"0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3","transactionIndex":"0x21","type":"0x2"}}
+
+        '
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - Content-Type,Authorization,User-Agent
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Allow-Origin:
+      - ''
+      CF-RAY:
+      - 9d0662fc19f4f4fe-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:17:15 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=JmQrwCVhh85NtHwzpp1UT3A%2FaThttLkc0RpNsCSj4TQGW8aue7tNGQo0OaWPYZkXV3cRKFREK4uqdwytnzFv73iQK73BbK31R83LieQO8IkMs3R70%2F9WMJd5PzcY2YD6"}]}'
+      Server:
+      - cloudflare
+      Transfer-Encoding:
+      - chunked
+      Vary:
+      - Accept-Encoding
+      Via:
+      - 2.0 Caddy
+      X-Host-Id:
+      - f1b546936d23e3b5-729114766a37fbe3
+      X-Node-Id:
+      - optimistic-ethereum_optimism_fra
+      X-Provider:
+      - optimism-rpc
+      cf-cache-status:
+      - DYNAMIC
+    status:
+      code: 200
+      message: OK
+- request:
+    body: '{"jsonrpc": "2.0", "method": "eth_getBlockByNumber", "params": ["0x83812c6",
+      false], "id": 9}'
+    headers:
+      Accept:
+      - '*/*'
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '93'
+      Content-Type:
+      - application/json
+      User-Agent:
+      - web3.py/7.14.0/web3.providers.rpc.rpc.HTTPProvider
+    method: POST
+    uri: https://rpc-gate.autonolas.tech/optimism-rpc/
+  response:
+    body:
+      string: '{"jsonrpc":"2.0","id":9,"result":{"baseFeePerGas":"0x164e","blobGasUsed":"0x0","difficulty":"0x0","excessBlobGas":"0x0","extraData":"0x00000000fa00000002","gasLimit":"0x2625a00","gasUsed":"0xff5ef7","hash":"0xb2d1e65af5cc4f974d80206fc30b3949a08e54f0a1f029df63fa1ef79a48f12c","logsBloom":"0x001238041202000080400082020004000040801a000001000c04400040810902450c040429000000004000102122200001044040040022400080060140ac000029100400000820a80000000900080000008014820044002840120010a000002100444004060400d022000104080018004000440020280c000008001248081088010010011002000140008200000000001020300100210000001114108b40001282100000000040001000000240009040000000900000001010d00001000082008500008fc0240000280c221410420000080000040c80030000002002100029100090000104a000004c40000400000100880020002082004488000000002de100","miner":"0x4200000000000000000000000000000000000011","mixHash":"0x63915a5d053d0b45e2fa2158544e1b4b89c429a27f415c2c2ec4d4d88f5b4d30","nonce":"0x0000000000000000","number":"0x83812c6","parentBeaconBlockRoot":"0xa6fe8b5c56a064686751a80e12a78ee48ea6774246b393661259b42dea50940c","parentHash":"0xe68dd9e07a5ca3569c07bb918d6b76431894fafaa52da58af2b81193a0617649","receiptsRoot":"0x12fb3ccb451be57f8d6bfac06dfbc4b838d74dc2bb7bf5a457e6eab31bf4d3d2","requestsHash":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x5803","stateRoot":"0x73391b6849e950354fcd1be5069acc43e6fb2b32cdf70bb12f25a85c1a4eb83c","timestamp":"0x6863ff45","transactions":["0x50af5541d590b5e50c2686ac735825ca07d558dcf478d0d50387ac4035fe5626","0x4272adf6031c98a9c60bf65c21b425d664c8d1554266aa28602283c016a582cc","0x17415522db9b1302f44ebc15987cec813d8f399001c171cd61f42db2190fe57e","0x2f8a95fce9f4b538c68229c20332b029858e8872e58f6f8f4e993bb568087902","0xa5fd17a035e5172a77a94ca88da944587564db2fbc0ee1e44cdf30ef1ffd9662","0xc474c561a5c04096adce751520d6b4a8114719669f2836c835f2b42e8ff05b2f","0x98257e04f34d3c1a6f15bd6b5f0223eb64db607f0691ebfd365072ddab7ea4bc","0xb8fd8df120204bf7ffd6002ee9c85943dab1404ab343cc649e14c2a7c00eb0d2","0xced94d3138cba1f6fee3c873d3998ee7e9a444332a6a3fed4abc5ef2ba9ae3e5","0xaa61e41eb7a751f00216033c365c11bbed787d540be9537cdc5f93e2c7ae67f3","0x7ac4e40135818fdb119c56438f0798e99e7cfc1174b12c539f51f53df6329567","0xdcc0a3964656cfc4a0e5d0e2de9069887fe8b0c798c6f0f8a7fc8a3f4936d9e0","0xd908122928befda7b6938badaecc81b87313cad72fc3582418221e8bf528160a","0x449bde2cda7b9b52590c97415b391ce6faf99774f7d600538a9bd38e2ac53cde","0x4ec140f6b359b465ebbcd64b617dc52f74e0df68b23ff712c8a72d4feba5bd44","0xe825992cdfe131e8fb83def47e83b11eeef740da5e628325ba9a1efc48276a5e","0x612343a86c89a569deb1515608d8b75f386a1a6437dbd5892a52fd49f1a7f010","0xb429a4f1107e6de29d87dd365e9a65ccc22d3632896d91ad4d98114415e8c9c1","0xae1b710609e29002a28c23c920fc56dfa3949462ef67f4fac5e04d0fd69b444c","0x035d9e2fdef3446d67f57889bb66dbc3b1b0a58c70fc556b5862caea146745f7","0xb6863a6633de84491098752708422542fde95970421a2c277640286bb9e454ea","0x921ebc897622c98efbcc6ff46f98c55d70b230ec7686a256128a617031f8855d","0xaf80673f6116b758c1e6c331d068ed61ec844072ce311db9796053d812d3e0b2","0x55061185898f4630037245d1987f1d19e133696b3659404f2c7e772a409cd045","0xae033f3c2d62cbfeb303ddee7eacdf296ea0fa18ce7ff4c850e65f9826526a8e","0xb28ee88ee1d64e682eb1fa42acaa6a5de65ce5c885acb04cf376540d47344814","0x996e6bc4678683adc9e7c1a4fb9a1b5d5f924181536ce7107fbf2005e16ec57c","0x57529d3d1bc34defaba2abc6cf1636325517f69ad12a04f6ec21e63b6a44a991","0x2c46136331f19cfcc3c72df36931369304d3c36ab2d0cd88ed594dda6aa39ff7","0x00579df821d88def23230866627867e991cf38fd6ab27bd0a99fa738ac353a83","0x537fb7dc9975d3a5c17ad201d7541e583b14556f226558fbce713067f5d65dad","0x8a01994ed4312558b5726109654f5570c860f533472700493e0e17e121960eaa","0x3b3e87368bdc44674e989de888b60307f97309b95d344252f3fa4fd9a8ccc72d","0x798887aa9bbcea4b8578ab0aba67a8f26418373a8df9036ccbde96f5125483e3","0x2a369ec6c59ee23e7da0d50cacf02495a90e65a7667f13ab0d150f29d4624307","0x41dd5671d45ecaba4ef4659ed1de91dfc413796b042c07708b3d7017265126c0","0x554ee8d18ed490fbce57eb7ac2a3097f5d1c7ac884e741147cd7c22ca90e6241","0x0f579875c76a998ee124d2bc1d1de46aa8788404f58f3ff446388d94859d41ce","0x1ad1a00b4887c4f0d87261d7996f436415f8d0a8bb2849c9af4010191a80e025","0x032f73b10aa35a3ab96d3bd0d8455fb2202491a8d6fad06adbf7d9bfdd82fbc3"],"transactionsRoot":"0xcc005b9c50235faa2cb940983f52615896821ce8814f5f1e742377cc884fd10c","uncles":[],"withdrawals":[],"withdrawalsRoot":"0x2e1ad1104fe7e8f77d68a6cedcb8329681672f1e989a329e28625eea1120f639"}}
+
+        '
+    headers:
+      Access-Control-Allow-Credentials:
+      - 'true'
+      Access-Control-Allow-Headers:
+      - Content-Type,Authorization,User-Agent
+      Access-Control-Allow-Methods:
+      - GET, POST, OPTIONS
+      Access-Control-Allow-Origin:
+      - ''
+      CF-RAY:
+      - 9d0662ff2e01a6db-DEL
+      Connection:
+      - keep-alive
+      Content-Encoding:
+      - gzip
+      Content-Length:
+      - '2461'
+      Content-Type:
+      - application/json
+      Date:
+      - Thu, 19 Feb 2026 14:17:15 GMT
+      Nel:
+      - '{"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}'
+      Report-To:
+      - '{"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=P6bfSS0CtxeN4h%2F4ESbpQA7T8fVNwztZQA2wTvKiqD9cbWQJw73PzL%2BJtTjVOYrLsv95KG3%2B3hMK4%2FK89YgY34TO5egBTKZo89Ya9TxOwwpNBYeBIwHEIRGx8HgD1iJO"}]}'
+      Server:
+      - cloudflare
+      Vary:
+      - Accept-Encoding
+      Via:
+      - 2.0 Caddy
+      X-Host-Id:
+      - f1b546936d23e3b5-d36d71973f9682f4
+      X-Node-Id:
+      - optimistic-ethereum_optimism_fra
+      X-Provider:
+      - optimism-rpc
+      cf-cache-status:
+      - DYNAMIC
+    status:
+      code: 200
+      message: OK
+version: 1
