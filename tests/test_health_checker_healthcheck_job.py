@@ -271,8 +271,8 @@ class TestHealthCheckerJobManagement:
         assert service_config_id not in health_checker._jobs
 
     @pytest.mark.asyncio
-    async def test_check_port_ready_returns_false_on_timeout(self) -> None:
-        """Test that _check_port_ready returns False when wait_for_port times out."""
+    async def test_healthcheck_job_runs_when_service_always_healthy(self) -> None:
+        """Test that healthcheck_job starts and runs without error when the service is always healthy."""
         mock_service = MagicMock()
         mock_service.path = MagicMock()
         mock_service_manager = MagicMock()
@@ -281,19 +281,15 @@ class TestHealthCheckerJobManagement:
         health_checker = HealthChecker(
             service_manager=mock_service_manager,
             logger=MagicMock(),
-            port_up_timeout=1,  # Very short timeout so it expires quickly
+            port_up_timeout=1,
         )
 
         service_config_id = "test-service"
 
-        # Make check_service_health always succeed so _wait_for_port returns immediately,
-        # but override _check_port_ready to test the TimeoutError path directly
         async def always_healthy(*args: object, **kwargs: object) -> bool:
             return True
 
         with patch.object(health_checker, "check_service_health", always_healthy):
-            # We test _check_port_ready indirectly by running healthcheck_job
-            # and verifying it proceeds past port-ready phase
             task = asyncio.create_task(
                 health_checker.healthcheck_job(service_config_id)
             )
@@ -304,7 +300,7 @@ class TestHealthCheckerJobManagement:
             except (asyncio.CancelledError, Exception):  # pylint: disable=broad-except
                 pass
 
-        # Logger should have been called with port-ready info
+        # Job ran — at minimum the startup log should have been emitted
         health_checker.logger.info.assert_called()  # type: ignore[attr-defined]
 
 

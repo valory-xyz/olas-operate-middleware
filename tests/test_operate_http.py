@@ -17,7 +17,12 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Tests for operate/operate_http/__init__.py."""
+"""Tests for operate/operate_http/__init__.py.
+
+Note: ``Resource`` is an abstract ASGI handler base class.  It is not
+currently subclassed by any production endpoint (dead code), but the tests
+document its expected contract in case it is put back into use.
+"""
 
 from http import HTTPStatus
 
