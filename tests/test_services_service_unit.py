@@ -161,9 +161,7 @@ class TestGetLatestHealthcheck:
     def test_returns_parsed_json_when_file_exists(self, tmp_path: Path) -> None:
         """Test that the healthcheck JSON is returned when the file exists."""
         payload = {"status": "healthy", "count": 3}
-        (tmp_path / HEALTHCHECK_JSON).write_text(
-            json.dumps(payload), encoding="utf-8"
-        )
+        (tmp_path / HEALTHCHECK_JSON).write_text(json.dumps(payload), encoding="utf-8")
         svc = _make_service(tmp_path)
         result = svc.get_latest_healthcheck()
         assert result == payload
@@ -211,9 +209,7 @@ class TestGetAgentPerformance:
         """Test that defaults are returned when agent_performance.json is absent."""
         svc = _make_service(
             tmp_path,
-            env_variables={
-                AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}
-            },
+            env_variables={AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}},
         )
         result = svc.get_agent_performance()
         assert result["timestamp"] is None
@@ -223,15 +219,16 @@ class TestGetAgentPerformance:
 
     def test_reads_and_merges_performance_file(self, tmp_path: Path) -> None:
         """Test that agent_performance.json data is merged into the defaults."""
-        perf_data = {"timestamp": 1234567890, "metrics": [{"name": "trades", "value": 5}]}
+        perf_data = {
+            "timestamp": 1234567890,
+            "metrics": [{"name": "trades", "value": 5}],
+        }
         (tmp_path / "agent_performance.json").write_text(
             json.dumps(perf_data), encoding="utf-8"
         )
         svc = _make_service(
             tmp_path,
-            env_variables={
-                AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}
-            },
+            env_variables={AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}},
         )
         result = svc.get_agent_performance()
         assert result["timestamp"] == 1234567890
@@ -244,9 +241,7 @@ class TestGetAgentPerformance:
         )
         svc = _make_service(
             tmp_path,
-            env_variables={
-                AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}
-            },
+            env_variables={AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}},
         )
         result = svc.get_agent_performance()
         assert result["timestamp"] is None
@@ -260,9 +255,7 @@ class TestGetAgentPerformance:
         )
         svc = _make_service(
             tmp_path,
-            env_variables={
-                AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}
-            },
+            env_variables={AGENT_PERSISTENT_STORAGE_ENV_VAR: {"value": str(tmp_path)}},
         )
         result = svc.get_agent_performance()
         assert result["timestamp"] is None

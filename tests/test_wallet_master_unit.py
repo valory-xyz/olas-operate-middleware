@@ -250,9 +250,7 @@ class TestMasterWalletGetBalance:
         mock_api = MagicMock()
         with patch(
             "operate.wallet.master.make_chain_ledger_api", return_value=mock_api
-        ) as mock_fn, patch(
-            "operate.wallet.master.get_asset_balance", return_value=0
-        ):
+        ) as mock_fn, patch("operate.wallet.master.get_asset_balance", return_value=0):
             wallet.get_balance(Chain.GNOSIS, from_safe=True, rpc="http://custom-rpc")
         mock_fn.assert_called_once_with(Chain.GNOSIS, "http://custom-rpc")
 
@@ -355,8 +353,10 @@ class TestTransferFromSafe:
         ), patch.object(wallet, "ledger_api", return_value=mock_api), patch(
             "operate.wallet.master.transfer_erc20_from_safe", return_value="0xtxerc"
         ) as mock_erc:
-            result = wallet._transfer_erc20_from_safe(  # pylint: disable=protected-access
-                TOKEN_ADDR, EOA_ADDR, 100, Chain.GNOSIS
+            result = (
+                wallet._transfer_erc20_from_safe(  # pylint: disable=protected-access
+                    TOKEN_ADDR, EOA_ADDR, 100, Chain.GNOSIS
+                )
             )
         mock_erc.assert_called_once()
         assert result == "0xtxerc"
@@ -410,9 +410,7 @@ class TestEthereumTransferRouting:
         )
         assert result == "0xtx3"
 
-    def test_from_eoa_erc20_calls_transfer_erc20_from_eoa(
-        self, tmp_path: Path
-    ) -> None:
+    def test_from_eoa_erc20_calls_transfer_erc20_from_eoa(self, tmp_path: Path) -> None:
         """Test that from_eoa + erc20 routes to _transfer_erc20_from_eoa."""
         wallet = _make_wallet(tmp_path)
         with patch.object(
@@ -474,9 +472,9 @@ class TestTransferFromSafeThenEoa:
         # safe=40, eoa=80, total=120 >= 100; safe < 100 so both used
         # get_balance called: once for safe, once for eoa in initial check,
         # then again for eoa after safe transfer (3 calls total)
-        with patch.object(wallet, "get_balance", side_effect=[40, 80, 80]), patch.object(
-            wallet, "transfer", return_value="0xtx"
-        ) as mock_transfer:
+        with patch.object(
+            wallet, "get_balance", side_effect=[40, 80, 80]
+        ), patch.object(wallet, "transfer", return_value="0xtx") as mock_transfer:
             result = wallet.transfer_from_safe_then_eoa(
                 EOA_ADDR, 100, Chain.GNOSIS, asset=TOKEN_ADDR
             )
@@ -562,8 +560,12 @@ class TestDecryptMnemonic:
         wallet = _make_wallet(tmp_path)
         mock_encrypted = MagicMock()
         mock_encrypted.decrypt.return_value = b"word1 word2 word3"
-        with patch("operate.wallet.master.EncryptedData.load", return_value=mock_encrypted), patch.object(
-            type(wallet), "mnemonic_path", new_callable=lambda: property(lambda self: tmp_path / "fake.json")
+        with patch(
+            "operate.wallet.master.EncryptedData.load", return_value=mock_encrypted
+        ), patch.object(
+            type(wallet),
+            "mnemonic_path",
+            new_callable=lambda: property(lambda self: tmp_path / "fake.json"),
         ):
             # Create the fake mnemonic file so the exists() check passes
             (tmp_path / "fake.json").write_text("{}", encoding="utf-8")
@@ -985,6 +987,8 @@ class TestMasterWalletManager:
             "safe_nonce": None,
         }
         _write_ethereum_json(tmp_path, data)
-        manager = MasterWalletManager(path=tmp_path, password=test_password)  # nosec B106
+        manager = MasterWalletManager(
+            path=tmp_path, password=test_password
+        )  # nosec B106
         wallet = manager.load(LedgerType.ETHEREUM)
         assert wallet.password == test_password
