@@ -1990,20 +1990,27 @@ class ServiceManager:
             )
             return 0
 
-        # transfer claimed amount from agents safe to master safe
+        # transfer reward token balance from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
+        reward_token = receipt["logs"][0]["address"]
         amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
-        self.logger.info(f"Claimed amount: {amount_claimed}")
-        ethereum_crypto = self.keys_manager.get_crypto_instance(
-            service.agent_addresses[0]
+        amount_to_transfer = get_asset_balance(
+            ledger_api=ledger_api,
+            asset_address=reward_token,
+            address=chain_config.chain_data.multisig,
         )
+        self.logger.info(f"Claimed amount: {amount_claimed}")
+        self.logger.info(f"Reward token balance to transfer: {amount_to_transfer}")
+        if amount_to_transfer == 0:
+            return amount_claimed
+
         transfer_erc20_from_safe(
             ledger_api=ledger_api,
-            crypto=ethereum_crypto,
+            crypto=self.keys_manager.get_crypto_instance(service.agent_addresses[0]),
             safe=chain_config.chain_data.multisig,
-            token=receipt["logs"][0]["address"],
+            token=reward_token,
             to=wallet.safes[Chain(chain)],
-            amount=amount_claimed,
+            amount=amount_to_transfer,
         )
         return amount_claimed
 
