@@ -788,7 +788,7 @@ class EthereumMasterWallet(MasterWallet):
             )
             return True
 
-        return False
+        return False  # pragma: no cover
 
     @property
     def extended_json(self) -> t.Dict:
