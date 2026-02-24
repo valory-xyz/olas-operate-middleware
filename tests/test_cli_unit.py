@@ -275,6 +275,9 @@ class TestCreateAppInfra:
 
         stack, app, mock_wd, _ = _open_app(m)
         with stack:
+            import operate.cli as _cli  # HealthChecker is mocked while stack is active
+
+            mock_hc = _cli.HealthChecker.return_value  # type: ignore[attr-defined]
             app._server = MagicMock()
             with TestClient(app, raise_server_exceptions=False) as client:
                 # _deploy_and_run_service calls schedule_healthcheck_job
@@ -290,9 +293,7 @@ class TestCreateAppInfra:
                 HTTPStatus.NOT_FOUND,
                 HTTPStatus.UNAUTHORIZED,
             )
-        app._health_checker.start_for_service.assert_called_once_with(  # type: ignore[attr-defined]
-            "svc_abc"
-        )
+            mock_hc.start_for_service.assert_called_once_with("svc_abc")
 
     def test_schedule_healthcheck_job_skipped_when_off(self) -> None:
         """Cover lines 399-401: HEALTH_CHECKER_OFF prevents start_for_service."""
@@ -304,10 +305,13 @@ class TestCreateAppInfra:
 
         stack, app, mock_wd, _ = _open_app(m, health_checker_off=True)
         with stack:
+            import operate.cli as _cli  # HealthChecker is mocked while stack is active
+
+            mock_hc = _cli.HealthChecker.return_value  # type: ignore[attr-defined]
             app._server = MagicMock()
             with TestClient(app, raise_server_exceptions=False) as client:
                 client.post("/api/v2/service/svc_abc", json={})
-        app._health_checker.start_for_service.assert_not_called()  # type: ignore[attr-defined]
+            mock_hc.start_for_service.assert_not_called()
 
     # ── schedule_funding_job ──────────────────────────────────────────────────
 

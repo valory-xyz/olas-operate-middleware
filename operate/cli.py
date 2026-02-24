@@ -500,7 +500,6 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             await watchdog.stop()
 
     app = FastAPI(lifespan=lifespan)
-    app._health_checker = health_checker  # pylint: disable=protected-access
 
     app.add_middleware(
         CORSMiddleware,
