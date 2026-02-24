@@ -992,3 +992,219 @@ class TestMasterWalletManager:
         )  # nosec B106
         wallet = manager.load(LedgerType.ETHEREUM)
         assert wallet.password == test_password
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – _transfer_from_eoa (lines 307-367)
+# ---------------------------------------------------------------------------
+
+
+class TestTransferFromEoa:
+    """Tests for EthereumMasterWallet._transfer_from_eoa (lines 307-367)."""
+
+    def test_happy_path_calls_tx_settler(self, tmp_path: Path) -> None:
+        """Test that _transfer_from_eoa calls TxSettler and returns tx_hash (covers lines 311-367 including _build_tx inner function)."""
+        wallet = _make_wallet(tmp_path)
+        crypto_mock = MagicMock()
+        crypto_mock.address = EOA_ADDR
+        wallet._crypto = crypto_mock  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        mock_api.get_transfer_transaction.return_value = {"tx": "data"}
+        mock_api.update_with_gas_estimate.return_value = {"tx": "updated"}
+
+        mock_settler_inst = MagicMock()
+        mock_settler_inst.transact.return_value = mock_settler_inst
+        mock_settler_inst.settle.return_value = mock_settler_inst
+        mock_settler_inst.tx_hash = "0xtxhash"
+
+        def settler_side_effect(**kwargs: t.Any) -> MagicMock:
+            kwargs["tx_builder"]()  # call _build_tx to cover its body
+            return mock_settler_inst
+
+        with patch.object(wallet, "get_balance", return_value=1000), patch(
+            "operate.wallet.master.estimate_transfer_tx_fee", return_value=100
+        ), patch.object(
+            wallet, "_pre_transfer_checks", return_value=SAFE_ADDR
+        ), patch.object(
+            wallet, "ledger_api", return_value=mock_api
+        ), patch(
+            "operate.wallet.master.TxSettler", side_effect=settler_side_effect
+        ):
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 500, Chain.GNOSIS
+            )
+
+        assert result == "0xtxhash"
+
+    def test_drain_mode_returns_none_when_fee_exceeds_balance(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that _transfer_from_eoa returns None when gas fee exceeds balance in drain mode (covers lines 315-324)."""
+        wallet = _make_wallet(tmp_path)
+        # balance=50, tx_fee=80: balance - tx_fee = -30 < 50 <= 50, so drain branch
+        # amount becomes -30 which is <=0, so warning and return None
+        with patch.object(wallet, "get_balance", return_value=50), patch(
+            "operate.wallet.master.estimate_transfer_tx_fee", return_value=80
+        ):
+            result = wallet._transfer_from_eoa(  # pylint: disable=protected-access
+                SAFE_ADDR, 50, Chain.GNOSIS
+            )
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – _transfer_erc20_from_eoa (lines 407-455)
+# ---------------------------------------------------------------------------
+
+
+class TestTransferErc20FromEoa:
+    """Tests for EthereumMasterWallet._transfer_erc20_from_eoa (lines 407-455)."""
+
+    def test_happy_path_calls_tx_settler(self, tmp_path: Path) -> None:
+        """Test that _transfer_erc20_from_eoa calls TxSettler and covers _build_transfer_tx body (lines 416-455)."""
+        wallet = _make_wallet(tmp_path, safes={Chain.GNOSIS: SAFE_ADDR})
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        mock_instance = MagicMock()
+        mock_instance.functions.transfer.return_value.build_transaction.return_value = {
+            "tx": "erc20_data"
+        }
+
+        mock_settler_inst = MagicMock()
+        mock_settler_inst.transact.return_value = mock_settler_inst
+        mock_settler_inst.settle.return_value = mock_settler_inst
+        mock_settler_inst.tx_hash = "0xerc20hash"
+
+        def settler_side_effect(**kwargs: t.Any) -> MagicMock:
+            kwargs["tx_builder"]()  # call _build_transfer_tx to cover its body
+            return mock_settler_inst
+
+        with patch.object(
+            wallet, "_pre_transfer_checks", return_value=SAFE_ADDR
+        ), patch.object(wallet, "ledger_api", return_value=mock_api), patch(
+            "operate.wallet.master.registry_contracts"
+        ) as mock_registry, patch(
+            "operate.wallet.master.update_tx_with_gas_pricing"
+        ), patch(
+            "operate.wallet.master.update_tx_with_gas_estimate"
+        ), patch(
+            "operate.wallet.master.TxSettler", side_effect=settler_side_effect
+        ):
+            mock_registry.erc20.get_instance.return_value = mock_instance
+            result = (
+                wallet._transfer_erc20_from_eoa(  # pylint: disable=protected-access
+                    TOKEN_ADDR, SAFE_ADDR, 100, Chain.GNOSIS
+                )
+            )
+
+        assert result == "0xerc20hash"
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – transfer_from_safe_then_eoa native ZERO_ADDRESS paths
+# ---------------------------------------------------------------------------
+
+
+class TestTransferFromSafeThenEoaNative:
+    """Tests for native ZERO_ADDRESS path in transfer_from_safe_then_eoa (lines 519, 546, 555)."""
+
+    def test_native_dust_gas_deduction_and_eoa_drain(self, tmp_path: Path) -> None:
+        """Test ZERO_ADDRESS path: DUST added (519), gas deducted (546), EOA balance set as amount (555)."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+        # Setup: safe=50, eoa=100 initially; eoa=60 re-fetched after safe transfer
+        # amount=120: safe covers 50, EOA needed for remaining 70
+        # After gas deduction of 5: remaining = 65
+        # Re-fetched eoa_balance = 60 <= 65, so amount = 60 (line 555)
+        balance_side_effect = [50, 100, 60]
+
+        with patch.object(
+            wallet, "get_balance", side_effect=balance_side_effect
+        ), patch.object(
+            wallet, "transfer", side_effect=["0xtx_safe", "0xtx_eoa"]
+        ), patch(
+            "operate.wallet.master.gas_fees_spent_in_tx", return_value=5
+        ), patch.object(
+            wallet, "ledger_api", return_value=MagicMock()
+        ):
+            result = wallet.transfer_from_safe_then_eoa(
+                SAFE_ADDR, 120, Chain.GNOSIS, asset=ZERO_ADDRESS
+            )
+
+        assert "0xtx_safe" in result
+        assert "0xtx_eoa" in result
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – create_safe with safes=None
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSafeWithNoneSafes:
+    """Test that create_safe initializes safes dict when safes is None (line 707)."""
+
+    def test_create_safe_initializes_safes_when_none(self, tmp_path: Path) -> None:
+        """Test that create_safe sets safes={} when self.safes is None (covers line 707)."""
+        wallet = EthereumMasterWallet(
+            path=tmp_path,
+            address=EOA_ADDR,
+            safes=None,  # type: ignore[arg-type]
+            safe_chains=[],
+        )
+        wallet._password = (
+            "password123"  # pylint: disable=protected-access  # nosec B105
+        )
+        wallet._crypto = MagicMock()  # pylint: disable=protected-access
+
+        mock_api = MagicMock()
+        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
+            "operate.wallet.master.create_gnosis_safe",
+            return_value=(SAFE_ADDR, 42, "0xtxhash"),
+        ), patch.object(wallet, "store"):
+            wallet.create_safe(Chain.GNOSIS)
+
+        assert wallet.safes is not None
+        assert isinstance(wallet.safes, dict)
+        assert Chain.GNOSIS in wallet.safes
+
+
+# ---------------------------------------------------------------------------
+# EthereumMasterWallet – extended_json property (lines 793-839)
+# ---------------------------------------------------------------------------
+
+
+class TestExtendedJson:
+    """Tests for EthereumMasterWallet.extended_json property (lines 793-839)."""
+
+    def test_extended_json_returns_enriched_wallet_info(self, tmp_path: Path) -> None:
+        """Test extended_json property builds wallet info with balances, owners (covers lines 793-839)."""
+        wallet = _make_wallet(
+            tmp_path, safes={Chain.GNOSIS: SAFE_ADDR}, safe_chains=[Chain.GNOSIS]
+        )
+
+        mock_api = MagicMock()
+
+        with patch.object(wallet, "ledger_api", return_value=mock_api), patch(
+            "operate.wallet.master.get_owners",
+            return_value=[EOA_ADDR, BACKUP_ADDR],
+        ), patch.object(wallet, "get_balance", return_value=1000), patch(
+            "operate.wallet.master.ERC20_TOKENS", {}
+        ):
+            result = wallet.extended_json
+
+        assert result["extended_json"] is True
+        assert "balances" in result
+        assert "all_safes_have_backup_owner" in result
+        # BACKUP_ADDR is backup owner after removing EOA_ADDR → at least 1 backup owner
+        assert result["all_safes_have_backup_owner"] is True
+        assert "consistent_safe_address" in result
+        assert "consistent_backup_owner" in result
+        assert "consistent_backup_owner_count" in result
+        # Safes is {Chain.GNOSIS: SAFE_ADDR} → 1 unique value → consistent
+        assert result["consistent_safe_address"] is True
+        # 1 owner set → consistent
+        assert result["consistent_backup_owner"] is True
