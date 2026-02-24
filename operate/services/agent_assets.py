@@ -17,13 +17,14 @@
 #   limitations under the License.
 #
 # -------------------------------------------------------------
-"""Source dode to download and run agent from the repos."""
+"""Source code to download agent assets from GitHub releases."""
 import hashlib
 import json
 import os
 import platform
 import shutil
 import stat
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -66,10 +67,10 @@ class AgentRelease:
         return file_url, file_hash
 
 
-class AgentRunnerManager:
-    """Agent Runner Manager."""
+class AgentAssetManager:
+    """Agent Asset Manager."""
 
-    logger = setup_logger(name="operate.agent_runner_manager")
+    logger = setup_logger(name="operate.agent_asset_manager")
 
     @staticmethod
     def get_agent_runner_executable_name() -> str:
@@ -147,12 +148,16 @@ class AgentRunnerManager:
         return "sha256:" + sha256_hash.hexdigest()
 
     @classmethod
-    def update_agent_runner(
-        cls, target_path: Path, agent_runner_name: str, agent_release: AgentRelease
+    def update_agent_release_asset(
+        cls,
+        target_path: Path,
+        agent_release_asset_name: str,
+        target_filename: str,
+        agent_release: AgentRelease,
     ) -> None:
-        """Download agent runner."""
+        """Download agent release asset (e.g., agent_runner or agent.zip)."""
         download_url, remote_file_hash = agent_release.get_url_and_hash(
-            agent_runner_name
+            agent_release_asset_name
         )
 
         if target_path.exists():
@@ -164,41 +169,92 @@ class AgentRunnerManager:
                 )
                 return
             cls.logger.info(
-                "local and remote files hashes does not  match, go to download"
+                "local and remote files hashes does not match, go to download"
             )
         else:
             cls.logger.info("local file not found, go to download")
 
         try:
             with TemporaryDirectory() as tmp_dir:
-                tmp_file = Path(tmp_dir) / "agent_runner"
+                tmp_file = Path(tmp_dir) / target_filename
                 cls.download_file(download_url, tmp_file)
                 shutil.copy2(tmp_file, target_path)
-                if os.name == "posix":
+                # Make executable only for agent runner (detect by filename pattern)
+                if os.name == "posix" and "agent_runner" in target_filename:
                     target_path.chmod(target_path.stat().st_mode | stat.S_IEXEC)
         except Exception:
-            # remove in caae of errors
+            # remove in case of errors
             if target_path.exists():
                 target_path.unlink(missing_ok=True)
             raise
 
     @classmethod
     def get_agent_runner_path(cls, service_dir: Path) -> str:
-        """Get path to the agent runner bin palced."""
+        """Get path to the agent runner bin placed."""
         agent_runner_name = cls.get_agent_runner_executable_name()
         agent_runner_path: Path = service_dir / agent_runner_name
         agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
 
-        cls.update_agent_runner(
+        cls.update_agent_release_asset(
             target_path=agent_runner_path,
-            agent_runner_name=agent_runner_name,
+            agent_release_asset_name=agent_runner_name,
+            target_filename=agent_runner_name,
             agent_release=agent_release,
         )
         return str(agent_runner_path)
 
+    @classmethod
+    def get_agent_code_path(cls, service_dir: Path) -> str:
+        """Get path to the agent code zip archive."""
+        agent_cache_dir = service_dir / "agent_cache"
+        agent_cache_dir.mkdir(exist_ok=True)
+        agent_zip_path: Path = agent_cache_dir / "agent.zip"
+        agent_release = cls.get_agent_release_from_service_dir(service_dir=service_dir)
+
+        cls.update_agent_release_asset(
+            target_path=agent_zip_path,
+            agent_release_asset_name="agent.zip",
+            target_filename="agent.zip",
+            agent_release=agent_release,
+        )
+        return str(agent_zip_path)
+
+    @staticmethod
+    def extract_agent_zip(zip_path: Path, extract_dir: Path) -> None:
+        """Extract agent zip archive to directory.
+
+        Assumes the zip contains a root folder 'agent/' and extracts its contents
+        directly into extract_dir (skipping the 'agent' folder level).
+        """
+        extract_dir.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            for member in zip_ref.namelist():
+                # Skip directories
+                if member.endswith("/"):
+                    continue
+                # Expect all files to be under 'agent/' folder
+                if not member.startswith("agent/"):
+                    raise ValueError(
+                        f"Unexpected file in agent.zip: {member}. "
+                        "Expected all files to be under 'agent/' folder."
+                    )
+                # Remove 'agent/' prefix from path
+                target_path = extract_dir / member[6:]  # len('agent/') = 6
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                with zip_ref.open(member) as source, open(target_path, "wb") as target:
+                    shutil.copyfileobj(source, target)
+        AgentAssetManager.logger.info(f"Extracted {zip_path} to {extract_dir}")
+
 
 def get_agent_runner_path(service_dir: Path) -> str:
     """Get path to the agent runner bin placed."""
-    return AgentRunnerManager.get_agent_runner_path(
+    return AgentAssetManager.get_agent_runner_path(
+        service_dir=service_dir,
+    )
+
+
+def get_agent_code_path(service_dir: Path) -> str:
+    """Get path to the agent code zip archive."""
+    return AgentAssetManager.get_agent_code_path(
         service_dir=service_dir,
     )
