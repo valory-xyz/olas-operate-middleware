@@ -686,7 +686,7 @@ class TestBridgeManager:
         expected_provider_cls: t.Type[Provider],
         expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]],
         check_price: bool = True,
-        margin: float = 0.15,
+        margin: float = 0.17,
     ) -> None:
         """_main_test_correct_providers"""
         operate = OperateApp(

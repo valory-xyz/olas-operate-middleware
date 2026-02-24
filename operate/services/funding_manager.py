@@ -281,7 +281,11 @@ class FundingManager:
                 protocol_agent_bonds = BigInt(MIN_AGENT_BOND * number_of_agents)
                 protocol_security_deposit = MIN_SECURITY_DEPOSIT
 
-                staking_manager = StakingManager(chain=Chain(chain))
+                # Use service's custom RPC from chain_configs
+                ledger_config = chain_config.ledger_config
+                staking_manager = StakingManager(
+                    chain=Chain(chain), rpc=ledger_config.rpc
+                )
                 staking_params = staking_manager.get_staking_params(
                     staking_contract=staking_manager.get_staking_contract(
                         staking_program_id=user_params.staking_program_id,
@@ -338,7 +342,7 @@ class FundingManager:
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
             # Use service's custom RPC from chain_configs
             ledger_api = make_chain_ledger_api(Chain(chain), rpc=ledger_config.rpc)
-            staking_manager = StakingManager(Chain(chain))
+            staking_manager = StakingManager(Chain(chain), rpc=ledger_config.rpc)
 
             if Chain(chain) not in wallet.safes:
                 protocol_bonded_assets[chain] = {
@@ -399,7 +403,7 @@ class FundingManager:
             if not staking_contract:
                 return ChainAmounts(bonded_assets)
 
-            staking_manager = StakingManager(Chain(chain))
+            staking_manager = StakingManager(Chain(chain), rpc=ledger_config.rpc)
             staking_params = staking_manager.get_staking_params(
                 staking_contract=staking_contract,
             )
@@ -996,12 +1000,13 @@ class FundingManager:
                         )
 
             self.fund_chain_amounts(amounts, service=service)
-            self._funding_requests_cooldown_until[service_config_id] = (
-                time() + self.funding_requests_cooldown_seconds
-            )
         finally:
+            # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:
                 self._funding_in_progress[service_config_id] = False
+                self._funding_requests_cooldown_until[service_config_id] = (
+                    time() + self.funding_requests_cooldown_seconds
+                )
 
     async def funding_job(
         self,

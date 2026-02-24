@@ -74,6 +74,7 @@ from operate.data.contracts.dual_staking_token.contract import DualStakingTokenC
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import (
     get_default_ledger_api,
+    make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
@@ -214,20 +215,42 @@ class StakingManager:
     def __init__(
         self,
         chain: OperateChain,
+        rpc: t.Optional[str] = None,
     ) -> None:
-        """Initialize object."""
+        """Initialize object.
+
+        Args:
+            chain: The blockchain chain
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+        """
         self.chain = chain
+        self._rpc = rpc
 
     @property
     def ledger_api(self) -> LedgerApi:
-        """Get ledger api."""
+        """Get ledger api using custom RPC if provided, otherwise default."""
+        if self._rpc:
+            return make_chain_ledger_api(OperateChain(self.chain.value), rpc=self._rpc)
         return get_default_ledger_api(OperateChain(self.chain.value))
 
     @staticmethod
     @cache
-    def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
-        """Get staking params"""
-        ledger_api = get_default_ledger_api(chain=chain)
+    def _get_staking_params(  # pylint: disable=too-many-locals
+        chain: OperateChain,
+        staking_contract: str,
+        rpc: t.Optional[str] = None,
+    ) -> t.Dict:
+        """Get staking params.
+
+        Args:
+            chain: The blockchain chain
+            staking_contract: The staking contract address
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+        """
+        if rpc:
+            ledger_api = make_chain_ledger_api(chain, rpc=rpc)
+        else:
+            ledger_api = get_default_ledger_api(chain=chain)
 
         second_token_func = (
             lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
@@ -300,6 +323,7 @@ class StakingManager:
         return StakingManager._get_staking_params(
             chain=self.chain,
             staking_contract=staking_contract,
+            rpc=self._rpc,
         )
 
     def staking_state(self, service_id: int, staking_contract: str) -> StakingState:
@@ -1024,6 +1048,7 @@ class _ChainUtil:
         self._patch()
         staking_manager = StakingManager(
             chain=OperateChain(self.chain_type.value),
+            rpc=self.rpc,
         )
         return staking_manager.get_staking_params(
             staking_contract=staking_contract,

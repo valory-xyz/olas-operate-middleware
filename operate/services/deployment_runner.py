@@ -44,6 +44,13 @@ from aea.helpers.logging import setup_logger
 from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
+from operate.utils.pid_file import (
+    PIDFileError,
+    StalePIDFile,
+    read_pid_file,
+    remove_pid_file,
+    write_pid_file,
+)
 
 from .agent_runner import get_agent_runner_path
 
@@ -111,11 +118,23 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         self._is_aea = is_aea
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
-        """Open agent_runner.log file."""
+        """Open agent_runner.log file.
+
+        TODO: Resource leak - file handle not explicitly closed.
+        File is passed to subprocess.Popen as stdout/stderr and never closed.
+        OS cleans up when subprocess dies, but explicit cleanup would be better.
+        See: RESOURCE_LEAKS.md for details.
+        """
         return (self._get_operate_dir() / "agent_runner.log").open("w+")
 
     def _open_tendermint_log_file(self) -> TextIOWrapper:
-        """Open tm.log file."""
+        """Open tm.log file.
+
+        TODO: Resource leak - file handle not explicitly closed.
+        File is passed to subprocess.Popen as stdout/stderr and never closed.
+        OS cleans up when subprocess dies, but explicit cleanup would be better.
+        See: RESOURCE_LEAKS.md for details.
+        """
         return (self._get_operate_dir() / "tm.log").open("w+")
 
     def _get_operate_dir(self) -> Path:
@@ -320,17 +339,35 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             self._stop_tendermint()
 
     def _stop_agent(self) -> None:
-        """Start process."""
-        pid = self._work_directory / "agent.pid"
-        if not pid.exists():
+        """Stop agent process using safe PID file operations."""
+        pid_file = self._work_directory / "agent.pid"
+        if not pid_file.exists():
             return
-        kill_process(int(pid.read_text(encoding="utf-8")))
+
+        try:
+            # Read and validate PID (checks process exists, removes stale files)
+            # Expected process names: python, agent_runner, aea
+            pid = read_pid_file(
+                pid_file,
+                expected_process_names=["python", "agent", "aea"],
+                remove_stale=True,
+            )
+            kill_process(pid)
+            # Clean up PID file after successful kill
+            remove_pid_file(pid_file, force=True)
+        except (FileNotFoundError, StalePIDFile):
+            # PID file doesn't exist or process already dead - OK
+            self.logger.debug(f"Agent PID file {pid_file} not found or stale")
+        except PIDFileError as e:
+            self.logger.error(f"Error reading agent PID file {pid_file}: {e}")
+            # Try to clean up invalid PID file
+            remove_pid_file(pid_file, force=True)
 
     def _get_tm_exit_url(self) -> str:
         return f"{self.TM_CONTROL_URL}/exit"
 
     def _stop_tendermint(self) -> None:
-        """Stop tendermint process."""
+        """Stop tendermint process using safe PID file operations."""
         try:
             requests.get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
@@ -341,10 +378,28 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         except Exception:  # pylint: disable=broad-except
             self.logger.exception("Exception on tendermint stop!")
 
-        pid = self._work_directory / "tendermint.pid"
-        if not pid.exists():
+        pid_file = self._work_directory / "tendermint.pid"
+        if not pid_file.exists():
             return
-        kill_process(int(pid.read_text(encoding="utf-8")))
+
+        try:
+            # Read and validate PID (checks process exists, removes stale files)
+            # Expected process names: tendermint, flask, python
+            pid = read_pid_file(
+                pid_file,
+                expected_process_names=["tendermint", "flask", "python"],
+                remove_stale=True,
+            )
+            kill_process(pid)
+            # Clean up PID file after successful kill
+            remove_pid_file(pid_file, force=True)
+        except (FileNotFoundError, StalePIDFile):
+            # PID file doesn't exist or process already dead - OK
+            self.logger.debug(f"Tendermint PID file {pid_file} not found or stale")
+        except PIDFileError as e:
+            self.logger.error(f"Error reading tendermint PID file {pid_file}: {e}")
+            # Try to clean up invalid PID file
+            remove_pid_file(pid_file, force=True)
 
     @abstractmethod
     def _start_tendermint(self) -> None:
@@ -405,10 +460,23 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         process = self._start_agent_process(
             env=env, working_dir=working_dir, password=password
         )
-        (working_dir / "agent.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "agent.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["python", "agent", "aea"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_agent_process(
         self, env: Dict, working_dir: Path, password: str
@@ -430,10 +498,22 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
         process = self._start_tendermint_process(env=env, working_dir=working_dir)
 
-        (working_dir / "tendermint.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+        # Write PID file with validation and locking
+        pid_file = working_dir / "tendermint.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["tendermint", "flask", "python"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write tendermint PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_tendermint_process(
         self, env: Dict, working_dir: Path
@@ -637,10 +717,23 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
-        (working_dir / "agent.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "agent.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["python", "agent", "aea"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -666,10 +759,23 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
-        (working_dir / "tendermint.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "tendermint.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["tendermint", "flask", "python"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write tendermint PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     @property
     def _venv_dir(self) -> Path:
