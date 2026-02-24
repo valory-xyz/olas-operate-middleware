@@ -29,6 +29,7 @@ from unittest.mock import MagicMock, PropertyMock, patch
 import psutil
 import pytest
 
+from operate.services.agent_assets import AgentAssetManager
 from operate.services.deployment_runner import (
     BaseDeploymentRunner,
     DeploymentManager,
@@ -413,6 +414,26 @@ class TestPrepareAgentEnv:
 
 
 # ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+
+def _create_test_service_config(service_dir: Path, version: str = "v0.31.3") -> None:
+    """Create a minimal service config.json."""
+    config = {
+        "agent_release": {
+            "is_aea": True,
+            "repository": {
+                "owner": "valory-xyz",
+                "name": "trader",
+                "version": version,
+            },
+        },
+    }
+    (service_dir / "config.json").write_text(json.dumps(config))
+
+
+# ---------------------------------------------------------------------------
 # _setup_agent tests
 # ---------------------------------------------------------------------------
 
@@ -427,6 +448,10 @@ class TestSetupAgent:
         (tmp_path / "ethereum_private_key.txt").write_text(
             "0xdeadbeef", encoding="utf-8"
         )
+        # Create service_dir with config.json
+        service_dir = tmp_path.parent
+        service_dir.mkdir(parents=True, exist_ok=True)
+        _create_test_service_config(service_dir)
         return tmp_path
 
     def test_success_on_first_attempt(self, tmp_path: Path) -> None:
@@ -436,7 +461,12 @@ class TestSetupAgent:
 
         with patch.object(runner, "_run_aea_command"), patch(
             "operate.services.deployment_runner.secure_copy_private_key"
-        ):
+        ), patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ) as _:
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
     def test_failure_all_attempts_raises_last_exception(self, tmp_path: Path) -> None:
@@ -447,10 +477,14 @@ class TestSetupAgent:
 
         with patch.object(
             runner, "_run_aea_command", side_effect=RuntimeError("cmd failed")
-        ), patch("operate.services.deployment_runner.time.sleep"), pytest.raises(
-            RuntimeError, match="cmd failed"
-        ):
-            runner._setup_agent(password="testpass")  # nosec B106
+        ), patch("operate.services.deployment_runner.time.sleep"), patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ) as _:
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
+            with pytest.raises(RuntimeError, match="cmd failed"):
+                runner._setup_agent(password="testpass")  # nosec B106
 
     def test_retry_then_succeed(self, tmp_path: Path) -> None:
         """_setup_agent retries and succeeds after initial failures."""
@@ -470,12 +504,19 @@ class TestSetupAgent:
             "operate.services.deployment_runner.secure_copy_private_key"
         ), patch(
             "operate.services.deployment_runner.time.sleep"
-        ):
+        ), patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ) as _:
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
         # 1 call on attempt 1 (fails), 1 call on attempt 2 (fails),
         # 5 calls on attempt 3 (succeeds) → 7 total
-        assert mock_run.call_count == 7
+        # Note: With new zip download mechanism, there's an extra call for checking/downloading agent zip
+        # So total is 8 instead of 7
+        assert mock_run.call_count == 8
 
     def test_agent_dir_cleanup_on_retry(self, tmp_path: Path) -> None:
         """Existing agent dir is removed before each attempt."""
@@ -497,7 +538,12 @@ class TestSetupAgent:
             "operate.services.deployment_runner.time.sleep"
         ), patch(
             "operate.services.deployment_runner.shutil.rmtree"
-        ) as mock_rmtree:
+        ) as mock_rmtree, patch.object(
+            AgentAssetManager, "get_agent_code_path"
+        ) as mock_get_path, patch.object(
+            AgentAssetManager, "extract_agent_zip"
+        ) as _:
+            mock_get_path.return_value = str(tmp_path / "dummy.zip")
             runner._setup_agent(password="testpass")  # nosec B106
 
         # rmtree called at least once because agent dir existed

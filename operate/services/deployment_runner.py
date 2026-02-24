@@ -54,7 +54,7 @@ from operate.utils.pid_file import (
     write_pid_file,
 )
 
-from .agent_runner import get_agent_runner_path
+from .agent_assets import AgentAssetManager, get_agent_code_path, get_agent_runner_path
 
 
 class AbstractDeploymentRunner(ABC):
@@ -238,7 +238,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         for attempt in range(1, max_attempts + 1):
             try:
                 working_dir = self._work_directory
-                env = self._prepare_agent_env()
+                _ = self._prepare_agent_env()  # env not used in this method
 
                 # Clear agent directory before each attempt to avoid partial state
                 agent_alias_name = "agent"
@@ -259,19 +259,46 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
                     cwd=working_dir,
                 )
 
-                self._run_aea_command(
-                    "-s",
-                    "fetch",
-                    env["AEA_AGENT"],
-                    "--alias",
-                    agent_alias_name,
-                    cwd=working_dir,
+                # Download agent code zip and extract it. Replaces `aea fetch`
+                service_dir = working_dir.parent
+                self.logger.info("Checking and downloading agent zip!")
+                agent_zip_path = Path(get_agent_code_path(service_dir))
+                AgentAssetManager.extract_agent_zip(agent_zip_path, agent_dir_full_path)
+
+                # Add keys
+                # Remove existing ethereum_private_key.txt if present (may be included in agent.zip)
+                private_key_in_agent = (
+                    working_dir / "agent" / "ethereum_private_key.txt"
                 )
+                # Ensure parent directory exists before trying to delete file
+                if private_key_in_agent.parent.exists():
+                    private_key_in_agent.unlink(missing_ok=True)
+
+                # Remove existing ethereum keys if present (tolerant to errors)
+                try:
+                    self._run_aea_command(
+                        "-s", "remove-key", "ethereum", cwd=working_dir / "agent"
+                    )
+                except RuntimeError:
+                    self.logger.warning("Failed to remove ethereum key (may not exist)")
+
+                try:
+                    self._run_aea_command(
+                        "-s",
+                        "remove-key",
+                        "ethereum",
+                        "--connection",
+                        cwd=working_dir / "agent",
+                    )
+                except RuntimeError:
+                    self.logger.warning(
+                        "Failed to remove ethereum connection key (may not exist)"
+                    )
 
                 # Add keys securely
                 secure_copy_private_key(
                     src=working_dir / "ethereum_private_key.txt",
-                    dst=working_dir / "agent" / "ethereum_private_key.txt",
+                    dst=private_key_in_agent,
                 )
 
                 self._run_aea_command(
@@ -445,6 +472,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
         service_dir = self._work_directory.parent
+        self.logger.info("Checking and downloading agent runner!")
         agent_runner_bin = get_agent_runner_path(service_dir=service_dir)
         return str(agent_runner_bin)
 
@@ -461,8 +489,10 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         env["PYTHONIOENCODING"] = "utf8"
         env = {**os.environ, **env}
 
-        process = self._start_agent_process(
-            env=env, working_dir=working_dir, password=password
+        process = (  # pylint: disable=assignment-from-no-return
+            self._start_agent_process(
+                env=env, working_dir=working_dir, password=password
+            )
         )
 
         # Write PID file with validation and locking
@@ -486,7 +516,8 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        raise NotImplementedError  # pragma: no cover
+        _ = env, working_dir, password  # Unused parameters, required by interface
+        raise NotImplementedError  # pragma: no cover  # pylint: disable=inconsistent-return-statements
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -522,7 +553,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     def _start_tendermint_process(
         self, env: Dict, working_dir: Path
     ) -> subprocess.Popen:
-        raise NotImplementedError  # pragma: no cover
+        raise NotImplementedError  # pragma: no cover  # pylint: disable=inconsistent-return-statements
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
@@ -816,7 +847,12 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
 
     def _setup_agent(self, password: str) -> None:
         """Prepare agent."""
-        multiprocessing.set_start_method("spawn")
+        # Set spawn method for cross-platform compatibility (required on Windows/macOS)
+        try:
+            multiprocessing.set_start_method("spawn")
+        except RuntimeError as e:
+            # If start method is already set (e.g., in test environment), log and continue
+            self.logger.warning(f"Could not set multiprocessing start method: {e}")
         self._setup_venv()
         super()._setup_agent(password=password)
         if not self._is_aea:

@@ -133,6 +133,9 @@ def secure_copy_private_key(src: Path, dst: Path) -> None:
         src: Source file path
         dst: Destination file path
     """
+    # Ensure parent directory exists
+    dst.parent.mkdir(parents=True, exist_ok=True)
+
     # First copy the file
     shutil.copy2(src, dst)
 
