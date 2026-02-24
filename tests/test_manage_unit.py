@@ -158,9 +158,7 @@ class TestGetAllServices:
             funding_manager=MagicMock(),
             logger=logging.getLogger("test"),
         )
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ):
+        with patch("operate.services.service.Service.load", return_value=mock_service):
             services, success = manager.get_all_services()
 
         assert success is True
@@ -180,9 +178,7 @@ class TestGetAllServices:
             funding_manager=MagicMock(),
             logger=logging.getLogger("test"),
         )
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ):
+        with patch("operate.services.service.Service.load", return_value=mock_service):
             services, success = manager.get_all_services()
 
         assert success is False
@@ -242,9 +238,7 @@ class TestGetAllServices:
             funding_manager=MagicMock(),
             logger=logging.getLogger("test"),
         )
-        with patch(
-            "operate.services.service.Service.load", return_value=mock_service
-        ):
+        with patch("operate.services.service.Service.load", return_value=mock_service):
             services, success = manager.get_all_services()
 
         assert success is True
@@ -257,14 +251,10 @@ class TestValidateServicesAndJsonProperty:
     def test_validate_services_delegates(self, tmp_path: Path) -> None:
         """validate_services() returns the success flag from get_all_services."""
         manager = _make_manager(tmp_path)
-        with patch.object(
-            manager, "get_all_services", return_value=([], True)
-        ):
+        with patch.object(manager, "get_all_services", return_value=([], True)):
             assert manager.validate_services() is True
 
-        with patch.object(
-            manager, "get_all_services", return_value=([], False)
-        ):
+        with patch.object(manager, "get_all_services", return_value=([], False)):
             assert manager.validate_services() is False
 
     def test_json_returns_service_json_list(self, tmp_path: Path) -> None:
@@ -324,14 +314,10 @@ class TestGetOnChainManagerAndBuilder:
         mock_wallet = MagicMock()
         manager.wallet_manager.load.return_value = mock_wallet  # type: ignore
 
-        with patch(
-            "operate.services.manage.OnChainManager"
-        ) as mock_ocm_cls, patch(
+        with patch("operate.services.manage.OnChainManager") as mock_ocm_cls, patch(
             "operate.services.manage.CONTRACTS",
             {Chain.GNOSIS: {"service_manager": "0xabc"}},
-        ), patch(
-            "operate.services.manage.ChainType"
-        ) as mock_chain_type:
+        ), patch("operate.services.manage.ChainType") as mock_chain_type:
             mock_chain_type.return_value = MagicMock()
             result = manager.get_on_chain_manager(ledger_config)
 
@@ -345,14 +331,10 @@ class TestGetOnChainManagerAndBuilder:
         mock_wallet = MagicMock()
         manager.wallet_manager.load.return_value = mock_wallet  # type: ignore
 
-        with patch(
-            "operate.services.manage.EthSafeTxBuilder"
-        ) as mock_sftxb_cls, patch(
+        with patch("operate.services.manage.EthSafeTxBuilder") as mock_sftxb_cls, patch(
             "operate.services.manage.CONTRACTS",
             {Chain.GNOSIS: {"service_manager": "0xabc"}},
-        ), patch(
-            "operate.services.manage.ChainType"
-        ) as mock_chain_type:
+        ), patch("operate.services.manage.ChainType") as mock_chain_type:
             mock_chain_type.return_value = MagicMock()
             result = manager.get_eth_safe_tx_builder(ledger_config)
 
@@ -379,9 +361,7 @@ class TestLoadOrCreate:
         )
         mock_service = _make_mock_service()
 
-        with patch(
-            "operate.services.manage.Service.load", return_value=mock_service
-        ):
+        with patch("operate.services.manage.Service.load", return_value=mock_service):
             result = manager.load_or_create(hash=svc_hash)
 
         assert result == mock_service
@@ -403,9 +383,7 @@ class TestLoadOrCreate:
         mock_service = _make_mock_service()
         mock_template: t.Dict[str, t.Any] = {"name": "test", "hash": svc_hash}
 
-        with patch(
-            "operate.services.manage.Service.load", return_value=mock_service
-        ):
+        with patch("operate.services.manage.Service.load", return_value=mock_service):
             result = manager.load_or_create(
                 hash=svc_hash, service_template=mock_template  # type: ignore
             )
@@ -430,9 +408,7 @@ class TestLoadOrCreate:
         with pytest.raises(ValueError, match="service_template.*cannot be None"):
             manager.load_or_create(hash="QmNew")
 
-    def test_path_not_exists_with_template_calls_create(
-        self, tmp_path: Path
-    ) -> None:
+    def test_path_not_exists_with_template_calls_create(self, tmp_path: Path) -> None:
         """When path does not exist and template provided, call create()."""
         services_dir = tmp_path / "services"
         services_dir.mkdir()
@@ -463,9 +439,7 @@ class TestLoadOrCreate:
 class TestGetOnChainState:
     """Tests for _get_on_chain_state()."""
 
-    def test_returns_non_existent_when_token_is_minus_one(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_non_existent_when_token_is_minus_one(self, tmp_path: Path) -> None:
         """Returns NON_EXISTENT when token == NON_EXISTENT_TOKEN."""
         from operate.operate_types import OnChainState
 
@@ -506,9 +480,7 @@ class TestGetOnChainState:
 class TestGetOnChainMetadata:
     """Tests for _get_on_chain_metadata()."""
 
-    def test_returns_empty_dict_for_non_existent_token(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_empty_dict_for_non_existent_token(self, tmp_path: Path) -> None:
         """Returns {} when token == NON_EXISTENT_TOKEN."""
         manager = _make_manager(tmp_path)
         mock_chain_config = MagicMock()
@@ -567,9 +539,7 @@ class TestGetMechConfigs:
         ledger_api.api.provider.endpoint_uri = _RPC
         return ledger_api
 
-    def test_returns_default_when_no_staking_contract(
-        self, tmp_path: Path
-    ) -> None:
+    def test_returns_default_when_no_staking_contract(self, tmp_path: Path) -> None:
         """Returns default MechMarketplaceConfig when staking contract is None."""
         from operate.operate_types import MechMarketplaceConfig
 
@@ -579,9 +549,7 @@ class TestGetMechConfigs:
 
         with patch.object(
             manager, "get_eth_safe_tx_builder", return_value=mock_sftxb
-        ), patch(
-            "operate.services.manage.get_staking_contract", return_value=None
-        ):
+        ), patch("operate.services.manage.get_staking_contract", return_value=None):
             result = manager.get_mech_configs(
                 chain=_CHAIN,
                 ledger_api=self._make_ledger_api(),
@@ -715,7 +683,9 @@ class TestGetMechConfigs:
         assert isinstance(result, MechMarketplaceConfig)
         assert result.use_mech_marketplace is False
         # Uses the hardcoded default address
-        assert result.priority_mech_address == "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+        assert (
+            result.priority_mech_address == "0x77af31De935740567Cf4fF1986D04B2c964A786a"
+        )
 
 
 class TestGetCurrentStakingProgram:

@@ -563,7 +563,9 @@ class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
     """Linux deployment runner."""
 
 
-class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):  # pragma: no cover
+class PyInstallerHostDeploymentRunnerWindows(
+    PyInstallerHostDeploymentRunner
+):  # pragma: no cover
     """Windows deployment runner."""
 
     def __init__(self, work_directory: Path, is_aea: bool) -> None:

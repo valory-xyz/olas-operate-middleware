@@ -54,9 +54,7 @@ class TestTendermintNodeMethods:
     def test_init_calls_subprocess_call(self) -> None:
         """init() calls subprocess.call with the init command."""
         node = self._make_node()
-        with patch(
-            "operate.services.utils.tendermint.subprocess.call"
-        ) as mock_call:
+        with patch("operate.services.utils.tendermint.subprocess.call") as mock_call:
             node.init()
         mock_call.assert_called_once_with(["tendermint", "init"])
 
@@ -142,9 +140,7 @@ class TestTendermintNodeMethods:
     def test_start_tm_process_spawns_popen(self) -> None:
         """_start_tm_process creates a subprocess and stores it in _process."""
         node = self._make_node()
-        with patch(
-            "operate.services.utils.tendermint.subprocess.Popen"
-        ) as mock_popen:
+        with patch("operate.services.utils.tendermint.subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
             node._start_tm_process()  # pylint: disable=protected-access
         assert node._process is not None  # pylint: disable=protected-access
@@ -153,9 +149,7 @@ class TestTendermintNodeMethods:
     def test_start_tm_process_debug_flag(self) -> None:
         """_start_tm_process with debug=True includes --log_level=debug."""
         node = self._make_node()
-        with patch(
-            "operate.services.utils.tendermint.subprocess.Popen"
-        ) as mock_popen:
+        with patch("operate.services.utils.tendermint.subprocess.Popen") as mock_popen:
             mock_popen.return_value = MagicMock()
             node._start_tm_process(debug=True)  # pylint: disable=protected-access
         call_args = mock_popen.call_args[0][0]
@@ -318,9 +312,7 @@ class TestCreateAppFlaskRoutes:
 
         with patch.dict("os.environ", env):
             with patch.object(TendermintNode, "init"):
-                with patch(
-                    "operate.services.utils.tendermint.override_config_toml"
-                ):
+                with patch("operate.services.utils.tendermint.override_config_toml"):
                     with patch.object(TendermintNode, "start"):
                         app, node = create_app()
             # Keep os.environ patch active for route handler env access
@@ -344,9 +336,7 @@ class TestCreateAppFlaskRoutes:
         )
 
         mock_status = MagicMock()
-        mock_status.json.return_value = {
-            "result": {"node_info": {"id": "peer123"}}
-        }
+        mock_status.json.return_value = {"result": {"node_info": {"id": "peer123"}}}
 
         with patch(
             "operate.services.utils.tendermint.requests.get",
