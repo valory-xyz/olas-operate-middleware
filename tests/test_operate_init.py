@@ -113,9 +113,7 @@ class TestOperateInitPlatformBranches:
                 importlib.reload(operate_module)
                 assert os.environ.get("REQUESTS_CA_BUNDLE") == certifi_path
 
-    def test_unknown_os_branch_no_bundle_logs_warning(
-        self, caplog: Any
-    ) -> None:
+    def test_unknown_os_branch_no_bundle_logs_warning(self, caplog: Any) -> None:
         """Unknown OS branch logs warning when no CA bundle is available (lines 65-66, 72)."""
         with caplog.at_level(logging.WARNING, logger="operate"), patch(
             "platform.system", return_value="FreeBSD"

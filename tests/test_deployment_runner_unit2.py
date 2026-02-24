@@ -467,9 +467,7 @@ class TestSetupAgent:
 
         with patch.object(
             runner, "_run_aea_command", side_effect=maybe_fail
-        ) as mock_run, patch(
-            "operate.services.deployment_runner.shutil.copy"
-        ), patch(
+        ) as mock_run, patch("operate.services.deployment_runner.shutil.copy"), patch(
             "operate.services.deployment_runner.time.sleep"
         ):
             runner._setup_agent(password="testpass")  # nosec B106
