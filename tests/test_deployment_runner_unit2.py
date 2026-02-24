@@ -826,7 +826,7 @@ class TestPyInstallerBinProperties:
             result = runner._agent_runner_bin
 
         mock_path.assert_called_once_with(service_dir=tmp_path / "service")
-        assert result == "/fake/path/agent_runner"
+        assert result == str(Path("/fake/path/agent_runner"))
 
     def test_tendermint_bin_ends_with_tendermint_bin(self, tmp_path: Path) -> None:
         """_tendermint_bin ends with 'tendermint_bin'."""
@@ -992,6 +992,10 @@ class TestPyInstallerStartTendermint:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="PyInstallerHostDeploymentRunnerMac uses os.setpgrp which is Unix-only",
+)
 class TestPyInstallerMacStartProcessMethods:
     """Tests for Mac-specific process start methods (lines 527-559)."""
 
@@ -1097,7 +1101,7 @@ class TestHostPythonAgentRunnerBin:
             result = runner._agent_runner_bin
 
         mock_path.assert_called_once_with(service_dir=tmp_path / "service")
-        assert result == "/fake/agent_runner"
+        assert result == str(Path("/fake/agent_runner"))
 
 
 # ---------------------------------------------------------------------------
