@@ -20,6 +20,7 @@
 """Unit tests for operate/cli.py — covering all lines missed by existing tests."""
 
 import asyncio
+import logging
 import multiprocessing
 import os
 import signal as signal_module
@@ -29,7 +30,6 @@ from pathlib import Path
 from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from starlette.testclient import TestClient
 
 from operate import __version__
@@ -242,12 +242,14 @@ class TestCreateAppInfra:
 
     # ── HEALTH_CHECKER_OFF ────────────────────────────────────────────────────
 
-    def test_health_checker_off_logs_warning(self) -> None:
+    def test_health_checker_off_logs_warning(self, caplog: Any) -> None:
         """Cover line 372: logger.warning when HEALTH_CHECKER_OFF=1."""
         m = _make_mock_operate()
-        stack, app, mock_wd, _ = _open_app(m, health_checker_off=True)
-        with stack:
-            pass  # Just building the app is enough to trigger the warning.
+        with caplog.at_level(logging.WARNING, logger="operate"):
+            stack, app, mock_wd, _ = _open_app(m, health_checker_off=True)
+            with stack:
+                pass
+        assert "Healthchecker is off" in caplog.text
 
     # ── run_in_executor body ──────────────────────────────────────────────────
 
@@ -288,6 +290,9 @@ class TestCreateAppInfra:
                 HTTPStatus.NOT_FOUND,
                 HTTPStatus.UNAUTHORIZED,
             )
+        app._health_checker.start_for_service.assert_called_once_with(  # type: ignore[attr-defined]
+            "svc_abc"
+        )
 
     def test_schedule_healthcheck_job_skipped_when_off(self) -> None:
         """Cover lines 399-401: HEALTH_CHECKER_OFF prevents start_for_service."""
@@ -302,6 +307,7 @@ class TestCreateAppInfra:
             app._server = MagicMock()
             with TestClient(app, raise_server_exceptions=False) as client:
                 client.post("/api/v2/service/svc_abc", json={})
+        app._health_checker.start_for_service.assert_not_called()  # type: ignore[attr-defined]
 
     # ── schedule_funding_job ──────────────────────────────────────────────────
 
@@ -2379,8 +2385,7 @@ class TestCliCommands:
     def test_daemon_command_body(self) -> None:
         """Cover lines 1793-1818: _daemon sets up and runs uvicorn server."""
         fn = self._get_callback("_daemon")
-        if fn is None:
-            pytest.skip("Cannot access _daemon callback")
+        assert fn is not None
 
         with patch("operate.cli.create_app") as mock_create_app, patch(
             "operate.cli.Server"
@@ -2406,8 +2411,7 @@ class TestCliCommands:
     def test_daemon_command_with_ssl(self) -> None:
         """Cover lines 1806-1814: _daemon with SSL config."""
         fn = self._get_callback("_daemon")
-        if fn is None:
-            pytest.skip("Cannot access _daemon callback")
+        assert fn is not None
 
         with patch("operate.cli.create_app") as mock_create_app, patch(
             "operate.cli.Server"
@@ -2433,8 +2437,7 @@ class TestCliCommands:
     def test_qs_start_command_body(self) -> None:
         """Cover lines 1840-1843: qs_start body."""
         fn = self._get_callback("qs_start")
-        if fn is None:
-            pytest.skip("Cannot access qs_start callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.run_service"
@@ -2455,8 +2458,7 @@ class TestCliCommands:
     def test_qs_stop_command_body(self) -> None:
         """Cover lines 1864-1867: qs_stop body."""
         fn = self._get_callback("qs_stop")
-        if fn is None:
-            pytest.skip("Cannot access qs_stop callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.stop_service"
@@ -2473,8 +2475,7 @@ class TestCliCommands:
     def test_qs_terminate_command_body(self) -> None:
         """Cover lines 1878-1881: qs_terminate body."""
         fn = self._get_callback("qs_terminate")
-        if fn is None:
-            pytest.skip("Cannot access qs_terminate callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.terminate_service"
@@ -2487,8 +2488,7 @@ class TestCliCommands:
     def test_qs_claim_command_body(self) -> None:
         """Cover lines 1892-1895: qs_claim body."""
         fn = self._get_callback("qs_claim")
-        if fn is None:
-            pytest.skip("Cannot access qs_claim callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.claim_staking_rewards"
@@ -2501,8 +2501,7 @@ class TestCliCommands:
     def test_qs_reset_configs_command_body(self) -> None:
         """Cover lines 1906-1909: qs_reset_configs body."""
         fn = self._get_callback("qs_reset_configs")
-        if fn is None:
-            pytest.skip("Cannot access qs_reset_configs callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.reset_configs"
@@ -2515,8 +2514,7 @@ class TestCliCommands:
     def test_qs_reset_staking_command_body(self) -> None:
         """Cover lines 1920-1923: qs_reset_staking body."""
         fn = self._get_callback("qs_reset_staking")
-        if fn is None:
-            pytest.skip("Cannot access qs_reset_staking callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.reset_staking"
@@ -2529,8 +2527,7 @@ class TestCliCommands:
     def test_qs_reset_password_command_body(self) -> None:
         """Cover lines 1933-1936: qs_reset_password body."""
         fn = self._get_callback("qs_reset_password")
-        if fn is None:
-            pytest.skip("Cannot access qs_reset_password callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.reset_password"
@@ -2543,8 +2540,7 @@ class TestCliCommands:
     def test_qs_analyse_logs_command_body(self) -> None:
         """Cover lines 1991-2008: qs_analyse_logs body."""
         fn = self._get_callback("qs_analyse_logs")
-        if fn is None:
-            pytest.skip("Cannot access qs_analyse_logs callback")
+        assert fn is not None
 
         with patch("operate.cli.OperateApp") as mock_app_cls, patch(
             "operate.cli.analyse_logs"

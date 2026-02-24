@@ -20,8 +20,10 @@
 """Unit tests for operate/__init__.py module-level code."""
 
 import importlib
+import logging
 import os
 from importlib.metadata import PackageNotFoundError
+from typing import Any
 from unittest.mock import patch
 
 import operate as operate_module
@@ -111,10 +113,12 @@ class TestOperateInitPlatformBranches:
                 importlib.reload(operate_module)
                 assert os.environ.get("REQUESTS_CA_BUNDLE") == certifi_path
 
-    def test_unknown_os_branch_no_bundle_logs_warning(self) -> None:
+    def test_unknown_os_branch_no_bundle_logs_warning(
+        self, caplog: Any
+    ) -> None:
         """Unknown OS branch logs warning when no CA bundle is available (lines 65-66, 72)."""
-        with patch("platform.system", return_value="FreeBSD"), patch(
-            "os.path.exists", return_value=False
-        ):
+        with caplog.at_level(logging.WARNING, logger="operate"), patch(
+            "platform.system", return_value="FreeBSD"
+        ), patch("os.path.exists", return_value=False):
             importlib.reload(operate_module)
-        # No exception means the warning was logged and code completed
+        assert "No CA certificate bundle available" in caplog.text

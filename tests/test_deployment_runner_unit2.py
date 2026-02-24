@@ -465,10 +465,18 @@ class TestSetupAgent:
             if call_count < 3:
                 raise RuntimeError("transient failure")
 
-        with patch.object(runner, "_run_aea_command", side_effect=maybe_fail), patch(
+        with patch.object(
+            runner, "_run_aea_command", side_effect=maybe_fail
+        ) as mock_run, patch(
             "operate.services.deployment_runner.shutil.copy"
-        ), patch("operate.services.deployment_runner.time.sleep"):
+        ), patch(
+            "operate.services.deployment_runner.time.sleep"
+        ):
             runner._setup_agent(password="testpass")  # nosec B106
+
+        # 1 call on attempt 1 (fails), 1 call on attempt 2 (fails),
+        # 5 calls on attempt 3 (succeeds) → 7 total
+        assert mock_run.call_count == 7
 
     def test_agent_dir_cleanup_on_retry(self, tmp_path: Path) -> None:
         """Existing agent dir is removed before each attempt."""

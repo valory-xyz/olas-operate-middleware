@@ -960,8 +960,9 @@ class TestBridgeRefillRequirementsWithChains:
         ), patch(
             "operate.bridge.bridge_manager.get_assets_balances",
             return_value={},
-        ):
+        ) as mock_get_balances:
             result = manager.bridge_refill_requirements([])
 
         assert "id" in result
         manager.wallet_manager.load.assert_called()  # type: ignore[union-attr]
+        mock_get_balances.assert_called()
