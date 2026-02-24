@@ -67,6 +67,18 @@ class TestOperateInitPlatformBranches:
         """Restore the operate module after each test."""
         importlib.reload(operate_module)
 
+    def test_darwin_branch_with_system_bundle(self) -> None:
+        """Darwin branch sets REQUESTS_CA_BUNDLE when system bundle exists (lines 51-55)."""
+        darwin_bundle = "/etc/ssl/cert.pem"
+        with patch("platform.system", return_value="Darwin"), patch(
+            "os.path.exists", return_value=True
+        ), patch.dict(os.environ, {}, clear=False):
+            env_copy = dict(os.environ)
+            env_copy.pop("REQUESTS_CA_BUNDLE", None)
+            with patch.dict(os.environ, env_copy, clear=True):
+                importlib.reload(operate_module)
+                assert os.environ.get("REQUESTS_CA_BUNDLE") == darwin_bundle
+
     def test_linux_branch_with_system_bundle(self) -> None:
         """Linux branch sets REQUESTS_CA_BUNDLE when system bundle exists (lines 56-60)."""
         linux_bundle = "/etc/ssl/certs/ca-certificates.crt"
