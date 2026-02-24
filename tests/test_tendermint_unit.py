@@ -470,11 +470,11 @@ class TestCreateAppFlaskRoutes:
     ) -> None:
         """GET /gentle_reset returns 500 when app._is_on_exit is True."""
         app, _ = flask_app_and_node
-        setattr(app, "_is_on_exit", True)
+        app._is_on_exit = True  # type: ignore[attr-defined]
         client = app.test_client()
         response = client.get("/gentle_reset")
         assert response.status_code == 500
-        setattr(app, "_is_on_exit", False)  # reset
+        app._is_on_exit = False  # type: ignore[attr-defined]
 
     def test_app_hash_success(
         self, flask_app_and_node: Tuple[Flask, TendermintNode]
@@ -573,11 +573,11 @@ class TestCreateAppFlaskRoutes:
     ) -> None:
         """GET /hard_reset returns 500 when app._is_on_exit is True."""
         app, _ = flask_app_and_node
-        setattr(app, "_is_on_exit", True)
+        app._is_on_exit = True  # type: ignore[attr-defined]
         client = app.test_client()
         response = client.get("/hard_reset")
         assert response.status_code == 500
-        setattr(app, "_is_on_exit", False)
+        app._is_on_exit = False  # type: ignore[attr-defined]
 
     def test_hard_reset_dev_mode(
         self, flask_app_and_node: Tuple[Flask, TendermintNode]
@@ -641,9 +641,9 @@ class TestCreateAppFlaskRoutes:
     ) -> None:
         """Unhandled RuntimeError in route returns 500 with error body."""
         app, _ = flask_app_and_node
-        setattr(app, "_is_on_exit", True)
+        app._is_on_exit = True  # type: ignore[attr-defined]
         client = app.test_client()
         response = client.get("/gentle_reset")
         assert response.status_code == 500
         assert b"Error Closing Node" in response.data
-        setattr(app, "_is_on_exit", False)
+        app._is_on_exit = False  # type: ignore[attr-defined]
