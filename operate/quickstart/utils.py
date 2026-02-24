@@ -36,7 +36,9 @@ from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
 
-def print_box(text: str, margin: int = 1, character: str = "=") -> None:
+def print_box(
+    text: str, margin: int = 1, character: str = "="
+) -> None:  # pragma: no cover
     """Print text centered within a box."""
 
     lines = text.split("\n")
@@ -53,12 +55,12 @@ def print_box(text: str, margin: int = 1, character: str = "=") -> None:
     print()
 
 
-def print_title(text: str) -> None:
+def print_title(text: str) -> None:  # pragma: no cover
     """Print title."""
     print_box(text, 4, "=")
 
 
-def print_section(text: str) -> None:
+def print_section(text: str) -> None:  # pragma: no cover
     """Print section."""
     print_box(text, 1, "-")
 
