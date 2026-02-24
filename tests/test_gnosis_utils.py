@@ -19,6 +19,7 @@
 
 """Tests for operate/utils/gnosis.py utility functions."""
 
+import typing as t
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -920,3 +921,228 @@ class TestDrainEoa:
                     withdrawal_address="0xWithdrawal",
                     chain_id=100,
                 )
+
+
+# ---------------------------------------------------------------------------
+# Helper: a fake TxSettler class that actually calls tx_builder during transact()
+# This is used by the "closure coverage" tests below.
+# ---------------------------------------------------------------------------
+
+
+def _calling_txsettler_cls(
+    tx_hash: str = "0xhash",
+    events: t.Optional[t.List] = None,
+) -> t.Type:
+    """Return a fake TxSettler class that invokes tx_builder() inside transact().
+
+    Using a real TxSettler requires a live blockchain; this fake drives the
+    inner _build / _build_tx closures without any network access.
+    """
+    _events = events if events is not None else []
+
+    class _Fake:
+        def __init__(self, *, tx_builder: t.Callable, **_kwargs: t.Any) -> None:
+            self._tx_builder = tx_builder
+            self.tx_hash = tx_hash
+
+        def transact(self) -> "_Fake":
+            self._tx_builder()
+            return self
+
+        def settle(self) -> "_Fake":
+            return self
+
+        def get_events(self, **_kwargs: t.Any) -> t.List:
+            return _events
+
+    return _Fake
+
+
+# ---------------------------------------------------------------------------
+# Inner-closure coverage: create_safe._build (lines 172-180)
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSafeBuildClosure:
+    """Test the _build() closure inside create_safe (lines 172-180)."""
+
+    def test_build_closure_calls_get_deploy_transaction(self) -> None:
+        """Test _build() invokes gnosis_safe.get_deploy_transaction and strips contract_address."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+
+        fake_settler_cls = _calling_txsettler_cls(
+            tx_hash="0xcreatetxhash",
+            events=[{"args": {"proxy": "0xNewSafe"}}],
+        )
+
+        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id"
+        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+            mock_contracts.gnosis_safe.get_deploy_transaction.return_value = {
+                "contract_address": "0xFactory",
+                "data": "0xdeadbeef",
+                "to": "0xProxy",
+            }
+            mock_proxy_instance = MagicMock()
+            mock_contracts.gnosis_safe_proxy_factory.get_instance.return_value = (
+                mock_proxy_instance
+            )
+
+            safe_addr, salt_nonce, tx_hash = create_safe(
+                mock_ledger, mock_crypto, salt_nonce=42
+            )
+
+        # The _build() closure should have been called
+        mock_contracts.gnosis_safe.get_deploy_transaction.assert_called_once()
+        assert safe_addr == "0xNewSafe"
+        assert salt_nonce == 42
+        assert tx_hash == "0xcreatetxhash"
+
+
+# ---------------------------------------------------------------------------
+# Inner-closure coverage: send_safe_txs._build_tx (lines 232-250)
+# ---------------------------------------------------------------------------
+
+
+class TestSendSafeTxsBuildClosure:
+    """Test the _build_tx() closure inside send_safe_txs (lines 232-250)."""
+
+    def test_build_tx_closure_builds_and_signs_safe_tx(self) -> None:
+        """Test _build_tx() hashes, signs, and assembles the safe transaction."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+        mock_ledger.api.to_checksum_address.return_value = "0xCryptoAddress"
+        mock_ledger.api.eth.get_transaction_count.return_value = 0
+        # sign_message returns bytes-like; slicing [2:] on a MagicMock is safe
+        mock_crypto.sign_message.return_value = MagicMock()
+
+        fake_settler_cls = _calling_txsettler_cls(tx_hash="0xsafetxhash")
+
+        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id"
+        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "ab" * 32  # 64 hex chars — valid for unhexlify
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "data": "0xbeef"
+            }
+
+            result = send_safe_txs(
+                txd=b"\x00\x01",
+                safe="0xSafe",
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+            )
+
+        # Both contract calls inside _build_tx must have been made
+        mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.assert_called_once()
+        mock_contracts.gnosis_safe.get_raw_safe_transaction.assert_called_once()
+        assert result == "0xsafetxhash"
+
+
+# ---------------------------------------------------------------------------
+# Inner-closure coverage: transfer._build_tx (lines 399-417)
+# ---------------------------------------------------------------------------
+
+
+class TestTransferBuildClosure:
+    """Test the _build_tx() closure inside transfer (lines 399-417)."""
+
+    def test_build_tx_closure_builds_signed_native_transfer(self) -> None:
+        """Test _build_tx() hashes, signs, and assembles the native-token safe tx."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xCryptoAddress"
+        mock_ledger.api.to_checksum_address.return_value = "0xCryptoAddress"
+        mock_ledger.api.eth.get_transaction_count.return_value = 1
+
+        fake_settler_cls = _calling_txsettler_cls(tx_hash="0xtransferhash2")
+
+        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id"
+        ), patch("operate.utils.gnosis.registry_contracts") as mock_contracts:
+            mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.return_value = {
+                "tx_hash": "0x" + "cd" * 32
+            }
+            mock_contracts.gnosis_safe.get_raw_safe_transaction.return_value = {
+                "data": "0xcafe"
+            }
+
+            result = transfer(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                safe="0xSafe",
+                to="0xRecipient",
+                amount=500,
+            )
+
+        mock_contracts.gnosis_safe.get_raw_safe_transaction_hash.assert_called_once()
+        mock_contracts.gnosis_safe.get_raw_safe_transaction.assert_called_once()
+        assert result == "0xtransferhash2"
+
+
+# ---------------------------------------------------------------------------
+# Inner-closure coverage: drain_eoa._build_tx (lines 532-565)
+# ---------------------------------------------------------------------------
+
+
+class TestDrainEoaBuildClosure:
+    """Test the _build_tx() closure inside drain_eoa (lines 532-565)."""
+
+    def test_build_tx_closure_zero_balance_returns_none(self) -> None:
+        """Test _build_tx raises when balance <= fee, causing drain_eoa to return None."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+        # get_balance returns less than the fee → amount <= 0 → exception → None
+        mock_ledger.get_balance.return_value = 0
+
+        fake_settler_cls = _calling_txsettler_cls()
+
+        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+            result = drain_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                withdrawal_address="0xWithdrawal",
+                chain_id=100,
+            )
+
+        assert result is None
+
+    def test_build_tx_closure_positive_balance_success(self) -> None:
+        """Test _build_tx builds the drain transaction when balance exceeds fee."""
+        mock_ledger = MagicMock()
+        mock_crypto = MagicMock()
+        mock_crypto.address = "0xWalletAddr"
+        mock_ledger.get_balance.return_value = 10_000
+        mock_ledger.get_transfer_transaction.return_value = {
+            "gas": 21000,
+            "maxFeePerGas": 1000,
+            "value": 9_900,
+        }
+        mock_ledger.update_with_gas_estimate.return_value = {
+            "gas": 25000,
+            "maxFeePerGas": 1000,
+        }
+
+        fake_settler_cls = _calling_txsettler_cls(tx_hash="0xdrainsuccess")
+
+        with patch("operate.utils.gnosis.TxSettler", fake_settler_cls), patch(
+            "operate.utils.gnosis.Chain.from_id", return_value=Chain.GNOSIS
+        ), patch("operate.utils.gnosis.estimate_transfer_tx_fee", return_value=100):
+            result = drain_eoa(
+                ledger_api=mock_ledger,
+                crypto=mock_crypto,
+                withdrawal_address="0xWithdrawal",
+                chain_id=100,
+            )
+
+        assert result == "0xdrainsuccess"
+        mock_ledger.get_transfer_transaction.assert_called_once()
+        mock_ledger.update_with_gas_estimate.assert_called_once()
