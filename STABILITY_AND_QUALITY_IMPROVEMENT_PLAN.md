@@ -7,7 +7,8 @@
 **Phase 1.3: Race Condition Fixes** ✅ COMPLETE (PID File ✅, Funding Cooldown ✅, Health Checker ✅)
 **Phase 1.4: Resource Leak Prevention** ✅ DOCUMENTED (Implementation deferred)
 **Phase 1.5: Input Validation & State Protection** ✅ ANALYZED (Implementation deferred)
-**Phase 2-4:** 📋 PLANNED
+**Phase 2: Testing & Reliability** 🔄 IN PROGRESS (Test review complete, branches ready for merge)
+**Phase 3-4:** 📋 PLANNED
 
 **Branches:**
 - `feat/phase1.1-rpc-bug-fix` - Merged/Complete
@@ -301,141 +302,218 @@ pytest tests/test_concurrency.py -v --count=100
 
 ---
 
-## Phase 2: Testing & Reliability (Weeks 3-4, ~11-12 days)
+## Phase 2: Testing & Reliability (Weeks 3-4, ~11-12 days) - 🔄 REVISED STRATEGY
 
-**Goal:** Add comprehensive test coverage for critical untested components and improve test infrastructure.
+**Goal (REVISED):** Fill critical test coverage gaps strategically, not add tests everywhere.
 
-### 2.1 Critical Component Testing
+**Status (2026-02-10):** Test review complete. **Strategy revised** based on systematic assessment.
 
-**New Test Files:**
+**Key Insight:** Codebase has ~60% coverage (209 tests) but **uneven distribution**. Issue is not total count but **critical gaps** in high-impact areas.
 
-1. **test_deployment_runner.py** (2 days, ~20-25 tests)
-   - Process lifecycle (start, stop, restart, cleanup)
-   - PID file operations with locking
-   - Process cleanup (kill children recursively)
-   - Platform-specific behavior (Windows/Unix/macOS)
-   - Error scenarios (crashes, PID reuse)
-   - Mock: subprocess, psutil, docker
+**Assessment Document:** See `TEST_COVERAGE_ASSESSMENT.md` for full file-by-file analysis.
 
-2. **test_health_checker.py** (2 days, ~25-30 tests)
-   - Health check lifecycle (start, stop)
-   - Concurrent job management
-   - Restart logic and failfast behavior
-   - Timeout handling (port up timeout)
-   - healthcheck.json parsing edge cases
-   - Mock: aiohttp.ClientSession, asyncio
+**Strategy Change:**
+- ❌ **OLD:** Add 170+ tests everywhere for quantity metrics
+- ✅ **NEW:** Fill critical gaps (agent_runner, protocol) with ~50-60 high-value tests
 
-**Test Structure:**
-```python
-@pytest.fixture
-def mock_deployment_runner(tmp_path):
-    """Create deployment runner with temp directory."""
-    return DeploymentRunner(work_directory=tmp_path)
+**Completed Work:**
+- ✅ Test review and cleanup (removed 380+ lines of bad tests)
+- ✅ Created ~25-30 high-quality tests in branches
+- ✅ Systematic coverage assessment of all files
 
-def test_pid_file_locking(mock_deployment_runner, monkeypatch):
-    """Test PID file prevents concurrent access."""
-    # Simulate two processes trying to write PID
-    # Verify only one succeeds
+**Branches Status:**
+- ✅ `feat/phase2-balance-checking-tests` - Ready for merge (11 tests)
+- ✅ `feat/phase2-strategic-unit-tests` - Ready for merge (needs pytest-asyncio setup)
+- ✅ `feat/phase2-error-path-tests` - Ready for merge (3 tests)
+- ❌ `feat/phase2-wallet-algorithm-tests` - DELETED (372 lines of valueless tests)
 
-def test_process_cleanup_on_failure(mock_deployment_runner, monkeypatch):
-    """Test subprocess cleanup if start fails."""
-    # Mock subprocess.Popen to fail
-    # Verify no leaked processes
-```
+### 2.1 Critical Gap Filling (NEW FOCUS) - 🔄 IN PROGRESS
+
+**Priority 1: Fill Critical Gaps in High-Impact Areas**
+
+#### ❌ 2.1.1 agent_runner.py Tests (HIGH PRIORITY - NOT STARTED)
+
+**Issue:** ZERO tests for agent_runner.py - the component that runs actual autonomous agents!
+
+**Impact:** CRITICAL - Bugs directly affect agent execution, process management, resource cleanup
+
+**Tests Needed (~15-20 tests, 3-4 days):**
+
+1. **Agent Lifecycle Tests** (5-7 tests)
+   ```python
+   def test_start_agent_creates_process():
+       """Test agent start creates Docker/K8s process."""
+
+   def test_stop_agent_cleans_up_resources():
+       """Test agent stop removes containers and cleanup."""
+
+   def test_restart_agent_after_crash():
+       """Test agent restart logic on failure."""
+   ```
+
+2. **Process Management Tests** (4-5 tests)
+   - PID tracking and validation
+   - Container lifecycle (Docker/K8s)
+   - Process cleanup on error
+   - Orphaned process detection
+
+3. **Error Handling Tests** (3-4 tests)
+   - Agent crash recovery
+   - Restart loop prevention
+   - Resource exhaustion handling
+   - Timeout scenarios
+
+4. **Integration Tests** (3-4 tests)
+   - Full agent start/stop cycle
+   - Multiple agents running
+   - Agent health monitoring
+   - Log collection
 
 **Files to Create:**
-- `tests/test_deployment_runner.py`
-- `tests/test_health_checker.py`
+- `tests/test_agent_runner.py`
+- `tests/test_agent_runner_integration.py` (optional)
 
-**Effort:** 4-5 days
+**Mocking Strategy:**
+- Mock Docker/K8s clients
+- Mock subprocess/process management
+- Test actual agent_runner logic
 
-### 2.2 Fast Unit Test Suite Expansion
+**Effort:** 3-4 days
 
-**Goal:** Convert slow integration tests to fast unit tests with mocking.
+#### ⚠️ 2.1.2 protocol.py Tests (HIGH PRIORITY - PARTIALLY DONE)
 
-**Conversions:**
+**Issue:** Minimal coverage (~10%) - only RPC bug tests exist
 
-1. **Service Management Tests** (1.5 days, ~50 new tests)
-   - File: `tests/test_services_manage.py`
-   - Convert: Balance checks, refill calculations, state transitions
-   - Mock: Blockchain calls, wallet operations
-   - Keep as integration: Actual deployments, cross-chain ops
+**Impact:** CRITICAL - Bugs affect on-chain service registration, state updates, bonding
 
-2. **Wallet Management Tests** (1 day, ~30 new tests)
-   - File: `tests/test_wallet_master.py`
-   - Convert: Balance checks, address validation, transfer logic
-   - Mock: LedgerAPI, blockchain responses
-   - Keep as integration: Safe creation, real fund transfers
+**Current Coverage:**
+- ✅ RPC configuration (`test_rpc_config_bug.py`)
+- ❌ Service registration (not tested)
+- ❌ State updates (not tested)
+- ❌ Token operations (not tested)
 
-3. **Funding Manager Tests** (0.5 days, ~15 new tests)
-   - File: `tests/test_services_funding.py`
-   - Add unit tests for cooldown logic, requirement computation
-   - Mock: Blockchain state
+**Tests Needed (~10-15 tests, 2-3 days):**
 
-**Pattern:**
-```python
-# BEFORE (integration test - slow)
-@pytest.mark.integration
-def test_get_balance_real_chain(service_manager):
-    balance = service_manager.get_balance(chain=Chain.GNOSIS)  # Network call
-    assert balance >= 0
+1. **Service Registration Tests** (4-5 tests)
+   ```python
+   def test_register_service_on_chain():
+       """Test service registration with on-chain protocol."""
 
-# AFTER (unit test - fast)
-def test_get_balance_mocked(service_manager, monkeypatch):
-    mock_ledger = MagicMock()
-    mock_ledger.get_balance.return_value = 1000000000000000000  # 1 ETH
-    monkeypatch.setattr('operate.ledger.get_default_ledger_api', lambda x: mock_ledger)
+   def test_register_service_with_insufficient_funds():
+       """Test registration fails gracefully without funds."""
+   ```
 
-    balance = service_manager.get_balance(chain=Chain.GNOSIS)
-    assert balance == 1000000000000000000
-```
+2. **Service State Update Tests** (3-4 tests)
+   - Update service state on-chain
+   - State transition validation
+   - Error handling for failed updates
 
-**Expected Outcome:**
-- Unit tests: 130 → 225+ (73% increase)
-- Unit test runtime: ~2 min → ~3 min (still fast)
-- Faster CI feedback
+3. **Token Operations Tests** (2-3 tests)
+   - Service bonding
+   - Unbonding
+   - Token approval
 
-**Effort:** 3 days
-
-### 2.3 Error Path Testing
-
-**Goal:** Increase error coverage from 14% to 30%+.
-
-**New Error Tests (~30 tests):**
-
-1. **Network Failure Simulation** (1 day)
-   - Test RPC failures with proper exceptions
-   - Verify retry logic (to be added)
-   - Test fallback behavior
-
-2. **Transaction Failures** (0.5 days)
-   - Insufficient gas/funds
-   - Nonce conflicts
-   - Error propagation
-
-3. **State Corruption Recovery** (0.5 days)
-   - Corrupted JSON files
-   - Missing required fields
-   - Invalid state transitions
-
-**Pattern:**
-```python
-def test_balance_check_network_failure(service_manager, monkeypatch):
-    """Test balance check handles network failure gracefully."""
-    mock_ledger = MagicMock()
-    mock_ledger.get_balance.side_effect = ConnectionError("Network unreachable")
-
-    with pytest.raises(NetworkError) as exc_info:
-        service_manager.get_balance(chain=Chain.GNOSIS)
-
-    assert "Network unreachable" in str(exc_info.value)
-```
+4. **Error Handling Tests** (2-3 tests)
+   - Chain connection failures
+   - Transaction revert handling
+   - Gas estimation errors
 
 **Files to Enhance:**
-- All existing test files
-- New: `tests/test_error_handling.py`
+- `tests/test_services_protocol.py` (new - expand from test_rpc_config_bug.py)
+
+**Mocking Strategy:**
+- Mock blockchain calls
+- Mock contract interactions
+- Test protocol logic
+
+**Effort:** 2-3 days
+
+**Total Priority 1 Effort:** 5-7 days, ~25-35 high-value tests
+
+### 2.2 Merge Existing Test Branches (INFRASTRUCTURE) - 🔄 TODO
+
+**Priority 2: Consolidate and Setup Testing Infrastructure**
+
+#### 2.2.1 Merge Strategic Test Branch (~0.5 days)
+
+**Branch:** `feat/phase2-strategic-unit-tests`
+
+**Contents:**
+- ✅ `test_deployment_runner_error_handling.py` (6 tests)
+- ✅ `test_deployment_runner_race_conditions.py`
+- ✅ `test_health_checker_check_service_health.py` (7 tests, need pytest-asyncio)
+- ✅ `test_health_checker_healthcheck_job.py`
+- ✅ `test_health_checker_race_conditions.py`
+- ✅ `test_funding_manager_error_handling.py` (4 tests)
+- ✅ `test_funding_manager_race_conditions.py`
+
+**Action:** Merge to main
+
+#### 2.2.2 Setup pytest-asyncio (~0.25 days)
+
+**Issue:** Async tests currently skipped due to pytest-asyncio not configured
+
+**Action:**
+1. Add `pytest-asyncio` to dependencies
+2. Configure in `pytest.ini`
+3. Enable 7 skipped async tests in health_checker tests
+
+**Files to Modify:**
+- `pyproject.toml` (add pytest-asyncio dependency)
+- `pytest.ini` (verify asyncio_mode configuration)
+
+#### 2.2.3 Merge Balance & Error Test Branches (~0.25 days)
+
+**Branches:**
+- `feat/phase2-balance-checking-tests` (11 tests)
+- `feat/phase2-error-path-tests` (3 tests)
+
+**Action:** Merge both to main
+
+**Total Priority 2 Effort:** ~1 day
+
+### 2.3 Medium Priority Gaps (IF TIME PERMITS) - 📋 PLANNED
+
+**Priority 3: Address Secondary Gaps**
+
+#### 2.3.1 migration.py Tests (~2 days, 8-10 tests)
+
+**Issue:** Migration logic untested - risk of config corruption during upgrades
+
+**Impact:** MEDIUM - Bugs could break service configs on version updates
+
+**Tests Needed:**
+1. Version migrations (v1→v2, v2→v3, etc.)
+2. Backward compatibility validation
+3. Rollback scenarios
+4. Corrupted config handling during migration
+5. Missing field defaults
+
+**Files to Create:**
+- `tests/test_migration.py`
 
 **Effort:** 2 days
+
+#### 2.3.2 services/utils Tests (~2-3 days, 10-15 tests)
+
+**Files:**
+- `operate/services/utils/tendermint.py` (status unknown)
+- `operate/services/utils/mech.py` (status unknown)
+
+**Action:**
+1. Investigate current test coverage
+2. Add tests for core utility functions
+3. Focus on error handling and edge cases
+
+**Files to Create/Enhance:**
+- `tests/test_services_utils_tendermint.py`
+- `tests/test_services_utils_mech.py`
+
+**Effort:** 2-3 days
+
+**Total Priority 3 Effort:** 4-5 days, ~20-25 tests (OPTIONAL)
+
+**Effort Actual:** 0.5 days
 
 ### 2.4 Test Infrastructure Improvements
 
@@ -463,33 +541,57 @@ def test_balance_check_network_failure(service_manager, monkeypatch):
 
 **Effort:** 2 days
 
-### Phase 2 Summary
+### Phase 2 Summary - REVISED PLAN
 
-**Total Effort:** 11-12 days (2.2-2.4 weeks)
+**Assessment Complete:** See `TEST_COVERAGE_ASSESSMENT.md` for full analysis
 
-**Deliverables:**
-- ✅ 45-55 new tests for deployment_runner and health_checker
-- ✅ 95+ converted/new unit tests (fast)
-- ✅ 30+ error scenario tests
-- ✅ Improved test infrastructure and documentation
+**Key Finding:** Codebase has ~60% coverage (209 tests) but **uneven distribution**. Most areas well-tested, but **critical gaps** in agent_runner and protocol.
 
-**Metrics:**
-- Total tests: 108 → 280+ (159% increase)
-- Unit tests: 130 → 225+ (73% increase)
-- Error coverage: 14% → 30%+
-- Unit test runtime: ~2 min → ~3 min
+**Revised Strategy:**
+- ❌ **OLD Plan:** Add 170+ tests everywhere (quantity focus)
+- ✅ **NEW Plan:** Fill critical gaps with ~50-60 high-value tests (quality focus)
 
-**Verification:**
-```bash
-# Fast unit tests
-tox -e unit-tests  # Should complete in < 5 minutes
+**Completed (2-3 days):**
+- ✅ Systematic file-by-file coverage assessment
+- ✅ Created ~25-30 high-quality tests (deployment_runner, health_checker, funding_manager, balance checking)
+- ✅ Removed 380+ lines of valueless "algorithm tests"
+- ✅ Documented critical learnings about test quality
 
-# Coverage report
-pytest --cov=operate --cov-report=html tests/
+**Remaining Work (6-8 days):**
 
-# Verify error coverage
-grep -r "pytest.raises" tests/ | wc -l  # Should be 40+
-```
+**Priority 1 - Critical Gaps (5-7 days, ~25-35 tests):**
+1. ❌ agent_runner.py tests (3-4 days, ~15-20 tests) - CRITICAL
+2. ⚠️ protocol.py tests (2-3 days, ~10-15 tests) - Expand existing
+
+**Priority 2 - Infrastructure (1 day):**
+3. ✅ Merge existing test branches
+4. ✅ Setup pytest-asyncio
+
+**Priority 3 - Optional (4-5 days, ~20-25 tests):**
+5. migration.py tests (2 days, ~8-10 tests)
+6. tendermint/mech utils tests (2-3 days, ~10-15 tests)
+
+**Estimated Total Addition:**
+- **Minimum:** ~40-50 tests (Priorities 1-2 only)
+- **Maximum:** ~70-80 tests (all priorities)
+- **Quality:** HIGH - all test real implementations
+
+**Critical Learnings Applied:**
+
+1. ❌ **DON'T create "algorithm tests"** that reimplement logic
+2. ❌ **DON'T test Python's standard library** behavior
+3. ❌ **DON'T test trivial behavior** (exception creation, dict creation)
+4. ✅ **DO test real implementations** with mocked external dependencies
+5. ✅ **DO focus on high-impact areas** (agent_runner, protocol)
+6. ✅ **DO prioritize quality over quantity**
+
+**Key Insight:** Better to have 50 tests that catch real bugs in critical areas than 200 tests that verify Python works.
+
+**Next Steps:**
+1. Start with agent_runner.py tests (highest impact)
+2. Expand protocol.py tests
+3. Merge existing branches and setup pytest-asyncio
+4. Consider medium priority gaps if time permits
 
 ---
 

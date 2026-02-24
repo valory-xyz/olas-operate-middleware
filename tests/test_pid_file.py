@@ -5,9 +5,11 @@ Verifies thread-safe and process-safe PID file operations.
 """
 
 import os
+import sys
 import threading
 import time
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import psutil
 import pytest
@@ -16,6 +18,8 @@ from operate.utils.pid_file import (
     PIDFileError,
     PIDFileLocked,
     StalePIDFile,
+    _acquire_lock,
+    _release_lock,
     read_pid_file,
     remove_pid_file,
     validate_pid,
@@ -335,3 +339,193 @@ class TestConcurrentOperations:
         # Document the behavior: some operations may timeout under heavy load
         # but this is expected and acceptable (locking is working)
         # The fact that we got valid results proves synchronization works
+
+
+class TestLockingPlatformBranches:
+    """Tests for platform-specific locking code paths."""
+
+    def test_acquire_lock_windows_raises_pid_file_locked(self, tmp_path: Path) -> None:
+        """Test that Windows locking raises PIDFileLocked when OSError occurs."""
+        mock_msvcrt = MagicMock()
+        mock_msvcrt.locking.side_effect = OSError("Windows: file locked")
+        mock_msvcrt.LK_NBLCK = 1
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Windows"
+        ), patch.dict(sys.modules, {"msvcrt": mock_msvcrt}):
+            with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
+                with pytest.raises(PIDFileLocked, match="locked"):
+                    _acquire_lock(f.fileno())
+
+    def test_release_lock_windows_silently_ignores_error(self, tmp_path: Path) -> None:
+        """Test that Windows unlock silently ignores OSError (best-effort unlock)."""
+        mock_msvcrt = MagicMock()
+        mock_msvcrt.locking.side_effect = OSError("Windows: unlock failed")
+        mock_msvcrt.LK_UNLCK = 2
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Windows"
+        ), patch.dict(sys.modules, {"msvcrt": mock_msvcrt}):
+            with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
+                # Should not raise
+                _release_lock(f.fileno())
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
+    def test_release_lock_unix_fcntl_error_silently_ignored(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that Unix fcntl unlock OSError is silently ignored."""
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=OSError("flock failed")):
+            with open(tmp_path / "test.pid", "w", encoding="utf-8") as f:
+                # Should not raise
+                _release_lock(f.fileno())
+
+
+class TestValidatePidEdgeCases:
+    """Tests for validate_pid edge cases."""
+
+    def test_validate_pid_no_such_process_returns_false(self) -> None:
+        """Test that NoSuchProcess during name check causes validate_pid to return False."""
+        current_pid = os.getpid()
+
+        with patch.object(
+            psutil.Process,
+            "name",
+            side_effect=psutil.NoSuchProcess(current_pid),
+        ):
+            result = validate_pid(current_pid, expected_process_names=["any_name"])
+
+        assert result is False
+
+    def test_validate_pid_generic_exception_returns_false_and_logs(self) -> None:
+        """Test that a generic Exception during validate_pid returns False."""
+        with patch(
+            "operate.utils.pid_file.psutil.pid_exists",
+            side_effect=RuntimeError("unexpected error"),
+        ):
+            result = validate_pid(os.getpid())
+
+        assert result is False
+
+
+class TestWritePIDFileEdgeCases:
+    """Tests for write_pid_file edge cases."""
+
+    def test_write_pid_file_oserror_raises_pid_file_error(self, tmp_path: Path) -> None:
+        """Test that OSError during write is wrapped in PIDFileError."""
+        pid_file = tmp_path / "test.pid"
+        current_pid = os.getpid()
+
+        with patch(
+            "operate.utils.pid_file._acquire_lock",
+            side_effect=OSError("disk full"),
+        ):
+            # OSError (not PIDFileLocked) from the write path → PIDFileError
+            with pytest.raises(PIDFileError, match="Failed to write"):
+                write_pid_file(pid_file, current_pid)
+
+    def test_write_pid_file_lock_timeout_raises_pid_file_locked(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that write_pid_file raises PIDFileLocked after lock timeout expires."""
+        pid_file = tmp_path / "test.pid"
+        current_pid = os.getpid()
+
+        with patch(
+            "operate.utils.pid_file._acquire_lock",
+            side_effect=PIDFileLocked("always locked"),
+        ):
+            with pytest.raises(PIDFileLocked, match="Could not acquire lock"):
+                write_pid_file(pid_file, current_pid, timeout=0.2)
+
+
+class TestReadPIDFileEdgeCases:
+    """Tests for read_pid_file edge cases."""
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
+    def test_read_pid_file_retries_on_pid_file_locked_then_raises_timeout(
+        self, tmp_path: Path
+    ) -> None:
+        """Test read_pid_file retries on PIDFileLocked and raises after timeout (lines 238-240, 247-249)."""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=PIDFileLocked("always locked")), patch(
+            "operate.utils.pid_file.time.sleep"
+        ):
+            with pytest.raises(PIDFileLocked, match="Could not acquire lock"):
+                read_pid_file(pid_file, timeout=0.05)
+
+    @pytest.mark.skipif(
+        sys.platform == "win32", reason="fcntl not available on Windows"
+    )
+    def test_read_pid_file_fcntl_oserror_raises_pid_file_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Test read_pid_file wraps fcntl OSError in PIDFileError (lines 243-244)."""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+        with patch(
+            "operate.utils.pid_file.platform.system", return_value="Linux"
+        ), patch("fcntl.flock", side_effect=OSError("disk error")):
+            with pytest.raises(PIDFileError, match="Failed to read PID file"):
+                read_pid_file(pid_file)
+
+    def test_read_pid_file_stale_removal_failure_logs_error(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that failed removal of stale PID file logs an error."""
+        pid_file = tmp_path / "test.pid"
+        nonexistent_pid = 999999
+        pid_file.write_text(str(nonexistent_pid), encoding="utf-8")
+
+        original_unlink = Path.unlink
+
+        def mock_unlink(self: Path, missing_ok: bool = False) -> None:  # type: ignore[override]
+            if self == pid_file:
+                raise OSError("permission denied")
+            original_unlink(self, missing_ok)
+
+        with patch("operate.utils.pid_file.logger") as mock_logger, patch.object(
+            Path, "unlink", mock_unlink
+        ):
+            with pytest.raises(StalePIDFile):
+                read_pid_file(pid_file, remove_stale=True)
+
+        mock_logger.error.assert_called()
+        error_msg = str(mock_logger.error.call_args)
+        assert "Failed to remove stale PID file" in error_msg
+
+
+class TestRemovePIDFileEdgeCases:
+    """Tests for remove_pid_file edge cases."""
+
+    def test_remove_pid_file_unlink_oserror_logs_error(self, tmp_path: Path) -> None:
+        """Test that remove_pid_file logs an error if unlink raises OSError."""
+        pid_file = tmp_path / "test.pid"
+        pid_file.write_text("999999", encoding="utf-8")  # Dead process
+
+        original_unlink = Path.unlink
+
+        def mock_unlink(self: Path, missing_ok: bool = False) -> None:  # type: ignore[override]
+            if self == pid_file:
+                raise OSError("permission denied")
+            original_unlink(self, missing_ok)
+
+        with patch("operate.utils.pid_file.logger") as mock_logger, patch.object(
+            Path, "unlink", mock_unlink
+        ):
+            remove_pid_file(pid_file, force=True)
+
+        mock_logger.error.assert_called()
+        error_msg = str(mock_logger.error.call_args)
+        assert "Failed to remove PID file" in error_msg
