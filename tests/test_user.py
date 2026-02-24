@@ -106,6 +106,21 @@ class TestUserAccount:
         # Old password should no longer be valid
         assert not account.is_valid(password=password)
 
+    def test_force_update_changes_password(self, tmp_path: Path) -> None:
+        """Test that force_update() changes the password without requiring the old one."""
+        password = "initial_password"  # nosec B105
+        new_password = "forced_new_password"  # nosec B105
+        account_path = tmp_path / "user.json"
+        account = UserAccount.new(password=password, path=account_path)
+
+        account.force_update(new_password)
+
+        assert account.is_valid(password=new_password)
+        assert not account.is_valid(password=password)
+        # Verify the new hash is persisted to disk
+        reloaded = UserAccount.load(account_path)
+        assert reloaded.is_valid(password=new_password)
+
     def test_argon2id_returns_valid_hash(self) -> None:
         """Test that argon2id() returns a valid Argon2id hash."""
         password = "testpassword"  # nosec B105
