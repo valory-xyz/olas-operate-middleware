@@ -18,13 +18,14 @@
 # ------------------------------------------------------------------------------
 """Settings for operate."""
 
+import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
-from operate.resource import LocalResource, serialize
+from operate.resource import LocalResource, deserialize, serialize
 from operate.serialization import BigInt
 from operate.utils import SingletonMeta
 from operate.wallet.master import MasterWalletManager
@@ -53,7 +54,13 @@ class Settings(LocalResource, metaclass=SingletonMeta):
         self.wallet_manager: MasterWalletManager = kwargs.pop("wallet_manager")
         super().__init__(path=path)
         if path is not None and (path / self._file).exists():
-            self.load(path)
+            data = json.loads(
+                (path / self._file).read_text(encoding="utf-8")
+            )
+            for pname, ptype in self.__class__.__annotations__.items():
+                if pname.startswith("_") or pname not in data:
+                    continue
+                setattr(self, pname, deserialize(obj=data[pname], otype=ptype))
 
         for key, default_value in DEFAULT_SETTINGS.items():
             value = kwargs.get(key, default_value)
@@ -84,11 +91,17 @@ class Settings(LocalResource, metaclass=SingletonMeta):
 
     def get_eoa_topups(self) -> Dict[Chain, Dict[str, BigInt]]:
         """Get the EOA topups."""
-        eth_master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
+        try:
+            eth_master_wallet = self.wallet_manager.load(
+                ledger_type=LedgerType.ETHEREUM
+            )
+            safes = eth_master_wallet.safes
+        except FileNotFoundError:
+            safes = {}
         return {
             chain: {
                 asset: (
-                    amount if chain in eth_master_wallet.safes else BigInt(amount * 2)
+                    amount if chain in safes else BigInt(amount * 2)
                 )
                 for asset, amount in asset_amount.items()
             }
