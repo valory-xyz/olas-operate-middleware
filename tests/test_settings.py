@@ -21,17 +21,25 @@
 import json
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
 from operate.cli import OperateApp
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
+from operate.operate_types import Chain
 from operate.resource import serialize
+from operate.serialization import BigInt
 from operate.settings import SETTINGS_JSON_VERSION, Settings
 
 from tests.conftest import OperateTestEnv, create_wallets
 from tests.constants import CHAINS_TO_TEST
+
+
+# ---------------------------------------------------------------------------
+# Integration tests (require test_operate / test_env fixtures)
+# ---------------------------------------------------------------------------
 
 
 def test_settings_no_file(test_operate: OperateApp) -> None:
@@ -77,6 +85,7 @@ def test_settings_persistence(tmp_path: Path, test_operate: OperateApp) -> None:
     existing_settings.eoa_topups["new_chain"] = {"new_asset": 12345}
     existing_settings.store()
 
+    Settings._instances.clear()
     del test_operate
     new_operate = OperateApp(home=tmp_path)
 
@@ -106,3 +115,94 @@ def test_settings_version_mismatch(test_operate: OperateApp) -> None:
             wallet_manager=test_operate.wallet_manager,
             path=test_operate._path,
         )
+
+
+# ---------------------------------------------------------------------------
+# Unit tests (mock-based, no fixtures needed)
+# ---------------------------------------------------------------------------
+
+
+class TestSettingsInit:
+    """Tests for Settings.__init__ validation."""
+
+    def test_missing_wallet_manager_raises(self) -> None:
+        """Test that omitting wallet_manager raises ValueError."""
+        Settings._instances.clear()
+        with pytest.raises(ValueError, match="wallet_manager is required"):
+            Settings(path=Path("/tmp/nonexistent"))  # nosec B108
+
+    def test_singleton_returns_same_instance(self, tmp_path: Path) -> None:
+        """Test that Settings is a singleton — second call returns the same object."""
+        Settings._instances.clear()
+        wm = MagicMock()
+        first = Settings(wallet_manager=wm, path=tmp_path)
+        second = Settings(wallet_manager=wm, path=tmp_path)
+        assert first is second
+        Settings._instances.clear()
+
+
+class TestGetEoaTopups:
+    """Tests for Settings.get_eoa_topups with mocked wallet."""
+
+    def _make_settings(self, tmp_path: Path, safes: dict) -> Settings:  # type: ignore[type-arg]
+        """Create a Settings with a mocked wallet_manager."""
+        Settings._instances.clear()
+        mock_wallet = MagicMock()
+        mock_wallet.safes = safes
+        mock_wm = MagicMock()
+        mock_wm.load.return_value = mock_wallet
+        settings = Settings(wallet_manager=mock_wm, path=tmp_path)
+        settings.eoa_topups = {
+            Chain.GNOSIS: {"0x0": BigInt(100)},
+            Chain.BASE: {"0x0": BigInt(200)},
+        }
+        return settings
+
+    def test_chains_with_safe_get_original_amount(self, tmp_path: Path) -> None:
+        """Chains that have a Safe should return the original topup amount."""
+        settings = self._make_settings(
+            tmp_path, safes={Chain.GNOSIS: "0xSafe", Chain.BASE: "0xSafe2"}
+        )
+        result = settings.get_eoa_topups()
+        assert result[Chain.GNOSIS]["0x0"] == 100
+        assert result[Chain.BASE]["0x0"] == 200
+        Settings._instances.clear()
+
+    def test_chains_without_safe_get_doubled_amount(self, tmp_path: Path) -> None:
+        """Chains without a Safe should return 2x the topup amount."""
+        settings = self._make_settings(tmp_path, safes={Chain.GNOSIS: "0xSafe"})
+        result = settings.get_eoa_topups()
+        assert result[Chain.GNOSIS]["0x0"] == 100  # has safe
+        assert result[Chain.BASE]["0x0"] == 400  # no safe → doubled
+        Settings._instances.clear()
+
+    def test_no_safes_doubles_all(self, tmp_path: Path) -> None:
+        """When wallet has no safes, all topups are doubled."""
+        settings = self._make_settings(tmp_path, safes={})
+        result = settings.get_eoa_topups()
+        assert result[Chain.GNOSIS]["0x0"] == 200
+        assert result[Chain.BASE]["0x0"] == 400
+        Settings._instances.clear()
+
+
+class TestSettingsJson:
+    """Tests for Settings.json property."""
+
+    def test_json_contains_thresholds(self, tmp_path: Path) -> None:
+        """Test that json includes eoa_thresholds as topups // 2."""
+        Settings._instances.clear()
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {Chain.GNOSIS: "0xSafe"}
+        mock_wm = MagicMock()
+        mock_wm.load.return_value = mock_wallet
+        settings = Settings(wallet_manager=mock_wm, path=tmp_path)
+        settings.eoa_topups = {Chain.GNOSIS: {"0x0": BigInt(1000)}}
+
+        result = settings.json
+        assert "eoa_thresholds" in result
+        assert "eoa_topups" in result
+        assert "version" in result
+        # Threshold should be topup // 2
+        gnosis_key = str(Chain.GNOSIS.value)
+        assert result["eoa_thresholds"][gnosis_key]["0x0"] == 500
+        Settings._instances.clear()

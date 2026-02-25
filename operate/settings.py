@@ -23,7 +23,7 @@ from typing import Any, Dict, Optional
 
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
-from operate.operate_types import LedgerType
+from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource, serialize
 from operate.serialization import BigInt
 from operate.utils import SingletonMeta
@@ -82,12 +82,12 @@ class Settings(LocalResource, metaclass=SingletonMeta):
             }
         )
 
-    def get_eoa_topups(self) -> Dict[str, Dict[str, int]]:
+    def get_eoa_topups(self) -> Dict[Chain, Dict[str, BigInt]]:
         """Get the EOA topups."""
         eth_master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
         return {
             chain: {
-                asset: amount if chain in eth_master_wallet.safes else amount * 2
+                asset: amount if chain in eth_master_wallet.safes else BigInt(amount * 2)
                 for asset, amount in asset_amount.items()
             }
             for chain, asset_amount in self.eoa_topups.items()
