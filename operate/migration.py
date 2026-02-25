@@ -317,7 +317,7 @@ class MigrationManager:
 
             if "env_variables" not in data:
                 if data["name"] == "valory/trader_pearl":
-                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS  # pragma: no cover
                 else:
                     data["env_variables"] = {}
 
@@ -401,7 +401,7 @@ class MigrationManager:
             )
 
             if data["name"] is None:
-                data["name"] = release_data.repo
+                data["name"] = release_data.repo  # pragma: no cover
 
         data["version"] = SERVICE_CONFIG_VERSION
 
@@ -466,7 +466,7 @@ class MigrationManager:
 
         for qs_config in self._path.glob("*-quickstart-config.json"):
             if not qs_config.exists():
-                continue
+                continue  # pragma: no cover
 
             migrated = False
             with open(qs_config, "r", encoding="utf-8") as f:

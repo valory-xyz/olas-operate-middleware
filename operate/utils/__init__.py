@@ -31,27 +31,12 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Lock
 
 from operate.constants import DEFAULT_TIMEOUT
 from operate.serialization import BigInt
 
 
 logger = logging.getLogger(__name__)
-
-
-class SingletonMeta(type):
-    """A metaclass for creating thread-safe singleton classes."""
-
-    _instances: t.Dict[t.Type, t.Any] = {}
-    _lock: Lock = Lock()
-
-    def __call__(cls, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        """Override the __call__ method to control instance creation."""
-        with cls._lock:
-            if cls not in cls._instances:
-                cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
 
 
 def create_backup(path: Path) -> Path:

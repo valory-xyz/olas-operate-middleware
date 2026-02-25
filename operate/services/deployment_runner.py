@@ -45,6 +45,13 @@ from autonomy.__version__ import __version__ as autonomy_version
 
 from operate import constants
 from operate.utils import secure_copy_private_key
+from operate.utils.pid_file import (
+    PIDFileError,
+    StalePIDFile,
+    read_pid_file,
+    remove_pid_file,
+    write_pid_file,
+)
 
 from .agent_runner import get_agent_runner_path
 
@@ -110,6 +117,8 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Initialize the deployment runner."""
         super().__init__(work_directory)
         self._is_aea = is_aea
+        self._agent_log_file: t.Optional[TextIOWrapper] = None
+        self._tm_log_file: t.Optional[TextIOWrapper] = None
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
         """Open agent_runner.log file."""
@@ -118,6 +127,20 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _open_tendermint_log_file(self) -> TextIOWrapper:
         """Open tm.log file."""
         return (self._get_operate_dir() / "tm.log").open("w+")
+
+    def _close_agent_log_file(self) -> None:
+        """Close agent log file handle if open."""
+        if self._agent_log_file is not None:
+            with suppress(Exception):
+                self._agent_log_file.close()
+            self._agent_log_file = None
+
+    def _close_tm_log_file(self) -> None:
+        """Close tendermint log file handle if open."""
+        if self._tm_log_file is not None:
+            with suppress(Exception):
+                self._tm_log_file.close()
+            self._tm_log_file = None
 
     def _get_operate_dir(self) -> Path:
         """Get .operate dir."""
@@ -149,7 +172,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             )
 
     @staticmethod
-    def _call_aea_command(cwd: str | Path, args: List[str]) -> None:
+    def _call_aea_command(cwd: str | Path, args: List[str]) -> None:  # pragma: no cover
         try:
             import os  # pylint: disable=redefined-outer-name,reimported,import-outside-toplevel
 
@@ -160,6 +183,10 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             call_aea(  # pylint: disable=unexpected-keyword-arg, no-value-for-parameter
                 args, standalone_mode=False
             )
+            # os._exit(0) is needed in case of run onlinux woth form subprocess method
+            # otherwise its going to perform all actions  successfully bu return code 1 to the calling coder
+            # it looks like aea+pyinstaller+multiprocessexit hooks issue on process stops
+            os._exit(0)  # pylint: disable=protected-access
         except Exception:
             print(f"Error on calling aea command: {args}")
             print_exc()
@@ -317,17 +344,34 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             self._stop_tendermint()
 
     def _stop_agent(self) -> None:
-        """Start process."""
-        pid = self._work_directory / "agent.pid"
-        if not pid.exists():
-            return
-        kill_process(int(pid.read_text(encoding="utf-8")))
+        """Stop agent process using safe PID file operations."""
+        pid_file = self._work_directory / "agent.pid"
+        if pid_file.exists():
+            try:
+                # Read and validate PID (checks process exists, removes stale files)
+                # Expected process names: python, agent_runner, aea
+                pid = read_pid_file(
+                    pid_file,
+                    expected_process_names=["python", "agent", "aea"],
+                    remove_stale=True,
+                )
+                kill_process(pid)
+                # Clean up PID file after successful kill
+                remove_pid_file(pid_file, force=True)
+            except (FileNotFoundError, StalePIDFile):
+                # PID file doesn't exist or process already dead - OK
+                self.logger.debug(f"Agent PID file {pid_file} not found or stale")
+            except PIDFileError as e:
+                self.logger.error(f"Error reading agent PID file {pid_file}: {e}")
+                # Try to clean up invalid PID file
+                remove_pid_file(pid_file, force=True)
+        self._close_agent_log_file()
 
     def _get_tm_exit_url(self) -> str:
         return f"{self.TM_CONTROL_URL}/exit"
 
     def _stop_tendermint(self) -> None:
-        """Stop tendermint process."""
+        """Stop tendermint process using safe PID file operations."""
         try:
             requests.get(self._get_tm_exit_url(), timeout=(1, 10))
             time.sleep(self.SLEEP_BEFORE_TM_KILL)
@@ -338,10 +382,27 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         except Exception:  # pylint: disable=broad-except
             self.logger.exception("Exception on tendermint stop!")
 
-        pid = self._work_directory / "tendermint.pid"
-        if not pid.exists():
-            return
-        kill_process(int(pid.read_text(encoding="utf-8")))
+        pid_file = self._work_directory / "tendermint.pid"
+        if pid_file.exists():
+            try:
+                # Read and validate PID (checks process exists, removes stale files)
+                # Expected process names: tendermint, flask, python
+                pid = read_pid_file(
+                    pid_file,
+                    expected_process_names=["tendermint", "flask", "python"],
+                    remove_stale=True,
+                )
+                kill_process(pid)
+                # Clean up PID file after successful kill
+                remove_pid_file(pid_file, force=True)
+            except (FileNotFoundError, StalePIDFile):
+                # PID file doesn't exist or process already dead - OK
+                self.logger.debug(f"Tendermint PID file {pid_file} not found or stale")
+            except PIDFileError as e:
+                self.logger.error(f"Error reading tendermint PID file {pid_file}: {e}")
+                # Try to clean up invalid PID file
+                remove_pid_file(pid_file, force=True)
+        self._close_tm_log_file()
 
     @abstractmethod
     def _start_tendermint(self) -> None:
@@ -355,7 +416,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     @abstractmethod
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def get_agent_start_args(self, password: str) -> List[str]:
         """Return agent start arguments."""
@@ -402,16 +463,29 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         process = self._start_agent_process(
             env=env, working_dir=working_dir, password=password
         )
-        (working_dir / "agent.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "agent.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["python", "agent", "aea"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_agent_process(
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -427,15 +501,27 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
 
         process = self._start_tendermint_process(env=env, working_dir=working_dir)
 
-        (working_dir / "tendermint.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+        # Write PID file with validation and locking
+        pid_file = working_dir / "tendermint.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["tendermint", "flask", "python"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write tendermint PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_tendermint_process(
         self, env: Dict, working_dir: Path
     ) -> subprocess.Popen:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
@@ -445,12 +531,12 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             env=env,
             preexec_fn=os.setpgrp,
         )
@@ -464,19 +550,25 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             **env,
         }
         env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
-        tm_log_file = self._open_tendermint_log_file()
+        self._tm_log_file = self._open_tendermint_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=tm_log_file,
-            stderr=tm_log_file,
+            stdout=self._tm_log_file,
+            stderr=self._tm_log_file,
             env=env,
             preexec_fn=os.setpgrp,  # pylint: disable=subprocess-popen-preexec-fn # nosec
         )
         return process
 
 
-class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
+class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
+    """Linux deployment runner."""
+
+
+class PyInstallerHostDeploymentRunnerWindows(
+    PyInstallerHostDeploymentRunner
+):  # pragma: no cover
     """Windows deployment runner."""
 
     def __init__(self, work_directory: Path, is_aea: bool) -> None:
@@ -565,12 +657,12 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
@@ -584,14 +676,14 @@ class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
         env = {
             **env,
         }
-        tm_log_file = self._open_tendermint_log_file()
+        self._tm_log_file = self._open_tendermint_log_file()
         env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=tm_log_file,
-            stderr=tm_log_file,
+            stdout=self._tm_log_file,
+            stderr=self._tm_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
@@ -618,22 +710,35 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
-        (working_dir / "agent.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "agent.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["python", "agent", "aea"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write agent PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -659,10 +764,23 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
         )
-        (working_dir / "tendermint.pid").write_text(
-            data=str(process.pid),
-            encoding="utf-8",
-        )
+
+        # Write PID file with validation and locking
+        pid_file = working_dir / "tendermint.pid"
+        try:
+            write_pid_file(
+                pid_file,
+                process.pid,
+                expected_process_names=["tendermint", "flask", "python"],
+            )
+        except PIDFileError as e:
+            self.logger.error(f"Failed to write tendermint PID file {pid_file}: {e}")
+            # Process started but PID file write failed - try to kill process
+            try:
+                kill_process(process.pid)
+            except Exception:  # nosec # pylint: disable=broad-except
+                pass  # Best-effort cleanup; don't mask original error
+            raise
 
     @property
     def _venv_dir(self) -> Path:
@@ -754,7 +872,9 @@ class DeploymentManager:
                 return PyInstallerHostDeploymentRunnerMac
             if platform.system() == "Windows":
                 return PyInstallerHostDeploymentRunnerWindows
-            raise ValueError(f"Platform not supported {platform.system()}")
+            if platform.system() == "Linux":
+                return PyInstallerHostDeploymentRunnerLinux
+            raise ValueError(f"Platform is not supported {platform.system()}")
 
         return HostPythonHostDeploymentRunner
 

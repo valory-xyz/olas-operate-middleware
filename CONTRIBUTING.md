@@ -146,6 +146,77 @@ tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e sa
 
 Tests use **pytest** with fixtures defined in `conftest.py`.
 
+#### Standard Tests
+
+Write tests following pytest conventions:
+
+```python
+def test_my_feature(tmp_path: Path):
+    """Test my feature."""
+    # Setup
+    operate = OperateApp(home=tmp_path / "test_operate")
+    
+    # Execute
+    result = operate.some_method()
+    
+    # Assert
+    assert result == expected_value
+```
+
+#### VCR Tests (HTTP Recording)
+
+For tests that make HTTP calls, use VCR to record/replay interactions:
+
+**1. Mark test with `@pytest.mark.vcr`:**
+```python
+@pytest.mark.vcr
+def test_api_call(self):
+    response = requests.get("https://api.example.com/data")
+    assert response.status_code == 200
+```
+
+**2. First run records cassette:**
+```bash
+pytest tests/test_file.py::test_api_call --record-mode=once -v
+```
+
+**3. Subsequent runs replay from cassette** (no network needed):
+```bash
+pytest tests/test_file.py::test_api_call -v
+```
+
+**4. Commit the cassette file:**
+```bash
+git add tests/cassettes/test_file/TestClass.test_api_call.yaml
+git commit -m "test: add VCR cassette for test_api_call"
+```
+
+**When to use VCR:**
+- ✅ Testing external API integrations (Relay, LiFi, CoinGecko)
+- ✅ Testing RPC calls to blockchain nodes
+- ✅ Tests that are slow due to network latency
+- ✅ Tests that fail intermittently due to network issues
+- ✅ Tests that make deterministic API calls (same request/response expected)
+
+**When NOT to use VCR:**
+- ❌ Tests with sensitive data (use mocking instead)
+- ❌ Tests that need to validate live network state
+- ❌ WebSocket or streaming connections
+- ❌ Tests that should always call live endpoints
+
+**Re-recording cassettes:**
+
+If API behavior changes, re-record cassettes:
+```bash
+# Delete old cassette
+rm tests/cassettes/test_file/TestClass.test_api_call.yaml
+
+# Re-record
+pytest tests/test_file.py::test_api_call --record-mode=once -v
+```
+
+For detailed VCR documentation, see the "Working with VCR Tests" section in [TESTING.md](TESTING.md).
+
 ## Pull Request Process
 
 ### Before Submitting

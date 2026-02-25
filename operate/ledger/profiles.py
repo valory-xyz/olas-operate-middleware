@@ -17,7 +17,11 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Chain profiles."""
+"""
+Chain profiles.
+
+Helper classes for ledger interactions.
+"""
 
 import typing as t
 from functools import cache
@@ -166,6 +170,10 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
     "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB": (
         "0xC05e7412439bD7e91730a6880E18d5D5873F632C",
         2182,
+    ),
+    "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020": (
+        "TBD",  # TOFIX
+        0,
     ),
     "0x343F2B005cF6D70bA610CD9F1F1927049414B582": (
         "0x45F25db135E83d7a010b05FFc1202F8473E3ae7D",

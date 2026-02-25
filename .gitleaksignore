@@ -27,3 +27,4 @@ d8149e9b5b7bd6a7ed7bc1039900702f1d4f287b:operate/services/manage.py:generic-api-
 568b98af266c7344d88462702e72c21cdc5367ae:tests/test_api.py:generic-api-key:249
 568b98af266c7344d88462702e72c21cdc5367ae:tests/test_api.py:generic-api-key:265
 568b98af266c7344d88462702e72c21cdc5367ae:tests/test_api.py:generic-api-key:283
+fbef1b38a70f5113d01c382d73cb63aae1123805:tests/test_ssl.py:PKCS8-PK:100
