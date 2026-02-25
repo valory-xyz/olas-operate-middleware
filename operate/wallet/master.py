@@ -694,10 +694,11 @@ class EthereumMasterWallet(MasterWallet):
         )
         self.password = new_password
 
-        eoa_mnemonic_path = path / self._mnemonic
-        if not eoa_mnemonic_path.exists():
+        if not self.mnemonic_path.exists():
             encrypted_mnemonic = EncryptedData.new(
-                path=eoa_mnemonic_path, password=new_password, plaintext_bytes=mnemonic.encode()
+                path=self.mnemonic_path,
+                password=new_password,
+                plaintext_bytes=mnemonic.encode(),
             )
             encrypted_mnemonic.store()
 

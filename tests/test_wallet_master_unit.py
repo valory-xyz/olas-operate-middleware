@@ -613,6 +613,94 @@ class TestUpdatePasswordWithMnemonic:
             with pytest.raises(ValueError, match="mnemonic is not valid"):
                 wallet.update_password_with_mnemonic("bad mnemonic", "new_pass")
 
+    def test_valid_mnemonic_updates_keystore_and_password(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that valid mnemonic re-encrypts the keystore and updates password."""
+        wallet = _make_wallet(tmp_path)
+        # Create a dummy keystore file so create_backup and write_text work
+        key_path = tmp_path / EthereumMasterWallet._key
+        key_path.write_text("{}", encoding="utf-8")
+        # Create mnemonic file so the "store mnemonic" branch is skipped
+        wallet.mnemonic_path.write_text("{}", encoding="utf-8")
+
+        fake_crypto = MagicMock()
+        fake_crypto._private_key = b"\x01" * 32  # pylint: disable=protected-access
+        mock_w3 = MagicMock()
+        mock_w3.eth.account.from_mnemonic.return_value = fake_crypto
+
+        with patch.object(wallet, "is_mnemonic_valid", return_value=True), patch(
+            "operate.wallet.master.Web3", return_value=mock_w3
+        ), patch(
+            "operate.wallet.master.Account.encrypt", return_value={"key": "data"}
+        ), patch(
+            "operate.wallet.master.create_backup"
+        ):
+            wallet.update_password_with_mnemonic("word " * 12, "new_pass")
+
+        assert wallet.password == "new_pass"  # nosec B105
+        # Keystore was rewritten
+        assert key_path.read_text(encoding="utf-8") != "{}"
+
+    def test_stores_mnemonic_when_file_missing(self, tmp_path: Path) -> None:
+        """Test that mnemonic is encrypted and stored when mnemonic file absent."""
+        wallet = _make_wallet(tmp_path)
+        key_path = tmp_path / EthereumMasterWallet._key
+        key_path.write_text("{}", encoding="utf-8")
+        # Do NOT create mnemonic file — should trigger storage
+
+        fake_crypto = MagicMock()
+        fake_crypto._private_key = b"\x01" * 32  # pylint: disable=protected-access
+        mock_w3 = MagicMock()
+        mock_w3.eth.account.from_mnemonic.return_value = fake_crypto
+
+        mock_enc = MagicMock()
+        mnemonic_str = "word " * 12
+
+        with patch.object(wallet, "is_mnemonic_valid", return_value=True), patch(
+            "operate.wallet.master.Web3", return_value=mock_w3
+        ), patch(
+            "operate.wallet.master.Account.encrypt", return_value={"key": "data"}
+        ), patch(
+            "operate.wallet.master.create_backup"
+        ), patch(
+            "operate.wallet.master.EncryptedData.new", return_value=mock_enc
+        ) as mock_new:
+            wallet.update_password_with_mnemonic(mnemonic_str, "new_pass")
+
+        mock_new.assert_called_once_with(
+            path=wallet.mnemonic_path,
+            password="new_pass",  # nosec B106
+            plaintext_bytes=mnemonic_str.encode(),
+        )
+        mock_enc.store.assert_called_once()
+
+    def test_skips_mnemonic_storage_when_file_exists(self, tmp_path: Path) -> None:
+        """Test that mnemonic is NOT stored when mnemonic file already exists."""
+        wallet = _make_wallet(tmp_path)
+        key_path = tmp_path / EthereumMasterWallet._key
+        key_path.write_text("{}", encoding="utf-8")
+        # Create mnemonic file — storage should be skipped
+        wallet.mnemonic_path.write_text("{}", encoding="utf-8")
+
+        fake_crypto = MagicMock()
+        fake_crypto._private_key = b"\x01" * 32  # pylint: disable=protected-access
+        mock_w3 = MagicMock()
+        mock_w3.eth.account.from_mnemonic.return_value = fake_crypto
+
+        with patch.object(wallet, "is_mnemonic_valid", return_value=True), patch(
+            "operate.wallet.master.Web3", return_value=mock_w3
+        ), patch(
+            "operate.wallet.master.Account.encrypt", return_value={"key": "data"}
+        ), patch(
+            "operate.wallet.master.create_backup"
+        ), patch(
+            "operate.wallet.master.EncryptedData.new"
+        ) as mock_new:
+            wallet.update_password_with_mnemonic("word " * 12, "new_pass")
+
+        mock_new.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # EthereumMasterWallet – migrate_format
