@@ -613,9 +613,7 @@ class TestUpdatePasswordWithMnemonic:
             with pytest.raises(ValueError, match="mnemonic is not valid"):
                 wallet.update_password_with_mnemonic("bad mnemonic", "new_pass")
 
-    def test_valid_mnemonic_updates_keystore_and_password(
-        self, tmp_path: Path
-    ) -> None:
+    def test_valid_mnemonic_updates_keystore_and_password(self, tmp_path: Path) -> None:
         """Test that valid mnemonic re-encrypts the keystore and updates password."""
         wallet = _make_wallet(tmp_path)
         # Create a dummy keystore file so create_backup and write_text work
