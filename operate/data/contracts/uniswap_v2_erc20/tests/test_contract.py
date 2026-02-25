@@ -68,7 +68,7 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
         approval_value = 100
         data = self.contract.get_instance(
             self.ledger_api, self.contract_address
-        ).encodeABI(fn_name="approve", args=[spender_address, approval_value])
+        ).encode_abi(abi_element_identifier="approve", args=[spender_address, approval_value])
         with mock.patch.object(
             self.ledger_api.api.eth, "get_transaction_count", return_value=NONCE
         ):
@@ -102,7 +102,7 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
         value = 100
         data = self.contract.get_instance(
             self.ledger_api, self.contract_address
-        ).encodeABI(fn_name="transfer", args=[spender_address, value])
+        ).encode_abi(abi_element_identifier="transfer", args=[spender_address, value])
         with mock.patch.object(
             self.ledger_api.api.eth, "get_transaction_count", return_value=NONCE
         ):
@@ -137,7 +137,7 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
         value = 100
         data = self.contract.get_instance(
             self.ledger_api, self.contract_address
-        ).encodeABI(fn_name="transferFrom", args=[from_address, to_address, value])
+        ).encode_abi(abi_element_identifier="transferFrom", args=[from_address, to_address, value])
         with mock.patch.object(
             self.ledger_api.api.eth, "get_transaction_count", return_value=NONCE
         ):
@@ -177,8 +177,8 @@ class TestUniswapV2ERC20Contract(BaseContractTestCase):
         s = b""
         data = self.contract.get_instance(
             self.ledger_api, self.contract_address
-        ).encodeABI(
-            fn_name="permit",
+        ).encode_abi(
+            abi_element_identifier="permit",
             args=[owner_address, spender_address, value, deadline, v, r, s],
         )
         with mock.patch.object(

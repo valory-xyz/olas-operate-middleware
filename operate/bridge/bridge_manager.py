@@ -214,6 +214,7 @@ class BridgeManager:
                     from_bridge=config["from_bridge"],
                     to_bridge=config["to_bridge"],
                     bridge_eta=config["bridge_eta"],
+                    logger=logger,
                 ),
                 provider_id,
                 wallet_manager,
@@ -326,7 +327,7 @@ class BridgeManager:
             safe_address = wallet.safes.get(Chain(from_chain))
 
             if from_address is None or not (
-                from_address == wallet_address or from_address == safe_address
+                from_address in (wallet_address, safe_address)
             ):
                 raise ValueError(
                     f"Invalid input: 'from' address {from_address} does not match Master EOA nor Master Safe on chain {Chain(from_chain).name}."
@@ -369,9 +370,9 @@ class BridgeManager:
         status_json = self.get_status_json(bundle.id)
         status_json.update(
             {
-                "balances": balances,
-                "bridge_refill_requirements": bridge_refill_requirements,
-                "bridge_total_requirements": bridge_total_requirements,
+                "balances": balances.json,
+                "bridge_refill_requirements": bridge_refill_requirements.json,
+                "bridge_total_requirements": bridge_total_requirements.json,
                 "expiration_timestamp": bundle.timestamp + self.bundle_validity_period,
                 "is_refill_required": is_refill_required,
             }
@@ -380,6 +381,8 @@ class BridgeManager:
 
     def execute_bundle(self, bundle_id: str) -> t.Dict:
         """Execute the bundle"""
+
+        self.logger.info(f"[BRIDGE MANAGER] Executing bundle {bundle_id}.")
 
         bundle = self.data.last_requested_bundle
 

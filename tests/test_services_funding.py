@@ -28,6 +28,7 @@ from http import HTTPStatus
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import requests_mock
 from deepdiff import DeepDiff
 from fastapi.testclient import TestClient
@@ -48,7 +49,14 @@ from operate.ledger.profiles import (
     OLAS,
     USDC,
 )
-from operate.operate_types import Chain, DeploymentStatus, LedgerType, OnChainState
+from operate.operate_types import (
+    Chain,
+    ChainAmounts,
+    DeploymentStatus,
+    LedgerType,
+    OnChainState,
+)
+from operate.serialization import BigInt
 from operate.services.service import Deployment
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import get_asset_balance
@@ -77,6 +85,7 @@ for _chain in set(CHAINS) - {Chain.SOLANA}:
     }
 
 
+@pytest.mark.integration
 class TestFunding(OnTestnet):
     """Tests for services.funding."""
 
@@ -108,6 +117,7 @@ class TestFunding(OnTestnet):
                 assert mock_transfer.call_count == 0
 
             # When Master EOA balance is lower than threshold
+            # But master safe doesn't have enough funds
             current_balance = get_asset_balance(
                 ledger_api=ledger_api,
                 asset_address=ZERO_ADDRESS,
@@ -118,6 +128,43 @@ class TestFunding(OnTestnet):
                 amount=current_balance - DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] // 2,
                 chain=chain,
                 from_safe=False,
+            )
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.address,
+                )
+                < DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS] / 2
+            )
+            wallet.transfer(
+                to=ZERO_ADDRESS,  # burn the whole balance
+                amount=get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.safes[chain],
+                ),
+                chain=chain,
+                from_safe=True,
+            )
+            assert (
+                get_asset_balance(
+                    ledger_api=ledger_api,
+                    asset_address=ZERO_ADDRESS,
+                    address=wallet.safes[chain],
+                )
+                == 0
+            )
+            with patch.object(wallet, "transfer") as mock_transfer:
+                operate.funding_manager.fund_master_eoa()
+                assert mock_transfer.call_count == 0
+
+            # Master safe has enough funds
+            tenderly_add_balance(
+                chain=chain,
+                recipient=wallet.safes[chain],
+                token=ZERO_ADDRESS,
+                amount=DEFAULT_EOA_TOPUPS[chain][ZERO_ADDRESS],
             )
             assert (
                 get_asset_balance(
@@ -562,9 +609,15 @@ class TestFunding(OnTestnet):
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
             <= initial_balance_native + amount_transfer_native
         )
+        gas_price = ledger_api.try_get_gas_pricing()
+        tx_fees_estimate = (
+            gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"]
+        ) * 85000 + (  # safe drain tx
+            gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"]
+        ) * 21000  # EOA drain tx
         assert (
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
-            >= initial_balance_native + amount_transfer_native - DUST[chain]
+            >= initial_balance_native + amount_transfer_native - tx_fees_estimate
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
@@ -617,9 +670,16 @@ class TestFunding(OnTestnet):
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
             <= initial_balance_native + amount_transfer_native
         )
+        gas_price = ledger_api.try_get_gas_pricing()
+        tx_fees_estimate = 2 * (
+            (gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"])
+            * 85000  # safe drain tx
+            + (gas_price["maxFeePerGas"] + gas_price["maxPriorityFeePerGas"])
+            * 21000  # EOA drain tx
+        )
         assert (
             get_asset_balance(ledger_api, ZERO_ADDRESS, dst_address)
-            >= initial_balance_native + amount_transfer_native - DUST[chain]
+            >= initial_balance_native + amount_transfer_native - tx_fees_estimate
         )
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_safe) == 0
         assert get_asset_balance(ledger_api, ZERO_ADDRESS, master_eoa) <= DUST[chain]
@@ -655,12 +715,12 @@ class TestFunding(OnTestnet):
             "balances": {
                 chain1.value: {
                     "master_eoa": {
-                        ZERO_ADDRESS: 0,
-                        OLAS[chain1]: 0,
+                        ZERO_ADDRESS: "0",
+                        OLAS[chain1]: "0",
                     },
                     "master_safe": {
-                        ZERO_ADDRESS: 0,
-                        OLAS[chain1]: 0,
+                        ZERO_ADDRESS: "0",
+                        OLAS[chain1]: "0",
                     },
                 },
             },
@@ -672,42 +732,46 @@ class TestFunding(OnTestnet):
             "total_requirements": {
                 chain1.value: {
                     "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
-                            ZERO_ADDRESS
-                        ],
-                        OLAS[chain1]: 0,
+                        ZERO_ADDRESS: str(
+                            DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][ZERO_ADDRESS]
+                        ),
+                        OLAS[chain1]: "0",
                     },
                     "master_safe": {
-                        ZERO_ADDRESS: MIN_AGENT_BOND
-                        + MIN_SECURITY_DEPOSIT
-                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
-                        OLAS[chain1]: 2 * c1_staking_bond,
+                        ZERO_ADDRESS: str(
+                            MIN_AGENT_BOND
+                            + MIN_SECURITY_DEPOSIT
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
+                        ),
+                        OLAS[chain1]: str(2 * c1_staking_bond),
                     },
                 },
             },
             "refill_requirements": {
                 chain1.value: {
                     "master_eoa": {
-                        ZERO_ADDRESS: DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][
-                            ZERO_ADDRESS
-                        ],
-                        OLAS[chain1]: 0,
+                        ZERO_ADDRESS: str(
+                            DEFAULT_EOA_TOPUPS_WITHOUT_SAFE[chain1][ZERO_ADDRESS]
+                        ),
+                        OLAS[chain1]: "0",
                     },
                     "master_safe": {
-                        ZERO_ADDRESS: MIN_AGENT_BOND
-                        + MIN_SECURITY_DEPOSIT
-                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
-                        + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"],
-                        OLAS[chain1]: 2 * c1_staking_bond,
+                        ZERO_ADDRESS: str(
+                            MIN_AGENT_BOND
+                            + MIN_SECURITY_DEPOSIT
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["agent"]
+                            + c1_cfg["fund_requirements"][ZERO_ADDRESS]["safe"]
+                        ),
+                        OLAS[chain1]: str(2 * c1_staking_bond),
                     },
                 },
             },
             "protocol_asset_requirements": {
                 chain1.value: {
                     "master_safe": {
-                        ZERO_ADDRESS: MIN_AGENT_BOND + MIN_SECURITY_DEPOSIT,
-                        OLAS[chain1]: 2 * c1_staking_bond,
+                        ZERO_ADDRESS: str(MIN_AGENT_BOND + MIN_SECURITY_DEPOSIT),
+                        OLAS[chain1]: str(2 * c1_staking_bond),
                     },
                 },
             },
@@ -776,6 +840,7 @@ class TestFunding(OnTestnet):
         for chain_str, addresses in response_json["refill_requirements"].items():
             for _, master_eoa_assets in addresses.items():
                 for asset, amount in master_eoa_assets.items():
+                    amount = int(amount)
                     # The sum of requirements for Master EOA and Master Safe is transferred to Master EOA.
                     tenderly_add_balance(
                         chain=Chain(chain_str),
@@ -783,31 +848,38 @@ class TestFunding(OnTestnet):
                         token=asset,
                         amount=amount,
                     )
-                    expected_json["balances"][chain_str][master_eoa][asset] += amount
+                    expected_json["balances"][chain_str][master_eoa][asset] = str(
+                        int(expected_json["balances"][chain_str][master_eoa][asset])
+                        + amount
+                    )
 
         # Arrange "balances in the future" (after transferring excess)
         for chain_str in expected_json["balances"]:
             if MASTER_SAFE_PLACEHOLDER in expected_json["balances"][chain_str]:
                 master_eoa_assets = expected_json["balances"][chain_str][master_eoa]
                 for asset, amount in master_eoa_assets.items():
+                    amount = int(amount)
                     default_eoa_topup = DEFAULT_EOA_TOPUPS[Chain(chain_str)].get(
-                        asset, 0
+                        asset, BigInt(0)
                     )
                     expected_json["balances"][chain_str][MASTER_SAFE_PLACEHOLDER][
                         asset
-                    ] = (amount - default_eoa_topup)
-                    expected_json["balances"][chain_str][master_eoa][
-                        asset
-                    ] = default_eoa_topup
+                    ] = str(amount - default_eoa_topup)
+                    expected_json["balances"][chain_str][master_eoa][asset] = str(
+                        default_eoa_topup
+                    )
 
         for chain in chains:
             expected_json["total_requirements"][chain.value][master_eoa][
                 ZERO_ADDRESS
-            ] = 0  # TODO verify
+            ] = "0"  # TODO verify
 
-        expected_json["refill_requirements"] = subtract_dicts(
-            expected_json["total_requirements"], expected_json["balances"]
-        )
+        expected_json["refill_requirements"] = ChainAmounts(
+            subtract_dicts(
+                ChainAmounts.from_json(expected_json["total_requirements"]),
+                ChainAmounts.from_json(expected_json["balances"]),
+            )
+        ).json
         expected_json["is_refill_required"] = False
 
         response = client.get(
@@ -831,7 +903,7 @@ class TestFunding(OnTestnet):
                     "transfer_excess_assets": True,
                 },
             )
-            assert response.status_code == HTTPStatus.CREATED
+            assert response.status_code == HTTPStatus.OK
             master_safes[chain] = response.json()["safe"]
 
         response = client.get(
@@ -854,23 +926,36 @@ class TestFunding(OnTestnet):
                     chain.value
                 ].pop("master_safe")
 
-        # Adjust expected Master EOA native assets
+        # Adjust expected Master EOA and MasterSafe native assets
         for chain_str in expected_json["balances"]:
-            real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
-                ZERO_ADDRESS
-            ]
-            assert (
-                real_balance_master_eoa
-                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            real_balance_master_eoa = int(
+                response_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            )
+            assert real_balance_master_eoa <= int(
+                expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
             )
             # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee - tx_fee_registry
             assert (
                 real_balance_master_eoa
-                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+                >= int(expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS])
+                * 0.99
             )  # TODO fix line above
-            expected_json["balances"][chain_str][master_eoa][
-                ZERO_ADDRESS
-            ] = real_balance_master_eoa
+            expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] = str(
+                real_balance_master_eoa
+            )
+
+            master_safe = master_safes[Chain(chain_str)]
+            real_balance_master_safe = int(
+                response_json["balances"][chain_str][master_safe][ZERO_ADDRESS]
+            )
+            assert (
+                real_balance_master_safe
+                >= int(expected_json["balances"][chain_str][master_safe][ZERO_ADDRESS])
+                * 0.99
+            )
+            expected_json["balances"][chain_str][master_safe][ZERO_ADDRESS] = str(
+                real_balance_master_safe
+            )
 
         expected_json["allow_start_agent"] = True
 
@@ -899,44 +984,45 @@ class TestFunding(OnTestnet):
         for chain_str in expected_json["balances"]:
             master_safe = master_safes[chain]
             for asset in expected_json["balances"][chain_str][master_safe]:
-                expected_json["balances"][chain_str][master_safe][
-                    asset
-                ] -= expected_json["protocol_asset_requirements"][chain_str][
-                    master_safe
-                ][
-                    asset
-                ]
+                expected_json["balances"][chain_str][master_safe][asset] = str(
+                    int(expected_json["balances"][chain_str][master_safe][asset])
+                    - int(
+                        expected_json["protocol_asset_requirements"][chain_str][
+                            master_safe
+                        ][asset]
+                    )
+                )
                 cfg = service_template["configurations"][chain1.value]
-                expected_json["balances"][chain_str][master_safe][asset] -= (
-                    cfg["fund_requirements"].get(asset, {}).get("agent", 0)
+                expected_json["balances"][chain_str][master_safe][asset] = str(
+                    int(expected_json["balances"][chain_str][master_safe][asset])
+                    - int(cfg["fund_requirements"].get(asset, {}).get("agent", 0))
                 )
-                expected_json["balances"][chain_str][master_safe][asset] -= (
-                    cfg["fund_requirements"].get(asset, {}).get("safe", 0)
+                expected_json["balances"][chain_str][master_safe][asset] = str(
+                    int(expected_json["balances"][chain_str][master_safe][asset])
+                    - int(cfg["fund_requirements"].get(asset, {}).get("safe", 0))
                 )
-                expected_json["bonded_assets"][chain_str][master_safe][
-                    asset
-                ] = expected_json["protocol_asset_requirements"][chain_str][
-                    master_safe
-                ][
-                    asset
-                ]
+                expected_json["bonded_assets"][chain_str][master_safe][asset] = (
+                    expected_json["protocol_asset_requirements"][chain_str][
+                        master_safe
+                    ][asset]
+                )
                 expected_json["total_requirements"][chain_str][master_safe][
                     asset
-                ] = 0  # The protocol requirements are bonded, nothing more needed.
+                ] = "0"  # The protocol requirements are bonded, nothing more needed.
 
         # Adjust Master EOA native assets
         for chain_str in expected_json["balances"]:
             real_balance_master_eoa = response_json["balances"][chain_str][master_eoa][
                 ZERO_ADDRESS
             ]
-            assert (
-                real_balance_master_eoa
-                <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+            assert int(real_balance_master_eoa) <= int(
+                expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
             )
             # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
             assert (
-                real_balance_master_eoa
-                >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] * 0.99
+                int(real_balance_master_eoa)
+                >= int(expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS])
+                * 0.99
             )
             expected_json["balances"][chain_str][master_eoa][
                 ZERO_ADDRESS
@@ -979,7 +1065,7 @@ class TestFunding(OnTestnet):
         expected_json["agent_funding_requests"] = {
             chain1.value: {
                 agent_safe: {
-                    ZERO_ADDRESS: 42000000000000000000,
+                    ZERO_ADDRESS: "42000000000000000000",
                 }
             }
         }
@@ -1000,9 +1086,11 @@ class TestFunding(OnTestnet):
             chain=chain1,
             recipient=master_safes[chain1],
             token=ZERO_ADDRESS,
-            amount=expected_json["agent_funding_requests"][chain1.value][agent_safe][
-                ZERO_ADDRESS
-            ],
+            amount=int(
+                expected_json["agent_funding_requests"][chain1.value][agent_safe][
+                    ZERO_ADDRESS
+                ]
+            ),
         )
 
         # ---------------------------------------
@@ -1057,14 +1145,15 @@ class TestFunding(OnTestnet):
                 real_balance_master_eoa = response_json["balances"][chain_str][
                     master_eoa
                 ][ZERO_ADDRESS]
-                assert (
-                    real_balance_master_eoa
-                    <= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                assert int(real_balance_master_eoa) <= int(
+                    expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
                 )
                 # TODO fix this line assert real_balance_master_eoa >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS] - tx_fee_registry
                 assert (
-                    real_balance_master_eoa
-                    >= expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                    int(real_balance_master_eoa)
+                    >= int(
+                        expected_json["balances"][chain_str][master_eoa][ZERO_ADDRESS]
+                    )
                     * 0.99
                 )
                 expected_json["balances"][chain_str][master_eoa][

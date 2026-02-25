@@ -41,7 +41,7 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
-from operate.constants import ZERO_ADDRESS
+from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
 from operate.data import DATA_DIR
 from operate.data.contracts.foreign_omnibridge.contract import ForeignOmnibridge
 from operate.data.contracts.home_omnibridge.contract import HomeOmnibridge
@@ -69,13 +69,14 @@ BLOCK_CHUNK_SIZE = 5000
 class BridgeContractAdaptor(ABC):
     """Adaptor class for bridge contract packages."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         from_chain: str,
         from_bridge: str,
         to_chain: str,
         to_bridge: str,
         bridge_eta: int,
+        logger: logging.Logger,
     ) -> None:
         """Initialize the bridge contract adaptor."""
         super().__init__()
@@ -86,6 +87,7 @@ class BridgeContractAdaptor(ABC):
         self.to_chain = to_chain
         self.to_bridge = to_bridge
         self.bridge_eta = bridge_eta
+        self.logger = logger
 
     def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
@@ -396,26 +398,34 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ):
             return provider_request.execution_data.provider_data.get("message_id", None)
 
-        from_address = provider_request.params["from"]["address"]
-        from_token = provider_request.params["from"]["token"]
-        from_tx_hash = provider_request.execution_data.from_tx_hash
-        to_amount = provider_request.params["to"]["amount"]
-        from_bridge = self.from_bridge
+        try:
+            from_address = provider_request.params["from"]["address"]
+            from_token = provider_request.params["from"]["token"]
+            from_tx_hash = provider_request.execution_data.from_tx_hash
+            to_amount = provider_request.params["to"]["amount"]
+            from_bridge = self.from_bridge
 
-        message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
-            ledger_api=from_ledger_api,
-            contract_address=from_bridge,
-            tx_hash=from_tx_hash,
-            token=from_token,
-            sender=from_address,
-            value=to_amount,
-        )
+            message_id = (
+                self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
+                    ledger_api=from_ledger_api,
+                    contract_address=from_bridge,
+                    tx_hash=from_tx_hash,
+                    token=from_token,
+                    sender=from_address,
+                    value=to_amount,
+                )
+            )
 
-        if not provider_request.execution_data.provider_data:
-            provider_request.execution_data.provider_data = {}
+            if not provider_request.execution_data.provider_data:
+                provider_request.execution_data.provider_data = {}
 
-        provider_request.execution_data.provider_data["message_id"] = message_id
-        return message_id
+            provider_request.execution_data.provider_data["message_id"] = message_id
+            return message_id
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"[OMNI BRIDGE CONTRACT ADAPTOR] Failed to retrieve message_id for request {provider_request.id}: {e}"
+            )
+            return None
 
     def get_explorer_link(
         self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
@@ -527,7 +537,9 @@ class NativeBridgeProvider(Provider):
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         update_tx_with_gas_pricing(approve_tx, from_ledger_api)
-        update_tx_with_gas_estimate(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return approve_tx
 
     def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
@@ -549,7 +561,9 @@ class NativeBridgeProvider(Provider):
         )
 
         update_tx_with_gas_pricing(bridge_tx, from_ledger_api)
-        update_tx_with_gas_estimate(bridge_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            bridge_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return bridge_tx
 
     def _get_txs(
@@ -565,10 +579,15 @@ class NativeBridgeProvider(Provider):
             txs.append(("bridge_tx", bridge_tx))
         return txs
 
-    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
+    def _update_execution_status(  # pylint: disable=too-many-locals
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the execution status."""
 
-        if provider_request.status != ProviderRequestStatus.EXECUTION_PENDING:
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
             return
 
         self.logger.info(
@@ -645,13 +664,14 @@ class NativeBridgeProvider(Provider):
                     provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                     return
 
-        except Exception as e:
-            self.logger.error(f"Error updating execution status: {e}")
-            import traceback
-
-            traceback.print_exc()
-            execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+        except Exception as e:  # pylint:disable=broad-except
+            self.logger.error(
+                f"[NATIVE BRIDGE PROVIDER] Failed to update status for request {provider_request.id}: {e}"
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:

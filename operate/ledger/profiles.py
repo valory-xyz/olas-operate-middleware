@@ -17,7 +17,11 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Chain profiles."""
+"""
+Chain profiles.
+
+Helper classes for ledger interactions.
+"""
 
 import typing as t
 from functools import cache
@@ -33,6 +37,7 @@ from operate.ledger import (
     get_default_ledger_api,
 )
 from operate.operate_types import Chain, ContractAddresses
+from operate.serialization import BigInt
 
 
 # TODO: Refactor, remove the usage of CONTRACTS and use CHAIN_PROFILES from Open Autonomy instead.
@@ -40,24 +45,31 @@ CONTRACTS: t.Dict[Chain, ContractAddresses] = {}
 for _chain in CHAINS:
     if _chain.value in CHAIN_PROFILES:
         profile = CHAIN_PROFILES[_chain.value]
-        CONTRACTS[_chain] = ContractAddresses(
-            {
-                "service_registry": profile["service_registry"],
-                "service_registry_token_utility": profile[
-                    "service_registry_token_utility"
-                ],
-                "service_manager": profile["service_manager_token"],
-                "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
-                "gnosis_safe_same_address_multisig": profile[
-                    "gnosis_safe_same_address_multisig"
-                ],
-                "safe_multisig_with_recovery_module": profile[
-                    "safe_multisig_with_recovery_module"
-                ],
-                "recovery_module": profile["recovery_module"],
-                "multisend": DEFAULT_MULTISEND,
-            }
-        )
+        contracts_dict = {
+            "service_registry": profile["service_registry"],
+            "service_registry_token_utility": profile["service_registry_token_utility"],
+            "gnosis_safe_proxy_factory": profile["gnosis_safe_proxy_factory"],
+            "gnosis_safe_same_address_multisig": profile[
+                "gnosis_safe_same_address_multisig"
+            ],
+            "safe_multisig_with_recovery_module": profile[
+                "safe_multisig_with_recovery_module"
+            ],
+            "recovery_module": profile["recovery_module"],
+            "multisend": DEFAULT_MULTISEND,
+        }
+        # Add optional ERC8004 contracts if available
+        if "erc8004_identity_registry" in profile:
+            contracts_dict["erc8004_identity_registry"] = profile[
+                "erc8004_identity_registry"
+            ]
+        if "erc8004_identity_registry_bridger" in profile:
+            contracts_dict["erc8004_identity_registry_bridger"] = profile[
+                "erc8004_identity_registry_bridger"
+            ]
+        if "sign_message_lib" in profile:
+            contracts_dict["sign_message_lib"] = profile["sign_message_lib"]
+        CONTRACTS[_chain] = ContractAddresses(contracts_dict)
 
 STAKING: t.Dict[Chain, t.Dict[str, str]] = {
     Chain.ARBITRUM_ONE: {},
@@ -102,6 +114,8 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_8": "0x168aED532a0CD8868c22Fc77937Af78b363652B1",
         "quickstart_beta_mech_marketplace_expert_9": "0xdDa9cD214F12e7C2D58E871404A0A3B1177065C8",
         "quickstart_beta_mech_marketplace_expert_10": "0x53a38655B4e659eF4C7F88A26fbF5c67932C7156",
+        "quickstart_beta_mech_marketplace_expert_11": "0x1eaDe40561C61fa7AcC5D816b1FC55a8d9B58519",
+        "quickstart_beta_mech_marketplace_expert_12": "0x99Fe6B5C9980Fc3A44b1Dc32A76Db6aDfcf4c75e",
         "mech_marketplace": "0x998dEFafD094817EF329f6dc79c703f1CF18bC90",
         "marketplace_supply_alpha": "0xCAbD0C941E54147D40644CF7DA7e36d70DF46f44",
         "marketplace_demand_alpha_1": "0x9d6e7aB0B5B48aE5c146936147C639fEf4575231",
@@ -125,6 +139,10 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "0x2585e63df7BD9De8e058884D496658a030b5c6ce",
         "agents_fun_2": "0x26FA75ef9Ccaa60E58260226A71e9d07564C01bF",
         "agents_fun_3": "0x4D4233EBF0473Ca8f34d105A6256A2389176F0Ce",
+        "pett_ai_agent_1": "0x31183503be52391844594b4B587F0e764eB3956E",
+        "pett_ai_agent_2": "0xEA15F76D7316B09b3f89613e32d3B780619d61e2",
+        "pett_ai_agent_3": "0xFA0ca3935758cB81D35A8F1395b9Eb5a596ce301",
+        "pett_ai_agent_4": "0x00D544c10BDC0E9b0a71CeAF52C1342BB8f21c1D",
     },
     Chain.CELO: {
         "meme_celo_alpha_2": "0x95D12D193d466237Bc1E92a1a7756e4264f574AB",
@@ -136,7 +154,11 @@ STAKING: t.Dict[Chain, t.Dict[str, str]] = {
         "modius_alpha_3": "0x9034D0413D122015710f1744A19eFb1d7c2CEB13",
         "modius_alpha_4": "0x8BcAdb2c291C159F9385964e5eD95a9887302862",
     },
-    Chain.POLYGON: {},
+    Chain.POLYGON: {
+        "polygon_beta_1": "0x9F1936f6afB5EAaA2220032Cf5e265F2Cc9511Cc",
+        "polygon_beta_2": "0x22D58680F643333F93205B956a4Aa1dC203a16Ad",
+        "polygon_beta_3": "0x8887C2852986e7cbaC99B6065fFe53074A6BCC26",  # Note: “Polygon Alpha 3” is a typo in apps — the correct name is Polygon Beta 3.
+    },
 }
 
 
@@ -148,6 +170,14 @@ DEFAULT_PRIORITY_MECH = {  # maps mech marketplace address to its default priori
     "0x735FAAb1c4Ec41128c367AFb5c3baC73509f70bB": (
         "0xC05e7412439bD7e91730a6880E18d5D5873F632C",
         2182,
+    ),
+    "0xf24eE42edA0fc9b33B7D41B06Ee8ccD2Ef7C5020": (
+        "TBD",  # TOFIX
+        0,
+    ),
+    "0x343F2B005cF6D70bA610CD9F1F1927049414B582": (
+        "0x45F25db135E83d7a010b05FFc1202F8473E3ae7D",
+        25,
     ),
 }
 
@@ -175,6 +205,12 @@ USDC: t.Dict[Chain, str] = {
     Chain.POLYGON: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
 }
 
+USDC_E: t.Dict[Chain, str] = {
+    Chain.GNOSIS: "0x2a22f9c3b484c3629090FeED35F17Ff8F88f76F0",
+    Chain.OPTIMISM: "0x7F5c764cBc14f9669B88837ca1490cCa17c31607",
+    Chain.POLYGON: "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174",
+}
+
 WRAPPED_NATIVE_ASSET = {
     Chain.ARBITRUM_ONE: "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
     Chain.BASE: "0x4200000000000000000000000000000000000006",
@@ -189,6 +225,7 @@ WRAPPED_NATIVE_ASSET = {
 ERC20_TOKENS = {
     "OLAS": OLAS,
     "USDC": USDC,
+    "USDC.e": USDC_E,
     "WRAPPED_NATIVE": WRAPPED_NATIVE_ASSET,
 }
 
@@ -231,14 +268,14 @@ DEFAULT_NEW_SAFE_FUNDS: t.Dict[Chain, t.Dict[str, int]] = {
 }
 
 DEFAULT_EOA_TOPUPS = {
-    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 2_500_000_000_000_000},
-    Chain.BASE: {ZERO_ADDRESS: 2_500_000_000_000_000},
-    Chain.CELO: {ZERO_ADDRESS: 750_000_000_000_000_000},
-    Chain.ETHEREUM: {ZERO_ADDRESS: 10_000_000_000_000_000},
-    Chain.GNOSIS: {ZERO_ADDRESS: 750_000_000_000_000_000},
-    Chain.MODE: {ZERO_ADDRESS: 250_000_000_000_000},
-    Chain.OPTIMISM: {ZERO_ADDRESS: 2_500_000_000_000_000},
-    Chain.POLYGON: {ZERO_ADDRESS: 750_000_000_000_000_000},
+    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
+    Chain.BASE: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
+    Chain.CELO: {ZERO_ADDRESS: BigInt(750_000_000_000_000_000)},
+    Chain.ETHEREUM: {ZERO_ADDRESS: BigInt(10_000_000_000_000_000)},
+    Chain.GNOSIS: {ZERO_ADDRESS: BigInt(750_000_000_000_000_000)},
+    Chain.MODE: {ZERO_ADDRESS: BigInt(250_000_000_000_000)},
+    Chain.OPTIMISM: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
+    Chain.POLYGON: {ZERO_ADDRESS: BigInt(8_000_000_000_000_000_000)},
 }
 
 DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
@@ -247,14 +284,14 @@ DEFAULT_EOA_TOPUPS_WITHOUT_SAFE = {
 }
 
 DEFAULT_RECOVERY_TOPUPS = {
-    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: 625_000_000_000_000},
-    Chain.BASE: {ZERO_ADDRESS: 625_000_000_000_000},
-    Chain.CELO: {ZERO_ADDRESS: 187_500_000_000_000_000},
-    Chain.ETHEREUM: {ZERO_ADDRESS: 2_500_000_000_000_000},
-    Chain.GNOSIS: {ZERO_ADDRESS: 187_500_000_000_000_000},
-    Chain.MODE: {ZERO_ADDRESS: 62_500_000_000_000},
-    Chain.OPTIMISM: {ZERO_ADDRESS: 625_000_000_000_000},
-    Chain.POLYGON: {ZERO_ADDRESS: 187_500_000_000_000_000},
+    Chain.ARBITRUM_ONE: {ZERO_ADDRESS: BigInt(625_000_000_000_000)},
+    Chain.BASE: {ZERO_ADDRESS: BigInt(625_000_000_000_000)},
+    Chain.CELO: {ZERO_ADDRESS: BigInt(187_500_000_000_000_000)},
+    Chain.ETHEREUM: {ZERO_ADDRESS: BigInt(2_500_000_000_000_000)},
+    Chain.GNOSIS: {ZERO_ADDRESS: BigInt(187_500_000_000_000_000)},
+    Chain.MODE: {ZERO_ADDRESS: BigInt(62_500_000_000_000)},
+    Chain.OPTIMISM: {ZERO_ADDRESS: BigInt(625_000_000_000_000)},
+    Chain.POLYGON: {ZERO_ADDRESS: BigInt(2_000_000_000_000_000_000)},
 }
 
 DEFAULT_EOA_THRESHOLD = 0.5

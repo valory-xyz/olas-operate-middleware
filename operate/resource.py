@@ -19,16 +19,14 @@
 
 """Local resource representation."""
 
-import enum
 import json
 import os
 import platform
 import shutil
-import types
 import typing as t
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
+from operate.serialization import deserialize, serialize
 from operate.utils import safe_file_operation
 
 
@@ -36,63 +34,6 @@ from operate.utils import safe_file_operation
 
 
 N_BACKUPS = 5
-
-
-def serialize(obj: t.Any) -> t.Any:
-    """Serialize object."""
-    if is_dataclass(obj):
-        return serialize(asdict(obj))
-    if isinstance(obj, Path):
-        return str(obj)
-    if isinstance(obj, dict):
-        return {serialize(key): serialize(obj=value) for key, value in obj.items()}
-    if isinstance(obj, list):
-        return [serialize(obj=value) for value in obj]
-    if isinstance(obj, enum.Enum):
-        return obj.value
-    if isinstance(obj, bytes):
-        return obj.hex()
-    return obj
-
-
-def deserialize(obj: t.Any, otype: t.Any) -> t.Any:
-    """Desrialize a json object."""
-
-    origin = getattr(otype, "__origin__", None)
-
-    # Handle Union and Optional
-    if origin is t.Union or isinstance(otype, types.UnionType):
-        for arg in t.get_args(otype):
-            if arg is type(None):  # noqa: E721
-                continue
-            try:
-                return deserialize(obj, arg)
-            except Exception:  # pylint: disable=broad-except  # nosec
-                continue
-        return None
-
-    base = getattr(otype, "__class__")  # noqa: B009
-    if base.__name__ == "_GenericAlias":  # type: ignore
-        args = otype.__args__  # type: ignore
-        if len(args) == 1:
-            (atype,) = args
-            return [deserialize(arg, atype) for arg in obj]
-        if len(args) == 2:
-            (ktype, vtype) = args
-            return {
-                deserialize(key, ktype): deserialize(val, vtype)
-                for key, val in obj.items()
-            }
-        return obj
-    if base is enum.EnumMeta:
-        return otype(obj)
-    if otype is Path:
-        return Path(obj)
-    if is_dataclass(otype):
-        return otype.from_json(obj)
-    if otype is bytes:
-        return bytes.fromhex(obj)
-    return obj
 
 
 class LocalResource:
@@ -123,6 +64,16 @@ class LocalResource:
                 continue
             kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
         return cls(**kwargs)
+
+    @classmethod
+    def exists_at(cls, path: Path) -> bool:
+        """Verifies if local resource exists at specified path."""
+        file = (
+            path / cls._file
+            if cls._file is not None and path.name != cls._file
+            else path
+        )
+        return file.exists()
 
     @classmethod
     def load(cls, path: Path) -> "LocalResource":

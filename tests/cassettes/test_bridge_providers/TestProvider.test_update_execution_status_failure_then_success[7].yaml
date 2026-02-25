@@ -1,0 +1,86 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - python-requests/2.32.4
+      accept:
+      - application/json
+    method: GET
+    uri: https://api.relay.link/requests/v2?hash=0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0&sortBy=createdAt
+  response:
+    body:
+      string: '{"requests":[]}'
+    headers:
+      Cache-Control:
+      - max-age=1, must-revalidate, public
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '15'
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 14:17:33 GMT
+      Via:
+      - 1.1 6bf20f938cbbe9edfe2a97c1862da87e.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - SQ42Tn01p8XTcm3nVSLfKDOjkrJwqqRRZ1mz5DXAJKJ2N3vyADXitQ==
+      X-Amz-Cf-Pop:
+      - MXP53-P8
+      X-Cache:
+      - Miss from cloudfront
+      access-control-allow-origin:
+      - '*'
+      strict-transport-security:
+      - max-age=86400; includeSubDomains
+    status:
+      code: 200
+      message: OK
+- request:
+    body: null
+    headers:
+      Accept-Encoding:
+      - gzip, deflate
+      Connection:
+      - keep-alive
+      User-Agent:
+      - python-requests/2.32.4
+      accept:
+      - application/json
+    method: GET
+    uri: https://api.relay.link/requests/v2?hash=0x4a755c455f029a645f5bfe3fcd999c24acbde49991cb54f5b9b8fcf286ad2ac0&sortBy=createdAt
+  response:
+    body:
+      string: '{"requests":[]}'
+    headers:
+      Cache-Control:
+      - max-age=1, must-revalidate, public
+      Connection:
+      - keep-alive
+      Content-Length:
+      - '15'
+      Content-Type:
+      - application/json; charset=utf-8
+      Date:
+      - Thu, 19 Feb 2026 14:17:39 GMT
+      Via:
+      - 1.1 a4b90eeb3ac2a0b286bca1c8dc675fae.cloudfront.net (CloudFront)
+      X-Amz-Cf-Id:
+      - CkbIRH9xcRSTZEFso9yXrJRQZ4Jn-GTq048OZ10ZbF1l8qMdaBKFjQ==
+      X-Amz-Cf-Pop:
+      - MXP53-P8
+      X-Cache:
+      - Miss from cloudfront
+      access-control-allow-origin:
+      - '*'
+      strict-transport-security:
+      - max-age=86400; includeSubDomains
+    status:
+      code: 200
+      message: OK
+version: 1

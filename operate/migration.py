@@ -33,7 +33,9 @@ from web3 import Web3
 
 from operate.constants import USER_JSON, ZERO_ADDRESS
 from operate.keys import KeysManager
-from operate.operate_types import Chain, LedgerType
+from operate.operate_types import AgentRelease as AgentReleaseType
+from operate.operate_types import AgentReleaseRepo, Chain, LedgerType
+from operate.services.agent_runner import AgentRelease
 from operate.services.manage import ServiceManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
@@ -160,7 +162,7 @@ class MigrationManager:
 
         self.logger.info("Migrating wallet configs done.")
 
-    def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals
+    def _migrate_service(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
         self,
         path: Path,
     ) -> bool:
@@ -250,12 +252,6 @@ class MigrationManager:
                                 "nft": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("nft"),
-                                "threshold": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("threshold"),
-                                "use_staking": data.get("chain_data", {})
-                                .get("user_params", {})
-                                .get("use_staking"),
                                 "cost_of_bond": data.get("chain_data", {})
                                 .get("user_params", {})
                                 .get("cost_of_bond"),
@@ -277,9 +273,6 @@ class MigrationManager:
         if version < 4:
             # Add missing fields introduced in later versions, if necessary.
             for _, chain_data in data.get("chain_configs", {}).items():
-                chain_data.setdefault("chain_data", {}).setdefault(
-                    "user_params", {}
-                ).setdefault("use_mech_marketplace", False)
                 service_name = data.get("name", "")
                 agent_id = Service.determine_agent_id(service_name)
                 chain_data.setdefault("chain_data", {}).setdefault("user_params", {})[
@@ -324,7 +317,7 @@ class MigrationManager:
 
             if "env_variables" not in data:
                 if data["name"] == "valory/trader_pearl":
-                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS
+                    data["env_variables"] = DEFAULT_TRADER_ENV_VARS  # pragma: no cover
                 else:
                     data["env_variables"] = {}
 
@@ -341,6 +334,12 @@ class MigrationManager:
 
                 new_chain_configs[chain] = chain_data  # type: ignore
             data["chain_configs"] = new_chain_configs
+
+        if version < 6 and "service_path" in data:
+            # Redownload service path
+            package_absolute_path = path / Path(data["service_path"]).name
+            data.pop("service_path")
+            data["package_path"] = str(package_absolute_path.name)
 
         if version < 7:
             for _, chain_data in data.get("chain_configs", {}).items():
@@ -370,6 +369,39 @@ class MigrationManager:
             for _, chain_config in data["chain_configs"].items():
                 if chain_config["ledger_config"]["chain"] == "optimistic":
                     chain_config["ledger_config"]["chain"] = Chain.OPTIMISM.value
+
+        if version < 9:
+            agents_supported = {
+                "trader_pearl": AgentRelease(
+                    is_aea=True, owner="valory-xyz", repo="trader", release="v0.0.101"
+                ),
+                "optimus": AgentRelease(
+                    is_aea=True, owner="valory-xyz", repo="optimus", release="v0.0.103"
+                ),
+                "memeooorr": AgentRelease(
+                    is_aea=True,
+                    owner="valory-xyz",
+                    repo="meme-ooorr",
+                    release="v0.0.101",
+                ),
+            }
+            package_path = data["package_path"]
+            try:
+                release_data = agents_supported[package_path]
+            except KeyError as e:
+                raise RuntimeError(f"Found unsupported {package_path=}") from e
+
+            data["agent_release"] = AgentReleaseType(
+                is_aea=release_data.is_aea,
+                repository=AgentReleaseRepo(
+                    owner=release_data.owner,
+                    name=release_data.repo,
+                    version=release_data.release,
+                ),
+            )
+
+            if data["name"] is None:
+                data["name"] = release_data.repo  # pragma: no cover
 
         data["version"] = SERVICE_CONFIG_VERSION
 
@@ -434,7 +466,7 @@ class MigrationManager:
 
         for qs_config in self._path.glob("*-quickstart-config.json"):
             if not qs_config.exists():
-                continue
+                continue  # pragma: no cover
 
             migrated = False
             with open(qs_config, "r", encoding="utf-8") as f:
@@ -468,7 +500,9 @@ class MigrationManager:
                 or key_file.suffix == ".bak"
                 or not Web3.is_address(key_file.name)
             ):
-                self.logger.warning(f"Skipping non-key file: {key_file}")
+                if not key_file.suffix == ".bak":
+                    self.logger.warning(f"Skipping non-key file: {key_file}")
+
                 continue
 
             migrated = False

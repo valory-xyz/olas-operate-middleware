@@ -34,12 +34,19 @@ from halo import Halo  # type: ignore[import]
 from web3.exceptions import Web3Exception
 
 from operate.account.user import UserAccount
-from operate.constants import IPFS_ADDRESS, NO_STAKING_PROGRAM_ID, USER_JSON
+from operate.constants import (
+    DEFAULT_TIMEOUT,
+    IPFS_ADDRESS,
+    NO_STAKING_PROGRAM_ID,
+    USER_JSON,
+)
 from operate.data import DATA_DIR
 from operate.data.contracts.staking_token.contract import StakingTokenContract
+from operate.ledger import DEFAULT_RPCS
 from operate.ledger.profiles import STAKING, get_staking_contract
 from operate.operate_types import (
     Chain,
+    ChainAmounts,
     LedgerType,
     ServiceEnvProvisionType,
     ServiceTemplate,
@@ -48,6 +55,7 @@ from operate.quickstart.utils import (
     CHAIN_TO_METADATA,
     QuickstartConfig,
     ask_or_get_from_env,
+    ask_yes_or_no,
     check_rpc,
     print_box,
     print_section,
@@ -63,7 +71,7 @@ from operate.wallet.master import MasterWallet
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from operate.cli import OperateApp
 
 NO_STAKING_PROGRAM_METADATA = {
@@ -101,6 +109,8 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "quickstart_beta_mech_marketplace_expert_8": "trader",
         "quickstart_beta_mech_marketplace_expert_9": "trader",
         "quickstart_beta_mech_marketplace_expert_10": "trader",
+        "quickstart_beta_mech_marketplace_expert_11": "trader",
+        "quickstart_beta_mech_marketplace_expert_12": "trader",
         "mech_marketplace": "mech",
         "marketplace_supply_alpha": "mech",
     },
@@ -116,12 +126,49 @@ QS_STAKING_PROGRAMS: t.Dict[Chain, t.Dict[str, str]] = {
         "agents_fun_1": "memeooorr",
         "agents_fun_2": "memeooorr",
         "agents_fun_3": "memeooorr",
+        "pett_ai_agent": "pett_ai",
     },
     Chain.CELO: {},
     Chain.MODE: {
         "optimus_alpha": "modius",
     },
 }
+
+DEPRECATED_QS_STAKING_PROGRAMS = {
+    "quickstart_beta_hobbyist",
+    "quickstart_beta_hobbyist_2",
+    "quickstart_beta_expert",
+    "quickstart_beta_expert_2",
+    "quickstart_beta_expert_3",
+    "quickstart_beta_expert_4",
+    "quickstart_beta_expert_5",
+    "quickstart_beta_expert_6",
+    "quickstart_beta_expert_7",
+    "quickstart_beta_expert_8",
+    "quickstart_beta_expert_9",
+    "quickstart_beta_expert_10",
+    "quickstart_beta_expert_11",
+    "quickstart_beta_expert_12",
+    "quickstart_beta_expert_15_mech_marketplace",
+    "quickstart_beta_expert_16_mech_marketplace",
+    "quickstart_beta_expert_17_mech_marketplace",
+    "quickstart_beta_expert_18_mech_marketplace",
+}
+
+
+def _deprecated_program_warning(program_id: str) -> bool:
+    """Confirm deprecated program warning."""
+    if program_id not in DEPRECATED_QS_STAKING_PROGRAMS:
+        return True
+
+    print_box(
+        """
+        WARNING
+        The selected staking program is deprecated.
+        Using it may prevent your agent from earning staking rewards.
+    """
+    )
+    return ask_yes_or_no("Do you want to proceed anyway?")
 
 
 def ask_confirm_password() -> str:
@@ -188,7 +235,7 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
     return config
 
 
-def configure_local_config(
+def configure_local_config(  # pragma: no cover
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
     """Configure local quickstart configuration."""
@@ -205,6 +252,7 @@ def configure_local_config(
                 f"{chain.upper()}_LEDGER_RPC",
             )
         os.environ[f"{chain.upper()}_LEDGER_RPC"] = config.rpc[chain]
+        DEFAULT_RPCS[Chain.from_string(chain)] = config.rpc[chain]
 
     config.principal_chain = template["home_chain"]
 
@@ -219,7 +267,18 @@ def configure_local_config(
         LedgerType.ETHEREUM.lower(),
         address=config.rpc[config.principal_chain],  # type: ignore[index]
         chain_id=home_chain.id,
+        poa_chain=chain in (Chain.OPTIMISM.value, Chain.POLYGON.value),
     )
+
+    if config.staking_program_id is None:
+        if not STAKING.get(home_chain, {}) or not QS_STAKING_PROGRAMS.get(
+            home_chain, {}
+        ):
+            config.staking_program_id = NO_STAKING_PROGRAM_ID
+            print(
+                f"No staking programs available for {config.principal_chain}. "
+                f"Defaulting to '{NO_STAKING_PROGRAM_ID}'."
+            )
 
     if config.staking_program_id is None:
         print_section("Please, select your staking program preference")
@@ -251,7 +310,7 @@ def configure_local_config(
                 try:
                     metadata_hash = instance.functions.metadataHash().call().hex()
                     ipfs_address = IPFS_ADDRESS.format(hash=metadata_hash)
-                    response = requests.get(ipfs_address)
+                    response = requests.get(ipfs_address, timeout=DEFAULT_TIMEOUT)
                     if response.status_code != HTTPStatus.OK:
                         raise requests.RequestException(
                             f"Failed to fetch data from {ipfs_address}: {response.status_code}"
@@ -274,7 +333,10 @@ def configure_local_config(
                 except Web3Exception:
                     metadata["available_staking_slots"] = "?"
 
-            name = metadata["name"]
+            deprecated_str = (
+                "[DEPRECATED] " if program_id in DEPRECATED_QS_STAKING_PROGRAMS else ""
+            )
+            name = deprecated_str + metadata["name"]
             description = metadata["description"]
             if "available_staking_slots" in metadata:
                 available_slots_str = (
@@ -311,12 +373,23 @@ def configure_local_config(
                         for idx, prog in available_choices.items():
                             print(f"{idx}) {prog['name']} : {prog['slots']}")
                         continue
+
+                    if not _deprecated_program_warning(
+                        available_choices[choice]["program_id"]
+                    ):
+                        continue
+
                     selected_program = available_choices[choice]
                     config.staking_program_id = selected_program["program_id"]
                     print(f"Selected staking program: {selected_program['name']}")
                     break
                 except ValueError:
                     if input_value in ids:
+                        if not _deprecated_program_warning(
+                            available_choices[choice]["program_id"]
+                        ):
+                            continue
+
                         config.staking_program_id = input_value
                         break
                     else:
@@ -429,15 +502,13 @@ def configure_local_config(
 
                 print()
 
-            template["env_variables"][env_var_name][
-                "value"
-            ] = config.user_provided_args[env_var_name]
+            template["env_variables"][env_var_name]["value"] = str(
+                config.user_provided_args[env_var_name]
+            )
 
         # TODO: Handle it in a more generic way
         if (
-            template["env_variables"][env_var_name]["provision_type"]
-            == ServiceEnvProvisionType.COMPUTED
-            and "SUBGRAPH_API_KEY" in config.user_provided_args
+            "SUBGRAPH_API_KEY" in config.user_provided_args
             and "{SUBGRAPH_API_KEY}" in template["env_variables"][env_var_name]["value"]
         ):
             template["env_variables"][env_var_name]["value"] = template[
@@ -483,7 +554,11 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     for service in manager.json:
         if service["name"] == template["name"]:
             old_hash = service["hash"]
-            if old_hash == template["hash"]:
+            old_version = service["agent_release"]["repository"]["version"]
+            if (
+                old_hash == template["hash"]
+                and old_version == template["agent_release"]["repository"]["version"]
+            ):
                 print(f'Loading service {template["hash"]}')
                 service = manager.load(
                     service_config_id=service["service_config_id"],
@@ -493,11 +568,20 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
                 service = manager.update(
                     service_config_id=service["service_config_id"],
                     service_template=template,
+                    allow_different_service_public_id=template.get(
+                        "allow_different_service_public_id", False
+                    ),
                 )
 
             for env_var_name, env_var_data in template["env_variables"].items():
                 if env_var_name not in service.env_variables:
                     service.env_variables[env_var_name] = env_var_data
+
+                if env_var_data["provision_type"] in (
+                    ServiceEnvProvisionType.FIXED,
+                    ServiceEnvProvisionType.USER,
+                ):
+                    service.env_variables[env_var_name]["value"] = env_var_data["value"]
 
             service.update_user_params_from_template(service_template=template)
             service.store()
@@ -512,7 +596,7 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     return service
 
 
-def ask_funds_in_address(
+def ask_funds_in_address(  # pragma: no cover
     ledger_api: LedgerApi,
     required_balance: int,
     asset_address: str,
@@ -579,7 +663,9 @@ def _ask_funds_from_requirements(
     )
 
     if not requirements["is_refill_required"] and requirements["allow_start_agent"]:
-        for chain_name, balances in requirements["balances"].items():
+        for chain_name, balances in ChainAmounts.from_json(
+            requirements["balances"]
+        ).items():
             ledger_api = wallet.ledger_api(
                 chain=Chain(chain_name),
                 rpc=service.chain_configs[chain_name].ledger_config.rpc,
@@ -592,17 +678,19 @@ def _ask_funds_from_requirements(
 
         return True
 
-    for chain_name, chain_requirements in requirements["refill_requirements"].items():
+    for chain_name, chain_requirements in ChainAmounts.from_json(
+        requirements["refill_requirements"]
+    ).items():
         chain = Chain(chain_name)
         ledger_api = wallet.ledger_api(
             chain=chain,
             rpc=service.chain_configs[chain_name].ledger_config.rpc,
         )
-        for wallet_address, requirements in chain_requirements.items():
+        for wallet_address, _requirements in chain_requirements.items():
             if wallet_address in ("master_safe", "service_safe"):
                 continue  # we can't ask funds in placeholder addresses
 
-            for asset_address, requirement in requirements.items():
+            for asset_address, requirement in _requirements.items():
                 ask_funds_in_address(
                     ledger_api=ledger_api,
                     chain=chain_name,
@@ -633,7 +721,9 @@ def _maybe_create_master_eoa(operate: "OperateApp") -> None:
         )
 
 
-def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
+def ensure_enough_funds(
+    operate: "OperateApp", service: Service
+) -> None:  # pragma: no cover
     """Ensure enough funds."""
     _maybe_create_master_eoa(operate)
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
@@ -661,11 +751,12 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 )
 
 
-def run_service(
+def run_service(  # pragma: no cover
     operate: "OperateApp",
     config_path: str,
     build_only: bool = False,
     skip_dependency_check: bool = False,
+    use_binary: bool = False,
 ) -> None:
     """Run service."""
 
@@ -700,10 +791,17 @@ def run_service(
     manager.funding_manager.topup_service_initial(service=service)
 
     print_section("Deploying the service")
+    if use_binary:
+        use_docker = False
+        use_k8s = False
+    else:
+        use_docker = True
+        use_k8s = True
+
     manager.deploy_service_locally(
         service_config_id=service.service_config_id,
-        use_docker=True,
-        use_kubernetes=True,
+        use_docker=use_docker,
+        use_kubernetes=use_k8s,
         build_only=build_only,
     )
     if build_only:

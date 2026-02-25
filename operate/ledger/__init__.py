@@ -27,7 +27,6 @@ from math import ceil
 from aea.crypto.base import LedgerApi
 from aea.crypto.registries import make_ledger_api
 from aea_ledger_ethereum import DEFAULT_GAS_PRICE_STRATEGIES, EIP1559, GWEI, to_wei
-from web3.middleware import geth_poa_middleware
 
 from operate.operate_types import Chain
 
@@ -127,17 +126,19 @@ def make_chain_ledger_api(
         gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
             5, GWEI
         )
+    elif chain == Chain.POLYGON:
+        gas_price_strategies[EIP1559]["max_gas_fast"] = 10000
+        gas_price_strategies[EIP1559]["fallback_estimate"]["maxFeePerGas"] = to_wei(
+            6000, GWEI
+        )
 
     ledger_api = make_ledger_api(
         chain.ledger_type.name.lower(),
         address=rpc or get_default_rpc(chain=chain),
         chain_id=chain.id,
         gas_price_strategies=gas_price_strategies,
-        poa_chain=chain == Chain.POLYGON,
+        poa_chain=chain in (Chain.OPTIMISM, Chain.POLYGON),
     )
-
-    if chain == Chain.OPTIMISM:
-        ledger_api.api.middleware_onion.inject(geth_poa_middleware, layer=0)
 
     return ledger_api
 
@@ -155,7 +156,7 @@ GAS_ESTIMATE_FALLBACK_ADDRESSES = [
     "0x000000000000000000000000000000000000dEaD",
     "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",  # nosec
 ]
-GAS_ESTIMATE_BUFFER = 1.10
+DEFAULT_GAS_ESTIMATE_MULTIPLIER = 1.10
 
 
 # TODO backport to open aea/autonomy
@@ -181,9 +182,12 @@ def update_tx_with_gas_pricing(tx: t.Dict, ledger_api: LedgerApi) -> None:
 
 # TODO backport to open aea/autonomy
 # TODO This gas management should be done at a lower level in the library
-def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
+def update_tx_with_gas_estimate(
+    tx: t.Dict,
+    ledger_api: LedgerApi,
+    gas_estimate_multiplier: float = DEFAULT_GAS_ESTIMATE_MULTIPLIER,
+) -> None:
     """Update transaction with gas estimate."""
-    print(f"[LEDGER] Trying to update transaction gas {tx['from']=} {tx['gas']=}.")
     original_from = tx["from"]
     original_gas = tx.get("gas", 1)
 
@@ -192,11 +196,14 @@ def update_tx_with_gas_estimate(tx: t.Dict, ledger_api: LedgerApi) -> None:
         tx["gas"] = 1
         ledger_api.update_with_gas_estimate(tx)
         if tx["gas"] > 1:
-            print(f"[LEDGER] Gas estimated successfully {tx['from']=} {tx['gas']=}.")
             break
 
     tx["from"] = original_from
     if tx["gas"] == 1:
         tx["gas"] = original_gas
         print(f"[LEDGER] Unable to estimate gas. Restored {tx['gas']=}.")
-    tx["gas"] = ceil(tx["gas"] * GAS_ESTIMATE_BUFFER)
+    tx["gas"] = ceil(tx["gas"] * gas_estimate_multiplier)
+
+
+class UnsupportedChainError(Exception):
+    """Error for unsupported chains."""

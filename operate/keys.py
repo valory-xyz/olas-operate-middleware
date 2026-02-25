@@ -113,9 +113,9 @@ class KeysManager:
             )
         )
 
-    def get_json(self, key: str) -> dict:
+    def get_decrypted(self, key: str) -> dict:
         """Get key json."""
-        if self.password:
+        if self.password is not None:
             return self.get(key).get_decrypted_json(self.password)
         return self.get(key).json
 
@@ -144,9 +144,11 @@ class KeysManager:
         key = Key(
             ledger=LedgerType.ETHEREUM,
             address=crypto.address,
-            private_key=crypto.encrypt(password=self.password)
-            if self.password is not None
-            else crypto.private_key,
+            private_key=(
+                crypto.encrypt(password=self.password)
+                if self.password is not None
+                else crypto.private_key
+            ),
         )
         for path in (
             self.path / f"{crypto.address}.bak",

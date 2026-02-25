@@ -21,6 +21,8 @@
 import asyncio
 import json
 import logging
+import threading
+import time
 import typing as t
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
@@ -40,6 +42,8 @@ class HealthChecker:
     PORT_UP_TIMEOUT_DEFAULT = 300  # seconds
     REQUEST_TIMEOUT_DEFAULT = 90  # seconds
     NUMBER_OF_FAILS_DEFAULT = 60
+    FAILFAST_NUM = 15
+    FAILFAST_TIMEOUT = 15 * 60  # 15 minutes
 
     def __init__(
         self,
@@ -51,6 +55,7 @@ class HealthChecker:
     ) -> None:
         """Init the healtch checker."""
         self._jobs: t.Dict[str, asyncio.Task] = {}
+        self._jobs_lock = threading.Lock()  # Protect _jobs dict operations
         self._service_manager = service_manager
         self.logger = logger
         self.port_up_timeout = port_up_timeout or self.PORT_UP_TIMEOUT_DEFAULT
@@ -62,38 +67,55 @@ class HealthChecker:
         self.logger.info(
             f"[HEALTH_CHECKER]: Starting healthcheck job for {service_config_id}"
         )
-        if service_config_id in self._jobs:
-            self.stop_for_service(service_config_id=service_config_id)
 
-        loop = asyncio.get_running_loop()
-        self._jobs[service_config_id] = loop.create_task(
-            self.healthcheck_job(
-                service_config_id=service_config_id,
+        # Thread-safe job management: check and stop existing job atomically
+        with self._jobs_lock:
+            if service_config_id in self._jobs:
+                # Stop existing job (cancel and clean up)
+                old_task = self._jobs[service_config_id]
+                old_task.cancel()
+                # Remove from dict - task will handle cancellation
+                del self._jobs[service_config_id]
+                self.logger.info(
+                    f"[HEALTH_CHECKER]: Cancelled existing job for {service_config_id}"
+                )
+
+            # Create new job
+            loop = asyncio.get_running_loop()
+            self._jobs[service_config_id] = loop.create_task(
+                self.healthcheck_job(
+                    service_config_id=service_config_id,
+                )
             )
-        )
 
     def stop_for_service(self, service_config_id: str) -> None:
         """Stop for a specific service."""
-        if service_config_id not in self._jobs:
-            return
-        self.logger.info(
-            f"[HEALTH_CHECKER]: Cancelling existing healthcheck_jobs job for {service_config_id}"
-        )
-        status = self._jobs[service_config_id].cancel()
-        if not status:
-            self.logger.info(
-                f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
-            )
+        # Thread-safe job cancellation
+        with self._jobs_lock:
+            if service_config_id not in self._jobs:
+                return
 
-    async def check_service_health(
+            self.logger.info(
+                f"[HEALTH_CHECKER]: Cancelling existing healthcheck_jobs job for {service_config_id}"
+            )
+            task = self._jobs[service_config_id]
+            status = task.cancel()
+            if not status:
+                self.logger.info(
+                    f"[HEALTH_CHECKER]: Healthcheck job cancellation for {service_config_id} failed"
+                )
+            # Remove from dict - task will handle cancellation
+            del self._jobs[service_config_id]
+
+    async def check_service_health(  # pylint: disable=too-many-return-statements
         self, service_config_id: str, service_path: t.Optional[Path] = None
     ) -> bool:
         """Check the service health"""
         del service_config_id
         timeout = aiohttp.ClientTimeout(total=self.REQUEST_TIMEOUT_DEFAULT)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.get(HEALTH_CHECK_URL) as resp:
-                try:
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(HEALTH_CHECK_URL) as resp:
                     status = resp.status
 
                     if status != HTTPStatus.OK:
@@ -115,13 +137,40 @@ class HealthChecker:
                     return response_json.get(
                         "is_healthy", response_json.get("is_transitioning_fast", False)
                     )  # TODO: remove is_transitioning_fast after all the services start reporting is_healthy
-                except Exception as e:  # pylint: disable=broad-except
-                    self.logger.error(
-                        f"[HEALTH_CHECKER] error {e}. set not healthy!", exc_info=True
-                    )
-                    return False
+        except asyncio.TimeoutError as e:
+            # NOTE: Must come before OSError since TimeoutError is a subclass of OSError in Python 3.10+
+            self.logger.error(
+                f"[HEALTH_CHECKER] Request timeout during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except aiohttp.ClientError as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] HTTP client error during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"[HEALTH_CHECKER] JSON decode error while parsing health check response: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except (OSError, PermissionError) as e:
+            # NOTE: Comes after TimeoutError to avoid catching it (TimeoutError is subclass of OSError)
+            self.logger.error(
+                f"[HEALTH_CHECKER] File system error while writing healthcheck.json: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"[HEALTH_CHECKER] Unexpected error during health check: {e}. set not healthy!",
+                exc_info=True,
+            )
+            return False
 
-    async def healthcheck_job(
+    async def healthcheck_job(  # pylint: disable=too-many-statements
         self,
         service_config_id: str,
     ) -> None:
@@ -211,10 +260,27 @@ class HealthChecker:
                     future = loop.run_in_executor(executor, _do_restart)
                     await future
                     exception = future.exception()
-                    if exception is not None:
-                        raise exception
+                    if exception is not None:  # pragma: no cover
+                        raise exception  # pragma: no cover
+
+            async def _stop(
+                service_manager: ServiceManager, service_config_id: str
+            ) -> None:
+                def _do_stop() -> None:
+                    service_manager.stop_service_locally(
+                        service_config_id=service_config_id
+                    )
+
+                loop = asyncio.get_event_loop()
+                with ThreadPoolExecutor() as executor:
+                    future = loop.run_in_executor(executor, _do_stop)
+                    await future
+                    exception = future.exception()
+                    if exception is not None:  # pragma: no cover
+                        raise exception  # pragma: no cover
 
             # upper cycle
+            failfast_records: t.List[float] = []
             while True:
                 self.logger.info(
                     f"[HEALTH_CHECKER] {service_config_id} wait for port ready"
@@ -224,6 +290,7 @@ class HealthChecker:
                     self.logger.info(
                         f"[HEALTH_CHECKER]  {service_config_id} port is ready, checking health every {self.sleep_period}"
                     )
+                    failfast_records = []
                     await _check_health(
                         number_of_fails=self.number_of_fails,
                         sleep_period=self.sleep_period,
@@ -236,7 +303,22 @@ class HealthChecker:
 
                 # perform restart
                 # TODO: blocking!!!!!!!
-                await _restart(self._service_manager, service_config_id)
+                while True:
+                    # we count every restart till success (port is up and healtcheck started)
+                    failfast_records.append(time.time())
+                    try:
+                        await _restart(self._service_manager, service_config_id)
+                        break
+                    except Exception:  # pylint: disable=broad-except
+                        if (len(failfast_records) >= self.FAILFAST_NUM) or (
+                            time.time() - failfast_records[0]
+                        ) > self.FAILFAST_TIMEOUT:
+                            await _stop(self._service_manager, service_config_id)
+                            raise
+
+                        self.logger.exception(f"Restart problem: {service_config_id}")
+                        await asyncio.sleep(30)
+
         except Exception:
             self.logger.exception(
                 f"Problems running healthcheck job for {service_config_id}"

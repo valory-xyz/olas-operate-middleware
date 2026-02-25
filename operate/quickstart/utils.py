@@ -27,15 +27,18 @@ from pathlib import Path
 from typing import Dict, Optional, Union, get_args, get_origin
 
 import requests
-from halo import Halo  # type: ignore[import]  # pylint: disable=import-error
+from halo import Halo
+from web3.exceptions import Web3RPCError
 
-from operate.constants import ZERO_ADDRESS
+from operate.constants import DEFAULT_TIMEOUT, ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
 from operate.operate_types import Chain
 from operate.resource import LocalResource, deserialize
 
 
-def print_box(text: str, margin: int = 1, character: str = "=") -> None:
+def print_box(
+    text: str, margin: int = 1, character: str = "="
+) -> None:  # pragma: no cover
     """Print text centered within a box."""
 
     lines = text.split("\n")
@@ -52,12 +55,12 @@ def print_box(text: str, margin: int = 1, character: str = "=") -> None:
     print()
 
 
-def print_title(text: str) -> None:
+def print_title(text: str) -> None:  # pragma: no cover
     """Print title."""
     print_box(text, 4, "=")
 
 
-def print_section(text: str) -> None:
+def print_section(text: str) -> None:  # pragma: no cover
     """Print section."""
     print_box(text, 1, "-")
 
@@ -164,6 +167,30 @@ CHAIN_TO_METADATA = {
             "MAX_FEE_PER_GAS": "",
         },
     },
+    "polygon": {
+        "name": "Polygon",
+        "gasFundReq": unit_to_wei(1.5),  # fund for master EOA
+        "staking_bonding_token": OLAS[Chain.POLYGON],
+        "token_data": {
+            ZERO_ADDRESS: {
+                "symbol": "POL",
+                "decimals": 18,
+            },
+            USDC[Chain.POLYGON]: {
+                "symbol": "USDC",
+                "decimals": 6,
+            },
+            OLAS[Chain.POLYGON]: {
+                "symbol": "OLAS",
+                "decimals": 18,
+            },
+        },
+        "gasParams": {
+            # this means default values will be used
+            "MAX_PRIORITY_FEE_PER_GAS": "",
+            "MAX_FEE_PER_GAS": "",
+        },
+    },
 }
 
 
@@ -225,11 +252,14 @@ def check_rpc(chain: str, rpc_url: Optional[str] = None) -> bool:
 
     try:
         response = requests.post(
-            rpc_url, json=rpc_data, headers={"Content-Type": "application/json"}
+            rpc_url,
+            json=rpc_data,
+            headers={"Content-Type": "application/json"},
+            timeout=DEFAULT_TIMEOUT,
         )
         response.raise_for_status()
         rpc_response = response.json()
-    except (requests.exceptions.RequestException, ValueError, TypeError) as e:
+    except (requests.exceptions.RequestException, Web3RPCError, TypeError) as e:
         spinner.fail(f"Error: Failed to send {chain} RPC request: {e}")
         return False
 

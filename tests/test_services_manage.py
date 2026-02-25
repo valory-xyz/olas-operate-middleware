@@ -69,6 +69,7 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
         "description": kwargs.get("description"),
         "image": "https://image_url",
         "service_version": "",
+        "agent_release": kwargs.get("agent_release"),
         "home_chain": "gnosis",
         "configurations": {
             "gnosis": {
@@ -106,6 +107,7 @@ def get_template(**kwargs: t.Any) -> ServiceTemplate:
     }
 
 
+@pytest.mark.integration
 class TestServiceManager(OnTestnet):
     """Tests for services.manager.ServiceManager class."""
 
@@ -114,6 +116,8 @@ class TestServiceManager(OnTestnet):
     @pytest.mark.parametrize("update_name", [True, False])
     @pytest.mark.parametrize("update_description", [True, False])
     @pytest.mark.parametrize("update_hash", [True, False])
+    @pytest.mark.parametrize("update_release", [True, False])
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_partial_update(
         self,
         update_new_var: bool,
@@ -121,10 +125,15 @@ class TestServiceManager(OnTestnet):
         update_name: bool,
         update_description: bool,
         update_hash: bool,
+        update_release: bool,
         tmp_path: Path,
         password: str,
     ) -> None:
-        """Test operate.service_manager().update()"""
+        """Test operate.service_manager().update().
+
+        Note: This test makes real IPFS downloads and may be flaky due to network
+        issues or IPFS registry unavailability. See IPFS_DOWNLOAD_ISSUES.md for details.
+        """
 
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,
@@ -180,6 +189,17 @@ class TestServiceManager(OnTestnet):
             update_template["hash"] = new_hash
             expected_service_json["hash"] = new_hash
 
+        if update_release:
+            update_template["agent_release"] = {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "optimus",
+                    "version": "v0.0.1002",
+                },
+            }
+            expected_service_json["agent_release"] = update_template["agent_release"]
+
         service_manager.update(
             service_config_id=service_config_id,
             service_template=update_template,
@@ -204,6 +224,7 @@ class TestServiceManager(OnTestnet):
     @pytest.mark.parametrize("update_name", [True, False])
     @pytest.mark.parametrize("update_description", [True, False])
     @pytest.mark.parametrize("update_hash", [True, False])
+    @pytest.mark.flaky(reruns=2, reruns_delay=5)
     def test_service_manager_update(
         self,
         update_new_var: bool,
@@ -215,7 +236,11 @@ class TestServiceManager(OnTestnet):
         tmp_path: Path,
         password: str,
     ) -> None:
-        """Test operate.service_manager().update()"""
+        """Test operate.service_manager().update().
+
+        Note: This test makes real IPFS downloads and may be flaky due to network
+        issues or IPFS registry unavailability. See IPFS_DOWNLOAD_ISSUES.md for details.
+        """
 
         operate = OperateApp(
             home=tmp_path / OPERATE_TEST,

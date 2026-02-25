@@ -29,7 +29,6 @@ from aea.crypto.base import Crypto, LedgerApi
 from aea.helpers.logging import setup_logger
 from aea_ledger_ethereum.ethereum import EthereumApi, EthereumCrypto
 from autonomy.chain.base import registry_contracts
-from autonomy.chain.config import ChainType as ChainProfile
 from autonomy.chain.tx import TxSettler
 from web3 import Account, Web3
 
@@ -48,11 +47,13 @@ from operate.ledger import (
 from operate.ledger.profiles import DUST, ERC20_TOKENS, format_asset_amount
 from operate.operate_types import Chain, EncryptedData, LedgerType
 from operate.resource import LocalResource
+from operate.serialization import BigInt
 from operate.utils import create_backup
 from operate.utils.gnosis import add_owner
 from operate.utils.gnosis import create_safe as create_gnosis_safe
 from operate.utils.gnosis import (
     estimate_transfer_tx_fee,
+    gas_fees_spent_in_tx,
     get_asset_balance,
     get_owners,
     remove_owner,
@@ -75,14 +76,12 @@ class MasterWallet(LocalResource):
 
     path: Path
     address: str
-
-    safes: t.Dict[Chain, str] = field(default_factory=dict)
-    safe_chains: t.List[Chain] = field(default_factory=list)
+    safes: t.Dict[Chain, str]
+    safe_chains: t.List[Chain]
     ledger_type: LedgerType
     safe_nonce: t.Optional[int] = None
 
     _key: str
-    _mnemonic: str
     _crypto: t.Optional[Crypto] = None
     _password: t.Optional[str] = None
     _crypto_cls: t.Type[Crypto]
@@ -111,10 +110,15 @@ class MasterWallet(LocalResource):
         """Key path."""
         return self.path / self._key
 
+    @classmethod
+    def mnemonic_filename(cls) -> str:
+        """Return deterministic mnemonic filename per ledger type."""
+        return f"{cls.ledger_type.value.lower()}.mnemonic.json"
+
     @property
     def mnemonic_path(self) -> Path:
         """Mnemonic path."""
-        return self.path / self._mnemonic
+        return self.path / self.__class__.mnemonic_filename()
 
     @staticmethod
     def ledger_api(
@@ -207,9 +211,23 @@ class MasterWallet(LocalResource):
         raise NotImplementedError()
 
     def get_balance(
-        self, chain: Chain, asset: str = ZERO_ADDRESS, from_safe: bool = True
-    ) -> int:
-        """Get wallet balance on a given chain."""
+        self,
+        chain: Chain,
+        asset: str = ZERO_ADDRESS,
+        from_safe: bool = True,
+        rpc: t.Optional[str] = None,
+    ) -> BigInt:
+        """Get wallet balance on a given chain.
+
+        Args:
+            chain: The chain to check balance on
+            asset: Asset address (ZERO_ADDRESS for native token)
+            from_safe: Whether to check Safe balance (True) or EOA balance (False)
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+
+        Returns:
+            Balance as BigInt
+        """
         if from_safe:
             if chain not in self.safes:
                 raise ValueError(f"Wallet does not have a Safe on chain {chain}.")
@@ -218,8 +236,13 @@ class MasterWallet(LocalResource):
         else:
             address = self.address
 
+        # Use custom RPC if provided, otherwise fall back to default
+        ledger_api = (
+            make_chain_ledger_api(chain, rpc) if rpc else get_default_ledger_api(chain)
+        )
+
         return get_asset_balance(
-            ledger_api=get_default_ledger_api(chain),
+            ledger_api=ledger_api,
             asset_address=asset,
             address=address,
         )
@@ -250,7 +273,6 @@ class EthereumMasterWallet(MasterWallet):
 
     _file = ledger_type.config_file
     _key = ledger_type.key_file
-    _mnemonic = ledger_type.mnemonic_file
     _crypto_cls = EthereumCrypto
 
     def _pre_transfer_checks(
@@ -284,7 +306,7 @@ class EthereumMasterWallet(MasterWallet):
 
     def _transfer_from_eoa(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
-    ) -> t.Optional[str]:
+    ) -> str:
         """Transfer funds from EOA wallet."""
         balance = self.get_balance(chain=chain, from_safe=False)
         tx_fee = estimate_transfer_tx_fee(
@@ -306,18 +328,8 @@ class EthereumMasterWallet(MasterWallet):
         )
 
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
-        tx_helper = TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
 
-        def _build_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kwargs: t.Any
-        ) -> t.Dict:
+        def _build_tx() -> t.Dict:
             """Build transaction"""
             max_priority_fee_per_gas = os.getenv("MAX_PRIORITY_FEE_PER_GAS", None)
             max_fee_per_gas = os.getenv("MAX_FEE_PER_GAS", None)
@@ -339,10 +351,20 @@ class EthereumMasterWallet(MasterWallet):
                 raise_on_try=True,
             )
 
-        setattr(tx_helper, "build", _build_tx)  # noqa: B010
-        tx_receipt = tx_helper.transact(lambda x: x, "", kwargs={})
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
-        return tx_hash
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
+        )
 
     def _transfer_from_safe(
         self, to: str, amount: int, chain: Chain, rpc: t.Optional[str] = None
@@ -389,7 +411,7 @@ class EthereumMasterWallet(MasterWallet):
         amount: int,
         chain: Chain,
         rpc: t.Optional[str] = None,
-    ) -> t.Optional[str]:
+    ) -> str:
         """Transfer erc20 from EOA wallet."""
         to = self._pre_transfer_checks(
             to=to, amount=amount, chain=chain, from_safe=False, asset=token
@@ -397,18 +419,8 @@ class EthereumMasterWallet(MasterWallet):
 
         wallet_address = self.address
         ledger_api = t.cast(EthereumApi, self.ledger_api(chain=chain, rpc=rpc))
-        tx_settler = TxSettler(
-            ledger_api=ledger_api,
-            crypto=self.crypto,
-            chain_type=ChainProfile.CUSTOM,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
 
-        def _build_transfer_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
+        def _build_transfer_tx() -> t.Dict:
             # TODO Backport to OpenAEA
             instance = registry_contracts.erc20.get_instance(
                 ledger_api=ledger_api,
@@ -427,15 +439,20 @@ class EthereumMasterWallet(MasterWallet):
             update_tx_with_gas_estimate(tx, ledger_api)
             return tx
 
-        setattr(tx_settler, "build", _build_transfer_tx)  # noqa: B010
-        tx_receipt = tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                chain_type=chain,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=_build_transfer_tx,
+            )
+            .transact()
+            .settle()
+            .tx_hash
         )
-        tx_hash = tx_receipt.get("transactionHash", "").hex()
-        return tx_hash
 
     def transfer(  # pylint: disable=too-many-arguments
         self,
@@ -524,12 +541,16 @@ class EthereumMasterWallet(MasterWallet):
                 tx_hashes.append(tx_hash)
         amount -= from_safe_amount
 
+        # Subtract gas fees from remaining amount if this was a native currency transfer
+        if from_safe_amount > 0 and asset == ZERO_ADDRESS and tx_hash:
+            amount -= gas_fees_spent_in_tx(
+                ledger_api=self.ledger_api(chain=chain, rpc=rpc),
+                tx_hash=tx_hash,
+            )
+
         if amount > 0:
             eoa_balance = self.get_balance(chain=chain, asset=asset, from_safe=False)
-            if (
-                asset == ZERO_ADDRESS
-                and eoa_balance <= amount <= eoa_balance + DUST[chain]
-            ):
+            if asset == ZERO_ADDRESS and eoa_balance <= amount:
                 # to make the internal function drain the EOA
                 amount = eoa_balance
 
@@ -549,7 +570,9 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> None:
         """Drain all erc20/native assets to the given account."""
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
         for asset in assets:
             balance = self.get_balance(chain=chain, asset=asset, from_safe=from_safe)
             if balance <= 0:
@@ -572,7 +595,7 @@ class EthereumMasterWallet(MasterWallet):
         # Backport support on aea
 
         eoa_wallet_path = path / cls._key
-        eoa_mnemonic_path = path / cls._mnemonic
+        eoa_mnemonic_path = path / cls.mnemonic_filename()
 
         if eoa_wallet_path.exists():
             raise FileExistsError(f"Wallet file already exists at {eoa_wallet_path}.")
@@ -611,12 +634,10 @@ class EthereumMasterWallet(MasterWallet):
 
     def decrypt_mnemonic(self, password: str) -> t.Optional[t.List[str]]:
         """Retrieve the mnemonic"""
-        eoa_mnemonic_path = self.path / self.ledger_type.mnemonic_file
-
-        if not eoa_mnemonic_path.exists():
+        if not self.mnemonic_path.exists():
             return None
 
-        encrypted_mnemonic = EncryptedData.load(eoa_mnemonic_path)
+        encrypted_mnemonic = EncryptedData.load(self.mnemonic_path)
         mnemonic = encrypted_mnemonic.decrypt(password).decode("utf-8")
         return mnemonic.split()
 
@@ -687,20 +708,29 @@ class EthereumMasterWallet(MasterWallet):
         rpc: t.Optional[str] = None,
     ) -> t.Optional[str]:
         """Create safe."""
-        if chain in self.safes:
-            raise ValueError(f"Wallet already has a Safe on chain {chain}.")
-
-        safe, self.safe_nonce, tx_hash = create_gnosis_safe(
-            ledger_api=self.ledger_api(chain=chain, rpc=rpc),
-            crypto=self.crypto,
-            backup_owner=backup_owner,
-            salt_nonce=self.safe_nonce,
-        )
-        self.safe_chains.append(chain)
+        tx_hash = None
+        ledger_api = self.ledger_api(chain=chain, rpc=rpc)
         if self.safes is None:
             self.safes = {}
-        self.safes[chain] = safe
-        self.store()
+
+        if chain not in self.safe_chains and chain not in self.safes:
+            safe, self.safe_nonce, tx_hash = create_gnosis_safe(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                salt_nonce=self.safe_nonce,
+            )
+            self.safe_chains.append(chain)
+            self.safes[chain] = safe
+            self.store()
+
+        if backup_owner is not None:
+            add_owner(
+                ledger_api=ledger_api,
+                crypto=self.crypto,
+                safe=self.safes[chain],
+                owner=backup_owner,
+            )
+
         return tx_hash
 
     def update_backup_owner(
@@ -728,6 +758,9 @@ class EthereumMasterWallet(MasterWallet):
             raise ValueError(
                 "The master wallet cannot be set as the Safe backup owner."
             )
+
+        if self.address not in owners:
+            return False
 
         owners.remove(self.address)
         old_backup_owner = owners[0] if owners else None
@@ -762,7 +795,7 @@ class EthereumMasterWallet(MasterWallet):
             )
             return True
 
-        return False
+        return False  # pragma: no cover
 
     @property
     def extended_json(self) -> t.Dict:
@@ -770,26 +803,30 @@ class EthereumMasterWallet(MasterWallet):
         rpc = None
         wallet_json = self.json
 
-        balances: t.Dict[str, t.Dict[str, t.Dict[str, int]]] = {}
+        balances: t.Dict[str, t.Dict[str, t.Dict[str, BigInt]]] = {}
         owner_sets = set()
         for chain, safe in self.safes.items():
             chain_str = chain.value
             ledger_api = self.ledger_api(chain=chain, rpc=rpc)
             owners = get_owners(ledger_api=ledger_api, safe=safe)
-            owners.remove(self.address)
+
+            if self.address in owners:
+                owners.remove(self.address)
 
             balances[chain_str] = {self.address: {}, safe: {}}
 
-            assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+            assets = [
+                token[chain] for token in ERC20_TOKENS.values() if chain in token
+            ] + [ZERO_ADDRESS]
             for asset in assets:
-                balances[chain_str][self.address][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=False
+                balances[chain_str][self.address][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=False)
                 )
-                balances[chain_str][safe][asset] = self.get_balance(
-                    chain=chain, asset=asset, from_safe=True
+                balances[chain_str][safe][asset] = str(
+                    self.get_balance(chain=chain, asset=asset, from_safe=True)
                 )
-            wallet_json["safes"][chain.value] = {
-                wallet_json["safes"][chain.value]: {
+            wallet_json["safes"][chain_str] = {
+                safe: {
                     "backup_owners": owners,
                     "balances": balances[chain_str][safe],
                 }
@@ -798,6 +835,9 @@ class EthereumMasterWallet(MasterWallet):
 
         wallet_json["balances"] = balances
         wallet_json["extended_json"] = True
+        wallet_json["all_safes_have_backup_owner"] = all(
+            len(owners) > 0 for owners in owner_sets
+        )
         wallet_json["consistent_safe_address"] = len(set(self.safes.values())) == 1
         wallet_json["consistent_backup_owner"] = len(owner_sets) == 1
         wallet_json["consistent_backup_owner_count"] = all(

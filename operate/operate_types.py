@@ -30,106 +30,21 @@ from pathlib import Path
 import argon2
 from aea_ledger_ethereum import cast
 from autonomy.chain.config import ChainType
-from autonomy.chain.constants import CHAIN_NAME_TO_CHAIN_ID
+from autonomy.chain.config import LedgerType as LedgerTypeOA
 from cryptography.fernet import Fernet
 from typing_extensions import TypedDict
 
-from operate.constants import FERNET_KEY_LENGTH, NO_STAKING_PROGRAM_ID
-from operate.resource import LocalResource
-
-
-CHAIN_NAME_TO_CHAIN_ID["solana"] = 900
-
-_CHAIN_ID_TO_CHAIN_NAME = {
-    chain_id: chain_name for chain_name, chain_id in CHAIN_NAME_TO_CHAIN_ID.items()
-}
-
-
-class LedgerType(str, enum.Enum):
-    """Ledger type enum."""
-
-    ETHEREUM = "ethereum"
-    SOLANA = "solana"
-
-    @property
-    def config_file(self) -> str:
-        """Config filename."""
-        return f"{self.name.lower()}.json"
-
-    @property
-    def key_file(self) -> str:
-        """Key filename."""
-        return f"{self.name.lower()}.txt"
-
-    @property
-    def mnemonic_file(self) -> str:
-        """Mnemonic filename."""
-        return f"{self.name.lower()}.mnemonic.json"
-
-    @classmethod
-    def from_id(cls, chain_id: int) -> "LedgerType":
-        """Load from chain ID."""
-        return Chain(_CHAIN_ID_TO_CHAIN_NAME[chain_id]).ledger_type
-
-
-# Dynamically create the Chain enum from the ChainType
-# TODO: Migrate this to open-autonomy and remove this modified version of Chain here and use the one from open-autonomy
-# This version of open-autonomy must support the LedgerType to support SOLANA in the future
-# If solana support is not fuly implemented, decide to keep this half-baked feature.
-#
-# TODO: Once the above issue is properly implemented in Open Autonomy, remove the following
-# lines from tox.ini:
-#
-#    exclude = ^(operate/operate_types\.py|scripts/setup_wallet\.py|operate/ledger/profiles\.py|operate/ledger/__init__\.py|operate/wallet/master\.py|operate/services/protocol\.py|operate/services/manage\.py|operate/cli\.py)$
-#
-#    [mypy-operate.*]
-#    follow_imports = skip  # noqa
-#
-# These lines were itroduced to resolve mypy issues with the temporary Chain/ChainType solution.
-Chain = enum.Enum(
-    "Chain",
-    [(member.name, member.value) for member in ChainType]
-    + [
-        ("SOLANA", "solana"),
-    ],
+from operate.constants import (
+    ACHIEVEMENTS_NOTIFICATIONS_JSON,
+    FERNET_KEY_LENGTH,
+    NO_STAKING_PROGRAM_ID,
 )
+from operate.resource import LocalResource
+from operate.serialization import BigInt, serialize
 
 
-class ChainMixin:
-    """Mixin for some new functions in the ChainType class."""
-
-    @property
-    def id(self) -> t.Optional[int]:
-        """Chain ID"""
-        if self == Chain.CUSTOM:
-            chain_id = os.environ.get("CUSTOM_CHAIN_ID")
-            if chain_id is None:
-                return None
-            return int(chain_id)
-        return CHAIN_NAME_TO_CHAIN_ID[self.value]
-
-    @property
-    def ledger_type(self) -> LedgerType:
-        """Ledger type."""
-        if self in (Chain.SOLANA,):
-            return LedgerType.SOLANA
-        return LedgerType.ETHEREUM
-
-    @classmethod
-    def from_string(cls, chain: str) -> "Chain":
-        """Load from string."""
-        return Chain(chain.lower())
-
-    @classmethod
-    def from_id(cls, chain_id: int) -> "Chain":
-        """Load from chain ID."""
-        return Chain(_CHAIN_ID_TO_CHAIN_NAME[chain_id])
-
-
-# Add the ChainMixin methods to the Chain enum
-for name in dir(ChainMixin):
-    if not name.startswith("__"):
-        setattr(Chain, name, getattr(ChainMixin, name))
+LedgerType = LedgerTypeOA
+Chain = ChainType
 
 
 class DeploymentStatus(enum.IntEnum):
@@ -223,6 +138,21 @@ class EnvVariableAttributes(TypedDict):
     provision_type: ServiceEnvProvisionType
 
 
+class AgentReleaseRepo(TypedDict):
+    """Agent release repo template."""
+
+    owner: str
+    name: str
+    version: str
+
+
+class AgentRelease(TypedDict):
+    """Agent release template."""
+
+    is_aea: bool
+    repository: AgentReleaseRepo
+
+
 ConfigurationTemplates = t.Dict[str, ConfigurationTemplate]
 EnvVariables = t.Dict[str, EnvVariableAttributes]
 
@@ -235,6 +165,7 @@ class ServiceTemplate(TypedDict, total=False):
     image: str
     description: str
     service_version: str
+    agent_release: AgentRelease
     home_chain: str
     configurations: ConfigurationTemplates
     env_variables: EnvVariables
@@ -252,8 +183,8 @@ class DeployedNodes(LocalResource):
 class OnChainFundRequirements(LocalResource):
     """On-chain fund requirements."""
 
-    agent: float
-    safe: float
+    agent: BigInt
+    safe: BigInt
 
 
 OnChainTokenRequirements = t.Dict[str, OnChainFundRequirements]
@@ -266,7 +197,7 @@ class OnChainUserParams(LocalResource):
     staking_program_id: str
     nft: str
     agent_id: int
-    cost_of_bond: int
+    cost_of_bond: BigInt
     fund_requirements: OnChainTokenRequirements
 
     @property
@@ -291,6 +222,30 @@ class OnChainData(LocalResource):
     token: int
     multisig: str
     user_params: OnChainUserParams
+
+
+@dataclass
+class AchievementNotification(LocalResource):
+    """AchievementNotification"""
+
+    achievement_id: str
+    acknowledged: bool
+    acknowledgement_timestamp: int
+
+    @classmethod
+    def from_json(cls, obj: t.Dict) -> "ChainConfig":
+        """Load the chain config."""
+        return super().from_json(obj)  # type: ignore
+
+
+@dataclass
+class AchievementsNotifications(LocalResource):
+    """AchievementsNotifications"""
+
+    path: Path
+    notifications: t.Dict[str, AchievementNotification]
+
+    _file = ACHIEVEMENTS_NOTIFICATIONS_JSON
 
 
 @dataclass
@@ -370,35 +325,54 @@ class Version:
         return self.patch < other.patch
 
 
-class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
+class ChainAmounts(dict[str, dict[str, dict[str, BigInt]]]):
     """
     Class that represents chain amounts as a dictionary
 
     The standard format follows the convention {chain: {address: {token: amount}}}
     """
 
+    @property
+    def json(self) -> dict:
+        """Return JSON representation with amounts as strings."""
+        return serialize(self)
+
+    @staticmethod
+    def from_json(obj: dict) -> "ChainAmounts":
+        """Create ChainAmounts from JSON representation."""
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
+
+        for chain, addresses in obj.items():
+            for address, assets in addresses.items():
+                for asset, amount in assets.items():
+                    result.setdefault(chain, {}).setdefault(address, {})[asset] = (
+                        BigInt(amount)
+                    )
+
+        return ChainAmounts(result)
+
     @classmethod
     def shortfalls(
         cls, requirements: "ChainAmounts", balances: "ChainAmounts"
     ) -> "ChainAmounts":
         """Return the shortfalls between requirements and balances."""
-        result: dict[str, dict[str, dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
 
         for chain, addresses in requirements.items():
             for address, assets in addresses.items():
                 for asset, required_amount in assets.items():
                     available = balances.get(chain, {}).get(address, {}).get(asset, 0)
                     shortfall = max(required_amount - available, 0)
-                    result.setdefault(chain, {}).setdefault(address, {})[
-                        asset
-                    ] = shortfall
+                    result.setdefault(chain, {}).setdefault(address, {})[asset] = (
+                        BigInt(shortfall)
+                    )
 
         return cls(result)
 
     @classmethod
     def add(cls, *chainamounts: "ChainAmounts") -> "ChainAmounts":
         """Add multiple ChainAmounts"""
-        result: dict[str, dict[str, dict[str, int]]] = {}
+        result: dict[str, dict[str, dict[str, BigInt]]] = {}
 
         for ca in chainamounts:
             for chain, addresses in ca.items():
@@ -406,7 +380,9 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
                 for address, assets in addresses.items():
                     result_assets = result_addresses.setdefault(address, {})
                     for asset, amount in assets.items():
-                        result_assets[asset] = result_assets.get(asset, 0) + amount
+                        result_assets[asset] = BigInt(
+                            result_assets.get(asset, 0) + amount
+                        )
 
         return cls(result)
 
@@ -420,7 +396,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = int(amount * multiplier)
+                    balances[asset] = BigInt(int(amount * multiplier))
         return output
 
     def __sub__(self, other: "ChainAmounts") -> "ChainAmounts":
@@ -436,7 +412,7 @@ class ChainAmounts(dict[str, dict[str, dict[str, int]]]):
         for _, addresses in output.items():
             for _, balances in addresses.items():
                 for asset, amount in balances.items():
-                    balances[asset] = int(amount // divisor)
+                    balances[asset] = BigInt(int(amount // divisor))
         return output
 
     def __lt__(self, other: "ChainAmounts") -> bool:
