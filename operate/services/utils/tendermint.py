@@ -42,6 +42,8 @@ import requests
 from flask import Flask, Response, jsonify, request
 from werkzeug.exceptions import InternalServerError, NotFound
 
+from operate.constants import DEFAULT_TIMEOUT
+
 
 ENCODING = "utf-8"
 DEFAULT_LOG_FILE = "com.log"
@@ -282,7 +284,7 @@ class TendermintNode:
         self._process = None
         self.log("Tendermint process stopped\n")
 
-    def _win_stop_tm(self) -> None:
+    def _win_stop_tm(self) -> None:  # pragma: no cover
         """Stop a Tendermint node process on Windows."""
         os.kill(self._process.pid, signal.CTRL_C_EVENT)  # type: ignore  # pylint: disable=no-member
         try:
@@ -474,7 +476,7 @@ class PeriodDumper:
             os.chmod(path, stat.S_IWRITE)
             func(path)
         except (FileNotFoundError, OSError):
-            return
+            pass
 
     def dump_period(self) -> None:
         """Dump tendermint run data for replay"""
@@ -532,7 +534,7 @@ def create_app(  # pylint: disable=too-many-statements
             )
             priv_key_data = json.loads(priv_key_file.read_text(encoding=ENCODING))
             del priv_key_data["priv_key"]
-            status = requests.get(TM_STATUS_ENDPOINT).json()
+            status = requests.get(TM_STATUS_ENDPOINT, timeout=DEFAULT_TIMEOUT).json()
             priv_key_data["peer_id"] = status["result"]["node_info"]["id"]
             return {
                 "params": priv_key_data,
@@ -600,7 +602,7 @@ def create_app(  # pylint: disable=too-many-statements
             endpoint = f"{tendermint_params.rpc_laddr.replace('tcp', 'http').replace(non_routable, loopback)}/block"
             height = request.args.get("height")
             params = {"height": height} if height is not None else None
-            res = requests.get(endpoint, params)
+            res = requests.get(endpoint, params, timeout=DEFAULT_TIMEOUT)
             app_hash_ = res.json()["result"]["block"]["header"]["app_hash"]
             return jsonify({"app_hash": app_hash_}), res.status_code
         except Exception as e:  # pylint: disable=W0703
@@ -662,13 +664,13 @@ def create_app(  # pylint: disable=too-many-statements
     return app, tendermint_node
 
 
-def create_server() -> Any:
+def create_server() -> Any:  # pragma: no cover
     """Function to retrieve just the app to be used by flask entry point."""
     flask_app, _ = create_app()
     return flask_app
 
 
-def run_app_in_subprocess(q: multiprocessing.Queue) -> None:
+def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
     """Run flask app in a subprocess to kill it when needed."""
     print("app in subprocess")
     app, tendermint_node = create_app()
@@ -686,7 +688,7 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:
     app.run(host="localhost", port=8080)
 
 
-def run_stoppable_main() -> None:
+def run_stoppable_main() -> None:  # pragma: no cover
     """Main to spawn flask in a subprocess."""
     print("run stoppable main!")
     q: multiprocessing.Queue = multiprocessing.Queue()
@@ -703,13 +705,13 @@ def run_stoppable_main() -> None:
             p.terminate()
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """Main entrance."""
     app = create_server()
     app.run(host="localhost", port=8080)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     # Start the Flask server programmatically
 
     with contextlib.suppress(Exception):

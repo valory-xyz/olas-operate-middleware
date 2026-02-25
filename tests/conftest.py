@@ -35,15 +35,18 @@ import tempfile
 import typing as t
 from dataclasses import dataclass
 from pathlib import Path
+from platform import system
 from typing import Generator
 
 import pytest
 import requests
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from web3 import Web3
 
 from operate.bridge.bridge_manager import BridgeManager
-from operate.cli import OperateApp
-from operate.constants import KEYS_DIR, ZERO_ADDRESS
+from operate.cli import OperateApp, create_app
+from operate.constants import AGENT_PERSISTENT_STORAGE_DIR, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api, get_default_rpc  # noqa: E402
 from operate.ledger.profiles import OLAS, USDC
@@ -56,17 +59,115 @@ from operate.operate_types import (
     ServiceTemplate,
 )
 from operate.services.manage import ServiceManager
+from operate.services.service import Service
 from operate.settings import Settings
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
-from tests.constants import (
-    CHAINS_TO_TEST,
-    LOGGER,
-    OPERATE_TEST,
-    RUNNING_IN_CI,
-    TESTNET_RPCS,
-)
+from tests.constants import CHAINS_TO_TEST, OPERATE_TEST, RUNNING_IN_CI, TESTNET_RPCS
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Add custom CLI options."""
+
+    group = parser.getgroup("profiling")
+    group.addoption(
+        "--profiler",
+        action="store",
+        default=None,
+        help=(
+            "Enable profiling. Supported values: cProfile, yappi, viztracer. "
+            "Outputs to prof/profile.prof (cProfile/yappi) or prof/viztracer.json (viztracer)."
+        ),
+    )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    """Start profiling if requested."""
+    profiler_opt = config.getoption("--profiler")
+    if not profiler_opt:
+        return
+
+    profiler_opt_norm = str(profiler_opt).strip().lower()
+    if profiler_opt_norm == "cprofile":
+        import cProfile
+
+        profiler = cProfile.Profile()
+        config._operate_profiler_backend = "cprofile"
+        config._operate_cprofile = profiler
+        profiler.enable()
+        return
+
+    if profiler_opt_norm == "yappi":
+        try:
+            import yappi  # type: ignore
+        except ImportError as e:
+            raise pytest.UsageError(
+                "--profiler=yappi requires yappi to be installed"
+            ) from e
+
+        yappi.set_clock_type("wall")
+        yappi.start()
+        config._operate_profiler_backend = "yappi"
+        return
+
+    if profiler_opt_norm == "viztracer":
+        try:
+            from viztracer import VizTracer  # type: ignore
+        except ImportError as e:
+            raise pytest.UsageError(
+                "--profiler=viztracer requires viztracer to be installed"
+            ) from e
+
+        config._operate_profiler_backend = "viztracer"
+        tracer = VizTracer()
+        config._operate_viztracer = tracer
+        tracer.start()
+        return
+
+    raise pytest.UsageError(
+        "Unsupported value for --profiler. Supported: --profiler=cProfile, --profiler=yappi, --profiler=viztracer"
+    )
+
+
+def pytest_unconfigure(config: pytest.Config) -> None:
+    """Stop profiling and write stats if enabled."""
+
+    backend = getattr(config, "_operate_profiler_backend", None)
+    if backend is None:
+        return
+
+    prof_dir = Path("prof")
+    prof_dir.mkdir(parents=True, exist_ok=True)
+
+    if backend == "yappi":
+        import yappi  # type: ignore
+
+        yappi.stop()
+        output_path = prof_dir / "profile.prof"
+        yappi.get_func_stats().save(str(output_path), type="pstat")
+        yappi.clear_stats()
+        return
+
+    if backend == "cprofile":
+        profiler = getattr(config, "_operate_cprofile", None)
+        if profiler is None:
+            return
+        profiler.disable()
+        output_path = prof_dir / "profile.prof"
+        profiler.dump_stats(str(output_path))
+        return
+
+    if backend == "viztracer":
+        tracer = getattr(config, "_operate_viztracer", None)
+        if tracer is None:
+            return
+        tracer.stop()
+        output_path = prof_dir / "viztracer.json"
+        tracer.save(output_file=str(output_path))
+        return
+
+    raise pytest.UsageError(f"Unknown profiler backend: {backend}")
 
 
 def random_string(length: int = 16) -> str:
@@ -145,6 +246,115 @@ def password() -> str:
     return random_string(16)
 
 
+def pytest_recording_configure(config, vcr) -> None:  # type: ignore[no-untyped-def]
+    """Configure VCR with custom matchers for host-agnostic JSON-RPC cassette replay."""
+    chain_keywords = {
+        "arbitrum": ["arbitrum", "arb"],
+        "base": ["base"],
+        "celo": ["celo"],
+        "ethereum": ["ethereum", "eth-mainnet", "eth"],
+        "gnosis": ["gnosis", "xdai"],
+        "mode": ["mode"],
+        "optimism": ["optimism", "op-mainnet", "op"],
+        "polygon": ["polygon", "matic"],
+        "solana": ["solana"],
+    }
+
+    def _infer_chain_from_uri(uri: str) -> str:
+        """Infer chain label from RPC URI for stable cassette matching."""
+        uri_lower = uri.lower()
+        for chain_name, keywords in chain_keywords.items():
+            if any(keyword in uri_lower for keyword in keywords):
+                return chain_name
+        return "unknown"
+
+    def _body_to_json(body: t.Any) -> t.Any:
+        """Decode request body into json when possible."""
+        if isinstance(body, bytes):
+            body_str = body.decode("utf-8", errors="ignore")
+        else:
+            body_str = str(body)
+
+        if not body_str:
+            return None
+
+        try:
+            return json.loads(body_str)
+        except (TypeError, json.JSONDecodeError):
+            return None
+
+    def _is_json_rpc_request(request: t.Any) -> bool:
+        """Whether the request is a JSON-RPC request."""
+        body_json = _body_to_json(getattr(request, "body", b""))
+        return isinstance(body_json, dict) and body_json.get("jsonrpc") == "2.0"
+
+    def rpc_body(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
+        """Match JSON-RPC bodies while ignoring volatile request id field."""
+        body_1 = _body_to_json(getattr(request_1, "body", b""))
+        body_2 = _body_to_json(getattr(request_2, "body", b""))
+
+        if isinstance(body_1, dict) and isinstance(body_2, dict):
+            is_rpc_1 = body_1.get("jsonrpc") == "2.0"
+            is_rpc_2 = body_2.get("jsonrpc") == "2.0"
+
+            if is_rpc_1 and is_rpc_2:
+                method_match = body_1.get("method") == body_2.get("method")
+                params_match = body_1.get("params") == body_2.get("params")
+                match = method_match and params_match
+                message = (
+                    "JSON-RPC method/params match"
+                    if match
+                    else "JSON-RPC method/params mismatch"
+                )
+                return match, message
+
+        body_raw_1 = getattr(request_1, "body", b"")
+        body_raw_2 = getattr(request_2, "body", b"")
+        match = body_raw_1 == body_raw_2
+        message = "Body match" if match else "Body mismatch"
+        return match, message
+
+    def rpc_uri(request_1: t.Any, request_2: t.Any) -> t.Tuple[bool, str]:
+        """Match JSON-RPC requests across different RPC hosts/providers."""
+        req1_is_rpc = _is_json_rpc_request(request_1)
+        req2_is_rpc = _is_json_rpc_request(request_2)
+
+        if req1_is_rpc and req2_is_rpc:
+            chain_1 = _infer_chain_from_uri(getattr(request_1, "uri", ""))
+            chain_2 = _infer_chain_from_uri(getattr(request_2, "uri", ""))
+
+            # Unknown: likely new cassette being recorded - match for safety
+            if "unknown" in (chain_1, chain_2):
+                return True, "RPC request with unknown chain"
+
+            match = chain_1 == chain_2
+            message = (
+                f"Chain match: {chain_1}"
+                if match
+                else f"Chain mismatch: {chain_1} != {chain_2}"
+            )
+            return match, message
+
+        # Non-RPC: strict URI match
+        uri1 = getattr(request_1, "uri", "")
+        uri2 = getattr(request_2, "uri", "")
+        match = uri1 == uri2
+        message = "URI match" if match else f"URI mismatch: {uri1} != {uri2}"
+        return match, message
+
+    # Register the custom matcher with this VCR instance
+    vcr.matchers["rpc_uri"] = rpc_uri
+    vcr.matchers["rpc_body"] = rpc_body
+
+
+@pytest.fixture(scope="module")
+def vcr_config() -> t.Dict[str, t.Any]:
+    """VCR configuration for deterministic JSON-RPC request matching."""
+    return {
+        "match_on": ["method", "rpc_uri", "query", "rpc_body"],
+    }
+
+
 @pytest.fixture
 def temp_keys_dir() -> Generator[Path, None, None]:
     """Create a temporary directory for keys."""
@@ -157,7 +367,8 @@ class OnTestnet:
 
     # TODO: Remove this skip after optimizing tenderly usage
     pytestmark = pytest.mark.skipif(
-        RUNNING_IN_CI, reason="To avoid exhausting tenderly limits."
+        RUNNING_IN_CI and system() != "Linux",
+        reason="To avoid exhausting tenderly limits.",
     )
 
     @pytest.fixture(autouse=True)
@@ -183,6 +394,8 @@ class OperateTestEnv:
     tmp_path: Path
     password: str
     operate: OperateApp
+    operate_app: FastAPI
+    operate_client: TestClient
     wallet_manager: MasterWalletManager
     mnemonics: t.Dict[LedgerType, t.List[str]]
     service_manager: ServiceManager
@@ -190,6 +403,20 @@ class OperateTestEnv:
     keys_manager: KeysManager
     backup_owner: str
     backup_owner2: str
+
+
+@dataclass
+class TestOperateSevice:
+    """Operate test service."""
+
+    tmp_path: Path
+    password: str
+    operate: OperateApp
+    service_manager: ServiceManager
+    service: Service
+    service_config_id: str
+    service_config_dir: Path
+    service_persistent_dir: Path
 
 
 def _get_service_template_trader() -> ServiceTemplate:
@@ -201,6 +428,14 @@ def _get_service_template_trader() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Trader agent for omen prediction markets",
             "service_version": "v0.26.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(
@@ -209,7 +444,7 @@ def _get_service_template_trader() -> ServiceTemplate:
                         "nft": "bafybeig64atqaladigoc3ds4arltdu63wkdrk3gesjfvnfdmz35amv7faq",
                         "rpc": get_default_rpc(Chain.GNOSIS),
                         "agent_id": 14,
-                        "cost_of_bond": 1000000000000000,
+                        "cost_of_bond": 50000000000000000000,
                         "fund_requirements": {
                             ZERO_ADDRESS: FundRequirementsTemplate(
                                 {
@@ -315,6 +550,14 @@ def _get_service_template_multichain_service() -> ServiceTemplate:
             "image": "https://operate.olas.network/_next/image?url=%2Fimages%2Fprediction-agent.png&w=3840&q=75",
             "description": "Test Multichain Service",
             "service_version": "v0.0.1",
+            "agent_release": {
+                "is_aea": True,
+                "repository": {
+                    "owner": "valory-xyz",
+                    "name": "trader",
+                    "version": "v0.27.5-rc.2",
+                },
+            },
             "home_chain": "gnosis",
             "configurations": {
                 "gnosis": ConfigurationTemplate(
@@ -449,6 +692,34 @@ def test_operate(tmp_path: Path, password: str) -> OperateApp:
 
 
 @pytest.fixture
+def test_operate_service(
+    tmp_path: Path, password: str, test_operate: OperateApp
+) -> TestOperateSevice:
+    """Sets up a test operate app."""
+
+    test_operate.service_manager().create(
+        service_template=_get_service_template_trader()
+    )
+
+    service_config_id = test_operate.service_manager().json[0]["service_config_id"]
+    service = test_operate.service_manager().load(service_config_id)
+    service_config_dir = service.path
+    service_persistent_dir = service.path / AGENT_PERSISTENT_STORAGE_DIR
+    service_persistent_dir.mkdir(parents=True, exist_ok=True)
+
+    return TestOperateSevice(
+        tmp_path=tmp_path,
+        password=password,
+        operate=test_operate,
+        service_manager=test_operate.service_manager(),
+        service=service,
+        service_config_id=service_config_id,
+        service_config_dir=service_config_dir,
+        service_persistent_dir=service_persistent_dir,
+    )
+
+
+@pytest.fixture
 def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> OperateTestEnv:
     """Sets up a test environment."""
 
@@ -475,10 +746,7 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
                     amount=int(1000e6),
                 )
 
-    keys_manager = KeysManager(
-        path=test_operate._path / KEYS_DIR,  # pylint: disable=protected-access
-        logger=LOGGER,
-    )
+    keys_manager = test_operate.keys_manager
     backup_owner = keys_manager.create()
     backup_owner2 = keys_manager.create()
 
@@ -496,10 +764,14 @@ def test_env(tmp_path: Path, password: str, test_operate: OperateApp) -> Operate
     # Logout
     test_operate.password = None
 
+    operate_app = create_app(home=test_operate._path)
+
     return OperateTestEnv(
         tmp_path=tmp_path,
         password=password,
         operate=test_operate,
+        operate_app=operate_app,
+        operate_client=TestClient(operate_app),
         wallet_manager=test_operate.wallet_manager,
         mnemonics=mnemonics,
         service_manager=test_operate.service_manager(),

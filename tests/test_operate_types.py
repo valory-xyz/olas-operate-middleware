@@ -23,7 +23,9 @@ import copy
 
 import pytest
 
-from operate.operate_types import ChainAmounts, Version
+from operate.constants import NO_STAKING_PROGRAM_ID
+from operate.operate_types import ChainAmounts, OnChainUserParams, Version
+from operate.serialization import BigInt
 
 
 def test_version() -> None:
@@ -43,7 +45,7 @@ def test_version() -> None:
     assert str(v1) == "0.0.0"
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_a() -> ChainAmounts:
     """Sample ChainAmounts instance A."""
     return ChainAmounts(
@@ -57,7 +59,7 @@ def sample_a() -> ChainAmounts:
     )
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_b() -> ChainAmounts:
     """Sample ChainAmounts instance B."""
     return ChainAmounts(
@@ -99,10 +101,10 @@ def test_floordiv(sample_a: ChainAmounts) -> None:
     assert result["chain1"]["addr1"]["tokenY"] == 2  # 5 // 2
     assert result["chain1"]["addr2"]["tokenX"] == 1  # 3 // 2
     assert result["chain2"]["addr3"]["tokenZ"] == 50  # 100 // 2
-    assert (
-        type(result["chain1"]["addr1"]["tokenY"]) is int
+    assert isinstance(
+        result["chain1"]["addr1"]["tokenY"], int
     )  # floor division should yield int when both operands are int
-    assert type(result["chain1"]["addr2"]["tokenX"]) is int
+    assert isinstance(result["chain1"]["addr2"]["tokenX"], int)
 
 
 def test_sub(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:
@@ -116,7 +118,7 @@ def test_sub(sample_a: ChainAmounts, sample_b: ChainAmounts) -> None:
 
 def test_division_by_zero(sample_a: ChainAmounts) -> None:
     """Test division by zero raises ValueError."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="Cannot divide by zero"):
         _ = sample_a // 0
 
 
@@ -159,3 +161,129 @@ def test_negative_results_and_presence(
     result = sample_b - sample_a
     assert result["chain1"]["addr1"]["tokenX"] == -8  # 2 - 10
     assert result["chain2"]["addr3"]["tokenZ"] == -100
+
+
+def test_version_eq_not_implemented() -> None:
+    """Test Version.__eq__ returns NotImplemented for non-Version objects."""
+    v = Version("1.0.0")
+    result = v.__eq__("1.0.0")
+    assert result is NotImplemented
+
+
+def test_on_chain_user_params_use_staking_none() -> None:
+    """Test use_staking returns False when staking_program_id is None."""
+    params = OnChainUserParams(
+        staking_program_id=None,  # type: ignore[arg-type]
+        nft="bafybei_test",
+        agent_id=14,
+        cost_of_bond=BigInt(1000),
+        fund_requirements={},
+    )
+    assert params.use_staking is False
+
+
+def test_on_chain_user_params_use_staking_no_staking_id() -> None:
+    """Test use_staking returns False when staking_program_id is NO_STAKING_PROGRAM_ID."""
+    params = OnChainUserParams(
+        staking_program_id=NO_STAKING_PROGRAM_ID,
+        nft="bafybei_test",
+        agent_id=14,
+        cost_of_bond=BigInt(1000),
+        fund_requirements={},
+    )
+    assert params.use_staking is False
+
+
+def test_on_chain_user_params_use_staking_real_program() -> None:
+    """Test use_staking returns True when staking_program_id is a real staking program."""
+    params = OnChainUserParams(
+        staking_program_id="pearl_alpha",
+        nft="bafybei_test",
+        agent_id=14,
+        cost_of_bond=BigInt(1000),
+        fund_requirements={},
+    )
+    assert params.use_staking is True
+
+
+def test_chain_amounts_json_round_trip() -> None:
+    """Test ChainAmounts.json property serializes amounts and from_json deserializes them."""
+    original = ChainAmounts(
+        {"chain1": {"addr1": {"tokenX": BigInt(100), "tokenY": BigInt(50)}}}
+    )
+    json_repr = original.json
+    restored = ChainAmounts.from_json(json_repr)
+    assert restored["chain1"]["addr1"]["tokenX"] == BigInt(100)
+    assert restored["chain1"]["addr1"]["tokenY"] == BigInt(50)
+
+
+def test_chain_amounts_from_json_nested_structure() -> None:
+    """Test ChainAmounts.from_json handles nested chain/address/asset structure."""
+    obj = {
+        "chain1": {
+            "addr1": {"tokenX": "999999999999999999"},
+            "addr2": {"tokenZ": "200"},
+        },
+        "chain2": {"addr3": {"tokenA": "0"}},
+    }
+    result = ChainAmounts.from_json(obj)
+    assert result["chain1"]["addr1"]["tokenX"] == BigInt(999999999999999999)
+    assert result["chain1"]["addr2"]["tokenZ"] == BigInt(200)
+    assert result["chain2"]["addr3"]["tokenA"] == BigInt(0)
+
+
+def test_chain_amounts_shortfalls_with_shortfall() -> None:
+    """Test ChainAmounts.shortfalls returns positive shortfall when balance is below requirement."""
+    requirements = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(100)}}})
+    balances = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(40)}}})
+    shortfalls = ChainAmounts.shortfalls(requirements, balances)
+    assert shortfalls["chain1"]["addr1"]["tokenX"] == BigInt(60)
+
+
+def test_chain_amounts_shortfalls_no_shortfall() -> None:
+    """Test ChainAmounts.shortfalls returns zero when balance exceeds requirement."""
+    requirements = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(100)}}})
+    balances = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(200)}}})
+    shortfalls = ChainAmounts.shortfalls(requirements, balances)
+    assert shortfalls["chain1"]["addr1"]["tokenX"] == BigInt(0)
+
+
+def test_chain_amounts_shortfalls_missing_chain() -> None:
+    """Test ChainAmounts.shortfalls returns full requirement when chain is absent from balances."""
+    requirements = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(100)}}})
+    balances = ChainAmounts({})
+    shortfalls = ChainAmounts.shortfalls(requirements, balances)
+    assert shortfalls["chain1"]["addr1"]["tokenX"] == BigInt(100)
+
+
+def test_chain_amounts_lt_all_strictly_less() -> None:
+    """Test ChainAmounts.__lt__ returns True when all amounts are strictly less."""
+    low = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(1)}}})
+    high = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(10)}}})
+    assert (low < high) is True
+
+
+def test_chain_amounts_lt_equal_is_not_strictly_less() -> None:
+    """Test ChainAmounts.__lt__ returns False when an amount equals the other."""
+    equal_a = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(5)}}})
+    equal_b = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(5)}}})
+    assert (equal_a < equal_b) is False
+
+
+def test_chain_amounts_lt_one_amount_greater() -> None:
+    """Test ChainAmounts.__lt__ returns False when one amount is greater."""
+    mixed = ChainAmounts(
+        {"chain1": {"addr1": {"tokenX": BigInt(10), "tokenY": BigInt(1)}}}
+    )
+    other = ChainAmounts(
+        {"chain1": {"addr1": {"tokenX": BigInt(5), "tokenY": BigInt(5)}}}
+    )
+    # tokenX (10) >= tokenX in other (5) => returns False
+    assert (mixed < other) is False
+
+
+def test_chain_amounts_lt_empty_is_vacuously_true() -> None:
+    """Test ChainAmounts.__lt__ returns True when self is empty (vacuous truth)."""
+    empty = ChainAmounts({})
+    other = ChainAmounts({"chain1": {"addr1": {"tokenX": BigInt(1)}}})
+    assert (empty < other) is True

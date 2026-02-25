@@ -35,12 +35,7 @@ from operate.keys import KeysManager
 from operate.ledger import get_default_ledger_api
 from operate.ledger.profiles import DUST, ERC20_TOKENS, USDC, format_asset_amount
 from operate.operate_types import Chain, LedgerType
-from operate.utils.gnosis import (
-    add_owner,
-    estimate_transfer_tx_fee,
-    get_asset_balance,
-    get_owners,
-)
+from operate.utils.gnosis import estimate_transfer_tx_fee, get_asset_balance, get_owners
 from operate.wallet.master import (
     EthereumMasterWallet,
     InsufficientFundsException,
@@ -54,6 +49,7 @@ from tests.constants import LOGGER, RUNNING_IN_CI
 TX_FEE_TOLERANCE = 2
 
 
+@pytest.mark.integration
 class TestMasterWalletOnTestnet(OnTestnet):
     """Tests for wallet.wallet_recoverey_manager.WalletRecoveryManager class."""
 
@@ -180,8 +176,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -194,7 +191,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         safe_address = wallet.safes[chain]
         tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
-        tokens = [token[chain] for token in ERC20_TOKENS.values()]
+        tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
             if token == USDC[chain]:
@@ -202,7 +199,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
             tenderly_add_balance(chain, eoa_address, topup, token)
             tenderly_add_balance(chain, safe_address, topup, token)
 
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
 
         # Test 1 - Remove partial amount of all assets
         for asset in assets:
@@ -258,8 +257,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer_error_funds"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
@@ -272,7 +272,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         safe_address = wallet.safes[chain]
         tenderly_add_balance(chain, safe_address, topup, ZERO_ADDRESS)
 
-        tokens = [token[chain] for token in ERC20_TOKENS.values()]
+        tokens = [token[chain] for token in ERC20_TOKENS.values() if chain in token]
         for token in tokens:
             topup = int(10e18)
             if token == USDC[chain]:
@@ -280,7 +280,9 @@ class TestMasterWalletOnTestnet(OnTestnet):
             tenderly_add_balance(chain, eoa_address, topup, token)
             tenderly_add_balance(chain, safe_address, topup, token)
 
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
 
         for asset in assets:
             for from_safe in (True, False):
@@ -317,15 +319,18 @@ class TestMasterWalletOnTestnet(OnTestnet):
         """test_transfer_error_safes"""
 
         keys_manager = KeysManager(
-            path=tmp_path / KEYS_DIR,  # pylint: disable=protected-access
+            path=tmp_path / KEYS_DIR,
             logger=LOGGER,
+            password=password,
         )
         receiver_addr = keys_manager.create()
 
         wallet, _ = wallet_class.new(password=password, path=tmp_path / WALLETS_DIR)
 
         chain = Chain.POLYGON  # Chain not funded
-        assets = [token[chain] for token in ERC20_TOKENS.values()] + [ZERO_ADDRESS]
+        assets = [token[chain] for token in ERC20_TOKENS.values() if chain in token] + [
+            ZERO_ADDRESS
+        ]
         for asset in assets:
             assert wallet.get_balance(chain=chain, asset=asset, from_safe=False) == 0
             with pytest.raises(
@@ -367,7 +372,7 @@ class TestMasterWalletOnTestnet(OnTestnet):
         wallet, _ = wallet_manager.create(LedgerType.ETHEREUM)
         chain1 = Chain.GNOSIS
         chain2 = Chain.OPTIMISM
-        backup_owner = KeysManager().create()
+        backup_owner = test_operate.keys_manager.create()
         for chain in (chain1, chain2):
             assert chain not in wallet.safes
             assert chain not in wallet.safe_chains
@@ -417,17 +422,12 @@ class TestMasterWalletOnTestnet(OnTestnet):
         assert chain2 not in wallet.safe_chains
         assert wallet.safe_nonce == created_nonce
 
-        call_count = {"count": 0}
-
-        def flaky_add_owner(*args, **kwargs) -> None:
-            call_count["count"] += 1
-            if call_count["count"] < 5:
-                raise Exception("Simulated failure")
-            return add_owner(*args, **kwargs)
-
         # Create safe on another chain, but fail while adding backup owner
-        with patch("operate.utils.gnosis.add_owner", side_effect=flaky_add_owner):
-            with patch("time.sleep", lambda x: None):
+        with patch(
+            "operate.wallet.master.add_owner",
+            side_effect=Exception("Simulated failure"),
+        ):
+            with pytest.raises(Exception, match="Simulated failure"):
                 wallet.create_safe(chain=chain2, backup_owner=backup_owner)
 
         assert wallet.safe_nonce == created_nonce
@@ -435,10 +435,26 @@ class TestMasterWalletOnTestnet(OnTestnet):
         for chain in (chain1, chain2):
             assert chain in wallet.safes
             assert chain in wallet.safe_chains
-            assert backup_owner in get_owners(
-                ledger_api=wallet.ledger_api(chain),
-                safe=wallet.safes[chain],
-            )
+
+        assert backup_owner in get_owners(
+            ledger_api=wallet.ledger_api(chain1),
+            safe=wallet.safes[chain1],
+        )
+        assert backup_owner not in get_owners(
+            ledger_api=wallet.ledger_api(chain2),
+            safe=wallet.safes[chain2],
+        )
+
+        # Try the same call again, only to add the backup owner successfully
+        wallet.create_safe(chain=chain2, backup_owner=backup_owner)
+        assert wallet.safe_nonce == created_nonce
+        for chain in (chain1, chain2):
+            assert set(
+                get_owners(
+                    ledger_api=wallet.ledger_api(chain),
+                    safe=wallet.safes[chain],
+                )
+            ) == {wallet.address, backup_owner}
 
 
 class TestMasterWallet:

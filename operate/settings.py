@@ -25,6 +25,7 @@ from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import LedgerType
 from operate.resource import LocalResource, serialize
+from operate.serialization import BigInt
 from operate.utils import SingletonMeta
 from operate.wallet.master import MasterWalletManager
 
@@ -42,7 +43,7 @@ class Settings(LocalResource, metaclass=SingletonMeta):
     _file = SETTINGS_JSON
 
     version: int
-    eoa_topups: Dict[str, Dict[str, int]]
+    eoa_topups: Dict[str, Dict[str, BigInt]]
 
     def __init__(self, path: Optional[Path] = None, **kwargs: Any) -> None:
         """Initialize settings."""

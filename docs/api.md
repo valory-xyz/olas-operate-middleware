@@ -49,7 +49,7 @@ Get current settings.
   "version": 1,
   "eoa_topups": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 750000000000000000
+      "0x0000000000000000000000000000000000000000": "750000000000000000"
     }
   },
   "eoa_thresholds": {
@@ -333,8 +333,8 @@ falling back to Master EOA if needed.
   "to": "0x...",
   "withdraw_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000,
-      "0x...": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000",
+      "0x...": "500000000000000000"
     }
   }
 }
@@ -504,7 +504,7 @@ Get Master EOA mnemonic.
 }
 ```
 
-### `GET /api/extended/wallet`
+### `GET /api/wallet/extended`
 
 Get extended wallet information including safes and additional metadata.
 
@@ -521,8 +521,8 @@ Get extended wallet information including safes and additional metadata.
         "0x...": {
           "backup_owners": ["0x..."],
           "balances": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
           }
         }
       }
@@ -530,16 +530,17 @@ Get extended wallet information including safes and additional metadata.
     "balances": {
       "gnosis": {
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },
         "0x...": {
-            "0x0000000000000000000000000000000000000000": 1000000000000000000,
-            "0x...": 500000000000000000
+            "0x0000000000000000000000000000000000000000": "1000000000000000000",
+            "0x...": "500000000000000000"
         },        
       }
     },
     "extended_json": true,
+    "all_safes_have_backup_owner": true,
     "consistent_safe_address": true,
     "consistent_backup_owner": true,
     "consistent_backup_owner_count": true
@@ -575,9 +576,9 @@ Get all safes for all wallets.
 
 ## Wallet Recovery
 
-### `POST /api/wallet/recovery/initiate`
+### `POST /api/wallet/recovery/prepare`
 
-Initiate wallet recovery.
+Prepare wallet recovery. Creates a new recovery bundle or returns the last incomplete bundle if it contains partial backup owner swaps.
 
 **Request Body:**
 
@@ -597,8 +598,22 @@ Initiate wallet recovery.
       "current_wallet": {
         "address": "0x...",
         "safes": {
-          "gnosis": "0x...",
-          "base": "0x..."
+          "gnosis": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          },
+          "base": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          }
         },
         "safe_chains": [
           "gnosis",
@@ -615,8 +630,20 @@ Initiate wallet recovery.
         "safe_nonce": 1234567890
       },
       "new_mnemonic": ["word1", "word2", "word3", ...]
-    }
-  ]
+    },
+  ],
+  "status": "PREPARED",
+  "all_safes_have_backup_owner": true,
+  "consistent_safe_address": true,
+  "consistent_backup_owner": true,
+  "consistent_backup_owner_count": true,
+  "prepared": true,
+  "has_swaps": false,
+  "has_pending_swaps": true,
+  "num_safes": 2,
+  "num_safes_with_new_wallet": 0,
+  "num_safes_with_old_wallet": 2,
+  "num_safes_with_both_wallets": 0
 }
 ```
 
@@ -648,28 +675,141 @@ Initiate wallet recovery.
 
 ```json
 {
-  "error": "Failed to initiate recovery. Please check the logs."
+  "error": "Failed to prepare recovery. Please check the logs."
+}
+```
+
+### `GET /api/wallet/recovery/funding_requirements`
+
+Get backup owner funding requirements to complete wallet recovery process.
+
+**Response (Success - 200):**
+
+```json
+{
+  "balances": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
+      }
+    }
+  },
+  "total_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
+      }
+    }
+  },
+  "refill_requirements": {
+    "gnosis": {
+      "0x...": {
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
+      }
+    }
+  },
+  "is_refill_required": true,
+  "pending_backup_owner_swaps": {
+    "gnosis": ["0x..."]
+  }
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery funding requirements. Please check the logs."
+}
+```
+
+### `GET /api/wallet/recovery/status`
+
+Get recovery status.
+
+**Response (Success - 200):**
+
+```json
+{
+  "id": "bundle_123",
+  "wallets": [
+    {
+      "current_wallet": {
+        "address": "0x...",
+        "safes": {
+          "gnosis": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": null,
+              "owner_to_add": null
+            }
+          },
+          "base": {
+            "0x...": {
+              "owners": ["0x...", "0x..."],
+              "backup_owners": ["0x...", "0x..."],
+              "owner_to_remove": "0x...",
+              "owner_to_add": "0x..."
+            }
+          }
+        },
+        "safe_chains": [
+          "gnosis",
+          "base"
+        ],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_wallet": {
+        "address": "0x...",
+        "safes": {},
+        "safe_chains": [],
+        "ledger_type": "ethereum",
+        "safe_nonce": 1234567890
+      },
+      "new_mnemonic": null
+    },
+  ],
+  "status": "IN_PROGRESS",
+  "all_safes_have_backup_owner": true,
+  "consistent_safe_address": true,
+  "consistent_backup_owner": true,
+  "consistent_backup_owner_count": true,
+  "prepared": true,
+  "has_swaps": false,
+  "has_pending_swaps": true,
+  "num_safes": 2,
+  "num_safes_with_new_wallet": 1,
+  "num_safes_with_old_wallet": 1,
+  "num_safes_with_both_wallets": 0
+}
+```
+
+**Response (Failed - 500):**
+
+```json
+{
+  "error": "Failed to retrieve recovery status. Please check the logs."
 }
 ```
 
 ### `POST /api/wallet/recovery/complete`
 
-Initiate wallet recovery.
+Complete wallet recovery.
 
 **Request Body:**
 
 ```json
 {
-  "id": "bundle_123",
-  "password": "your_new_password",
   "require_consistent_owners": true
 }
 ```
 
-`new_wallet` must be an owner of all Safes created by `current_wallet` to proceed. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
+New MasterEOA (output from `POST /api/wallet/recovery/prepare`) must be an owner of all Safes where current (old) MasterEOA is an owner. Additionally, the flag `require_consistent_owners` enforces the following checks to proceed:
 
 - Current (old) MasterEOA cannot be a Safe owner.
-- All Safes must have two owners (`new_wallet` and a backup owner).
+- All Safes must have two owners (new MasterEOA and a backup owner).
 - All backup owners must match in all Safes.
 
 **Response (Success - 200):**
@@ -820,7 +960,12 @@ Get the safe address for a specific chain.
 
 ### `POST /api/wallet/safe`
 
-Create a new Gnosis Safe.
+Create or ensure a Gnosis Safe exists for the specified chain and fund it if needed.
+
+The endpoint automatically skips Safe creation if one already exists for the chain. It will only perform transfers if additional funds are required (or if excess assets should be swept when `transfer_excess_assets` is enabled).
+
+**Important note on transactions:**  
+The endpoint only returns transaction hashes (`create_tx` and `transfer_txs`) for actions actually executed **during the current request**. If the Safe already exists and is sufficiently funded, no transactions are performed and the fields will be `null` / empty. The client is responsible for tracking transaction hashes across multiple calls if needed (e.g. for confirmation or monitoring).
 
 **Request Body:**
 
@@ -834,7 +979,7 @@ Create a new Gnosis Safe.
 }
 ```
 
-**Request Body (with asset transfer):**
+**Request Body (with transfer excess assets):**
 
 ```json
 {
@@ -844,25 +989,93 @@ Create a new Gnosis Safe.
 }
 ```
 
-**Response (Success - 201):**
+**Response (Safe created, funding - 200):**
 
 ```json
 {
+  "safe": "0x...",
   "create_tx": "0x...",
   "transfer_txs": {
     "0x0000000000000000000000000000000000000000": "0x..."
   },
-  "safe": "0x...",
-  "message": "Safe created successfully"
+  "transfer_errors": {},
+  "message": "Safe created and funded successfully.",
+  "status": "SAFE_CREATED_TRANSFER_COMPLETED"
 }
 ```
 
-**Response (Safe exists - 200):**
+**Response (Safe created, funding failed - 200):**
 
 ```json
 {
   "safe": "0x...",
-  "message": "Safe already exists for this chain."
+  "create_tx": "0x...",
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe created but some funding transactions failed.",
+  "status": "SAFE_CREATED_TRANSFER_FAILED"
+}
+```
+
+**Response (Safe exists, funding - 200):**
+
+```json
+{
+  "safe": "0x...",
+  "create_tx": null,
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {},
+  "message": "Safe already exists and funded successfully.",
+  "status": "SAFE_EXISTS_TRANSFER_COMPLETED"
+}
+```
+
+**Response (Safe exists, funding failed - 200):**
+
+```json
+{
+  "safe": "0x...",
+  "create_tx": null,
+  "transfer_txs": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "transfer_errors": {
+    "0x0000000000000000000000000000000000000000": "0x..."
+  },
+  "message": "Safe already exists but some funding transactions failed.",
+  "status": "SAFE_EXISTS_TRANSFER_FAILED"
+}
+```
+
+**Response (Safe exists, no funding needed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
+  "transfer_txs": {},
+  "transfer_errors": {},
+  "message": "Safe already exists and is sufficiently funded.",
+  "status": "SAFE_EXISTS_ALREADY_FUNDED"
+}
+```
+
+**Response (Safe creation failed - 200):**
+
+```json
+{
+  "safe": null,
+  "create_tx": null,
+  "transfer_txs": {},
+  "transfer_errors": {},
+  "message": "Failed to create Safe.",
+  "status": "SAFE_CREATION_FAILED"
 }
 ```
 
@@ -895,14 +1108,6 @@ Create a new Gnosis Safe.
 ```json
 {
   "error": "User account not found."
-}
-```
-
-**Response (Creation failed - 500):**
-
-```json
-{
-  "error": "Failed to create safe. Please check the logs."
 }
 ```
 
@@ -998,17 +1203,25 @@ Get all valid services.
 ```json
 [
   {
-    "service_config_id": "service_123",
     "name": "My Service",
-    "description": "Service description",
+    "version": 9,
+    "service_config_id": "service_123",
     "service_public_id": "valory/service_123:0.1.0",
-    "hash": "bafybeic...",
-    "keys": [
-      {
-        "ledger": "ethereum",
-        "address": "0x...",
-        "private_key": "0x..."
+    "package_path": "package",
+    "hash": "bafybei...",
+    "hash_history": {
+      "1756295395": "bafybei..."
+    },
+    "agent_release": {
+      "is_aea": true,
+      "repository": {
+        "owner": "org",
+        "name": "repo",
+        "release_tag": "v0.0.100"
       }
+    },
+    "agent_addresses": [
+      "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
     ],
     "home_chain": "gnosis",
     "chain_configs": {
@@ -1029,15 +1242,24 @@ Get all valid services.
             "threshold": 1,
             "use_staking": true,
             "use_mech_marketplace": false,
-            "cost_of_bond": 10000000000000000000,
+            "cost_of_bond": "10000000000000000000",
             "fund_requirements": {
               "0x0000000000000000000000000000000000000000": {
-                "agent": 100000000000000000,
-                "safe": 500000000000000000
+                "agent": "100000000000000000",
+                "safe": "500000000000000000"
               }
             }
           }
         }
+      }
+    },
+    "description": "Service description",
+    "env_variables": {
+      "ENV_VAR_NAME": {
+        "name": "Environment Variable Name",
+        "description": "Description of the environment variable",
+        "value": "Value of the environment variable",
+        "provision_type": "fixed/computed/user"
       }
     }
   }
@@ -1112,17 +1334,25 @@ Get a specific service.
 
 ```json
 {
-  "service_config_id": "service_123",
   "name": "My Service",
-  "description": "Service description",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "hash": "bafybeic...",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1143,15 +1373,24 @@ Get a specific service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1291,38 +1530,38 @@ Notes:
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "agent_funding_requests": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
@@ -1352,32 +1591,32 @@ Get service refill requirements.
   "balances": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bonded_assets": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 500000000000000000
+      "0x0000000000000000000000000000000000000000": "500000000000000000"
     }
   },
   "total_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 2000000000000000000
+        "0x0000000000000000000000000000000000000000": "2000000000000000000"
       }
     }
   },
   "refill_requirements": {
     "gnosis": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "protocol_asset_requirements": {
     "gnosis": {
-      "0x0000000000000000000000000000000000000000": 1000000000000000000
+      "0x0000000000000000000000000000000000000000": "1000000000000000000"
     }
   },
   "is_refill_required": true,
@@ -1402,15 +1641,24 @@ Create a new service.
 ```json
 {
   "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1431,15 +1679,24 @@ Create a new service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1449,17 +1706,25 @@ Create a new service.
 
 ```json
 {
-  "service_config_id": "service_123",
   "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1480,15 +1745,24 @@ Create a new service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1510,16 +1784,24 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 
 ```json
 {
-  "name": "Updated Service Name",
-  "description": "Updated description",
-  "hash": "bafybeic...",
-  "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "name": "My Service",
+  "version": 9,
+  "service_config_id": "service_123",
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1540,15 +1822,24 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   },
   "allow_different_service_public_id": false
@@ -1559,17 +1850,24 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
 
 ```json
 {
+  "name": "My Service",
+  "version": 9,
   "service_config_id": "service_123",
-  "name": "Updated Service Name",
-  "description": "Updated description",
-  "hash": "bafybeic...",
-  "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1590,15 +1888,24 @@ Update a service configuration. Use `PUT` for full updates and `PATCH` for parti
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1628,17 +1935,25 @@ Deploy and run a service.
 
 ```json
 {
-  "service_config_id": "service_123",
   "name": "My Service",
-  "description": "Service description",
-  "hash": "bafybeic...",
+  "version": 9,
+  "service_config_id": "service_123",
   "service_public_id": "valory/service_123:0.1.0",
-  "keys": [
-    {
-      "ledger": "ethereum",
-      "address": "0x...",
-      "private_key": "0x..."
+  "package_path": "package",
+  "hash": "bafybei...",
+  "hash_history": {
+    "1756295395": "bafybei..."
+  },
+  "agent_release": {
+    "is_aea": true,
+    "repository": {
+      "owner": "org",
+      "name": "repo",
+      "release_tag": "v0.0.100"
     }
+  },
+  "agent_addresses": [
+    "0x8EA6C20bcC4cCBE59463F579c363732D66F804F9"
   ],
   "home_chain": "gnosis",
   "chain_configs": {
@@ -1659,15 +1974,24 @@ Deploy and run a service.
           "threshold": 1,
           "use_staking": true,
           "use_mech_marketplace": false,
-          "cost_of_bond": 10000000000000000000,
+          "cost_of_bond": "10000000000000000000",
           "fund_requirements": {
             "0x0000000000000000000000000000000000000000": {
-              "agent": 100000000000000000,
-              "safe": 500000000000000000
+              "agent": "100000000000000000",
+              "safe": "500000000000000000"
             }
           }
         }
       }
+    }
+  },
+  "description": "Service description",
+  "env_variables": {
+    "ENV_VAR_NAME": {
+      "name": "Environment Variable Name",
+      "description": "Description of the environment variable",
+      "value": "Value of the environment variable",
+      "provision_type": "fixed/computed/user"
     }
   }
 }
@@ -1895,6 +2219,80 @@ Funds the agent or service Safe from Master Safe. Fails (409 - Request conflict)
 }
 ```
 
+## Service achievements
+
+### `GET /api/v2/service/{service_config_id}/achievements`
+
+Get service achievements notifications.
+
+Query parameters:
+
+- `include_acknowledged` (boolean, optional, default: `false`): Include acknowledged achievements.
+
+**Response (Success - 200):**
+
+```json
+[
+  {
+    "achievement_id": "achievement_1",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  },
+  {
+    "achievement_id": "achievement_2",
+    "acknowledged": false,
+    "acknowledgement_timestamp": 0,
+    "..."  # Achievement data
+  }
+]
+```
+
+**Response (Service not found - 404):**
+
+```json
+{
+  "error": "Service service_123 not found"
+}
+```
+
+### `POST /api/v2/service/{service_config_id}/achievement/{achievement_id}/acknowledge`
+
+Acknowledge a service achievement.
+
+**Response (Success - 200):**
+
+```json
+{
+  "error": null,
+  "message": "Acknowledged achievement achievement_1 for service service_123 successfully."
+}
+```
+
+**Response (Achievement already acknowledged - 400):**
+
+```json
+{
+  "error": "Achievement achievement_1 was already acknowledged for service service_123."
+}
+```
+
+**Response (Not logged in - 401):**
+
+```json
+{
+  "error": "User not logged in."
+}
+```
+
+**Response (Achievement not found - 404):**
+
+```json
+{
+  "error": "Achievement achievement_1 does not exist for service service_123."
+}
+```
+
 ## Bridge Management
 
 ### `POST /api/bridge/bridge_refill_requirements`
@@ -1924,21 +2322,21 @@ Get bridge refill requirements for cross-chain transactions.
   "balances": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1000000000000000000
+        "0x0000000000000000000000000000000000000000": "1000000000000000000"
       }
     }
   },
   "bridge_refill_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 500000000000000000
+        "0x0000000000000000000000000000000000000000": "500000000000000000"
       }
     }
   },
   "bridge_total_requirements": {
     "ethereum": {
       "0x...": {
-        "0x0000000000000000000000000000000000000000": 1500000000000000000
+        "0x0000000000000000000000000000000000000000": "1500000000000000000"
       }
     }
   },

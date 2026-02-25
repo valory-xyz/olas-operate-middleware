@@ -39,6 +39,7 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
+from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER
 from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
 from operate.operate_types import Chain
 
@@ -101,6 +102,15 @@ RELAY_DEFAULT_GAS = {
         "swap": 400_000,
         "send": 1,
     },
+    Chain.ARBITRUM_ONE: {
+        "deposit": 50_000,
+        "approve": 200_000,
+        "authorize": 1,
+        "authorize1": 1,
+        "authorize2": 1,
+        "swap": 400_000,
+        "send": 1,
+    },
 }
 
 
@@ -127,7 +137,9 @@ class RelayProvider(Provider):
         """Get a human-readable description of the provider."""
         return "Relay Protocol https://www.relay.link/"
 
-    def quote(self, provider_request: ProviderRequest) -> None:
+    def quote(  # pylint: disable=too-many-locals, too-many-statements
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the request with the quote."""
         self._validate(provider_request)
 
@@ -179,7 +191,9 @@ class RelayProvider(Provider):
             "tradeType": "EXACT_OUTPUT",
             "enableTrueExactOutput": False,
         }
-        for attempt in range(1, DEFAULT_MAX_QUOTE_RETRIES + 1):
+        for attempt in range(  # pylint: disable=too-many-nested-blocks
+            1, DEFAULT_MAX_QUOTE_RETRIES + 1
+        ):
             start = time.time()
             try:
                 self.logger.info(f"[RELAY PROVIDER] POST {url}")
@@ -340,7 +354,9 @@ class RelayProvider(Provider):
                 tx["maxPriorityFeePerGas"] = int(tx.get("maxPriorityFeePerGas", 0))
                 tx["nonce"] = from_ledger_api.api.eth.get_transaction_count(tx["from"])
                 update_tx_with_gas_pricing(tx, from_ledger_api)
-                update_tx_with_gas_estimate(tx, from_ledger_api)
+                update_tx_with_gas_estimate(
+                    tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+                )
                 txs.append((f"{step['id']}-{i}", tx))
 
         return txs
@@ -387,52 +403,58 @@ class RelayProvider(Provider):
                 execution_data.message = str(relay_status)
             else:
                 provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+                if self._bridge_tx_likely_failed(provider_request):
+                    provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                 return
             response.raise_for_status()
-        except Exception as e:
+
+            if relay_status == RelayExecutionStatus.SUCCESS:
+                self.logger.info(
+                    f"[RELAY PROVIDER] Execution done for {provider_request.id}."
+                )
+                from_ledger_api = self._from_ledger_api(provider_request)
+                to_ledger_api = self._to_ledger_api(provider_request)
+
+                if (
+                    response_json["requests"][0]["data"]["outTxs"][0]["chainId"]
+                    == response_json["requests"][0]["data"]["inTxs"][0]["chainId"]
+                ):
+                    to_tx_hash = from_tx_hash  # Should match response_json["requests"][0]["data"]["inTxs"][0]["hash"]
+                else:
+                    to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0][
+                        "hash"
+                    ]
+
+                execution_data.message = response_json.get("details", None)
+                execution_data.to_tx_hash = to_tx_hash
+                execution_data.elapsed_time = Provider._tx_timestamp(
+                    to_tx_hash, to_ledger_api
+                ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
+                provider_request.status = ProviderRequestStatus.EXECUTION_DONE
+                execution_data.provider_data = {
+                    "response": response_json,
+                }
+            elif relay_status in (
+                RelayExecutionStatus.FAILURE,
+                RelayExecutionStatus.REFUND,
+            ):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            elif relay_status in (
+                RelayExecutionStatus.PENDING,
+                RelayExecutionStatus.DELAYED,
+                RelayExecutionStatus.WAITING,
+            ):
+                provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
+            else:
+                provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+        except Exception as e:  # pylint:disable=broad-except
             self.logger.error(
                 f"[RELAY PROVIDER] Failed to update status for request {provider_request.id}: {e}"
             )
             provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
             return
-
-        if relay_status == RelayExecutionStatus.SUCCESS:
-            self.logger.info(
-                f"[RELAY PROVIDER] Execution done for {provider_request.id}."
-            )
-            from_ledger_api = self._from_ledger_api(provider_request)
-            to_ledger_api = self._to_ledger_api(provider_request)
-
-            if (
-                response_json["requests"][0]["data"]["outTxs"][0]["chainId"]
-                == response_json["requests"][0]["data"]["inTxs"][0]["chainId"]
-            ):
-                to_tx_hash = from_tx_hash  # Should match response_json["requests"][0]["data"]["inTxs"][0]["hash"]
-            else:
-                to_tx_hash = response_json["requests"][0]["data"]["outTxs"][0]["hash"]
-
-            execution_data.message = response_json.get("details", None)
-            execution_data.to_tx_hash = to_tx_hash
-            execution_data.elapsed_time = Provider._tx_timestamp(
-                to_tx_hash, to_ledger_api
-            ) - Provider._tx_timestamp(from_tx_hash, from_ledger_api)
-            provider_request.status = ProviderRequestStatus.EXECUTION_DONE
-            execution_data.provider_data = {
-                "response": response_json,
-            }
-        elif relay_status in (
-            RelayExecutionStatus.FAILURE,
-            RelayExecutionStatus.REFUND,
-        ):
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
-        elif relay_status in (
-            RelayExecutionStatus.PENDING,
-            RelayExecutionStatus.DELAYED,
-            RelayExecutionStatus.WAITING,
-        ):
-            provider_request.status = ProviderRequestStatus.EXECUTION_PENDING
-        else:
-            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
 
     def _get_explorer_link(self, provider_request: ProviderRequest) -> t.Optional[str]:
         """Get the explorer link for a transaction."""

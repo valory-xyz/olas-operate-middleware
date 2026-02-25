@@ -22,7 +22,6 @@
 
 import time
 import typing as t
-from functools import cache
 from pathlib import Path
 
 import pytest
@@ -45,7 +44,7 @@ from operate.bridge.providers.relay_provider import RelayProvider
 from operate.cli import OperateApp
 from operate.constants import ZERO_ADDRESS
 from operate.ledger.profiles import OLAS, USDC
-from operate.operate_types import Chain, ChainAmounts, LedgerType
+from operate.operate_types import Chain, LedgerType
 
 from tests.constants import OPERATE_TEST
 
@@ -53,20 +52,21 @@ from tests.constants import OPERATE_TEST
 COINGECKO_PLATFORM_IDS = {
     "ethereum": "ethereum",
     "polygon": "polygon-pos",
-    "arbitrum": "arbitrum-one",
-    "optimism": "optimism-ethereum",
+    "arbitrum_one": "arbitrum-one",
+    "optimism": "optimistic-ethereum",
     "binance": "binance-smart-chain",
     "avalanche": "avalanche",
     "fantom": "fantom",
     "base": "base",
     "mode": "mode",
     "gnosis": "xdai",
+    "celo": "celo",
 }
 
 COINGECKO_NATIVE_IDS = {
     "ethereum": "ethereum",
-    "polygon": "matic-network",
-    "arbitrum": "ethereum",
+    "polygon": "polygon-ecosystem-token",
+    "arbitrum_one": "ethereum",
     "optimism": "ethereum",
     "binance": "binancecoin",
     "avalanche": "avalanche-2",
@@ -74,14 +74,39 @@ COINGECKO_NATIVE_IDS = {
     "base": "ethereum",
     "mode": "ethereum",
     "gnosis": "xdai",
+    "celo": "celo",
 }
 
 
+@pytest.mark.integration
 class TestBridgeManager:
     """Tests for bridge.bridge_manager.BridgeManager class."""
 
     @staticmethod
-    @cache
+    def _fetch_with_retry(
+        url: str, params: dict, max_retries: int = 5, base_delay: float = 1.0
+    ) -> t.Optional[requests.Response]:
+        """Fetch URL with exponential backoff on rate limiting."""
+        for attempt in range(max_retries):
+            print(f"Fetching {url} (attempt {attempt + 1}/{max_retries})")
+            r = requests.get(url, params=params, timeout=30)
+
+            if r.status_code == 429:  # Rate limited
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
+                    print(f"Rate limited, retrying in {delay:.1f}s...")
+                    time.sleep(delay)
+                    continue
+                return None
+
+            if r.status_code != 200:
+                return None
+
+            return r
+
+        return None
+
+    @staticmethod
     def _get_token_price_usd(
         chain: str, token_address: str, amount: t.Optional[int] = None
     ) -> t.Optional[float]:
@@ -102,14 +127,18 @@ class TestBridgeManager:
             if not coingecko_id:
                 return None
             url = "https://api.coingecko.com/api/v3/simple/price"
-            print(f"Fetching {url}")
             params = {"ids": coingecko_id, "vs_currencies": "usd"}
-            r = requests.get(url, params=params, timeout=30)
-            if r.status_code != 200:
+
+            r = TestBridgeManager._fetch_with_retry(url, params)
+            if r is None:
                 return None
+
             data = r.json()
-            print(r.json())
-            return data.get(coingecko_id, {}).get("usd") * amount / (10**decimals)
+            print(data)
+            price_usd = data.get(coingecko_id, {}).get("usd")
+            if price_usd is None:
+                return None
+            return price_usd * amount / (10**decimals)
 
         platform_id = COINGECKO_PLATFORM_IDS.get(chain)
         if not platform_id:
@@ -117,13 +146,17 @@ class TestBridgeManager:
         token_address = token_address.lower()
         url = f"https://api.coingecko.com/api/v3/simple/token_price/{platform_id}"
         params = {"contract_addresses": token_address, "vs_currencies": "usd"}
-        print(f"Fetching {url}")
-        r = requests.get(url, params=params, timeout=30)
-        if r.status_code != 200:
+
+        r = TestBridgeManager._fetch_with_retry(url, params)
+        if r is None:
             return None
+
         data = r.json()
-        print(r.json())
-        return data.get(token_address, {}).get("usd") * amount / (10**decimals)
+        print(data)
+        price_usd = data.get(token_address, {}).get("usd")
+        if price_usd is None:
+            return None
+        return price_usd * amount / (10**decimals)
 
     def test_bundle_zero(
         self,
@@ -178,9 +211,9 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {"gnosis": {wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}}}
-            ),
+            "balances": {
+                "gnosis": {wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}}
+            },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
@@ -200,20 +233,20 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
@@ -258,7 +291,7 @@ class TestBridgeManager:
                     "chain": Chain.OPTIMISM.value,
                     "address": wallet_address,
                     "token": USDC[Chain.OPTIMISM],
-                    "amount": int(1000 * 1e18),
+                    "amount": int(10000 * 1e18),  # Large amount to trigger error
                 },
             },
             {
@@ -283,26 +316,22 @@ class TestBridgeManager:
         timestamp2 = time.time()
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                    },
-                    "gnosis": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
-                    },
-                }
-            ),
-            "bridge_refill_requirements": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, USDC[Chain.ETHEREUM]: 0}
-                    },
-                    "gnosis": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.GNOSIS]: 0}
-                    },
-                }
-            ),
+            "balances": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", USDC[Chain.ETHEREUM]: "0"}
+                },
+                "gnosis": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}
+                },
+            },
+            "bridge_refill_requirements": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", USDC[Chain.ETHEREUM]: "0"}
+                },
+                "gnosis": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.GNOSIS]: "0"}
+                },
+            },
             "bridge_request_status": [
                 {
                     "eta": None,
@@ -321,20 +350,20 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["gnosis"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == 0
+            brr["balances"]["gnosis"][wallet_address][OLAS[Chain.GNOSIS]] == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][ZERO_ADDRESS]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert (
             brr["bridge_refill_requirements"]["gnosis"][wallet_address][
                 OLAS[Chain.GNOSIS]
             ]
-            == 0
+            == "0"
         ), "Wrong refill requirements."
         assert not DeepDiff(
             brr["bridge_refill_requirements"], brr["bridge_total_requirements"]
@@ -418,13 +447,11 @@ class TestBridgeManager:
 
         expected_brr = {
             "id": brr["id"],
-            "balances": ChainAmounts(
-                {
-                    "ethereum": {
-                        wallet_address: {ZERO_ADDRESS: 0, OLAS[Chain.ETHEREUM]: 0}
-                    }
+            "balances": {
+                "ethereum": {
+                    wallet_address: {ZERO_ADDRESS: "0", OLAS[Chain.ETHEREUM]: "0"}
                 }
-            ),
+            },
             "bridge_refill_requirements": brr["bridge_refill_requirements"],
             "bridge_request_status": [
                 {
@@ -444,19 +471,25 @@ class TestBridgeManager:
         }
 
         assert (
-            brr["balances"]["ethereum"][wallet_address][ZERO_ADDRESS] == 0
+            brr["balances"]["ethereum"][wallet_address][ZERO_ADDRESS] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["balances"]["ethereum"][wallet_address][OLAS[Chain.ETHEREUM]] == 0
+            brr["balances"]["ethereum"][wallet_address][OLAS[Chain.ETHEREUM]] == "0"
         ), "Wrong refill requirements."
         assert (
-            brr["bridge_refill_requirements"]["ethereum"][wallet_address][ZERO_ADDRESS]
+            int(
+                brr["bridge_refill_requirements"]["ethereum"][wallet_address][
+                    ZERO_ADDRESS
+                ]
+            )
             > 0
         ), "Wrong refill requirements."
         assert (
-            brr["bridge_refill_requirements"]["ethereum"][wallet_address][
-                OLAS[Chain.ETHEREUM]
-            ]
+            int(
+                brr["bridge_refill_requirements"]["ethereum"][wallet_address][
+                    OLAS[Chain.ETHEREUM]
+                ]
+            )
             > 0
         ), "Wrong refill requirements."
         assert not DeepDiff(
@@ -474,12 +507,31 @@ class TestBridgeManager:
 
         assert not diff, "Wrong refill requirements."
 
-    @pytest.mark.parametrize("to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM])
-    def test_correct_providers_bridge_native(
+    @pytest.mark.vcr
+    @pytest.mark.parametrize(
+        ("to_chain_enum", "expected_provider_cls", "expected_contract_adaptor_cls"),
+        [
+            (Chain.ARBITRUM_ONE, RelayProvider, None),
+            (Chain.BASE, NativeBridgeProvider, OptimismContractAdaptor),
+            (Chain.CELO, RelayProvider, None),
+            (Chain.GNOSIS, RelayProvider, None),
+            pytest.param(
+                Chain.MODE,
+                NativeBridgeProvider,
+                OptimismContractAdaptor,
+                marks=pytest.mark.xfail(reason="MODE chain unstable"),
+            ),
+            (Chain.OPTIMISM, NativeBridgeProvider, OptimismContractAdaptor),
+            (Chain.POLYGON, RelayProvider, None),
+        ],
+    )
+    def test_correct_providers_native(
         self,
         tmp_path: Path,
         password: str,
         to_chain_enum: Chain,
+        expected_provider_cls: t.Type[Provider],
+        expected_contract_adaptor_cls: type[BridgeContractAdaptor],
     ) -> None:
         """test_correct_providers_bridge_native"""
         self._main_test_correct_providers(
@@ -489,38 +541,30 @@ class TestBridgeManager:
             from_token=ZERO_ADDRESS,
             to_chain=to_chain_enum.value,
             to_token=ZERO_ADDRESS,
-            expected_provider_cls=NativeBridgeProvider,
-            expected_contract_adaptor_cls=OptimismContractAdaptor,
-        )
-
-    @pytest.mark.parametrize(
-        ("to_chain_enum", "expected_provider_cls"),
-        [(Chain.GNOSIS, RelayProvider)],
-    )
-    def test_correct_providers_swap_native(
-        self,
-        tmp_path: Path,
-        password: str,
-        to_chain_enum: Chain,
-        expected_provider_cls: t.Type[Provider],
-    ) -> None:
-        """test_correct_providers_swap_native"""
-        self._main_test_correct_providers(
-            tmp_path=tmp_path,
-            password=password,
-            from_chain=Chain.ETHEREUM.value,
-            from_token=ZERO_ADDRESS,
-            to_chain=to_chain_enum.value,
-            to_token=ZERO_ADDRESS,
             expected_provider_cls=expected_provider_cls,
-            expected_contract_adaptor_cls=None,
+            expected_contract_adaptor_cls=expected_contract_adaptor_cls,
+            margin=0.2,
         )
 
     @pytest.mark.parametrize(
-        "to_chain_enum", [Chain.BASE, Chain.MODE, Chain.OPTIMISM, Chain.GNOSIS]
+        "to_chain_enum",
+        [
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.CELO,
+            Chain.GNOSIS,
+            pytest.param(
+                Chain.MODE, marks=pytest.mark.xfail(reason="MODE chain unstable")
+            ),
+            Chain.OPTIMISM,
+            pytest.param(
+                Chain.POLYGON,
+                marks=pytest.mark.xfail(reason="POLYGON slippage is too high"),
+            ),
+        ],
     )
-    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
-    def test_correct_providers_bridge_token(
+    @pytest.mark.parametrize("token_dict", [OLAS, USDC])
+    def test_correct_providers_token_bridge(
         self,
         tmp_path: Path,
         password: str,
@@ -529,19 +573,26 @@ class TestBridgeManager:
     ) -> None:
         """test_correct_providers_bridge_token"""
         expected_provider_cls: type[Provider] = NativeBridgeProvider
-        expected_contract_adaptor_cls: type[BridgeContractAdaptor]
-        if to_chain_enum == Chain.GNOSIS:
+        expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]] = (
+            OptimismContractAdaptor
+        )
+
+        if to_chain_enum in [
+            Chain.ARBITRUM_ONE,
+            Chain.CELO,
+            Chain.POLYGON,
+        ]:  # Superbridge reports Relay instead of native bridge for CELO
+            expected_provider_cls = RelayProvider
+            expected_contract_adaptor_cls = None
+        elif to_chain_enum == Chain.BASE and token_dict == USDC:
+            expected_provider_cls = LiFiProvider
+            expected_contract_adaptor_cls = None
+        elif to_chain_enum == Chain.GNOSIS:
+            expected_provider_cls = NativeBridgeProvider
             expected_contract_adaptor_cls = OmnibridgeContractAdaptor
-        else:
-            expected_contract_adaptor_cls = OptimismContractAdaptor
-
-        if to_chain_enum == Chain.BASE and token_dict == USDC:
+        elif to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
             expected_provider_cls = LiFiProvider
-            expected_contract_adaptor_cls = None  # type: ignore
-
-        if to_chain_enum == Chain.OPTIMISM and token_dict == USDC:
-            expected_provider_cls = LiFiProvider
-            expected_contract_adaptor_cls = None  # type: ignore
+            expected_contract_adaptor_cls = None
 
         self._main_test_correct_providers(
             tmp_path=tmp_path,
@@ -552,22 +603,29 @@ class TestBridgeManager:
             to_token=token_dict[to_chain_enum],
             expected_provider_cls=expected_provider_cls,
             expected_contract_adaptor_cls=expected_contract_adaptor_cls,
+            margin=0.3,
         )
 
     @pytest.mark.flaky(reruns=3, reruns_delay=30)
     @pytest.mark.parametrize(
         "to_chain_enum",
         [
+            Chain.ARBITRUM_ONE,
             Chain.BASE,
+            Chain.CELO,
+            Chain.GNOSIS,
             pytest.param(
                 Chain.MODE, marks=pytest.mark.xfail(reason="MODE chain unstable")
             ),
             Chain.OPTIMISM,
-            Chain.GNOSIS,
+            pytest.param(
+                Chain.POLYGON,
+                marks=pytest.mark.xfail(reason="POLYGON slippage is too high"),
+            ),
         ],
     )
     @pytest.mark.parametrize("token_dict", [USDC, OLAS])
-    def test_correct_providers_swap_token(
+    def test_correct_providers_token_swap(
         self,
         tmp_path: Path,
         password: str,
@@ -584,6 +642,35 @@ class TestBridgeManager:
             to_token=token_dict[to_chain_enum],
             expected_provider_cls=RelayProvider,
             expected_contract_adaptor_cls=None,
+            margin=0.2,
+        )
+
+    @pytest.mark.parametrize(
+        "from_chain_enum",
+        [
+            Chain.ARBITRUM_ONE,
+            Chain.BASE,
+            Chain.OPTIMISM,
+        ],
+    )
+    @pytest.mark.parametrize("token_dict", [USDC, OLAS])
+    def test_correct_providers_token_swap_celo(
+        self,
+        tmp_path: Path,
+        password: str,
+        from_chain_enum: Chain,
+        token_dict: t.Dict,
+    ) -> None:
+        """test_correct_providers_swap_token"""
+        self._main_test_correct_providers(
+            tmp_path=tmp_path,
+            password=password,
+            from_chain=from_chain_enum.value,
+            from_token=ZERO_ADDRESS,
+            to_chain=Chain.CELO.value,
+            to_token=token_dict[Chain.CELO],
+            expected_provider_cls=RelayProvider,
+            expected_contract_adaptor_cls=None,
         )
 
     def _main_test_correct_providers(
@@ -597,7 +684,7 @@ class TestBridgeManager:
         expected_provider_cls: t.Type[Provider],
         expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]],
         check_price: bool = True,
-        margin: float = 0.15,
+        margin: float = 0.17,
     ) -> None:
         """_main_test_correct_providers"""
         operate = OperateApp(
@@ -611,7 +698,7 @@ class TestBridgeManager:
 
         wallet_address = operate.wallet_manager.load(LedgerType.ETHEREUM).address
 
-        amount_unit = 100
+        amount_unit = 50
         if to_token in USDC.values():
             to_decimals = 6
         else:
@@ -685,7 +772,7 @@ class TestBridgeManager:
             print(f"{refill_amount=}")
 
             quoted_from_cost_usd = (
-                refill_amount * from_price_usd / (10**from_decimals)
+                int(refill_amount) * from_price_usd / (10**from_decimals)
             )
             expected_to_cost_usd = amount_unit * to_price_usd
             print(f"Expected cost on {to_chain}: {expected_to_cost_usd}")

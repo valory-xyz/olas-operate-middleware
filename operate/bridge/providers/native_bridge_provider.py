@@ -41,7 +41,7 @@ from operate.bridge.providers.provider import (
     ProviderRequestStatus,
     QuoteData,
 )
-from operate.constants import ZERO_ADDRESS
+from operate.constants import BRIDGE_GAS_ESTIMATE_MULTIPLIER, ZERO_ADDRESS
 from operate.data import DATA_DIR
 from operate.data.contracts.foreign_omnibridge.contract import ForeignOmnibridge
 from operate.data.contracts.home_omnibridge.contract import HomeOmnibridge
@@ -53,7 +53,11 @@ from operate.data.contracts.l2_standard_bridge.contract import L2StandardBridge
 from operate.data.contracts.optimism_mintable_erc20.contract import (
     OptimismMintableERC20,
 )
-from operate.ledger import update_tx_with_gas_estimate, update_tx_with_gas_pricing
+from operate.ledger import (
+    get_default_ledger_api,
+    update_tx_with_gas_estimate,
+    update_tx_with_gas_pricing,
+)
 from operate.ledger.profiles import ERC20_TOKENS, EXPLORER_URL
 from operate.operate_types import Chain
 from operate.wallet.master import MasterWalletManager
@@ -65,23 +69,27 @@ BLOCK_CHUNK_SIZE = 5000
 class BridgeContractAdaptor(ABC):
     """Adaptor class for bridge contract packages."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         from_chain: str,
         from_bridge: str,
         to_chain: str,
         to_bridge: str,
         bridge_eta: int,
+        logger: logging.Logger,
     ) -> None:
         """Initialize the bridge contract adaptor."""
         super().__init__()
+        if from_chain == to_chain:
+            raise ValueError("from_chain and to_chain cannot be the same.")
         self.from_chain = from_chain
         self.from_bridge = from_bridge
         self.to_chain = to_chain
         self.to_bridge = to_bridge
         self.bridge_eta = bridge_eta
+        self.logger = logger
 
-    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
+    def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_chain = params["from"]["chain"]
         from_token = Web3.to_checksum_address(params["from"]["token"])
@@ -158,11 +166,24 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
         ),
     )
 
-    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
+    def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
 
+        if not super().can_handle_request(params):
+            return False
+
+        from_chain = params["from"]["chain"]
         from_token = Web3.to_checksum_address(params["from"]["token"])
+        from_ledger_api = get_default_ledger_api(Chain(from_chain))
+        to_chain = params["to"]["chain"]
         to_token = Web3.to_checksum_address(params["to"]["token"])
+        to_ledger_api = get_default_ledger_api(Chain(to_chain))
+
+        if from_token == ZERO_ADDRESS and to_token == ZERO_ADDRESS:
+            if not self._l1_standard_bridge_contract.supports_bridge_eth_to(
+                ledger_api=from_ledger_api, contract_address=self.from_bridge
+            ):
+                return False
 
         if to_token != ZERO_ADDRESS:
             try:
@@ -176,7 +197,7 @@ class OptimismContractAdaptor(BridgeContractAdaptor):
             except Exception:  # pylint: disable=broad-except
                 return False
 
-        return super().can_handle_request(to_ledger_api, params)
+        return True
 
     def build_bridge_tx(
         self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
@@ -288,13 +309,13 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ),
     )
 
-    def can_handle_request(self, to_ledger_api: LedgerApi, params: t.Dict) -> bool:
+    def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the contract adaptor can handle a request for 'params'."""
         from_token = Web3.to_checksum_address(params["from"]["token"])
         if from_token == ZERO_ADDRESS:
             return False
 
-        return super().can_handle_request(to_ledger_api, params)
+        return super().can_handle_request(params)
 
     def build_bridge_tx(
         self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
@@ -377,26 +398,34 @@ class OmnibridgeContractAdaptor(BridgeContractAdaptor):
         ):
             return provider_request.execution_data.provider_data.get("message_id", None)
 
-        from_address = provider_request.params["from"]["address"]
-        from_token = provider_request.params["from"]["token"]
-        from_tx_hash = provider_request.execution_data.from_tx_hash
-        to_amount = provider_request.params["to"]["amount"]
-        from_bridge = self.from_bridge
+        try:
+            from_address = provider_request.params["from"]["address"]
+            from_token = provider_request.params["from"]["token"]
+            from_tx_hash = provider_request.execution_data.from_tx_hash
+            to_amount = provider_request.params["to"]["amount"]
+            from_bridge = self.from_bridge
 
-        message_id = self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
-            ledger_api=from_ledger_api,
-            contract_address=from_bridge,
-            tx_hash=from_tx_hash,
-            token=from_token,
-            sender=from_address,
-            value=to_amount,
-        )
+            message_id = (
+                self._foreign_omnibridge.get_tokens_bridging_initiated_message_id(
+                    ledger_api=from_ledger_api,
+                    contract_address=from_bridge,
+                    tx_hash=from_tx_hash,
+                    token=from_token,
+                    sender=from_address,
+                    value=to_amount,
+                )
+            )
 
-        if not provider_request.execution_data.provider_data:
-            provider_request.execution_data.provider_data = {}
+            if not provider_request.execution_data.provider_data:
+                provider_request.execution_data.provider_data = {}
 
-        provider_request.execution_data.provider_data["message_id"] = message_id
-        return message_id
+            provider_request.execution_data.provider_data["message_id"] = message_id
+            return message_id
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error(
+                f"[OMNI BRIDGE CONTRACT ADAPTOR] Failed to retrieve message_id for request {provider_request.id}: {e}"
+            )
+            return None
 
     def get_explorer_link(
         self, from_ledger_api: LedgerApi, provider_request: ProviderRequest
@@ -428,16 +457,10 @@ class NativeBridgeProvider(Provider):
 
     def can_handle_request(self, params: t.Dict) -> bool:
         """Returns 'true' if the provider can handle a request for 'params'."""
-
         if not super().can_handle_request(params):
             return False
 
-        to_chain = params["to"]["chain"]
-        chain = Chain(to_chain)
-        wallet = self.wallet_manager.load(chain.ledger_type)
-        to_ledger_api = wallet.ledger_api(chain)
-
-        if not self.bridge_contract_adaptor.can_handle_request(to_ledger_api, params):
+        if not self.bridge_contract_adaptor.can_handle_request(params):
             return False
 
         return True
@@ -514,7 +537,9 @@ class NativeBridgeProvider(Provider):
         )
         approve_tx["gas"] = 200_000  # TODO backport to ERC20 contract as default
         update_tx_with_gas_pricing(approve_tx, from_ledger_api)
-        update_tx_with_gas_estimate(approve_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            approve_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return approve_tx
 
     def _get_bridge_tx(self, provider_request: ProviderRequest) -> t.Optional[t.Dict]:
@@ -536,7 +561,9 @@ class NativeBridgeProvider(Provider):
         )
 
         update_tx_with_gas_pricing(bridge_tx, from_ledger_api)
-        update_tx_with_gas_estimate(bridge_tx, from_ledger_api)
+        update_tx_with_gas_estimate(
+            bridge_tx, from_ledger_api, BRIDGE_GAS_ESTIMATE_MULTIPLIER
+        )
         return bridge_tx
 
     def _get_txs(
@@ -552,10 +579,15 @@ class NativeBridgeProvider(Provider):
             txs.append(("bridge_tx", bridge_tx))
         return txs
 
-    def _update_execution_status(self, provider_request: ProviderRequest) -> None:
+    def _update_execution_status(  # pylint: disable=too-many-locals
+        self, provider_request: ProviderRequest
+    ) -> None:
         """Update the execution status."""
 
-        if provider_request.status != ProviderRequestStatus.EXECUTION_PENDING:
+        if provider_request.status not in (
+            ProviderRequestStatus.EXECUTION_PENDING,
+            ProviderRequestStatus.EXECUTION_UNKNOWN,
+        ):
             return
 
         self.logger.info(
@@ -632,13 +664,14 @@ class NativeBridgeProvider(Provider):
                     provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
                     return
 
-        except Exception as e:
-            self.logger.error(f"Error updating execution status: {e}")
-            import traceback
-
-            traceback.print_exc()
-            execution_data.message = f"{MESSAGE_EXECUTION_FAILED} {str(e)}"
-            provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+        except Exception as e:  # pylint:disable=broad-except
+            self.logger.error(
+                f"[NATIVE BRIDGE PROVIDER] Failed to update status for request {provider_request.id}: {e}"
+            )
+            provider_request.status = ProviderRequestStatus.EXECUTION_UNKNOWN
+            if self._bridge_tx_likely_failed(provider_request):
+                provider_request.status = ProviderRequestStatus.EXECUTION_FAILED
+            return
 
     @staticmethod
     def _find_block_before_timestamp(w3: Web3, timestamp: int) -> int:

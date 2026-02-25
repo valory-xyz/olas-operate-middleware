@@ -36,9 +36,9 @@ class AppSingleInstance:
 
     host = "127.0.0.1"
     after_kill_sleep_time = 1
-    proc_kill_wait_timeout = 10
-    proc_terminate_wait_timeout = 10
-    http_request_timeout = 3
+    proc_kill_wait_timeout = 3
+    proc_terminate_wait_timeout = 3
+    http_request_timeout = 1
 
     def __init__(self, port_number: int, shutdown_endpoint: str = "/shutdown") -> None:
         """Initialize the AppSingleInstance manager."""

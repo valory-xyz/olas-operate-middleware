@@ -28,7 +28,7 @@ import os
 import tempfile
 import typing as t
 from enum import Enum
-from functools import cache
+from functools import cache, cached_property
 from pathlib import Path
 from typing import Optional, Union, cast
 
@@ -41,6 +41,7 @@ from autonomy.chain.constants import (
     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT,
     GNOSIS_SAFE_SAME_ADDRESS_MULTISIG_CONTRACT,
     MULTISEND_CONTRACT,
+    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT,
     RECOVERY_MODULE_CONTRACT,
     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT,
 )
@@ -49,6 +50,7 @@ from autonomy.chain.service import (
     get_agent_instances,
     get_deployment_payload,
     get_deployment_with_recovery_payload,
+    get_poly_safe_deployment_payload,
     get_service_info,
     get_token_deposit_amount,
 )
@@ -58,6 +60,7 @@ from autonomy.cli.helpers.chain import ServiceHelper as ServiceManager
 from eth_utils import to_bytes
 from hexbytes import HexBytes
 from web3.contract import Contract
+from web3.types import TxReceipt
 
 from operate.constants import (
     NO_STAKING_PROGRAM_ID,
@@ -68,10 +71,10 @@ from operate.constants import (
 )
 from operate.data import DATA_DIR
 from operate.data.contracts.dual_staking_token.contract import DualStakingTokenContract
-from operate.data.contracts.recovery_module.contract import RecoveryModule
 from operate.data.contracts.staking_token.contract import StakingTokenContract
 from operate.ledger import (
     get_default_ledger_api,
+    make_chain_ledger_api,
     update_tx_with_gas_estimate,
     update_tx_with_gas_pricing,
 )
@@ -79,6 +82,7 @@ from operate.ledger.profiles import CONTRACTS, STAKING
 from operate.operate_types import Chain as OperateChain
 from operate.operate_types import ContractAddresses
 from operate.services.service import NON_EXISTENT_TOKEN
+from operate.utils import concurrent_execute
 from operate.utils.gnosis import (
     MultiSendOperation,
     SafeOperation,
@@ -121,9 +125,7 @@ class GnosisSafeTransaction:
         self._txs.append(tx)
         return self
 
-    def build(  # pylint: disable=unused-argument
-        self, *args: t.Any, **kwargs: t.Any
-    ) -> t.Dict:
+    def build(self) -> t.Dict:
         """Build the transaction."""
         multisend_data = bytes.fromhex(
             registry_contracts.multisend.get_tx_data(
@@ -175,22 +177,21 @@ class GnosisSafeTransaction:
         update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> t.Dict:
+    def settle(self) -> TxReceipt:  # pragma: no cover
         """Settle the transaction."""
-        tx_settler = TxSettler(
-            ledger_api=self.ledger_api,
-            crypto=self.crypto,
-            chain_type=self.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-        setattr(tx_settler, "build", self.build)  # noqa: B010
-        return tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+        return (
+            TxSettler(
+                ledger_api=self.ledger_api,
+                crypto=self.crypto,
+                chain_type=self.chain_type,
+                tx_builder=self.build,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+            )
+            .transact()
+            .settle()
+            .tx_receipt
         )
 
 
@@ -214,51 +215,56 @@ class StakingManager:
     def __init__(
         self,
         chain: OperateChain,
+        rpc: t.Optional[str] = None,
     ) -> None:
-        """Initialize object."""
+        """Initialize object.
+
+        Args:
+            chain: The blockchain chain
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+        """
         self.chain = chain
+        self._rpc = rpc
 
     @property
     def ledger_api(self) -> LedgerApi:
-        """Get ledger api."""
+        """Get ledger api using custom RPC if provided, otherwise default."""
+        if self._rpc:
+            return make_chain_ledger_api(OperateChain(self.chain.value), rpc=self._rpc)
         return get_default_ledger_api(OperateChain(self.chain.value))
 
     @staticmethod
     @cache
-    def _get_staking_params(chain: OperateChain, staking_contract: str) -> t.Dict:
-        """Get staking params"""
-        ledger_api = get_default_ledger_api(chain=chain)
-        instance = StakingManager.staking_ctr.get_instance(
-            ledger_api=ledger_api,
-            contract_address=staking_contract,
-        )
-        agent_ids = instance.functions.getAgentIds().call()
-        service_registry = instance.functions.serviceRegistry().call()
-        staking_token = instance.functions.stakingToken().call()
-        service_registry_token_utility = (
-            instance.functions.serviceRegistryTokenUtility().call()
-        )
-        min_staking_deposit = instance.functions.minStakingDeposit().call()
-        activity_checker = instance.functions.activityChecker().call()
+    def _get_staking_params(  # pylint: disable=too-many-locals
+        chain: OperateChain,
+        staking_contract: str,
+        rpc: t.Optional[str] = None,
+    ) -> t.Dict:
+        """Get staking params.
 
-        output = {
-            "staking_contract": staking_contract,
-            "agent_ids": agent_ids,
-            "service_registry": service_registry,
-            "staking_token": staking_token,
-            "service_registry_token_utility": service_registry_token_utility,
-            "min_staking_deposit": min_staking_deposit,
-            "activity_checker": activity_checker,
-            "additional_staking_tokens": {},
-        }
+        Args:
+            chain: The blockchain chain
+            staking_contract: The staking contract address
+            rpc: Optional custom RPC endpoint. If not provided, uses default RPC.
+        """
+        if rpc:
+            ledger_api = make_chain_ledger_api(chain, rpc=rpc)
+        else:
+            ledger_api = get_default_ledger_api(chain=chain)
+
+        second_token_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
+        second_token_amount_func = (
+            lambda: None  # pylint: disable=unnecessary-lambda-assignment  # noqa: E731
+        )
         try:
             instance = StakingManager.dual_staking_ctr.get_instance(
                 ledger_api=ledger_api,
                 contract_address=staking_contract,
             )
-            output["additional_staking_tokens"][
-                instance.functions.secondToken().call()
-            ] = instance.functions.secondTokenAmount().call()
+            second_token_func = instance.functions.secondToken().call
+            second_token_amount_func = instance.functions.secondTokenAmount().call
         except Exception:  # pylint: disable=broad-except # nosec
             # Contract is not a dual staking contract
 
@@ -271,6 +277,45 @@ class StakingManager:
             # avoid any issues we are simply catching all exceptions.
             pass
 
+        instance = StakingManager.staking_ctr.get_instance(
+            ledger_api=ledger_api,
+            contract_address=staking_contract,
+        )
+        (
+            agent_ids,
+            service_registry,
+            staking_token,
+            service_registry_token_utility,
+            min_staking_deposit,
+            activity_checker,
+            second_token,
+            second_token_amount,
+        ) = concurrent_execute(
+            (instance.functions.getAgentIds().call, ()),
+            (instance.functions.serviceRegistry().call, ()),
+            (instance.functions.stakingToken().call, ()),
+            (instance.functions.serviceRegistryTokenUtility().call, ()),
+            (instance.functions.minStakingDeposit().call, ()),
+            (instance.functions.activityChecker().call, ()),
+            (second_token_func, ()),
+            (second_token_amount_func, ()),
+            ignore_exceptions=True,
+        )
+
+        output = {
+            "staking_contract": staking_contract,
+            "agent_ids": agent_ids,
+            "service_registry": service_registry,
+            "staking_token": staking_token,
+            "service_registry_token_utility": service_registry_token_utility,
+            "min_staking_deposit": min_staking_deposit,
+            "activity_checker": activity_checker,
+            "additional_staking_tokens": (
+                {second_token: second_token_amount}
+                if second_token and second_token_amount
+                else {}
+            ),
+        }
         return output
 
     def get_staking_params(self, staking_contract: str) -> t.Dict:
@@ -278,9 +323,12 @@ class StakingManager:
         return StakingManager._get_staking_params(
             chain=self.chain,
             staking_contract=staking_contract,
+            rpc=self._rpc,
         )
 
-    def staking_state(self, service_id: int, staking_contract: str) -> StakingState:
+    def staking_state(
+        self, service_id: int, staking_contract: str
+    ) -> StakingState:  # pragma: no cover
         """Is the service staked?"""
         return StakingState(
             self.staking_ctr.get_instance(
@@ -291,7 +339,7 @@ class StakingManager:
             .call()
         )
 
-    def slots_available(self, staking_contract: str) -> bool:
+    def slots_available(self, staking_contract: str) -> bool:  # pragma: no cover
         """Check if there are available slots on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -302,7 +350,7 @@ class StakingManager:
         )
         return available > 0
 
-    def available_rewards(self, staking_contract: str) -> int:
+    def available_rewards(self, staking_contract: str) -> int:  # pragma: no cover
         """Get the available staking rewards on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -311,7 +359,9 @@ class StakingManager:
         available_rewards = instance.functions.availableRewards().call()
         return available_rewards
 
-    def claimable_rewards(self, staking_contract: str, service_id: int) -> int:
+    def claimable_rewards(
+        self, staking_contract: str, service_id: int
+    ) -> int:  # pragma: no cover
         """Get the claimable staking rewards on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -320,7 +370,9 @@ class StakingManager:
         claimable_rewards = instance.functions.calculateStakingReward(service_id).call()
         return claimable_rewards
 
-    def service_info(self, staking_contract: str, service_id: int) -> dict:
+    def service_info(
+        self, staking_contract: str, service_id: int
+    ) -> dict:  # pragma: no cover
         """Get the service onchain info"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -329,7 +381,7 @@ class StakingManager:
         service_info = instance.functions.getServiceInfo(service_id).call()
         return service_info
 
-    def agent_ids(self, staking_contract: str) -> t.List[int]:
+    def agent_ids(self, staking_contract: str) -> t.List[int]:  # pragma: no cover
         """Get a list of agent IDs for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -337,7 +389,7 @@ class StakingManager:
         )
         return instance.functions.getAgentIds().call()
 
-    def service_registry(self, staking_contract: str) -> str:
+    def service_registry(self, staking_contract: str) -> str:  # pragma: no cover
         """Retrieve the service registry address for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -345,7 +397,7 @@ class StakingManager:
         )
         return instance.functions.serviceRegistry().call()
 
-    def staking_token(self, staking_contract: str) -> str:
+    def staking_token(self, staking_contract: str) -> str:  # pragma: no cover
         """Get the staking token address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -353,7 +405,9 @@ class StakingManager:
         )
         return instance.functions.stakingToken().call()
 
-    def service_registry_token_utility(self, staking_contract: str) -> str:
+    def service_registry_token_utility(
+        self, staking_contract: str
+    ) -> str:  # pragma: no cover
         """Get the service registry token utility address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -361,7 +415,7 @@ class StakingManager:
         )
         return instance.functions.serviceRegistryTokenUtility().call()
 
-    def min_staking_deposit(self, staking_contract: str) -> int:
+    def min_staking_deposit(self, staking_contract: str) -> int:  # pragma: no cover
         """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -369,7 +423,7 @@ class StakingManager:
         )
         return instance.functions.minStakingDeposit().call()
 
-    def activity_checker(self, staking_contract: str) -> str:
+    def activity_checker(self, staking_contract: str) -> str:  # pragma: no cover
         """Retrieve the activity checker address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -394,14 +448,14 @@ class StakingManager:
             raise ValueError("No sataking slots available.")
 
     # TODO To be deprecated, only used in on-chain manager
-    def stake(
+    def stake(  # pragma: no cover
         self,
         service_id: int,
         service_registry: str,
         staking_contract: str,
         key: Path,
         password: str,
-    ) -> None:
+    ) -> str:
         """Stake the service"""
         och = OnChainHelper(
             key=key, chain_type=ChainType(self.chain.value), password=password
@@ -411,62 +465,52 @@ class StakingManager:
             service_id=service_id, staking_contract=staking_contract
         )
 
-        tx_settler = TxSettler(
-            ledger_api=och.ledger_api,
-            crypto=och.crypto,
-            chain_type=och.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-
         # we make use of the ERC20 contract to build the approval transaction
         # since it has the same interface as ERC721 we might want to create
         # a ERC721 contract package
         # this is very bad way to do it but it works because the ERC721 contract expects two arguments
         # for approve call (spender, token_id), and the ERC20 contract wrapper used here from open-autonomy
         # passes the amount as the second argument.
-        def _build_approval_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return registry_contracts.erc20.get_approve_tx(
+        TxSettler(
+            ledger_api=och.ledger_api,
+            crypto=och.crypto,
+            chain_type=och.chain_type,
+            timeout=ON_CHAIN_INTERACT_TIMEOUT,
+            retries=ON_CHAIN_INTERACT_RETRIES,
+            sleep=ON_CHAIN_INTERACT_SLEEP,
+            tx_builder=lambda: registry_contracts.erc20.get_approve_tx(
                 ledger_api=och.ledger_api,
                 contract_address=service_registry,
                 spender=staking_contract,
                 sender=och.crypto.address,
                 amount=service_id,  # TODO: This is a workaround and it should be fixed
-            )
+            ),
+        ).transact().settle()
 
-        setattr(tx_settler, "build", _build_approval_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
-        )
-
-        def _build_staking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return och.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=och.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=och.ledger_api,
+                crypto=och.crypto,
+                chain_type=och.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: och.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=och.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="stake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": och.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="stake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": och.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_staking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def check_if_unstaking_possible(
@@ -500,49 +544,42 @@ class StakingManager:
             raise ValueError("Service cannot be unstaked yet.")
 
     # TODO To be deprecated, only used in on-chain manager
-    def unstake(
+    def unstake(  # pragma: no cover
         self,
         service_id: int,
         staking_contract: str,
         key: Path,
         password: str,
-    ) -> None:
+    ) -> str:
         """Unstake the service"""
         och = OnChainHelper(
             key=key, chain_type=ChainType(self.chain.value), password=password
         )
 
-        tx_settler = TxSettler(
-            ledger_api=och.ledger_api,
-            crypto=och.crypto,
-            chain_type=och.chain_type,
-            timeout=ON_CHAIN_INTERACT_TIMEOUT,
-            retries=ON_CHAIN_INTERACT_RETRIES,
-            sleep=ON_CHAIN_INTERACT_SLEEP,
-        )
-
-        def _build_unstaking_tx(  # pylint: disable=unused-argument
-            *args: t.Any, **kargs: t.Any
-        ) -> t.Dict:
-            return och.ledger_api.build_transaction(
-                contract_instance=self.staking_ctr.get_instance(
-                    ledger_api=och.ledger_api,
-                    contract_address=staking_contract,
+        return (
+            TxSettler(
+                ledger_api=och.ledger_api,
+                crypto=och.crypto,
+                chain_type=och.chain_type,
+                timeout=ON_CHAIN_INTERACT_TIMEOUT,
+                retries=ON_CHAIN_INTERACT_RETRIES,
+                sleep=ON_CHAIN_INTERACT_SLEEP,
+                tx_builder=lambda: och.ledger_api.build_transaction(
+                    contract_instance=self.staking_ctr.get_instance(
+                        ledger_api=och.ledger_api,
+                        contract_address=staking_contract,
+                    ),
+                    method_name="unstake",
+                    method_args={"serviceId": service_id},
+                    tx_args={
+                        "sender_address": och.crypto.address,
+                    },
+                    raise_on_try=True,
                 ),
-                method_name="unstake",
-                method_args={"serviceId": service_id},
-                tx_args={
-                    "sender_address": och.crypto.address,
-                },
-                raise_on_try=True,
             )
-
-        setattr(tx_settler, "build", _build_unstaking_tx)  # noqa: B010
-        tx_settler.transact(
-            method=lambda: {},
-            contract="",
-            kwargs={},
-            dry_run=False,
+            .transact()
+            .settle()
+            .tx_hash
         )
 
     def get_stake_approval_tx_data(
@@ -559,8 +596,8 @@ class StakingManager:
         return registry_contracts.erc20.get_instance(
             ledger_api=self.ledger_api,
             contract_address=service_registry,
-        ).encodeABI(
-            fn_name="approve",
+        ).encode_abi(
+            abi_element_identifier="approve",
             args=[
                 staking_contract,
                 service_id,
@@ -576,8 +613,8 @@ class StakingManager:
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="stake",
+        ).encode_abi(
+            abi_element_identifier="stake",
             args=[service_id],
         )
 
@@ -590,8 +627,8 @@ class StakingManager:
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="unstake",
+        ).encode_abi(
+            abi_element_identifier="unstake",
             args=[service_id],
         )
 
@@ -600,8 +637,8 @@ class StakingManager:
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="claim",
+        ).encode_abi(
+            abi_element_identifier="claim",
             args=[service_id],
         )
 
@@ -612,8 +649,8 @@ class StakingManager:
         return self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
             contract_address=staking_contract,
-        ).encodeABI(
-            fn_name="forcedUnstake",
+        ).encode_abi(
+            abi_element_identifier="forcedUnstake",
             args=[service_id],
         )
 
@@ -711,7 +748,7 @@ class MintManager(MintHelper):
         )
         return self
 
-    def publish_metadata(self) -> "MintManager":
+    def publish_metadata(self) -> "MintManager":  # pragma: no cover
         """Publish metadata."""
         self.metadata_hash, self.metadata_string = publish_metadata(
             package_id=self.package_configuration.package_id,
@@ -761,7 +798,7 @@ class _ChainUtil:
         return self.wallet.safes[chain]
 
     @property
-    def crypto(self) -> Crypto:
+    def crypto(self) -> Crypto:  # pragma: no cover
         """Load crypto object."""
         self._patch()
         _, crypto = OnChainHelper.get_ledger_and_crypto_objects(
@@ -772,7 +809,7 @@ class _ChainUtil:
         return crypto
 
     @property
-    def ledger_api(self) -> LedgerApi:
+    def ledger_api(self) -> LedgerApi:  # pragma: no cover
         """Load ledger api object."""
         self._patch()
         return self.wallet.ledger_api(
@@ -780,19 +817,24 @@ class _ChainUtil:
             rpc=self.rpc,
         )
 
+    @cached_property
+    def service_manager_address(self) -> str:
+        """Get service manager contract address."""
+        return ContractConfigs.service_manager.contracts[self.chain_type]
+
     @property
-    def service_manager_instance(self) -> Contract:
+    def service_manager_instance(self) -> Contract:  # pragma: no cover
         """Load service manager contract instance."""
         contract_interface = registry_contracts.service_manager.contract_interface.get(
             self.ledger_api.identifier, {}
         )
         instance = self.ledger_api.get_contract_instance(
             contract_interface,
-            self.contracts["service_manager"],
+            self.service_manager_address,
         )
         return instance
 
-    def info(self, token_id: int) -> t.Dict:
+    def info(self, token_id: int) -> t.Dict:  # pragma: no cover
         """Get service info."""
         self._patch()
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
@@ -847,7 +889,9 @@ class _ChainUtil:
         )
         return bond
 
-    def get_service_safe_owners(self, service_id: int) -> t.List[str]:
+    def get_service_safe_owners(
+        self, service_id: int
+    ) -> t.List[str]:  # pragma: no cover
         """Get list of owners."""
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
             chain_type=self.chain_type
@@ -875,7 +919,7 @@ class _ChainUtil:
             contract_address=multisig_address,
         ).get("owners", [])
 
-    def swap(  # pylint: disable=too-many-arguments,too-many-locals
+    def swap(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         service_id: int,
         multisig: str,
@@ -1014,6 +1058,7 @@ class _ChainUtil:
         self._patch()
         staking_manager = StakingManager(
             chain=OperateChain(self.chain_type.value),
+            rpc=self.rpc,
         )
         return staking_manager.get_staking_params(
             staking_contract=staking_contract,
@@ -1023,7 +1068,7 @@ class _ChainUtil:
 class OnChainManager(_ChainUtil):
     """On chain service management."""
 
-    def mint(  # pylint: disable=too-many-arguments,too-many-locals
+    def mint(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         package_path: Path,
         agent_id: int,
@@ -1092,7 +1137,7 @@ class OnChainManager(_ChainUtil):
                 }
         return published
 
-    def activate(
+    def activate(  # pragma: no cover
         self,
         service_id: int,
         token: t.Optional[str] = None,
@@ -1113,7 +1158,7 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).activate_service()
 
-    def register(
+    def register(  # pragma: no cover
         self,
         service_id: int,
         instances: t.List[str],
@@ -1138,7 +1183,7 @@ class OnChainManager(_ChainUtil):
                 agent_ids=agents,
             )
 
-    def deploy(
+    def deploy(  # pragma: no cover
         self,
         service_id: int,
         reuse_multisig: bool = False,
@@ -1162,7 +1207,9 @@ class OnChainManager(_ChainUtil):
                 reuse_multisig=reuse_multisig,
             )
 
-    def terminate(self, service_id: int, token: t.Optional[str] = None) -> None:
+    def terminate(
+        self, service_id: int, token: t.Optional[str] = None
+    ) -> None:  # pragma: no cover
         """Terminate service."""
         logging.info(f"Terminating service {service_id}...")
         self._patch()
@@ -1179,7 +1226,9 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).terminate_service()
 
-    def unbond(self, service_id: int, token: t.Optional[str] = None) -> None:
+    def unbond(
+        self, service_id: int, token: t.Optional[str] = None
+    ) -> None:  # pragma: no cover
         """Unbond service."""
         logging.info(f"Unbonding service {service_id}...")
         self._patch()
@@ -1196,7 +1245,7 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).unbond_service()
 
-    def stake(
+    def stake(  # pragma: no cover
         self,
         service_id: int,
         service_registry: str,
@@ -1214,7 +1263,9 @@ class OnChainManager(_ChainUtil):
             password=self.wallet.password,
         )
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    def unstake(
+        self, service_id: int, staking_contract: str
+    ) -> None:  # pragma: no cover
         """Unstake service."""
         self._patch()
         StakingManager(
@@ -1226,7 +1277,9 @@ class OnChainManager(_ChainUtil):
             password=self.wallet.password,
         )
 
-    def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
+    def staking_status(
+        self, service_id: int, staking_contract: str
+    ) -> StakingState:  # pragma: no cover
         """Stake the service"""
         self._patch()
         return StakingManager(
@@ -1252,19 +1305,21 @@ class EthSafeTxBuilder(_ChainUtil):
             safe=safe,
         )
 
-    def new_tx(self) -> GnosisSafeTransaction:
+    def new_tx(
+        self, crypto: Optional[Crypto] = None, safe: Optional[str] = None
+    ) -> GnosisSafeTransaction:
         """Create a new GnosisSafeTransaction instance."""
         return EthSafeTxBuilder._new_tx(
             ledger_api=self.wallet.ledger_api(
                 chain=OperateChain.from_string(self.chain_type.value),
                 rpc=self.rpc,
             ),
-            crypto=self.crypto,
+            crypto=crypto or self.crypto,
             chain_type=self.chain_type,
-            safe=t.cast(str, self.safe),
+            safe=t.cast(str, safe or self.safe),
         )
 
-    def get_mint_tx_data(  # pylint: disable=too-many-arguments
+    def get_mint_tx_data(  # pylint: disable=too-many-arguments  # pragma: no cover
         self,
         package_path: Path,
         agent_id: int,
@@ -1309,8 +1364,8 @@ class EthSafeTxBuilder(_ChainUtil):
         instance = self.service_manager_instance
         if update_token is None:
             safe = self.safe
-            txd = instance.encodeABI(
-                fn_name="create",
+            txd = instance.encode_abi(
+                abi_element_identifier="create",
                 args=[
                     safe,
                     token or ETHEREUM_ERC20,
@@ -1321,8 +1376,8 @@ class EthSafeTxBuilder(_ChainUtil):
                 ],
             )
         else:
-            txd = instance.encodeABI(
-                fn_name="update",
+            txd = instance.encode_abi(
+                abi_element_identifier="update",
                 args=[
                     token or ETHEREUM_ERC20,
                     manager.metadata_hash,
@@ -1334,13 +1389,13 @@ class EthSafeTxBuilder(_ChainUtil):
             )
 
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
 
-    def get_erc20_approval_data(
+    def get_erc20_approval_data(  # pragma: no cover
         self,
         spender: str,
         amount: int,
@@ -1351,8 +1406,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=erc20_contract,
         )
-        txd = instance.encodeABI(
-            fn_name="approve",
+        txd = instance.encode_abi(
+            abi_element_identifier="approve",
             args=[spender, amount],
         )
         return {
@@ -1362,25 +1417,23 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_activate_data(self, service_id: int, cost_of_bond: int) -> t.Dict:
+    def get_activate_data(
+        self, service_id: int, cost_of_bond: int
+    ) -> t.Dict:  # pragma: no cover
         """Get activate tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
-        txd = instance.encodeABI(
-            fn_name="activateRegistration",
+        txd = self.service_manager_instance.encode_abi(
+            abi_element_identifier="activateRegistration",
             args=[service_id],
         )
         return {
             "from": self.safe,
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
         }
 
-    def get_register_instances_data(
+    def get_register_instances_data(  # pragma: no cover
         self,
         service_id: int,
         instances: t.List[str],
@@ -1388,12 +1441,8 @@ class EthSafeTxBuilder(_ChainUtil):
         cost_of_bond: int,
     ) -> t.Dict:
         """Get register instances tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
-        txd = instance.encodeABI(
-            fn_name="registerAgents",
+        txd = self.service_manager_instance.encode_abi(
+            abi_element_identifier="registerAgents",
             args=[
                 service_id,
                 instances,
@@ -1402,24 +1451,22 @@ class EthSafeTxBuilder(_ChainUtil):
         )
         return {
             "from": self.safe,
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": cost_of_bond,
         }
 
-    def get_deploy_data_from_safe(
+    def get_deploy_data_from_safe(  # pylint: disable=too-many-arguments
         self,
         service_id: int,
         master_safe: str,
         reuse_multisig: bool = False,
         use_recovery_module: bool = True,
+        use_poly_safe: bool = False,
+        agent_eoa_crypto: t.Optional[Crypto] = None,
     ) -> t.List[t.Dict[str, t.Any]]:
         """Get the deploy data instructions for a safe"""
-        registry_instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
         approve_hash_message = None
         if reuse_multisig:
             if not use_recovery_module:
@@ -1456,19 +1503,35 @@ class EthSafeTxBuilder(_ChainUtil):
                     RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
         else:  # Deploy a new multisig
-            if not use_recovery_module:
+            if not use_recovery_module and not use_poly_safe:
                 deployment_payload = get_deployment_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     GNOSIS_SAFE_PROXY_FACTORY_CONTRACT.name
                 ).contracts[self.chain_type]
-            else:
+            elif use_recovery_module and use_poly_safe:
+                if not agent_eoa_crypto:
+                    raise ValueError("Crypto object must be provided for Poly Safe.")
+
+                deployment_payload = get_poly_safe_deployment_payload(
+                    ledger_api=self.ledger_api,
+                    chain_type=self.chain_type,
+                    crypto=agent_eoa_crypto,
+                )
+                gnosis_safe_multisig = ContractConfigs.get(
+                    POLY_SAFE_CREATOR_WITH_RECOVERY_MODULE_CONTRACT.name
+                ).contracts[self.chain_type]
+            elif not use_recovery_module and use_poly_safe:
+                raise ValueError(
+                    "Poly Safe deployment without recovery module is not supported."
+                )
+            else:  # Normal case: use_recovery_module and not use_poly_safe
                 deployment_payload = get_deployment_with_recovery_payload()
                 gnosis_safe_multisig = ContractConfigs.get(
                     SAFE_MULTISIG_WITH_RECOVERY_MODULE_CONTRACT.name
                 ).contracts[self.chain_type]
 
-        deploy_data = registry_instance.encodeABI(
-            fn_name="deploy",
+        deploy_data = self.service_manager_instance.encode_abi(
+            abi_element_identifier="deploy",
             args=[
                 service_id,
                 gnosis_safe_multisig,
@@ -1476,7 +1539,7 @@ class EthSafeTxBuilder(_ChainUtil):
             ],
         )
         deploy_message = {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": deploy_data[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -1485,7 +1548,7 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals
+    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         safe_b_address: str,
         to: str,
@@ -1533,8 +1596,8 @@ class EthSafeTxBuilder(_ChainUtil):
         ).get("tx_hash")
 
         # Build approveHash message
-        approve_hash_data = safe_b_instance.encodeABI(
-            fn_name="approveHash",
+        approve_hash_data = safe_b_instance.encode_abi(
+            abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
         approve_hash_message = {
@@ -1545,8 +1608,8 @@ class EthSafeTxBuilder(_ChainUtil):
         }
 
         # Build execTransaction message
-        exec_data = safe_b_instance.encodeABI(
-            fn_name="execTransaction",
+        exec_data = safe_b_instance.encode_abi(
+            abi_element_identifier="execTransaction",
             args=[
                 multisend_address,
                 multisend_tx["value"],
@@ -1569,7 +1632,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals
+    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         safe_b_address: str,
         token: str,
@@ -1596,8 +1659,8 @@ class EthSafeTxBuilder(_ChainUtil):
         txs.append(
             {
                 "to": token,
-                "data": erc20_instance.encodeABI(
-                    fn_name="transfer",
+                "data": erc20_instance.encode_abi(
+                    abi_element_identifier="transfer",
                     args=[to, amount],
                 ),
                 "operation": MultiSendOperation.CALL,
@@ -1625,8 +1688,8 @@ class EthSafeTxBuilder(_ChainUtil):
         ).get("tx_hash")
 
         # Build approveHash message
-        approve_hash_data = safe_b_instance.encodeABI(
-            fn_name="approveHash",
+        approve_hash_data = safe_b_instance.encode_abi(
+            abi_element_identifier="approveHash",
             args=[safe_tx_hash],
         )
         approve_hash_message = {
@@ -1637,8 +1700,8 @@ class EthSafeTxBuilder(_ChainUtil):
         }
 
         # Build execTransaction message
-        exec_data = safe_b_instance.encodeABI(
-            fn_name="execTransaction",
+        exec_data = safe_b_instance.encode_abi(
+            abi_element_identifier="execTransaction",
             args=[
                 multisend_address,
                 multisend_tx["value"],
@@ -1661,35 +1724,27 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_terminate_data(self, service_id: int) -> t.Dict:
+    def get_terminate_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get terminate tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
-        txd = instance.encodeABI(
-            fn_name="terminate",
+        txd = self.service_manager_instance.encode_abi(
+            abi_element_identifier="terminate",
             args=[service_id],
         )
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
 
-    def get_unbond_data(self, service_id: int) -> t.Dict:
+    def get_unbond_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get unbond tx data."""
-        instance = registry_contracts.service_manager.get_instance(
-            ledger_api=self.ledger_api,
-            contract_address=self.contracts["service_manager"],
-        )
-        txd = instance.encodeABI(
-            fn_name="unbond",
+        txd = self.service_manager_instance.encode_abi(
+            abi_element_identifier="unbond",
             args=[service_id],
         )
         return {
-            "to": self.contracts["service_manager"],
+            "to": self.service_manager_address,
             "data": txd[2:],
             "operation": MultiSendOperation.CALL,
             "value": 0,
@@ -1811,30 +1866,21 @@ class EthSafeTxBuilder(_ChainUtil):
         except ValueError:
             return False
 
-    def get_swap_data(self, service_id: int, multisig: str, owner_key: str) -> t.Dict:
+    def get_swap_data(
+        self, service_id: int, multisig: str, owner_key: str
+    ) -> t.Dict:  # pragma: no cover
         """Swap safe owner."""
         # TODO: Discuss implementation
         raise NotImplementedError()
 
-    def get_recover_access_data(self, service_id: int) -> t.Dict:
+    def get_recover_access_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get recover access tx data."""
-        instance = t.cast(
-            RecoveryModule,
-            RecoveryModule.from_dir(
-                directory=str(DATA_DIR / "contracts" / "recovery_module"),
-            ),
-        ).get_instance(
+        instance = registry_contracts.recovery_module.get_instance(
             ledger_api=self.ledger_api,
             contract_address=self.contracts["recovery_module"],
         )
-        # TODO Replace the line above by this one once the recovery_module is
-        # included in the release of OpenAutonomy.
-        # instance = registry_contracts.recovery_module.get_instance(  # noqa: E800
-        #     ledger_api=self.ledger_api,  # noqa: E800
-        #     contract_address=self.contracts["recovery_module"],  # noqa: E800
-        # )  # noqa: E800
-        txd = instance.encodeABI(
-            fn_name="recoverAccess",
+        txd = instance.encode_abi(
+            abi_element_identifier="recoverAccess",
             args=[service_id],
         )
         return {
@@ -1844,7 +1890,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_enable_module_data(
+    def get_enable_module_data(  # pragma: no cover
         self,
         safe_address: str,
         module_address: str,
@@ -1855,8 +1901,8 @@ class EthSafeTxBuilder(_ChainUtil):
             ledger_api=self.ledger_api,
             contract_address=safe_address,
         )
-        txd = instance.encodeABI(
-            fn_name="enableModule",
+        txd = instance.encode_abi(
+            abi_element_identifier="enableModule",
             args=[module_address],
         )
         return {
@@ -1865,6 +1911,54 @@ class EthSafeTxBuilder(_ChainUtil):
             "operation": MultiSendOperation.CALL,
             "value": 0,
         }
+
+    def get_agent_wallet_setup_txs(  # pylint: disable=too-many-arguments  # pragma: no cover
+        self,
+        agent_id: int,
+        new_wallet: str,
+        identity_registry_address: str,
+        identity_registry_bridger_address: str,
+        sign_message_lib_address: str,
+        deadline: int,
+    ) -> t.Tuple[t.List[t.Dict], str]:
+        """Get agent wallet setup transactions (signMessage + setAgentWallet).
+
+        Args:
+            agent_id: Agent ID from mapServiceIdAgentIds
+            new_wallet: New wallet address (service Safe)
+            identity_registry_address: Identity Registry contract address
+            identity_registry_bridger_address: Identity Registry Bridger contract address
+            sign_message_lib_address: SignMessageLib contract address
+            deadline: Deadline timestamp
+
+        Returns:
+            Tuple of (list of tx dicts for multisend, digest for signing)
+        """
+        # Compute EIP-712 digest using identity_registry contract package
+        digest = registry_contracts.erc8004_identity_registry.compute_eip712_agent_wallet_set_digest(
+            ledger_api=self.ledger_api,
+            contract_address=identity_registry_address,
+            agent_id=agent_id,
+            new_wallet=new_wallet,
+            identity_registry_bridger_address=identity_registry_bridger_address,
+            deadline=deadline,
+        )
+
+        # Get signMessage transaction from sign_message_lib contract package
+        sign_message_tx = registry_contracts.sign_message_lib.get_sign_message_tx_data(
+            ledger_api=self.ledger_api,
+            contract_address=sign_message_lib_address,
+            digest=digest,
+        )
+
+        # Get setAgentWallet transaction from identity_registry_bridger contract package
+        set_agent_wallet_tx = registry_contracts.erc8004_identity_registry_bridger.get_set_agent_wallet_tx_data(
+            ledger_api=self.ledger_api,
+            contract_address=identity_registry_bridger_address,
+            deadline=deadline,
+        )
+
+        return [sign_message_tx, set_agent_wallet_tx], digest
 
 
 def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
@@ -1888,7 +1982,7 @@ def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
     return signatures
 
 
-def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
+def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
     ledger_api: LedgerApi,
     chain_type: ChainType,
     service_id: int,
@@ -1937,8 +2031,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
                 "to": multisig_address,
                 "data": HexBytes(
                     bytes.fromhex(
-                        multisig_instance.encodeABI(
-                            fn_name="addOwnerWithThreshold",
+                        multisig_instance.encode_abi(
+                            abi_element_identifier="addOwnerWithThreshold",
                             args=[_owner, 1],
                         )[2:]
                     )
@@ -1953,8 +2047,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="removeOwner",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="removeOwner",
                         args=[new_owners[0], master_safe, 1],
                     )[2:]
                 )
@@ -1969,8 +2063,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
             "to": multisig_address,
             "data": HexBytes(
                 bytes.fromhex(
-                    multisig_instance.encodeABI(
-                        fn_name="changeThreshold",
+                    multisig_instance.encode_abi(
+                        abi_element_identifier="changeThreshold",
                         args=[threshold],
                     )[2:]
                 )
@@ -1995,8 +2089,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         data=multisend_tx["data"],
         operation=1,
     ).get("tx_hash")
-    approve_hash_data = multisig_instance.encodeABI(
-        fn_name="approveHash",
+    approve_hash_data = multisig_instance.encode_abi(
+        abi_element_identifier="approveHash",
         args=[
             safe_tx_hash,
         ],
@@ -2008,8 +2102,8 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
         "value": 0,
     }
 
-    safe_exec_data = multisig_instance.encodeABI(
-        fn_name="execTransaction",
+    safe_exec_data = multisig_instance.encode_abi(
+        abi_element_identifier="execTransaction",
         args=[
             multisend_address,  # to address
             multisend_tx["value"],  # value
@@ -2027,7 +2121,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
     return payload, approve_hash_message, None
 
 
-def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals
+def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
     ledger_api: LedgerApi,
     chain_type: ChainType,
     service_id: int,

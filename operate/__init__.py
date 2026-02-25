@@ -20,7 +20,11 @@
 """Operate app."""
 
 import logging
+import os
+import platform
 from importlib.metadata import PackageNotFoundError, version
+
+import certifi
 
 
 try:
@@ -35,3 +39,34 @@ except PackageNotFoundError:
         __version__ = "0.0.0+local"
 
 logging.getLogger("aea").setLevel(logging.ERROR)
+logging.getLogger("aea.ledger_apis.ethereum").setLevel(logging.WARNING)
+
+
+# Ensure CA bundle is available for requests
+# This prevents errors when PyInstaller temp directory is cleaned during long-running apps
+# Set REQUESTS_CA_BUNDLE, preferring system CA bundle, falling back to bundled.
+logger = logging.getLogger("operate")
+system = platform.system()
+bundle_set = False
+if system == "Darwin":  # macOS
+    system_bundle = "/etc/ssl/cert.pem"
+    if os.path.exists(system_bundle):
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", system_bundle)
+        bundle_set = True
+elif system == "Linux":
+    system_bundle = "/etc/ssl/certs/ca-certificates.crt"
+    if os.path.exists(system_bundle):
+        os.environ.setdefault("REQUESTS_CA_BUNDLE", system_bundle)
+        bundle_set = True
+elif system == "Windows":
+    # Windows uses the system certificate store by default; no file needed
+    logger.info("Using system certificate store on Windows.")
+    bundle_set = True  # Considered set since system handles it
+else:
+    logger.warning(f"Unknown OS {system}; CA bundle handling not configured.")
+
+# Fallback to bundled if system not available
+if not bundle_set and os.path.exists(certifi.where()):
+    os.environ.setdefault("REQUESTS_CA_BUNDLE", certifi.where())
+elif not bundle_set:
+    logger.warning("No CA certificate bundle available.")

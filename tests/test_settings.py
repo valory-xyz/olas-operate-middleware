@@ -98,6 +98,11 @@ def test_settings_version_mismatch(test_operate: OperateApp) -> None:
         json.dump(data, f)
 
     Settings._instances.clear()
-    with pytest.raises(ValueError) as e:
-        Settings(path=test_operate._path)
-        assert str(e) == "Settings version 999 is not supported. Expected version 1."
+    with pytest.raises(
+        ValueError,
+        match="Settings version 999 is not supported. Expected version 1.",
+    ):
+        Settings(
+            wallet_manager=test_operate.wallet_manager,
+            path=test_operate._path,
+        )

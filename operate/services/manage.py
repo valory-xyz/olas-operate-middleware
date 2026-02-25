@@ -30,6 +30,7 @@ from http import HTTPStatus
 from pathlib import Path
 
 import requests
+from aea.configurations.data_types import PublicId
 from aea.helpers.base import IPFSHash
 from aea_ledger_ethereum import LedgerApi
 from autonomy.chain.base import registry_contracts
@@ -45,6 +46,7 @@ from operate.constants import (
     IPFS_ADDRESS,
     MIN_AGENT_BOND,
     MIN_SECURITY_DEPOSIT,
+    POLY_SAFE_SERVICE_NAMES,
     ZERO_ADDRESS,
 )
 from operate.data import DATA_DIR
@@ -53,7 +55,7 @@ from operate.data.contracts.requester_activity_checker.contract import (
     RequesterActivityCheckerContract,
 )
 from operate.keys import KeysManager
-from operate.ledger import get_default_rpc
+from operate.ledger import UnsupportedChainError, get_default_rpc
 from operate.ledger.profiles import (
     CONTRACTS,
     DEFAULT_EOA_THRESHOLD,
@@ -90,7 +92,6 @@ from operate.services.service import (
     SERVICE_CONFIG_VERSION,
     Service,
 )
-from operate.services.utils.mech import deploy_mech
 from operate.utils.gnosis import (
     get_asset_balance,
     get_assets_balances,
@@ -105,13 +106,16 @@ from operate.wallet.master import InsufficientFundsException, MasterWalletManage
 # If multiple agents are provided in the service.yaml file, only the 0th index config will be used.
 NUM_LOCAL_AGENT_INSTANCES = 1
 
+RPC_SYNC_TIMEOUT = 15
+
 
 class ServiceManager:
     """Service manager."""
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         path: Path,
+        keys_manager: KeysManager,
         wallet_manager: MasterWalletManager,
         funding_manager: FundingManager,
         logger: logging.Logger,
@@ -126,7 +130,7 @@ class ServiceManager:
         :param logger: logging.Logger object.
         """
         self.path = path
-        self.keys_manager = KeysManager()
+        self.keys_manager = keys_manager
         self.wallet_manager = wallet_manager
         self.funding_manager = funding_manager
         self.logger = logger
@@ -312,7 +316,7 @@ class ServiceManager:
             f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
 
-    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -326,7 +330,7 @@ class ServiceManager:
                 chain=chain,
             )
 
-    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -518,7 +522,7 @@ class ServiceManager:
         )
         service.store()
 
-    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -628,7 +632,7 @@ class ServiceManager:
             priority_mech_service_id=priority_mech_service_id,
         )
 
-    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -812,6 +816,9 @@ class ServiceManager:
         on_chain_metadata = self._get_on_chain_metadata(chain_config=chain_config)
         on_chain_hash = on_chain_metadata.get("code_uri", "")[len(IPFS_URI_PREFIX) :]
         on_chain_description = on_chain_metadata.get("description")
+        needs_update_agent_addresses = set(chain_data.instances) != set(
+            service.agent_addresses
+        )
 
         current_agent_bond = sftxb.get_agent_bond(
             service_id=chain_data.token, agent_id=target_staking_params["agent_ids"][0]
@@ -840,6 +847,7 @@ class ServiceManager:
                 or current_staking_params["staking_token"]
                 != target_staking_params["staking_token"]
                 or on_chain_description != service.description
+                or needs_update_agent_addresses
             )
         )
 
@@ -959,6 +967,7 @@ class ServiceManager:
             chain_data.token = event_data["args"]["serviceId"]
             service.store()
 
+        # Activate service
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.PRE_REGISTRATION
@@ -1023,6 +1032,7 @@ class ServiceManager:
                 )
             ).settle()
 
+        # Register agent instances
         if (
             self._get_on_chain_state(service=service, chain=chain)
             == OnChainState.ACTIVE_REGISTRATION
@@ -1105,6 +1115,7 @@ class ServiceManager:
                 is_recovery_module_enabled = True
             else:
                 reuse_multisig = True
+                is_initial_funding = False
                 is_recovery_module_enabled = (
                     registry_contracts.gnosis_safe.is_module_enabled(
                         ledger_api=sftxb.ledger_api,
@@ -1116,11 +1127,19 @@ class ServiceManager:
             self.logger.info(f"{reuse_multisig=}")
             self.logger.info(f"{is_recovery_module_enabled=}")
 
+            service_public_id = PublicId.from_str(service.service_public_id())
+            use_poly_safe = service_public_id.name in POLY_SAFE_SERVICE_NAMES
+
+            self.logger.info(f"{use_poly_safe=}")
             messages = sftxb.get_deploy_data_from_safe(
                 service_id=chain_data.token,
                 reuse_multisig=reuse_multisig,
                 master_safe=safe,
                 use_recovery_module=is_recovery_module_enabled,
+                use_poly_safe=use_poly_safe,
+                agent_eoa_crypto=self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                ),
             )
             tx = sftxb.new_tx()
             for message in messages:
@@ -1131,60 +1150,112 @@ class ServiceManager:
         info = sftxb.info(token_id=chain_data.token)
         chain_data.instances = info["instances"]
         chain_data.multisig = info["multisig"]
+        service.store()
 
         if is_initial_funding:
             self.funding_manager.fund_service_initial(service)
 
-        # TODO: yet another agent specific logic for mech, which should be abstracted
-        if all(
-            var in service.env_variables
-            for var in [
-                "AGENT_ID",
-                "MECH_TO_CONFIG",
-                "ON_CHAIN_SERVICE_ID",
-                "ETHEREUM_LEDGER_RPC_0",
-                "GNOSIS_LEDGER_RPC_0",
-                "MECH_MARKETPLACE_ADDRESS",
+        # Set ERC8004 agent wallet if not set already
+        try:
+            # Check if required contracts are available
+            required_contracts = [
+                "erc8004_identity_registry",
+                "erc8004_identity_registry_bridger",
+                "sign_message_lib",
             ]
-        ):
-            if (
-                not service.env_variables["AGENT_ID"]["value"]
-                or not service.env_variables["MECH_TO_CONFIG"]["value"]
+            if not all(
+                contract in CONTRACTS[Chain(chain)] for contract in required_contracts
             ):
-                mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
-                service.update_env_variables_values(
-                    {
-                        "AGENT_ID": agent_id,
-                        "MECH_TO_CONFIG": json.dumps(
-                            {
-                                mech_address: {
-                                    "use_dynamic_pricing": False,
-                                    "is_marketplace_mech": True,
-                                }
-                            },
-                            separators=(",", ":"),
-                        ),
-                        "MECH_TO_MAX_DELIVERY_RATE": json.dumps(
-                            {
-                                mech_address: service.env_variables.get(
-                                    "MECH_REQUEST_PRICE", {}
-                                ).get("value", 10000000000000000)
-                            },
-                            separators=(",", ":"),
-                        ),
-                    }
+                raise UnsupportedChainError("Missing ERC8004 contracts")
+
+            identity_registry_bridger = (
+                registry_contracts.erc8004_identity_registry_bridger.get_instance(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=CONTRACTS[Chain(chain)][
+                        "erc8004_identity_registry_bridger"
+                    ],
+                )
+            )
+            erc8004_agent_id = identity_registry_bridger.functions.mapServiceIdAgentIds(
+                chain_data.token
+            ).call()
+
+            # Get current registered agent wallet
+            identity_registry = (
+                registry_contracts.erc8004_identity_registry.get_instance(
+                    ledger_api=sftxb.ledger_api,
+                    contract_address=CONTRACTS[Chain(chain)][
+                        "erc8004_identity_registry"
+                    ],
+                )
+            )
+            registered_wallet = identity_registry.functions.getAgentWallet(
+                erc8004_agent_id
+            ).call()
+
+            # Check if agent wallet needs to be set (new multisig or unset wallet)
+            if chain_data.multisig != registered_wallet:
+                self.logger.info(
+                    f"Agent wallet setup needed: "
+                    f"service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}, "
+                    f"new_wallet={chain_data.multisig}, "
+                    f"registered_wallet={registered_wallet}"
                 )
 
-            service.update_env_variables_values(
-                {
-                    "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                }
+                # Get current block timestamp and compute deadline (5 minutes = 300 seconds)
+                latest_block = sftxb.ledger_api.api.eth.get_block("latest")
+                deadline = (
+                    latest_block["timestamp"] + 300
+                )  # MAX_DEADLINE_DELAY = 5 minutes
+
+                # Get required contract addresses
+                ir_address = CONTRACTS[Chain(chain)]["erc8004_identity_registry"]
+                irb_address = CONTRACTS[Chain(chain)][
+                    "erc8004_identity_registry_bridger"
+                ]
+                sign_message_lib_address = CONTRACTS[Chain(chain)]["sign_message_lib"]
+
+                # Get transaction data for agent wallet setup
+                agent_wallet_txs, _ = sftxb.get_agent_wallet_setup_txs(
+                    agent_id=erc8004_agent_id,
+                    new_wallet=chain_data.multisig,
+                    identity_registry_address=ir_address,
+                    identity_registry_bridger_address=irb_address,
+                    sign_message_lib_address=sign_message_lib_address,
+                    deadline=deadline,
+                )
+
+                agent_crypto = self.keys_manager.get_crypto_instance(
+                    service.agent_addresses[0]
+                )
+                asftx = sftxb.new_tx(crypto=agent_crypto, safe=chain_data.multisig)
+                for agent_wallet_tx in agent_wallet_txs:
+                    asftx.add(agent_wallet_tx)
+
+                receipt = asftx.settle()
+                if receipt["status"] != 1:
+                    self.logger.error(
+                        f"Agent wallet setup transaction failed: {receipt}"
+                    )
+                    raise RuntimeError("Agent wallet setup transaction failed")
+
+                self.logger.info(
+                    f"Agent wallet setup completed for service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}"
+                )
+            else:
+                self.logger.info(
+                    f"ERC8004 Agent wallet already set for service_id={chain_data.token}, "
+                    f"erc8004_agent_id={erc8004_agent_id}"
+                )
+        except UnsupportedChainError:
+            self.logger.warning(
+                f"Skipping ERC8004 agent wallet setup: contracts not configured for {chain}"
+            )
+        except Exception:  # pylint: disable=broad-except
+            self.logger.error(
+                f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
             )
 
         # TODO: this is a patch for modius, to be standardized
@@ -1213,7 +1284,7 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
 
-    def terminate_service_on_chain(
+    def terminate_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Terminate service on-chain"""
@@ -1242,7 +1313,7 @@ class ServiceManager:
             ),
         )
 
-    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1390,7 +1461,7 @@ class ServiceManager:
                 ),  # TODO it should always be safe address
             )
 
-    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1453,7 +1524,7 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module(  # pylint: disable=too-many-locals
+    def _enable_recovery_module(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1532,15 +1603,17 @@ class ServiceManager:
                 f"Cannot enable recovery module. Safe {service_safe_address} has inconsistent owners."
             )
 
-    def _get_current_staking_program(  # pylint: disable=no-self-use
+    def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-        staking_manager = StakingManager(Chain(chain))
+        # Use service's custom RPC from chain_configs
+        rpc = service.chain_configs[chain].ledger_config.rpc
+        staking_manager = StakingManager(Chain(chain), rpc=rpc)
         return staking_manager.get_current_staking_program(
             service_id=service.chain_configs[chain].chain_data.token
         )
 
-    def unbond_service_on_chain(
+    def unbond_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1576,7 +1649,7 @@ class ServiceManager:
         """
         raise NotImplementedError
 
-    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
@@ -1762,7 +1835,7 @@ class ServiceManager:
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
 
-    def unstake_service_on_chain(
+    def unstake_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1795,7 +1868,7 @@ class ServiceManager:
             ),
         )
 
-    def unstake_service_on_chain_from_safe(
+    def unstake_service_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1856,7 +1929,7 @@ class ServiceManager:
                 chain=service.home_chain,
             )
 
-    def claim_on_chain_from_safe(
+    def claim_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1921,9 +1994,11 @@ class ServiceManager:
 
         # transfer claimed amount from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
-        amount_claimed = int(receipt["logs"][0]["data"].hex(), 16)
+        amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
         self.logger.info(f"Claimed amount: {amount_claimed}")
-        ethereum_crypto = KeysManager().get_crypto_instance(service.agent_addresses[0])
+        ethereum_crypto = self.keys_manager.get_crypto_instance(
+            service.agent_addresses[0]
+        )
         transfer_erc20_from_safe(
             ledger_api=ledger_api,
             crypto=ethereum_crypto,
@@ -1944,7 +2019,7 @@ class ServiceManager:
         self.funding_manager.fund_service(service=service, amounts=amounts)
 
     # TODO deprecate
-    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements  # pragma: no cover
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
@@ -2109,7 +2184,7 @@ class ServiceManager:
 
     # TODO Deprecate
     # TODO This method is possibly not used anymore
-    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
+    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         token: str,
@@ -2206,7 +2281,7 @@ class ServiceManager:
             chain=chain,
         )
 
-    def deploy_service_locally(
+    def deploy_service_locally(  # pylint: disable=too-many-arguments
         self,
         service_config_id: str,
         chain: t.Optional[str] = None,
@@ -2232,10 +2307,15 @@ class ServiceManager:
             use_kubernetes=use_kubernetes,
             force=True,
             chain=chain or service.home_chain,
+            keys_manager=self.keys_manager,
         )
         if build_only:
             return deployment
-        deployment.start(use_docker=use_docker)
+        deployment.start(
+            password=self.wallet_manager.password,
+            use_docker=use_docker,
+            is_aea=service.agent_release["is_aea"],
+        )
         return deployment
 
     def stop_service_locally(
@@ -2255,7 +2335,11 @@ class ServiceManager:
         service = self.load(service_config_id=service_config_id)
         service.remove_latest_healthcheck()
         deployment = service.deployment
-        deployment.stop(use_docker=use_docker, force=force)
+        deployment.stop(
+            use_docker=use_docker,
+            force=force,
+            is_aea=service.agent_release["is_aea"],
+        )
         if delete:
             deployment.delete()
         return deployment
@@ -2286,7 +2370,7 @@ class ServiceManager:
         return self.funding_manager.funding_requirements(service)
 
     # TODO deprecate
-    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
+    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks  # pragma: no cover
         self, service_config_id: str
     ) -> t.Dict:
         """Get user refill requirements for a service."""
@@ -2322,9 +2406,9 @@ class ServiceManager:
                 allow_start_agent = False
 
             # Protocol asset requirements
-            protocol_asset_requirements[
-                chain
-            ] = self._compute_protocol_asset_requirements(service_config_id, chain)
+            protocol_asset_requirements[chain] = (
+                self._compute_protocol_asset_requirements(service_config_id, chain)
+            )
             service_asset_requirements = chain_data.user_params.fund_requirements
 
             # Bonded assets
@@ -2431,15 +2515,12 @@ class ServiceManager:
                     asset_address
                 ] = recommended_refill
 
-                total_requirements[chain].setdefault(master_safe, {})[
-                    asset_address
-                ] = sum(
-                    agent_asset_funding_values[address]["topup"]
-                    for address in agent_asset_funding_values
-                ) + protocol_asset_requirements[
-                    chain
-                ].get(
-                    asset_address, 0
+                total_requirements[chain].setdefault(master_safe, {})[asset_address] = (
+                    sum(
+                        agent_asset_funding_values[address]["topup"]
+                        for address in agent_asset_funding_values
+                    )
+                    + protocol_asset_requirements[chain].get(asset_address, 0)
                 )
 
                 if asset_address == ZERO_ADDRESS and any(
@@ -2468,9 +2549,9 @@ class ServiceManager:
                 ZERO_ADDRESS
             ] = eoa_recommended_refill
 
-            total_requirements[chain].setdefault(master_eoa, {})[
-                ZERO_ADDRESS
-            ] = eoa_funding_values["topup"]
+            total_requirements[chain].setdefault(master_eoa, {})[ZERO_ADDRESS] = (
+                eoa_funding_values["topup"]
+            )
 
         is_refill_required = any(
             amount > 0
@@ -2490,7 +2571,7 @@ class ServiceManager:
         }
 
     # TODO deprecate
-    def _compute_bonded_assets(  # pylint: disable=too-many-locals
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> t.Dict:
         """Computes the bonded tokens: current agent bonds and current security deposit"""
