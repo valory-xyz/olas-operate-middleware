@@ -447,7 +447,9 @@ class TestFundService:
         chain_data_mock.chain_data.multisig = SAFE_ADDR
         mock_service.chain_configs = {"gnosis": chain_data_mock}
 
-        amounts = ChainAmounts({"gnosis": {"not_an_address": {ZERO_ADDRESS: BigInt(1)}}})
+        amounts = ChainAmounts(
+            {"gnosis": {"not_an_address": {ZERO_ADDRESS: BigInt(1)}}}
+        )
 
         with pytest.raises(ValueError, match="not a valid Ethereum address"):
             manager.fund_service(mock_service, amounts)
