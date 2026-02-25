@@ -87,7 +87,9 @@ class Settings(LocalResource, metaclass=SingletonMeta):
         eth_master_wallet = self.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
         return {
             chain: {
-                asset: amount if chain in eth_master_wallet.safes else BigInt(amount * 2)
+                asset: (
+                    amount if chain in eth_master_wallet.safes else BigInt(amount * 2)
+                )
                 for asset, amount in asset_amount.items()
             }
             for chain, asset_amount in self.eoa_topups.items()
