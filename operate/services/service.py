@@ -776,7 +776,18 @@ class Deployment(LocalResource):
 
     def delete(self) -> None:
         """Delete the deployment."""
+        if self.status == DeploymentStatus.DEPLOYED:
+            raise ValueError(
+                f"Cannot delete a deployment in {self.status} state. "
+                "Stop the service first."
+            )
+
         build = self.path / DEPLOYMENT_DIR
+        if not build.exists():
+            self.status = DeploymentStatus.DELETED
+            self.store()
+            return
+
         shutil.rmtree(build)
         self.status = DeploymentStatus.DELETED
         self.store()

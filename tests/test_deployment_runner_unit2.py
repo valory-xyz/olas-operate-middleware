@@ -575,6 +575,47 @@ class TestStop:
 
 
 # ---------------------------------------------------------------------------
+# _close_agent_log_file / _close_tm_log_file tests
+# ---------------------------------------------------------------------------
+
+
+class TestCloseLogFiles:
+    """Tests for _close_agent_log_file and _close_tm_log_file."""
+
+    def test_close_agent_log_file_noop_when_none(self, tmp_path: Path) -> None:
+        """_close_agent_log_file does nothing when handle is None."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        assert runner._agent_log_file is None
+        runner._close_agent_log_file()  # Should not raise
+        assert runner._agent_log_file is None
+
+    def test_close_agent_log_file_closes_and_clears(self, tmp_path: Path) -> None:
+        """_close_agent_log_file closes the file handle and sets attribute to None."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        mock_fh = MagicMock()
+        runner._agent_log_file = mock_fh
+        runner._close_agent_log_file()
+        mock_fh.close.assert_called_once()
+        assert runner._agent_log_file is None
+
+    def test_close_tm_log_file_noop_when_none(self, tmp_path: Path) -> None:
+        """_close_tm_log_file does nothing when handle is None."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        assert runner._tm_log_file is None
+        runner._close_tm_log_file()  # Should not raise
+        assert runner._tm_log_file is None
+
+    def test_close_tm_log_file_closes_and_clears(self, tmp_path: Path) -> None:
+        """_close_tm_log_file closes the file handle and sets attribute to None."""
+        runner = ConcreteDeploymentRunner(tmp_path, is_aea=True)
+        mock_fh = MagicMock()
+        runner._tm_log_file = mock_fh
+        runner._close_tm_log_file()
+        mock_fh.close.assert_called_once()
+        assert runner._tm_log_file is None
+
+
+# ---------------------------------------------------------------------------
 # _stop_agent tests
 # ---------------------------------------------------------------------------
 

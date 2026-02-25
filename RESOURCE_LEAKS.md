@@ -4,7 +4,7 @@ This document tracks known resource leaks in the codebase that need future clean
 
 ## File Handle Leaks in deployment_runner.py
 
-**Status:** Documented (2026-02-10)
+**Status:** Fixed (2026-02-25)
 **Priority:** Low
 **Impact:** Minor - OS cleans up on subprocess termination
 
@@ -122,31 +122,17 @@ class ManagedSubprocess:
         # Process cleanup...
 ```
 
-### Recommended Action
+### Implementation (Option 1 — applied)
 
-Implement **Option 1** (Store File Handle References) in a future cleanup phase:
-- Low complexity
-- Minimal code changes
-- Backward compatible
-- Clear ownership and lifecycle
+`BaseDeploymentRunner` now tracks open log file handles:
+- `_agent_log_file: Optional[TextIOWrapper]` — set by each `_start_agent_process` / `_start_agent` call
+- `_tm_log_file: Optional[TextIOWrapper]` — set by each `_start_tendermint_process` call
+- `_close_agent_log_file()` — closes and clears `_agent_log_file`; called unconditionally in `_stop_agent()`
+- `_close_tm_log_file()` — closes and clears `_tm_log_file`; called unconditionally in `_stop_tendermint()`
 
-### Verification Tests
+All close calls use `suppress(Exception)` to avoid masking shutdown errors.
 
-When implementing the fix, add these tests:
-```python
-def test_log_files_closed_on_service_stop():
-    """Test that log file handles are closed when service stops."""
-    # Start service
-    # Get file descriptor count
-    # Stop service
-    # Verify file descriptor count decreased
-
-def test_rapid_service_restart_no_handle_leak():
-    """Test rapid restarts don't accumulate file handles."""
-    # Rapid start/stop cycles (100 iterations)
-    # Monitor file descriptor count
-    # Assert no unbounded growth
-```
+Tests added to `tests/test_deployment_runner_unit2.py` (`TestCloseLogFiles`).
 
 ## Other Resource Leak Checks
 

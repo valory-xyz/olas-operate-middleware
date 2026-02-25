@@ -61,3 +61,8 @@ custom-script.sh
 
 # profile files
 prof/
+
+# Coverage reports
+.coverage
+coverage.xml
+htmlcov/

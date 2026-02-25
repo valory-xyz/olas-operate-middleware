@@ -959,6 +959,10 @@ class FundingManager:
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if amount <= 0:
+                        self.logger.warning(
+                            f"[FUNDING MANAGER] Skipping non-positive amount {amount} "
+                            f"for {asset} to {address} on {chain.value}"
+                        )
                         continue
 
                     self.logger.info(
@@ -990,6 +994,10 @@ class FundingManager:
         try:
             for chain_str, addresses in amounts.items():
                 for address in addresses:
+                    if not Web3.is_address(address):
+                        raise ValueError(
+                            f"Failed to fund from Master Safe: Address {address!r} is not a valid Ethereum address."
+                        )
                     if (
                         address not in service.agent_addresses
                         and address

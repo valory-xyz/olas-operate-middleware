@@ -2,14 +2,14 @@
 
 Analysis of missing validation that could lead to state corruption or unsafe operations.
 
-**Date:** 2026-02-10
+**Date:** 2026-02-10 (updated 2026-02-25)
 **Phase:** 1.5 - Input Validation & State Protection
 
 ---
 
-## Critical Gaps
+## Implemented ✅
 
-### 1. Service Deletion Without State Validation ⚠️
+### 1. Service Deletion Without State Validation → FIXED
 
 **File:** `operate/services/service.py:773-778`
 
@@ -87,7 +87,7 @@ def test_delete_invalid_path_raises_error():
 
 ---
 
-### 2. Address Validation Missing in Funding ⚠️
+### 2. Address Validation Missing in Funding → FIXED
 
 **File:** `operate/services/funding_manager.py:975-1010`
 
@@ -189,7 +189,7 @@ def test_fund_service_zero_address():
 
 ---
 
-### 3. Amount Validation - Silent Skipping vs Rejection ℹ️
+### 3. Amount Validation - Silent Skipping vs Rejection → FIXED (warning logged)
 
 **File:** `operate/services/funding_manager.py:961-962`
 
@@ -251,9 +251,9 @@ if amount <= 0:
 
 ---
 
-## Lower Priority Gaps
+## Remaining / Deferred
 
-### 4. Service State Transitions Not Validated
+### 4. Service State Transitions Not Validated (deferred to Phase 3)
 
 **File:** `operate/services/service.py`
 
@@ -301,29 +301,16 @@ class Deployment:
 
 ---
 
-## Summary of Recommended Actions
+## Summary
 
-**High Priority:**
-1. ✅ Add state validation to `Deployment.delete()` (Prevents deleting running services)
-2. ✅ Add Ethereum address validation to funding operations (Prevents typos/corruption)
-3. ✅ Add path safety checks to destructive operations (Prevents accidental deletions)
-
-**Medium Priority:**
-4. ⚠️ Validate amounts (reject vs skip) - decide on error handling strategy
-5. ⚠️ Add state transition validation - enforce state machine
-
-**Implementation Plan:**
-1. Create validation utility functions in `operate/utils/validation.py`
-2. Add validation to critical operations (delete, fund)
-3. Add comprehensive test coverage
-4. Document validation requirements
-
-**Test Coverage Goals:**
-- Negative tests for each validation (invalid inputs raise proper errors)
-- Edge cases (zero address, negative amounts, invalid states)
-- Error messages are clear and actionable
+| Gap | Status |
+|-----|--------|
+| 1. `Deployment.delete()` state guard + missing-dir handling | ✅ `service.py` |
+| 2. Ethereum address format validation in `fund_service()` | ✅ `funding_manager.py` |
+| 3. Log warning for non-positive amounts in `fund_chain_amounts()` | ✅ `funding_manager.py` |
+| 4. Service state machine transition enforcement | 📋 Deferred to Phase 3 |
 
 ---
 
-**Last Updated:** 2026-02-10
-**Status:** Analysis Complete - Ready for Implementation
+**Last Updated:** 2026-02-25
+**Status:** Gaps 1-3 implemented. Gap 4 deferred to Phase 3 refactoring.

@@ -629,6 +629,22 @@ class TestDeploymentDelete:
         assert not build_dir.exists()
         assert depl.status == DeploymentStatus.DELETED
 
+    def test_delete_raises_when_deployed(self, tmp_path: Path) -> None:
+        """delete() raises ValueError when the service is currently DEPLOYED."""
+        depl = _make_deployment(tmp_path, DeploymentStatus.DEPLOYED)
+
+        with pytest.raises(ValueError, match="Cannot delete.*Stop the service first"):
+            depl.delete()
+
+    def test_delete_missing_build_dir_is_graceful(self, tmp_path: Path) -> None:
+        """delete() with no build directory still marks status DELETED without error."""
+        depl = _make_deployment(tmp_path, DeploymentStatus.BUILT)
+        # deliberately do NOT create the build dir
+
+        depl.delete()
+
+        assert depl.status == DeploymentStatus.DELETED
+
 
 # ---------------------------------------------------------------------------
 # tests for Deployment.build() routing logic
