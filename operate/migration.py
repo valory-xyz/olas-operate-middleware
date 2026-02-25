@@ -35,7 +35,7 @@ from operate.constants import USER_JSON, ZERO_ADDRESS
 from operate.keys import KeysManager
 from operate.operate_types import AgentRelease as AgentReleaseType
 from operate.operate_types import AgentReleaseRepo, Chain, LedgerType
-from operate.services.agent_runner import AgentRelease
+from operate.services.agent_assets import AgentRelease
 from operate.services.manage import ServiceManager
 from operate.services.service import (
     NON_EXISTENT_MULTISIG,
