@@ -171,11 +171,13 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
             logger=logger,
             password=self._password,
         )
-        self.settings = Settings(path=self._path)
 
         self._wallet_manager = MasterWalletManager(
             path=self._path / WALLETS_DIR,
             password=self.password,
+        )
+        self.settings: Settings = Settings(
+            wallet_manager=self.wallet_manager, path=self._path
         )
         self._wallet_manager.setup()
         self._funding_manager = FundingManager(
@@ -201,6 +203,7 @@ class OperateApp:  # pylint: disable=too-many-instance-attributes
         self._password = value
         self._keys_manager.password = value
         self._wallet_manager.password = value
+        self.settings.wallet_manager.password = value
         self._migration_manager.migrate_keys(self._keys_manager)
 
     def _backup_operate_if_new_version(self) -> None:
