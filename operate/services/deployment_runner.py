@@ -116,26 +116,30 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
         """Initialize the deployment runner."""
         super().__init__(work_directory)
         self._is_aea = is_aea
+        self._agent_log_file: t.Optional[TextIOWrapper] = None
+        self._tm_log_file: t.Optional[TextIOWrapper] = None
 
     def _open_agent_runner_log_file(self) -> TextIOWrapper:
-        """Open agent_runner.log file.
-
-        TODO: Resource leak - file handle not explicitly closed.
-        File is passed to subprocess.Popen as stdout/stderr and never closed.
-        OS cleans up when subprocess dies, but explicit cleanup would be better.
-        See: RESOURCE_LEAKS.md for details.
-        """
+        """Open agent_runner.log file."""
         return (self._get_operate_dir() / "agent_runner.log").open("w+")
 
     def _open_tendermint_log_file(self) -> TextIOWrapper:
-        """Open tm.log file.
-
-        TODO: Resource leak - file handle not explicitly closed.
-        File is passed to subprocess.Popen as stdout/stderr and never closed.
-        OS cleans up when subprocess dies, but explicit cleanup would be better.
-        See: RESOURCE_LEAKS.md for details.
-        """
+        """Open tm.log file."""
         return (self._get_operate_dir() / "tm.log").open("w+")
+
+    def _close_agent_log_file(self) -> None:
+        """Close agent log file handle if open."""
+        if self._agent_log_file is not None:
+            with suppress(Exception):
+                self._agent_log_file.close()
+            self._agent_log_file = None
+
+    def _close_tm_log_file(self) -> None:
+        """Close tendermint log file handle if open."""
+        if self._tm_log_file is not None:
+            with suppress(Exception):
+                self._tm_log_file.close()
+            self._tm_log_file = None
 
     def _get_operate_dir(self) -> Path:
         """Get .operate dir."""
@@ -341,27 +345,26 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     def _stop_agent(self) -> None:
         """Stop agent process using safe PID file operations."""
         pid_file = self._work_directory / "agent.pid"
-        if not pid_file.exists():
-            return
-
-        try:
-            # Read and validate PID (checks process exists, removes stale files)
-            # Expected process names: python, agent_runner, aea
-            pid = read_pid_file(
-                pid_file,
-                expected_process_names=["python", "agent", "aea"],
-                remove_stale=True,
-            )
-            kill_process(pid)
-            # Clean up PID file after successful kill
-            remove_pid_file(pid_file, force=True)
-        except (FileNotFoundError, StalePIDFile):
-            # PID file doesn't exist or process already dead - OK
-            self.logger.debug(f"Agent PID file {pid_file} not found or stale")
-        except PIDFileError as e:
-            self.logger.error(f"Error reading agent PID file {pid_file}: {e}")
-            # Try to clean up invalid PID file
-            remove_pid_file(pid_file, force=True)
+        if pid_file.exists():
+            try:
+                # Read and validate PID (checks process exists, removes stale files)
+                # Expected process names: python, agent_runner, aea
+                pid = read_pid_file(
+                    pid_file,
+                    expected_process_names=["python", "agent", "aea"],
+                    remove_stale=True,
+                )
+                kill_process(pid)
+                # Clean up PID file after successful kill
+                remove_pid_file(pid_file, force=True)
+            except (FileNotFoundError, StalePIDFile):
+                # PID file doesn't exist or process already dead - OK
+                self.logger.debug(f"Agent PID file {pid_file} not found or stale")
+            except PIDFileError as e:
+                self.logger.error(f"Error reading agent PID file {pid_file}: {e}")
+                # Try to clean up invalid PID file
+                remove_pid_file(pid_file, force=True)
+        self._close_agent_log_file()
 
     def _get_tm_exit_url(self) -> str:
         return f"{self.TM_CONTROL_URL}/exit"
@@ -379,27 +382,26 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             self.logger.exception("Exception on tendermint stop!")
 
         pid_file = self._work_directory / "tendermint.pid"
-        if not pid_file.exists():
-            return
-
-        try:
-            # Read and validate PID (checks process exists, removes stale files)
-            # Expected process names: tendermint, flask, python
-            pid = read_pid_file(
-                pid_file,
-                expected_process_names=["tendermint", "flask", "python"],
-                remove_stale=True,
-            )
-            kill_process(pid)
-            # Clean up PID file after successful kill
-            remove_pid_file(pid_file, force=True)
-        except (FileNotFoundError, StalePIDFile):
-            # PID file doesn't exist or process already dead - OK
-            self.logger.debug(f"Tendermint PID file {pid_file} not found or stale")
-        except PIDFileError as e:
-            self.logger.error(f"Error reading tendermint PID file {pid_file}: {e}")
-            # Try to clean up invalid PID file
-            remove_pid_file(pid_file, force=True)
+        if pid_file.exists():
+            try:
+                # Read and validate PID (checks process exists, removes stale files)
+                # Expected process names: tendermint, flask, python
+                pid = read_pid_file(
+                    pid_file,
+                    expected_process_names=["tendermint", "flask", "python"],
+                    remove_stale=True,
+                )
+                kill_process(pid)
+                # Clean up PID file after successful kill
+                remove_pid_file(pid_file, force=True)
+            except (FileNotFoundError, StalePIDFile):
+                # PID file doesn't exist or process already dead - OK
+                self.logger.debug(f"Tendermint PID file {pid_file} not found or stale")
+            except PIDFileError as e:
+                self.logger.error(f"Error reading tendermint PID file {pid_file}: {e}")
+                # Try to clean up invalid PID file
+                remove_pid_file(pid_file, force=True)
+        self._close_tm_log_file()
 
     @abstractmethod
     def _start_tendermint(self) -> None:
@@ -528,12 +530,12 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             env=env,
             preexec_fn=os.setpgrp,
         )
@@ -547,12 +549,12 @@ class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
             **env,
         }
         env["PATH"] = os.path.dirname(sys.executable) + ":" + os.environ["PATH"]
-        tm_log_file = self._open_tendermint_log_file()
+        self._tm_log_file = self._open_tendermint_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with,subprocess-popen-preexec-fn # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=tm_log_file,
-            stderr=tm_log_file,
+            stdout=self._tm_log_file,
+            stderr=self._tm_log_file,
             env=env,
             preexec_fn=os.setpgrp,  # pylint: disable=subprocess-popen-preexec-fn # nosec
         )
@@ -654,12 +656,12 @@ class PyInstallerHostDeploymentRunnerWindows(
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=working_dir / "agent",
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
@@ -673,14 +675,14 @@ class PyInstallerHostDeploymentRunnerWindows(
         env = {
             **env,
         }
-        tm_log_file = self._open_tendermint_log_file()
+        self._tm_log_file = self._open_tendermint_log_file()
         env["PATH"] = os.path.dirname(sys.executable) + ";" + os.environ["PATH"]
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=[self._tendermint_bin],
             cwd=working_dir,
-            stdout=tm_log_file,
-            stderr=tm_log_file,
+            stdout=self._tm_log_file,
+            stderr=self._tm_log_file,
             env=env,
             creationflags=0x00000200,  # Detach process from the main process
         )
@@ -707,14 +709,14 @@ class HostPythonHostDeploymentRunner(BaseDeploymentRunner):
         env = json.loads((working_dir / "agent.json").read_text(encoding="utf-8"))
         env["PYTHONUTF8"] = "1"
         env["PYTHONIOENCODING"] = "utf8"
-        agent_runner_log_file = self._open_agent_runner_log_file()
+        self._agent_log_file = self._open_agent_runner_log_file()
 
         process = subprocess.Popen(  # pylint: disable=consider-using-with # nosec
             args=self.get_agent_start_args(password=password),
             cwd=str(working_dir / "agent"),
             env={**os.environ, **env},
-            stdout=agent_runner_log_file,
-            stderr=agent_runner_log_file,
+            stdout=self._agent_log_file,
+            stderr=self._agent_log_file,
             creationflags=(
                 0x00000008 if platform.system() == "Windows" else 0
             ),  # Detach process from the main process
