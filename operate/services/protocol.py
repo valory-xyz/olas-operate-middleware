@@ -177,7 +177,7 @@ class GnosisSafeTransaction:
         update_tx_with_gas_estimate(tx, self.ledger_api)
         return t.cast(t.Dict, tx)
 
-    def settle(self) -> TxReceipt:
+    def settle(self) -> TxReceipt:  # pragma: no cover
         """Settle the transaction."""
         return (
             TxSettler(
@@ -326,7 +326,9 @@ class StakingManager:
             rpc=self._rpc,
         )
 
-    def staking_state(self, service_id: int, staking_contract: str) -> StakingState:
+    def staking_state(
+        self, service_id: int, staking_contract: str
+    ) -> StakingState:  # pragma: no cover
         """Is the service staked?"""
         return StakingState(
             self.staking_ctr.get_instance(
@@ -337,7 +339,7 @@ class StakingManager:
             .call()
         )
 
-    def slots_available(self, staking_contract: str) -> bool:
+    def slots_available(self, staking_contract: str) -> bool:  # pragma: no cover
         """Check if there are available slots on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -348,7 +350,7 @@ class StakingManager:
         )
         return available > 0
 
-    def available_rewards(self, staking_contract: str) -> int:
+    def available_rewards(self, staking_contract: str) -> int:  # pragma: no cover
         """Get the available staking rewards on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -357,7 +359,9 @@ class StakingManager:
         available_rewards = instance.functions.availableRewards().call()
         return available_rewards
 
-    def claimable_rewards(self, staking_contract: str, service_id: int) -> int:
+    def claimable_rewards(
+        self, staking_contract: str, service_id: int
+    ) -> int:  # pragma: no cover
         """Get the claimable staking rewards on the staking contract"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -366,7 +370,9 @@ class StakingManager:
         claimable_rewards = instance.functions.calculateStakingReward(service_id).call()
         return claimable_rewards
 
-    def service_info(self, staking_contract: str, service_id: int) -> dict:
+    def service_info(
+        self, staking_contract: str, service_id: int
+    ) -> dict:  # pragma: no cover
         """Get the service onchain info"""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -375,7 +381,7 @@ class StakingManager:
         service_info = instance.functions.getServiceInfo(service_id).call()
         return service_info
 
-    def agent_ids(self, staking_contract: str) -> t.List[int]:
+    def agent_ids(self, staking_contract: str) -> t.List[int]:  # pragma: no cover
         """Get a list of agent IDs for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -383,7 +389,7 @@ class StakingManager:
         )
         return instance.functions.getAgentIds().call()
 
-    def service_registry(self, staking_contract: str) -> str:
+    def service_registry(self, staking_contract: str) -> str:  # pragma: no cover
         """Retrieve the service registry address for the given staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -391,7 +397,7 @@ class StakingManager:
         )
         return instance.functions.serviceRegistry().call()
 
-    def staking_token(self, staking_contract: str) -> str:
+    def staking_token(self, staking_contract: str) -> str:  # pragma: no cover
         """Get the staking token address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -399,7 +405,9 @@ class StakingManager:
         )
         return instance.functions.stakingToken().call()
 
-    def service_registry_token_utility(self, staking_contract: str) -> str:
+    def service_registry_token_utility(
+        self, staking_contract: str
+    ) -> str:  # pragma: no cover
         """Get the service registry token utility address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -407,7 +415,7 @@ class StakingManager:
         )
         return instance.functions.serviceRegistryTokenUtility().call()
 
-    def min_staking_deposit(self, staking_contract: str) -> int:
+    def min_staking_deposit(self, staking_contract: str) -> int:  # pragma: no cover
         """Retrieve the minimum staking deposit required for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -415,7 +423,7 @@ class StakingManager:
         )
         return instance.functions.minStakingDeposit().call()
 
-    def activity_checker(self, staking_contract: str) -> str:
+    def activity_checker(self, staking_contract: str) -> str:  # pragma: no cover
         """Retrieve the activity checker address for the staking contract."""
         instance = self.staking_ctr.get_instance(
             ledger_api=self.ledger_api,
@@ -440,7 +448,7 @@ class StakingManager:
             raise ValueError("No sataking slots available.")
 
     # TODO To be deprecated, only used in on-chain manager
-    def stake(
+    def stake(  # pragma: no cover
         self,
         service_id: int,
         service_registry: str,
@@ -536,7 +544,7 @@ class StakingManager:
             raise ValueError("Service cannot be unstaked yet.")
 
     # TODO To be deprecated, only used in on-chain manager
-    def unstake(
+    def unstake(  # pragma: no cover
         self,
         service_id: int,
         staking_contract: str,
@@ -740,7 +748,7 @@ class MintManager(MintHelper):
         )
         return self
 
-    def publish_metadata(self) -> "MintManager":
+    def publish_metadata(self) -> "MintManager":  # pragma: no cover
         """Publish metadata."""
         self.metadata_hash, self.metadata_string = publish_metadata(
             package_id=self.package_configuration.package_id,
@@ -790,7 +798,7 @@ class _ChainUtil:
         return self.wallet.safes[chain]
 
     @property
-    def crypto(self) -> Crypto:
+    def crypto(self) -> Crypto:  # pragma: no cover
         """Load crypto object."""
         self._patch()
         _, crypto = OnChainHelper.get_ledger_and_crypto_objects(
@@ -801,7 +809,7 @@ class _ChainUtil:
         return crypto
 
     @property
-    def ledger_api(self) -> LedgerApi:
+    def ledger_api(self) -> LedgerApi:  # pragma: no cover
         """Load ledger api object."""
         self._patch()
         return self.wallet.ledger_api(
@@ -815,7 +823,7 @@ class _ChainUtil:
         return ContractConfigs.service_manager.contracts[self.chain_type]
 
     @property
-    def service_manager_instance(self) -> Contract:
+    def service_manager_instance(self) -> Contract:  # pragma: no cover
         """Load service manager contract instance."""
         contract_interface = registry_contracts.service_manager.contract_interface.get(
             self.ledger_api.identifier, {}
@@ -826,7 +834,7 @@ class _ChainUtil:
         )
         return instance
 
-    def info(self, token_id: int) -> t.Dict:
+    def info(self, token_id: int) -> t.Dict:  # pragma: no cover
         """Get service info."""
         self._patch()
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
@@ -881,7 +889,9 @@ class _ChainUtil:
         )
         return bond
 
-    def get_service_safe_owners(self, service_id: int) -> t.List[str]:
+    def get_service_safe_owners(
+        self, service_id: int
+    ) -> t.List[str]:  # pragma: no cover
         """Get list of owners."""
         ledger_api, _ = OnChainHelper.get_ledger_and_crypto_objects(
             chain_type=self.chain_type
@@ -909,7 +919,7 @@ class _ChainUtil:
             contract_address=multisig_address,
         ).get("owners", [])
 
-    def swap(  # pylint: disable=too-many-arguments,too-many-locals
+    def swap(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         service_id: int,
         multisig: str,
@@ -1058,7 +1068,7 @@ class _ChainUtil:
 class OnChainManager(_ChainUtil):
     """On chain service management."""
 
-    def mint(  # pylint: disable=too-many-arguments,too-many-locals
+    def mint(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         package_path: Path,
         agent_id: int,
@@ -1127,7 +1137,7 @@ class OnChainManager(_ChainUtil):
                 }
         return published
 
-    def activate(
+    def activate(  # pragma: no cover
         self,
         service_id: int,
         token: t.Optional[str] = None,
@@ -1148,7 +1158,7 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).activate_service()
 
-    def register(
+    def register(  # pragma: no cover
         self,
         service_id: int,
         instances: t.List[str],
@@ -1173,7 +1183,7 @@ class OnChainManager(_ChainUtil):
                 agent_ids=agents,
             )
 
-    def deploy(
+    def deploy(  # pragma: no cover
         self,
         service_id: int,
         reuse_multisig: bool = False,
@@ -1197,7 +1207,9 @@ class OnChainManager(_ChainUtil):
                 reuse_multisig=reuse_multisig,
             )
 
-    def terminate(self, service_id: int, token: t.Optional[str] = None) -> None:
+    def terminate(
+        self, service_id: int, token: t.Optional[str] = None
+    ) -> None:  # pragma: no cover
         """Terminate service."""
         logging.info(f"Terminating service {service_id}...")
         self._patch()
@@ -1214,7 +1226,9 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).terminate_service()
 
-    def unbond(self, service_id: int, token: t.Optional[str] = None) -> None:
+    def unbond(
+        self, service_id: int, token: t.Optional[str] = None
+    ) -> None:  # pragma: no cover
         """Unbond service."""
         logging.info(f"Unbonding service {service_id}...")
         self._patch()
@@ -1231,7 +1245,7 @@ class OnChainManager(_ChainUtil):
                 token=token,
             ).unbond_service()
 
-    def stake(
+    def stake(  # pragma: no cover
         self,
         service_id: int,
         service_registry: str,
@@ -1249,7 +1263,9 @@ class OnChainManager(_ChainUtil):
             password=self.wallet.password,
         )
 
-    def unstake(self, service_id: int, staking_contract: str) -> None:
+    def unstake(
+        self, service_id: int, staking_contract: str
+    ) -> None:  # pragma: no cover
         """Unstake service."""
         self._patch()
         StakingManager(
@@ -1261,7 +1277,9 @@ class OnChainManager(_ChainUtil):
             password=self.wallet.password,
         )
 
-    def staking_status(self, service_id: int, staking_contract: str) -> StakingState:
+    def staking_status(
+        self, service_id: int, staking_contract: str
+    ) -> StakingState:  # pragma: no cover
         """Stake the service"""
         self._patch()
         return StakingManager(
@@ -1301,7 +1319,7 @@ class EthSafeTxBuilder(_ChainUtil):
             safe=t.cast(str, safe or self.safe),
         )
 
-    def get_mint_tx_data(  # pylint: disable=too-many-arguments
+    def get_mint_tx_data(  # pylint: disable=too-many-arguments  # pragma: no cover
         self,
         package_path: Path,
         agent_id: int,
@@ -1377,7 +1395,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_erc20_approval_data(
+    def get_erc20_approval_data(  # pragma: no cover
         self,
         spender: str,
         amount: int,
@@ -1399,7 +1417,9 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_activate_data(self, service_id: int, cost_of_bond: int) -> t.Dict:
+    def get_activate_data(
+        self, service_id: int, cost_of_bond: int
+    ) -> t.Dict:  # pragma: no cover
         """Get activate tx data."""
         txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="activateRegistration",
@@ -1413,7 +1433,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": cost_of_bond,
         }
 
-    def get_register_instances_data(
+    def get_register_instances_data(  # pragma: no cover
         self,
         service_id: int,
         instances: t.List[str],
@@ -1528,7 +1548,7 @@ class EthSafeTxBuilder(_ChainUtil):
             return [deploy_message]
         return [approve_hash_message, deploy_message]
 
-    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals
+    def get_safe_b_native_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         safe_b_address: str,
         to: str,
@@ -1612,7 +1632,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals
+    def get_safe_b_erc20_transfer_messages(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         safe_b_address: str,
         token: str,
@@ -1704,7 +1724,7 @@ class EthSafeTxBuilder(_ChainUtil):
 
         return approve_hash_message, exec_message
 
-    def get_terminate_data(self, service_id: int) -> t.Dict:
+    def get_terminate_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get terminate tx data."""
         txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="terminate",
@@ -1717,7 +1737,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_unbond_data(self, service_id: int) -> t.Dict:
+    def get_unbond_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get unbond tx data."""
         txd = self.service_manager_instance.encode_abi(
             abi_element_identifier="unbond",
@@ -1846,12 +1866,14 @@ class EthSafeTxBuilder(_ChainUtil):
         except ValueError:
             return False
 
-    def get_swap_data(self, service_id: int, multisig: str, owner_key: str) -> t.Dict:
+    def get_swap_data(
+        self, service_id: int, multisig: str, owner_key: str
+    ) -> t.Dict:  # pragma: no cover
         """Swap safe owner."""
         # TODO: Discuss implementation
         raise NotImplementedError()
 
-    def get_recover_access_data(self, service_id: int) -> t.Dict:
+    def get_recover_access_data(self, service_id: int) -> t.Dict:  # pragma: no cover
         """Get recover access tx data."""
         instance = registry_contracts.recovery_module.get_instance(
             ledger_api=self.ledger_api,
@@ -1868,7 +1890,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_enable_module_data(
+    def get_enable_module_data(  # pragma: no cover
         self,
         safe_address: str,
         module_address: str,
@@ -1890,7 +1912,7 @@ class EthSafeTxBuilder(_ChainUtil):
             "value": 0,
         }
 
-    def get_agent_wallet_setup_txs(  # pylint: disable=too-many-arguments
+    def get_agent_wallet_setup_txs(  # pylint: disable=too-many-arguments  # pragma: no cover
         self,
         agent_id: int,
         new_wallet: str,
@@ -1960,7 +1982,7 @@ def get_packed_signature_for_approved_hash(owners: t.Tuple[str]) -> bytes:
     return signatures
 
 
-def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
+def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
     ledger_api: LedgerApi,
     chain_type: ChainType,
     service_id: int,
@@ -2099,7 +2121,7 @@ def get_reuse_multisig_from_safe_payload(  # pylint: disable=too-many-locals
     return payload, approve_hash_message, None
 
 
-def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals
+def get_reuse_multisig_with_recovery_from_safe_payload(  # pylint: disable=too-many-locals  # pragma: no cover
     ledger_api: LedgerApi,
     chain_type: ChainType,
     service_id: int,

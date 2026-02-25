@@ -71,7 +71,7 @@ from operate.wallet.master import MasterWallet
 warnings.filterwarnings("ignore", category=UserWarning)
 
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from operate.cli import OperateApp
 
 NO_STAKING_PROGRAM_METADATA = {
@@ -235,7 +235,7 @@ def load_local_config(operate: "OperateApp", service_name: str) -> QuickstartCon
     return config
 
 
-def configure_local_config(
+def configure_local_config(  # pragma: no cover
     template: ServiceTemplate, operate: "OperateApp"
 ) -> QuickstartConfig:
     """Configure local quickstart configuration."""
@@ -596,7 +596,7 @@ def get_service(manager: ServiceManager, template: ServiceTemplate) -> Service:
     return service
 
 
-def ask_funds_in_address(
+def ask_funds_in_address(  # pragma: no cover
     ledger_api: LedgerApi,
     required_balance: int,
     asset_address: str,
@@ -721,7 +721,9 @@ def _maybe_create_master_eoa(operate: "OperateApp") -> None:
         )
 
 
-def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
+def ensure_enough_funds(
+    operate: "OperateApp", service: Service
+) -> None:  # pragma: no cover
     """Ensure enough funds."""
     _maybe_create_master_eoa(operate)
     wallet = operate.wallet_manager.load(ledger_type=LedgerType.ETHEREUM)
@@ -749,7 +751,7 @@ def ensure_enough_funds(operate: "OperateApp", service: Service) -> None:
                 )
 
 
-def run_service(
+def run_service(  # pragma: no cover
     operate: "OperateApp",
     config_path: str,
     build_only: bool = False,

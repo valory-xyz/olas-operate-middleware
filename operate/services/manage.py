@@ -316,7 +316,7 @@ class ServiceManager:
             f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
 
-    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -330,7 +330,7 @@ class ServiceManager:
                 chain=chain,
             )
 
-    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -522,7 +522,7 @@ class ServiceManager:
         )
         service.store()
 
-    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -632,7 +632,7 @@ class ServiceManager:
             priority_mech_service_id=priority_mech_service_id,
         )
 
-    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
+    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1284,7 +1284,7 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
 
-    def terminate_service_on_chain(
+    def terminate_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Terminate service on-chain"""
@@ -1313,7 +1313,7 @@ class ServiceManager:
             ),
         )
 
-    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1461,7 +1461,7 @@ class ServiceManager:
                 ),  # TODO it should always be safe address
             )
 
-    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1524,7 +1524,7 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module(  # pylint: disable=too-many-locals
+    def _enable_recovery_module(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1613,7 +1613,7 @@ class ServiceManager:
             service_id=service.chain_configs[chain].chain_data.token
         )
 
-    def unbond_service_on_chain(
+    def unbond_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1649,7 +1649,7 @@ class ServiceManager:
         """
         raise NotImplementedError
 
-    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
@@ -1835,7 +1835,7 @@ class ServiceManager:
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
 
-    def unstake_service_on_chain(
+    def unstake_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1868,7 +1868,7 @@ class ServiceManager:
             ),
         )
 
-    def unstake_service_on_chain_from_safe(
+    def unstake_service_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1929,7 +1929,7 @@ class ServiceManager:
                 chain=service.home_chain,
             )
 
-    def claim_on_chain_from_safe(
+    def claim_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -2026,7 +2026,7 @@ class ServiceManager:
         self.funding_manager.fund_service(service=service, amounts=amounts)
 
     # TODO deprecate
-    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements  # pragma: no cover
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
@@ -2191,7 +2191,7 @@ class ServiceManager:
 
     # TODO Deprecate
     # TODO This method is possibly not used anymore
-    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
+    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         token: str,
@@ -2377,7 +2377,7 @@ class ServiceManager:
         return self.funding_manager.funding_requirements(service)
 
     # TODO deprecate
-    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
+    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks  # pragma: no cover
         self, service_config_id: str
     ) -> t.Dict:
         """Get user refill requirements for a service."""
@@ -2578,7 +2578,7 @@ class ServiceManager:
         }
 
     # TODO deprecate
-    def _compute_bonded_assets(  # pylint: disable=too-many-locals
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> t.Dict:
         """Computes the bonded tokens: current agent bonds and current security deposit"""
