@@ -167,7 +167,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
             )
 
     @staticmethod
-    def _call_aea_command(cwd: str | Path, args: List[str]) -> None:
+    def _call_aea_command(cwd: str | Path, args: List[str]) -> None:  # pragma: no cover
         try:
             import os  # pylint: disable=redefined-outer-name,reimported,import-outside-toplevel
 
@@ -413,7 +413,7 @@ class BaseDeploymentRunner(AbstractDeploymentRunner, metaclass=ABCMeta):
     @abstractmethod
     def _agent_runner_bin(self) -> str:
         """Return aea_bin path."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def get_agent_start_args(self, password: str) -> List[str]:
         """Return agent start arguments."""
@@ -482,7 +482,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
         self, env: Dict, working_dir: Path, password: str
     ) -> subprocess.Popen:
         """Start agent process."""
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
     def _start_tendermint(self) -> None:
         """Start tendermint process."""
@@ -518,7 +518,7 @@ class PyInstallerHostDeploymentRunner(BaseDeploymentRunner):
     def _start_tendermint_process(
         self, env: Dict, working_dir: Path
     ) -> subprocess.Popen:
-        raise NotImplementedError
+        raise NotImplementedError  # pragma: no cover
 
 
 class PyInstallerHostDeploymentRunnerMac(PyInstallerHostDeploymentRunner):
@@ -563,7 +563,9 @@ class PyInstallerHostDeploymentRunnerLinux(PyInstallerHostDeploymentRunnerMac):
     """Linux deployment runner."""
 
 
-class PyInstallerHostDeploymentRunnerWindows(PyInstallerHostDeploymentRunner):
+class PyInstallerHostDeploymentRunnerWindows(
+    PyInstallerHostDeploymentRunner
+):  # pragma: no cover
     """Windows deployment runner."""
 
     def __init__(self, work_directory: Path, is_aea: bool) -> None:

@@ -72,7 +72,7 @@ from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 

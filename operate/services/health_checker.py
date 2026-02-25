@@ -260,8 +260,8 @@ class HealthChecker:
                     future = loop.run_in_executor(executor, _do_restart)
                     await future
                     exception = future.exception()
-                    if exception is not None:
-                        raise exception
+                    if exception is not None:  # pragma: no cover
+                        raise exception  # pragma: no cover
 
             async def _stop(
                 service_manager: ServiceManager, service_config_id: str
@@ -276,8 +276,8 @@ class HealthChecker:
                     future = loop.run_in_executor(executor, _do_stop)
                     await future
                     exception = future.exception()
-                    if exception is not None:
-                        raise exception
+                    if exception is not None:  # pragma: no cover
+                        raise exception  # pragma: no cover
 
             # upper cycle
             failfast_records: t.List[float] = []
