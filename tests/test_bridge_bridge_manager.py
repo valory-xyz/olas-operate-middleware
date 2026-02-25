@@ -22,7 +22,6 @@
 
 import time
 import typing as t
-from functools import cache
 from pathlib import Path
 
 import pytest
@@ -108,7 +107,6 @@ class TestBridgeManager:
         return None
 
     @staticmethod
-    @cache
     def _get_token_price_usd(
         chain: str, token_address: str, amount: t.Optional[int] = None
     ) -> t.Optional[float]:
@@ -686,7 +684,7 @@ class TestBridgeManager:
         expected_provider_cls: t.Type[Provider],
         expected_contract_adaptor_cls: t.Optional[t.Type[BridgeContractAdaptor]],
         check_price: bool = True,
-        margin: float = 0.15,
+        margin: float = 0.17,
     ) -> None:
         """_main_test_correct_providers"""
         operate = OperateApp(

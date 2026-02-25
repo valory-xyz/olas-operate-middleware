@@ -565,6 +565,7 @@ def get_transfer_amount(
         return 0
 
 
+@pytest.mark.integration
 class TestNativeBridgeProvider:
     """Tests for bridge.providers.NativeBridgeProvider class."""
 

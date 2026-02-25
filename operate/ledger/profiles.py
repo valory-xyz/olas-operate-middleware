@@ -17,7 +17,11 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Chain profiles."""
+"""
+Chain profiles.
+
+Helper classes for ledger interactions.
+"""
 
 import typing as t
 from functools import cache

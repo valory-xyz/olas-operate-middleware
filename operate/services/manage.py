@@ -1606,7 +1606,9 @@ class ServiceManager:
     def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-        staking_manager = StakingManager(Chain(chain))
+        # Use service's custom RPC from chain_configs
+        rpc = service.chain_configs[chain].ledger_config.rpc
+        staking_manager = StakingManager(Chain(chain), rpc=rpc)
         return staking_manager.get_current_staking_program(
             service_id=service.chain_configs[chain].chain_data.token
         )

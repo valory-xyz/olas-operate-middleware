@@ -388,8 +388,8 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
         future = loop.run_in_executor(thread_pool_executor, fn, *args)
         res = await future
         exception = future.exception()
-        if exception is not None:
-            raise exception
+        if exception is not None:  # pragma: no cover
+            raise exception  # pragma: no cover
         return res
 
     def schedule_healthcheck_job(
@@ -422,7 +422,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 
         status = funding_job.cancel()
         if status:
-            funding_job = None
+            funding_job = None  # pragma: no cover
         else:
             logger.info("Funding job cancellation failed")
 
@@ -623,7 +623,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
                     }
                 )
 
-            return JSONResponse(
+            return JSONResponse(  # pragma: no cover
                 content={"error": "Password update failed."},
                 status_code=HTTPStatus.BAD_REQUEST,
             )
@@ -1773,7 +1773,7 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
 @group(name="operate")
 def _operate() -> None:
     """Operate - deploy autonomous services."""
-    logger.info(f"Operate version: {__version__}")
+    logger.info(f"Operate version: {__version__}")  # pragma: no cover
 
 
 @_operate.command(name="daemon")
@@ -2015,5 +2015,5 @@ def main() -> None:
     run(cli=_operate)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

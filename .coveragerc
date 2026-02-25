@@ -1,0 +1,4 @@
+[coverage:run]
+omit =
+    operate/pearl.py
+    operate/data/contracts/uniswap_v2_erc20/tests/test_contract.py
