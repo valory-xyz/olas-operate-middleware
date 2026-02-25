@@ -206,6 +206,17 @@ class TestGetEoaTopups:
         assert result[Chain.BASE]["0x0"] == 400
 
 
+class TestFromJson:
+    """Tests for Settings.from_json classmethod."""
+
+    def test_from_json_skips_missing_keys(self) -> None:
+        """Test that from_json skips annotation keys not present in obj."""
+        # Only provide 'version', omit 'eoa_topups'
+        settings = Settings.from_json({"version": 1})
+        assert settings.version == 1
+        assert not hasattr(settings, "eoa_topups")
+
+
 class TestSettingsJson:
     """Tests for Settings.json property."""
 
