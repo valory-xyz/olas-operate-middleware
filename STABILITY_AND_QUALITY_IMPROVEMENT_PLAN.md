@@ -6,7 +6,7 @@
 **Phase 1.2: Error Handling Improvements** ✅ COMPLETE
 **Phase 1.3: Race Condition Fixes** ✅ COMPLETE (PID File ✅, Funding Cooldown ✅, Health Checker ✅)
 **Phase 1.4: Resource Leak Prevention** ✅ DOCUMENTED (Implementation deferred — see `RESOURCE_LEAKS.md`)
-**Phase 1.5: Input Validation & State Protection** ✅ ANALYZED (Implementation deferred — see `VALIDATION_GAPS.md`)
+**Phase 1.5: Input Validation & State Protection** ✅ PARTIALLY COMPLETE (gaps 1-3 implemented; gap 4 deferred to Phase 3 — see `VALIDATION_GAPS.md`)
 **Phase 2: Testing & Reliability** ✅ COMPLETE (100% unit test coverage achieved)
 **Phase 3:** 📋 PLANNED (see `PHASE3_REFACTORING_PLAN.md`)
 **Phase 4:** 📋 ONGOING
@@ -20,6 +20,7 @@
 - `feat/fix-macos-pid-validation-case-sensitivity` - Complete (cross-platform fixes + bridge margin)
 - `feat/phase1.4-resource-leak-documentation` - Complete (Phase 1.4-1.5 analysis)
 - `feat/phase2-quickstart-coverage` - Complete (100% coverage across all operate/ modules)
+- `feat/address-validation-gaps` - Complete (Phase 1.5 gaps 1-3 implemented)
 
 **Test Metrics:**
 - Total unit tests: 1,639 (up from 108) — **15× increase**

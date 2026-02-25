@@ -437,6 +437,21 @@ class TestFundService:
         with pytest.raises(ValueError, match="not an agent EOA or service Safe"):
             manager.fund_service(mock_service, amounts)
 
+    def test_raises_value_error_for_malformed_address(self) -> None:
+        """Test ValueError when amounts contain a malformed (non-hex) address."""
+        manager = _make_manager()
+        mock_service = MagicMock()
+        mock_service.service_config_id = "svc-bad"
+        mock_service.agent_addresses = [EOA_ADDR]
+        chain_data_mock = MagicMock()
+        chain_data_mock.chain_data.multisig = SAFE_ADDR
+        mock_service.chain_configs = {"gnosis": chain_data_mock}
+
+        amounts = ChainAmounts({"gnosis": {"not_an_address": {ZERO_ADDRESS: BigInt(1)}}})
+
+        with pytest.raises(ValueError, match="not a valid Ethereum address"):
+            manager.fund_service(mock_service, amounts)
+
     def test_funding_in_progress_cleared_after_success(self) -> None:
         """Test that _funding_in_progress is cleared after successful fund_chain_amounts."""
         manager = _make_manager()
@@ -530,6 +545,29 @@ class TestFundChainAmounts:
         ):
             manager.fund_chain_amounts(amounts)
 
+        mock_wallet.transfer.assert_not_called()
+
+    def test_non_positive_amount_logs_warning(self) -> None:
+        """fund_chain_amounts logs a warning (not silently skips) for non-positive amounts."""
+        mock_wallet = MagicMock()
+        mock_wallet.safes = {Chain.GNOSIS: SAFE_ADDR}
+        mock_wallet_manager = MagicMock()
+        mock_wallet_manager.load.return_value = mock_wallet
+
+        manager = _make_manager(wallet_manager=mock_wallet_manager)
+
+        amounts = ChainAmounts({"gnosis": {EOA_ADDR: {ZERO_ADDRESS: BigInt(0)}}})
+
+        with patch.object(
+            manager,
+            "_get_master_safe_balances",
+            return_value=ChainAmounts(
+                {"gnosis": {SAFE_ADDR: {ZERO_ADDRESS: BigInt(1_000)}}}
+            ),
+        ):
+            manager.fund_chain_amounts(amounts)
+
+        manager.logger.warning.assert_called_once()  # type: ignore[attr-defined]
         mock_wallet.transfer.assert_not_called()
 
 
