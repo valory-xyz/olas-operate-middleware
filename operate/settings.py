@@ -18,16 +18,14 @@
 # ------------------------------------------------------------------------------
 """Settings for operate."""
 
-import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
 from operate.operate_types import Chain, LedgerType
 from operate.resource import LocalResource, deserialize, serialize
 from operate.serialization import BigInt
-from operate.utils import SingletonMeta
 from operate.wallet.master import MasterWalletManager
 
 
@@ -38,7 +36,7 @@ DEFAULT_SETTINGS = {
 }
 
 
-class Settings(LocalResource, metaclass=SingletonMeta):
+class Settings(LocalResource):
     """Settings for operate."""
 
     _file = SETTINGS_JSON
@@ -54,13 +52,9 @@ class Settings(LocalResource, metaclass=SingletonMeta):
         self.wallet_manager: MasterWalletManager = kwargs.pop("wallet_manager")
         super().__init__(path=path)
         if path is not None and (path / self._file).exists():
-            data = json.loads(
-                (path / self._file).read_text(encoding="utf-8")
-            )
-            for pname, ptype in self.__class__.__annotations__.items():
-                if pname.startswith("_") or pname not in data:
-                    continue
-                setattr(self, pname, deserialize(obj=data[pname], otype=ptype))
+            loaded_settings = cast(Settings, type(self).load(path))
+            self.version = loaded_settings.version
+            self.eoa_topups = loaded_settings.eoa_topups
 
         for key, default_value in DEFAULT_SETTINGS.items():
             value = kwargs.get(key, default_value)
@@ -100,10 +94,23 @@ class Settings(LocalResource, metaclass=SingletonMeta):
             safes = {}
         return {
             chain: {
-                asset: (
-                    amount if chain in safes else BigInt(amount * 2)
-                )
+                asset: (amount if chain in safes else BigInt(amount * 2))
                 for asset, amount in asset_amount.items()
             }
             for chain, asset_amount in self.eoa_topups.items()
         }
+
+    @classmethod
+    def from_json(cls, obj: Dict[str, Any]) -> "Settings":
+        """Load Settings from json without wallet manager dependency."""
+        kwargs: Dict[str, Any] = {}
+        for pname, ptype in cls.__annotations__.items():
+            if pname.startswith("_") or pname not in obj:
+                continue
+            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
+
+        settings = object.__new__(cls)
+        LocalResource.__init__(settings, path=obj.get("path"))
+        for key, value in kwargs.items():
+            setattr(settings, key, value)
+        return settings

@@ -21,7 +21,6 @@
 import json
 import os
 from pathlib import Path
-from typing import Iterator
 from unittest.mock import MagicMock
 
 import pytest
@@ -34,16 +33,8 @@ from operate.resource import serialize
 from operate.serialization import BigInt
 from operate.settings import SETTINGS_JSON_VERSION, Settings
 
-from tests.conftest import OperateTestEnv, create_wallets
+from tests.conftest import create_wallets
 from tests.constants import CHAINS_TO_TEST
-
-
-@pytest.fixture(autouse=True)
-def _clear_settings_singleton() -> Iterator[None]:
-    """Clear the Settings singleton before and after every test."""
-    Settings._instances.clear()
-    yield
-    Settings._instances.clear()
 
 
 # ---------------------------------------------------------------------------
@@ -55,15 +46,24 @@ def test_settings_no_file(test_operate: OperateApp) -> None:
     """Test loading settings when no file is present."""
     create_wallets(wallet_manager=test_operate.wallet_manager)
     assert os.path.exists(test_operate._path / SETTINGS_JSON) is False
-    settings: Settings = Settings()
+    settings: Settings = Settings(
+        wallet_manager=test_operate.wallet_manager,
+        path=test_operate._path,
+    )
     settings.store()
     assert os.path.exists(test_operate._path / SETTINGS_JSON) is True
 
 
-def test_settings_default_values(test_env: OperateTestEnv) -> None:
+def test_settings_default_values(test_operate: OperateApp) -> None:
     """Test settings default values."""
-    test_env.operate.password = test_env.password
-    settings: Settings = Settings()
+    create_wallets(wallet_manager=test_operate.wallet_manager)
+    mock_wallet = MagicMock()
+    mock_wallet.safes = {chain: "0xSafe" for chain in CHAINS_TO_TEST}
+    test_operate.wallet_manager.load = MagicMock(return_value=mock_wallet)
+    settings: Settings = Settings(
+        wallet_manager=test_operate.wallet_manager,
+        path=test_operate._path,
+    )
     expected_eoa_topups = {
         chain: {
             asset: amount if chain in CHAINS_TO_TEST else amount * 2
@@ -71,22 +71,25 @@ def test_settings_default_values(test_env: OperateTestEnv) -> None:
         }
         for chain, asset_amount in DEFAULT_EOA_TOPUPS.items()
     }
+    expected_serialized_topups = serialize(settings.get_eoa_topups())
     assert settings.version == SETTINGS_JSON_VERSION
     assert settings.eoa_topups == DEFAULT_EOA_TOPUPS
     assert settings.get_eoa_topups() == expected_eoa_topups
     assert settings.json == {
         "version": SETTINGS_JSON_VERSION,
-        "eoa_topups": serialize(expected_eoa_topups),
+        "eoa_topups": expected_serialized_topups,
         "eoa_thresholds": serialize(
             {
                 chain: {asset: amount // 2 for asset, amount in asset_amount.items()}
-                for chain, asset_amount in expected_eoa_topups.items()
+                for chain, asset_amount in settings.get_eoa_topups().items()
             }
         ),
     }
 
 
-def test_settings_persistence(tmp_path: Path, test_operate: OperateApp) -> None:
+def test_settings_persistence(
+    tmp_path: Path, test_operate: OperateApp, password: str
+) -> None:
     """Test settings persistence."""
     create_wallets(wallet_manager=test_operate.wallet_manager)
     existing_settings = test_operate.settings
@@ -94,18 +97,22 @@ def test_settings_persistence(tmp_path: Path, test_operate: OperateApp) -> None:
     existing_settings.eoa_topups["new_chain"] = {"new_asset": 12345}
     existing_settings.store()
 
-    Settings._instances.clear()
     del test_operate
-    new_operate = OperateApp(home=tmp_path)
+    new_operate = OperateApp(home=tmp_path / ".operate_test")
+    new_operate.password = password
 
     loaded_settings = new_operate.settings
-    assert loaded_settings.eoa_topups["new_chain"]["new_asset"] == 12345
+    assert loaded_settings.version == SETTINGS_JSON_VERSION
+    assert loaded_settings.json["eoa_thresholds"]["new_chain"]["new_asset"] == 24690
 
 
 def test_settings_version_mismatch(test_operate: OperateApp) -> None:
     """Test settings version mismatch."""
     create_wallets(wallet_manager=test_operate.wallet_manager)
-    settings: Settings = Settings(path=test_operate._path)
+    settings: Settings = Settings(
+        wallet_manager=test_operate.wallet_manager,
+        path=test_operate._path,
+    )
     settings.store()
 
     with open(test_operate._path / SETTINGS_JSON) as f:
@@ -115,7 +122,6 @@ def test_settings_version_mismatch(test_operate: OperateApp) -> None:
     with open(test_operate._path / SETTINGS_JSON, "w") as f:
         json.dump(data, f)
 
-    Settings._instances.clear()
     with pytest.raises(
         ValueError,
         match="Settings version 999 is not supported. Expected version 1.",
@@ -139,12 +145,12 @@ class TestSettingsInit:
         with pytest.raises(ValueError, match="wallet_manager is required"):
             Settings(path=Path("/tmp/nonexistent"))  # nosec B108
 
-    def test_singleton_returns_same_instance(self, tmp_path: Path) -> None:
-        """Test that Settings is a singleton — second call returns the same object."""
+    def test_initialization_returns_distinct_instances(self, tmp_path: Path) -> None:
+        """Test that Settings initialization returns a new object each time."""
         wm = MagicMock()
         first = Settings(wallet_manager=wm, path=tmp_path)
         second = Settings(wallet_manager=wm, path=tmp_path)
-        assert first is second
+        assert first is not second
 
 
 class TestGetEoaTopups:

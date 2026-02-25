@@ -60,7 +60,6 @@ from operate.operate_types import (
 )
 from operate.services.manage import ServiceManager
 from operate.services.service import Service
-from operate.settings import Settings
 from operate.utils.gnosis import get_asset_balance
 from operate.wallet.master import MasterWalletManager
 
@@ -680,7 +679,6 @@ def create_wallets(
 @pytest.fixture
 def test_operate(tmp_path: Path, password: str) -> OperateApp:
     """Sets up a test operate app."""
-    Settings._instances.clear()
     operate = OperateApp(
         home=tmp_path / OPERATE_TEST,
     )
