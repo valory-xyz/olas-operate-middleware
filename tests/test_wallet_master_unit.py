@@ -311,8 +311,7 @@ class TestPreTransferChecks:
             result = wallet._pre_transfer_checks(  # pylint: disable=protected-access
                 EOA_ADDR, 100, Chain.GNOSIS, from_safe=True
             )
-        assert result.startswith("0x")
-        assert len(result) == 42
+        assert result == "0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa"
 
 
 # ---------------------------------------------------------------------------
