@@ -106,7 +106,7 @@ from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
-from operate.utils import unrecoverable_delete
+from operate.utils import secure_copy_private_key, unrecoverable_delete
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
@@ -637,10 +637,10 @@ class Deployment(LocalResource):
             deployement_generator.generate()
             deployement_generator.populate_private_keys()
 
-            # Add keys
-            shutil.copy(
-                build / "ethereum_private_key.txt",
-                build / "agent" / "ethereum_private_key.txt",
+            # Add keys securely
+            secure_copy_private_key(
+                src=build / "ethereum_private_key.txt",
+                dst=build / "agent" / "ethereum_private_key.txt",
             )
 
         except Exception as e:

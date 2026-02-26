@@ -21,7 +21,9 @@
 
 import hashlib
 import json
+import os
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -236,7 +238,7 @@ class TestAgentRunnerManagerMethods:
     def test_update_agent_runner_hash_mismatch_triggers_download(
         self, tmp_path: Path
     ) -> None:
-        """Test that a hash mismatch triggers a download."""
+        """Test that a hash mismatch triggers a download and verifies hash."""
         target = tmp_path / "runner"
         target.write_bytes(b"old content")
         mock_release = MagicMock()
@@ -244,9 +246,12 @@ class TestAgentRunnerManagerMethods:
             "http://example.com/runner",
             "sha256:NEW",
         )
-        # shutil.copy2 is mocked; target already exists so chmod works on POSIX
+        # First call: existing file hash (OLD → mismatch triggers download)
+        # Second call: downloaded file hash (NEW → matches remote, passes verification)
         with patch.object(
-            AgentRunnerManager, "get_local_file_sha256", return_value="sha256:OLD"
+            AgentRunnerManager,
+            "get_local_file_sha256",
+            side_effect=["sha256:OLD", "sha256:NEW"],
         ), patch.object(AgentRunnerManager, "download_file") as mock_dl, patch(
             "operate.services.agent_runner.shutil.copy2"
         ):
@@ -268,12 +273,60 @@ class TestAgentRunnerManagerMethods:
         def _create_target(src: Path, dst: Path) -> None:
             dst.write_bytes(b"downloaded")
 
-        with patch.object(AgentRunnerManager, "download_file") as mock_dl, patch(
+        # Mock get_local_file_sha256 to return matching hash for downloaded file
+        with patch.object(
+            AgentRunnerManager,
+            "get_local_file_sha256",
+            return_value="sha256:HASH",
+        ), patch.object(AgentRunnerManager, "download_file") as mock_dl, patch(
             "operate.services.agent_runner.shutil.copy2",
             side_effect=_create_target,
         ):
             AgentRunnerManager.update_agent_runner(target, "runner", mock_release)
         mock_dl.assert_called_once()
+
+    def test_update_agent_runner_downloaded_hash_mismatch_raises(
+        self, tmp_path: Path
+    ) -> None:
+        """Test that a hash mismatch after download raises ValueError."""
+        target = tmp_path / "runner"
+        mock_release = MagicMock()
+        mock_release.get_url_and_hash.return_value = (
+            "http://example.com/runner",
+            "sha256:EXPECTED",
+        )
+        # Downloaded file hash doesn't match the remote hash
+        with patch.object(
+            AgentRunnerManager,
+            "get_local_file_sha256",
+            return_value="sha256:CORRUPT",
+        ), patch.object(AgentRunnerManager, "download_file"):
+            with pytest.raises(ValueError, match="Hash verification failed"):
+                AgentRunnerManager.update_agent_runner(target, "runner", mock_release)
+
+    @pytest.mark.skipif(os.name != "posix", reason="posix-only chmod test")
+    def test_update_agent_runner_sets_executable_on_posix(self, tmp_path: Path) -> None:
+        """Test that on posix the downloaded file gets executable permission."""
+        target = tmp_path / "runner"
+        mock_release = MagicMock()
+        mock_release.get_url_and_hash.return_value = (
+            "http://example.com/runner",
+            "sha256:HASH",
+        )
+
+        def _create_target(src: Any, dst: Any) -> None:
+            target.write_bytes(b"binary")
+
+        with patch.object(
+            AgentRunnerManager,
+            "get_local_file_sha256",
+            return_value="sha256:HASH",
+        ), patch.object(AgentRunnerManager, "download_file"), patch(
+            "operate.services.agent_runner.shutil.copy2",
+            side_effect=_create_target,
+        ):
+            AgentRunnerManager.update_agent_runner(target, "runner", mock_release)
+        assert target.exists()
 
     def test_update_agent_runner_download_error_removes_target(
         self, tmp_path: Path

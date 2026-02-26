@@ -27,6 +27,7 @@ import platform
 import shutil
 import time
 import typing as t
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
@@ -123,6 +124,29 @@ def safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) ->
             if platform.system() == "Windows":
                 # On Windows, wait a bit and retry
                 time.sleep(0.1)
+
+
+def secure_copy_private_key(src: Path, dst: Path) -> None:
+    """
+    Securely copy a private key file with strict permissions (0o600).
+
+    Args:
+        src: Source file path
+        dst: Destination file path
+    """
+    # First copy the file
+    shutil.copy2(src, dst)
+
+    # Set restrictive permissions (read/write only for owner)
+    try:
+        dst.chmod(0o600)
+    except (PermissionError, OSError):
+        # On Windows, chmod may not work as expected; we still try to set via os.chmod
+        try:
+            os.chmod(dst, 0o600)
+        except (PermissionError, OSError):
+            # Log warning but continue - file is copied
+            warnings.warn(f"Cannot set permissions on {dst}, please secure manually")
 
 
 def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:
