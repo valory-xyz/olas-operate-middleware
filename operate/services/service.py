@@ -106,7 +106,7 @@ from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
-from operate.utils import unrecoverable_delete, secure_copy_private_key
+from operate.utils import secure_copy_private_key, unrecoverable_delete
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 

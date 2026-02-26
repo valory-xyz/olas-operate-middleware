@@ -27,6 +27,7 @@ import platform
 import shutil
 import time
 import typing as t
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
@@ -145,8 +146,6 @@ def secure_copy_private_key(src: Path, dst: Path) -> None:
             os.chmod(dst, 0o600)
         except (PermissionError, OSError):
             # Log warning but continue - file is copied
-            import warnings
-
             warnings.warn(f"Cannot set permissions on {dst}, please secure manually")
 
 

@@ -436,7 +436,7 @@ class TestSetupAgent:
         runner = ConcreteDeploymentRunner(work_dir, is_aea=True)
 
         with patch.object(runner, "_run_aea_command"), patch(
-            "operate.services.deployment_runner.shutil.copy"
+            "operate.services.deployment_runner.secure_copy_private_key"
         ):
             runner._setup_agent(password="testpass")  # nosec B106
 
@@ -467,7 +467,9 @@ class TestSetupAgent:
 
         with patch.object(
             runner, "_run_aea_command", side_effect=maybe_fail
-        ) as mock_run, patch("operate.services.deployment_runner.shutil.copy"), patch(
+        ) as mock_run, patch(
+            "operate.services.deployment_runner.secure_copy_private_key"
+        ), patch(
             "operate.services.deployment_runner.time.sleep"
         ):
             runner._setup_agent(password="testpass")  # nosec B106
@@ -492,7 +494,7 @@ class TestSetupAgent:
 
         with patch.object(
             runner, "_run_aea_command", side_effect=succeed_on_second
-        ), patch("operate.services.deployment_runner.shutil.copy"), patch(
+        ), patch("operate.services.deployment_runner.secure_copy_private_key"), patch(
             "operate.services.deployment_runner.time.sleep"
         ), patch(
             "operate.services.deployment_runner.shutil.rmtree"

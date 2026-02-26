@@ -21,8 +21,9 @@
 
 import time
 import typing as t
+import warnings
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from deepdiff import DeepDiff
@@ -35,6 +36,7 @@ from operate.utils import (
     create_backup,
     merge_sum_dicts,
     safe_file_operation,
+    secure_copy_private_key,
     subtract_dicts,
     unrecoverable_delete,
 )
@@ -385,6 +387,55 @@ class TestUnrecoverableDeleteErrors:
 
         captured = capsys.readouterr()
         assert "Error during secure deletion" in captured.out
+
+
+class TestSecureCopyPrivateKey:
+    """Tests for secure_copy_private_key."""
+
+    def test_copies_file_and_sets_permissions(self, tmp_path: Path) -> None:
+        """Test normal case: file copied and chmod called."""
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        mock_chmod = MagicMock()
+        with patch.object(Path, "chmod", mock_chmod):
+            secure_copy_private_key(src, dst)
+
+        assert dst.read_text(encoding="utf-8") == "secret"
+        mock_chmod.assert_called_once_with(0o600)
+
+    def test_falls_back_to_os_chmod(self, tmp_path: Path) -> None:
+        """Test fallback to os.chmod when Path.chmod raises PermissionError."""
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        with patch.object(Path, "chmod", side_effect=PermissionError("no perms")):
+            secure_copy_private_key(src, dst)
+
+        assert dst.exists()
+
+    def test_warns_when_both_chmod_fail(self, tmp_path: Path) -> None:
+        """Test warning when both Path.chmod and os.chmod fail."""
+        import shutil
+
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        # Use shutil.copyfile (content only, no chmod) to avoid os.chmod in copy2
+        with patch(
+            "operate.utils.shutil.copy2", side_effect=shutil.copyfile
+        ), patch.object(Path, "chmod", side_effect=PermissionError("no perms")), patch(
+            "operate.utils.os.chmod", side_effect=OSError("os failed")
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                secure_copy_private_key(src, dst)
+
+        assert dst.exists()
+        assert any("Cannot set permissions" in str(w.message) for w in caught)
 
 
 class TestConcurrentExecuteFromEventLoop:
