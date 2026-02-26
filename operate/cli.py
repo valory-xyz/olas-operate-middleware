@@ -99,6 +99,7 @@ from operate.services.health_checker import HealthChecker
 from operate.settings import Settings
 from operate.utils import subtract_dicts
 from operate.utils.gnosis import gas_fees_spent_in_tx, get_assets_balances
+from operate.utils.frontend_monitor import create_frontend_monitor_from_env
 from operate.utils.single_instance import AppSingleInstance, ParentWatchdog
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 from operate.wallet.wallet_recovery_manager import (
@@ -491,13 +492,21 @@ def create_app(  # pylint: disable=too-many-locals, unused-argument, too-many-st
             app._server.should_exit = True  # pylint: disable=protected-access
             logger.info("App stopped due to parent death.")
 
+        # Start ParentWatchdog (works on Linux/Windows, not on macOS with SIP)
         watchdog = ParentWatchdog(on_parent_exit=stop_app)
         watchdog.start()
+
+        # Start FrontendMonitor (monitors Next.js as proxy for Electron health)
+        frontend_monitor = create_frontend_monitor_from_env()
+        frontend_monitor.start(shutdown_callback=stop_app)
 
         yield  # --- app is running ---
 
         with suppress(Exception):
             cancel_funding_job()
+
+        with suppress(Exception):
+            await frontend_monitor.stop()
 
         with suppress(Exception):
             await watchdog.stop()
