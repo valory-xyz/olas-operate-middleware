@@ -27,31 +27,17 @@ import platform
 import shutil
 import time
 import typing as t
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Lock
 
 from operate.constants import DEFAULT_TIMEOUT
 from operate.serialization import BigInt
 
 
 logger = logging.getLogger(__name__)
-
-
-class SingletonMeta(type):
-    """A metaclass for creating thread-safe singleton classes."""
-
-    _instances: t.Dict[t.Type, t.Any] = {}
-    _lock: Lock = Lock()
-
-    def __call__(cls, *args: t.Any, **kwargs: t.Any) -> t.Any:
-        """Override the __call__ method to control instance creation."""
-        with cls._lock:
-            if cls not in cls._instances:
-                cls._instances[cls] = super().__call__(*args, **kwargs)
-        return cls._instances[cls]
 
 
 def create_backup(path: Path) -> Path:
@@ -138,6 +124,29 @@ def safe_file_operation(operation: t.Callable, *args: t.Any, **kwargs: t.Any) ->
             if platform.system() == "Windows":
                 # On Windows, wait a bit and retry
                 time.sleep(0.1)
+
+
+def secure_copy_private_key(src: Path, dst: Path) -> None:
+    """
+    Securely copy a private key file with strict permissions (0o600).
+
+    Args:
+        src: Source file path
+        dst: Destination file path
+    """
+    # First copy the file
+    shutil.copy2(src, dst)
+
+    # Set restrictive permissions (read/write only for owner)
+    try:
+        dst.chmod(0o600)
+    except (PermissionError, OSError):
+        # On Windows, chmod may not work as expected; we still try to set via os.chmod
+        try:
+            os.chmod(dst, 0o600)
+        except (PermissionError, OSError):
+            # Log warning but continue - file is copied
+            warnings.warn(f"Cannot set permissions on {dst}, please secure manually")
 
 
 def unrecoverable_delete(file_path: Path, passes: int = 3) -> None:

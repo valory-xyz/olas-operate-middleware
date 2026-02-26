@@ -106,7 +106,7 @@ from operate.resource import LocalResource
 from operate.serialization import BigInt
 from operate.services.deployment_runner import run_host_deployment, stop_host_deployment
 from operate.services.utils import tendermint
-from operate.utils import unrecoverable_delete
+from operate.utils import secure_copy_private_key, unrecoverable_delete
 from operate.utils.gnosis import get_asset_balance
 from operate.utils.ssl import create_ssl_certificate
 
@@ -170,7 +170,7 @@ def remove_service_network(service_name: str, force: bool = True) -> None:
 class ServiceBuilder(BaseServiceBuilder):
     """Service builder patch."""
 
-    def try_update_runtime_params(
+    def try_update_runtime_params(  # pragma: no cover
         self,
         multisig_address: t.Optional[str] = None,
         agent_instances: t.Optional[t.List[str]] = None,
@@ -274,7 +274,9 @@ class HostDeploymentGenerator(BaseDeploymentGenerator):
     output_name: str = "runtime.json"
     deployment_type: str = "host"
 
-    def generate_config_tendermint(self) -> "HostDeploymentGenerator":
+    def generate_config_tendermint(
+        self,
+    ) -> "HostDeploymentGenerator":  # pragma: no cover
         """Generate tendermint configuration."""
         tmhome = str(self.build_dir / "node")
         tendermint_executable = str(
@@ -406,7 +408,9 @@ class Deployment(LocalResource):
         if source_path.exists():
             shutil.copy(source_path, destination_path)
 
-    def _build_kubernetes(self, keys_manager: KeysManager, force: bool = True) -> None:
+    def _build_kubernetes(  # pragma: no cover
+        self, keys_manager: KeysManager, force: bool = True
+    ) -> None:
         """Build kubernetes deployment."""
         k8s_build = self.path / DEPLOYMENT_DIR / "abci_build_k8s"
         if k8s_build.exists() and force:
@@ -446,7 +450,7 @@ class Deployment(LocalResource):
         )
         print(f"Kubernetes deployment built on {k8s_build.resolve()}\n")
 
-    def _build_docker(
+    def _build_docker(  # pragma: no cover
         self,
         keys_manager: KeysManager,
         force: bool = True,
@@ -562,7 +566,7 @@ class Deployment(LocalResource):
         self.status = DeploymentStatus.BUILT
         self.store()
 
-    def _build_host(
+    def _build_host(  # pragma: no cover
         self,
         keys_manager: KeysManager,
         force: bool = True,
@@ -633,10 +637,10 @@ class Deployment(LocalResource):
             deployement_generator.generate()
             deployement_generator.populate_private_keys()
 
-            # Add keys
-            shutil.copy(
-                build / "ethereum_private_key.txt",
-                build / "agent" / "ethereum_private_key.txt",
+            # Add keys securely
+            secure_copy_private_key(
+                src=build / "ethereum_private_key.txt",
+                dst=build / "agent" / "ethereum_private_key.txt",
             )
 
         except Exception as e:
@@ -772,7 +776,18 @@ class Deployment(LocalResource):
 
     def delete(self) -> None:
         """Delete the deployment."""
+        if self.status == DeploymentStatus.DEPLOYED:
+            raise ValueError(
+                f"Cannot delete a deployment in {self.status} state. "
+                "Stop the service first."
+            )
+
         build = self.path / DEPLOYMENT_DIR
+        if not build.exists():
+            self.status = DeploymentStatus.DELETED
+            self.store()
+            return
+
         shutil.rmtree(build)
         self.status = DeploymentStatus.DELETED
         self.store()

@@ -19,13 +19,14 @@
 """Settings for operate."""
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 from operate.constants import SETTINGS_JSON
 from operate.ledger.profiles import DEFAULT_EOA_TOPUPS
-from operate.operate_types import ChainAmounts
-from operate.resource import LocalResource
+from operate.operate_types import Chain, LedgerType
+from operate.resource import LocalResource, deserialize, serialize
 from operate.serialization import BigInt
+from operate.wallet.master import MasterWalletManager
 
 
 SETTINGS_JSON_VERSION = 1
@@ -45,9 +46,15 @@ class Settings(LocalResource):
 
     def __init__(self, path: Optional[Path] = None, **kwargs: Any) -> None:
         """Initialize settings."""
+        if "wallet_manager" not in kwargs:
+            raise ValueError("wallet_manager is required to initialize Settings.")
+
+        self.wallet_manager: MasterWalletManager = kwargs.pop("wallet_manager")
         super().__init__(path=path)
         if path is not None and (path / self._file).exists():
-            self.load(path)
+            loaded_settings = cast(Settings, type(self).load(path))
+            self.version = loaded_settings.version
+            self.eoa_topups = loaded_settings.eoa_topups
 
         for key, default_value in DEFAULT_SETTINGS.items():
             value = kwargs.get(key, default_value)
@@ -59,15 +66,51 @@ class Settings(LocalResource):
                 f"Settings version {self.version} is not supported. Expected version {SETTINGS_JSON_VERSION}."
             )
 
-    def get_eoa_topups(self, with_safe: bool = False) -> ChainAmounts:
-        """Get the EOA topups."""
-        return ChainAmounts(
-            self.eoa_topups
-            if with_safe
-            else {
-                chain: {
-                    asset: BigInt(amount * 2) for asset, amount in asset_amount.items()
-                }
-                for chain, asset_amount in self.eoa_topups.items()
+    @property
+    def json(self) -> Dict[str, Any]:
+        """Get the settings as a JSON serializable dictionary."""
+        eoa_topups = self.get_eoa_topups()
+        return serialize(
+            {
+                "version": self.version,
+                "eoa_topups": eoa_topups,
+                "eoa_thresholds": {
+                    chain: {
+                        asset: amount // 2 for asset, amount in asset_amount.items()
+                    }
+                    for chain, asset_amount in eoa_topups.items()
+                },
             }
         )
+
+    def get_eoa_topups(self) -> Dict[Chain, Dict[str, BigInt]]:
+        """Get the EOA topups."""
+        try:
+            eth_master_wallet = self.wallet_manager.load(
+                ledger_type=LedgerType.ETHEREUM
+            )
+            safes = eth_master_wallet.safes
+        except FileNotFoundError:
+            safes = {}
+        return {
+            chain: {
+                asset: (amount if chain in safes else BigInt(amount * 2))
+                for asset, amount in asset_amount.items()
+            }
+            for chain, asset_amount in self.eoa_topups.items()
+        }
+
+    @classmethod
+    def from_json(cls, obj: Dict[str, Any]) -> "Settings":
+        """Load Settings from json without wallet manager dependency."""
+        kwargs: Dict[str, Any] = {}
+        for pname, ptype in cls.__annotations__.items():
+            if pname.startswith("_") or pname not in obj:
+                continue
+            kwargs[pname] = deserialize(obj=obj[pname], otype=ptype)
+
+        settings = object.__new__(cls)
+        LocalResource.__init__(settings, path=obj.get("path"))
+        for key, value in kwargs.items():
+            setattr(settings, key, value)
+        return settings

@@ -17,7 +17,7 @@
 #
 # ------------------------------------------------------------------------------
 
-"""Exceptions."""
+"""Exceptions used in operate server (fastAPI)."""
 
 from http import HTTPStatus
 

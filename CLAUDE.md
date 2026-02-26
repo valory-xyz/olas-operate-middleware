@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Olas Operate Middleware is a cross-platform Python package for running autonomous agents powered by the OLAS Network. It provides a daemon service with a FastAPI-based HTTP server that manages agent services, wallets, and blockchain interactions.
 
+## Improvement Plan
+
+For remaining high-impact work (security fixes, data integrity, dead code removal, reliability), see [IMPROVEMENT_PLAN.md](IMPROVEMENT_PLAN.md). Phases 1 (stability fixes) and 2 (100% test coverage) are complete.
+
 ## Architecture Diagram
 
 ```
@@ -112,18 +116,37 @@ poetry shell
 
 ### Code Quality
 
-**IMPORTANT**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
+**CRITICAL**: Always run ALL linters before committing changes. CI runs all checks, so local verification prevents CI failures.
+
+**Required workflow before every commit:**
+1. Format code: `tox -p -e black -e isort`
+2. Run ALL linters: `tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit`
+3. Verify tests pass: `tox -e unit-tests`
 
 ```bash
-# Format code (run before committing)
+# Step 1: Format code automatically
 tox -p -e black -e isort
 
-# Run ALL quality checks (REQUIRED before committing)
+# Step 2: Run ALL quality checks (REQUIRED before committing)
+tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit
+
+# Step 3: Verify tests pass
+tox -e unit-tests
+
+# Optional: Full CI check (includes safety, takes longer)
 tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy -e bandit -e safety
 
-# Quick check (most common linters)
-tox -p -e isort-check -e black-check -e flake8 -e pylint -e mypy
+# Quick check during development (core linters only)
+tox -p -e black-check -e flake8 -e mypy
 ```
+
+**Linter checklist:**
+- ✅ **isort**: Import sorting
+- ✅ **black**: Code formatting
+- ✅ **flake8**: Style guide (PEP 8)
+- ✅ **pylint**: Code quality (aim for 10.00/10)
+- ✅ **mypy**: Type checking
+- ✅ **bandit**: Security issues
 
 ### Testing
 

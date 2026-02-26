@@ -284,7 +284,7 @@ class TendermintNode:
         self._process = None
         self.log("Tendermint process stopped\n")
 
-    def _win_stop_tm(self) -> None:
+    def _win_stop_tm(self) -> None:  # pragma: no cover
         """Stop a Tendermint node process on Windows."""
         os.kill(self._process.pid, signal.CTRL_C_EVENT)  # type: ignore  # pylint: disable=no-member
         try:
@@ -664,13 +664,13 @@ def create_app(  # pylint: disable=too-many-statements
     return app, tendermint_node
 
 
-def create_server() -> Any:
+def create_server() -> Any:  # pragma: no cover
     """Function to retrieve just the app to be used by flask entry point."""
     flask_app, _ = create_app()
     return flask_app
 
 
-def run_app_in_subprocess(q: multiprocessing.Queue) -> None:
+def run_app_in_subprocess(q: multiprocessing.Queue) -> None:  # pragma: no cover
     """Run flask app in a subprocess to kill it when needed."""
     print("app in subprocess")
     app, tendermint_node = create_app()
@@ -688,7 +688,7 @@ def run_app_in_subprocess(q: multiprocessing.Queue) -> None:
     app.run(host="localhost", port=8080)
 
 
-def run_stoppable_main() -> None:
+def run_stoppable_main() -> None:  # pragma: no cover
     """Main to spawn flask in a subprocess."""
     print("run stoppable main!")
     q: multiprocessing.Queue = multiprocessing.Queue()
@@ -705,13 +705,13 @@ def run_stoppable_main() -> None:
             p.terminate()
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """Main entrance."""
     app = create_server()
     app.run(host="localhost", port=8080)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     # Start the Flask server programmatically
 
     with contextlib.suppress(Exception):

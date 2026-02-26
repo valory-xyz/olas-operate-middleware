@@ -72,7 +72,7 @@ from operate.utils.gnosis import transfer_erc20_from_safe
 from operate.wallet.master import InsufficientFundsException, MasterWalletManager
 
 
-if t.TYPE_CHECKING:
+if t.TYPE_CHECKING:  # pragma: no cover
     from operate.services.manage import ServiceManager  # pylint: disable=unused-import
 
 
@@ -281,7 +281,11 @@ class FundingManager:
                 protocol_agent_bonds = BigInt(MIN_AGENT_BOND * number_of_agents)
                 protocol_security_deposit = MIN_SECURITY_DEPOSIT
 
-                staking_manager = StakingManager(chain=Chain(chain))
+                # Use service's custom RPC from chain_configs
+                ledger_config = chain_config.ledger_config
+                staking_manager = StakingManager(
+                    chain=Chain(chain), rpc=ledger_config.rpc
+                )
                 staking_params = staking_manager.get_staking_params(
                     staking_contract=staking_manager.get_staking_contract(
                         staking_program_id=user_params.staking_program_id,
@@ -338,7 +342,7 @@ class FundingManager:
             wallet = self.wallet_manager.load(ledger_config.chain.ledger_type)
             # Use service's custom RPC from chain_configs
             ledger_api = make_chain_ledger_api(Chain(chain), rpc=ledger_config.rpc)
-            staking_manager = StakingManager(Chain(chain))
+            staking_manager = StakingManager(Chain(chain), rpc=ledger_config.rpc)
 
             if Chain(chain) not in wallet.safes:
                 protocol_bonded_assets[chain] = {
@@ -399,7 +403,7 @@ class FundingManager:
             if not staking_contract:
                 return ChainAmounts(bonded_assets)
 
-            staking_manager = StakingManager(Chain(chain))
+            staking_manager = StakingManager(Chain(chain), rpc=ledger_config.rpc)
             staking_params = staking_manager.get_staking_params(
                 staking_contract=staking_contract,
             )
@@ -955,6 +959,10 @@ class FundingManager:
             for address, assets in addresses.items():
                 for asset, amount in assets.items():
                     if amount <= 0:
+                        self.logger.warning(
+                            f"[FUNDING MANAGER] Skipping non-positive amount {amount} "
+                            f"for {asset} to {address} on {chain.value}"
+                        )
                         continue
 
                     self.logger.info(
@@ -986,6 +994,10 @@ class FundingManager:
         try:
             for chain_str, addresses in amounts.items():
                 for address in addresses:
+                    if not Web3.is_address(address):
+                        raise ValueError(
+                            f"Failed to fund from Master Safe: Address {address!r} is not a valid Ethereum address."
+                        )
                     if (
                         address not in service.agent_addresses
                         and address
@@ -996,12 +1008,13 @@ class FundingManager:
                         )
 
             self.fund_chain_amounts(amounts, service=service)
-            self._funding_requests_cooldown_until[service_config_id] = (
-                time() + self.funding_requests_cooldown_seconds
-            )
         finally:
+            # Thread-safe cleanup: clear in-progress flag and set cooldown atomically
             with self._lock:
                 self._funding_in_progress[service_config_id] = False
+                self._funding_requests_cooldown_until[service_config_id] = (
+                    time() + self.funding_requests_cooldown_seconds
+                )
 
     async def funding_job(
         self,

@@ -19,10 +19,11 @@
 
 """Tests for utils module."""
 
-import threading
 import time
 import typing as t
+import warnings
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import pytest
 from deepdiff import DeepDiff
@@ -30,10 +31,12 @@ from deepdiff import DeepDiff
 import operate.utils as utils
 from operate.serialization import BigInt
 from operate.utils import (
-    SingletonMeta,
     concurrent_execute,
+    concurrent_execute_async,
+    create_backup,
     merge_sum_dicts,
     safe_file_operation,
+    secure_copy_private_key,
     subtract_dicts,
     unrecoverable_delete,
 )
@@ -145,173 +148,6 @@ class TestUtils:
         if diff:
             print(diff)
         assert not diff, "Test failed."
-
-
-class TestSingletonMeta:
-    """Tests for SingletonMeta metaclass."""
-
-    def test_singleton_instance_creation(self) -> None:
-        """Test that singleton classes create only one instance."""
-
-        class TestSingleton(metaclass=SingletonMeta):
-            def __init__(self, value: int = 0) -> None:
-                self.value = value
-
-        # Create multiple instances
-        instance1 = TestSingleton(42)
-        instance2 = TestSingleton(100)  # This should be ignored
-        instance3 = TestSingleton()
-
-        # All should be the same instance
-        assert instance1 is instance2
-        assert instance2 is instance3
-        assert instance1 is instance3
-
-        # Value should be from first instantiation
-        assert instance1.value == 42
-        assert instance2.value == 42
-        assert instance3.value == 42
-
-    def test_different_singleton_classes_have_different_instances(self) -> None:
-        """Test that different singleton classes maintain separate instances."""
-
-        class SingletonA(metaclass=SingletonMeta):
-            def __init__(self, name: str = "A") -> None:
-                self.name = name
-
-        class SingletonB(metaclass=SingletonMeta):
-            def __init__(self, name: str = "B") -> None:
-                self.name = name
-
-        instance_a1 = SingletonA("First A")
-        instance_b1 = SingletonB("First B")
-        instance_a2 = SingletonA("Second A")
-        instance_b2 = SingletonB("Second B")
-
-        # Same class instances should be identical
-        assert instance_a1 is instance_a2
-        assert instance_b1 is instance_b2
-
-        # Different class instances should be different
-        assert instance_a1 is not instance_b1
-
-        # Values should be from first instantiation
-        assert instance_a1.name == "First A"
-        assert instance_b1.name == "First B"
-
-    def test_concurrent_singleton_instantiation(self) -> None:
-        """Test that concurrent instantiation still results in a single instance."""
-
-        class ConcurrentInstantiation(metaclass=SingletonMeta):
-            def __init__(self, thread_id: int) -> None:
-                self.thread_id = thread_id
-                self.instantiation_time = time.time()
-
-        instances = []
-        threads = []
-        num_threads = 5
-
-        def create_instance(thread_id: int) -> None:
-            instance = ConcurrentInstantiation(thread_id)
-            instances.append(instance)
-
-        # Create and start threads
-        for i in range(num_threads):
-            thread = threading.Thread(target=create_instance, args=(i,))
-            threads.append(thread)
-            thread.start()
-
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
-
-        # All instances should be the same object
-        first_instance = instances[0]
-        for instance in instances[1:]:
-            assert instance is first_instance
-
-        # Should have the thread_id from whichever thread got there first
-        assert hasattr(first_instance, "thread_id")
-        assert isinstance(first_instance.thread_id, int)
-
-    def test_special_methods_not_wrapped(self) -> None:
-        """Test that special methods (dunder methods) are not wrapped."""
-
-        class SpecialMethodsSingleton(metaclass=SingletonMeta):
-            def __init__(self, value: str = "test") -> None:
-                self.value = value
-
-            def __str__(self) -> str:
-                return f"SpecialMethodsSingleton({self.value})"
-
-            def __repr__(self) -> str:
-                return f"SpecialMethodsSingleton(value='{self.value}')"
-
-            def regular_method(self) -> str:
-                return "regular"
-
-        instance = SpecialMethodsSingleton("hello")
-
-        # Special methods should work normally
-        assert str(instance) == "SpecialMethodsSingleton(hello)"
-        assert "SpecialMethodsSingleton(value='hello')" in repr(instance)
-
-        # Regular methods should be wrapped (we can't easily test the wrapping itself,
-        # but we can test that they still work)
-        assert instance.regular_method() == "regular"
-
-    def test_inheritance_with_singleton(self) -> None:
-        """Test that inheritance works correctly with singleton metaclass."""
-
-        class BaseSingleton(metaclass=SingletonMeta):
-            def __init__(self, base_value: int = 1) -> None:
-                self.base_value = base_value
-
-            def base_method(self) -> str:
-                return "base"
-
-        class DerivedSingleton(BaseSingleton):
-            def __init__(self, base_value: int = 1, derived_value: int = 2) -> None:
-                super().__init__(base_value)
-                self.derived_value = derived_value
-
-            def derived_method(self) -> str:
-                return "derived"
-
-        # Each class should have its own singleton instance
-        base1 = BaseSingleton(10)
-        base2 = BaseSingleton(20)
-        derived1 = DerivedSingleton(30, 40)
-        derived2 = DerivedSingleton(50, 60)
-
-        # Same class instances should be identical
-        assert base1 is base2
-        assert derived1 is derived2
-
-        # Different class instances should be different
-        assert base1 is not derived1
-
-        # Check values from first instantiation
-        assert base1.base_value == 10
-        assert derived1.base_value == 30
-        assert derived1.derived_value == 40
-
-    def test_singleton_with_no_init_args(self) -> None:
-        """Test singleton behavior with classes that have no __init__ arguments."""
-
-        class NoArgsSingleton(metaclass=SingletonMeta):
-            def __init__(self) -> None:
-                self.created_at = time.time()
-
-            def get_time(self) -> float:
-                return self.created_at
-
-        instance1 = NoArgsSingleton()
-        time.sleep(0.001)  # Small delay
-        instance2 = NoArgsSingleton()
-
-        assert instance1 is instance2
-        assert instance1.get_time() == instance2.get_time()
 
 
 class TestSafeFileOperation:
@@ -488,3 +324,141 @@ class TestParallelExecute:
 
         with pytest.raises(TimeoutError):
             concurrent_execute((slow, ()))
+
+
+class TestCreateBackup:
+    """Tests for create_backup function (lines 67, 73)."""
+
+    def test_create_backup_raises_when_path_does_not_exist(
+        self, tmp_path: Path
+    ) -> None:
+        """Test create_backup raises FileNotFoundError when path doesn't exist (line 67)."""
+        missing = tmp_path / "nonexistent.txt"
+        with pytest.raises(FileNotFoundError):
+            create_backup(missing)
+
+    def test_create_backup_file(self, tmp_path: Path) -> None:
+        """Test create_backup creates a timestamped copy of a file."""
+        source = tmp_path / "data.txt"
+        source.write_text("hello", encoding="utf-8")
+        backup = create_backup(source)
+        assert backup.exists()
+        assert backup.read_text(encoding="utf-8") == "hello"
+        assert ".bak" in backup.name
+
+    def test_create_backup_directory(self, tmp_path: Path) -> None:
+        """Test create_backup uses shutil.copytree for directories (line 73)."""
+        source_dir = tmp_path / "mydir"
+        source_dir.mkdir()
+        (source_dir / "file.txt").write_text("content", encoding="utf-8")
+        backup = create_backup(source_dir)
+        assert backup.is_dir()
+        assert (backup / "file.txt").read_text(encoding="utf-8") == "content"
+        assert ".bak" in backup.name
+
+
+class TestUnrecoverableDeleteErrors:
+    """Tests for unrecoverable_delete error-handling branches (lines 164-167)."""
+
+    def test_unrecoverable_delete_handles_permission_error(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Test PermissionError inside the delete block is caught and printed (lines 164-165)."""
+        file_path = tmp_path / "locked.txt"
+        file_path.write_bytes(b"data")
+
+        with patch(
+            "operate.utils.os.path.getsize", side_effect=PermissionError("denied")
+        ):
+            unrecoverable_delete(file_path)  # should not raise
+
+        captured = capsys.readouterr()
+        assert "Permission denied" in captured.out
+
+    def test_unrecoverable_delete_handles_generic_exception(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture
+    ) -> None:
+        """Generic Exception inside the delete block is caught and printed (lines 166-167)."""
+        file_path = tmp_path / "file.txt"
+        file_path.write_bytes(b"data")
+
+        with patch("operate.utils.os.path.getsize", side_effect=RuntimeError("oops")):
+            unrecoverable_delete(file_path)  # should not raise
+
+        captured = capsys.readouterr()
+        assert "Error during secure deletion" in captured.out
+
+
+class TestSecureCopyPrivateKey:
+    """Tests for secure_copy_private_key."""
+
+    def test_copies_file_and_sets_permissions(self, tmp_path: Path) -> None:
+        """Test normal case: file copied and chmod called."""
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        mock_chmod = MagicMock()
+        with patch.object(Path, "chmod", mock_chmod):
+            secure_copy_private_key(src, dst)
+
+        assert dst.read_text(encoding="utf-8") == "secret"
+        mock_chmod.assert_called_once_with(0o600)
+
+    def test_falls_back_to_os_chmod(self, tmp_path: Path) -> None:
+        """Test fallback to os.chmod when Path.chmod raises PermissionError."""
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        with patch.object(Path, "chmod", side_effect=PermissionError("no perms")):
+            secure_copy_private_key(src, dst)
+
+        assert dst.exists()
+
+    def test_warns_when_both_chmod_fail(self, tmp_path: Path) -> None:
+        """Test warning when both Path.chmod and os.chmod fail."""
+        import shutil
+
+        src = tmp_path / "key.json"
+        src.write_text("secret", encoding="utf-8")
+        dst = tmp_path / "key_copy.json"
+
+        # Use shutil.copyfile (content only, no chmod) to avoid os.chmod in copy2
+        with patch(
+            "operate.utils.shutil.copy2", side_effect=shutil.copyfile
+        ), patch.object(Path, "chmod", side_effect=PermissionError("no perms")), patch(
+            "operate.utils.os.chmod", side_effect=OSError("os failed")
+        ):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                secure_copy_private_key(src, dst)
+
+        assert dst.exists()
+        assert any("Cannot set permissions" in str(w.message) for w in caught)
+
+
+class TestConcurrentExecuteFromEventLoop:
+    """Tests for concurrent_execute when called from a running event loop (lines 207-209)."""
+
+    async def test_concurrent_execute_from_running_event_loop(self) -> None:
+        """concurrent_execute uses ThreadPoolExecutor when an event loop is already running."""
+
+        def add(a: int, b: int) -> int:
+            return a + b
+
+        result = concurrent_execute((add, (1, 2)))
+        assert result == [3]
+
+
+class TestConcurrentExecuteAsyncCallable:
+    """Tests for concurrent_execute_async with async callables (line 227)."""
+
+    async def test_concurrent_execute_with_async_callable(self) -> None:
+        """Async callables are awaited directly (line 227)."""
+
+        async def async_double(x: int) -> int:
+            return x * 2
+
+        result = await concurrent_execute_async((async_double, (5,)))
+        assert result == [10]

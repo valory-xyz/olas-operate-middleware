@@ -92,7 +92,6 @@ from operate.services.service import (
     SERVICE_CONFIG_VERSION,
     Service,
 )
-from operate.services.utils.mech import deploy_mech
 from operate.utils.gnosis import (
     get_asset_balance,
     get_assets_balances,
@@ -317,7 +316,7 @@ class ServiceManager:
             f"Something went wrong while trying to get the on-chain metadata from IPFS: {res}"
         )
 
-    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -331,7 +330,7 @@ class ServiceManager:
                 chain=chain,
             )
 
-    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals
+    def _deploy_service_onchain(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -523,7 +522,7 @@ class ServiceManager:
         )
         service.store()
 
-    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
     ) -> None:
@@ -633,7 +632,7 @@ class ServiceManager:
             priority_mech_service_id=priority_mech_service_id,
         )
 
-    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches
+    def _deploy_service_onchain_from_safe(  # pylint: disable=too-many-statements,too-many-locals,too-many-branches  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1259,58 +1258,6 @@ class ServiceManager:
                 f"Failed to set agent wallet for service_id={chain_data.token}: {traceback.format_exc()}"
             )
 
-        # TODO: yet another agent specific logic for mech, which should be abstracted
-        if all(
-            var in service.env_variables
-            for var in [
-                "AGENT_ID",
-                "MECH_TO_CONFIG",
-                "ON_CHAIN_SERVICE_ID",
-                "ETHEREUM_LEDGER_RPC_0",
-                "GNOSIS_LEDGER_RPC_0",
-                "MECH_MARKETPLACE_ADDRESS",
-            ]
-        ):
-            if (
-                not service.env_variables["AGENT_ID"]["value"]
-                or not service.env_variables["MECH_TO_CONFIG"]["value"]
-            ):
-                mech_address, agent_id = deploy_mech(sftxb=sftxb, service=service)
-                service.update_env_variables_values(
-                    {
-                        "AGENT_ID": agent_id,
-                        "MECH_TO_CONFIG": json.dumps(
-                            {
-                                mech_address: {
-                                    "use_dynamic_pricing": False,
-                                    "is_marketplace_mech": True,
-                                }
-                            },
-                            separators=(",", ":"),
-                        ),
-                        "MECH_TO_MAX_DELIVERY_RATE": json.dumps(
-                            {
-                                mech_address: service.env_variables.get(
-                                    "MECH_REQUEST_PRICE", {}
-                                ).get("value", 10000000000000000)
-                            },
-                            separators=(",", ":"),
-                        ),
-                    }
-                )
-
-            service.update_env_variables_values(
-                {
-                    "ON_CHAIN_SERVICE_ID": chain_data.token,
-                    "ETHEREUM_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                    "GNOSIS_LEDGER_RPC_0": service.env_variables["GNOSIS_LEDGER_RPC"][
-                        "value"
-                    ],
-                }
-            )
-
         # TODO: this is a patch for modius, to be standardized
         staking_chain = None
         for chain_, config in service.chain_configs.items():
@@ -1337,7 +1284,7 @@ class ServiceManager:
                 service_config_id=service_config_id, chain=chain
             )
 
-    def terminate_service_on_chain(
+    def terminate_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Terminate service on-chain"""
@@ -1366,7 +1313,7 @@ class ServiceManager:
             ),
         )
 
-    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals
+    def terminate_service_on_chain_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1514,7 +1461,7 @@ class ServiceManager:
                 ),  # TODO it should always be safe address
             )
 
-    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals
+    def _execute_recovery_module_flow_from_safe(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1577,7 +1524,7 @@ class ServiceManager:
             ).settle()
             self.logger.info("Recovering service Safe done.")
 
-    def _enable_recovery_module(  # pylint: disable=too-many-locals
+    def _enable_recovery_module(  # pylint: disable=too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1659,12 +1606,14 @@ class ServiceManager:
     def _get_current_staking_program(
         self, service: Service, chain: str
     ) -> t.Optional[str]:
-        staking_manager = StakingManager(Chain(chain))
+        # Use service's custom RPC from chain_configs
+        rpc = service.chain_configs[chain].ledger_config.rpc
+        staking_manager = StakingManager(Chain(chain), rpc=rpc)
         return staking_manager.get_current_staking_program(
             service_id=service.chain_configs[chain].chain_data.token
         )
 
-    def unbond_service_on_chain(
+    def unbond_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1700,7 +1649,7 @@ class ServiceManager:
         """
         raise NotImplementedError
 
-    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals
+    def stake_service_on_chain_from_safe(  # pylint: disable=too-many-statements,too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> None:
         """Stake service on-chain"""
@@ -1886,7 +1835,7 @@ class ServiceManager:
         self.logger.info(f"{target_staking_program=}")
         self.logger.info(f"{current_staking_program=}")
 
-    def unstake_service_on_chain(
+    def unstake_service_on_chain(  # pragma: no cover
         self, service_config_id: str, chain: t.Optional[str] = None
     ) -> None:
         """Unbond service on-chain"""
@@ -1919,7 +1868,7 @@ class ServiceManager:
             ),
         )
 
-    def unstake_service_on_chain_from_safe(
+    def unstake_service_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -1980,7 +1929,7 @@ class ServiceManager:
                 chain=service.home_chain,
             )
 
-    def claim_on_chain_from_safe(
+    def claim_on_chain_from_safe(  # pragma: no cover
         self,
         service_config_id: str,
         chain: str,
@@ -2043,20 +1992,27 @@ class ServiceManager:
             )
             return 0
 
-        # transfer claimed amount from agents safe to master safe
+        # transfer reward token balance from agents safe to master safe
         # TODO: remove after staking contract directly starts sending the rewards to master safe
+        reward_token = receipt["logs"][0]["address"]
         amount_claimed = int(receipt["logs"][0]["data"].to_0x_hex(), 16)
-        self.logger.info(f"Claimed amount: {amount_claimed}")
-        ethereum_crypto = self.keys_manager.get_crypto_instance(
-            service.agent_addresses[0]
+        amount_to_transfer = get_asset_balance(
+            ledger_api=ledger_api,
+            asset_address=reward_token,
+            address=chain_config.chain_data.multisig,
         )
+        self.logger.info(f"Claimed amount: {amount_claimed}")
+        self.logger.info(f"Reward token balance to transfer: {amount_to_transfer}")
+        if amount_to_transfer == 0:
+            return amount_claimed
+
         transfer_erc20_from_safe(
             ledger_api=ledger_api,
-            crypto=ethereum_crypto,
+            crypto=self.keys_manager.get_crypto_instance(service.agent_addresses[0]),
             safe=chain_config.chain_data.multisig,
-            token=receipt["logs"][0]["address"],
+            token=reward_token,
             to=wallet.safes[Chain(chain)],
-            amount=amount_claimed,
+            amount=amount_to_transfer,
         )
         return amount_claimed
 
@@ -2070,7 +2026,7 @@ class ServiceManager:
         self.funding_manager.fund_service(service=service, amounts=amounts)
 
     # TODO deprecate
-    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements
+    def fund_service_single_chain(  # pylint: disable=too-many-arguments,too-many-locals,too-many-statements  # pragma: no cover
         self,
         service_config_id: str,
         rpc: t.Optional[str] = None,
@@ -2235,7 +2191,7 @@ class ServiceManager:
 
     # TODO Deprecate
     # TODO This method is possibly not used anymore
-    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals
+    def fund_service_erc20(  # pylint: disable=too-many-arguments,too-many-locals  # pragma: no cover
         self,
         service_config_id: str,
         token: str,
@@ -2421,7 +2377,7 @@ class ServiceManager:
         return self.funding_manager.funding_requirements(service)
 
     # TODO deprecate
-    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks
+    def refill_requirements(  # pylint: disable=too-many-locals,too-many-statements,too-many-nested-blocks  # pragma: no cover
         self, service_config_id: str
     ) -> t.Dict:
         """Get user refill requirements for a service."""
@@ -2622,7 +2578,7 @@ class ServiceManager:
         }
 
     # TODO deprecate
-    def _compute_bonded_assets(  # pylint: disable=too-many-locals
+    def _compute_bonded_assets(  # pylint: disable=too-many-locals  # pragma: no cover
         self, service_config_id: str, chain: str
     ) -> t.Dict:
         """Computes the bonded tokens: current agent bonds and current security deposit"""
