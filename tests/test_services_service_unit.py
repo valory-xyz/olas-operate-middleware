@@ -92,7 +92,11 @@ class TestMkdirs:
         """Test that mkdirs ignores os.chown PermissionError/AttributeError."""
         build_dir = tmp_path / "build"
 
-        with patch("operate.services.service.os.chown", side_effect=PermissionError):
+        with patch(
+            "operate.services.service.os.chown",
+            side_effect=PermissionError,
+            create=True,
+        ):
             mkdirs(build_dir)
 
         assert (build_dir / PERSISTENT_DATA_DIR).exists()
